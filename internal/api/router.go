@@ -43,11 +43,39 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 	r.POST("/v1/mcp/messages", mcpHandler.HandleMCPMessages)
 	r.GET("/v1/mcp", mcpHandler.HandleMCPInfo)
 
-	// Admin Control Plane APIs
+	// Admin & User Control Plane APIs
 	if adminHandler != nil {
+		// Unified Public Auth Endpoints
+		authGroup := r.Group("/api/v1/auth")
+		{
+			authGroup.POST("/login", adminHandler.Login)
+			authGroup.POST("/register", adminHandler.Register)
+			authGroup.POST("/send-verification-code", adminHandler.SendVerificationCode)
+			authGroup.GET("/oauth/:provider", adminHandler.OAuthInitiate)
+			authGroup.POST("/oauth/:provider/callback", adminHandler.OAuthCallback)
+			authGroup.GET("/oauth/:provider/callback", adminHandler.OAuthCallback)
+		}
+
+		// Public Payment Webhooks
+		r.POST("/api/v1/public/stripe/webhook", adminHandler.StripeWebhook)
+
+		// Regular User Self-Service APIs
+		userGroup := r.Group("/api/v1/user")
+		userGroup.Use(adminHandler.AdminAuthMiddleware())
+		{
+			userGroup.GET("/wallet", adminHandler.GetUserWallet)
+			userGroup.POST("/wallet/redeem", adminHandler.RedeemWalletCode)
+			userGroup.POST("/wallet/recharge/stripe/session", adminHandler.CreateStripeRechargeSession)
+			userGroup.POST("/wallet/recharge/sandbox", adminHandler.SandboxRecharge)
+			userGroup.GET("/wallet/orders", adminHandler.ListUserRechargeOrders)
+			userGroup.GET("/keys", adminHandler.ListUserKeys)
+			userGroup.POST("/keys", adminHandler.CreateUserKey)
+			userGroup.DELETE("/keys/:id", adminHandler.DeleteUserKey)
+		}
+
 		admin := r.Group("/api/v1/admin")
 		{
-			// Public Auth Endpoint
+			// Public Auth Endpoint (backward compatibility)
 			admin.POST("/auth/login", adminHandler.Login)
 
 			// Protected Admin API group
@@ -60,6 +88,13 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 				protected.POST("/users", adminHandler.CreateUser)
 				protected.DELETE("/users/:username", adminHandler.DeleteUser)
 				protected.POST("/users/:username/password", adminHandler.ResetUserPassword)
+				protected.POST("/users/:username/status", adminHandler.UpdateUserStatus)
+				protected.POST("/users/:username/balance", adminHandler.UpdateUserBalance)
+				protected.POST("/users/:username/group", adminHandler.UpdateUserGroup)
+
+				protected.GET("/redemptions", adminHandler.ListRedemptions)
+				protected.POST("/redemptions/generate", adminHandler.GenerateRedemptions)
+				protected.DELETE("/redemptions/:id", adminHandler.DeleteRedemption)
 
 				protected.GET("/channels", adminHandler.ListChannels)
 				protected.POST("/channels", adminHandler.CreateChannel)

@@ -475,7 +475,7 @@ export default function ServiceStatus({
                 onClick={onOpenLogin}
                 className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center space-x-1.5 transition cursor-pointer"
               >
-                <span>{lang === 'zh' ? '管理员登录' : 'Login'}</span>
+                <span>{lang === 'zh' ? '登录 / 注册' : 'Login / Register'}</span>
               </button>
             )}
           </div>

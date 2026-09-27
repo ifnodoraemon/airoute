@@ -182,10 +182,12 @@ func (c *ChannelConfig) GetUpstreamModel(requestedModel string) string {
 
 // VirtualKeyConfig defines a virtual API key configured on the gateway.
 type VirtualKeyConfig struct {
-	Key         string   `yaml:"key" json:"key"`                 // e.g. "sk-nano-8f92a1c4b7e3"
-	TenantID    string   `yaml:"tenant_id" json:"tenant_id"`
+	Key           string   `yaml:"key" json:"key"`                 // e.g. "sk-nano-8f92a1c4b7e3"
+	TenantID      string   `yaml:"tenant_id" json:"tenant_id"`
 	AllowedModels []string `yaml:"allowed_models" json:"allowed_models"` // empty means all allowed
-	RPM         int      `yaml:"rpm" json:"rpm"`                 // Requests per minute limit (0 = unlimited)
-	TPM         int      `yaml:"tpm" json:"tpm"`                 // Tokens per minute limit (0 = unlimited)
-	Budget      float64  `yaml:"budget" json:"budget"`           // total dollar or token budget
+	RPM           int      `yaml:"rpm" json:"rpm"`                 // Requests per minute limit (0 = unlimited)
+	TPM           int      `yaml:"tpm" json:"tpm"`                 // Tokens per minute limit (0 = unlimited)
+	Budget        float64  `yaml:"budget" json:"budget"`           // total dollar or token budget
+	GroupName     string   `yaml:"group_name" json:"group_name"`   // pricing group e.g. default, vip
+	UserID        int64    `yaml:"user_id" json:"user_id"`         // owner user id
 }

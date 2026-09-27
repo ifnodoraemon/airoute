@@ -2,6 +2,7 @@ package controlplane
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -93,7 +94,7 @@ type LoginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
-// Login handles admin authentication.
+// Login handles user authentication.
 func (h *AdminHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -104,6 +105,11 @@ func (h *AdminHandler) Login(c *gin.Context) {
 	user, err := h.repo.GetUserByUsername(req.Username)
 	if err != nil || user == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "用户名或密码错误"})
+		return
+	}
+
+	if strings.EqualFold(user.Status, "locked") {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "该账户已被管理员锁定，无法登录"})
 		return
 	}
 
@@ -123,15 +129,21 @@ func (h *AdminHandler) Login(c *gin.Context) {
 		"data": gin.H{
 			"token": token,
 			"user": gin.H{
-				"username": user.Username,
-				"role":     user.Role,
+				"id":         user.ID,
+				"username":   user.Username,
+				"email":      user.Email,
+				"role":       user.Role,
+				"status":     user.Status,
+				"balance":    user.Balance,
+				"is_admin":   strings.EqualFold(user.Role, "admin"),
+				"group_name": user.GroupName,
 			},
 		},
 		"message": "登录成功",
 	})
 }
 
-// GetMe returns current authenticated admin information.
+// GetMe returns current authenticated user information.
 func (h *AdminHandler) GetMe(c *gin.Context) {
 	claimsVal, exists := c.Get("admin_claims")
 	if !exists {
@@ -139,11 +151,34 @@ func (h *AdminHandler) GetMe(c *gin.Context) {
 		return
 	}
 	claims := claimsVal.(*AdminClaims)
+
+	user, err := h.repo.GetUserByUsername(claims.Username)
+	if err != nil || user == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"code": 0,
+			"data": gin.H{
+				"username":   claims.Username,
+				"role":       claims.Role,
+				"status":     "active",
+				"balance":    0.0,
+				"is_admin":   strings.EqualFold(claims.Role, "admin"),
+				"group_name": "default",
+			},
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
 		"data": gin.H{
-			"username": claims.Username,
-			"role":     claims.Role,
+			"id":         user.ID,
+			"username":   user.Username,
+			"email":      user.Email,
+			"role":       user.Role,
+			"status":     user.Status,
+			"balance":    user.Balance,
+			"is_admin":   strings.EqualFold(user.Role, "admin"),
+			"group_name": user.GroupName,
 		},
 	})
 }
@@ -199,7 +234,7 @@ func (h *AdminHandler) ChangePassword(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "密码修改成功，请使用新密码重新登录"})
 }
 
-// ListUsers returns all operator/admin accounts.
+// ListUsers returns all users with balance, status, role, and group.
 func (h *AdminHandler) ListUsers(c *gin.Context) {
 	users, err := h.repo.ListUsers()
 	if err != nil {
@@ -207,18 +242,26 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 		return
 	}
 	type UserDTO struct {
-		ID        int64  `json:"id"`
-		Username  string `json:"username"`
-		Role      string `json:"role"`
-		CreatedAt string `json:"created_at"`
-		UpdatedAt string `json:"updated_at"`
+		ID        int64   `json:"id"`
+		Username  string  `json:"username"`
+		Email     string  `json:"email"`
+		Role      string  `json:"role"`
+		Status    string  `json:"status"`
+		Balance   float64 `json:"balance"`
+		GroupName string  `json:"group_name"`
+		CreatedAt string  `json:"created_at"`
+		UpdatedAt string  `json:"updated_at"`
 	}
 	res := make([]UserDTO, 0)
 	for _, u := range users {
 		res = append(res, UserDTO{
 			ID:        u.ID,
 			Username:  u.Username,
+			Email:     u.Email,
 			Role:      u.Role,
+			Status:    u.Status,
+			Balance:   u.Balance,
+			GroupName: u.GroupName,
 			CreatedAt: u.CreatedAt.Format("2006-01-02 15:04:05"),
 			UpdatedAt: u.UpdatedAt.Format("2006-01-02 15:04:05"),
 		})
@@ -228,12 +271,16 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 
 // CreateUserRequest defines payload to create a new user account.
 type CreateUserRequest struct {
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
-	Role     string `json:"role"`
+	Username  string  `json:"username" binding:"required"`
+	Email     string  `json:"email"`
+	Password  string  `json:"password" binding:"required"`
+	Role      string  `json:"role"`
+	Status    string  `json:"status"`
+	Balance   float64 `json:"balance"`
+	GroupName string  `json:"group_name"`
 }
 
-// CreateUser adds a new administrator or operator.
+// CreateUser adds a new user with quota, group, and automatically creates an initial API key.
 func (h *AdminHandler) CreateUser(c *gin.Context) {
 	claimsVal, exists := c.Get("admin_claims")
 	if !exists {
@@ -263,7 +310,18 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 	}
 
 	if req.Role == "" {
-		req.Role = "operator"
+		req.Role = "user"
+	}
+	if req.Status == "" {
+		req.Status = "active"
+	}
+	if req.GroupName == "" {
+		req.GroupName = "default"
+	}
+	if req.Role == "admin" && req.Balance <= 0 {
+		req.Balance = 9999999.0
+	} else if req.Balance <= 0 {
+		req.Balance = 10.0 // Default initial quota
 	}
 
 	existing, _ := h.repo.GetUserByUsername(req.Username)
@@ -280,15 +338,49 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 
 	user := &storage.UserRecord{
 		Username:     req.Username,
+		Email:        req.Email,
 		PasswordHash: string(hash),
 		Role:         req.Role,
+		Status:       req.Status,
+		Balance:      req.Balance,
+		GroupName:    req.GroupName,
 	}
 	if err := h.repo.CreateUser(user); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "创建用户失败: " + err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "创建账号成功", "data": gin.H{"username": user.Username, "role": user.Role}})
+	// Auto-generate initial API key for the new user
+	keyBytes := make([]byte, 16)
+	_, _ = rand.Read(keyBytes)
+	newKey := "sk-nano-" + hex.EncodeToString(keyBytes)
+	_ = h.repo.CreateVirtualKey(&storage.VirtualKeyRecord{
+		Key:           newKey,
+		TenantID:      user.Username,
+		UserID:        user.ID,
+		GroupName:     user.GroupName,
+		AllowedModels: []string{"*"},
+		RPM:           60,
+		TPM:           100000,
+		Budget:        100.0,
+		Status:        "active",
+	})
+	h.syncDataPlane()
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    0,
+		"message": "创建账号成功",
+		"data": gin.H{
+			"id":         user.ID,
+			"username":   user.Username,
+			"email":      user.Email,
+			"role":       user.Role,
+			"status":     user.Status,
+			"balance":    user.Balance,
+			"group_name": user.GroupName,
+			"api_key":    newKey,
+		},
+	})
 }
 
 // DeleteUser deletes an account by username.

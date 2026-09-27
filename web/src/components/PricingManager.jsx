@@ -130,11 +130,13 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
   const [serverWeekday, setServerWeekday] = useState('');
   const [isWeekend, setIsWeekend] = useState(false);
   const [platformModels, setPlatformModels] = useState([]);
-  const [selectedModels, setSelectedModels] = useState([]);
+  const [selectedKeys, setSelectedKeys] = useState([]);
+  const [groupFilter, setGroupFilter] = useState('all');
 
-  // Clean, flexible form state (supports multiple arbitrary time windows)
+  // Clean, flexible form state (supports multiple arbitrary time windows & user group tiers)
   const [formData, setFormData] = useState({
     model: '',
+    group_name: 'default',
     prompt_price: 2.0,
     completion_price: 8.0,
     cache_read_price: 0.2,
@@ -179,10 +181,50 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
     }
   };
 
+  const availableGroups = React.useMemo(() => {
+    const set = new Set(['default', 'vip', 'enterprise']);
+    prices.forEach(p => {
+      if (p.group_name) set.add(p.group_name);
+    });
+    return Array.from(set);
+  }, [prices]);
+
+  const filteredPrices = React.useMemo(() => {
+    if (groupFilter === 'all') return prices;
+    return prices.filter(p => (p.group_name || 'default') === groupFilter);
+  }, [prices, groupFilter]);
+
   const unpricedModels = React.useMemo(() => {
-    const configured = new Set(prices.map(p => p.model));
+    const curGroup = formData.group_name || 'default';
+    const configured = new Set(prices.filter(p => (p.group_name || 'default') === curGroup).map(p => p.model));
     return (platformModels || []).filter(m => !configured.has(m));
-  }, [platformModels, prices]);
+  }, [platformModels, prices, formData.group_name]);
+
+  const getGroupBadge = (group) => {
+    const g = (group || 'default').toLowerCase();
+    if (g === 'vip') {
+      return {
+        label: 'VIP 用户组',
+        className: 'bg-amber-50 text-amber-700 border-amber-200'
+      };
+    }
+    if (g === 'enterprise') {
+      return {
+        label: '企业大客户',
+        className: 'bg-purple-50 text-purple-700 border-purple-200'
+      };
+    }
+    if (g === 'default') {
+      return {
+        label: '默认基础组',
+        className: 'bg-indigo-50 text-indigo-700 border-indigo-200'
+      };
+    }
+    return {
+      label: `${group} 组`,
+      className: 'bg-sky-50 text-sky-700 border-sky-200'
+    };
+  };
 
   const handleSelectModelCandidate = (m) => {
     const lower = m.toLowerCase();
@@ -219,6 +261,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
     setEditingPrice(null);
     setFormData({
       model: '',
+      group_name: groupFilter !== 'all' ? groupFilter : 'default',
       prompt_price: 2.0,
       completion_price: 8.0,
       cache_read_price: 0.2,
@@ -238,6 +281,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
     setEditingPrice(p);
     setFormData({
       model: p.model,
+      group_name: p.group_name || 'default',
       prompt_price: p.prompt_price ?? 2.0,
       completion_price: p.completion_price ?? 8.0,
       cache_read_price: p.cache_read_price ?? 0.2,
@@ -307,17 +351,17 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
     }));
   };
 
-  const handleDelete = async (model) => {
-    if (!window.confirm(`确定删除模型 [${model}] 的定价规则？`)) {
+  const handleDelete = async (model, groupName = 'default') => {
+    if (!window.confirm(`确定删除模型 [${model}] 在 [${groupName}] 分组的定价规则？`)) {
       return;
     }
     try {
-      const res = await adminFetch(`/api/v1/admin/pricing/${encodeURIComponent(model)}`, {
+      const res = await adminFetch(`/api/v1/admin/pricing/${encodeURIComponent(model)}?group=${encodeURIComponent(groupName || 'default')}`, {
         method: 'DELETE'
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(`已删除模型 [${model}] 定价规则`, 'success');
+        showToast(`已删除 [${groupName}] 组模型 [${model}] 定价规则`, 'success');
         fetchPrices();
       } else {
         showToast(data.error || '删除失败', 'warning');
@@ -328,20 +372,25 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
   };
 
   const handleBatchDelete = async () => {
-    if (selectedModels.length === 0) return;
-    if (!window.confirm(`确定批量删除选中的 ${selectedModels.length} 个模型定价规则？`)) {
+    if (selectedKeys.length === 0) return;
+    if (!window.confirm(`确定批量删除选中的 ${selectedKeys.length} 个模型定价规则？`)) {
       return;
     }
+    const items = selectedKeys.map(k => {
+      const idx = k.indexOf('::');
+      if (idx === -1) return { group: 'default', model: k };
+      return { group: k.substring(0, idx), model: k.substring(idx + 2) };
+    });
     try {
       const res = await adminFetch('/api/v1/admin/pricing/batch-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ models: selectedModels })
+        body: JSON.stringify({ items })
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
         showToast(data.message || '已批量删除定价规则', 'success');
-        setSelectedModels([]);
+        setSelectedKeys([]);
         fetchPrices();
       } else {
         showToast(data.error || '批量删除失败', 'warning');
@@ -394,6 +443,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
     try {
       const payload = {
         model: formData.model.trim(),
+        group_name: (formData.group_name || 'default').trim(),
         prompt_price: parseFloat(formData.prompt_price) || 0,
         completion_price: parseFloat(formData.completion_price) || 0,
         cache_read_price: parseFloat(formData.cache_read_price) || 0,
@@ -415,7 +465,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(`已保存模型 [${payload.model}] 定价规则`, 'success');
+        showToast(`已保存 [${payload.group_name}] 组模型 [${payload.model}] 定价规则`, 'success');
         setShowModal(false);
         fetchPrices();
       } else {
@@ -475,10 +525,10 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
       </div>
 
       {/* Batch Action Bar */}
-      {selectedModels.length > 0 && (
+      {selectedKeys.length > 0 && (
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-indigo-50 border border-indigo-200 px-5 py-3 rounded-2xl animate-in fade-in gap-3">
           <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-900">
-            <span>已选中 {selectedModels.length} 个模型定价规则</span>
+            <span>已选中 {selectedKeys.length} 个模型定价规则</span>
           </div>
           <div className="flex items-center space-x-2">
             <button
@@ -489,7 +539,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
               <span>批量删除</span>
             </button>
             <button
-              onClick={() => setSelectedModels([])}
+              onClick={() => setSelectedKeys([])}
               className="px-3 py-1.5 bg-white text-slate-700 border border-slate-200 text-xs font-medium rounded-xl hover:bg-slate-50 transition cursor-pointer"
             >
               取消选择
@@ -500,14 +550,45 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
 
       {/* 2. Rates Table (High Whitespace & Clean) */}
       <div className="bg-white border border-slate-200/80 rounded-3xl shadow-xs overflow-hidden">
+        {/* Group Filter Tabs */}
+        <div className="flex flex-wrap items-center gap-2 px-6 pt-5 pb-3 border-b border-slate-100">
+          <span className="text-xs text-slate-400 font-medium mr-1">价格分组:</span>
+          {[
+            { id: 'all', label: '全部规则' },
+            { id: 'default', label: '默认组 (default)' },
+            { id: 'vip', label: 'VIP组 (vip)' },
+            { id: 'enterprise', label: '企业组 (enterprise)' },
+            ...availableGroups.filter(g => !['default', 'vip', 'enterprise'].includes(g)).map(g => ({ id: g, label: `${g} 组` }))
+          ].map(tab => {
+            const count = tab.id === 'all' ? prices.length : prices.filter(p => (p.group_name || 'default') === tab.id).length;
+            const isActive = groupFilter === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => { setGroupFilter(tab.id); setSelectedKeys([]); }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center space-x-1.5 ${
+                  isActive
+                    ? 'bg-indigo-600 text-white shadow-2xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80 hover:text-slate-900'
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-indigo-700/80 text-indigo-100' : 'bg-slate-200 text-slate-500'}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
         {loading && prices.length === 0 ? (
           <div className="p-12 text-center text-slate-400 text-xs flex items-center justify-center space-x-2">
             <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
             <span>加载费率规则中...</span>
           </div>
-        ) : prices.length === 0 ? (
+        ) : filteredPrices.length === 0 ? (
           <div className="p-12 text-center text-slate-400 text-xs">
-            暂无配置的定价规则，点击上方「新建定价规则」进行添加
+            {prices.length === 0 ? '暂无配置的定价规则，点击上方「新建定价规则」进行添加' : '当前分组下暂无定价规则，点击上方「新建定价规则」添加'}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -518,17 +599,18 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
                     <input
                       type="checkbox"
                       className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                      checked={prices.length > 0 && selectedModels.length === prices.length}
+                      checked={filteredPrices.length > 0 && selectedKeys.length === filteredPrices.length}
                       onChange={(e) => {
                         if (e.target.checked) {
-                          setSelectedModels(prices.map(p => p.model));
+                          setSelectedKeys(filteredPrices.map(p => `${p.group_name || 'default'}::${p.model}`));
                         } else {
-                          setSelectedModels([]);
+                          setSelectedKeys([]);
                         }
                       }}
                     />
                   </th>
                   <th className="py-3 px-6">模型标识</th>
+                  <th className="py-3 px-4">适用用户组</th>
                   <th className="py-3 px-4">基准输入 (1M)</th>
                   <th className="py-3 px-4">基准输出 (1M)</th>
                   <th className="py-3 px-4">缓存命中 (1M)</th>
@@ -538,12 +620,14 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {prices.map((p) => {
+                {filteredPrices.map((p) => {
+                  const itemKey = `${p.group_name || 'default'}::${p.model}`;
                   const isOff = p.is_currently_off_peak;
                   const discount = p.current_discount || 1.0;
                   const effPrompt = p.effective_prompt_price !== undefined ? p.effective_prompt_price : p.prompt_price;
                   const effComp = p.effective_completion_price !== undefined ? p.effective_completion_price : p.completion_price;
                   const currencySym = p.currency === 'USD' ? '$' : '¥';
+                  const grpBadge = getGroupBadge(p.group_name);
 
                   // Parse multi-slots for clean display
                   let displaySlots = [];
@@ -563,24 +647,30 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
                   }
 
                   return (
-                    <tr key={p.id || p.model} className="hover:bg-slate-50/60 transition-colors">
+                    <tr key={itemKey} className="hover:bg-slate-50/60 transition-colors">
                       <td className="py-4 px-4 text-center" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                          checked={selectedModels.includes(p.model)}
+                          checked={selectedKeys.includes(itemKey)}
                           onChange={(e) => {
                             e.stopPropagation();
                             if (e.target.checked) {
-                              setSelectedModels(prev => [...prev, p.model]);
+                              setSelectedKeys(prev => [...prev, itemKey]);
                             } else {
-                              setSelectedModels(prev => prev.filter(m => m !== p.model));
+                              setSelectedKeys(prev => prev.filter(k => k !== itemKey));
                             }
                           }}
                         />
                       </td>
                       <td className="py-4 px-6 font-mono font-bold text-slate-900">
                         {p.model}
+                      </td>
+
+                      <td className="py-4 px-4">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold border ${grpBadge.className}`}>
+                          {grpBadge.label}
+                        </span>
                       </td>
 
                       <td className="py-4 px-4 font-mono font-medium">
@@ -669,7 +759,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
                           编辑
                         </button>
                         <button
-                          onClick={() => handleDelete(p.model)}
+                          onClick={() => handleDelete(p.model, p.group_name || 'default')}
                           className="px-3 py-1 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 text-xs font-medium transition cursor-pointer"
                         >
                           删除
@@ -755,6 +845,51 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
                         );
                       })}
                     </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Field: User Group Tier */}
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  适用用户组 (Group Tier) <span className="text-rose-500">*</span>
+                </label>
+                {editingPrice ? (
+                  <div className="flex items-center space-x-2 py-1">
+                    <span className={`px-2.5 py-1 rounded-xl text-xs font-semibold border ${getGroupBadge(formData.group_name).className}`}>
+                      {getGroupBadge(formData.group_name).label} ({formData.group_name})
+                    </span>
+                    <span className="text-[11px] text-slate-400">（已生效规则分组不可变更）</span>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {[
+                        { id: 'default', label: '默认组 (default)' },
+                        { id: 'vip', label: 'VIP组 (vip)' },
+                        { id: 'enterprise', label: '企业组 (enterprise)' }
+                      ].map(g => (
+                        <button
+                          key={g.id}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, group_name: g.id })}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition cursor-pointer ${
+                            formData.group_name === g.id
+                              ? 'bg-indigo-600 text-white border-indigo-600 font-semibold shadow-2xs'
+                              : 'bg-white hover:bg-indigo-50/60 border-slate-200 text-slate-700'
+                          }`}
+                        >
+                          {g.label}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="或输入自定义用户组标识 (如 partner / test 等)"
+                      value={formData.group_name}
+                      onChange={(e) => setFormData({ ...formData, group_name: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '') })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-indigo-500 text-xs"
+                    />
                   </div>
                 )}
               </div>

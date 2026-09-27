@@ -281,8 +281,14 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 		}
 
 		var cost, savedCost float64
+		keyGroup := "default"
+		if vkAny, exists := c.Get(middleware.ContextKeyVirtualKeyConfig); exists {
+			if vk, ok := vkAny.(*model.VirtualKeyConfig); ok && vk.GroupName != "" {
+				keyGroup = vk.GroupName
+			}
+		}
 		if billing.GlobalEngine != nil {
-			cost, savedCost = billing.GlobalEngine.CalculateCost(req.Model, inputTokens, outputTokens, 0)
+			cost, savedCost = billing.GlobalEngine.CalculateCostWithGroup(req.Model, keyGroup, inputTokens, outputTokens, 0)
 		}
 		_ = savedCost
 		if storage.GlobalAsyncLogger != nil {
@@ -405,8 +411,14 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 
 				dur := time.Since(start)
 				var cost, savedCost float64
+				keyGroup := "default"
+				if vkAny, exists := c.Get(middleware.ContextKeyVirtualKeyConfig); exists {
+					if vk, ok := vkAny.(*model.VirtualKeyConfig); ok && vk.GroupName != "" {
+						keyGroup = vk.GroupName
+					}
+				}
 				if billing.GlobalEngine != nil {
-					cost, savedCost = billing.GlobalEngine.CalculateCost(req.Model, totalPromptTokens, totalCompTokens, 0)
+					cost, savedCost = billing.GlobalEngine.CalculateCostWithGroup(req.Model, keyGroup, totalPromptTokens, totalCompTokens, 0)
 				}
 				_ = savedCost
 				telemetry.GlobalMetrics.RecordRequest(true, dur, totalPromptTokens, totalCompTokens)

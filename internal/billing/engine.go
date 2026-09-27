@@ -76,7 +76,14 @@ func (e *BillingEngine) ReloadPrices() error {
 
 	m := make(map[string]*storage.ModelPriceRecord)
 	for _, rec := range list {
-		m[strings.ToLower(rec.Model)] = rec
+		grp := strings.ToLower(strings.TrimSpace(rec.GroupName))
+		if grp == "" {
+			grp = "default"
+		}
+		m[grp+":"+strings.ToLower(rec.Model)] = rec
+		if grp == "default" {
+			m[strings.ToLower(rec.Model)] = rec
+		}
 	}
 
 	e.mu.Lock()
@@ -87,34 +94,76 @@ func (e *BillingEngine) ReloadPrices() error {
 	return nil
 }
 
-// GetPrice finds the applicable pricing rate for a requested model.
+// GetPrice finds the applicable pricing rate for a requested model in default group.
 func (e *BillingEngine) GetPrice(modelName string) *storage.ModelPriceRecord {
+	return e.GetPriceWithGroup(modelName, "default")
+}
+
+// GetPriceWithGroup finds the applicable pricing rate for a requested model within a specific pricing tier/group.
+func (e *BillingEngine) GetPriceWithGroup(modelName, groupName string) *storage.ModelPriceRecord {
 	modelLower := strings.ToLower(strings.TrimSpace(modelName))
+	grp := strings.ToLower(strings.TrimSpace(groupName))
+	if grp == "" {
+		grp = "default"
+	}
 
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
-	// 1. Exact match
-	if p, ok := e.prices[modelLower]; ok {
+	// 1. Exact match in requested group
+	if p, ok := e.prices[grp+":"+modelLower]; ok {
 		return p
 	}
 
-	// 2. Wildcard prefix match (e.g. "gpt-4o-*" matching "gpt-4o-2024-08-06")
-	for pattern, p := range e.prices {
-		if strings.HasSuffix(pattern, "*") {
-			prefix := strings.TrimSuffix(pattern, "*")
-			if strings.HasPrefix(modelLower, prefix) {
-				return p
-			}
+	// 2. Exact match in default group fallback
+	if grp != "default" {
+		if p, ok := e.prices["default:"+modelLower]; ok {
+			return p
+		}
+		if p, ok := e.prices[modelLower]; ok {
+			return p
+		}
+	} else {
+		if p, ok := e.prices[modelLower]; ok {
+			return p
 		}
 	}
 
-	// 3. Fallback wildcard rule "*"
+	// 3. Wildcard prefix match in group (e.g. "vip:gpt-4o-*" matching "gpt-4o-mini")
+	prefixMatch := func(g string) *storage.ModelPriceRecord {
+		prefixKey := g + ":"
+		for k, p := range e.prices {
+			if strings.HasPrefix(k, prefixKey) {
+				pattern := strings.TrimPrefix(k, prefixKey)
+				if strings.HasSuffix(pattern, "*") {
+					patPrefix := strings.TrimSuffix(pattern, "*")
+					if strings.HasPrefix(modelLower, patPrefix) {
+						return p
+					}
+				}
+			}
+		}
+		return nil
+	}
+
+	if p := prefixMatch(grp); p != nil {
+		return p
+	}
+	if grp != "default" {
+		if p := prefixMatch("default"); p != nil {
+			return p
+		}
+	}
+
+	// 4. Group wildcard or global wildcard "*"
+	if p, ok := e.prices[grp+":*"]; ok {
+		return p
+	}
 	if p, ok := e.prices["*"]; ok {
 		return p
 	}
 
-	// 4. Default standard fallback
+	// 5. Default standard fallback
 	return e.deflt
 }
 
@@ -417,13 +466,13 @@ func parseTimeToMinutes(s string) int {
 	return h*60 + m
 }
 
-// CalculateCostDetailed computes total request cost, total saved amount, cache savings, and off-peak discount metrics.
-func (e *BillingEngine) CalculateCostDetailed(modelName string, promptTokens, completionTokens, cachedTokens int, t time.Time) (cost float64, totalSaved float64, cacheSaved float64, isOffPeak bool, discount float64) {
+// CalculateCostDetailedWithGroup computes total request cost, total saved amount, cache savings, and off-peak discount metrics for a specified pricing group.
+func (e *BillingEngine) CalculateCostDetailedWithGroup(modelName, groupName string, promptTokens, completionTokens, cachedTokens int, t time.Time) (cost float64, totalSaved float64, cacheSaved float64, isOffPeak bool, discount float64) {
 	if e == nil {
 		return 0, 0, 0, false, 1.0
 	}
 
-	p := e.GetPrice(modelName)
+	p := e.GetPriceWithGroup(modelName, groupName)
 	if p == nil {
 		return 0, 0, 0, false, 1.0
 	}
@@ -469,8 +518,19 @@ func (e *BillingEngine) CalculateCostDetailed(modelName string, promptTokens, co
 	return cost, totalSaved, cacheSaved, isOffPeak, discount
 }
 
-// CalculateCost computes total request cost and savings using current server time.
-func (e *BillingEngine) CalculateCost(modelName string, promptTokens, completionTokens, cachedTokens int) (cost float64, savedCost float64) {
-	cost, totalSaved, _, _, _ := e.CalculateCostDetailed(modelName, promptTokens, completionTokens, cachedTokens, time.Now())
+// CalculateCostDetailed computes total request cost, total saved amount, cache savings, and off-peak discount metrics using the default group.
+func (e *BillingEngine) CalculateCostDetailed(modelName string, promptTokens, completionTokens, cachedTokens int, t time.Time) (cost float64, totalSaved float64, cacheSaved float64, isOffPeak bool, discount float64) {
+	return e.CalculateCostDetailedWithGroup(modelName, "default", promptTokens, completionTokens, cachedTokens, t)
+}
+
+// CalculateCostWithGroup computes total request cost and savings using current server time and the specified pricing group.
+func (e *BillingEngine) CalculateCostWithGroup(modelName, groupName string, promptTokens, completionTokens, cachedTokens int) (cost float64, savedCost float64) {
+	cost, totalSaved, _, _, _ := e.CalculateCostDetailedWithGroup(modelName, groupName, promptTokens, completionTokens, cachedTokens, time.Now())
 	return cost, totalSaved
 }
+
+// CalculateCost computes total request cost and savings using current server time and default group.
+func (e *BillingEngine) CalculateCost(modelName string, promptTokens, completionTokens, cachedTokens int) (cost float64, savedCost float64) {
+	return e.CalculateCostWithGroup(modelName, "default", promptTokens, completionTokens, cachedTokens)
+}
+

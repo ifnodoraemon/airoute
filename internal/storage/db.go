@@ -197,8 +197,12 @@ func (db *DB) migrate() error {
 	CREATE TABLE IF NOT EXISTS users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		username TEXT UNIQUE NOT NULL,
+		email TEXT DEFAULT '',
 		password_hash TEXT NOT NULL,
 		role TEXT DEFAULT 'admin',
+		status TEXT DEFAULT 'active',
+		balance REAL DEFAULT 0.0,
+		group_name TEXT DEFAULT 'default',
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -213,7 +217,8 @@ func (db *DB) migrate() error {
 
 	CREATE TABLE IF NOT EXISTS model_prices (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		model TEXT UNIQUE NOT NULL,
+		model TEXT NOT NULL,
+		group_name TEXT DEFAULT 'default',
 		prompt_price REAL DEFAULT 0,
 		completion_price REAL DEFAULT 0,
 		cache_read_price REAL DEFAULT 0,
@@ -227,7 +232,42 @@ func (db *DB) migrate() error {
 		off_peak_slots TEXT DEFAULT '',
 		weekend_all_day INTEGER DEFAULT 1,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(model, group_name)
+	);
+
+	CREATE TABLE IF NOT EXISTS redemption_codes (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		code TEXT UNIQUE NOT NULL,
+		name TEXT DEFAULT '',
+		amount REAL DEFAULT 0.0,
+		status TEXT DEFAULT 'active',
+		used_by TEXT DEFAULT '',
+		used_at DATETIME,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS recharge_orders (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		order_no TEXT UNIQUE NOT NULL,
+		username TEXT NOT NULL,
+		amount REAL DEFAULT 0.0,
+		currency TEXT DEFAULT 'CNY',
+		channel TEXT DEFAULT 'stripe',
+		stripe_session_id TEXT DEFAULT '',
+		status TEXT DEFAULT 'pending',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS verification_codes (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		email TEXT NOT NULL,
+		code TEXT NOT NULL,
+		purpose TEXT DEFAULT 'register',
+		expires_at DATETIME NOT NULL,
+		used INTEGER DEFAULT 0,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
 	CREATE TABLE IF NOT EXISTS system_skills (
@@ -252,6 +292,10 @@ func (db *DB) migrate() error {
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_usage_created ON usage_logs(created_at);
+	CREATE INDEX IF NOT EXISTS idx_redemption_code ON redemption_codes(code);
+	CREATE INDEX IF NOT EXISTS idx_recharge_user ON recharge_orders(username);
+	CREATE INDEX IF NOT EXISTS idx_recharge_order ON recharge_orders(order_no);
+	CREATE INDEX IF NOT EXISTS idx_verify_email ON verification_codes(email, code);
 	`
 	if _, err := db.Exec(schema); err != nil {
 		return err
@@ -272,6 +316,8 @@ func (db *DB) migrate() error {
 	_, _ = db.Exec("ALTER TABLE usage_logs ADD COLUMN is_off_peak INTEGER DEFAULT 0;")
 	_, _ = db.Exec("ALTER TABLE usage_logs ADD COLUMN off_peak_discount REAL DEFAULT 1.0;")
 	_, _ = db.Exec("ALTER TABLE virtual_keys ADD COLUMN used_cost REAL DEFAULT 0;")
+	_, _ = db.Exec("ALTER TABLE virtual_keys ADD COLUMN group_name TEXT DEFAULT 'default';")
+	_, _ = db.Exec("ALTER TABLE virtual_keys ADD COLUMN user_id INTEGER DEFAULT 0;")
 	_, _ = db.Exec("ALTER TABLE model_prices ADD COLUMN off_peak_enabled INTEGER DEFAULT 1;")
 	_, _ = db.Exec("ALTER TABLE model_prices ADD COLUMN off_peak_start TEXT DEFAULT '00:00';")
 	_, _ = db.Exec("ALTER TABLE model_prices ADD COLUMN off_peak_end TEXT DEFAULT '08:30';")
@@ -279,7 +325,13 @@ func (db *DB) migrate() error {
 	_, _ = db.Exec("ALTER TABLE model_prices ADD COLUMN off_peak_mode TEXT DEFAULT 'deepseek';")
 	_, _ = db.Exec("ALTER TABLE model_prices ADD COLUMN off_peak_slots TEXT DEFAULT '';")
 	_, _ = db.Exec("ALTER TABLE model_prices ADD COLUMN weekend_all_day INTEGER DEFAULT 1;")
+	_, _ = db.Exec("ALTER TABLE model_prices ADD COLUMN group_name TEXT DEFAULT 'default';")
+	_, _ = db.Exec("CREATE INDEX IF NOT EXISTS idx_model_price_group ON model_prices(model, group_name);")
 	_, _ = db.Exec("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'admin';")
+	_, _ = db.Exec("ALTER TABLE users ADD COLUMN email TEXT DEFAULT '';")
+	_, _ = db.Exec("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active';")
+	_, _ = db.Exec("ALTER TABLE users ADD COLUMN balance REAL DEFAULT 0.0;")
+	_, _ = db.Exec("ALTER TABLE users ADD COLUMN group_name TEXT DEFAULT 'default';")
 	_, _ = db.Exec("ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP;")
 	_, _ = db.Exec("ALTER TABLE users ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP;")
 	_, _ = db.Exec("ALTER TABLE system_skills ADD COLUMN loading_mode TEXT DEFAULT 'lazy';")
@@ -350,8 +402,12 @@ func (db *DB) migratePostgres() error {
 	CREATE TABLE IF NOT EXISTS users (
 		id BIGSERIAL PRIMARY KEY,
 		username VARCHAR(128) UNIQUE NOT NULL,
+		email VARCHAR(255) DEFAULT '',
 		password_hash TEXT NOT NULL,
 		role VARCHAR(32) DEFAULT 'admin',
+		status VARCHAR(32) DEFAULT 'active',
+		balance DOUBLE PRECISION DEFAULT 0.0,
+		group_name VARCHAR(64) DEFAULT 'default',
 		created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 	);
@@ -366,7 +422,8 @@ func (db *DB) migratePostgres() error {
 
 	CREATE TABLE IF NOT EXISTS model_prices (
 		id BIGSERIAL PRIMARY KEY,
-		model VARCHAR(128) UNIQUE NOT NULL,
+		model VARCHAR(128) NOT NULL,
+		group_name VARCHAR(64) DEFAULT 'default',
 		prompt_price DOUBLE PRECISION DEFAULT 0,
 		completion_price DOUBLE PRECISION DEFAULT 0,
 		cache_read_price DOUBLE PRECISION DEFAULT 0,
@@ -380,7 +437,42 @@ func (db *DB) migratePostgres() error {
 		off_peak_slots TEXT DEFAULT '',
 		weekend_all_day INT DEFAULT 1,
 		created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(model, group_name)
+	);
+
+	CREATE TABLE IF NOT EXISTS redemption_codes (
+		id BIGSERIAL PRIMARY KEY,
+		code VARCHAR(128) UNIQUE NOT NULL,
+		name VARCHAR(255) DEFAULT '',
+		amount DOUBLE PRECISION DEFAULT 0.0,
+		status VARCHAR(32) DEFAULT 'active',
+		used_by VARCHAR(128) DEFAULT '',
+		used_at TIMESTAMPTZ,
+		created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS recharge_orders (
+		id BIGSERIAL PRIMARY KEY,
+		order_no VARCHAR(128) UNIQUE NOT NULL,
+		username VARCHAR(128) NOT NULL,
+		amount DOUBLE PRECISION DEFAULT 0.0,
+		currency VARCHAR(16) DEFAULT 'CNY',
+		channel VARCHAR(64) DEFAULT 'stripe',
+		stripe_session_id VARCHAR(255) DEFAULT '',
+		status VARCHAR(32) DEFAULT 'pending',
+		created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS verification_codes (
+		id BIGSERIAL PRIMARY KEY,
+		email VARCHAR(255) NOT NULL,
+		code VARCHAR(32) NOT NULL,
+		purpose VARCHAR(64) DEFAULT 'register',
+		expires_at TIMESTAMPTZ NOT NULL,
+		used INT DEFAULT 0,
+		created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 	);
 
 	CREATE TABLE IF NOT EXISTS system_skills (
@@ -408,11 +500,24 @@ func (db *DB) migratePostgres() error {
 	CREATE INDEX IF NOT EXISTS idx_usage_trace ON usage_logs(trace_id);
 	CREATE INDEX IF NOT EXISTS idx_usage_chat ON usage_logs(chat_id);
 	CREATE INDEX IF NOT EXISTS idx_usage_session ON usage_logs(session_id);
+	CREATE INDEX IF NOT EXISTS idx_redemption_code ON redemption_codes(code);
+	CREATE INDEX IF NOT EXISTS idx_recharge_user ON recharge_orders(username);
+	CREATE INDEX IF NOT EXISTS idx_recharge_order ON recharge_orders(order_no);
+	CREATE INDEX IF NOT EXISTS idx_verify_email ON verification_codes(email, code);
 	`
 	if _, err := db.DB.Exec(schema); err != nil {
 		return err
 	}
 
+	// Idempotent migrations for existing deployments
+	_, _ = db.DB.Exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255) DEFAULT '';")
+	_, _ = db.DB.Exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(32) DEFAULT 'active';")
+	_, _ = db.DB.Exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS balance DOUBLE PRECISION DEFAULT 0.0;")
+	_, _ = db.DB.Exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS group_name VARCHAR(64) DEFAULT 'default';")
+	_, _ = db.DB.Exec("ALTER TABLE virtual_keys ADD COLUMN IF NOT EXISTS group_name VARCHAR(64) DEFAULT 'default';")
+	_, _ = db.DB.Exec("ALTER TABLE virtual_keys ADD COLUMN IF NOT EXISTS user_id BIGINT DEFAULT 0;")
+	_, _ = db.DB.Exec("ALTER TABLE model_prices ADD COLUMN IF NOT EXISTS group_name VARCHAR(64) DEFAULT 'default';")
+	_, _ = db.DB.Exec("CREATE INDEX IF NOT EXISTS idx_model_price_group ON model_prices(model, group_name);")
 	_, _ = db.DB.Exec("INSERT INTO system_settings (key, value) VALUES ('mcp_enabled', 'true') ON CONFLICT (key) DO NOTHING;")
 	return nil
 }

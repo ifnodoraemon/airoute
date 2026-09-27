@@ -38,6 +38,21 @@ func NewAdminHandler(repo *storage.Repository, sync *Synchronizer, dispatcher *r
 	}
 }
 
+// syncDataPlane synchronizes updated channels, virtual keys, and routing rules into memory and cluster replicas.
+func (h *AdminHandler) syncDataPlane(events ...string) {
+	if h.sync != nil {
+		event := "data_plane_updated"
+		if len(events) > 0 && events[0] != "" {
+			event = events[0]
+		}
+		_ = h.sync.ReloadAndBroadcast(cContext(), event)
+	}
+}
+
+func cContext() context.Context {
+	return context.Background()
+}
+
 // ProbeChannel handles automated downstream service detection and discovery.
 func (h *AdminHandler) ProbeChannel(c *gin.Context) {
 	var req ProbeRequest
@@ -245,8 +260,25 @@ func (h *AdminHandler) TestChannel(c *gin.Context) {
 	})
 }
 
-// ListVirtualKeys returns all virtual keys.
+// ListVirtualKeys returns all virtual keys (scoped to current user if non-admin).
 func (h *AdminHandler) ListVirtualKeys(c *gin.Context) {
+	claimsVal, exists := c.Get("admin_claims")
+	if exists {
+		claims := claimsVal.(*AdminClaims)
+		if claims.Role != "admin" {
+			user, _ := h.repo.GetUserByUsername(claims.Username)
+			if user != nil {
+				keys, err := h.repo.ListVirtualKeysByUser(user.ID)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					return
+				}
+				c.JSON(http.StatusOK, gin.H{"code": 0, "data": keys})
+				return
+			}
+		}
+	}
+
 	keys, err := h.repo.ListVirtualKeys()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -261,6 +293,18 @@ func (h *AdminHandler) CreateVirtualKey(c *gin.Context) {
 	if err := c.ShouldBindJSON(&rec); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	claimsVal, exists := c.Get("admin_claims")
+	if exists {
+		claims := claimsVal.(*AdminClaims)
+		if claims.Role != "admin" {
+			user, _ := h.repo.GetUserByUsername(claims.Username)
+			if user != nil {
+				rec.UserID = user.ID
+				rec.GroupName = user.GroupName
+			}
+		}
 	}
 
 	if rec.Key == "" {
@@ -295,6 +339,18 @@ func (h *AdminHandler) UpdateVirtualKey(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "virtual key not found"})
 		return
+	}
+
+	claimsVal, exists := c.Get("admin_claims")
+	if exists {
+		claims := claimsVal.(*AdminClaims)
+		if claims.Role != "admin" {
+			user, _ := h.repo.GetUserByUsername(claims.Username)
+			if user == nil || existing.UserID != user.ID {
+				c.JSON(http.StatusForbidden, gin.H{"error": "无权修改该密钥"})
+				return
+			}
+		}
 	}
 
 	var req struct {
@@ -346,6 +402,23 @@ func (h *AdminHandler) DeleteVirtualKey(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
+	}
+
+	claimsVal, exists := c.Get("admin_claims")
+	if exists {
+		claims := claimsVal.(*AdminClaims)
+		if claims.Role != "admin" {
+			user, _ := h.repo.GetUserByUsername(claims.Username)
+			if user == nil {
+				c.JSON(http.StatusForbidden, gin.H{"error": "用户不存在"})
+				return
+			}
+			existing, err := h.repo.GetVirtualKey(id)
+			if err != nil || existing == nil || existing.UserID != user.ID {
+				c.JSON(http.StatusForbidden, gin.H{"error": "无权操作该密钥"})
+				return
+			}
+		}
 	}
 
 	if err := h.repo.DeleteVirtualKey(id); err != nil {
@@ -719,14 +792,21 @@ func (h *AdminHandler) SavePricingRate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "模型计费单价配置已保存并实时生效"})
 }
 
-// DeletePricingRate removes pricing for a model.
+// DeletePricingRate removes pricing for a model (optionally within a group).
 func (h *AdminHandler) DeletePricingRate(c *gin.Context) {
 	modelName := strings.TrimSpace(c.Param("model"))
 	if modelName == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "model name required"})
 		return
 	}
-	if err := h.repo.DeleteModelPrice(modelName); err != nil {
+	groupName := strings.TrimSpace(c.Query("group"))
+	var err error
+	if groupName != "" {
+		err = h.repo.DeleteModelPriceWithGroup(modelName, groupName)
+	} else {
+		err = h.repo.DeleteModelPrice(modelName)
+	}
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete model price: " + err.Error()})
 		return
 	}
@@ -830,6 +910,38 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 		SessionID: c.Query("session_id"),
 		Model:     c.Query("model"),
 		TenantID:  c.Query("tenant_id"),
+	}
+
+	claimsVal, exists := c.Get("admin_claims")
+	if exists {
+		claims := claimsVal.(*AdminClaims)
+		if claims.Role != "admin" {
+			user, _ := h.repo.GetUserByUsername(claims.Username)
+			if user != nil {
+				userKeys, _ := h.repo.ListVirtualKeysByUser(user.ID)
+				if len(userKeys) == 0 {
+					c.JSON(http.StatusOK, gin.H{"code": 0, "data": []*storage.UsageLogRecord{}})
+					return
+				}
+				userKeyMap := make(map[string]bool)
+				for _, k := range userKeys {
+					userKeyMap[k.Key] = true
+				}
+				logs, err := h.repo.ListUsageLogsWithFilter(filter)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					return
+				}
+				userFiltered := make([]*storage.UsageLogRecord, 0)
+				for _, l := range logs {
+					if userKeyMap[l.VirtualKey] {
+						userFiltered = append(userFiltered, l)
+					}
+				}
+				c.JSON(http.StatusOK, gin.H{"code": 0, "data": userFiltered})
+				return
+			}
+		}
 	}
 
 	logs, err := h.repo.ListUsageLogsWithFilter(filter)
@@ -1129,13 +1241,23 @@ func (h *AdminHandler) BatchDeleteModelRoutes(c *gin.Context) {
 // BatchDeletePricingRates deletes pricing for multiple models.
 func (h *AdminHandler) BatchDeletePricingRates(c *gin.Context) {
 	var req struct {
-		Models []string `json:"models"`
+		Models []string                `json:"models"`
+		Items  []storage.ModelPriceKey `json:"items"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil || len(req.Models) == 0 {
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数格式错误"})
+		return
+	}
+	var n int64
+	var err error
+	if len(req.Items) > 0 {
+		n, err = h.repo.BatchDeleteModelPriceKeys(req.Items)
+	} else if len(req.Models) > 0 {
+		n, err = h.repo.BatchDeleteModelPrices(req.Models)
+	} else {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请提供待删除定价模型列表"})
 		return
 	}
-	n, err := h.repo.BatchDeleteModelPrices(req.Models)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

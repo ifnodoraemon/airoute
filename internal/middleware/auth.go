@@ -7,12 +7,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/nano-gateway/internal/config"
 	"github.com/ifnodoraemon/nano-gateway/internal/model"
+	"github.com/ifnodoraemon/nano-gateway/internal/storage"
 )
 
 const (
 	ContextKeyTenant           = "tenant_id"
 	ContextKeyVirtualKey       = "virtual_key"
 	ContextKeyVirtualKeyConfig = "virtual_key_config"
+	ContextKeyUserRecord       = "user_record"
 )
 
 // AuthMiddleware authenticates incoming requests via Bearer API keys.
@@ -63,6 +65,50 @@ func AuthMiddleware() gin.HandlerFunc {
 				},
 			})
 			return
+		}
+
+		// Check associated user account status and wallet quota balance
+		repo := storage.GetGlobalRepository()
+		if repo != nil {
+			var user *storage.UserRecord
+			if matchedKey.UserID > 0 {
+				user, _ = repo.GetUserByID(matchedKey.UserID)
+			}
+			if user == nil && matchedKey.TenantID != "" {
+				user, _ = repo.GetUserByUsername(matchedKey.TenantID)
+			}
+
+			if user != nil {
+				// 1. Account lock check
+				if strings.EqualFold(user.Status, "locked") {
+					c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+						"error": gin.H{
+							"message": "User account is locked. Please contact administrator.",
+							"type":    "account_locked",
+							"code":    "account_locked",
+						},
+					})
+					return
+				}
+
+				// 2. Wallet balance check (admin accounts have unlimited quota)
+				if !strings.EqualFold(user.Role, "admin") && user.Balance <= 0 {
+					c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
+						"error": gin.H{
+							"message": "You have exceeded your current balance/quota (insufficient_quota). Please recharge your wallet at the console.",
+							"type":    "insufficient_quota",
+							"code":    "insufficient_quota",
+						},
+					})
+					return
+				}
+
+				// Inherit user's group if key does not have an explicit group
+				if (matchedKey.GroupName == "" || matchedKey.GroupName == "default") && user.GroupName != "" {
+					matchedKey.GroupName = user.GroupName
+				}
+				c.Set(ContextKeyUserRecord, user)
+			}
 		}
 
 		// Save context info

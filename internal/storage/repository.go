@@ -41,6 +41,8 @@ type VirtualKeyRecord struct {
 	Budget        float64   `json:"budget"`
 	UsedTokens    int64     `json:"used_tokens"`
 	UsedCost      float64   `json:"used_cost"`
+	GroupName     string    `json:"group_name"`
+	UserID        int64     `json:"user_id"`
 	Status        string    `json:"status"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
@@ -73,6 +75,7 @@ type UsageLogRecord struct {
 type ModelPriceRecord struct {
 	ID              int64     `json:"id"`
 	Model           string    `json:"model"`
+	GroupName       string    `json:"group_name"`       // "default", "vip", "enterprise", etc.
 	PromptPrice     float64   `json:"prompt_price"`     // per 1,000,000 prompt tokens (CNY/USD)
 	CompletionPrice float64   `json:"completion_price"` // per 1,000,000 completion tokens
 	CacheReadPrice  float64   `json:"cache_read_price"` // per 1,000,000 cached tokens
@@ -109,9 +112,23 @@ type Repository struct {
 	db *DB
 }
 
+var globalRepo *Repository
+
+// SetGlobalRepository registers the global storage repository instance.
+func SetGlobalRepository(repo *Repository) {
+	globalRepo = repo
+}
+
+// GetGlobalRepository returns the active global repository instance.
+func GetGlobalRepository() *Repository {
+	return globalRepo
+}
+
 // NewRepository creates a new Repository.
 func NewRepository(db *DB) *Repository {
-	return &Repository{db: db}
+	r := &Repository{db: db}
+	globalRepo = r
+	return r
 }
 
 // ListChannels returns all channels.
@@ -223,7 +240,7 @@ func (r *Repository) DeleteChannel(id int64) error {
 
 // ListVirtualKeys returns all virtual keys.
 func (r *Repository) ListVirtualKeys() ([]*VirtualKeyRecord, error) {
-	rows, err := r.db.Query(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), status, created_at, updated_at FROM virtual_keys ORDER BY id ASC`)
+	rows, err := r.db.Query(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, created_at, updated_at FROM virtual_keys ORDER BY id ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +250,31 @@ func (r *Repository) ListVirtualKeys() ([]*VirtualKeyRecord, error) {
 	for rows.Next() {
 		var rec VirtualKeyRecord
 		var allowedJSON string
-		err := rows.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt)
+		err := rows.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.GroupName, &rec.UserID, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		if allowedJSON != "" {
+			_ = json.Unmarshal([]byte(allowedJSON), &rec.AllowedModels)
+		}
+		list = append(list, &rec)
+	}
+	return list, nil
+}
+
+// ListVirtualKeysByUser returns virtual keys belonging to a specific user.
+func (r *Repository) ListVirtualKeysByUser(userID int64) ([]*VirtualKeyRecord, error) {
+	rows, err := r.db.Query(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, created_at, updated_at FROM virtual_keys WHERE user_id = ? ORDER BY id ASC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := make([]*VirtualKeyRecord, 0)
+	for rows.Next() {
+		var rec VirtualKeyRecord
+		var allowedJSON string
+		err := rows.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.GroupName, &rec.UserID, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -254,9 +295,12 @@ func (r *Repository) CreateVirtualKey(rec *VirtualKeyRecord) error {
 	if rec.RPM == 0 {
 		rec.RPM = 60
 	}
+	if rec.GroupName == "" {
+		rec.GroupName = "default"
+	}
 
-	res, err := r.db.Exec(`INSERT INTO virtual_keys (key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, used_cost, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-		rec.Key, rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, rec.UsedTokens, rec.UsedCost, rec.Status)
+	res, err := r.db.Exec(`INSERT INTO virtual_keys (key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, used_cost, group_name, user_id, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		rec.Key, rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, rec.UsedTokens, rec.UsedCost, rec.GroupName, rec.UserID, rec.Status)
 	if err != nil {
 		return err
 	}
@@ -272,10 +316,10 @@ func (r *Repository) DeleteVirtualKey(id int64) error {
 
 // GetVirtualKey returns a single virtual key by ID.
 func (r *Repository) GetVirtualKey(id int64) (*VirtualKeyRecord, error) {
-	row := r.db.QueryRow(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), status, created_at, updated_at FROM virtual_keys WHERE id = ?`, id)
+	row := r.db.QueryRow(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, created_at, updated_at FROM virtual_keys WHERE id = ?`, id)
 	var rec VirtualKeyRecord
 	var allowedJSON string
-	if err := row.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+	if err := row.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.GroupName, &rec.UserID, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
 		return nil, err
 	}
 	if allowedJSON != "" {
@@ -284,14 +328,17 @@ func (r *Repository) GetVirtualKey(id int64) (*VirtualKeyRecord, error) {
 	return &rec, nil
 }
 
-// UpdateVirtualKey updates an existing virtual key (e.g. status, RPM, tenant, allowed models).
+// UpdateVirtualKey updates an existing virtual key (e.g. status, RPM, tenant, allowed models, group).
 func (r *Repository) UpdateVirtualKey(rec *VirtualKeyRecord) error {
 	allowedBytes, _ := json.Marshal(rec.AllowedModels)
 	if rec.Status == "" {
 		rec.Status = "active"
 	}
-	_, err := r.db.Exec(`UPDATE virtual_keys SET tenant_id = ?, allowed_models = ?, rpm = ?, tpm = ?, budget = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-		rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, rec.Status, rec.ID)
+	if rec.GroupName == "" {
+		rec.GroupName = "default"
+	}
+	_, err := r.db.Exec(`UPDATE virtual_keys SET tenant_id = ?, allowed_models = ?, rpm = ?, tpm = ?, budget = ?, group_name = ?, user_id = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, rec.GroupName, rec.UserID, rec.Status, rec.ID)
 	return err
 }
 
@@ -345,6 +392,13 @@ func (r *Repository) RecordUsageLog(log *UsageLogRecord) error {
 	if log.VirtualKey != "" && (log.Cost > 0 || log.TotalTokens > 0) {
 		_, _ = r.db.Exec(`UPDATE virtual_keys SET used_cost = used_cost + ?, used_tokens = used_tokens + ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?`,
 			log.Cost, log.TotalTokens, log.VirtualKey)
+		if log.Cost > 0 {
+			_, _ = r.db.Exec(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT user_id FROM virtual_keys WHERE key = ?) AND role != 'admin'`,
+				log.Cost, log.VirtualKey)
+		}
+	} else if log.TenantID != "" && log.Cost > 0 {
+		_, _ = r.db.Exec(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`,
+			log.Cost, log.TenantID, log.TenantID)
 	}
 	return err
 }
@@ -549,6 +603,33 @@ func (r *Repository) BatchDeleteModelPrices(models []string) (int64, error) {
 	return res.RowsAffected()
 }
 
+// ModelPriceKey identifies a specific model within a pricing group.
+type ModelPriceKey struct {
+	Model string `json:"model"`
+	Group string `json:"group"`
+}
+
+// BatchDeleteModelPriceKeys deletes specific (model, group) combinations.
+func (r *Repository) BatchDeleteModelPriceKeys(keys []ModelPriceKey) (int64, error) {
+	if len(keys) == 0 {
+		return 0, nil
+	}
+	var total int64
+	for _, k := range keys {
+		grp := strings.TrimSpace(k.Group)
+		if grp == "" {
+			grp = "default"
+		}
+		res, err := r.db.Exec(`DELETE FROM model_prices WHERE model = ? AND group_name = ?`, k.Model, grp)
+		if err != nil {
+			return total, err
+		}
+		n, _ := res.RowsAffected()
+		total += n
+	}
+	return total, nil
+}
+
 // GetStatsOverview queries summary metrics.
 func (r *Repository) GetStatsOverview() (*StatsOverview, error) {
 	stats := &StatsOverview{}
@@ -617,26 +698,42 @@ func (r *Repository) ToModelVirtualKeys() ([]model.VirtualKeyConfig, error) {
 			RPM:           rec.RPM,
 			TPM:           rec.TPM,
 			Budget:        rec.Budget,
+			GroupName:     rec.GroupName,
+			UserID:        rec.UserID,
 		})
 	}
 	return res, nil
 }
 
-// UserRecord represents an administrator or operator account.
+// UserRecord represents an administrator, operator, or standard user account.
 type UserRecord struct {
 	ID           int64     `json:"id"`
 	Username     string    `json:"username"`
+	Email        string    `json:"email"`
 	PasswordHash string    `json:"-"`
-	Role         string    `json:"role"`
+	Role         string    `json:"role"`       // "admin" or "user"
+	Status       string    `json:"status"`     // "active" or "locked"
+	Balance      float64   `json:"balance"`    // Wallet balance in CNY
+	GroupName    string    `json:"group_name"` // "default", "vip", "enterprise"
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-// GetUserByUsername finds a user by username.
+// GetUserByUsername finds a user by username or email.
 func (r *Repository) GetUserByUsername(username string) (*UserRecord, error) {
-	row := r.db.QueryRow(`SELECT id, username, password_hash, role, created_at, updated_at FROM users WHERE username = ?`, username)
+	row := r.db.QueryRow(`SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE username = ? OR email = ?`, username, username)
 	var u UserRecord
-	if err := row.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Role, &u.CreatedAt, &u.UpdatedAt); err != nil {
+	if err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.Balance, &u.GroupName, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+// GetUserByID finds a user by primary key ID.
+func (r *Repository) GetUserByID(id int64) (*UserRecord, error) {
+	row := r.db.QueryRow(`SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE id = ?`, id)
+	var u UserRecord
+	if err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.Balance, &u.GroupName, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		return nil, err
 	}
 	return &u, nil
@@ -644,8 +741,17 @@ func (r *Repository) GetUserByUsername(username string) (*UserRecord, error) {
 
 // CreateUser inserts a new user record.
 func (r *Repository) CreateUser(u *UserRecord) error {
-	res, err := r.db.Exec(`INSERT INTO users (username, password_hash, role, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)`,
-		u.Username, u.PasswordHash, u.Role)
+	if u.Role == "" {
+		u.Role = "user"
+	}
+	if u.Status == "" {
+		u.Status = "active"
+	}
+	if u.GroupName == "" {
+		u.GroupName = "default"
+	}
+	res, err := r.db.Exec(`INSERT INTO users (username, email, password_hash, role, status, balance, group_name, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		u.Username, u.Email, u.PasswordHash, u.Role, u.Status, u.Balance, u.GroupName)
 	if err != nil {
 		return err
 	}
@@ -662,9 +768,45 @@ func (r *Repository) UpdateUserPassword(username, newHash string) error {
 	return err
 }
 
+// UpdateUserStatus updates user status ('active' or 'locked').
+func (r *Repository) UpdateUserStatus(username, status string) error {
+	_, err := r.db.Exec(`UPDATE users SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, status, username)
+	return err
+}
+
+// UpdateUserBalance adjusts a user's wallet balance by a delta amount.
+func (r *Repository) UpdateUserBalance(username string, delta float64) error {
+	_, err := r.db.Exec(`UPDATE users SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, delta, username)
+	return err
+}
+
+// SetUserBalance sets an exact wallet balance for a user.
+func (r *Repository) SetUserBalance(username string, balance float64) error {
+	_, err := r.db.Exec(`UPDATE users SET balance = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, balance, username)
+	return err
+}
+
+// UpdateUserGroup updates a user's pricing group.
+func (r *Repository) UpdateUserGroup(username, groupName string) error {
+	if groupName == "" {
+		groupName = "default"
+	}
+	_, err := r.db.Exec(`UPDATE users SET group_name = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, groupName, username)
+	return err
+}
+
+// DeductUserBalance deducts quota/cost from user wallet. Admins are exempt.
+func (r *Repository) DeductUserBalance(userID int64, cost float64) error {
+	if userID <= 0 || cost <= 0 {
+		return nil
+	}
+	_, err := r.db.Exec(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND role != 'admin'`, cost, userID)
+	return err
+}
+
 // ListUsers returns all registered users without password hashes.
 func (r *Repository) ListUsers() ([]*UserRecord, error) {
-	rows, err := r.db.Query(`SELECT id, username, role, created_at, updated_at FROM users ORDER BY id ASC`)
+	rows, err := r.db.Query(`SELECT id, username, COALESCE(email, ''), COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(group_name, 'default'), created_at, updated_at FROM users ORDER BY id ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -673,7 +815,7 @@ func (r *Repository) ListUsers() ([]*UserRecord, error) {
 	var list []*UserRecord
 	for rows.Next() {
 		var u UserRecord
-		if err := rows.Scan(&u.ID, &u.Username, &u.Role, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.Role, &u.Status, &u.Balance, &u.GroupName, &u.CreatedAt, &u.UpdatedAt); err != nil {
 			return nil, err
 		}
 		list = append(list, &u)
@@ -691,6 +833,10 @@ func (r *Repository) DeleteUser(username string) error {
 func (r *Repository) EnsureDefaultAdmin(username, plainPass string) error {
 	existing, _ := r.GetUserByUsername(username)
 	if existing != nil {
+		// Ensure admin has infinite balance flag and active status
+		if existing.Balance < 999999 {
+			_ = r.SetUserBalance(username, 9999999.0)
+		}
 		return nil
 	}
 
@@ -700,9 +846,265 @@ func (r *Repository) EnsureDefaultAdmin(username, plainPass string) error {
 	}
 	return r.CreateUser(&UserRecord{
 		Username:     username,
+		Email:        "admin@nano-gateway.local",
 		PasswordHash: string(hash),
 		Role:         "admin",
+		Status:       "active",
+		Balance:      9999999.0, // Admin has infinite quota
+		GroupName:    "default",
 	})
+}
+
+// RedemptionCodeRecord represents a gift or balance redemption code.
+type RedemptionCodeRecord struct {
+	ID        int64      `json:"id"`
+	Code      string     `json:"code"`
+	Name      string     `json:"name"`
+	Amount    float64    `json:"amount"`
+	Status    string     `json:"status"` // "active", "used"
+	UsedBy    string     `json:"used_by"`
+	UsedAt    *time.Time `json:"used_at"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
+// CreateRedemptionCode creates a new redemption card.
+func (r *Repository) CreateRedemptionCode(rec *RedemptionCodeRecord) error {
+	if rec.Status == "" {
+		rec.Status = "active"
+	}
+	res, err := r.db.Exec(`INSERT INTO redemption_codes (code, name, amount, status, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		rec.Code, rec.Name, rec.Amount, rec.Status)
+	if err != nil {
+		// SQLite table doesn't have updated_at, handle gracefully
+		res, err = r.db.Exec(`INSERT INTO redemption_codes (code, name, amount, status) VALUES (?, ?, ?, ?)`,
+			rec.Code, rec.Name, rec.Amount, rec.Status)
+		if err != nil {
+			return err
+		}
+	}
+	id, err := res.LastInsertId()
+	if err == nil {
+		rec.ID = id
+	}
+	return nil
+}
+
+// ListRedemptionCodes returns all redemption codes.
+func (r *Repository) ListRedemptionCodes() ([]*RedemptionCodeRecord, error) {
+	rows, err := r.db.Query(`SELECT id, code, COALESCE(name, ''), amount, COALESCE(status, 'active'), COALESCE(used_by, ''), used_at, created_at FROM redemption_codes ORDER BY id DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*RedemptionCodeRecord
+	for rows.Next() {
+		var rec RedemptionCodeRecord
+		var usedAt sql.NullTime
+		if err := rows.Scan(&rec.ID, &rec.Code, &rec.Name, &rec.Amount, &rec.Status, &rec.UsedBy, &usedAt, &rec.CreatedAt); err != nil {
+			return nil, err
+		}
+		if usedAt.Valid {
+			t := usedAt.Time
+			rec.UsedAt = &t
+		}
+		list = append(list, &rec)
+	}
+	return list, nil
+}
+
+// RedeemCode redeems a code and adds its amount to the specified user's balance.
+func (r *Repository) RedeemCode(code, username string) (*RedemptionCodeRecord, error) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return nil, fmt.Errorf("兑换码不能为空")
+	}
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	var rec RedemptionCodeRecord
+	var usedAt sql.NullTime
+	row := tx.QueryRow(`SELECT id, code, COALESCE(name, ''), amount, COALESCE(status, 'active'), COALESCE(used_by, ''), used_at, created_at FROM redemption_codes WHERE code = ?`, code)
+	if err := row.Scan(&rec.ID, &rec.Code, &rec.Name, &rec.Amount, &rec.Status, &rec.UsedBy, &usedAt, &rec.CreatedAt); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("无效的兑换码")
+		}
+		return nil, err
+	}
+
+	if rec.Status != "active" {
+		return nil, fmt.Errorf("该兑换码已被使用或已失效")
+	}
+
+	// Mark as used
+	now := time.Now()
+	_, err = tx.Exec(`UPDATE redemption_codes SET status = 'used', used_by = ?, used_at = CURRENT_TIMESTAMP WHERE id = ?`, username, rec.ID)
+	if err != nil {
+		return nil, fmt.Errorf("更新兑换状态失败: %w", err)
+	}
+
+	// Credit user balance
+	_, err = tx.Exec(`UPDATE users SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, rec.Amount, username)
+	if err != nil {
+		return nil, fmt.Errorf("充值到账户余额失败: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	rec.Status = "used"
+	rec.UsedBy = username
+	rec.UsedAt = &now
+	return &rec, nil
+}
+
+// DeleteRedemptionCode removes a redemption code.
+func (r *Repository) DeleteRedemptionCode(id int64) error {
+	_, err := r.db.Exec(`DELETE FROM redemption_codes WHERE id = ?`, id)
+	return err
+}
+
+// RechargeOrderRecord represents a user wallet top-up order.
+type RechargeOrderRecord struct {
+	ID              int64     `json:"id"`
+	OrderNo         string    `json:"order_no"`
+	Username        string    `json:"username"`
+	Amount          float64   `json:"amount"`
+	Currency        string    `json:"currency"`
+	Channel         string    `json:"channel"`           // "stripe", "sandbox"
+	StripeSessionID string    `json:"stripe_session_id"` // Stripe Checkout Session ID
+	Status          string    `json:"status"`            // "pending", "paid", "cancelled"
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+// CreateRechargeOrder inserts a new recharge order.
+func (r *Repository) CreateRechargeOrder(rec *RechargeOrderRecord) error {
+	if rec.Currency == "" {
+		rec.Currency = "CNY"
+	}
+	if rec.Status == "" {
+		rec.Status = "pending"
+	}
+	res, err := r.db.Exec(`INSERT INTO recharge_orders (order_no, username, amount, currency, channel, stripe_session_id, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		rec.OrderNo, rec.Username, rec.Amount, rec.Currency, rec.Channel, rec.StripeSessionID, rec.Status)
+	if err != nil {
+		return err
+	}
+	id, err := res.LastInsertId()
+	if err == nil {
+		rec.ID = id
+	}
+	return nil
+}
+
+// CompleteRechargeOrder marks an order as paid and credits the user's wallet balance.
+func (r *Repository) CompleteRechargeOrder(orderNo string) (*RechargeOrderRecord, error) {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	var rec RechargeOrderRecord
+	row := tx.QueryRow(`SELECT id, order_no, username, amount, currency, channel, stripe_session_id, status, created_at, updated_at FROM recharge_orders WHERE order_no = ?`, orderNo)
+	if err := row.Scan(&rec.ID, &rec.OrderNo, &rec.Username, &rec.Amount, &rec.Currency, &rec.Channel, &rec.StripeSessionID, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+		return nil, fmt.Errorf("订单不存在: %w", err)
+	}
+
+	if rec.Status == "paid" {
+		return &rec, nil // Already completed (idempotent)
+	}
+
+	_, err = tx.Exec(`UPDATE recharge_orders SET status = 'paid', updated_at = CURRENT_TIMESTAMP WHERE id = ?`, rec.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = tx.Exec(`UPDATE users SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, rec.Amount, rec.Username)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	rec.Status = "paid"
+	return &rec, nil
+}
+
+// ListRechargeOrders returns recharge orders for a specific user or all users if username is empty.
+func (r *Repository) ListRechargeOrders(username string) ([]*RechargeOrderRecord, error) {
+	var rows *sql.Rows
+	var err error
+	if username != "" {
+		rows, err = r.db.Query(`SELECT id, order_no, username, amount, currency, channel, stripe_session_id, status, created_at, updated_at FROM recharge_orders WHERE username = ? ORDER BY id DESC LIMIT 50`, username)
+	} else {
+		rows, err = r.db.Query(`SELECT id, order_no, username, amount, currency, channel, stripe_session_id, status, created_at, updated_at FROM recharge_orders ORDER BY id DESC LIMIT 100`)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*RechargeOrderRecord
+	for rows.Next() {
+		var rec RechargeOrderRecord
+		if err := rows.Scan(&rec.ID, &rec.OrderNo, &rec.Username, &rec.Amount, &rec.Currency, &rec.Channel, &rec.StripeSessionID, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, &rec)
+	}
+	return list, nil
+}
+
+// VerificationCodeRecord stores temporary email verification codes.
+type VerificationCodeRecord struct {
+	ID        int64     `json:"id"`
+	Email     string    `json:"email"`
+	Code      string    `json:"code"`
+	Purpose   string    `json:"purpose"`
+	ExpiresAt time.Time `json:"expires_at"`
+	Used      bool      `json:"used"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// SaveVerificationCode stores a verification code with an expiration window.
+func (r *Repository) SaveVerificationCode(email, code, purpose string, duration time.Duration) error {
+	expiresAt := time.Now().Add(duration)
+	_, err := r.db.Exec(`INSERT INTO verification_codes (email, code, purpose, expires_at, used) VALUES (?, ?, ?, ?, 0)`,
+		strings.ToLower(strings.TrimSpace(email)), strings.TrimSpace(code), purpose, expiresAt.UTC().Format("2006-01-02 15:04:05"))
+	return err
+}
+
+// VerifyCode validates and consumes a verification code.
+func (r *Repository) VerifyCode(email, code, purpose string) bool {
+	email = strings.ToLower(strings.TrimSpace(email))
+	code = strings.TrimSpace(code)
+	if email == "" || code == "" {
+		return false
+	}
+
+	var id int64
+	row := r.db.QueryRow(`SELECT id FROM verification_codes WHERE email = ? AND code = ? AND purpose = ? AND used = 0 AND datetime(expires_at) > datetime('now') ORDER BY id DESC LIMIT 1`,
+		email, code, purpose)
+	if err := row.Scan(&id); err != nil {
+		return false
+	}
+
+	// Mark as used
+	_, _ = r.db.Exec(`UPDATE verification_codes SET used = 1 WHERE id = ?`, id)
+	return true
 }
 
 // ModelFallbackRecord represents a cross-model fallback rule.
@@ -753,7 +1155,7 @@ func (r *Repository) DeleteModelFallback(model string) error {
 
 // ListModelPrices returns all configured model pricing rates.
 func (r *Repository) ListModelPrices() ([]*ModelPriceRecord, error) {
-	rows, err := r.db.Query(`SELECT id, model, prompt_price, completion_price, cache_read_price, fixed_price, currency, COALESCE(off_peak_enabled, 1), COALESCE(off_peak_start, '00:00'), COALESCE(off_peak_end, '08:30'), COALESCE(off_peak_discount, 0.5), COALESCE(off_peak_mode, 'deepseek'), COALESCE(off_peak_slots, ''), COALESCE(weekend_all_day, 1), created_at, updated_at FROM model_prices ORDER BY id ASC`)
+	rows, err := r.db.Query(`SELECT id, model, COALESCE(group_name, 'default'), prompt_price, completion_price, cache_read_price, fixed_price, currency, COALESCE(off_peak_enabled, 1), COALESCE(off_peak_start, '00:00'), COALESCE(off_peak_end, '08:30'), COALESCE(off_peak_discount, 0.5), COALESCE(off_peak_mode, 'deepseek'), COALESCE(off_peak_slots, ''), COALESCE(weekend_all_day, 1), created_at, updated_at FROM model_prices ORDER BY id ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -763,7 +1165,7 @@ func (r *Repository) ListModelPrices() ([]*ModelPriceRecord, error) {
 	for rows.Next() {
 		var rec ModelPriceRecord
 		var offEnabled, weekendAllDay int
-		if err := rows.Scan(&rec.ID, &rec.Model, &rec.PromptPrice, &rec.CompletionPrice, &rec.CacheReadPrice, &rec.FixedPrice, &rec.Currency, &offEnabled, &rec.OffPeakStart, &rec.OffPeakEnd, &rec.OffPeakDiscount, &rec.OffPeakMode, &rec.OffPeakSlots, &weekendAllDay, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+		if err := rows.Scan(&rec.ID, &rec.Model, &rec.GroupName, &rec.PromptPrice, &rec.CompletionPrice, &rec.CacheReadPrice, &rec.FixedPrice, &rec.Currency, &offEnabled, &rec.OffPeakStart, &rec.OffPeakEnd, &rec.OffPeakDiscount, &rec.OffPeakMode, &rec.OffPeakSlots, &weekendAllDay, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
 			return nil, err
 		}
 		rec.OffPeakEnabled = offEnabled == 1
@@ -773,12 +1175,20 @@ func (r *Repository) ListModelPrices() ([]*ModelPriceRecord, error) {
 	return list, nil
 }
 
-// GetModelPrice returns pricing rates for a specific model.
+// GetModelPrice returns pricing rates for a specific model (defaulting to default group).
 func (r *Repository) GetModelPrice(modelName string) (*ModelPriceRecord, error) {
-	row := r.db.QueryRow(`SELECT id, model, prompt_price, completion_price, cache_read_price, fixed_price, currency, COALESCE(off_peak_enabled, 1), COALESCE(off_peak_start, '00:00'), COALESCE(off_peak_end, '08:30'), COALESCE(off_peak_discount, 0.5), COALESCE(off_peak_mode, 'deepseek'), COALESCE(off_peak_slots, ''), COALESCE(weekend_all_day, 1), created_at, updated_at FROM model_prices WHERE model = ?`, modelName)
+	return r.GetModelPriceWithGroup(modelName, "default")
+}
+
+// GetModelPriceExact returns pricing rates for an exact model and group without fallback.
+func (r *Repository) GetModelPriceExact(modelName, groupName string) (*ModelPriceRecord, error) {
+	if groupName == "" {
+		groupName = "default"
+	}
+	row := r.db.QueryRow(`SELECT id, model, COALESCE(group_name, 'default'), prompt_price, completion_price, cache_read_price, fixed_price, currency, COALESCE(off_peak_enabled, 1), COALESCE(off_peak_start, '00:00'), COALESCE(off_peak_end, '08:30'), COALESCE(off_peak_discount, 0.5), COALESCE(off_peak_mode, 'deepseek'), COALESCE(off_peak_slots, ''), COALESCE(weekend_all_day, 1), created_at, updated_at FROM model_prices WHERE model = ? AND group_name = ?`, modelName, groupName)
 	var rec ModelPriceRecord
 	var offEnabled, weekendAllDay int
-	if err := row.Scan(&rec.ID, &rec.Model, &rec.PromptPrice, &rec.CompletionPrice, &rec.CacheReadPrice, &rec.FixedPrice, &rec.Currency, &offEnabled, &rec.OffPeakStart, &rec.OffPeakEnd, &rec.OffPeakDiscount, &rec.OffPeakMode, &rec.OffPeakSlots, &weekendAllDay, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+	if err := row.Scan(&rec.ID, &rec.Model, &rec.GroupName, &rec.PromptPrice, &rec.CompletionPrice, &rec.CacheReadPrice, &rec.FixedPrice, &rec.Currency, &offEnabled, &rec.OffPeakStart, &rec.OffPeakEnd, &rec.OffPeakDiscount, &rec.OffPeakMode, &rec.OffPeakSlots, &weekendAllDay, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
 		return nil, err
 	}
 	rec.OffPeakEnabled = offEnabled == 1
@@ -786,8 +1196,27 @@ func (r *Repository) GetModelPrice(modelName string) (*ModelPriceRecord, error) 
 	return &rec, nil
 }
 
-// SaveModelPrice inserts or updates pricing rates for a model.
+// GetModelPriceWithGroup returns pricing rates for a specific model and group (with fallback to default group).
+func (r *Repository) GetModelPriceWithGroup(modelName, groupName string) (*ModelPriceRecord, error) {
+	if groupName == "" {
+		groupName = "default"
+	}
+	rec, err := r.GetModelPriceExact(modelName, groupName)
+	if err == nil {
+		return rec, nil
+	}
+	// Fallback to default group if specific group not found
+	if groupName != "default" {
+		return r.GetModelPriceExact(modelName, "default")
+	}
+	return nil, sql.ErrNoRows
+}
+
+// SaveModelPrice inserts or updates pricing rates for a model within a specific group.
 func (r *Repository) SaveModelPrice(rec *ModelPriceRecord) error {
+	if rec.GroupName == "" {
+		rec.GroupName = "default"
+	}
 	if rec.Currency == "" {
 		rec.Currency = "CNY"
 	}
@@ -813,9 +1242,9 @@ func (r *Repository) SaveModelPrice(rec *ModelPriceRecord) error {
 	}
 
 	_, err := r.db.Exec(`
-		INSERT INTO model_prices (model, prompt_price, completion_price, cache_read_price, fixed_price, currency, off_peak_enabled, off_peak_start, off_peak_end, off_peak_discount, off_peak_mode, off_peak_slots, weekend_all_day, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-		ON CONFLICT(model) DO UPDATE SET 
+		INSERT INTO model_prices (model, group_name, prompt_price, completion_price, cache_read_price, fixed_price, currency, off_peak_enabled, off_peak_start, off_peak_end, off_peak_discount, off_peak_mode, off_peak_slots, weekend_all_day, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(model, group_name) DO UPDATE SET 
 			prompt_price = excluded.prompt_price,
 			completion_price = excluded.completion_price,
 			cache_read_price = excluded.cache_read_price,
@@ -829,13 +1258,22 @@ func (r *Repository) SaveModelPrice(rec *ModelPriceRecord) error {
 			off_peak_slots = excluded.off_peak_slots,
 			weekend_all_day = excluded.weekend_all_day,
 			updated_at = CURRENT_TIMESTAMP
-	`, rec.Model, rec.PromptPrice, rec.CompletionPrice, rec.CacheReadPrice, rec.FixedPrice, rec.Currency, offEnabled, rec.OffPeakStart, rec.OffPeakEnd, rec.OffPeakDiscount, rec.OffPeakMode, rec.OffPeakSlots, weekendAll)
+	`, rec.Model, rec.GroupName, rec.PromptPrice, rec.CompletionPrice, rec.CacheReadPrice, rec.FixedPrice, rec.Currency, offEnabled, rec.OffPeakStart, rec.OffPeakEnd, rec.OffPeakDiscount, rec.OffPeakMode, rec.OffPeakSlots, weekendAll)
 	return err
 }
 
 // DeleteModelPrice removes pricing rates for a model.
 func (r *Repository) DeleteModelPrice(modelName string) error {
 	_, err := r.db.Exec(`DELETE FROM model_prices WHERE model = ?`, modelName)
+	return err
+}
+
+// DeleteModelPriceWithGroup removes pricing rates for a specific model and group.
+func (r *Repository) DeleteModelPriceWithGroup(modelName, groupName string) error {
+	if groupName == "" {
+		groupName = "default"
+	}
+	_, err := r.db.Exec(`DELETE FROM model_prices WHERE model = ? AND group_name = ?`, modelName, groupName)
 	return err
 }
 

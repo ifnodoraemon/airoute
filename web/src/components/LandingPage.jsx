@@ -209,10 +209,10 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
             ) : (
               <button
                 onClick={onOpenLogin}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
               >
                 <Key className="w-3.5 h-3.5" />
-                <span>管理员登录</span>
+                <span>登录 / 注册</span>
               </button>
             )}
           </div>
@@ -851,8 +851,8 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
                 进入管理控制台
               </button>
             ) : (
-              <button onClick={onOpenLogin} className="text-indigo-600 hover:underline font-semibold">
-                管理员登录
+              <button onClick={onOpenLogin} className="text-indigo-600 hover:underline font-semibold cursor-pointer">
+                登录 / 注册
               </button>
             )}
             <button onClick={onViewStatus} className="hover:text-slate-800 cursor-pointer">

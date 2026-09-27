@@ -49,7 +49,8 @@ import {
   ShieldCheck,
   DollarSign,
   Coins,
-  Bot
+  Bot,
+  Wallet
 } from 'lucide-react';
 import Toast from './components/Toast';
 import QuickStartModal from './components/QuickStartModal';
@@ -66,6 +67,7 @@ import ServiceStatus from './components/ServiceStatus';
 import PricingManager from './components/PricingManager';
 import McpIntegrationView from './components/McpIntegrationView';
 import UserManagementView from './components/UserManagementView';
+import WalletManagementView from './components/WalletManagementView';
 import { translations } from './i18n';
 
 export default function App() {
@@ -170,7 +172,21 @@ export default function App() {
     localStorage.removeItem('nano_admin_token');
     localStorage.removeItem('nano_admin_user');
     setViewMode('landing');
-    showToast('已安全退出管理后台', 'info');
+    showToast('已安全退出账号', 'info');
+  };
+
+  const fetchUserProfile = async () => {
+    if (!adminToken) return;
+    try {
+      const res = await fetch('/api/v1/admin/auth/me', {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      });
+      const data = await res.json();
+      if (res.ok && data.code === 0 && data.data) {
+        setAdminUser(data.data);
+        localStorage.setItem('nano_admin_user', JSON.stringify(data.data));
+      }
+    } catch (e) {}
   };
 
   const [activeQuickKey, setActiveQuickKey] = useState(null);
@@ -180,7 +196,26 @@ export default function App() {
   const [batchTesting, setBatchTesting] = useState(false);
   const [channelLatencies, setChannelLatencies] = useState({});
 
-  const [currentTab, setCurrentTab] = useState('dashboard');
+  const [currentTab, setCurrentTab] = useState(() => {
+    const savedUser = localStorage.getItem('nano_admin_user');
+    if (savedUser) {
+      try {
+        const u = JSON.parse(savedUser);
+        if (u && u.role !== 'admin') return 'wallet';
+      } catch (e) {}
+    }
+    return 'dashboard';
+  });
+
+  // Automatically ensure regular user stays within permitted tabs
+  useEffect(() => {
+    if (adminUser && adminUser.role !== 'admin') {
+      const allowedTabs = ['wallet', 'keys', 'playground', 'pricing', 'logs', 'docs'];
+      if (!allowedTabs.includes(currentTab)) {
+        setCurrentTab('wallet');
+      }
+    }
+  }, [adminUser, currentTab]);
   const [stats, setStats] = useState({});
   const [channels, setChannels] = useState([]);
   const [keys, setKeys] = useState([]);
@@ -1712,113 +1747,193 @@ export default function App() {
         </div>
 
         <nav className="flex-1 p-4 space-y-1.5">
-          <button
-            onClick={() => setCurrentTab('dashboard')}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-              currentTab === 'dashboard'
-                ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-            }`}
-          >
-            <Activity className="w-4 h-4 text-indigo-500" />
-            <span>{t.navDashboard}</span>
-          </button>
+          {adminUser?.role === 'admin' ? (
+            /* Admin Full Navigation */
+            <>
+              <button
+                onClick={() => setCurrentTab('dashboard')}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
+                  currentTab === 'dashboard'
+                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                }`}
+              >
+                <Activity className="w-4 h-4 text-indigo-500" />
+                <span>{t.navDashboard}</span>
+              </button>
 
-          <button
-            onClick={() => setCurrentTab('models')}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-              currentTab === 'models'
-                ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-            }`}
-          >
-            <Cpu className="w-4 h-4 text-pink-500" />
-            <span>{t.navModels}</span>
-          </button>
+              <button
+                onClick={() => setCurrentTab('models')}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
+                  currentTab === 'models'
+                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                }`}
+              >
+                <Cpu className="w-4 h-4 text-pink-500" />
+                <span>{t.navModels}</span>
+              </button>
 
-          <button
-            onClick={() => setCurrentTab('pricing')}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-              currentTab === 'pricing'
-                ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-            }`}
-          >
-            <DollarSign className="w-4 h-4 text-emerald-500" />
-            <span>{t.navPricing}</span>
-          </button>
+              <button
+                onClick={() => setCurrentTab('pricing')}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
+                  currentTab === 'pricing'
+                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                }`}
+              >
+                <DollarSign className="w-4 h-4 text-emerald-500" />
+                <span>{t.navPricing}</span>
+              </button>
 
-          <button
-            onClick={() => setCurrentTab('channels')}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-              currentTab === 'channels'
-                ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-            }`}
-          >
-            <Server className="w-4 h-4 text-emerald-500" />
-            <span>{t.navChannels}</span>
-          </button>
+              <button
+                onClick={() => setCurrentTab('channels')}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
+                  currentTab === 'channels'
+                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                }`}
+              >
+                <Server className="w-4 h-4 text-emerald-500" />
+                <span>{t.navChannels}</span>
+              </button>
 
-          <button
-            onClick={() => setCurrentTab('keys')}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-              currentTab === 'keys'
-                ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-            }`}
-          >
-            <Key className="w-4 h-4 text-amber-500" />
-            <span>{t.navKeys}</span>
-          </button>
+              <button
+                onClick={() => setCurrentTab('keys')}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
+                  currentTab === 'keys'
+                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                }`}
+              >
+                <Key className="w-4 h-4 text-amber-500" />
+                <span>{t.navKeys}</span>
+              </button>
 
-          <button
-            onClick={() => setCurrentTab('logs')}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-              currentTab === 'logs'
-                ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-            }`}
-          >
-            <History className="w-4 h-4 text-sky-500" />
-            <span>{t.navLogs}</span>
-          </button>
+              <button
+                onClick={() => setCurrentTab('wallet')}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
+                  currentTab === 'wallet'
+                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                }`}
+              >
+                <Wallet className="w-4 h-4 text-teal-600" />
+                <span>卡密与充值</span>
+              </button>
 
-          <button
-            onClick={() => setCurrentTab('mcp')}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-              currentTab === 'mcp'
-                ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-            }`}
-          >
-            <Bot className="w-4 h-4 text-violet-500" />
-            <span>{t.navMcp}</span>
-          </button>
+              <button
+                onClick={() => setCurrentTab('logs')}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
+                  currentTab === 'logs'
+                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                }`}
+              >
+                <History className="w-4 h-4 text-sky-500" />
+                <span>{t.navLogs}</span>
+              </button>
 
-          <button
-            onClick={() => setCurrentTab('users')}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-              currentTab === 'users'
-                ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-            }`}
-          >
-            <ShieldCheck className="w-4 h-4 text-indigo-600" />
-            <span>{t.navUsers}</span>
-          </button>
+              <button
+                onClick={() => setCurrentTab('mcp')}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
+                  currentTab === 'mcp'
+                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                }`}
+              >
+                <Bot className="w-4 h-4 text-violet-500" />
+                <span>{t.navMcp}</span>
+              </button>
 
-          <button
-            onClick={() => setCurrentTab('playground')}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-              currentTab === 'playground'
-                ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-            }`}
-          >
-            <Terminal className="w-4 h-4 text-purple-500" />
-            <span>{t.navPlayground}</span>
-          </button>
+              <button
+                onClick={() => setCurrentTab('users')}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
+                  currentTab === 'users'
+                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                }`}
+              >
+                <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                <span>{t.navUsers}</span>
+              </button>
+
+              <button
+                onClick={() => setCurrentTab('playground')}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
+                  currentTab === 'playground'
+                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                }`}
+              >
+                <Terminal className="w-4 h-4 text-purple-500" />
+                <span>{t.navPlayground}</span>
+              </button>
+            </>
+          ) : (
+            /* Regular User Navigation */
+            <>
+              <button
+                onClick={() => setCurrentTab('wallet')}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
+                  currentTab === 'wallet'
+                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                }`}
+              >
+                <Wallet className="w-4 h-4 text-emerald-600" />
+                <span>{t.navWallet || '我的钱包'}</span>
+              </button>
+
+              <button
+                onClick={() => setCurrentTab('keys')}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
+                  currentTab === 'keys'
+                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                }`}
+              >
+                <Key className="w-4 h-4 text-amber-500" />
+                <span>{t.navKeys}</span>
+              </button>
+
+              <button
+                onClick={() => setCurrentTab('playground')}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
+                  currentTab === 'playground'
+                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                }`}
+              >
+                <Terminal className="w-4 h-4 text-purple-500" />
+                <span>{t.navPlayground}</span>
+              </button>
+
+              <button
+                onClick={() => setCurrentTab('pricing')}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
+                  currentTab === 'pricing'
+                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                }`}
+              >
+                <DollarSign className="w-4 h-4 text-emerald-500" />
+                <span>{t.navPricing}</span>
+              </button>
+
+              <button
+                onClick={() => setCurrentTab('logs')}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
+                  currentTab === 'logs'
+                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                }`}
+              >
+                <History className="w-4 h-4 text-sky-500" />
+                <span>{t.navLogs}</span>
+              </button>
+            </>
+          )}
 
           <div className="pt-3 mt-2 border-t border-slate-100">
             <button
@@ -1872,6 +1987,7 @@ export default function App() {
               {currentTab === 'pricing' && t.navPricing}
               {currentTab === 'channels' && t.navChannels}
               {currentTab === 'keys' && t.navKeys}
+              {currentTab === 'wallet' && (adminUser?.role === 'admin' ? '卡密与充值管理' : (t.navWallet || '我的钱包'))}
               {currentTab === 'logs' && t.navLogs}
               {currentTab === 'mcp' && (t.navMcp || '扩展广场')}
               {currentTab === 'users' && (t.navUsers || '用户管理')}
@@ -1915,21 +2031,56 @@ export default function App() {
             </a>
 
             {/* Account info & actions */}
-            <div className="flex items-center space-x-2 pl-2 border-l border-slate-200">
-              <button
-                onClick={() => setCurrentTab('users')}
-                className="flex items-center space-x-1.5 text-xs text-slate-700 font-medium px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 border border-slate-200 transition cursor-pointer"
-                title="进入用户与权限管理"
-              >
-                <User className="w-3.5 h-3.5 text-indigo-600" />
-                <span>{adminUser?.username || 'admin'}</span>
-                <span className="text-[10px] text-slate-500 bg-white px-1.5 py-0.5 rounded font-mono shadow-2xs">
-                  {adminUser?.role === 'admin' ? '系统管理员' : '普通用户'}
-                </span>
-              </button>
+            <div className="flex items-center space-x-2.5 pl-2 border-l border-slate-200">
+              {adminUser?.role === 'admin' ? (
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => setCurrentTab('users')}
+                    className="flex items-center space-x-1.5 text-xs text-slate-700 font-medium px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 border border-slate-200 transition cursor-pointer"
+                    title="进入用户与权限管理"
+                  >
+                    <User className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>{adminUser?.username || 'admin'}</span>
+                    <span className="text-[10px] text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded font-mono font-bold">
+                      超级管理员 · 无限额度
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setCurrentTab('wallet')}
+                    className="px-2.5 py-1 text-xs font-semibold text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition cursor-pointer"
+                    title="卡密生成与充值中心"
+                  >
+                    卡密中心
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center space-x-2">
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    {adminUser?.group_name ? `${adminUser.group_name} 组` : '默认组'}
+                  </span>
+                  <button
+                    onClick={() => setCurrentTab('wallet')}
+                    className="flex items-center space-x-1.5 text-xs text-emerald-800 font-bold px-2.5 py-1 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition cursor-pointer"
+                    title="点击管理钱包与充值"
+                  >
+                    <Coins className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>¥{Number(adminUser?.balance || 0).toFixed(2)}</span>
+                  </button>
+                  <button
+                    onClick={() => setCurrentTab('wallet')}
+                    className="px-2.5 py-1 text-xs font-semibold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 rounded-xl transition shadow-2xs cursor-pointer"
+                  >
+                    充值 / 兑换
+                  </button>
+                  <div className="flex items-center space-x-1.5 text-xs text-slate-700 px-2.5 py-1 bg-slate-100 border border-slate-200 rounded-xl font-medium">
+                    <User className="w-3.5 h-3.5 text-slate-500" />
+                    <span>{adminUser?.username}</span>
+                  </div>
+                </div>
+              )}
               <button
                 onClick={handleLogout}
-                className="p-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 transition"
+                className="p-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 transition cursor-pointer"
                 title="退出登录"
               >
                 <LogOut className="w-3.5 h-3.5" />
@@ -3230,6 +3381,20 @@ export default function App() {
               adminToken={adminToken}
               adminFetch={adminFetch}
               showToast={showToast}
+            />
+          )}
+
+          {/* 7. WALLET MANAGEMENT TAB */}
+          {currentTab === 'wallet' && (
+            <WalletManagementView
+              adminUser={adminUser}
+              adminToken={adminToken}
+              adminFetch={adminFetch}
+              showToast={showToast}
+              onBalanceUpdate={(newBal) => {
+                setAdminUser(prev => prev ? { ...prev, balance: newBal } : prev);
+                fetchUserProfile();
+              }}
             />
           )}
 
