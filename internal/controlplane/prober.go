@@ -23,13 +23,14 @@ type ProbeRequest struct {
 
 // ProbeResult contains automatically discovered downstream capabilities.
 type ProbeResult struct {
-	Type          model.ProviderType `json:"type"`
-	SuggestedName string             `json:"suggested_name"`
-	Models        []string           `json:"models"`
-	Protocols     []string           `json:"protocols"`
-	LatencyMs     int64              `json:"latency_ms"`
-	ServerHeader  string             `json:"server_header,omitempty"`
-	Message       string             `json:"message"`
+	Type             model.ProviderType `json:"type"`
+	SuggestedName    string             `json:"suggested_name"`
+	SuggestedBaseURL string             `json:"suggested_base_url,omitempty"`
+	Models           []string           `json:"models"`
+	Protocols        []string           `json:"protocols"`
+	LatencyMs        int64              `json:"latency_ms"`
+	ServerHeader     string             `json:"server_header,omitempty"`
+	Message          string             `json:"message"`
 }
 
 // DownstreamProber handles automatic probing and discovery of downstream LLM engines.
@@ -63,23 +64,28 @@ func (p *DownstreamProber) Probe(ctx context.Context, req *ProbeRequest) (*Probe
 
 	start := time.Now()
 
-	// 1. Check for Google Gemini Developer API
+	// 1. Check for GPUStack cluster (probe /version or root / for GPUStack signatures)
+	if gpustackRes, _ := p.probeGPUStack(ctx, baseURL, req.APIKey, start); gpustackRes != nil {
+		return gpustackRes, nil
+	}
+
+	// 2. Check for Google Gemini Developer API
 	if strings.Contains(baseURL, "generativelanguage.googleapis.com") || req.Type == "gemini" {
 		return p.probeGemini(ctx, baseURL, req.APIKey, start)
 	}
 
-	// 2. Check for Anthropic Claude direct API
+	// 3. Check for Anthropic Claude direct API
 	if strings.Contains(baseURL, "api.anthropic.com") || req.Type == "anthropic" {
 		return p.probeAnthropic(ctx, baseURL, req.APIKey, start)
 	}
 
-	// 3. Probe standard OpenAI-compatible endpoints (/v1/models or /models)
+	// 4. Probe standard OpenAI-compatible endpoints (/v1/models or /models)
 	res, err := p.probeOpenAICompatible(ctx, baseURL, req.APIKey, start)
 	if err == nil {
 		return res, nil
 	}
 
-	// 4. Probe Ollama /api/tags
+	// 5. Probe Ollama /api/tags
 	ollamaRes, errOllama := p.probeOllama(ctx, baseURL, start)
 	if errOllama == nil {
 		return ollamaRes, nil
@@ -89,22 +95,29 @@ func (p *DownstreamProber) Probe(ctx context.Context, req *ProbeRequest) (*Probe
 	dur := time.Since(start).Milliseconds()
 	serverHeader := ""
 	detectedType := inferProviderType(baseURL, serverHeader, nil)
+	msg := "已连接下游服务，但该服务未开放无凭证的模型列表接口。您可以输入 API Key 重新拉取，或在下方手动添加模型。"
+	if err != nil && (strings.Contains(err.Error(), "401") || strings.Contains(err.Error(), "Unauthorized")) {
+		msg = "已成功连通下游服务，但该服务开启了访问鉴权保护 (401 Unauthorized)。请在上方填入 API Key 后再次获取模型。"
+	} else if err != nil {
+		msg = fmt.Sprintf("服务已连通 (响应延迟 %dms)，但自动读取模型列表未成功: %v。请在下方手动输入所需模型。", dur, err)
+	}
 	return &ProbeResult{
 		Type:          detectedType,
 		SuggestedName: suggestProviderName(detectedType, baseURL, ""),
-		Models:        []string{"default-model"},
-		Protocols:     []string{"openai_chat", "openai_text"},
+		Models:        []string{},
+		Protocols:     []string{"openai_chat", "openai_response", "openai_text"},
 		LatencyMs:     dur,
-		Message:       fmt.Sprintf("探测完成 (无法自动读取模型列表，已按地址推断并推荐标准协议): %v", err),
+		Message:       msg,
 	}, nil
 }
 
 func (p *DownstreamProber) probeOpenAICompatible(ctx context.Context, baseURL, apiKey string, start time.Time) (*ProbeResult, error) {
 	testEndpoints := []string{
-		baseURL + "/models",
+		baseURL + "/v1-openai/models",
 		baseURL + "/v1/models",
+		baseURL + "/models",
 	}
-	if strings.HasSuffix(baseURL, "/v1") {
+	if strings.HasSuffix(baseURL, "/v1") || strings.HasSuffix(baseURL, "/v1-openai") {
 		testEndpoints = []string{baseURL + "/models"}
 	}
 
@@ -178,6 +191,8 @@ func (p *DownstreamProber) probeOpenAICompatible(ctx context.Context, baseURL, a
 					Message:       fmt.Sprintf("成功检测到 %d 个下游模型", len(modelIDs)),
 				}, nil
 			}
+		} else if resp.StatusCode == http.StatusUnauthorized {
+			lastErr = fmt.Errorf("status code 401 (Unauthorized: 下游开启了访问凭证保护，请输入 API Key 提取在线模型列表)")
 		} else {
 			lastErr = fmt.Errorf("status code %d", resp.StatusCode)
 		}
@@ -195,12 +210,6 @@ func (p *DownstreamProber) probeGemini(ctx context.Context, baseURL, apiKey stri
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
 	resp, err := p.client.Do(req)
 	dur := time.Since(start).Milliseconds()
-
-	defaultGeminiModels := []string{
-		"gemini-2.0-flash",
-		"gemini-1.5-pro",
-		"gemini-1.5-flash",
-	}
 
 	if err == nil && resp.StatusCode == http.StatusOK {
 		defer resp.Body.Close()
@@ -230,20 +239,15 @@ func (p *DownstreamProber) probeGemini(ctx context.Context, baseURL, apiKey stri
 	return &ProbeResult{
 		Type:          model.ProviderGemini,
 		SuggestedName: "google-gemini-official",
-		Models:        defaultGeminiModels,
+		Models:        []string{},
 		Protocols:     []string{"openai_chat", "anthropic_messages", "embeddings"},
 		LatencyMs:     dur,
-		Message:       "已配置 Google Gemini 协议，已载入标准 Gemini 2.0 / 1.5 系列预设",
+		Message:       "已识别 Google Gemini 官方协议。请输入 API Key 后再次点击【连通测试并拉取模型】以同步在线模型列表，或在下方手动添加。",
 	}, nil
 }
 
 func (p *DownstreamProber) probeAnthropic(ctx context.Context, baseURL, apiKey string, start time.Time) (*ProbeResult, error) {
 	dur := time.Since(start).Milliseconds()
-	claudeModels := []string{
-		"claude-3-5-sonnet-20241022",
-		"claude-3-5-haiku-20241022",
-		"claude-3-opus-20240229",
-	}
 
 	if apiKey != "" && apiKey != "none" {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.anthropic.com/v1/models", nil)
@@ -278,10 +282,10 @@ func (p *DownstreamProber) probeAnthropic(ctx context.Context, baseURL, apiKey s
 	return &ProbeResult{
 		Type:          model.ProviderAnthropic,
 		SuggestedName: "anthropic-claude-direct",
-		Models:        claudeModels,
+		Models:        []string{},
 		Protocols:     []string{"openai_chat", "anthropic_messages"},
 		LatencyMs:     dur,
-		Message:       "已识别 Anthropic Claude 原生协议，并已预置 Claude 3.5 系列模型与全双工协议转换",
+		Message:       "已识别 Anthropic Claude 原生协议。请输入 API Key 后再次点击【连通测试并拉取模型】以同步在线模型列表，或在下方手动添加。",
 	}, nil
 }
 
@@ -317,6 +321,140 @@ func (p *DownstreamProber) probeOllama(ctx context.Context, baseURL string, star
 		Protocols:     inferProtocols(models),
 		LatencyMs:     dur,
 		Message:       fmt.Sprintf("已成功连接本地 Ollama 推理引擎，发现 %d 个模型", len(models)),
+	}, nil
+}
+
+func (p *DownstreamProber) probeGPUStack(ctx context.Context, baseURL, apiKey string, start time.Time) (*ProbeResult, error) {
+	rootURL := baseURL
+	if idx := strings.Index(rootURL, "/v1-openai"); idx != -1 {
+		rootURL = rootURL[:idx]
+	} else if idx := strings.Index(rootURL, "/v1"); idx != -1 {
+		rootURL = rootURL[:idx]
+	}
+	rootURL = strings.TrimRight(rootURL, "/")
+
+	isGPUStack := false
+	versionStr := ""
+	dur := time.Since(start).Milliseconds()
+
+	// 1. Probe /version
+	vCtx, vCancel := context.WithTimeout(ctx, 3*time.Second)
+	defer vCancel()
+
+	versionURL := rootURL + "/version"
+	vReq, err := http.NewRequestWithContext(vCtx, http.MethodGet, versionURL, nil)
+	if err == nil {
+		if vResp, err := p.client.Do(vReq); err == nil {
+			defer vResp.Body.Close()
+			if vResp.StatusCode == http.StatusOK {
+				body, _ := io.ReadAll(vResp.Body)
+				var vData struct {
+					Version   string `json:"version"`
+					GitCommit string `json:"git_commit"`
+				}
+				if json.Unmarshal(body, &vData) == nil && (vData.GitCommit != "" || strings.HasPrefix(vData.Version, "v")) {
+					isGPUStack = true
+					versionStr = vData.Version
+				}
+			}
+		}
+	}
+
+	// 2. If not detected via /version, probe root / for HTML signatures
+	if !isGPUStack {
+		rCtx, rCancel := context.WithTimeout(ctx, 3*time.Second)
+		defer rCancel()
+		rootReq, err := http.NewRequestWithContext(rCtx, http.MethodGet, rootURL, nil)
+		if err == nil {
+			if rootResp, err := p.client.Do(rootReq); err == nil {
+				defer rootResp.Body.Close()
+				body, _ := io.ReadAll(io.LimitReader(rootResp.Body, 16384))
+				bodyStr := string(body)
+				if strings.Contains(bodyStr, "<title>GPUStack</title>") || strings.Contains(bodyStr, "data-version=\"v") {
+					isGPUStack = true
+					if idx := strings.Index(bodyStr, "data-version=\""); idx != -1 {
+						sub := bodyStr[idx+14:]
+						if end := strings.Index(sub, "\""); end != -1 {
+							versionStr = sub[:end]
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if !isGPUStack && !strings.Contains(strings.ToLower(baseURL), "gpustack") {
+		return nil, nil
+	}
+
+	// Definitively GPUStack!
+	suggestedBaseURL := rootURL + "/v1-openai"
+	if strings.HasSuffix(baseURL, "/v1-openai") {
+		suggestedBaseURL = baseURL
+	}
+
+	// Try reading models if apiKey provided
+	if apiKey != "" && apiKey != "none" {
+		mCtx, mCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer mCancel()
+		modelReq, err := http.NewRequestWithContext(mCtx, http.MethodGet, suggestedBaseURL+"/models", nil)
+		if err == nil {
+			modelReq.Header.Set("Authorization", "Bearer "+apiKey)
+			if modelResp, err := p.client.Do(modelReq); err == nil {
+				defer modelResp.Body.Close()
+				if modelResp.StatusCode == http.StatusOK {
+					body, _ := io.ReadAll(modelResp.Body)
+					var parsed struct {
+						Data []struct {
+							ID string `json:"id"`
+						} `json:"data"`
+					}
+					if json.Unmarshal(body, &parsed) == nil && len(parsed.Data) > 0 {
+						var list []string
+						for _, d := range parsed.Data {
+							if d.ID != "" {
+								list = append(list, d.ID)
+							}
+						}
+						return &ProbeResult{
+							Type:             model.ProviderGPUStack,
+							SuggestedName:    "gpustack-cluster",
+							SuggestedBaseURL: suggestedBaseURL,
+							Models:           list,
+							Protocols:        inferProtocols(list),
+							LatencyMs:        time.Since(start).Milliseconds(),
+							Message:          fmt.Sprintf("已成功识别 GPUStack 企业算力集群 (版本 %s) 并自动同步 %d 个已部署模型", versionStr, len(list)),
+						}, nil
+					}
+				} else if modelResp.StatusCode == http.StatusUnauthorized {
+					return &ProbeResult{
+						Type:             model.ProviderGPUStack,
+						SuggestedName:    "gpustack-cluster",
+						SuggestedBaseURL: suggestedBaseURL,
+						Models:           []string{},
+						Protocols:        []string{"openai_chat", "openai_response", "openai_text", "embeddings", "rerank", "images"},
+						LatencyMs:        time.Since(start).Milliseconds(),
+						Message:          fmt.Sprintf("已成功识别 GPUStack 企业集群 (版本 %s)，但提供的 API Key 鉴权失败 (401 Unauthorized)，请检查 API Key 后重试。", versionStr),
+					}, nil
+				}
+			}
+		}
+	}
+
+	// Authentication required (no apiKey provided)
+	verMsg := ""
+	if versionStr != "" {
+		verMsg = fmt.Sprintf("版本 %s，", versionStr)
+	}
+
+	return &ProbeResult{
+		Type:             model.ProviderGPUStack,
+		SuggestedName:    "gpustack-cluster",
+		SuggestedBaseURL: suggestedBaseURL,
+		Models:           []string{},
+		Protocols:        []string{"openai_chat", "openai_response", "openai_text", "embeddings", "rerank", "images"},
+		LatencyMs:        dur,
+		Message:          fmt.Sprintf("已成功识别并连通 GPUStack 企业算力集群 (%s响应延迟 %dms)！检测到下游开启了访问密钥保护 (401 Unauthorized)，请在上方填入 API Key 后点击【获取模型列表】以拉取部署的模型。", verMsg, dur),
 	}, nil
 }
 
@@ -407,13 +545,14 @@ func contains(slice []string, item string) bool {
 func inferProtocols(models []string) []string {
 	protocolsMap := map[string]bool{
 		"openai_chat":        true,
+		"openai_response":    true,
 		"openai_text":        true,
 		"anthropic_messages": true,
 	}
 
 	for _, m := range models {
 		lower := strings.ToLower(m)
-		if strings.Contains(lower, "dall-e") || strings.Contains(lower, "flux") || strings.Contains(lower, "stable-diffusion") || strings.Contains(lower, "sd") || strings.Contains(lower, "midjourney") {
+		if strings.Contains(lower, "dall-e") || strings.Contains(lower, "flux") || strings.Contains(lower, "stable-diffusion") || strings.Contains(lower, "sd") || strings.Contains(lower, "seedream") || strings.Contains(lower, "midjourney") {
 			protocolsMap["images"] = true
 		}
 		if strings.Contains(lower, "tts") || strings.Contains(lower, "speech") || strings.Contains(lower, "cosyvoice") || strings.Contains(lower, "chattts") {
@@ -422,7 +561,7 @@ func inferProtocols(models []string) []string {
 		if strings.Contains(lower, "whisper") || strings.Contains(lower, "transcription") || strings.Contains(lower, "sensevoice") || strings.Contains(lower, "funasr") {
 			protocolsMap["audio_transcription"] = true
 		}
-		if strings.Contains(lower, "sora") || strings.Contains(lower, "cogvideo") || strings.Contains(lower, "kling") || strings.Contains(lower, "video") || strings.Contains(lower, "hunyuan") {
+		if strings.Contains(lower, "sora") || strings.Contains(lower, "cogvideo") || strings.Contains(lower, "kling") || strings.Contains(lower, "video") || strings.Contains(lower, "seedance") || strings.Contains(lower, "luma") || strings.Contains(lower, "runway") || strings.Contains(lower, "pika") || strings.Contains(lower, "wan") || strings.Contains(lower, "hunyuan") || strings.Contains(lower, "vidu") || strings.Contains(lower, "minimax-video") {
 			protocolsMap["videos"] = true
 		}
 		if strings.Contains(lower, "embed") || strings.Contains(lower, "bge") || strings.Contains(lower, "e5") || strings.Contains(lower, "nomic") || strings.Contains(lower, "voyage") || strings.Contains(lower, "jina") || strings.Contains(lower, "text-embedding") {
@@ -435,7 +574,7 @@ func inferProtocols(models []string) []string {
 
 	var list []string
 	// Order canonically
-	ordered := []string{"openai_chat", "openai_text", "anthropic_messages", "embeddings", "rerank", "images", "audio_speech", "audio_transcription", "videos"}
+	ordered := []string{"openai_chat", "openai_response", "openai_text", "anthropic_messages", "embeddings", "rerank", "images", "audio_speech", "audio_transcription", "videos"}
 	for _, p := range ordered {
 		if protocolsMap[p] {
 			list = append(list, p)

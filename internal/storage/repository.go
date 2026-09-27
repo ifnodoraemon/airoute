@@ -4,9 +4,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ifnodoraemon/nano-gateway/internal/model"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // ChannelRecord represents the database row for channels.
@@ -38,6 +40,7 @@ type VirtualKeyRecord struct {
 	TPM           int       `json:"tpm"`
 	Budget        float64   `json:"budget"`
 	UsedTokens    int64     `json:"used_tokens"`
+	UsedCost      float64   `json:"used_cost"`
 	Status        string    `json:"status"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
@@ -46,29 +49,59 @@ type VirtualKeyRecord struct {
 // UsageLogRecord represents an audit log entry.
 type UsageLogRecord struct {
 	ID               int64     `json:"id"`
+	TraceID          string    `json:"trace_id"`
+	ChatID           string    `json:"chat_id"`
+	SessionID        string    `json:"session_id,omitempty"`
 	VirtualKey       string    `json:"virtual_key"`
 	TenantID         string    `json:"tenant_id"`
 	Model            string    `json:"model"`
 	Channel          string    `json:"channel"`
 	PromptTokens     int       `json:"prompt_tokens"`
 	CompletionTokens int       `json:"completion_tokens"`
+	CachedTokens     int       `json:"cached_tokens"`
 	TotalTokens      int       `json:"total_tokens"`
+	Cost             float64   `json:"cost"`
+	IsOffPeak        bool      `json:"is_off_peak"`
+	OffPeakDiscount  float64   `json:"off_peak_discount"`
 	DurationMs       int64     `json:"duration_ms"`
 	TTFTMs           int64     `json:"ttft_ms"`
 	StatusCode       int       `json:"status_code"`
 	CreatedAt        time.Time `json:"created_at"`
 }
 
+// ModelPriceRecord defines rates for a model.
+type ModelPriceRecord struct {
+	ID              int64     `json:"id"`
+	Model           string    `json:"model"`
+	PromptPrice     float64   `json:"prompt_price"`     // per 1,000,000 prompt tokens (CNY/USD)
+	CompletionPrice float64   `json:"completion_price"` // per 1,000,000 completion tokens
+	CacheReadPrice  float64   `json:"cache_read_price"` // per 1,000,000 cached tokens
+	FixedPrice      float64   `json:"fixed_price"`      // per request (e.g. image/video)
+	Currency        string    `json:"currency"`          // CNY or USD
+	OffPeakEnabled  bool      `json:"off_peak_enabled"`  // whether time-of-use discount is active
+	OffPeakMode     string    `json:"off_peak_mode"`     // "deepseek", "night", "custom", "none"
+	OffPeakSlots    string    `json:"off_peak_slots"`    // JSON array of OffPeakSlot
+	WeekendAllDay   bool      `json:"weekend_all_day"`   // whether weekends are all-day off-peak
+	OffPeakStart    string    `json:"off_peak_start"`    // fallback/simple start
+	OffPeakEnd      string    `json:"off_peak_end"`      // fallback/simple end
+	OffPeakDiscount float64   `json:"off_peak_discount"` // e.g. 0.5 (50% discount)
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
 // StatsOverview aggregates system stats for the dashboard.
 type StatsOverview struct {
-	TotalRequests    int64   `json:"total_requests"`
-	TotalTokens      int64   `json:"total_tokens"`
-	PromptTokens     int64   `json:"prompt_tokens"`
-	CompletionTokens int64   `json:"completion_tokens"`
-	ActiveChannels   int     `json:"active_channels"`
-	ActiveKeys       int     `json:"active_keys"`
-	AvgTTFTMs        float64 `json:"avg_ttft_ms"`
-	AvgDurationMs    float64 `json:"avg_duration_ms"`
+	TotalRequests     int64   `json:"total_requests"`
+	TotalTokens       int64   `json:"total_tokens"`
+	PromptTokens      int64   `json:"prompt_tokens"`
+	CompletionTokens  int64   `json:"completion_tokens"`
+	TotalCachedTokens int64   `json:"total_cached_tokens"`
+	TotalCost         float64 `json:"total_cost"`
+	SavedCost         float64 `json:"saved_cost"`
+	ActiveChannels    int     `json:"active_channels"`
+	ActiveKeys        int     `json:"active_keys"`
+	AvgTTFTMs         float64 `json:"avg_ttft_ms"`
+	AvgDurationMs     float64 `json:"avg_duration_ms"`
 }
 
 // Repository manages persistence for channels, keys, and logs.
@@ -138,11 +171,44 @@ func (r *Repository) CreateChannel(rec *ChannelRecord) error {
 	return nil
 }
 
+// GetChannel retrieves a single channel by ID.
+func (r *Repository) GetChannel(id int64) (*ChannelRecord, error) {
+	row := r.db.QueryRow(`SELECT id, name, type, base_url, api_key, models, model_mapping, protocols, priority, weight, timeout_seconds, status, created_at, updated_at FROM channels WHERE id = ?`, id)
+	var rec ChannelRecord
+	var modelsJSON, mappingJSON, protocolsJSON sql.NullString
+	if err := row.Scan(&rec.ID, &rec.Name, &rec.Type, &rec.BaseURL, &rec.APIKey, &modelsJSON, &mappingJSON, &protocolsJSON, &rec.Priority, &rec.Weight, &rec.TimeoutSeconds, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+		return nil, err
+	}
+	if modelsJSON.Valid {
+		_ = json.Unmarshal([]byte(modelsJSON.String), &rec.Models)
+	}
+	if mappingJSON.Valid {
+		_ = json.Unmarshal([]byte(mappingJSON.String), &rec.ModelMapping)
+	}
+	if protocolsJSON.Valid {
+		_ = json.Unmarshal([]byte(protocolsJSON.String), &rec.Protocols)
+	}
+	return &rec, nil
+}
+
 // UpdateChannel updates an existing channel.
 func (r *Repository) UpdateChannel(rec *ChannelRecord) error {
 	modelsBytes, _ := json.Marshal(rec.Models)
 	mappingBytes, _ := json.Marshal(rec.ModelMapping)
 	protocolsBytes, _ := json.Marshal(rec.Protocols)
+
+	if rec.Status == "" {
+		rec.Status = "active"
+	}
+	if rec.Priority == 0 {
+		rec.Priority = 1
+	}
+	if rec.Weight == 0 {
+		rec.Weight = 10
+	}
+	if rec.TimeoutSeconds == 0 {
+		rec.TimeoutSeconds = 60
+	}
 
 	_, err := r.db.Exec(`UPDATE channels SET name=?, type=?, base_url=?, api_key=?, models=?, model_mapping=?, protocols=?, priority=?, weight=?, timeout_seconds=?, status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
 		rec.Name, rec.Type, rec.BaseURL, rec.APIKey, string(modelsBytes), string(mappingBytes), string(protocolsBytes), rec.Priority, rec.Weight, rec.TimeoutSeconds, rec.Status, rec.ID)
@@ -157,17 +223,17 @@ func (r *Repository) DeleteChannel(id int64) error {
 
 // ListVirtualKeys returns all virtual keys.
 func (r *Repository) ListVirtualKeys() ([]*VirtualKeyRecord, error) {
-	rows, err := r.db.Query(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, status, created_at, updated_at FROM virtual_keys ORDER BY id ASC`)
+	rows, err := r.db.Query(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), status, created_at, updated_at FROM virtual_keys ORDER BY id ASC`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var list []*VirtualKeyRecord
+	list := make([]*VirtualKeyRecord, 0)
 	for rows.Next() {
 		var rec VirtualKeyRecord
 		var allowedJSON string
-		err := rows.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt)
+		err := rows.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -189,8 +255,8 @@ func (r *Repository) CreateVirtualKey(rec *VirtualKeyRecord) error {
 		rec.RPM = 60
 	}
 
-	res, err := r.db.Exec(`INSERT INTO virtual_keys (key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-		rec.Key, rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, rec.UsedTokens, rec.Status)
+	res, err := r.db.Exec(`INSERT INTO virtual_keys (key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, used_cost, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		rec.Key, rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, rec.UsedTokens, rec.UsedCost, rec.Status)
 	if err != nil {
 		return err
 	}
@@ -204,22 +270,134 @@ func (r *Repository) DeleteVirtualKey(id int64) error {
 	return err
 }
 
-// RecordUsageLog records an audit log asynchronously.
+// GetVirtualKey returns a single virtual key by ID.
+func (r *Repository) GetVirtualKey(id int64) (*VirtualKeyRecord, error) {
+	row := r.db.QueryRow(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), status, created_at, updated_at FROM virtual_keys WHERE id = ?`, id)
+	var rec VirtualKeyRecord
+	var allowedJSON string
+	if err := row.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+		return nil, err
+	}
+	if allowedJSON != "" {
+		_ = json.Unmarshal([]byte(allowedJSON), &rec.AllowedModels)
+	}
+	return &rec, nil
+}
+
+// UpdateVirtualKey updates an existing virtual key (e.g. status, RPM, tenant, allowed models).
+func (r *Repository) UpdateVirtualKey(rec *VirtualKeyRecord) error {
+	allowedBytes, _ := json.Marshal(rec.AllowedModels)
+	if rec.Status == "" {
+		rec.Status = "active"
+	}
+	_, err := r.db.Exec(`UPDATE virtual_keys SET tenant_id = ?, allowed_models = ?, rpm = ?, tpm = ?, budget = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, rec.Status, rec.ID)
+	return err
+}
+
+// LogFilter defines search/filtering criteria for usage audit logs.
+type LogFilter struct {
+	Limit     int
+	Offset    int
+	StartTime string // e.g. "2026-09-26 00:00:00" or ISO8601
+	EndTime   string
+	TraceID   string
+	ChatID    string
+	SessionID string
+	Model     string
+	TenantID  string
+}
+
+// RecordUsageLog records an audit log asynchronously and updates key quota/cost.
 func (r *Repository) RecordUsageLog(log *UsageLogRecord) error {
-	_, err := r.db.Exec(`INSERT INTO usage_logs (virtual_key, tenant_id, model, channel, prompt_tokens, completion_tokens, total_tokens, duration_ms, ttft_ms, status_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		log.VirtualKey, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.TotalTokens, log.DurationMs, log.TTFTMs, log.StatusCode)
+	isOff := 0
+	if log.IsOffPeak {
+		isOff = 1
+	}
+	discount := log.OffPeakDiscount
+	if discount <= 0 {
+		discount = 1.0
+	}
+	if log.TraceID == "" {
+		if log.ChatID != "" {
+			log.TraceID = log.ChatID
+		} else if log.SessionID != "" {
+			log.TraceID = log.SessionID
+		} else {
+			log.TraceID = fmt.Sprintf("tr-%x", time.Now().UnixNano())
+		}
+	}
+	if log.ChatID == "" {
+		if log.SessionID != "" {
+			log.ChatID = log.SessionID
+		} else {
+			log.ChatID = fmt.Sprintf("chatcmpl-%x", time.Now().UnixNano())
+		}
+	}
+	var err error
+	if !log.CreatedAt.IsZero() {
+		_, err = r.db.Exec(`INSERT INTO usage_logs (trace_id, chat_id, session_id, virtual_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			log.TraceID, log.ChatID, log.SessionID, log.VirtualKey, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, log.CreatedAt.UTC().Format("2006-01-02 15:04:05"))
+	} else {
+		_, err = r.db.Exec(`INSERT INTO usage_logs (trace_id, chat_id, session_id, virtual_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			log.TraceID, log.ChatID, log.SessionID, log.VirtualKey, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode)
+	}
+	if log.VirtualKey != "" && (log.Cost > 0 || log.TotalTokens > 0) {
+		_, _ = r.db.Exec(`UPDATE virtual_keys SET used_cost = used_cost + ?, used_tokens = used_tokens + ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?`,
+			log.Cost, log.TotalTokens, log.VirtualKey)
+	}
 	return err
 }
 
 // ListUsageLogs returns recent usage logs for audit and monitoring.
 func (r *Repository) ListUsageLogs(limit int, offset int) ([]*UsageLogRecord, error) {
-	if limit <= 0 || limit > 100 {
-		limit = 50
+	return r.ListUsageLogsWithFilter(LogFilter{Limit: limit, Offset: offset})
+}
+
+// ListUsageLogsWithFilter queries logs with flexible filters (time range, trace ID, chat ID, session ID, model, tenant).
+func (r *Repository) ListUsageLogsWithFilter(f LogFilter) ([]*UsageLogRecord, error) {
+	if f.Limit <= 0 || f.Limit > 200 {
+		f.Limit = 50
 	}
-	if offset < 0 {
-		offset = 0
+	if f.Offset < 0 {
+		f.Offset = 0
 	}
-	rows, err := r.db.Query(`SELECT id, COALESCE(virtual_key, ''), COALESCE(tenant_id, ''), COALESCE(model, ''), COALESCE(channel, ''), prompt_tokens, completion_tokens, total_tokens, duration_ms, ttft_ms, status_code, created_at FROM usage_logs ORDER BY id DESC LIMIT ? OFFSET ?`, limit, offset)
+
+	query := `SELECT id, COALESCE(NULLIF(trace_id, ''), chat_id, session_id, ''), COALESCE(NULLIF(chat_id, ''), session_id, ''), COALESCE(session_id, ''), COALESCE(virtual_key, ''), COALESCE(tenant_id, ''), COALESCE(model, ''), COALESCE(channel, ''), prompt_tokens, completion_tokens, COALESCE(cached_tokens, 0), total_tokens, COALESCE(cost, 0.0), COALESCE(is_off_peak, 0), COALESCE(off_peak_discount, 1.0), duration_ms, ttft_ms, status_code, created_at FROM usage_logs WHERE 1=1`
+	var args []interface{}
+
+	if f.StartTime != "" {
+		query += ` AND datetime(created_at) >= datetime(?)`
+		args = append(args, f.StartTime)
+	}
+	if f.EndTime != "" {
+		query += ` AND datetime(created_at) <= datetime(?)`
+		args = append(args, f.EndTime)
+	}
+	if f.TraceID != "" {
+		query += ` AND (trace_id = ? OR trace_id LIKE ?)`
+		args = append(args, f.TraceID, "%"+f.TraceID+"%")
+	}
+	if f.ChatID != "" {
+		query += ` AND (chat_id = ? OR chat_id LIKE ? OR session_id = ? OR session_id LIKE ? OR trace_id = ? OR trace_id LIKE ?)`
+		args = append(args, f.ChatID, "%"+f.ChatID+"%", f.ChatID, "%"+f.ChatID+"%", f.ChatID, "%"+f.ChatID+"%")
+	} else if f.SessionID != "" {
+		query += ` AND (chat_id = ? OR chat_id LIKE ? OR session_id = ? OR session_id LIKE ? OR trace_id = ? OR trace_id LIKE ?)`
+		args = append(args, f.SessionID, "%"+f.SessionID+"%", f.SessionID, "%"+f.SessionID+"%", f.SessionID, "%"+f.SessionID+"%")
+	}
+	if f.Model != "" {
+		query += ` AND model = ?`
+		args = append(args, f.Model)
+	}
+	if f.TenantID != "" {
+		query += ` AND tenant_id = ?`
+		args = append(args, f.TenantID)
+	}
+
+	query += ` ORDER BY id DESC LIMIT ? OFFSET ?`
+	args = append(args, f.Limit, f.Offset)
+
+	rows, err := r.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -228,24 +406,162 @@ func (r *Repository) ListUsageLogs(limit int, offset int) ([]*UsageLogRecord, er
 	var logs []*UsageLogRecord
 	for rows.Next() {
 		var l UsageLogRecord
+		var isOff int
 		var createdAt time.Time
-		if err := rows.Scan(&l.ID, &l.VirtualKey, &l.TenantID, &l.Model, &l.Channel, &l.PromptTokens, &l.CompletionTokens, &l.TotalTokens, &l.DurationMs, &l.TTFTMs, &l.StatusCode, &createdAt); err != nil {
+		if err := rows.Scan(&l.ID, &l.TraceID, &l.ChatID, &l.SessionID, &l.VirtualKey, &l.TenantID, &l.Model, &l.Channel, &l.PromptTokens, &l.CompletionTokens, &l.CachedTokens, &l.TotalTokens, &l.Cost, &isOff, &l.OffPeakDiscount, &l.DurationMs, &l.TTFTMs, &l.StatusCode, &createdAt); err != nil {
 			return nil, err
 		}
+		if l.TraceID == "" {
+			l.TraceID = l.ChatID
+		}
+		l.IsOffPeak = isOff == 1
 		l.CreatedAt = createdAt
 		logs = append(logs, &l)
 	}
 	return logs, nil
 }
 
+// DeleteUsageLog deletes a single audit log by ID.
+func (r *Repository) DeleteUsageLog(id int64) error {
+	_, err := r.db.Exec(`DELETE FROM usage_logs WHERE id = ?`, id)
+	return err
+}
+
+// BatchDeleteUsageLogs deletes multiple usage logs by their IDs.
+func (r *Repository) BatchDeleteUsageLogs(ids []int64) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	q := fmt.Sprintf(`DELETE FROM usage_logs WHERE id IN (%s)`, strings.Join(placeholders, ","))
+	res, err := r.db.Exec(q, args...)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// ClearAllUsageLogs wipes all audit logs.
+func (r *Repository) ClearAllUsageLogs() error {
+	_, err := r.db.Exec(`DELETE FROM usage_logs`)
+	return err
+}
+
+// BatchDeleteChannels deletes channels by ID list.
+func (r *Repository) BatchDeleteChannels(ids []int64) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	q := fmt.Sprintf(`DELETE FROM channels WHERE id IN (%s)`, strings.Join(placeholders, ","))
+	res, err := r.db.Exec(q, args...)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// BatchUpdateChannelStatus updates status ('active'/'disabled') for multiple channels.
+func (r *Repository) BatchUpdateChannelStatus(ids []int64, status string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, len(ids)+1)
+	args[0] = status
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i+1] = id
+	}
+	q := fmt.Sprintf(`UPDATE channels SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id IN (%s)`, strings.Join(placeholders, ","))
+	res, err := r.db.Exec(q, args...)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// BatchDeleteVirtualKeys deletes multiple virtual keys.
+func (r *Repository) BatchDeleteVirtualKeys(ids []int64) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	q := fmt.Sprintf(`DELETE FROM virtual_keys WHERE id IN (%s)`, strings.Join(placeholders, ","))
+	res, err := r.db.Exec(q, args...)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// BatchUpdateVirtualKeyStatus updates status ('active'/'disabled') for multiple virtual keys.
+func (r *Repository) BatchUpdateVirtualKeyStatus(ids []int64, status string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, len(ids)+1)
+	args[0] = status
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i+1] = id
+	}
+	q := fmt.Sprintf(`UPDATE virtual_keys SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id IN (%s)`, strings.Join(placeholders, ","))
+	res, err := r.db.Exec(q, args...)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// BatchDeleteModelPrices deletes pricing for multiple models.
+func (r *Repository) BatchDeleteModelPrices(models []string) (int64, error) {
+	if len(models) == 0 {
+		return 0, nil
+	}
+	placeholders := make([]string, len(models))
+	args := make([]interface{}, len(models))
+	for i, m := range models {
+		placeholders[i] = "?"
+		args[i] = m
+	}
+	q := fmt.Sprintf(`DELETE FROM model_prices WHERE model IN (%s)`, strings.Join(placeholders, ","))
+	res, err := r.db.Exec(q, args...)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // GetStatsOverview queries summary metrics.
 func (r *Repository) GetStatsOverview() (*StatsOverview, error) {
 	stats := &StatsOverview{}
 
-	row := r.db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(total_tokens), 0), COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0), COALESCE(AVG(ttft_ms), 0), COALESCE(AVG(duration_ms), 0) FROM usage_logs`)
-	err := row.Scan(&stats.TotalRequests, &stats.TotalTokens, &stats.PromptTokens, &stats.CompletionTokens, &stats.AvgTTFTMs, &stats.AvgDurationMs)
+	row := r.db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(total_tokens), 0), COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0), COALESCE(SUM(cached_tokens), 0), COALESCE(SUM(cost), 0.0), COALESCE(AVG(ttft_ms), 0), COALESCE(AVG(duration_ms), 0) FROM usage_logs`)
+	err := row.Scan(&stats.TotalRequests, &stats.TotalTokens, &stats.PromptTokens, &stats.CompletionTokens, &stats.TotalCachedTokens, &stats.TotalCost, &stats.AvgTTFTMs, &stats.AvgDurationMs)
 	if err != nil {
 		return nil, fmt.Errorf("scan usage stats error: %w", err)
+	}
+
+	if stats.TotalCachedTokens > 0 {
+		// Benchmark prompt cache savings (e.g. 1.8 CNY per 1M cached tokens discount)
+		stats.SavedCost = float64(stats.TotalCachedTokens) * 1.8 / 1000000.0
 	}
 
 	_ = r.db.QueryRow(`SELECT COUNT(*) FROM channels WHERE status='active'`).Scan(&stats.ActiveChannels)
@@ -266,6 +582,7 @@ func (r *Repository) ToModelChannels() ([]model.ChannelConfig, error) {
 			continue
 		}
 		res = append(res, model.ChannelConfig{
+			ID:             rec.ID,
 			Name:           rec.Name,
 			Type:           rec.Type,
 			BaseURL:        rec.BaseURL,
@@ -276,6 +593,7 @@ func (r *Repository) ToModelChannels() ([]model.ChannelConfig, error) {
 			Priority:       rec.Priority,
 			Weight:         rec.Weight,
 			TimeoutSeconds: rec.TimeoutSeconds,
+			Status:         rec.Status,
 		})
 	}
 	return res, nil
@@ -302,4 +620,564 @@ func (r *Repository) ToModelVirtualKeys() ([]model.VirtualKeyConfig, error) {
 		})
 	}
 	return res, nil
+}
+
+// UserRecord represents an administrator or operator account.
+type UserRecord struct {
+	ID           int64     `json:"id"`
+	Username     string    `json:"username"`
+	PasswordHash string    `json:"-"`
+	Role         string    `json:"role"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// GetUserByUsername finds a user by username.
+func (r *Repository) GetUserByUsername(username string) (*UserRecord, error) {
+	row := r.db.QueryRow(`SELECT id, username, password_hash, role, created_at, updated_at FROM users WHERE username = ?`, username)
+	var u UserRecord
+	if err := row.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Role, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+// CreateUser inserts a new user record.
+func (r *Repository) CreateUser(u *UserRecord) error {
+	res, err := r.db.Exec(`INSERT INTO users (username, password_hash, role, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)`,
+		u.Username, u.PasswordHash, u.Role)
+	if err != nil {
+		return err
+	}
+	id, err := res.LastInsertId()
+	if err == nil {
+		u.ID = id
+	}
+	return nil
+}
+
+// UpdateUserPassword updates the password hash for a user.
+func (r *Repository) UpdateUserPassword(username, newHash string) error {
+	_, err := r.db.Exec(`UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, newHash, username)
+	return err
+}
+
+// ListUsers returns all registered users without password hashes.
+func (r *Repository) ListUsers() ([]*UserRecord, error) {
+	rows, err := r.db.Query(`SELECT id, username, role, created_at, updated_at FROM users ORDER BY id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*UserRecord
+	for rows.Next() {
+		var u UserRecord
+		if err := rows.Scan(&u.ID, &u.Username, &u.Role, &u.CreatedAt, &u.UpdatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, &u)
+	}
+	return list, nil
+}
+
+// DeleteUser removes a user by username.
+func (r *Repository) DeleteUser(username string) error {
+	_, err := r.db.Exec(`DELETE FROM users WHERE username = ?`, username)
+	return err
+}
+
+// EnsureDefaultAdmin initializes the default admin user if it does not already exist.
+func (r *Repository) EnsureDefaultAdmin(username, plainPass string) error {
+	existing, _ := r.GetUserByUsername(username)
+	if existing != nil {
+		return nil
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(plainPass), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	return r.CreateUser(&UserRecord{
+		Username:     username,
+		PasswordHash: string(hash),
+		Role:         "admin",
+	})
+}
+
+// ModelFallbackRecord represents a cross-model fallback rule.
+type ModelFallbackRecord struct {
+	Model         string    `json:"model"`
+	FallbackModel string    `json:"fallback_model"`
+	Enabled       bool      `json:"enabled"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// GetModelFallbacks returns all active model fallbacks mapped as target -> fallback.
+func (r *Repository) GetModelFallbacks() (map[string]string, error) {
+	rows, err := r.db.Query(`SELECT model, fallback_model FROM model_fallbacks WHERE enabled = 1`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := make(map[string]string)
+	for rows.Next() {
+		var src, dst string
+		if err := rows.Scan(&src, &dst); err == nil && src != "" && dst != "" {
+			m[src] = dst
+		}
+	}
+	return m, nil
+}
+
+// SetModelFallback creates or updates a model fallback mapping.
+func (r *Repository) SetModelFallback(model, fallbackModel string, enabled bool) error {
+	en := 1
+	if !enabled {
+		en = 0
+	}
+	_, err := r.db.Exec(`
+		INSERT INTO model_fallbacks (model, fallback_model, enabled, updated_at)
+		VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(model) DO UPDATE SET fallback_model = excluded.fallback_model, enabled = excluded.enabled, updated_at = CURRENT_TIMESTAMP
+	`, model, fallbackModel, en)
+	return err
+}
+
+// DeleteModelFallback removes a model fallback mapping.
+func (r *Repository) DeleteModelFallback(model string) error {
+	_, err := r.db.Exec(`DELETE FROM model_fallbacks WHERE model = ?`, model)
+	return err
+}
+
+// ListModelPrices returns all configured model pricing rates.
+func (r *Repository) ListModelPrices() ([]*ModelPriceRecord, error) {
+	rows, err := r.db.Query(`SELECT id, model, prompt_price, completion_price, cache_read_price, fixed_price, currency, COALESCE(off_peak_enabled, 1), COALESCE(off_peak_start, '00:00'), COALESCE(off_peak_end, '08:30'), COALESCE(off_peak_discount, 0.5), COALESCE(off_peak_mode, 'deepseek'), COALESCE(off_peak_slots, ''), COALESCE(weekend_all_day, 1), created_at, updated_at FROM model_prices ORDER BY id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := make([]*ModelPriceRecord, 0)
+	for rows.Next() {
+		var rec ModelPriceRecord
+		var offEnabled, weekendAllDay int
+		if err := rows.Scan(&rec.ID, &rec.Model, &rec.PromptPrice, &rec.CompletionPrice, &rec.CacheReadPrice, &rec.FixedPrice, &rec.Currency, &offEnabled, &rec.OffPeakStart, &rec.OffPeakEnd, &rec.OffPeakDiscount, &rec.OffPeakMode, &rec.OffPeakSlots, &weekendAllDay, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+			return nil, err
+		}
+		rec.OffPeakEnabled = offEnabled == 1
+		rec.WeekendAllDay = weekendAllDay == 1
+		list = append(list, &rec)
+	}
+	return list, nil
+}
+
+// GetModelPrice returns pricing rates for a specific model.
+func (r *Repository) GetModelPrice(modelName string) (*ModelPriceRecord, error) {
+	row := r.db.QueryRow(`SELECT id, model, prompt_price, completion_price, cache_read_price, fixed_price, currency, COALESCE(off_peak_enabled, 1), COALESCE(off_peak_start, '00:00'), COALESCE(off_peak_end, '08:30'), COALESCE(off_peak_discount, 0.5), COALESCE(off_peak_mode, 'deepseek'), COALESCE(off_peak_slots, ''), COALESCE(weekend_all_day, 1), created_at, updated_at FROM model_prices WHERE model = ?`, modelName)
+	var rec ModelPriceRecord
+	var offEnabled, weekendAllDay int
+	if err := row.Scan(&rec.ID, &rec.Model, &rec.PromptPrice, &rec.CompletionPrice, &rec.CacheReadPrice, &rec.FixedPrice, &rec.Currency, &offEnabled, &rec.OffPeakStart, &rec.OffPeakEnd, &rec.OffPeakDiscount, &rec.OffPeakMode, &rec.OffPeakSlots, &weekendAllDay, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+		return nil, err
+	}
+	rec.OffPeakEnabled = offEnabled == 1
+	rec.WeekendAllDay = weekendAllDay == 1
+	return &rec, nil
+}
+
+// SaveModelPrice inserts or updates pricing rates for a model.
+func (r *Repository) SaveModelPrice(rec *ModelPriceRecord) error {
+	if rec.Currency == "" {
+		rec.Currency = "CNY"
+	}
+	if rec.OffPeakMode == "" {
+		rec.OffPeakMode = "deepseek"
+	}
+	if rec.OffPeakStart == "" {
+		rec.OffPeakStart = "00:00"
+	}
+	if rec.OffPeakEnd == "" {
+		rec.OffPeakEnd = "08:30"
+	}
+	if rec.OffPeakDiscount <= 0 || rec.OffPeakDiscount > 1.0 {
+		rec.OffPeakDiscount = 0.5
+	}
+	offEnabled := 0
+	if rec.OffPeakEnabled {
+		offEnabled = 1
+	}
+	weekendAll := 0
+	if rec.WeekendAllDay {
+		weekendAll = 1
+	}
+
+	_, err := r.db.Exec(`
+		INSERT INTO model_prices (model, prompt_price, completion_price, cache_read_price, fixed_price, currency, off_peak_enabled, off_peak_start, off_peak_end, off_peak_discount, off_peak_mode, off_peak_slots, weekend_all_day, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(model) DO UPDATE SET 
+			prompt_price = excluded.prompt_price,
+			completion_price = excluded.completion_price,
+			cache_read_price = excluded.cache_read_price,
+			fixed_price = excluded.fixed_price,
+			currency = excluded.currency,
+			off_peak_enabled = excluded.off_peak_enabled,
+			off_peak_start = excluded.off_peak_start,
+			off_peak_end = excluded.off_peak_end,
+			off_peak_discount = excluded.off_peak_discount,
+			off_peak_mode = excluded.off_peak_mode,
+			off_peak_slots = excluded.off_peak_slots,
+			weekend_all_day = excluded.weekend_all_day,
+			updated_at = CURRENT_TIMESTAMP
+	`, rec.Model, rec.PromptPrice, rec.CompletionPrice, rec.CacheReadPrice, rec.FixedPrice, rec.Currency, offEnabled, rec.OffPeakStart, rec.OffPeakEnd, rec.OffPeakDiscount, rec.OffPeakMode, rec.OffPeakSlots, weekendAll)
+	return err
+}
+
+// DeleteModelPrice removes pricing rates for a model.
+func (r *Repository) DeleteModelPrice(modelName string) error {
+	_, err := r.db.Exec(`DELETE FROM model_prices WHERE model = ?`, modelName)
+	return err
+}
+
+// SeedDefaultModelPrices seeds industry-standard pricing benchmark presets if table is empty.
+func (r *Repository) SeedDefaultModelPrices() error {
+	var count int
+	_ = r.db.QueryRow(`SELECT COUNT(*) FROM model_prices`).Scan(&count)
+	if count > 0 {
+		return nil
+	}
+
+	defaults := []ModelPriceRecord{
+		{Model: "deepseek-chat", PromptPrice: 2.0, CompletionPrice: 8.0, CacheReadPrice: 0.2, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: true, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
+		{Model: "deepseek-reasoner", PromptPrice: 4.0, CompletionPrice: 16.0, CacheReadPrice: 0.4, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: true, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
+		{Model: "gpt-4o", PromptPrice: 18.0, CompletionPrice: 72.0, CacheReadPrice: 9.0, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: true, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
+		{Model: "gpt-4o-mini", PromptPrice: 1.1, CompletionPrice: 4.4, CacheReadPrice: 0.55, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: true, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
+		{Model: "claude-3-5-sonnet", PromptPrice: 21.0, CompletionPrice: 105.0, CacheReadPrice: 2.1, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: true, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
+		{Model: "dall-e-3", PromptPrice: 0, CompletionPrice: 0, CacheReadPrice: 0, FixedPrice: 0.28, Currency: "CNY", OffPeakEnabled: false, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
+		{Model: "tts-1", PromptPrice: 0, CompletionPrice: 0, CacheReadPrice: 0, FixedPrice: 0.10, Currency: "CNY", OffPeakEnabled: false, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
+		{Model: "whisper-1", PromptPrice: 0, CompletionPrice: 0, CacheReadPrice: 0, FixedPrice: 0.05, Currency: "CNY", OffPeakEnabled: false, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
+	}
+
+	for _, d := range defaults {
+		_ = r.SaveModelPrice(&d)
+	}
+	return nil
+}
+
+// SkillRecord represents an Agent Skill capability.
+type SkillRecord struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Category    string   `json:"category"`
+	Tools       []string `json:"tools"`
+	LoadingMode string   `json:"loading_mode"` // "lazy" (progressive disclosure) or "eager" (instant)
+	Manifest    string   `json:"manifest"`     // Markdown SKILL.md specification
+	Author      string   `json:"author"`
+	Version     string   `json:"version"`
+	Enabled     bool     `json:"enabled"`
+	UpdatedAt   string   `json:"updated_at"`
+}
+
+// SeedDefaultSkills ensures built-in skills exist with rich manifests and progressive loading configs.
+func (r *Repository) SeedDefaultSkills() error {
+	defaults := []SkillRecord{
+		{
+			ID:          "gateway_ops",
+			Name:        "网关运维与状态探针",
+			Description: "查询实时可用模型拓扑、上游渠道熔断状态与历史审计日志",
+			Category:    "ops",
+			Tools:       []string{"nano_list_models", "nano_check_status", "nano_query_logs"},
+			LoadingMode: "lazy",
+			Author:      "Nano Official",
+			Version:     "1.0.0",
+			Enabled:     true,
+			Manifest: `---
+name: gateway_ops
+description: 网关运维与状态探针
+category: ops
+author: Nano Official
+version: 1.0.0
+loading_mode: lazy
+tools:
+  - nano_list_models
+  - nano_check_status
+  - nano_query_logs
+---
+
+# 网关运维与状态探针 (gateway_ops)
+
+提供大模型网关集群的健康探针、模型拓扑治理与用量审计能力。
+
+## 触发场景
+- 查询网关当前可用模型列表及其支持的模态（如 chat, embeddings, images 等）
+- 检查各上游提供商与下游渠道的实时连通性、时延与熔断器健康状态
+- 检索历史请求日志，按会话 Session ID 追踪 Token 消耗与成本明细
+
+## 工具清单
+- nano_list_models(modality?: string): 查询统一模型路由拓扑
+- nano_check_status(): 获取上游渠道健康状态与熔断指标
+- nano_query_logs(session_id?: string, limit?: number): 查询会话调用明细
+`,
+		},
+		{
+			ID:          "model_router",
+			Name:        "多模型协作与智能对话代理",
+			Description: "跨渠道分发会话请求，支持自动会话粘连和前缀缓存亲和性",
+			Category:    "agent",
+			Tools:       []string{"nano_chat"},
+			LoadingMode: "eager",
+			Author:      "Nano Official",
+			Version:     "1.0.0",
+			Enabled:     true,
+			Manifest: `---
+name: model_router
+description: 多模型协作与智能对话代理
+category: agent
+author: Nano Official
+version: 1.0.0
+loading_mode: eager
+tools:
+  - nano_chat
+---
+
+# 多模型协作与智能对话代理 (model_router)
+
+支持将任务委派给指定模型执行对话补全，享受网关内置的零配置会话保持与前缀缓存亲和性。
+
+## 触发场景
+- Agent 需要借助另一个模型协助完成子任务时（如深思链、代码生成、摘要提炼）
+
+## 工具清单
+- nano_chat(model: string, message: string, session_id?: string): 向指定模型发起对话
+`,
+		},
+		{
+			ID:          "web_search",
+			Name:        "实时联网检索与知识增强",
+			Description: "为接入的 AI Agent 提供全局联网搜索能力，返回实时权威网页结果与摘要",
+			Category:    "search",
+			Tools:       []string{"nano_web_search"},
+			LoadingMode: "lazy",
+			Author:      "Nano Official",
+			Version:     "1.0.0",
+			Enabled:     true,
+			Manifest: `---
+name: web_search
+description: 实时联网检索与知识增强
+category: search
+author: Nano Official
+version: 1.0.0
+loading_mode: lazy
+tools:
+  - nano_web_search
+---
+
+# 实时联网检索与知识增强 (web_search)
+
+提供高质量公网信息检索能力，返回权威网页摘要与参考引用链接。
+
+## 触发场景
+- 用户问题涉及最新时事、最新发布的框架/库版本、实时股票/天气或外部实时资料
+- 知识库截断日期之后的问题解答
+
+## 工具清单
+- nano_web_search(query: string): 执行公网搜索并获取摘要和引用
+`,
+		},
+		{
+			ID:          "datetime_clock",
+			Name:        "高精度时区与闲时感知",
+			Description: "精确获取服务器当前时间、时区、星期以及实时闲时半价时段判定",
+			Category:    "utility",
+			Tools:       []string{"nano_get_current_time"},
+			LoadingMode: "lazy",
+			Author:      "Nano Official",
+			Version:     "1.0.0",
+			Enabled:     true,
+			Manifest: `---
+name: datetime_clock
+description: 高精度时区与闲时感知
+category: utility
+author: Nano Official
+version: 1.0.0
+loading_mode: lazy
+tools:
+  - nano_get_current_time
+---
+
+# 高精度时区与闲时感知 (datetime_clock)
+
+精确获取服务器当前时间、时区、星期，并自动计算当前是否处于 DeepSeek 等模型官方闲时优惠窗口。
+
+## 触发场景
+- 用户询问当前时间、日期、星期几或调度任务规划时
+- 需要根据当前时间判断模型计费是否享受闲时折扣时
+
+## 工具清单
+- nano_get_current_time(): 获取当前标准时间、时区及闲时半价命中状态
+`,
+		},
+		{
+			ID:          "code_runner",
+			Name:        "轻量沙箱与数学表达式计算",
+			Description: "提供安全的四则运算、高精度数学计算、单位换算与逻辑求值",
+			Category:    "utility",
+			Tools:       []string{"nano_calc_eval"},
+			LoadingMode: "lazy",
+			Author:      "Nano Official",
+			Version:     "1.0.0",
+			Enabled:     true,
+			Manifest: `---
+name: code_runner
+description: 轻量沙箱与数学表达式计算
+category: utility
+author: Nano Official
+version: 1.0.0
+loading_mode: lazy
+tools:
+  - nano_calc_eval
+---
+
+# 轻量沙箱与数学表达式计算 (code_runner)
+
+提供高精度的四则运算、指数对数、复合数学公式求值，消除大语言模型的计算幻觉。
+
+## 触发场景
+- 用户输入复杂的代数运算、汇率或比例换算、大数相乘
+- 需要准确数值计算而非估算的场景
+
+## 工具清单
+- nano_calc_eval(expression: string): 评估并计算数学表达式（如 "(128 * 1024) / 0.85"）
+`,
+		},
+	}
+
+	for _, s := range defaults {
+		toolsJSON, _ := json.Marshal(s.Tools)
+		enabledInt := 0
+		if s.Enabled {
+			enabledInt = 1
+		}
+		_, _ = r.db.Exec(`
+			INSERT INTO system_skills (id, name, description, category, tools, loading_mode, manifest, author, version, enabled, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+			ON CONFLICT(id) DO UPDATE SET
+				name = excluded.name,
+				description = excluded.description,
+				category = excluded.category,
+				tools = excluded.tools,
+				loading_mode = excluded.loading_mode,
+				manifest = excluded.manifest,
+				author = excluded.author,
+				version = excluded.version
+		`, s.ID, s.Name, s.Description, s.Category, string(toolsJSON), s.LoadingMode, s.Manifest, s.Author, s.Version, enabledInt)
+	}
+	return nil
+}
+
+// ListSkills returns all registered Agent Skills.
+func (r *Repository) ListSkills() ([]*SkillRecord, error) {
+	_ = r.SeedDefaultSkills()
+
+	rows, err := r.db.Query(`SELECT id, name, description, category, tools, loading_mode, manifest, author, version, enabled, updated_at FROM system_skills ORDER BY id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*SkillRecord
+	for rows.Next() {
+		var s SkillRecord
+		var toolsStr string
+		var enabledInt int
+		var updatedAt time.Time
+		if err := rows.Scan(&s.ID, &s.Name, &s.Description, &s.Category, &toolsStr, &s.LoadingMode, &s.Manifest, &s.Author, &s.Version, &enabledInt, &updatedAt); err != nil {
+			return nil, err
+		}
+		s.Enabled = enabledInt == 1
+		s.UpdatedAt = updatedAt.Format("2006-01-02 15:04:05")
+		_ = json.Unmarshal([]byte(toolsStr), &s.Tools)
+		list = append(list, &s)
+	}
+	return list, nil
+}
+
+// GetSkill retrieves a specific skill by ID.
+func (r *Repository) GetSkill(id string) (*SkillRecord, error) {
+	_ = r.SeedDefaultSkills()
+
+	var s SkillRecord
+	var toolsStr string
+	var enabledInt int
+	var updatedAt time.Time
+	err := r.db.QueryRow(`SELECT id, name, description, category, tools, loading_mode, manifest, author, version, enabled, updated_at FROM system_skills WHERE id = ?`, id).
+		Scan(&s.ID, &s.Name, &s.Description, &s.Category, &toolsStr, &s.LoadingMode, &s.Manifest, &s.Author, &s.Version, &enabledInt, &updatedAt)
+	if err != nil {
+		return nil, err
+	}
+	s.Enabled = enabledInt == 1
+	s.UpdatedAt = updatedAt.Format("2006-01-02 15:04:05")
+	_ = json.Unmarshal([]byte(toolsStr), &s.Tools)
+	return &s, nil
+}
+
+// SetSkillEnabled toggles a skill's enabled state on-demand.
+func (r *Repository) SetSkillEnabled(id string, enabled bool) error {
+	_ = r.SeedDefaultSkills()
+	enabledInt := 0
+	if enabled {
+		enabledInt = 1
+	}
+	_, err := r.db.Exec(`UPDATE system_skills SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, enabledInt, id)
+	return err
+}
+
+// IsSkillEnabled checks if a skill is active.
+func (r *Repository) IsSkillEnabled(id string) bool {
+	_ = r.SeedDefaultSkills()
+	var enabledInt int
+	err := r.db.QueryRow(`SELECT enabled FROM system_skills WHERE id = ?`, id).Scan(&enabledInt)
+	if err != nil {
+		return true
+	}
+	return enabledInt == 1
+}
+
+// IsToolEnabled checks if any enabled skill contains this tool.
+func (r *Repository) IsToolEnabled(toolName string) bool {
+	if toolName == "nano_search_skills" || toolName == "nano_discover_skills" || toolName == "nano_inspect_skill" || toolName == "nano_get_skill_manifest" {
+		return true
+	}
+	skills, err := r.ListSkills()
+	if err != nil {
+		return true
+	}
+	for _, s := range skills {
+		for _, t := range s.Tools {
+			if t == toolName {
+				return s.Enabled
+			}
+		}
+	}
+	return true
+}
+
+// GetSetting retrieves a system configuration value.
+func (r *Repository) GetSetting(key, defaultVal string) string {
+	var val string
+	err := r.db.QueryRow(`SELECT value FROM system_settings WHERE key = ?`, key).Scan(&val)
+	if err != nil {
+		return defaultVal
+	}
+	return val
+}
+
+// SetSetting saves a system configuration value.
+func (r *Repository) SetSetting(key, val string) error {
+	_, err := r.db.Exec(`
+		INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+	`, key, val)
+	return err
 }

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,8 +9,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/nano-gateway/internal/billing"
 	"github.com/ifnodoraemon/nano-gateway/internal/middleware"
 	"github.com/ifnodoraemon/nano-gateway/internal/model"
+	"github.com/ifnodoraemon/nano-gateway/internal/router"
+	"github.com/ifnodoraemon/nano-gateway/internal/storage"
 	"github.com/ifnodoraemon/nano-gateway/internal/telemetry"
 )
 
@@ -205,9 +209,15 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 	start := time.Now()
 	canonicalReq := ConvertAnthropicToCanonical(&req)
 
+	sessionID := resolveSessionID(c, canonicalReq.Model, canonicalReq.Messages, "")
+	reqCtx := c.Request.Context()
+	if sessionID != "" {
+		reqCtx = context.WithValue(reqCtx, router.ContextKeySessionID, sessionID)
+	}
+
 	// Non-streaming response for Anthropic clients
 	if !req.Stream {
-		resp, err := h.dispatcher.Dispatch(c.Request.Context(), canonicalReq)
+		resp, err := h.dispatcher.Dispatch(reqCtx, canonicalReq)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{
 				"type": "error",
@@ -270,12 +280,33 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 			},
 		}
 
+		var cost, savedCost float64
+		if billing.GlobalEngine != nil {
+			cost, savedCost = billing.GlobalEngine.CalculateCost(req.Model, inputTokens, outputTokens, 0)
+		}
+		_ = savedCost
+		if storage.GlobalAsyncLogger != nil {
+			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
+				TraceID:          middleware.GetTraceID(c),
+				SessionID:        sessionID,
+				VirtualKey:       c.GetString("virtual_key"),
+				TenantID:         c.GetString("tenant_id"),
+				Model:            req.Model,
+				PromptTokens:     inputTokens,
+				CompletionTokens: outputTokens,
+				TotalTokens:      inputTokens + outputTokens,
+				Cost:             cost,
+				DurationMs:       time.Since(start).Milliseconds(),
+				StatusCode:       http.StatusOK,
+			})
+		}
+
 		c.JSON(http.StatusOK, anthropicResp)
 		return
 	}
 
 	// Streaming SSE response for Anthropic clients
-	streamChan, err := h.dispatcher.DispatchStream(c.Request.Context(), canonicalReq)
+	streamChan, err := h.dispatcher.DispatchStream(reqCtx, canonicalReq)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{
 			"type": "error",
@@ -373,7 +404,27 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 				flusher.Flush()
 
 				dur := time.Since(start)
+				var cost, savedCost float64
+				if billing.GlobalEngine != nil {
+					cost, savedCost = billing.GlobalEngine.CalculateCost(req.Model, totalPromptTokens, totalCompTokens, 0)
+				}
+				_ = savedCost
 				telemetry.GlobalMetrics.RecordRequest(true, dur, totalPromptTokens, totalCompTokens)
+				if storage.GlobalAsyncLogger != nil {
+					storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
+						TraceID:          middleware.GetTraceID(c),
+						SessionID:        sessionID,
+						VirtualKey:       c.GetString("virtual_key"),
+						TenantID:         c.GetString("tenant_id"),
+						Model:            req.Model,
+						PromptTokens:     totalPromptTokens,
+						CompletionTokens: totalCompTokens,
+						TotalTokens:      totalPromptTokens + totalCompTokens,
+						Cost:             cost,
+						DurationMs:       dur.Milliseconds(),
+						StatusCode:       http.StatusOK,
+					})
+				}
 				return
 			}
 

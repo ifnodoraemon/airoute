@@ -110,4 +110,19 @@ func TestCascadingAndUnrestrictedModelMapping(t *testing.T) {
 	if receivedUpstreamModel != "meta-llama/Llama-3.1-70B-Instruct" {
 		t.Fatalf("expected upstream to receive 'meta-llama/Llama-3.1-70B-Instruct', got '%s'", receivedUpstreamModel)
 	}
+
+	// Case 4: Channel prefix with mapped alias: cascade-channel/yy/xxx/xx
+	req4 := &model.ChatCompletionRequest{
+		Model: "cascade-channel/yy/xxx/xx",
+		Messages: []model.ChatMessage{
+			{Role: "user", Content: "Hello prefix+alias"},
+		},
+	}
+	_, err = dispatcher.Dispatch(context.Background(), req4)
+	if err != nil {
+		t.Fatalf("unexpected error for prefix+alias: %v", err)
+	}
+	if receivedUpstreamModel != "xxx/xx" {
+		t.Fatalf("expected upstream to receive 'xxx/xx', got '%s'", receivedUpstreamModel)
+	}
 }

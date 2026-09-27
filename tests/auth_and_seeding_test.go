@@ -130,6 +130,86 @@ func TestStorageSeeding_ProtocolsPersistence(t *testing.T) {
 	}
 }
 
+func TestRateLimitMiddleware_Enforcement(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	oldCfg := config.GetGlobalConfig()
+	defer config.SetGlobalConfig(oldCfg)
+
+	testKey := "sk-gw-ratelimit-test"
+	cfg := &config.Config{
+		VirtualKeys: []model.VirtualKeyConfig{
+			{
+				Key:      testKey,
+				TenantID: "tenant-limit",
+				RPM:      2, // Limit to 2 requests per minute
+			},
+		},
+	}
+	config.SetGlobalConfig(cfg)
+
+	r := gin.New()
+	r.Use(middleware.AuthMiddleware())
+	r.Use(middleware.RateLimitMiddleware())
+	r.GET("/api/test", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	// First 2 requests should succeed
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
+		req.Header.Set("Authorization", "Bearer "+testKey)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("request %d expected 200 OK, got %d", i+1, w.Code)
+		}
+	}
+
+	// 3rd request should be blocked with 429 Too Many Requests
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
+	req.Header.Set("Authorization", "Bearer "+testKey)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 Too Many Requests after exceeding RPM, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestConfig_EnvironmentVariableExpansion(t *testing.T) {
+	os.Setenv("TEST_GATEWAY_SECRET", "super-secret-token-12345")
+	defer os.Unsetenv("TEST_GATEWAY_SECRET")
+
+	tempYAML := "test_config_expand_" + t.Name() + ".yaml"
+	yamlContent := `
+server:
+  host: "127.0.0.1"
+  port: 8080
+channels:
+  - name: "test-channel"
+    type: "openai"
+    base_url: "https://api.test.com"
+    api_key: "${TEST_GATEWAY_SECRET}"
+`
+	if err := os.WriteFile(tempYAML, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("failed to write test yaml: %v", err)
+	}
+	defer os.Remove(tempYAML)
+
+	cfg, err := config.LoadConfig(tempYAML)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	if len(cfg.Channels) == 0 {
+		t.Fatalf("expected channels in config")
+	}
+	if cfg.Channels[0].APIKey != "super-secret-token-12345" {
+		t.Errorf("expected expanded API key 'super-secret-token-12345', got '%s'", cfg.Channels[0].APIKey)
+	}
+}
+
 func init() {
 	// Register sqlite3 driver if needed
 	_ = sql.Drivers()

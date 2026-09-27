@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,11 +9,24 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/nano-gateway/internal/billing"
 	"github.com/ifnodoraemon/nano-gateway/internal/middleware"
 	"github.com/ifnodoraemon/nano-gateway/internal/model"
 	"github.com/ifnodoraemon/nano-gateway/internal/router"
 	"github.com/ifnodoraemon/nano-gateway/internal/storage"
 )
+
+func resolveMMSessionID(c *gin.Context, prefix string) string {
+	sID := c.GetHeader("X-Session-ID")
+	if sID == "" {
+		sID = c.GetHeader("X-Nano-Session-ID")
+	}
+	if sID == "" {
+		sID = fmt.Sprintf("sess_%s_%d_%x", prefix, time.Now().Unix(), time.Now().UnixNano()%1000000)
+	}
+	c.Header("X-Nano-Session-ID", sID)
+	return sID
+}
 
 // MultimodalHandler handles image, audio (TTS/STT), and video modalities.
 type MultimodalHandler struct {
@@ -53,6 +67,8 @@ func (h *MultimodalHandler) HandleImageGenerations(c *gin.Context) {
 		return
 	}
 
+	sessionID := resolveMMSessionID(c, "img")
+
 	start := time.Now()
 	upReq := &router.UpstreamRequest{
 		Path:        "/v1/images/generations",
@@ -71,11 +87,18 @@ func (h *MultimodalHandler) HandleImageGenerations(c *gin.Context) {
 	defer resp.Stream.Close()
 
 	dur := time.Since(start)
+	var cost float64
+	if billing.GlobalEngine != nil {
+		cost, _ = billing.GlobalEngine.CalculateCost(req.Model, 0, 0, 0)
+	}
 	if storage.GlobalAsyncLogger != nil {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
+			TraceID:    middleware.GetTraceID(c),
+			SessionID:  sessionID,
 			VirtualKey: c.GetString("virtual_key"),
 			TenantID:   c.GetString("tenant_id"),
 			Model:      req.Model,
+			Cost:       cost,
 			DurationMs: dur.Milliseconds(),
 			StatusCode: resp.StatusCode,
 		})
@@ -119,6 +142,8 @@ func (h *MultimodalHandler) HandleAudioSpeech(c *gin.Context) {
 		return
 	}
 
+	sessionID := resolveMMSessionID(c, "tts")
+
 	start := time.Now()
 	upReq := &router.UpstreamRequest{
 		Path:        "/v1/audio/speech",
@@ -137,11 +162,18 @@ func (h *MultimodalHandler) HandleAudioSpeech(c *gin.Context) {
 	defer resp.Stream.Close()
 
 	dur := time.Since(start)
+	var cost float64
+	if billing.GlobalEngine != nil {
+		cost, _ = billing.GlobalEngine.CalculateCost(req.Model, 0, 0, 0)
+	}
 	if storage.GlobalAsyncLogger != nil {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
+			TraceID:    middleware.GetTraceID(c),
+			SessionID:  sessionID,
 			VirtualKey: c.GetString("virtual_key"),
 			TenantID:   c.GetString("tenant_id"),
 			Model:      req.Model,
+			Cost:       cost,
 			DurationMs: dur.Milliseconds(),
 			StatusCode: resp.StatusCode,
 		})
@@ -163,6 +195,13 @@ func (h *MultimodalHandler) HandleAudioSpeech(c *gin.Context) {
 
 // HandleAudioTranscriptions handles speech-to-text POST /v1/audio/transcriptions.
 func (h *MultimodalHandler) HandleAudioTranscriptions(c *gin.Context) {
+	bodyBytes, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read multipart body"})
+		return
+	}
+	c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
 	// Read multipart form to identify the requested model
 	modelName := c.PostForm("model")
 	if modelName == "" {
@@ -180,12 +219,6 @@ func (h *MultimodalHandler) HandleAudioTranscriptions(c *gin.Context) {
 		return
 	}
 
-	bodyBytes, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read multipart body"})
-		return
-	}
-
 	start := time.Now()
 	upReq := &router.UpstreamRequest{
 		Path:        "/v1/audio/transcriptions",
@@ -196,6 +229,8 @@ func (h *MultimodalHandler) HandleAudioTranscriptions(c *gin.Context) {
 		Protocol:    "audio_transcription",
 	}
 
+	sessionID := resolveMMSessionID(c, "stt")
+
 	resp, err := h.dispatcher.DispatchHTTP(c.Request.Context(), upReq)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
@@ -204,11 +239,18 @@ func (h *MultimodalHandler) HandleAudioTranscriptions(c *gin.Context) {
 	defer resp.Stream.Close()
 
 	dur := time.Since(start)
+	var cost float64
+	if billing.GlobalEngine != nil {
+		cost, _ = billing.GlobalEngine.CalculateCost(modelName, 0, 0, 0)
+	}
 	if storage.GlobalAsyncLogger != nil {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
+			TraceID:    middleware.GetTraceID(c),
+			SessionID:  sessionID,
 			VirtualKey: c.GetString("virtual_key"),
 			TenantID:   c.GetString("tenant_id"),
 			Model:      modelName,
+			Cost:       cost,
 			DurationMs: dur.Milliseconds(),
 			StatusCode: resp.StatusCode,
 		})
@@ -225,6 +267,13 @@ func (h *MultimodalHandler) HandleAudioTranscriptions(c *gin.Context) {
 
 // HandleAudioTranslations handles audio translation POST /v1/audio/translations.
 func (h *MultimodalHandler) HandleAudioTranslations(c *gin.Context) {
+	bodyBytes, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read multipart body"})
+		return
+	}
+	c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
 	modelName := c.PostForm("model")
 	if modelName == "" {
 		modelName = "whisper-1"
@@ -241,11 +290,7 @@ func (h *MultimodalHandler) HandleAudioTranslations(c *gin.Context) {
 		return
 	}
 
-	bodyBytes, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read multipart body"})
-		return
-	}
+	sessionID := resolveMMSessionID(c, "stt")
 
 	start := time.Now()
 	upReq := &router.UpstreamRequest{
@@ -265,11 +310,18 @@ func (h *MultimodalHandler) HandleAudioTranslations(c *gin.Context) {
 	defer resp.Stream.Close()
 
 	dur := time.Since(start)
+	var cost float64
+	if billing.GlobalEngine != nil {
+		cost, _ = billing.GlobalEngine.CalculateCost(modelName, 0, 0, 0)
+	}
 	if storage.GlobalAsyncLogger != nil {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
+			TraceID:    middleware.GetTraceID(c),
+			SessionID:  sessionID,
 			VirtualKey: c.GetString("virtual_key"),
 			TenantID:   c.GetString("tenant_id"),
 			Model:      modelName,
+			Cost:       cost,
 			DurationMs: dur.Milliseconds(),
 			StatusCode: resp.StatusCode,
 		})
@@ -313,6 +365,8 @@ func (h *MultimodalHandler) HandleVideoGenerations(c *gin.Context) {
 		return
 	}
 
+	sessionID := resolveMMSessionID(c, "vid")
+
 	start := time.Now()
 	upReq := &router.UpstreamRequest{
 		Path:        "/v1/videos/generations",
@@ -331,11 +385,18 @@ func (h *MultimodalHandler) HandleVideoGenerations(c *gin.Context) {
 	defer resp.Stream.Close()
 
 	dur := time.Since(start)
+	var cost float64
+	if billing.GlobalEngine != nil {
+		cost, _ = billing.GlobalEngine.CalculateCost(req.Model, 0, 0, 0)
+	}
 	if storage.GlobalAsyncLogger != nil {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
+			TraceID:    middleware.GetTraceID(c),
+			SessionID:  sessionID,
 			VirtualKey: c.GetString("virtual_key"),
 			TenantID:   c.GetString("tenant_id"),
 			Model:      req.Model,
+			Cost:       cost,
 			DurationMs: dur.Milliseconds(),
 			StatusCode: resp.StatusCode,
 		})

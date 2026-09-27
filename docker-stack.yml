@@ -1,0 +1,166 @@
+version: '3.8'
+
+# ==============================================================================
+# Nano-Gateway High-Availability Enterprise Docker Swarm Stack
+# Multi-Node Cluster with Distributed PostgreSQL, Redis Streams Queue, and Ingress
+# ==============================================================================
+
+services:
+  # ============================================================================
+  # 1. Distributed Relational Database (PostgreSQL 16)
+  # Provides shared transactional consistency across all gateway nodes.
+  # ============================================================================
+  nano-postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=${DB_USER:-nanouser}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-nanopassword}
+      - POSTGRES_DB=${DB_NAME:-nanodb}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - nano-pgdata:/var/lib/postgresql/data
+    networks:
+      - nano-swarm-net
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+
+  # ============================================================================
+  # 2. Distributed Memory Broker & Log Message Queue (Redis 7 + Redis Streams)
+  # Powers cluster-wide rate limiting, cache invalidation, and async log queues.
+  # ============================================================================
+  nano-redis:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --appendonly yes
+      --save ""
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --tcp-keepalive 60
+    volumes:
+      - nano-redisdata:/data
+    networks:
+      - nano-swarm-net
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+
+  # ============================================================================
+  # 3. High-Concurrency Nano-Gateway Service (Multi-Node Replicated)
+  # Zero-downtime rolling upgrades, trace ID correlation, Redis Streams log queue.
+  # ============================================================================
+  nano-gateway:
+    image: ${GATEWAY_IMAGE:-nano-gateway:latest}
+    environment:
+      - TZ=Asia/Shanghai
+      - GATEWAY_HOST=0.0.0.0
+      - DATABASE_URL=postgres://${DB_USER:-nanouser}:${DB_PASSWORD:-nanopassword}@nano-postgres:5432/${DB_NAME:-nanodb}?sslmode=disable
+      - REDIS_URL=redis://nano-redis:6379/0
+      - NANO_SECRET_KEY=${NANO_SECRET_KEY:-nano-swarm-enterprise-secret-key}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    networks:
+      - nano-swarm-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    deploy:
+      mode: replicated
+      replicas: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+        monitor: 15s
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+        order: stop-first
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # ============================================================================
+  # 4. Swarm Ingress Load Balancer (NGINX with HTTP/2 & SSE Streaming)
+  # Distributes ingress traffic across all gateway nodes with zero-buffering.
+  # ============================================================================
+  nano-lb:
+    image: nginx:alpine
+    ports:
+      - target: 80
+        published: 8080
+        protocol: tcp
+        mode: ingress
+    configs:
+      - source: nginx_swarm_config
+        target: /etc/nginx/conf.d/default.conf
+    networks:
+      - nano-swarm-net
+    deploy:
+      mode: replicated
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 5s
+        order: start-first
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+configs:
+  nginx_swarm_config:
+    file: ./deploy/swarm/nginx-swarm.conf
+
+networks:
+  nano-swarm-net:
+    driver: overlay
+    attachable: true
+
+volumes:
+  nano-pgdata:
+    driver: local
+  nano-redisdata:
+    driver: local

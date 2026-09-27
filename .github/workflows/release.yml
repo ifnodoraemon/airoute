@@ -48,10 +48,10 @@ jobs:
           npm ci
           npm run build
 
-      - name: Setup Go 1.24
+      - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version-file: 'go.mod'
           cache: true
 
       - name: Cross Compile ${{ matrix.os }}/${{ matrix.arch }}

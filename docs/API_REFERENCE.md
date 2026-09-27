@@ -7,8 +7,8 @@ Nano-Gateway provides high-performance, unified API endpoints conforming to Open
 ## 1. Authentication & Rate Limiting
 
 Client requests to Data Plane endpoints under `/v1` require virtual key authentication via standard HTTP headers:
-- `Authorization: Bearer sk-gw-xxxx`
-- Or `x-api-key: sk-gw-xxxx`
+- `Authorization: Bearer sk-nano-xxxx`
+- Or `x-api-key: sk-nano-xxxx`
 
 If no virtual keys are configured, the gateway operates in open bypass mode (no authentication required).
 
@@ -24,7 +24,7 @@ If no virtual keys are configured, the gateway operates in open bypass mode (no 
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/chat/completions \
-  -H "Authorization: Bearer sk-gw-xxxx" \
+  -H "Authorization: Bearer sk-nano-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "deepseek-chat",
@@ -44,7 +44,7 @@ curl -X POST http://localhost:8080/v1/chat/completions \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/completions \
-  -H "Authorization: Bearer sk-gw-xxxx" \
+  -H "Authorization: Bearer sk-nano-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "text-davinci-003",
@@ -61,7 +61,7 @@ curl -X POST http://localhost:8080/v1/completions \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/messages \
-  -H "x-api-key: sk-gw-xxxx" \
+  -H "x-api-key: sk-nano-xxxx" \
   -H "anthropic-version: 2023-06-01" \
   -H "Content-Type: application/json" \
   -d '{
@@ -81,7 +81,7 @@ curl -X POST http://localhost:8080/v1/messages \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/messages/count_tokens \
-  -H "x-api-key: sk-gw-xxxx" \
+  -H "x-api-key: sk-nano-xxxx" \
   -H "anthropic-version: 2023-06-01" \
   -H "Content-Type: application/json" \
   -d '{
@@ -114,7 +114,7 @@ curl -X POST http://localhost:8080/v1/messages/count_tokens \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/images/generations \
-  -H "Authorization: Bearer sk-gw-xxxx" \
+  -H "Authorization: Bearer sk-nano-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "dall-e-3",
@@ -132,7 +132,7 @@ curl -X POST http://localhost:8080/v1/images/generations \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/audio/speech \
-  -H "Authorization: Bearer sk-gw-xxxx" \
+  -H "Authorization: Bearer sk-nano-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "tts-1",
@@ -149,7 +149,7 @@ curl -X POST http://localhost:8080/v1/audio/speech \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/audio/transcriptions \
-  -H "Authorization: Bearer sk-gw-xxxx" \
+  -H "Authorization: Bearer sk-nano-xxxx" \
   -F "file=@/path/to/audio.mp3" \
   -F "model=whisper-1"
 ```
@@ -162,7 +162,7 @@ curl -X POST http://localhost:8080/v1/audio/transcriptions \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/audio/translations \
-  -H "Authorization: Bearer sk-gw-xxxx" \
+  -H "Authorization: Bearer sk-nano-xxxx" \
   -F "file=@/path/to/french_speech.mp3" \
   -F "model=whisper-1"
 ```
@@ -175,7 +175,7 @@ curl -X POST http://localhost:8080/v1/audio/translations \
 ```bash
 # 1. Submit task
 curl -X POST http://localhost:8080/v1/videos/generations \
-  -H "Authorization: Bearer sk-gw-xxxx" \
+  -H "Authorization: Bearer sk-nano-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "sora",
@@ -187,7 +187,7 @@ curl -X POST http://localhost:8080/v1/videos/generations \
 
 # 2. Poll task status
 curl -X GET http://localhost:8080/v1/videos/tasks/video_task_123 \
-  -H "Authorization: Bearer sk-gw-xxxx"
+  -H "Authorization: Bearer sk-nano-xxxx"
 ```
 
 ### 3.6 Vector Embeddings
@@ -198,7 +198,7 @@ curl -X GET http://localhost:8080/v1/videos/tasks/video_task_123 \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/embeddings \
-  -H "Authorization: Bearer sk-gw-xxxx" \
+  -H "Authorization: Bearer sk-nano-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "text-embedding-3-small",
@@ -238,7 +238,7 @@ curl -X POST http://localhost:8080/v1/embeddings \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/rerank \
-  -H "Authorization: Bearer sk-gw-xxxx" \
+  -H "Authorization: Bearer sk-nano-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "bge-reranker-large",
@@ -290,6 +290,7 @@ All Admin APIs are under `/api/v1/admin`:
 | :--- | :--- | :--- |
 | `GET` | `/api/v1/admin/channels` | List all configured providers with live circuit breaker statuses |
 | `POST` | `/api/v1/admin/channels` | Create a new provider and immediately hot-reload in memory |
+| `PUT` | `/api/v1/admin/channels/:id` | Update an existing provider configuration and hot-reload in memory |
 | `POST` | `/api/v1/admin/channels/probe` | **Deep Auto-Probe**: Automatically normalize URL, probe live models, fingerprint upstream engine (GPUStack, vLLM, SGLang, Ollama, DeepSeek, Gemini, Anthropic, Sub2API), infer protocols (`chat`, `completion`, `messages`, `embeddings`, `rerank`, etc.) |
 | `POST` | `/api/v1/admin/channels/:id/test` | Ping downstream provider for latency & response verification |
 | `DELETE`| `/api/v1/admin/channels/:id` | Delete provider and remove from routing |

@@ -80,9 +80,9 @@ channels:
     priority: 1
     weight: 10
 
-# Initial Client Virtual Keys
+# 客户端 API 访问密钥 (Client API Keys, 可通过 Web 控制台动态签发)
 virtual_keys:
-  - key: "sk-gw-admin-demo"
+  - key: "sk-nano-8f92a1c4b7e3"
     tenant_id: "engineering-dept"
     allowed_models: []          # Empty means all models permitted
     rpm: 120                    # Rate limit: 120 requests/minute

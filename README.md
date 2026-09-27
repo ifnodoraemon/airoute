@@ -35,7 +35,7 @@
 - **Gemini 原生格式转译**：官方 Gemini Developer API 专用协议透明转译，支持多模态多轮会话。
 
 ### 3. 🎨 文本/图像/语音/视频全模态支持 (Unified Multimodal Pipeline)
-- **对话与补全**：`/v1/chat/completions`, `/v1/completions`, `/v1/messages`
+- **对话、智能体响应与补全**：`/v1/chat/completions`, `/v1/responses` (OpenAI 官方新代智能体协议), `/v1/completions`, `/v1/messages`
 - **AI 图像生成**：`/v1/images/generations`（DALL-E 3、Flux、SD3）
 - **语音合成 TTS**：`/v1/audio/speech`（流式二进制直连，零常驻内存）
 - **语音识别 STT**：`/v1/audio/transcriptions`（Whisper Multipart 流式转录）

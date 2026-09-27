@@ -5,6 +5,7 @@ import (
 	"github.com/ifnodoraemon/nano-gateway/internal/controlplane"
 	"github.com/ifnodoraemon/nano-gateway/internal/middleware"
 	"github.com/ifnodoraemon/nano-gateway/internal/router"
+	"github.com/ifnodoraemon/nano-gateway/internal/storage"
 	"github.com/ifnodoraemon/nano-gateway/web"
 )
 
@@ -16,6 +17,10 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 	// Global recovery
 	r.Use(gin.Recovery())
 
+	// Distributed Trace Correlation & Structured Access Logging
+	r.Use(middleware.TraceMiddleware())
+	r.Use(middleware.AccessLogMiddleware())
+
 	// Mount embedded Web UI
 	web.RegisterStaticRoutes(r)
 
@@ -23,26 +28,78 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 
 	// Public health and observability endpoints
 	r.GET("/health", handler.HandleHealth)
-	r.GET("/metrics", handler.HandleMetrics)
+	r.GET("/api/v1/public/status", handler.HandlePublicStatus)
+
+	// Model Context Protocol (MCP) server endpoints for AI Agents (Cursor, Claude Desktop, Cline, etc.)
+	var repo *storage.Repository
+	if adminHandler != nil {
+		repo = adminHandler.GetRepo()
+	}
+	mcpHandler := NewMCPHandler(dispatcher, repo)
+	r.GET("/mcp/sse", mcpHandler.HandleMCPSSE)
+	r.POST("/mcp/messages", mcpHandler.HandleMCPMessages)
+	r.GET("/mcp", mcpHandler.HandleMCPInfo)
+	r.GET("/v1/mcp/sse", mcpHandler.HandleMCPSSE)
+	r.POST("/v1/mcp/messages", mcpHandler.HandleMCPMessages)
+	r.GET("/v1/mcp", mcpHandler.HandleMCPInfo)
 
 	// Admin Control Plane APIs
 	if adminHandler != nil {
 		admin := r.Group("/api/v1/admin")
 		{
-			admin.GET("/channels", adminHandler.ListChannels)
-			admin.POST("/channels", adminHandler.CreateChannel)
-			admin.PUT("/channels/:id", adminHandler.UpdateChannel)
-			admin.DELETE("/channels/:id", adminHandler.DeleteChannel)
-			admin.POST("/channels/:id/test", adminHandler.TestChannel)
-			admin.POST("/channels/probe", adminHandler.ProbeChannel)
+			// Public Auth Endpoint
+			admin.POST("/auth/login", adminHandler.Login)
 
-			admin.GET("/keys", adminHandler.ListVirtualKeys)
-			admin.POST("/keys", adminHandler.CreateVirtualKey)
-			admin.DELETE("/keys/:id", adminHandler.DeleteVirtualKey)
+			// Protected Admin API group
+			protected := admin.Group("")
+			protected.Use(adminHandler.AdminAuthMiddleware())
+			{
+				protected.GET("/auth/me", adminHandler.GetMe)
+				protected.POST("/auth/password", adminHandler.ChangePassword)
+				protected.GET("/users", adminHandler.ListUsers)
+				protected.POST("/users", adminHandler.CreateUser)
+				protected.DELETE("/users/:username", adminHandler.DeleteUser)
+				protected.POST("/users/:username/password", adminHandler.ResetUserPassword)
 
-			admin.GET("/stats/overview", adminHandler.GetStatsOverview)
-			admin.GET("/models", adminHandler.ListModels)
-			admin.GET("/logs", adminHandler.ListLogs)
+				protected.GET("/channels", adminHandler.ListChannels)
+				protected.POST("/channels", adminHandler.CreateChannel)
+				protected.PUT("/channels/:id", adminHandler.UpdateChannel)
+				protected.DELETE("/channels/:id", adminHandler.DeleteChannel)
+				protected.POST("/channels/:id/test", adminHandler.TestChannel)
+				protected.POST("/channels/probe", adminHandler.ProbeChannel)
+				protected.POST("/channels/batch-delete", adminHandler.BatchDeleteChannels)
+				protected.POST("/channels/batch-status", adminHandler.BatchStatusChannels)
+
+				protected.GET("/keys", adminHandler.ListVirtualKeys)
+				protected.POST("/keys", adminHandler.CreateVirtualKey)
+				protected.PUT("/keys/:id", adminHandler.UpdateVirtualKey)
+				protected.DELETE("/keys/:id", adminHandler.DeleteVirtualKey)
+				protected.POST("/keys/batch-delete", adminHandler.BatchDeleteVirtualKeys)
+				protected.POST("/keys/batch-status", adminHandler.BatchStatusVirtualKeys)
+
+				protected.GET("/stats/overview", adminHandler.GetStatsOverview)
+				protected.GET("/models", adminHandler.ListModels)
+				protected.GET("/models/routes", adminHandler.GetModelRoutes)
+				protected.POST("/models/routes", adminHandler.UpdateModelRoute)
+				protected.DELETE("/models/routes/:model", adminHandler.DeleteModelRoute)
+				protected.POST("/models/routes/batch-delete", adminHandler.BatchDeleteModelRoutes)
+				protected.POST("/models/routes/probe", adminHandler.ProbeModelRoute)
+
+				protected.GET("/pricing", adminHandler.GetPricingRates)
+				protected.POST("/pricing", adminHandler.SavePricingRate)
+				protected.DELETE("/pricing/:model", adminHandler.DeletePricingRate)
+				protected.POST("/pricing/batch-delete", adminHandler.BatchDeletePricingRates)
+
+				protected.GET("/skills", adminHandler.ListSkills)
+				protected.POST("/skills/:id/toggle", adminHandler.ToggleSkill)
+				protected.GET("/mcp/settings", adminHandler.GetMCPSettings)
+				protected.POST("/mcp/settings", adminHandler.UpdateMCPSettings)
+
+				protected.GET("/logs", adminHandler.ListLogs)
+				protected.DELETE("/logs/:id", adminHandler.DeleteLog)
+				protected.POST("/logs/batch-delete", adminHandler.BatchDeleteLogs)
+				protected.POST("/logs/clear", adminHandler.ClearLogs)
+			}
 		}
 	}
 
@@ -51,8 +108,9 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 	v1.Use(middleware.AuthMiddleware())
 	v1.Use(middleware.RateLimitMiddleware())
 	{
-		// OpenAI ingress (Chat completions + Text completions + Models + Embeddings + Rerank + Moderations)
+		// OpenAI ingress (Chat completions + Responses + Text completions + Models + Embeddings + Rerank + Moderations)
 		v1.POST("/chat/completions", handler.HandleChatCompletions)
+		v1.POST("/responses", handler.HandleResponses)
 		v1.POST("/completions", handler.HandleCompletions)
 		v1.GET("/models", handler.HandleModels)
 		v1.GET("/models/:model", handler.HandleModelDetail)

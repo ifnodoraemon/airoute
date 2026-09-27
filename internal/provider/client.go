@@ -29,5 +29,5 @@ var SharedDefaultHTTPClient = &http.Client{
 			MinVersion: tls.VersionTLS12,
 		},
 	},
-	Timeout: 300 * time.Second,
+	Timeout: 0, // No client-level body deadline to allow long-running SSE streams; ResponseHeaderTimeout protects headers
 }

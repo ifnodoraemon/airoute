@@ -72,9 +72,20 @@ func (h *Handler) HandleEmbeddings(c *gin.Context) {
 		return
 	}
 
+	sessionID := c.GetHeader("X-Session-ID")
+	if sessionID == "" {
+		sessionID = c.GetHeader("X-Nano-Session-ID")
+	}
+	if sessionID == "" {
+		sessionID = fmt.Sprintf("sess_emb_%d_%x", time.Now().Unix(), time.Now().UnixNano()%1000000)
+	}
+	c.Header("X-Nano-Session-ID", sessionID)
+
 	dur := time.Since(start)
 	if storage.GlobalAsyncLogger != nil {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
+			TraceID:          middleware.GetTraceID(c),
+			SessionID:        sessionID,
 			VirtualKey:       c.GetString("virtual_key"),
 			TenantID:         c.GetString("tenant_id"),
 			Model:            req.Model,

@@ -20,6 +20,7 @@ const (
 
 // ChannelConfig defines an upstream endpoint configuration.
 type ChannelConfig struct {
+	ID             int64             `yaml:"id,omitempty" json:"id,omitempty"`
 	Name           string            `yaml:"name" json:"name"`
 	Type           ProviderType      `yaml:"type" json:"type"`
 	BaseURL        string            `yaml:"base_url" json:"base_url"`
@@ -30,6 +31,7 @@ type ChannelConfig struct {
 	Priority       int               `yaml:"priority" json:"priority"`                             // lower number means higher priority (e.g. 1 is primary, 2 is fallback)
 	Weight         int               `yaml:"weight" json:"weight"`                                 // weight for load balancing among same priority
 	TimeoutSeconds int               `yaml:"timeout_seconds" json:"timeout_seconds"`
+	Status         string            `yaml:"status,omitempty" json:"status,omitempty"`
 }
 
 // SupportsProtocol checks whether this channel supports the requested inbound/outbound protocol.
@@ -43,6 +45,13 @@ func (c *ChannelConfig) SupportsProtocol(proto string) bool {
 			return true
 		}
 		if (p == "chat" || p == "openai_chat") && (proto == "chat" || proto == "openai_chat") {
+			return true
+		}
+		if (p == "response" || p == "responses" || p == "openai_response" || p == "openai_responses") && (proto == "response" || proto == "responses" || proto == "openai_response" || proto == "openai_responses") {
+			return true
+		}
+		// Upstream chat providers can seamlessly adapt to openai_response
+		if (p == "chat" || p == "openai_chat") && (proto == "response" || proto == "responses" || proto == "openai_response" || proto == "openai_responses") {
 			return true
 		}
 		if (p == "completion" || p == "openai_text") && (proto == "completion" || proto == "openai_text") {
@@ -125,10 +134,8 @@ func (c *ChannelConfig) SupportsModel(requestedModel string) bool {
 	chPrefix := c.Name + "/"
 	if strings.HasPrefix(requestedModel, chPrefix) {
 		remainder := strings.TrimPrefix(requestedModel, chPrefix)
-		for _, m := range c.Models {
-			if m == "*" || m == remainder {
-				return true
-			}
+		if c.SupportsModel(remainder) {
+			return true
 		}
 	}
 
@@ -167,11 +174,7 @@ func (c *ChannelConfig) GetUpstreamModel(requestedModel string) string {
 	chPrefix := c.Name + "/"
 	if strings.HasPrefix(requestedModel, chPrefix) {
 		remainder := strings.TrimPrefix(requestedModel, chPrefix)
-		for _, m := range c.Models {
-			if m == "*" || m == remainder {
-				return remainder
-			}
-		}
+		return c.GetUpstreamModel(remainder)
 	}
 
 	return requestedModel
@@ -179,7 +182,7 @@ func (c *ChannelConfig) GetUpstreamModel(requestedModel string) string {
 
 // VirtualKeyConfig defines a virtual API key configured on the gateway.
 type VirtualKeyConfig struct {
-	Key         string   `yaml:"key" json:"key"`                 // e.g. "sk-gw-admin-12345"
+	Key         string   `yaml:"key" json:"key"`                 // e.g. "sk-nano-8f92a1c4b7e3"
 	TenantID    string   `yaml:"tenant_id" json:"tenant_id"`
 	AllowedModels []string `yaml:"allowed_models" json:"allowed_models"` // empty means all allowed
 	RPM         int      `yaml:"rpm" json:"rpm"`                 // Requests per minute limit (0 = unlimited)

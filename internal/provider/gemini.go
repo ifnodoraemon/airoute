@@ -130,6 +130,15 @@ func convertOpenAIToGemini(req *model.ChatCompletionRequest) *GeminiRequest {
 	var contents []GeminiContent
 	var systemParts []GeminiPart
 
+	toolCallNames := make(map[string]string)
+	for _, m := range req.Messages {
+		for _, tc := range m.ToolCalls {
+			if tc.ID != "" && tc.Function.Name != "" {
+				toolCallNames[tc.ID] = tc.Function.Name
+			}
+		}
+	}
+
 	for _, msg := range req.Messages {
 		if strings.ToLower(msg.Role) == "system" {
 			parts := model.ParseMessageContent(msg.Content)
@@ -146,12 +155,19 @@ func convertOpenAIToGemini(req *model.ChatCompletionRequest) *GeminiRequest {
 			if err := json.Unmarshal([]byte(msg.GetContentString()), &respMap); err != nil {
 				respMap = map[string]any{"content": msg.GetContentString()}
 			}
+			fnName := msg.Name
+			if fnName == "" && msg.ToolCallID != "" {
+				fnName = toolCallNames[msg.ToolCallID]
+			}
+			if fnName == "" {
+				fnName = "function_response"
+			}
 			contents = append(contents, GeminiContent{
 				Role: "user",
 				Parts: []GeminiPart{
 					{
 						FunctionResponse: &GeminiFunctionResponse{
-							Name:     msg.Name,
+							Name:     fnName,
 							Response: respMap,
 						},
 					},

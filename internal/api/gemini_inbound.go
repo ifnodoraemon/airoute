@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,6 +13,8 @@ import (
 	"github.com/ifnodoraemon/nano-gateway/internal/middleware"
 	"github.com/ifnodoraemon/nano-gateway/internal/model"
 	"github.com/ifnodoraemon/nano-gateway/internal/provider"
+	"github.com/ifnodoraemon/nano-gateway/internal/router"
+	"github.com/ifnodoraemon/nano-gateway/internal/storage"
 	"github.com/ifnodoraemon/nano-gateway/internal/telemetry"
 )
 
@@ -164,13 +167,19 @@ func (h *Handler) HandleGeminiAction(c *gin.Context) {
 
 	canonicalReq := convertInboundGeminiToCanonical(modelName, &geminiReq, isStream)
 
+	sessionID := resolveSessionID(c, canonicalReq.Model, canonicalReq.Messages, "")
+	reqCtx := c.Request.Context()
+	if sessionID != "" {
+		reqCtx = context.WithValue(reqCtx, router.ContextKeySessionID, sessionID)
+	}
+
 	telemetry.GlobalMetrics.IncActiveConns()
 	defer telemetry.GlobalMetrics.DecActiveConns()
 
 	start := time.Now()
 
 	if !isStream {
-		resp, err := h.dispatcher.Dispatch(c.Request.Context(), canonicalReq)
+		resp, err := h.dispatcher.Dispatch(reqCtx, canonicalReq)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{
 				"error": gin.H{
@@ -183,11 +192,32 @@ func (h *Handler) HandleGeminiAction(c *gin.Context) {
 		}
 
 		geminiResp := convertCanonicalToGeminiResponse(resp)
+		dur := time.Since(start)
+		pTokens := 0
+		cTokens := 0
+		if resp.Usage != nil {
+			pTokens = resp.Usage.PromptTokens
+			cTokens = resp.Usage.CompletionTokens
+		}
+		if storage.GlobalAsyncLogger != nil {
+			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
+				TraceID:          middleware.GetTraceID(c),
+				SessionID:        sessionID,
+				VirtualKey:       c.GetString(middleware.ContextKeyVirtualKey),
+				TenantID:         c.GetString(middleware.ContextKeyTenant),
+				Model:            modelName,
+				PromptTokens:     pTokens,
+				CompletionTokens: cTokens,
+				TotalTokens:      pTokens + cTokens,
+				DurationMs:       dur.Milliseconds(),
+				StatusCode:       http.StatusOK,
+			})
+		}
 		c.JSON(http.StatusOK, geminiResp)
 		return
 	}
 
-	streamChan, err := h.dispatcher.DispatchStream(c.Request.Context(), canonicalReq)
+	streamChan, err := h.dispatcher.DispatchStream(reqCtx, canonicalReq)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{
 			"error": gin.H{
@@ -225,6 +255,20 @@ func (h *Handler) HandleGeminiAction(c *gin.Context) {
 			if !open {
 				dur := time.Since(start)
 				telemetry.GlobalMetrics.RecordRequest(true, dur, totalPromptTokens, totalCompTokens)
+				if storage.GlobalAsyncLogger != nil {
+					storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
+						TraceID:          middleware.GetTraceID(c),
+						SessionID:        sessionID,
+						VirtualKey:       c.GetString(middleware.ContextKeyVirtualKey),
+						TenantID:         c.GetString(middleware.ContextKeyTenant),
+						Model:            modelName,
+						PromptTokens:     totalPromptTokens,
+						CompletionTokens: totalCompTokens,
+						TotalTokens:      totalPromptTokens + totalCompTokens,
+						DurationMs:       dur.Milliseconds(),
+						StatusCode:       http.StatusOK,
+					})
+				}
 				return
 			}
 

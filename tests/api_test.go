@@ -43,13 +43,22 @@ func TestAPI_HealthMetricsAndWebUI(t *testing.T) {
 		t.Fatalf("expected 200 OK for /health, got %d", w.Code)
 	}
 
-	// 2. Test GET /metrics
+	// 2. Test GET /metrics (temporarily disabled for public access -> returns 404)
 	reqMetrics := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	wMetrics := httptest.NewRecorder()
 	engine.ServeHTTP(wMetrics, reqMetrics)
 
-	if wMetrics.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK for /metrics, got %d", wMetrics.Code)
+	if wMetrics.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 NotFound for public /metrics (temporarily disabled), got %d", wMetrics.Code)
+	}
+
+	// 2b. Test GET /api/v1/public/status (standalone public status page API)
+	reqStatus := httptest.NewRequest(http.MethodGet, "/api/v1/public/status", nil)
+	wStatus := httptest.NewRecorder()
+	engine.ServeHTTP(wStatus, reqStatus)
+
+	if wStatus.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for /api/v1/public/status, got %d", wStatus.Code)
 	}
 
 	// 3. Test GET /ui/ (embedded Web UI)
@@ -60,8 +69,8 @@ func TestAPI_HealthMetricsAndWebUI(t *testing.T) {
 	if wUI.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for embedded Web UI /ui/, got %d", wUI.Code)
 	}
-	if !bytes.Contains(wUI.Body.Bytes(), []byte("Nano-Gateway")) {
-		t.Errorf("expected Web UI to contain 'Nano-Gateway'")
+	if !bytes.Contains(wUI.Body.Bytes(), []byte("AI路由器")) && !bytes.Contains(wUI.Body.Bytes(), []byte("Nano")) {
+		t.Errorf("expected Web UI to contain 'AI路由器' or 'Nano'")
 	}
 }
 

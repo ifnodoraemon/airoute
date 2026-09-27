@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/nano-gateway/internal/distributed"
 	"github.com/ifnodoraemon/nano-gateway/internal/model"
 )
 
@@ -75,9 +76,12 @@ func (rl *RateLimiter) getBucket(key string, rpm int) *tokenBucket {
 }
 
 // RateLimitMiddleware enforces RPM rate limits per virtual key.
+// Priority:
+// 1. Enterprise Redis Distributed Sliding Window (if REDIS_URL is configured and reachable)
+// 2. Local In-Memory Token Bucket (graceful zero-dependency fallback)
 func RateLimitMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		vkAny, exists := c.Get(ContextKeyVirtualKey)
+		vkAny, exists := c.Get(ContextKeyVirtualKeyConfig)
 		if !exists {
 			c.Next()
 			return
@@ -89,6 +93,28 @@ func RateLimitMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		// 1. Check Enterprise Distributed Redis cluster rate limit
+		client := distributed.GetClient()
+		if client != nil && client.IsActive() {
+			allowed, err := client.AllowRPM(c.Request.Context(), vk.Key, vk.RPM)
+			if err == nil {
+				if !allowed {
+					c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+						"error": gin.H{
+							"message": "Cluster rate limit exceeded (RPM limit reached). Please slow down requests.",
+							"type":    "rate_limit_error",
+							"code":    "rate_limit_exceeded",
+						},
+					})
+					return
+				}
+				c.Next()
+				return
+			}
+			// On Redis error/timeout, gracefully fall through to local in-memory token bucket
+		}
+
+		// 2. Fallback to high-performance local in-memory token bucket
 		bucket := GlobalRateLimiter.getBucket(vk.Key, vk.RPM)
 		if !bucket.allow() {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{

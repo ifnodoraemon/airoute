@@ -35,8 +35,22 @@ func TestMultimodalPipeline_ImageAudioVideo(t *testing.T) {
 			w.Write([]byte{0xFF, 0xFB, 0x90, 0x64, 0x00, 0x00, 0x00, 0x00})
 
 		case "/v1/audio/transcriptions":
+			bodyBytes, _ := io.ReadAll(r.Body)
+			if len(bodyBytes) == 0 {
+				http.Error(w, "upstream received empty multipart body", http.StatusBadRequest)
+				return
+			}
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(`{"text": "Transcription from audio file successfully recognized."}`))
+
+		case "/v1/audio/translations":
+			bodyBytes, _ := io.ReadAll(r.Body)
+			if len(bodyBytes) == 0 {
+				http.Error(w, "upstream received empty multipart body", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"text": "Translation from audio file successfully recognized."}`))
 
 		case "/v1/videos/generations":
 			w.Header().Set("Content-Type", "application/json")

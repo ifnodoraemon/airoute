@@ -1,5 +1,7 @@
 # Binaries
 bin/
+nano
+nano-gateway
 *.exe
 *.exe~
 *.dll

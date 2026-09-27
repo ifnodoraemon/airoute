@@ -16,6 +16,7 @@ type ServerConfig struct {
 	ReadTimeoutSec  int    `yaml:"read_timeout_sec"`
 	WriteTimeoutSec int    `yaml:"write_timeout_sec"`
 	LogLevel        string `yaml:"log_level"`
+	RedisURL        string `yaml:"redis_url"`
 }
 
 // Config represents the complete gateway configuration.
@@ -26,6 +27,16 @@ type Config struct {
 	EnableFallback         bool                      `yaml:"enable_fallback"`
 	MaxRetries             int                       `yaml:"max_retries"`
 	DefaultTimeoutSeconds  int                       `yaml:"default_timeout_seconds"`
+	HasConfiguredKeys      bool                      `yaml:"-"`
+	virtualKeysMap         map[string]*model.VirtualKeyConfig
+}
+
+// GetVirtualKey returns the VirtualKeyConfig in O(1) constant time.
+func (c *Config) GetVirtualKey(key string) *model.VirtualKeyConfig {
+	if c == nil || c.virtualKeysMap == nil {
+		return nil
+	}
+	return c.virtualKeysMap[key]
 }
 
 var (
@@ -35,6 +46,7 @@ var (
 
 // DefaultConfig provides sensible defaults.
 func DefaultConfig() *Config {
+	redisURL := os.Getenv("REDIS_URL")
 	return &Config{
 		Server: ServerConfig{
 			Host:            "0.0.0.0",
@@ -42,12 +54,14 @@ func DefaultConfig() *Config {
 			ReadTimeoutSec:  120,
 			WriteTimeoutSec: 120,
 			LogLevel:        "info",
+			RedisURL:        redisURL,
 		},
 		EnableFallback:        true,
 		MaxRetries:            3,
 		DefaultTimeoutSeconds: 60,
 		Channels:              []model.ChannelConfig{},
 		VirtualKeys:           []model.VirtualKeyConfig{},
+		virtualKeysMap:        make(map[string]*model.VirtualKeyConfig),
 	}
 }
 
@@ -65,8 +79,13 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("read config file error: %w", err)
 	}
 
-	if err := yaml.Unmarshal(data, cfg); err != nil {
+	expanded := []byte(os.ExpandEnv(string(data)))
+	if err := yaml.Unmarshal(expanded, cfg); err != nil {
 		return nil, fmt.Errorf("unmarshal config yaml error: %w", err)
+	}
+
+	if env := os.Getenv("REDIS_URL"); env != "" {
+		cfg.Server.RedisURL = env
 	}
 
 	SetGlobalConfig(cfg)
@@ -77,6 +96,14 @@ func LoadConfig(path string) (*Config, error) {
 func SetGlobalConfig(cfg *Config) {
 	configMutex.Lock()
 	defer configMutex.Unlock()
+	if cfg != nil {
+		m := make(map[string]*model.VirtualKeyConfig, len(cfg.VirtualKeys))
+		for i := range cfg.VirtualKeys {
+			vk := &cfg.VirtualKeys[i]
+			m[vk.Key] = vk
+		}
+		cfg.virtualKeysMap = m
+	}
 	globalConfig = cfg
 }
 

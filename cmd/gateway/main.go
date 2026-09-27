@@ -7,20 +7,34 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/ifnodoraemon/nano-gateway/internal/api"
+	"github.com/ifnodoraemon/nano-gateway/internal/billing"
 	"github.com/ifnodoraemon/nano-gateway/internal/config"
 	"github.com/ifnodoraemon/nano-gateway/internal/controlplane"
+	"github.com/ifnodoraemon/nano-gateway/internal/distributed"
 	"github.com/ifnodoraemon/nano-gateway/internal/router"
 	"github.com/ifnodoraemon/nano-gateway/internal/storage"
 	"github.com/ifnodoraemon/nano-gateway/internal/telemetry"
 )
 
 func main() {
-	configPath := flag.String("config", "configs/config.yaml", "Path to YAML configuration file")
-	dbPath := flag.String("db", "data/gateway.db", "Path to SQLite database file")
+	defaultConfig := "configs/config.yaml"
+	if env := os.Getenv("GATEWAY_CONFIG"); env != "" {
+		defaultConfig = env
+	}
+	defaultDB := "data/gateway.db"
+	if env := os.Getenv("GATEWAY_DB_DSN"); env != "" {
+		defaultDB = env
+	} else if env := os.Getenv("GATEWAY_DB"); env != "" {
+		defaultDB = env
+	}
+
+	configPath := flag.String("config", defaultConfig, "Path to YAML configuration file")
+	dbPath := flag.String("db", defaultDB, "Path to SQLite database file")
 	flag.Parse()
 
 	// Load file configuration
@@ -28,6 +42,15 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
 		os.Exit(1)
+	}
+
+	if portEnv := os.Getenv("GATEWAY_PORT"); portEnv != "" {
+		if p, err := strconv.Atoi(portEnv); err == nil && p > 0 {
+			cfg.Server.Port = p
+		}
+	}
+	if hostEnv := os.Getenv("GATEWAY_HOST"); hostEnv != "" {
+		cfg.Server.Host = hostEnv
 	}
 
 	// Initialize Logger
@@ -38,8 +61,13 @@ func main() {
 		"db", *dbPath,
 	)
 
-	// Initialize Storage Layer (SQLite)
-	db, err := storage.OpenDB(*dbPath)
+	dataSource := *dbPath
+	if dbEnv := os.Getenv("DATABASE_URL"); dbEnv != "" {
+		dataSource = dbEnv
+	}
+
+	// Initialize Storage Layer (SQLite or Distributed PostgreSQL)
+	db, err := storage.OpenDB(dataSource)
 	if err != nil {
 		telemetry.Logger.Error("failed to open database", "error", err.Error())
 		os.Exit(1)
@@ -47,6 +75,9 @@ func main() {
 	defer db.Close()
 
 	repo := storage.NewRepository(db)
+
+	// Ensure default admin user account exists
+	controlplane.InitDefaultAdmin(repo)
 
 	// Seed DB from YAML config if DB is currently empty
 	existingChannels, _ := repo.ListChannels()
@@ -89,6 +120,9 @@ func main() {
 	asyncLogger := storage.InitAsyncLogger(repo, 10000, 100, 500*time.Millisecond)
 	defer asyncLogger.Stop()
 
+	// Initialize Real-Time Model Pricing & Prompt-Cache Billing Engine
+	billing.InitGlobalEngine(repo)
+
 	// Initialize Control Plane Synchronizer & load state into Data Plane memory
 	synchronizer := controlplane.NewSynchronizer(repo, dispatcher)
 	if err := synchronizer.ReloadFromDB(); err != nil {
@@ -96,7 +130,20 @@ func main() {
 		dispatcher.UpdateChannels(cfg.Channels)
 	}
 
-	// HA Multi-Replica Periodic Auto-Sync (10s interval)
+	// Initialize Enterprise Distributed Redis Layer (if REDIS_URL configured)
+	redisClient := distributed.InitRedis(cfg.Server.RedisURL)
+	if redisClient != nil && redisClient.IsActive() {
+		stopRedis := make(chan struct{})
+		defer close(stopRedis)
+		redisClient.SubscribeReload(func(reason string) {
+			telemetry.Logger.Info("handling cluster-wide reload broadcast (<1ms latency)", "reason", reason)
+			if err := synchronizer.ReloadFromDB(); err != nil {
+				telemetry.Logger.Error("failed to reload data plane after cluster broadcast", "error", err.Error())
+			}
+		}, stopRedis)
+	}
+
+	// HA Multi-Replica Periodic Auto-Sync (10s interval as baseline fallback)
 	stopSync := make(chan struct{})
 	defer close(stopSync)
 	synchronizer.StartPeriodicSync(10*time.Second, stopSync)

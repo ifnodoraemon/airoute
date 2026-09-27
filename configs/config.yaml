@@ -9,60 +9,9 @@ enable_fallback: true
 max_retries: 3
 default_timeout_seconds: 60
 
-# Configured upstream channels
-channels:
-  - name: "deepseek-primary"
-    type: "openai"
-    base_url: "https://api.deepseek.com/v1"
-    api_key: "${DEEPSEEK_API_KEY}"
-    models:
-      - "deepseek-chat"
-      - "deepseek-coder"
-      - "deepseek-reasoner"
-    priority: 1
-    weight: 10
-    timeout_seconds: 60
+# Configured upstream channels (empty by default, create via Web UI or Admin API)
+channels: []
 
-  - name: "vllm-local"
-    type: "vllm"
-    base_url: "http://127.0.0.1:8000/v1"
-    api_key: "none"
-    models:
-      - "qwen2.5-7b"
-      - "llama-3-8b"
-    model_mapping:
-      "default-model": "qwen2.5-7b"
-    priority: 1
-    weight: 10
-    timeout_seconds: 60
-
-  - name: "anthropic-backup"
-    type: "anthropic"
-    base_url: "https://api.anthropic.com"
-    api_key: "${ANTHROPIC_API_KEY}"
-    models:
-      - "claude-3-5-sonnet-20241022"
-      - "claude-3-haiku-20240307"
-    model_mapping:
-      "gpt-4o": "claude-3-5-sonnet-20241022"
-    priority: 2
-    weight: 10
-    timeout_seconds: 60
-
-# Virtual API keys issued to client apps / agents
-virtual_keys:
-  - key: "sk-gw-admin-demo"
-    tenant_id: "admin-team"
-    allowed_models: [] # empty means all models allowed
-    rpm: 600
-    tpm: 500000
-    budget: 1000.0
-
-  - key: "sk-gw-agent-dev"
-    tenant_id: "agent-research"
-    allowed_models:
-      - "deepseek-chat"
-      - "qwen2.5-7b"
-    rpm: 120
-    tpm: 100000
-    budget: 200.0
+# 客户端 API 访问密钥 (Client API Keys)
+# 默认清空，由管理员在控制台或通过 Admin API 为下游应用按需签发
+virtual_keys: []

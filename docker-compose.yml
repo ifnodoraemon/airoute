@@ -2,6 +2,24 @@ version: '3.8'
 
 services:
   # ============================================================================
+  # High-Performance Distributed Cache & Cluster Invalidation Broker (Redis)
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: nano-gateway-redis
+    restart: always
+    command: redis-server --appendonly yes --save ""
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ============================================================================
   # High-Availability Gateway Node 1
   # ============================================================================
   gateway-1:
@@ -13,6 +31,7 @@ services:
     restart: always
     environment:
       - TZ=Asia/Shanghai
+      - REDIS_URL=redis://redis:6379/0
     volumes:
       - gateway-data:/app/data
       - ./configs/config.yaml:/app/configs/config.yaml:ro
@@ -23,6 +42,9 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+    depends_on:
+      redis:
+        condition: service_healthy
 
   # ============================================================================
   # High-Availability Gateway Node 2
@@ -36,6 +58,7 @@ services:
     restart: always
     environment:
       - TZ=Asia/Shanghai
+      - REDIS_URL=redis://redis:6379/0
     volumes:
       - gateway-data:/app/data
       - ./configs/config.yaml:/app/configs/config.yaml:ro
@@ -46,6 +69,9 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+    depends_on:
+      redis:
+        condition: service_healthy
 
   # ============================================================================
   # High-Availability Load Balancer (Nginx with SSE stream support)
@@ -64,4 +90,6 @@ services:
 
 volumes:
   gateway-data:
+    driver: local
+  redis-data:
     driver: local

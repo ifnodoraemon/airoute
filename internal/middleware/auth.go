@@ -20,8 +20,9 @@ func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cfg := config.GetGlobalConfig()
 
-		// If no virtual keys configured in system, allow all requests in open dev mode
-		if len(cfg.VirtualKeys) == 0 {
+		// If no virtual keys configured in system and no keys ever created, allow all requests in open dev mode.
+		// If keys have been registered in the gateway (even if currently disabled/revoked), strictly enforce auth!
+		if len(cfg.VirtualKeys) == 0 && !cfg.HasConfiguredKeys {
 			c.Next()
 			return
 		}
@@ -51,13 +52,7 @@ func AuthMiddleware() gin.HandlerFunc {
 			})
 			return
 		}
-		var matchedKey *model.VirtualKeyConfig
-		for _, vk := range cfg.VirtualKeys {
-			if vk.Key == rawKey {
-				matchedKey = &vk
-				break
-			}
-		}
+		matchedKey := cfg.GetVirtualKey(rawKey)
 
 		if matchedKey == nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{

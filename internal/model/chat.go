@@ -68,11 +68,26 @@ type ChatCompletionRequest struct {
 	ToolChoice       any            `json:"tool_choice,omitempty"`
 }
 
+// PromptTokensDetails provides token breakdown details including cache hits.
+type PromptTokensDetails struct {
+	CachedTokens int `json:"cached_tokens,omitempty"`
+	AudioTokens  int `json:"audio_tokens,omitempty"`
+}
+
 // Usage reports token usage for the request.
 type Usage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens        int                  `json:"prompt_tokens"`
+	CompletionTokens    int                  `json:"completion_tokens"`
+	TotalTokens         int                  `json:"total_tokens"`
+	PromptTokensDetails *PromptTokensDetails `json:"prompt_tokens_details,omitempty"`
+}
+
+// GetCachedTokens returns the cached prompt tokens if available.
+func (u *Usage) GetCachedTokens() int {
+	if u == nil || u.PromptTokensDetails == nil {
+		return 0
+	}
+	return u.PromptTokensDetails.CachedTokens
 }
 
 // ChatCompletionChoice is an individual completion choice.
