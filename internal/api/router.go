@@ -83,29 +83,11 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 			protected := admin.Group("")
 			protected.Use(adminHandler.AdminAuthMiddleware())
 			{
+				// User-accessible endpoints under /api/v1/admin
 				protected.GET("/auth/me", adminHandler.GetMe)
 				protected.POST("/auth/password", adminHandler.ChangePassword)
-				protected.GET("/users", adminHandler.ListUsers)
-				protected.POST("/users", adminHandler.CreateUser)
-				protected.DELETE("/users/:username", adminHandler.DeleteUser)
-				protected.POST("/users/:username/password", adminHandler.ResetUserPassword)
-				protected.POST("/users/:username/status", adminHandler.UpdateUserStatus)
-				protected.POST("/users/:username/balance", adminHandler.UpdateUserBalance)
-				protected.POST("/users/:username/group", adminHandler.UpdateUserGroup)
 
-				protected.GET("/redemptions", adminHandler.ListRedemptions)
-				protected.POST("/redemptions/generate", adminHandler.GenerateRedemptions)
-				protected.DELETE("/redemptions/:id", adminHandler.DeleteRedemption)
-
-				protected.GET("/channels", adminHandler.ListChannels)
-				protected.POST("/channels", adminHandler.CreateChannel)
-				protected.PUT("/channels/:id", adminHandler.UpdateChannel)
-				protected.DELETE("/channels/:id", adminHandler.DeleteChannel)
-				protected.POST("/channels/:id/test", adminHandler.TestChannel)
-				protected.POST("/channels/probe", adminHandler.ProbeChannel)
-				protected.POST("/channels/batch-delete", adminHandler.BatchDeleteChannels)
-				protected.POST("/channels/batch-status", adminHandler.BatchStatusChannels)
-
+				// Virtual Keys (scoped to owner for non-admins)
 				protected.GET("/keys", adminHandler.ListVirtualKeys)
 				protected.POST("/keys", adminHandler.CreateVirtualKey)
 				protected.PUT("/keys/:id", adminHandler.UpdateVirtualKey)
@@ -113,28 +95,56 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 				protected.POST("/keys/batch-delete", adminHandler.BatchDeleteVirtualKeys)
 				protected.POST("/keys/batch-status", adminHandler.BatchStatusVirtualKeys)
 
+				// Read-only inspection endpoints
 				protected.GET("/stats/overview", adminHandler.GetStatsOverview)
 				protected.GET("/models", adminHandler.ListModels)
 				protected.GET("/models/routes", adminHandler.GetModelRoutes)
-				protected.POST("/models/routes", adminHandler.UpdateModelRoute)
-				protected.DELETE("/models/routes/:model", adminHandler.DeleteModelRoute)
-				protected.POST("/models/routes/batch-delete", adminHandler.BatchDeleteModelRoutes)
-				protected.POST("/models/routes/probe", adminHandler.ProbeModelRoute)
-
 				protected.GET("/pricing", adminHandler.GetPricingRates)
-				protected.POST("/pricing", adminHandler.SavePricingRate)
-				protected.DELETE("/pricing/:model", adminHandler.DeletePricingRate)
-				protected.POST("/pricing/batch-delete", adminHandler.BatchDeletePricingRates)
-
 				protected.GET("/skills", adminHandler.ListSkills)
-				protected.POST("/skills/:id/toggle", adminHandler.ToggleSkill)
 				protected.GET("/mcp/settings", adminHandler.GetMCPSettings)
-				protected.POST("/mcp/settings", adminHandler.UpdateMCPSettings)
-
 				protected.GET("/logs", adminHandler.ListLogs)
-				protected.DELETE("/logs/:id", adminHandler.DeleteLog)
-				protected.POST("/logs/batch-delete", adminHandler.BatchDeleteLogs)
-				protected.POST("/logs/clear", adminHandler.ClearLogs)
+
+				// Protected super-admin operations
+				adminOnly := protected.Group("")
+				adminOnly.Use(adminHandler.RequireAdminRole())
+				{
+					adminOnly.GET("/users", adminHandler.ListUsers)
+					adminOnly.POST("/users", adminHandler.CreateUser)
+					adminOnly.DELETE("/users/:username", adminHandler.DeleteUser)
+					adminOnly.POST("/users/:username/password", adminHandler.ResetUserPassword)
+					adminOnly.POST("/users/:username/status", adminHandler.UpdateUserStatus)
+					adminOnly.POST("/users/:username/balance", adminHandler.UpdateUserBalance)
+					adminOnly.POST("/users/:username/group", adminHandler.UpdateUserGroup)
+
+					adminOnly.GET("/redemptions", adminHandler.ListRedemptions)
+					adminOnly.POST("/redemptions/generate", adminHandler.GenerateRedemptions)
+					adminOnly.DELETE("/redemptions/:id", adminHandler.DeleteRedemption)
+
+					adminOnly.GET("/channels", adminHandler.ListChannels)
+					adminOnly.POST("/channels", adminHandler.CreateChannel)
+					adminOnly.PUT("/channels/:id", adminHandler.UpdateChannel)
+					adminOnly.DELETE("/channels/:id", adminHandler.DeleteChannel)
+					adminOnly.POST("/channels/:id/test", adminHandler.TestChannel)
+					adminOnly.POST("/channels/probe", adminHandler.ProbeChannel)
+					adminOnly.POST("/channels/batch-delete", adminHandler.BatchDeleteChannels)
+					adminOnly.POST("/channels/batch-status", adminHandler.BatchStatusChannels)
+
+					adminOnly.POST("/models/routes", adminHandler.UpdateModelRoute)
+					adminOnly.DELETE("/models/routes/:model", adminHandler.DeleteModelRoute)
+					adminOnly.POST("/models/routes/batch-delete", adminHandler.BatchDeleteModelRoutes)
+					adminOnly.POST("/models/routes/probe", adminHandler.ProbeModelRoute)
+
+					adminOnly.POST("/pricing", adminHandler.SavePricingRate)
+					adminOnly.DELETE("/pricing/:model", adminHandler.DeletePricingRate)
+					adminOnly.POST("/pricing/batch-delete", adminHandler.BatchDeletePricingRates)
+
+					adminOnly.POST("/skills/:id/toggle", adminHandler.ToggleSkill)
+					adminOnly.POST("/mcp/settings", adminHandler.UpdateMCPSettings)
+
+					adminOnly.DELETE("/logs/:id", adminHandler.DeleteLog)
+					adminOnly.POST("/logs/batch-delete", adminHandler.BatchDeleteLogs)
+					adminOnly.POST("/logs/clear", adminHandler.ClearLogs)
+				}
 			}
 		}
 	}

@@ -236,6 +236,17 @@ func (h *AdminHandler) ChangePassword(c *gin.Context) {
 
 // ListUsers returns all users with balance, status, role, and group.
 func (h *AdminHandler) ListUsers(c *gin.Context) {
+	claimsVal, exists := c.Get("admin_claims")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "未登录"})
+		return
+	}
+	claims, ok := claimsVal.(*AdminClaims)
+	if !ok || claims.Role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "权限不足，仅超级管理员可查看用户列表"})
+		return
+	}
+
 	users, err := h.repo.ListUsers()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "查询用户列表失败: " + err.Error()})
@@ -509,8 +520,33 @@ func (h *AdminHandler) AdminAuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		if h.repo != nil {
+			user, _ := h.repo.GetUserByUsername(claims.Username)
+			if user != nil && strings.EqualFold(user.Status, "locked") {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": 403, "error": "该账户已被管理员锁定，无法继续访问"})
+				return
+			}
+		}
+
 		c.Set("admin_claims", claims)
 		c.Set("admin_username", claims.Username)
+		c.Next()
+	}
+}
+
+// RequireAdminRole verifies that the authenticated user possesses the admin role.
+func (h *AdminHandler) RequireAdminRole() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		claimsVal, exists := c.Get("admin_claims")
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "未登录"})
+			return
+		}
+		claims, ok := claimsVal.(*AdminClaims)
+		if !ok || claims.Role != "admin" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": 403, "error": "权限不足，仅超级管理员可执行此操作"})
+			return
+		}
 		c.Next()
 	}
 }

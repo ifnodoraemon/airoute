@@ -292,8 +292,8 @@ func (r *Repository) CreateVirtualKey(rec *VirtualKeyRecord) error {
 	if rec.Status == "" {
 		rec.Status = "active"
 	}
-	if rec.RPM == 0 {
-		rec.RPM = 60
+	if rec.RPM < 0 {
+		rec.RPM = 0
 	}
 	if rec.GroupName == "" {
 		rec.GroupName = "default"
@@ -407,8 +407,15 @@ func (r *Repository) RecordUsageLog(log *UsageLogRecord) error {
 		_, _ = r.db.Exec(`UPDATE virtual_keys SET used_cost = used_cost + ?, used_tokens = used_tokens + ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?`,
 			log.Cost, log.TotalTokens, log.VirtualKey)
 		if log.Cost > 0 {
-			_, _ = r.db.Exec(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT user_id FROM virtual_keys WHERE key = ?) AND role != 'admin'`,
+			res, _ := r.db.Exec(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT user_id FROM virtual_keys WHERE key = ?) AND role != 'admin'`,
 				log.Cost, log.VirtualKey)
+			if res != nil {
+				affected, _ := res.RowsAffected()
+				if affected == 0 && log.TenantID != "" {
+					_, _ = r.db.Exec(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`,
+						log.Cost, log.TenantID, log.TenantID)
+				}
+			}
 		}
 	} else if log.TenantID != "" && log.Cost > 0 {
 		_, _ = r.db.Exec(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`,

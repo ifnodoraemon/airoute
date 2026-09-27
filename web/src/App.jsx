@@ -216,6 +216,13 @@ export default function App() {
       }
     }
   }, [adminUser, currentTab]);
+
+  // Auto-select first available virtual key for Playground
+  useEffect(() => {
+    if (!playApiKey && keys.length > 0) {
+      setPlayApiKey(keys[0].key);
+    }
+  }, [keys, playApiKey]);
   const [stats, setStats] = useState({});
   const [channels, setChannels] = useState([]);
   const [keys, setKeys] = useState([]);
@@ -1132,9 +1139,10 @@ export default function App() {
     let firstTokenTime = null;
 
     const headers = { 'Content-Type': 'application/json' };
-    if (playApiKey) {
-      headers['Authorization'] = `Bearer ${playApiKey}`;
-      headers['x-api-key'] = playApiKey;
+    const activeKey = playApiKey || (keys.length > 0 ? keys[0].key : '');
+    if (activeKey) {
+      headers['Authorization'] = `Bearer ${activeKey}`;
+      headers['x-api-key'] = activeKey;
     }
 
     let url = '/v1/chat/completions';
@@ -1286,8 +1294,9 @@ export default function App() {
 
     try {
       const headers = { 'Content-Type': 'application/json' };
-      if (playApiKey) {
-        headers['Authorization'] = `Bearer ${playApiKey}`;
+      const activeKey = playApiKey || (keys.length > 0 ? keys[0].key : '');
+      if (activeKey) {
+        headers['Authorization'] = `Bearer ${activeKey}`;
       }
       const res = await fetch('/v1/images/generations', {
         method: 'POST',
@@ -1330,8 +1339,9 @@ export default function App() {
 
     try {
       const headers = { 'Content-Type': 'application/json' };
-      if (playApiKey) {
-        headers['Authorization'] = `Bearer ${playApiKey}`;
+      const activeKey = playApiKey || (keys.length > 0 ? keys[0].key : '');
+      if (activeKey) {
+        headers['Authorization'] = `Bearer ${activeKey}`;
       }
       const res = await fetch('/v1/audio/speech', {
         method: 'POST',
@@ -1379,8 +1389,9 @@ export default function App() {
       formData.append('model', sttModel);
 
       const headers = {};
-      if (playApiKey) {
-        headers['Authorization'] = `Bearer ${playApiKey}`;
+      const activeKey = playApiKey || (keys.length > 0 ? keys[0].key : '');
+      if (activeKey) {
+        headers['Authorization'] = `Bearer ${activeKey}`;
       }
 
       const res = await fetch('/v1/audio/transcriptions', {
@@ -1411,7 +1422,8 @@ export default function App() {
       setVideoPollCount(attempts);
       try {
         const headers = {};
-        if (playApiKey) headers['Authorization'] = `Bearer ${playApiKey}`;
+        const activeKey = playApiKey || (keys.length > 0 ? keys[0].key : '');
+        if (activeKey) headers['Authorization'] = `Bearer ${activeKey}`;
         const res = await fetch(`/v1/videos/tasks/${taskId}`, { headers });
         const data = await res.json();
         setVideoTaskStatus(data.status || 'PROCESSING');
@@ -1447,8 +1459,9 @@ export default function App() {
 
     try {
       const headers = { 'Content-Type': 'application/json' };
-      if (playApiKey) {
-        headers['Authorization'] = `Bearer ${playApiKey}`;
+      const activeKey = playApiKey || (keys.length > 0 ? keys[0].key : '');
+      if (activeKey) {
+        headers['Authorization'] = `Bearer ${activeKey}`;
       }
       const res = await fetch('/v1/videos/generations', {
         method: 'POST',
@@ -1497,8 +1510,9 @@ export default function App() {
 
     try {
       const headers = { 'Content-Type': 'application/json' };
-      if (playApiKey) {
-        headers['Authorization'] = `Bearer ${playApiKey}`;
+      const activeKey = playApiKey || (keys.length > 0 ? keys[0].key : '');
+      if (activeKey) {
+        headers['Authorization'] = `Bearer ${activeKey}`;
       }
       const lines = embedInput.split('\n').map(l => l.trim()).filter(Boolean);
       const inputPayload = lines.length > 1 ? lines : embedInput;
@@ -1542,8 +1556,9 @@ export default function App() {
 
     try {
       const headers = { 'Content-Type': 'application/json' };
-      if (playApiKey) {
-        headers['Authorization'] = `Bearer ${playApiKey}`;
+      const activeKey = playApiKey || (keys.length > 0 ? keys[0].key : '');
+      if (activeKey) {
+        headers['Authorization'] = `Bearer ${activeKey}`;
       }
       let docList = [];
       if (rerankDocs.includes('\n---\n')) {
@@ -3457,7 +3472,7 @@ export default function App() {
                       type="text"
                       value={playApiKey}
                       onChange={(e) => setPlayApiKey(e.target.value)}
-                      placeholder="sk-nano-xxxx (留空将使用网关免密直通)"
+                      placeholder={keys.length > 0 ? `留空默认使用: ${keys[0].key} (${keys[0].tenant_id || '首个密钥'})` : 'sk-nano-xxxx (留空将使用网关免密直通)'}
                       className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono"
                     />
                   </div>

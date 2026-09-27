@@ -458,6 +458,17 @@ func (h *AdminHandler) UpdateUserGroup(c *gin.Context) {
 
 // ListRedemptions lists redemption gift codes.
 func (h *AdminHandler) ListRedemptions(c *gin.Context) {
+	claimsVal, exists := c.Get("admin_claims")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "未登录"})
+		return
+	}
+	claims, ok := claimsVal.(*AdminClaims)
+	if !ok || claims.Role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "权限不足，仅超级管理员可查看兑换码"})
+		return
+	}
+
 	codes, err := h.repo.ListRedemptionCodes()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "查询兑换码列表失败: " + err.Error()})
@@ -475,6 +486,17 @@ type GenerateRedemptionsRequest struct {
 
 // GenerateRedemptions batch creates redemption gift codes.
 func (h *AdminHandler) GenerateRedemptions(c *gin.Context) {
+	claimsVal, exists := c.Get("admin_claims")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "未登录"})
+		return
+	}
+	claims, ok := claimsVal.(*AdminClaims)
+	if !ok || claims.Role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "权限不足，仅超级管理员可生成兑换码"})
+		return
+	}
+
 	var req GenerateRedemptionsRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.Amount <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "请提供有效的充值金额"})
@@ -520,6 +542,17 @@ func (h *AdminHandler) GenerateRedemptions(c *gin.Context) {
 
 // DeleteRedemption removes a redemption code.
 func (h *AdminHandler) DeleteRedemption(c *gin.Context) {
+	claimsVal, exists := c.Get("admin_claims")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "未登录"})
+		return
+	}
+	claims, ok := claimsVal.(*AdminClaims)
+	if !ok || claims.Role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "权限不足，仅超级管理员可删除兑换码"})
+		return
+	}
+
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -824,8 +857,12 @@ func (h *AdminHandler) ListUserKeys(c *gin.Context) {
 
 // CreateUserKeyRequest defines personal API key creation.
 type CreateUserKeyRequest struct {
+	Name          string   `json:"name"`
+	TenantID      string   `json:"tenant_id"`
 	AllowedModels []string `json:"allowed_models"`
 	RPM           int      `json:"rpm"`
+	TPM           int      `json:"tpm"`
+	Budget        float64  `json:"budget"`
 }
 
 // CreateUserKey generates a new virtual API key for the current user.
@@ -850,8 +887,23 @@ func (h *AdminHandler) CreateUserKey(c *gin.Context) {
 		req.AllowedModels = []string{"*"}
 	}
 	rpm := req.RPM
-	if rpm <= 0 {
-		rpm = 60
+	if rpm < 0 {
+		rpm = 0
+	}
+	tenantID := strings.TrimSpace(req.TenantID)
+	if tenantID == "" {
+		tenantID = strings.TrimSpace(req.Name)
+	}
+	if tenantID == "" {
+		tenantID = user.Username
+	}
+	budget := req.Budget
+	if budget < 0 {
+		budget = 0
+	}
+	tpm := req.TPM
+	if tpm <= 0 {
+		tpm = 100000
 	}
 
 	keyBytes := make([]byte, 16)
@@ -860,13 +912,13 @@ func (h *AdminHandler) CreateUserKey(c *gin.Context) {
 
 	rec := &storage.VirtualKeyRecord{
 		Key:           newKey,
-		TenantID:      user.Username,
+		TenantID:      tenantID,
 		UserID:        user.ID,
 		GroupName:     user.GroupName,
 		AllowedModels: req.AllowedModels,
 		RPM:           rpm,
-		TPM:           100000,
-		Budget:        100.0,
+		TPM:           tpm,
+		Budget:        budget,
 		Status:        "active",
 	}
 

@@ -1054,8 +1054,19 @@ func (h *AdminHandler) UpdateMCPSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "MCP 服务状态已更新", "mcp_enabled": req.MCPEnabled})
 }
 
-// DeleteLog deletes a single log by ID.
+// DeleteLog deletes a single log by ID (admin only).
 func (h *AdminHandler) DeleteLog(c *gin.Context) {
+	claimsVal, exists := c.Get("admin_claims")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		return
+	}
+	claims, ok := claimsVal.(*AdminClaims)
+	if !ok || claims.Role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "权限不足，仅超级管理员可删除审计日志"})
+		return
+	}
+
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -1069,8 +1080,19 @@ func (h *AdminHandler) DeleteLog(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "已删除该条调用日志"})
 }
 
-// BatchDeleteLogs deletes multiple logs by IDs.
+// BatchDeleteLogs deletes multiple logs by IDs (admin only).
 func (h *AdminHandler) BatchDeleteLogs(c *gin.Context) {
+	claimsVal, exists := c.Get("admin_claims")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		return
+	}
+	claims, ok := claimsVal.(*AdminClaims)
+	if !ok || claims.Role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "权限不足，仅超级管理员可删除审计日志"})
+		return
+	}
+
 	var req struct {
 		IDs []int64 `json:"ids"`
 	}
@@ -1086,8 +1108,19 @@ func (h *AdminHandler) BatchDeleteLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": fmt.Sprintf("已批量删除 %d 条调用日志", n), "deleted_count": n})
 }
 
-// ClearLogs clears all audit logs.
+// ClearLogs clears all audit logs (admin only).
 func (h *AdminHandler) ClearLogs(c *gin.Context) {
+	claimsVal, exists := c.Get("admin_claims")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		return
+	}
+	claims, ok := claimsVal.(*AdminClaims)
+	if !ok || claims.Role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "权限不足，仅超级管理员可清空审计日志"})
+		return
+	}
+
 	if err := h.repo.ClearAllUsageLogs(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1148,7 +1181,41 @@ func (h *AdminHandler) BatchDeleteVirtualKeys(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请提供有效密钥 ID 列表"})
 		return
 	}
-	n, err := h.repo.BatchDeleteVirtualKeys(req.IDs)
+
+	targetIDs := req.IDs
+	claimsVal, exists := c.Get("admin_claims")
+	if exists {
+		claims, ok := claimsVal.(*AdminClaims)
+		if ok && claims.Role != "admin" {
+			user, _ := h.repo.GetUserByUsername(claims.Username)
+			if user == nil {
+				c.JSON(http.StatusForbidden, gin.H{"error": "用户不存在"})
+				return
+			}
+			userKeys, err := h.repo.ListVirtualKeysByUser(user.ID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			allowedMap := make(map[int64]bool)
+			for _, k := range userKeys {
+				allowedMap[k.ID] = true
+			}
+			var filteredIDs []int64
+			for _, id := range req.IDs {
+				if allowedMap[id] {
+					filteredIDs = append(filteredIDs, id)
+				}
+			}
+			if len(filteredIDs) == 0 {
+				c.JSON(http.StatusForbidden, gin.H{"error": "无权操作所选密钥"})
+				return
+			}
+			targetIDs = filteredIDs
+		}
+	}
+
+	n, err := h.repo.BatchDeleteVirtualKeys(targetIDs)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1170,7 +1237,41 @@ func (h *AdminHandler) BatchStatusVirtualKeys(c *gin.Context) {
 	if req.Status != "active" && req.Status != "disabled" {
 		req.Status = "active"
 	}
-	n, err := h.repo.BatchUpdateVirtualKeyStatus(req.IDs, req.Status)
+
+	targetIDs := req.IDs
+	claimsVal, exists := c.Get("admin_claims")
+	if exists {
+		claims, ok := claimsVal.(*AdminClaims)
+		if ok && claims.Role != "admin" {
+			user, _ := h.repo.GetUserByUsername(claims.Username)
+			if user == nil {
+				c.JSON(http.StatusForbidden, gin.H{"error": "用户不存在"})
+				return
+			}
+			userKeys, err := h.repo.ListVirtualKeysByUser(user.ID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			allowedMap := make(map[int64]bool)
+			for _, k := range userKeys {
+				allowedMap[k.ID] = true
+			}
+			var filteredIDs []int64
+			for _, id := range req.IDs {
+				if allowedMap[id] {
+					filteredIDs = append(filteredIDs, id)
+				}
+			}
+			if len(filteredIDs) == 0 {
+				c.JSON(http.StatusForbidden, gin.H{"error": "无权操作所选密钥"})
+				return
+			}
+			targetIDs = filteredIDs
+		}
+	}
+
+	n, err := h.repo.BatchUpdateVirtualKeyStatus(targetIDs, req.Status)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
