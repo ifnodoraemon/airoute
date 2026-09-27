@@ -316,13 +316,9 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
       {/* 1. View Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 flex items-center space-x-2.5">
-            <Users className="w-6 h-6 text-indigo-600" />
-            <span>用户与额度管理中心</span>
+          <h2 className="text-lg font-bold text-slate-900 tracking-tight">
+            用户管理
           </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            统一维护超级管理员与普通用户账号、锁死封禁控制、钱包可用额度及分组定价策略
-          </p>
         </div>
 
         <div className="flex items-center space-x-3">

@@ -328,6 +328,20 @@ func (r *Repository) GetVirtualKey(id int64) (*VirtualKeyRecord, error) {
 	return &rec, nil
 }
 
+// GetVirtualKeyByKey returns a single virtual key by key string.
+func (r *Repository) GetVirtualKeyByKey(key string) (*VirtualKeyRecord, error) {
+	row := r.db.QueryRow(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, created_at, updated_at FROM virtual_keys WHERE key = ?`, key)
+	var rec VirtualKeyRecord
+	var allowedJSON string
+	if err := row.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.GroupName, &rec.UserID, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+		return nil, err
+	}
+	if allowedJSON != "" {
+		_ = json.Unmarshal([]byte(allowedJSON), &rec.AllowedModels)
+	}
+	return &rec, nil
+}
+
 // UpdateVirtualKey updates an existing virtual key (e.g. status, RPM, tenant, allowed models, group).
 func (r *Repository) UpdateVirtualKey(rec *VirtualKeyRecord) error {
 	allowedBytes, _ := json.Marshal(rec.AllowedModels)

@@ -16,6 +16,7 @@ import (
 	"github.com/ifnodoraemon/nano-gateway/internal/model"
 	"github.com/ifnodoraemon/nano-gateway/internal/router"
 	"github.com/ifnodoraemon/nano-gateway/internal/storage"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestUserWallet_RegistrationAndVerification(t *testing.T) {
@@ -453,6 +454,204 @@ func TestUserKeyScopingAndBatchPriceDelete(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &listResp)
 	if len(listResp.Data) != 1 {
 		t.Fatalf("expected bob to see 1 key, got %d", len(listResp.Data))
+	}
+}
+
+func TestVirtualKey_BudgetLimitEnforcement(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := storage.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+
+	repo := storage.NewRepository(db)
+	storage.SetGlobalRepository(repo)
+
+	cfg := config.DefaultConfig()
+	config.SetGlobalConfig(cfg)
+	dispatcher := router.NewDispatcher(nil)
+	sync := controlplane.NewSynchronizer(repo, dispatcher)
+	adminHandler := controlplane.NewAdminHandler(repo, sync, dispatcher)
+	engine := api.SetupRouter(dispatcher, adminHandler)
+
+	// Create user with high balance
+	_ = repo.CreateUser(&storage.UserRecord{
+		Username: "budget-user",
+		Balance:  100.0,
+		Role:     "user",
+		Status:   "active",
+	})
+	user, _ := repo.GetUserByUsername("budget-user")
+
+	// Create key with Budget: 10.0
+	vkKey := "sk-nano-budget-test"
+	_ = repo.CreateVirtualKey(&storage.VirtualKeyRecord{
+		Key:      vkKey,
+		TenantID: "budget-user",
+		UserID:   user.ID,
+		Budget:   10.0,
+		Status:   "active",
+	})
+	_ = sync.ReloadFromDB()
+
+	// 1. Under budget (used_cost = 2.0) -> request allowed to pass auth
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/v1/models", nil)
+	req.Header.Set("Authorization", "Bearer "+vkKey)
+	engine.ServeHTTP(w, req)
+	if w.Code == http.StatusPaymentRequired {
+		t.Fatalf("unexpected payment required when under budget: %d %s", w.Code, w.Body.String())
+	}
+
+	// 2. Simulate exceeding key budget: used_cost = 10.5
+	_, _ = db.Exec(`UPDATE virtual_keys SET used_cost = 10.5 WHERE key = ?`, vkKey)
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("GET", "/v1/models", nil)
+	req.Header.Set("Authorization", "Bearer "+vkKey)
+	engine.ServeHTTP(w, req)
+
+	if w.Code != http.StatusPaymentRequired {
+		t.Fatalf("expected 402 Payment Required for exceeded key budget, got %d %s", w.Code, w.Body.String())
+	}
+	var errResp struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &errResp)
+	if errResp.Error.Code != "key_budget_exceeded" {
+		t.Errorf("expected error code key_budget_exceeded, got %s", errResp.Error.Code)
+	}
+}
+
+func TestModelsEndpoint_AllowedModelsFiltering(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := storage.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+
+	repo := storage.NewRepository(db)
+	storage.SetGlobalRepository(repo)
+
+	cfg := config.DefaultConfig()
+	config.SetGlobalConfig(cfg)
+
+	// Add channel for two models in repository
+	_ = repo.CreateChannel(&storage.ChannelRecord{
+		Name:    "chan-1",
+		Type:    "openai",
+		BaseURL: "http://mock-upstream",
+		Models:  []string{"gpt-4o", "claude-3-5-sonnet"},
+		Status:  "active",
+	})
+
+	dispatcher := router.NewDispatcher(nil)
+	sync := controlplane.NewSynchronizer(repo, dispatcher)
+	adminHandler := controlplane.NewAdminHandler(repo, sync, dispatcher)
+	engine := api.SetupRouter(dispatcher, adminHandler)
+
+	// Create user
+	_ = repo.CreateUser(&storage.UserRecord{
+		Username: "model-user",
+		Balance:  50.0,
+		Role:     "user",
+		Status:   "active",
+	})
+	user, _ := repo.GetUserByUsername("model-user")
+
+	// Create key restricted to ONLY gpt-4o
+	vkKey := "sk-nano-model-filter"
+	_ = repo.CreateVirtualKey(&storage.VirtualKeyRecord{
+		Key:           vkKey,
+		TenantID:      "model-user",
+		UserID:        user.ID,
+		AllowedModels: []string{"gpt-4o"},
+		Status:        "active",
+	})
+	_ = sync.ReloadFromDB()
+
+	// 1. GET /v1/models should only return gpt-4o
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/v1/models", nil)
+	req.Header.Set("Authorization", "Bearer "+vkKey)
+	engine.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /v1/models failed: %d %s", w.Code, w.Body.String())
+	}
+	var modelList model.ModelListResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &modelList)
+	if len(modelList.Data) != 1 || modelList.Data[0].ID != "gpt-4o" {
+		t.Fatalf("expected exactly [gpt-4o], got: %+v", modelList.Data)
+	}
+
+	// 2. GET /v1/models/gpt-4o should succeed
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("GET", "/v1/models/gpt-4o", nil)
+	req.Header.Set("Authorization", "Bearer "+vkKey)
+	engine.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for allowed model, got %d", w.Code)
+	}
+
+	// 3. GET /v1/models/claude-3-5-sonnet should be forbidden 403
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("GET", "/v1/models/claude-3-5-sonnet", nil)
+	req.Header.Set("Authorization", "Bearer "+vkKey)
+	engine.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for restricted model, got %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestUser_SelfServiceChangePassword(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := storage.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("failed to open db: %v", err)
+	}
+	defer db.Close()
+
+	repo := storage.NewRepository(db)
+	storage.SetGlobalRepository(repo)
+
+	cfg := config.DefaultConfig()
+	config.SetGlobalConfig(cfg)
+	dispatcher := router.NewDispatcher(nil)
+	sync := controlplane.NewSynchronizer(repo, dispatcher)
+	adminHandler := controlplane.NewAdminHandler(repo, sync, dispatcher)
+	engine := api.SetupRouter(dispatcher, adminHandler)
+
+	// Register user
+	pwHash, _ := bcrypt.GenerateFromPassword([]byte("secret123"), bcrypt.DefaultCost)
+	_ = repo.CreateUser(&storage.UserRecord{
+		Username:     "pw-user",
+		PasswordHash: string(pwHash),
+		Role:         "user",
+		Status:       "active",
+		Balance:      10.0,
+	})
+	user, _ := repo.GetUserByUsername("pw-user")
+
+	token, _ := controlplane.GenerateAdminToken(user.Username, user.Role, 24*time.Hour)
+
+	// Call POST /api/v1/user/password
+	pwBody, _ := json.Marshal(map[string]string{
+		"old_password": "secret123",
+		"new_password": "newsecret456",
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/v1/user/password", bytes.NewReader(pwBody))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("change password failed: %d %s", w.Code, w.Body.String())
 	}
 }
 

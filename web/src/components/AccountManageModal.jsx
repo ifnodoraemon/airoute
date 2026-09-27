@@ -1,18 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   X,
   Lock,
   User,
-  Users,
-  AlertCircle,
-  RefreshCw,
-  CheckCircle2,
-  Trash2,
-  Plus,
+  Copy,
+  Check,
   Shield,
-  Key,
+  Wallet,
   Eye,
-  EyeOff
+  EyeOff,
+  Server,
+  Sparkles
 } from 'lucide-react';
 
 export default function AccountManageModal({
@@ -26,520 +24,289 @@ export default function AccountManageModal({
 }) {
   if (!isOpen) return null;
 
-  const [activeTab, setActiveTab] = useState('accounts'); // 'accounts' | 'password'
+  const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'password'
 
-  // Users list state
-  const [users, setUsers] = useState([]);
-  const [usersLoading, setUsersLoading] = useState(false);
-  const [showAddUser, setShowAddUser] = useState(false);
-  const [newUsername, setNewUsername] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [newRole, setNewRole] = useState('operator');
-  const [creatingUser, setCreatingUser] = useState(false);
-
-  // Admin reset another user's password
-  const [resetTargetUser, setResetTargetUser] = useState(null);
-  const [resetNewPass, setResetNewPass] = useState('');
-  const [resetting, setResetting] = useState(false);
-
-  // Change own password state
+  // Change password state
   const [oldPassword, setOldPassword] = useState('');
-  const [newPass, setNewPass] = useState('');
-  const [confirmPass, setConfirmPass] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showOldPass, setShowOldPass] = useState(false);
   const [showNewPass, setShowNewPass] = useState(false);
-  const [passLoading, setPassLoading] = useState(false);
-  const [passError, setPassError] = useState('');
-  const [passSuccess, setPassSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [copiedBaseUrl, setCopiedBaseUrl] = useState(false);
 
-  const fetchUsers = async () => {
-    setUsersLoading(true);
-    try {
-      const res = await adminFetch('/api/v1/admin/users');
-      const data = await res.json();
-      if (res.ok && data.code === 0) {
-        setUsers(data.data || []);
-      }
-    } catch (err) {
-      console.error('Fetch users error:', err);
-    } finally {
-      setUsersLoading(false);
-    }
-  };
+  const isAdmin = adminUser?.role === 'admin';
+  const apiBaseUrl = typeof window !== 'undefined' ? `${window.location.origin}/v1` : 'http://localhost:8080/v1';
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchUsers();
-      setPassError('');
-      setPassSuccess(false);
-      setOldPassword('');
-      setNewPass('');
-      setConfirmPass('');
-      setResetTargetUser(null);
-    }
-  }, [isOpen]);
-
-  const handleCreateUser = async (e) => {
-    e.preventDefault();
-    if (!newUsername.trim() || !newPassword.trim()) {
-      showToast('用户名和密码不能为空', 'warning');
-      return;
-    }
-    setCreatingUser(true);
-    try {
-      const res = await adminFetch('/api/v1/admin/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: newUsername.trim(),
-          password: newPassword,
-          role: newRole
-        })
-      });
-      const data = await res.json();
-      if (res.ok && data.code === 0) {
-        showToast(`已创建账号: ${newUsername}`, 'success');
-        setNewUsername('');
-        setNewPassword('');
-        setShowAddUser(false);
-        fetchUsers();
-      } else {
-        showToast(data.error || '创建账号失败', 'error');
-      }
-    } catch (err) {
-      showToast('网络请求异常: ' + err.message, 'error');
-    } finally {
-      setCreatingUser(false);
-    }
-  };
-
-  const handleDeleteUser = async (username) => {
-    if (!window.confirm(`确定删除账号 [${username}] 吗？`)) {
-      return;
-    }
-    try {
-      const res = await adminFetch(`/api/v1/admin/users/${encodeURIComponent(username)}`, {
-        method: 'DELETE'
-      });
-      const data = await res.json();
-      if (res.ok && data.code === 0) {
-        showToast(`账号 [${username}] 已删除`, 'success');
-        fetchUsers();
-      } else {
-        showToast(data.error || '删除失败', 'warning');
-      }
-    } catch (err) {
-      showToast('请求异常: ' + err.message, 'error');
-    }
-  };
-
-  const handleResetPassword = async (e) => {
-    e.preventDefault();
-    if (!resetNewPass || resetNewPass.length < 6) {
-      showToast('新密码长度不能少于 6 个字符', 'warning');
-      return;
-    }
-    setResetting(true);
-    try {
-      const res = await adminFetch(`/api/v1/admin/users/${encodeURIComponent(resetTargetUser)}/password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ new_password: resetNewPass })
-      });
-      const data = await res.json();
-      if (res.ok && data.code === 0) {
-        showToast(`已成功重置账号 [${resetTargetUser}] 的密码`, 'success');
-        setResetTargetUser(null);
-        setResetNewPass('');
-      } else {
-        showToast(data.error || '重置密码失败', 'error');
-      }
-    } catch (err) {
-      showToast('网络请求异常: ' + err.message, 'error');
-    } finally {
-      setResetting(false);
-    }
+  const handleCopyBaseUrl = () => {
+    navigator.clipboard.writeText(apiBaseUrl);
+    setCopiedBaseUrl(true);
+    showToast('已复制网关 API Base URL 到剪贴板', 'success');
+    setTimeout(() => setCopiedBaseUrl(false), 2000);
   };
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
-    setPassError('');
+    setErrorMsg('');
 
-    if (newPass !== confirmPass) {
-      setPassError('两次输入的新密码不一致');
+    if (!oldPassword) {
+      setErrorMsg('请输入当前密码');
       return;
     }
-    if (newPass.length < 6) {
-      setPassError('新密码长度不能少于 6 个字符');
+    if (!newPassword || newPassword.length < 6) {
+      setErrorMsg('新密码长度不能少于 6 个字符');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setErrorMsg('两次输入的新密码不一致');
       return;
     }
 
-    setPassLoading(true);
+    setLoading(true);
     try {
       const res = await adminFetch('/api/v1/admin/auth/password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           old_password: oldPassword,
-          new_password: newPass
+          new_password: newPassword
         })
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        setPassSuccess(true);
-        showToast('密码修改成功，请牢记新密码', 'success');
+        showToast('密码修改成功，请妥善保管', 'success');
+        setOldPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
         if (onPasswordChanged) onPasswordChanged();
-        setTimeout(() => {
-          onClose();
-        }, 1200);
+        onClose();
       } else {
-        setPassError(data.error || '修改密码失败');
+        setErrorMsg(data.error || '修改密码失败，请核对当前密码');
       }
     } catch (err) {
-      setPassError('请求异常: ' + err.message);
+      setErrorMsg('网络请求异常，请稍后重试');
     } finally {
-      setPassLoading(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in">
-      <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150 max-h-[85vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <div className="flex items-center space-x-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 font-bold">
-              <Shield className="w-5 h-5" />
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-150">
+        {/* Modal Header */}
+        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-base uppercase">
+              {adminUser?.username?.charAt(0) || 'U'}
             </div>
             <div>
-              <h3 className="font-bold text-base text-slate-900 tracking-tight">
-                账号与安全管理
-              </h3>
-              <p className="text-xs text-slate-500">
-                当前登录: <strong className="text-slate-800">{adminUser?.username || 'admin'}</strong> ({adminUser?.role === 'admin' ? '超级管理员' : '操作员'})
-              </p>
+              <h3 className="text-base font-bold text-slate-900 tracking-tight">个人账号中心</h3>
+              <p className="text-xs text-slate-400">管理个人资料与 API 接入凭证</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition cursor-pointer"
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Tab switcher */}
-        <div className="flex items-center space-x-2 bg-slate-100 p-1 rounded-2xl border border-slate-200/80 text-xs">
+        {/* Tab Switcher */}
+        <div className="flex items-center px-6 pt-4 border-b border-slate-100 space-x-6">
           <button
-            type="button"
-            onClick={() => setActiveTab('accounts')}
-            className={`flex-1 py-1.5 rounded-xl font-semibold transition flex items-center justify-center space-x-1.5 cursor-pointer ${
-              activeTab === 'accounts'
-                ? 'bg-white text-indigo-600 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
+            onClick={() => { setActiveTab('profile'); setErrorMsg(''); }}
+            className={`pb-3 text-xs font-semibold transition border-b-2 cursor-pointer flex items-center space-x-1.5 ${
+              activeTab === 'profile'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Users className="w-3.5 h-3.5" />
-            <span>账号列表与角色 ({users.length})</span>
+            <User className="w-3.5 h-3.5" />
+            <span>账号概览</span>
           </button>
           <button
-            type="button"
-            onClick={() => setActiveTab('password')}
-            className={`flex-1 py-1.5 rounded-xl font-semibold transition flex items-center justify-center space-x-1.5 cursor-pointer ${
+            onClick={() => { setActiveTab('password'); setErrorMsg(''); }}
+            className={`pb-3 text-xs font-semibold transition border-b-2 cursor-pointer flex items-center space-x-1.5 ${
               activeTab === 'password'
-                ? 'bg-white text-indigo-600 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <Lock className="w-3.5 h-3.5" />
-            <span>修改当前密码</span>
+            <span>修改登录密码</span>
           </button>
         </div>
 
-        {/* Tab 1: Accounts List */}
-        {activeTab === 'accounts' && (
-          <div className="space-y-4 text-xs animate-in fade-in">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-700">系统用户列表</span>
-              {adminUser?.role === 'admin' && (
-                <button
-                  type="button"
-                  onClick={() => setShowAddUser(!showAddUser)}
-                  className="px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-semibold border border-indigo-200 transition flex items-center space-x-1 cursor-pointer"
-                >
-                  <Plus className="w-3 h-3" />
-                  <span>{showAddUser ? '取消' : '添加账号'}</span>
-                </button>
-              )}
-            </div>
+        {/* Modal Body */}
+        <div className="p-6">
+          {activeTab === 'profile' && (
+            <div className="space-y-5">
+              {/* Profile Details Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
+                  <span className="text-[11px] font-medium text-slate-400 block mb-1">登录用户名</span>
+                  <span className="text-sm font-bold text-slate-900 font-mono">{adminUser?.username || '—'}</span>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
+                  <span className="text-[11px] font-medium text-slate-400 block mb-1">绑定邮箱</span>
+                  <span className="text-sm font-semibold text-slate-900 truncate block">
+                    {adminUser?.email || '未绑定'}
+                  </span>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
+                  <span className="text-[11px] font-medium text-slate-400 block mb-1">角色身份</span>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold ${
+                    isAdmin ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                  }`}>
+                    {isAdmin ? '超级管理员' : '普通用户'}
+                  </span>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
+                  <span className="text-[11px] font-medium text-slate-400 block mb-1">价格分组</span>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 font-mono">
+                    {adminUser?.group_name || 'default'}
+                  </span>
+                </div>
+              </div>
 
-            {/* Inline reset password modal / card */}
-            {resetTargetUser && (
-              <form onSubmit={handleResetPassword} className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-2xl space-y-3 animate-in fade-in">
+              {/* Wallet Balance Banner */}
+              <div className="p-4 rounded-2xl bg-slate-900 text-white flex items-center justify-between shadow-xs">
+                <div className="flex items-center space-x-3">
+                  <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-emerald-400">
+                    <Wallet className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-400 block">当前钱包余额</span>
+                    <span className="text-lg font-black tracking-tight text-white font-mono">
+                      {isAdmin ? '无限额度' : `¥ ${Number(adminUser?.balance || 0).toFixed(2)}`}
+                    </span>
+                  </div>
+                </div>
+                {isAdmin && (
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-500/30 text-indigo-300 font-medium">
+                    管理员免扣费
+                  </span>
+                )}
+              </div>
+
+              {/* Gateway API Base URL Card */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-indigo-900 block text-xs">
-                    重置用户 [{resetTargetUser}] 的密码
+                  <span className="text-xs font-bold text-slate-700 flex items-center space-x-1.5">
+                    <Server className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>网关 API Base URL</span>
                   </span>
                   <button
-                    type="button"
-                    onClick={() => setResetTargetUser(null)}
-                    className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                    onClick={handleCopyBaseUrl}
+                    className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center space-x-1 transition cursor-pointer"
                   >
-                    <X className="w-4 h-4" />
+                    {copiedBaseUrl ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-emerald-600">已复制</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>复制地址</span>
+                      </>
+                    )}
                   </button>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="password"
-                    required
-                    placeholder="输入该账号的新密码 (至少 6 位)"
-                    value={resetNewPass}
-                    onChange={(e) => setResetNewPass(e.target.value)}
-                    className="flex-1 bg-white border border-indigo-200 rounded-xl px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
-                  />
-                  <button
-                    type="submit"
-                    disabled={resetting}
-                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition flex items-center space-x-1 disabled:opacity-50 cursor-pointer"
-                  >
-                    {resetting ? <RefreshCw className="w-3 h-3 animate-spin" /> : <span>确认重置</span>}
-                  </button>
+                <div className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 break-all select-all">
+                  {apiBaseUrl}
                 </div>
-              </form>
-            )}
-
-            {/* Add user form */}
-            {showAddUser && (
-              <form onSubmit={handleCreateUser} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 animate-in fade-in">
-                <span className="font-bold text-slate-800 block text-xs">
-                  新建管理员或操作员
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <div>
-                    <label className="block text-slate-600 font-medium mb-1">
-                      账号用户名
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="如 operator_ops"
-                      value={newUsername}
-                      onChange={(e) => setNewUsername(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-600 font-medium mb-1">
-                      初始密码 (≥6位)
-                    </label>
-                    <input
-                      type="password"
-                      required
-                      placeholder="密码"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-600 font-medium mb-1">
-                      系统角色
-                    </label>
-                    <select
-                      value={newRole}
-                      onChange={(e) => setNewRole(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-2 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
-                    >
-                      <option value="operator">操作员 (可查阅/调用)</option>
-                      <option value="admin">超级管理员 (全部管理权限)</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={creatingUser}
-                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition flex items-center space-x-1 disabled:opacity-50 cursor-pointer"
-                  >
-                    {creatingUser ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-                    <span>确认创建账号</span>
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* Users table */}
-            <div className="rounded-2xl border border-slate-200 overflow-hidden">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 text-slate-500 bg-slate-50/80">
-                    <th className="py-2.5 px-4 font-semibold">用户名</th>
-                    <th className="py-2.5 px-3 font-semibold">角色</th>
-                    <th className="py-2.5 px-3 font-semibold">创建时间</th>
-                    <th className="py-2.5 px-4 text-right font-semibold">操作</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {users.map((u) => {
-                    const isSelf = u.username === adminUser?.username;
-                    const isDefaultAdmin = u.username === 'admin';
-
-                    return (
-                      <tr key={u.id} className="hover:bg-slate-50/60 transition">
-                        <td className="py-3 px-4 font-bold text-slate-900 font-mono">
-                          {u.username}
-                          {isSelf && (
-                            <span className="ml-1.5 text-[10px] text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded font-sans">当前</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-3">
-                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold ${
-                            u.role === 'admin'
-                              ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                              : 'bg-slate-100 text-slate-600'
-                          }`}>
-                            {u.role === 'admin' ? '超级管理员' : '操作员'}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 text-slate-500 font-sans">
-                          {u.created_at || '-'}
-                        </td>
-                        <td className="py-3 px-4 text-right space-x-2">
-                          {adminUser?.role === 'admin' && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setResetTargetUser(u.username);
-                                setResetNewPass('');
-                              }}
-                              className="text-indigo-600 hover:text-indigo-800 text-xs font-medium transition cursor-pointer"
-                            >
-                              重置密码
-                            </button>
-                          )}
-                          {!(isDefaultAdmin || isSelf) && adminUser?.role === 'admin' && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteUser(u.username)}
-                              className="text-rose-600 hover:text-rose-800 text-xs font-semibold transition cursor-pointer"
-                            >
-                              删除
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Tab 2: Change Password */}
-        {activeTab === 'password' && (
-          <form onSubmit={handleChangePassword} className="space-y-4 text-xs animate-in fade-in">
-            {passError && (
-              <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 flex items-center space-x-2">
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-                <span>{passError}</span>
-              </div>
-            )}
-
-            {passSuccess && (
-              <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center space-x-2">
-                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
-                <span>密码修改成功！</span>
-              </div>
-            )}
-
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                当前旧密码 <span className="text-rose-500">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  required
-                  type={showOldPass ? 'text' : 'password'}
-                  value={oldPassword}
-                  onChange={(e) => setOldPassword(e.target.value)}
-                  placeholder="请输入当前账号的旧密码"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 pr-9"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowOldPass(!showOldPass)}
-                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
-                >
-                  {showOldPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                </button>
+                <p className="text-[11px] text-slate-400 leading-normal">
+                  兼容 OpenAI 与 Anthropic 原生规范。复制填入客户端（如 Cursor、Claude Code、NextChat、Cherry Studio）即可直连。
+                </p>
               </div>
             </div>
+          )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {activeTab === 'password' && (
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              {errorMsg && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">
+                  {errorMsg}
+                </div>
+              )}
+
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  新密码 (≥6位) <span className="text-rose-500">*</span>
-                </label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">当前旧密码</label>
                 <div className="relative">
                   <input
+                    type={showOldPass ? 'text' : 'password'}
                     required
+                    value={oldPassword}
+                    onChange={(e) => setOldPassword(e.target.value)}
+                    placeholder="输入当前使用的登录密码"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowOldPass(!showOldPass)}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {showOldPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">新密码</label>
+                <div className="relative">
+                  <input
                     type={showNewPass ? 'text' : 'password'}
-                    value={newPass}
-                    onChange={(e) => setNewPass(e.target.value)}
-                    placeholder="输入新密码"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 pr-9"
+                    required
+                    minLength={6}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="至少 6 个字符"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 pr-10"
                   />
                   <button
                     type="button"
                     onClick={() => setShowNewPass(!showNewPass)}
-                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
                   >
-                    {showNewPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  确认新密码 <span className="text-rose-500">*</span>
-                </label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">确认新密码</label>
                 <input
+                  type="password"
                   required
-                  type={showNewPass ? 'text' : 'password'}
-                  value={confirmPass}
-                  onChange={(e) => setConfirmPass(e.target.value)}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="再次输入新密码"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
                 />
               </div>
-            </div>
 
-            <div className="pt-2 flex justify-end space-x-2.5">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition font-medium"
-              >
-                取消
-              </button>
-              <button
-                type="submit"
-                disabled={passLoading}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer shadow-sm"
-              >
-                {passLoading ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>正在保存...</span>
-                  </>
-                ) : (
-                  <span>确认修改密码</span>
-                )}
-              </button>
-            </div>
-          </form>
-        )}
+              <div className="pt-2 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition shadow-sm disabled:opacity-50 cursor-pointer"
+                >
+                  {loading ? '正在更新...' : '保存新密码'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
       </div>
     </div>
   );

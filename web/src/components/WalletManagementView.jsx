@@ -369,9 +369,6 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                   </button>
                 </form>
               </div>
-              <p className="text-[11px] text-slate-400 mt-2">
-                可使用管理员发放的礼品卡或额度卡进行全额充值。
-              </p>
             </div>
           </div>
 
@@ -384,7 +381,6 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                 </div>
                 <div>
                   <h3 className="font-bold text-base text-slate-900">钱包余额在线充值</h3>
-                  <p className="text-xs text-slate-500">支持国际主流信用卡 / Stripe Checkout / 沙箱快速测试充值</p>
                 </div>
               </div>
             </div>
@@ -408,7 +404,6 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                     }`}
                   >
                     <span>¥ {amt}</span>
-                    <span className="text-[10px] text-slate-400 font-normal">标准充值</span>
                   </button>
                 ))}
               </div>

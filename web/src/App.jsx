@@ -1051,9 +1051,11 @@ export default function App() {
     const rand = 'sk-nano-' + Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 6);
     const tenantNum = (keys?.length || 0) + 1;
     setNewKey({
-      tenant_id: `app-client-${tenantNum}`,
+      tenant_id: `密钥-${tenantNum}`,
       key: rand,
-      rpm: 60,
+      rpm: 0,
+      budget: 0,
+      allowed_models: [],
     });
     setShowKeyModal(true);
   };
@@ -1062,7 +1064,7 @@ export default function App() {
   const handleCreateKey = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (!newKey.tenant_id.trim()) {
-      showToast('请输入团队或应用标识', 'warning');
+      showToast('请输入密钥名称或备注', 'warning');
       return;
     }
     try {
@@ -1073,15 +1075,14 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast('客户端访问密钥创建成功', 'success');
+        showToast('API 访问密钥创建成功', 'success');
         setShowKeyModal(false);
-        setNewKey({ tenant_id: '', key: '', rpm: 60 });
-        fetchData();
+        fetchKeys();
       } else {
-        showToast(data.error || '创建密钥失败', 'error');
+        showToast('创建失败: ' + (data.error || '未知错误'), 'error');
       }
-    } catch (err) {
-      showToast('请求异常: ' + err.message, 'error');
+    } catch (e) {
+      showToast('请求异常: ' + e.message, 'error');
     }
   };
 
@@ -1972,7 +1973,6 @@ export default function App() {
               对外状态页 ↗
             </button>
           </div>
-          <span className="text-[11px] text-slate-400">HA 双机 + Redis · 毫秒级流式分发</span>
         </div>
       </aside>
 
@@ -1994,9 +1994,6 @@ export default function App() {
               {currentTab === 'playground' && t.navPlayground}
               {currentTab === 'docs' && t.navDocs}
             </h2>
-            <span className="hidden sm:inline-block text-xs px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 font-medium">
-              v0.1.0 {t.clusterHealthy}
-            </span>
           </div>
 
           <div className="flex items-center space-x-2.5">
@@ -2010,21 +2007,11 @@ export default function App() {
               <span>{t.langToggle}</span>
             </button>
 
-            <button
-              onClick={() => {
-                if (keys.length > 0) setActiveQuickKey(keys[0]);
-                else showToast(lang === 'zh' ? '请先在密钥管理页面创建一个 API Key' : 'Please create an API Key first', 'warning');
-              }}
-              className="text-xs px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white font-medium flex items-center space-x-1.5 transition shadow-sm cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>{t.keysActionQuick}</span>
-            </button>
             <a
               href="https://github.com/ifnodoraemon/nano-gateway"
               target="_blank"
               rel="noreferrer"
-              className="text-xs px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-medium flex items-center space-x-1.5 transition"
+              className="text-xs px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 font-medium flex items-center space-x-1.5 transition"
             >
               <ExternalLink className="w-3.5 h-3.5" />
               <span>GitHub</span>
@@ -2035,14 +2022,14 @@ export default function App() {
               {adminUser?.role === 'admin' ? (
                 <div className="flex items-center space-x-2">
                   <button
-                    onClick={() => setCurrentTab('users')}
-                    className="flex items-center space-x-1.5 text-xs text-slate-700 font-medium px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 border border-slate-200 transition cursor-pointer"
-                    title="进入用户与权限管理"
+                    onClick={() => setShowAccountModal(true)}
+                    className="flex items-center space-x-1.5 text-xs text-slate-700 font-medium px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 transition cursor-pointer"
+                    title="账号设置与个人中心"
                   >
                     <User className="w-3.5 h-3.5 text-indigo-600" />
                     <span>{adminUser?.username || 'admin'}</span>
                     <span className="text-[10px] text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded font-mono font-bold">
-                      超级管理员 · 无限额度
+                      管理员
                     </span>
                   </button>
                   <button
@@ -2067,15 +2054,13 @@ export default function App() {
                     <span>¥{Number(adminUser?.balance || 0).toFixed(2)}</span>
                   </button>
                   <button
-                    onClick={() => setCurrentTab('wallet')}
-                    className="px-2.5 py-1 text-xs font-semibold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 rounded-xl transition shadow-2xs cursor-pointer"
+                    onClick={() => setShowAccountModal(true)}
+                    className="flex items-center space-x-1.5 text-xs text-slate-700 hover:text-slate-900 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl font-medium transition cursor-pointer"
+                    title="账号设置与个人中心"
                   >
-                    充值 / 兑换
-                  </button>
-                  <div className="flex items-center space-x-1.5 text-xs text-slate-700 px-2.5 py-1 bg-slate-100 border border-slate-200 rounded-xl font-medium">
                     <User className="w-3.5 h-3.5 text-slate-500" />
                     <span>{adminUser?.username}</span>
-                  </div>
+                  </button>
                 </div>
               )}
               <button
@@ -2511,6 +2496,7 @@ export default function App() {
               adminFetch={adminFetch}
               showToast={showToast}
               stats={stats}
+              isAdmin={adminUser?.role === 'admin'}
             />
           )}
 
@@ -2915,10 +2901,11 @@ export default function App() {
                               }}
                             />
                           </th>
-                          <th className="py-3.5 px-6 font-semibold">密钥 (Key)</th>
-                          <th className="py-3.5 px-6 font-semibold">团队 / 应用</th>
-                          <th className="py-3.5 px-6 font-semibold">速率限制 (RPM)</th>
+                          <th className="py-3.5 px-6 font-semibold">密钥名称</th>
+                          <th className="py-3.5 px-6 font-semibold">密钥 (API Key)</th>
+                          <th className="py-3.5 px-6 font-semibold">已用 / 额度</th>
                           <th className="py-3.5 px-6 font-semibold">授权模型</th>
+                          <th className="py-3.5 px-6 font-semibold">速率 (RPM)</th>
                           <th className="py-3.5 px-6 font-semibold">状态</th>
                           <th className="py-3.5 px-6 text-right font-semibold">操作</th>
                         </tr>
@@ -2941,25 +2928,36 @@ export default function App() {
                                 }}
                               />
                             </td>
+                            <td className="py-4 px-6 text-slate-800 dark:text-slate-100 font-semibold">{k.tenant_id}</td>
                             <td className="py-4 px-6 font-mono text-xs text-indigo-700 dark:text-indigo-400 font-semibold flex items-center space-x-2">
-                            <span>{k.key}</span>
-                            <button
-                              onClick={() => copyToClipboard(k.key)}
-                              className="p-1 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 transition flex items-center space-x-1"
-                              title="复制 Key"
-                            >
-                              {copiedKey === k.key ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-500" />
+                              <span>{k.key}</span>
+                              <button
+                                onClick={() => copyToClipboard(k.key)}
+                                className="p-1 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 transition flex items-center space-x-1 cursor-pointer"
+                                title="复制 Key"
+                              >
+                                {copiedKey === k.key ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-500" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </td>
+                            <td className="py-4 px-6 text-xs font-mono">
+                              <span className="text-slate-900 dark:text-slate-100 font-bold">¥{Number(k.used_cost || 0).toFixed(4)}</span>
+                              <span className="text-slate-400 mx-1">/</span>
+                              <span className={k.budget > 0 ? "text-indigo-600 dark:text-indigo-400 font-medium" : "text-slate-400"}>
+                                {k.budget > 0 ? `¥${Number(k.budget).toFixed(2)}` : '不限'}
+                              </span>
+                            </td>
+                            <td className="py-4 px-6 text-xs text-slate-600 dark:text-slate-300 font-medium">
+                              {!k.allowed_models || k.allowed_models.length === 0 ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 font-semibold">全部允许</span>
                               ) : (
-                                <Copy className="w-3.5 h-3.5" />
+                                <span className="font-mono">{k.allowed_models.join(', ')}</span>
                               )}
-                            </button>
-                          </td>
-                          <td className="py-4 px-6 text-slate-800 dark:text-slate-200 font-medium">{k.tenant_id}</td>
-                          <td className="py-4 px-6 text-slate-600 dark:text-slate-400 font-mono text-xs">{k.rpm ? `${k.rpm} 次/分` : '不限'}</td>
-                          <td className="py-4 px-6 text-xs text-emerald-700 dark:text-emerald-400 font-medium">
-                            {!k.allowed_models || k.allowed_models.length === 0 ? '全部允许' : k.allowed_models.join(', ')}
-                          </td>
+                            </td>
+                            <td className="py-4 px-6 text-slate-600 dark:text-slate-400 font-mono text-xs">{k.rpm ? `${k.rpm} 次/分` : '不限'}</td>
                           <td className="py-4 px-6">
                             {k.status === 'disabled' ? (
                               <span className="px-2.5 py-0.5 rounded-full text-xs bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60 font-medium inline-flex items-center space-x-1.5">
@@ -5051,18 +5049,19 @@ helm install nano-gateway ./helm/nano-gateway -n gateway --create-namespace
               </button>
             </div>
 
-            <div className="space-y-3.5 text-xs">
+            <div className="space-y-4 text-xs">
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  团队 / 应用标识 <span className="text-rose-500">*</span>
+                  密钥名称 / 备注 <span className="text-rose-500">*</span>
                 </label>
                 <input
                   value={newKey.tenant_id}
                   onChange={(e) => setNewKey({ ...newKey, tenant_id: e.target.value })}
-                  placeholder="team-nlp 或 app-client"
+                  placeholder="如 个人开发 / Cursor / Claude Code"
                   className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 text-xs"
                 />
               </div>
+
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="font-semibold text-slate-700 dark:text-slate-300">API 密钥</label>
@@ -5084,10 +5083,42 @@ helm install nano-gateway ./helm/nano-gateway -n gateway --create-namespace
                   className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-xs"
                 />
               </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-semibold text-slate-700 dark:text-slate-300">额度限制 (CNY, 0 为不限)</label>
+                  <div className="flex items-center space-x-1.5 text-[11px]">
+                    {[
+                      { label: '不限', val: 0 },
+                      { label: '¥10', val: 10 },
+                      { label: '¥50', val: 50 },
+                      { label: '¥100', val: 100 },
+                    ].map(p => (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => setNewKey(prev => ({ ...prev, budget: p.val }))}
+                        className="text-indigo-600 dark:text-indigo-400 hover:underline px-1 cursor-pointer"
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={newKey.budget ?? 0}
+                  onChange={(e) => setNewKey({ ...newKey, budget: parseFloat(e.target.value) || 0 })}
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-xs"
+                />
+              </div>
+
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="font-semibold text-slate-700 dark:text-slate-300">速率限制 (RPM, 0 为不限)</label>
-                  <div className="flex items-center space-x-1.5 text-[11px] text-slate-400">
+                  <div className="flex items-center space-x-1.5 text-[11px]">
                     {[
                       { label: '不限', val: 0 },
                       { label: '60', val: 60 },
@@ -5123,8 +5154,7 @@ helm install nano-gateway ./helm/nano-gateway -n gateway --create-namespace
                 取消
               </button>
               <button
-                type="button"
-                onClick={handleCreateKey}
+                type="submit"
                 className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition cursor-pointer"
               >
                 确认创建

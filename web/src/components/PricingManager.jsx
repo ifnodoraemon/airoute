@@ -121,7 +121,7 @@ function parseSlotsFromPrice(p) {
   ];
 }
 
-export default function PricingManager({ adminFetch, showToast, stats = {} }) {
+export default function PricingManager({ adminFetch, showToast, stats = {}, isAdmin = true }) {
   const [prices, setPrices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -480,7 +480,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
 
   return (
     <div className="space-y-6 animate-in fade-in">
-      {/* 1. Header with live status */}
+      {/* 1. Header */}
       <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
@@ -490,13 +490,15 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
           </div>
 
           <div className="flex items-center space-x-2 shrink-0">
-            <button
-              onClick={handleOpenAdd}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-semibold shadow-xs flex items-center space-x-1.5 transition cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>新建定价规则</span>
-            </button>
+            {isAdmin && (
+              <button
+                onClick={handleOpenAdd}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-semibold shadow-xs flex items-center space-x-1.5 transition cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>新建定价规则</span>
+              </button>
+            )}
             <button
               onClick={fetchPrices}
               disabled={loading}
@@ -507,25 +509,10 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
             </button>
           </div>
         </div>
-
-        {/* Server Time Indicator (Lightweight & Clean) */}
-        <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap items-center gap-4 text-xs text-slate-600">
-          <div className="flex items-center space-x-1.5 font-mono">
-            <Clock className="w-3.5 h-3.5 text-indigo-500" />
-            <span>网关当前时区: <strong>CST (UTC+8)</strong></span>
-            {serverTime && <span className="text-indigo-600 font-bold ml-1">{serverTime}</span>}
-            {serverWeekday && <span className="text-slate-400">({serverWeekday})</span>}
-          </div>
-          {isWeekend && (
-            <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-              周末时段 (全天享受闲时优惠)
-            </span>
-          )}
-        </div>
       </div>
 
-      {/* Batch Action Bar */}
-      {selectedKeys.length > 0 && (
+      {/* Batch Action Bar (Admin only) */}
+      {isAdmin && selectedKeys.length > 0 && (
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-indigo-50 border border-indigo-200 px-5 py-3 rounded-2xl animate-in fade-in gap-3">
           <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-900">
             <span>已选中 {selectedKeys.length} 个模型定价规则</span>
@@ -595,20 +582,22 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-100 text-slate-400 font-medium bg-slate-50/50">
-                  <th className="py-3 px-4 w-10 text-center">
-                    <input
-                      type="checkbox"
-                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                      checked={filteredPrices.length > 0 && selectedKeys.length === filteredPrices.length}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedKeys(filteredPrices.map(p => `${p.group_name || 'default'}::${p.model}`));
-                        } else {
-                          setSelectedKeys([]);
-                        }
-                      }}
-                    />
-                  </th>
+                  {isAdmin && (
+                    <th className="py-3 px-4 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        checked={filteredPrices.length > 0 && selectedKeys.length === filteredPrices.length}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedKeys(filteredPrices.map(p => `${p.group_name || 'default'}::${p.model}`));
+                          } else {
+                            setSelectedKeys([]);
+                          }
+                        }}
+                      />
+                    </th>
+                  )}
                   <th className="py-3 px-6">模型标识</th>
                   <th className="py-3 px-4">适用用户组</th>
                   <th className="py-3 px-4">基准输入 (1M)</th>
@@ -616,7 +605,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
                   <th className="py-3 px-4">缓存命中 (1M)</th>
                   <th className="py-3 px-4">分时优惠时段</th>
                   <th className="py-3 px-4">当前生效费率</th>
-                  <th className="py-3 px-6 text-right">操作</th>
+                  {isAdmin && <th className="py-3 px-6 text-right">操作</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -648,21 +637,23 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
 
                   return (
                     <tr key={itemKey} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-4 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                          checked={selectedKeys.includes(itemKey)}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            if (e.target.checked) {
-                              setSelectedKeys(prev => [...prev, itemKey]);
-                            } else {
-                              setSelectedKeys(prev => prev.filter(k => k !== itemKey));
-                            }
-                          }}
-                        />
-                      </td>
+                      {isAdmin && (
+                        <td className="py-4 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            checked={selectedKeys.includes(itemKey)}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              if (e.target.checked) {
+                                setSelectedKeys(prev => [...prev, itemKey]);
+                              } else {
+                                setSelectedKeys(prev => prev.filter(k => k !== itemKey));
+                              }
+                            }}
+                          />
+                        </td>
+                      )}
                       <td className="py-4 px-6 font-mono font-bold text-slate-900">
                         {p.model}
                       </td>
@@ -751,20 +742,22 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
                       </td>
 
                       {/* Actions */}
-                      <td className="py-4 px-6 text-right space-x-2 font-sans">
-                        <button
-                          onClick={() => handleOpenEdit(p)}
-                          className="px-3 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium transition cursor-pointer"
-                        >
-                          编辑
-                        </button>
-                        <button
-                          onClick={() => handleDelete(p.model, p.group_name || 'default')}
-                          className="px-3 py-1 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 text-xs font-medium transition cursor-pointer"
-                        >
-                          删除
-                        </button>
-                      </td>
+                      {isAdmin && (
+                        <td className="py-4 px-6 text-right space-x-2 font-sans">
+                          <button
+                            onClick={() => handleOpenEdit(p)}
+                            className="px-3 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium transition cursor-pointer"
+                          >
+                            编辑
+                          </button>
+                          <button
+                            onClick={() => handleDelete(p.model, p.group_name || 'default')}
+                            className="px-3 py-1 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 text-xs font-medium transition cursor-pointer"
+                          >
+                            删除
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -820,33 +813,6 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
                     <option key={m} value={m} />
                   ))}
                 </datalist>
-
-                {!editingPrice && unpricedModels.length > 0 && (
-                  <div className="mt-2 pt-2 border-t border-slate-100">
-                    <span className="text-[11px] text-slate-500 font-medium block mb-1.5">
-                      待配置定价的平台模型 (点击自动填入并适配参考费率):
-                    </span>
-                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-                      {unpricedModels.map(m => {
-                        const isSelected = formData.model === m;
-                        return (
-                          <button
-                            key={m}
-                            type="button"
-                            onClick={() => handleSelectModelCandidate(m)}
-                            className={`px-2 py-0.5 rounded-lg border text-[11px] font-mono transition cursor-pointer ${
-                              isSelected
-                                ? 'bg-indigo-600 text-white border-indigo-600 font-semibold shadow-2xs'
-                                : 'bg-white hover:bg-indigo-50 border-slate-200 text-slate-700 hover:text-indigo-700 hover:border-indigo-200'
-                            }`}
-                          >
-                            {m}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Field: User Group Tier */}
@@ -1108,51 +1074,6 @@ export default function PricingManager({ adminFetch, showToast, stats = {} }) {
                     </div>
                   </div>
                 )}
-              </div>
-
-              {/* Field 4: Live Preview Box */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2 text-xs">
-                <div className="font-semibold text-slate-700">
-                  <span>实时计费预览</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                  <div className="p-2.5 rounded-xl bg-white/90 border border-indigo-100 space-y-1">
-                    <span className="font-semibold text-slate-700 block flex items-center space-x-1">
-                      <Sun className="w-3.5 h-3.5 text-amber-500 inline mr-1" />
-                      基准单价
-                    </span>
-                    <p className="text-slate-600 font-mono text-[11px]">
-                      输入: <strong>¥{parseFloat(formData.prompt_price || 0).toFixed(2)}</strong> / 1M
-                    </p>
-                    <p className="text-slate-600 font-mono text-[11px]">
-                      输出: <strong>¥{parseFloat(formData.completion_price || 0).toFixed(2)}</strong> / 1M
-                    </p>
-                    <p className="text-emerald-700 font-mono text-[11px]">
-                      缓存: <strong>¥{parseFloat(formData.cache_read_price || 0).toFixed(2)}</strong> / 1M
-                    </p>
-                  </div>
-
-                  {formData.off_peak_enabled && formData.slots && formData.slots.length > 0 ? (
-                    formData.slots.map((s, idx) => (
-                      <div key={idx} className="p-2.5 rounded-xl bg-indigo-600/10 border border-indigo-200 space-y-1">
-                        <span className="font-semibold text-indigo-900 block flex items-center space-x-1">
-                          <Moon className="w-3.5 h-3.5 text-indigo-600 inline mr-1" />
-                          {s.name || `时段 ${idx + 1}`} ({formatDaysLabel(s.days) || '每天'} {s.start || '00:00'}-{s.end || '08:30'}) · {Math.round((s.discount || 0.5) * 10)}折
-                        </span>
-                        <p className="text-indigo-900 font-mono text-[11px]">
-                          输入: <strong className="text-indigo-700">¥{(parseFloat(formData.prompt_price || 0) * (s.discount || 0.5)).toFixed(2)}</strong> / 1M
-                        </p>
-                        <p className="text-indigo-900 font-mono text-[11px]">
-                          输出: <strong className="text-indigo-700">¥{(parseFloat(formData.completion_price || 0) * (s.discount || 0.5)).toFixed(2)}</strong> / 1M
-                        </p>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400 text-xs">
-                      全天按基准单价计费
-                    </div>
-                  )}
-                </div>
               </div>
 
               {/* Actions */}

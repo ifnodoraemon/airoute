@@ -78,6 +78,31 @@ func AuthMiddleware() gin.HandlerFunc {
 				user, _ = repo.GetUserByUsername(matchedKey.TenantID)
 			}
 
+			// Key budget and status check
+			vkRec, _ := repo.GetVirtualKeyByKey(matchedKey.Key)
+			if vkRec != nil {
+				if vkRec.Status != "" && vkRec.Status != "active" {
+					c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+						"error": gin.H{
+							"message": "The API key has been revoked or disabled.",
+							"type":    "invalid_request_error",
+							"code":    "api_key_revoked",
+						},
+					})
+					return
+				}
+				if matchedKey.Budget > 0 && vkRec.UsedCost >= matchedKey.Budget {
+					c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
+						"error": gin.H{
+							"message": "This API key has exceeded its assigned quota budget limit.",
+							"type":    "key_budget_exceeded",
+							"code":    "key_budget_exceeded",
+						},
+					})
+					return
+				}
+			}
+
 			if user != nil {
 				// 1. Account lock check
 				if strings.EqualFold(user.Status, "locked") {

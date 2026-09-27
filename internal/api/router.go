@@ -71,6 +71,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 			userGroup.GET("/keys", adminHandler.ListUserKeys)
 			userGroup.POST("/keys", adminHandler.CreateUserKey)
 			userGroup.DELETE("/keys/:id", adminHandler.DeleteUserKey)
+			userGroup.POST("/password", adminHandler.ChangePassword)
 		}
 
 		admin := r.Group("/api/v1/admin")

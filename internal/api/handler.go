@@ -296,6 +296,9 @@ func (h *Handler) HandleModels(c *gin.Context) {
 	now := time.Now().Unix()
 
 	for _, m := range models {
+		if !middleware.ValidateModelAllowed(c, m) {
+			continue
+		}
 		items = append(items, model.ModelItem{
 			ID:      m,
 			Object:  "model",
@@ -324,11 +327,22 @@ func (h *Handler) HandleModelDetail(c *gin.Context) {
 		return
 	}
 
+	if !middleware.ValidateModelAllowed(c, modelID) {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": gin.H{
+				"message": fmt.Sprintf("Your API key does not have access to model '%s'.", modelID),
+				"type":    "invalid_request_error",
+				"code":    "model_not_allowed",
+			},
+		})
+		return
+	}
+
 	channels := h.dispatcher.GetChannelsForModel(modelID)
 	if len(channels) == 0 {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": gin.H{
-				"message": fmt.Sprintf("The model '%s' does not exist or you do not have access to it.", modelID),
+				"message": fmt.Sprintf("The model '%s' does not exist or is not available.", modelID),
 				"type":    "invalid_request_error",
 				"code":    "model_not_found",
 			},
