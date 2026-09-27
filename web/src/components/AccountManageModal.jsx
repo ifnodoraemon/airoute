@@ -158,7 +158,7 @@ export default function AccountManageModal({
                 <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
                   <span className="text-[11px] font-medium text-slate-400 block mb-1">角色身份</span>
                   <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold ${
-                    isAdmin ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                    isAdmin ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                   }`}>
                     {isAdmin ? '超级管理员' : '普通用户'}
                   </span>
@@ -168,6 +168,21 @@ export default function AccountManageModal({
                   <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 font-mono">
                     {adminUser?.group_name || 'default'}
                   </span>
+                </div>
+              </div>
+
+              {/* Role Scope Notice */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-start space-x-2.5 text-xs text-slate-600">
+                <Shield className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <span className="font-bold text-slate-800 block text-xs">
+                    {isAdmin ? '超级管理员权限 (Super Admin)' : '普通用户权限 (Developer / User)'}
+                  </span>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    {isAdmin
+                      ? '具备全局管控权限：管理上游渠道与秘钥、模型路由拓扑、费率设定、用户与卡密管理，享有无限免扣费调用。'
+                      : '具备安全自服务权限：拥有独立钱包、专属 API 密钥创建与限额管控、私有调用流水审计与在线调试。'}
+                  </p>
                 </div>
               </div>
 

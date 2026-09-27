@@ -27,6 +27,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
   const [loading, setLoading] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [showRoleInfo, setShowRoleInfo] = useState(false);
 
   // Add User Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -231,6 +232,39 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
     }
   };
 
+  const handleUpdateRole = async (user, newRole) => {
+    if (!adminFetch) return;
+    if (user.username === 'admin') {
+      showToast('系统内置超级管理员 (admin) 不允许修改角色', 'warning');
+      return;
+    }
+    if (adminUser && user.username === adminUser.username && newRole !== 'admin') {
+      showToast('不能将当前登录的管理员账号降级为普通用户', 'warning');
+      return;
+    }
+    const roleLabel = newRole === 'admin' ? '超级管理员' : '普通用户';
+    if (!window.confirm(`确认将用户 [${user.username}] 的角色更改为【${roleLabel}】吗？`)) {
+      return;
+    }
+
+    try {
+      const res = await adminFetch(`/api/v1/admin/users/${user.username}/role`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole })
+      });
+      const data = await res.json();
+      if (res.ok && data.code === 0) {
+        showToast(data.message || `用户 [${user.username}] 已切换为【${roleLabel}】`, 'success');
+        fetchUsers();
+      } else {
+        showToast(data.error || '修改角色失败', 'error');
+      }
+    } catch (err) {
+      showToast('请求异常: ' + err.message, 'error');
+    }
+  };
+
   const handleResetPassword = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     setResetModalError('');
@@ -379,6 +413,63 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
         </div>
       </div>
 
+      {/* Role & Permissions Matrix Banner */}
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xs">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+              <Shield className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-xs font-bold text-slate-800">多角色权限体系架构</h3>
+              <p className="text-[11px] text-slate-500">基于角色的访问控制 (RBAC)，保障核心资产安全与业务调用隔离</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowRoleInfo(!showRoleInfo)}
+            className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center space-x-1 cursor-pointer"
+          >
+            <span>{showRoleInfo ? '收起权限明细' : '查看角色权限差异'}</span>
+          </button>
+        </div>
+
+        {showRoleInfo && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-100 animate-in fade-in">
+            <div className="p-4 rounded-xl bg-purple-50/50 border border-purple-100 space-y-2">
+              <div className="flex items-center space-x-2">
+                <span className="px-2 py-0.5 rounded-md bg-purple-100 text-purple-700 text-[11px] font-bold">超级管理员 (admin)</span>
+                <span className="text-[11px] text-purple-600 font-medium">全平台最高管控权限</span>
+              </div>
+              <ul className="text-xs text-slate-600 space-y-1 pl-1 leading-relaxed">
+                <li>• <b>服务商渠道</b>：全量增删改查、上游 API Key 与全渠道健康体检</li>
+                <li>• <b>模型路由</b>：自定义多节点负载均衡权重与智能 Fallback 容灾链</li>
+                <li>• <b>定价策略</b>：全局配置模型基础单价、倍率、分时峰谷与假日折扣</li>
+                <li>• <b>用户管控</b>：账号创建、角色切换、重置密码、锁定状态与额度分配</li>
+                <li>• <b>卡密中心</b>：批量生成充值卡密、作废卡密、查看全量充值订单</li>
+                <li>• <b>集群审计</b>：查看全网所有用户的请求流水，支持一键清空日志</li>
+                <li>• <b>无限额度</b>：免扣费、无额度上限测试调用</li>
+              </ul>
+            </div>
+
+            <div className="p-4 rounded-xl bg-emerald-50/50 border border-emerald-100 space-y-2">
+              <div className="flex items-center space-x-2">
+                <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700 text-[11px] font-bold">普通用户 (user)</span>
+                <span className="text-[11px] text-emerald-600 font-medium">安全隔离的开发者/终端自服务</span>
+              </div>
+              <ul className="text-xs text-slate-600 space-y-1 pl-1 leading-relaxed">
+                <li>• <b>独立个人钱包</b>：支持卡密兑换、Stripe 在线充值、独立流水审计</li>
+                <li>• <b>自主密钥管理</b>：自主创建专属 API Key，自定义额度 (Budget) 与限速 (RPM)</li>
+                <li>• <b>严格隐私审计</b>：仅可查看属于自身 Key 的调用日志与 Token 扣费记录</li>
+                <li>• <b>在线调试台</b>：通过自选密钥在 Playground 进行对话/多模态测试</li>
+                <li>• <b>公开费率查阅</b>：只读查看模型计费单价，无权篡改平台费率</li>
+                <li>• <b>敏感操作严禁</b>：完全屏蔽上游渠道与秘钥、严禁查看他人数据</li>
+                <li>• <b>自动拦截机制</b>：余额耗尽或密钥超额即刻受限，安全防超支</li>
+              </ul>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* 3. Search and Filters */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">
         <div className="flex items-center space-x-3 flex-1 max-w-md">
@@ -498,15 +589,20 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                       </td>
 
                       <td className="py-3 px-4">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        <select
+                          value={u.role || 'user'}
+                          disabled={isSysAdmin || isCurrentAdmin}
+                          onChange={(e) => handleUpdateRole(u, e.target.value)}
+                          className={`border rounded-lg px-2 py-1 text-[11px] font-bold focus:outline-none transition cursor-pointer ${
                             u.role === 'admin'
-                              ? 'bg-purple-100 text-purple-800'
-                              : 'bg-emerald-100 text-emerald-800'
-                          }`}
+                              ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                          } disabled:opacity-75 disabled:cursor-not-allowed`}
+                          title={isSysAdmin ? '系统默认管理员不可修改角色' : (isCurrentAdmin ? '当前登录账号不可降级自己' : '点击切换用户角色')}
                         >
-                          {u.role === 'admin' ? '超级管理员' : '普通用户'}
-                        </span>
+                          <option value="user">普通用户 (user)</option>
+                          <option value="admin">超级管理员 (admin)</option>
+                        </select>
                       </td>
 
                       <td className="py-3 px-4">

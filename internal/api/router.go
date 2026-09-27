@@ -115,6 +115,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 					adminOnly.POST("/users/:username/status", adminHandler.UpdateUserStatus)
 					adminOnly.POST("/users/:username/balance", adminHandler.UpdateUserBalance)
 					adminOnly.POST("/users/:username/group", adminHandler.UpdateUserGroup)
+					adminOnly.POST("/users/:username/role", adminHandler.UpdateUserRole)
 
 					adminOnly.GET("/redemptions", adminHandler.ListRedemptions)
 					adminOnly.POST("/redemptions/generate", adminHandler.GenerateRedemptions)

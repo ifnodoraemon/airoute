@@ -456,6 +456,68 @@ func (h *AdminHandler) UpdateUserGroup(c *gin.Context) {
 	})
 }
 
+// UpdateUserRoleRequest defines role change payload.
+type UpdateUserRoleRequest struct {
+	Role string `json:"role" binding:"required"` // "admin" or "user"
+}
+
+// UpdateUserRole updates a user's system role ('admin' or 'user').
+func (h *AdminHandler) UpdateUserRole(c *gin.Context) {
+	claimsVal, exists := c.Get("admin_claims")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "未登录"})
+		return
+	}
+	claims, ok := claimsVal.(*AdminClaims)
+	if !ok || claims.Role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "权限不足，仅超级管理员可修改角色"})
+		return
+	}
+
+	targetUsername := c.Param("username")
+	if targetUsername == "admin" && claims.Username != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "禁止修改内置超级管理员的角色"})
+		return
+	}
+
+	var req UpdateUserRoleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "请提供有效角色 (admin 或 user)"})
+		return
+	}
+
+	role := strings.ToLower(strings.TrimSpace(req.Role))
+	if role != "admin" && role != "user" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "无效角色类型，仅支持 admin 或 user"})
+		return
+	}
+
+	if targetUsername == claims.Username && role != "admin" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "不能将自己的管理员角色降级为普通用户"})
+		return
+	}
+
+	targetUser, err := h.repo.GetUserByUsername(targetUsername)
+	if err != nil || targetUser == nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": 404, "error": "目标用户不存在"})
+		return
+	}
+
+	if err := h.repo.UpdateUserRole(targetUsername, role); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "修改角色失败: " + err.Error()})
+		return
+	}
+
+	roleLabel := "超级管理员"
+	if role == "user" {
+		roleLabel = "普通用户"
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"code":    0,
+		"message": fmt.Sprintf("已成功将用户 [%s] 的角色变更为 [%s]", targetUsername, roleLabel),
+	})
+}
+
 // ListRedemptions lists redemption gift codes.
 func (h *AdminHandler) ListRedemptions(c *gin.Context) {
 	claimsVal, exists := c.Get("admin_claims")

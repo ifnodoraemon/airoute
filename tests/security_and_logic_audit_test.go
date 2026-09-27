@@ -330,3 +330,72 @@ func TestLogic_CreateUserKey_Options(t *testing.T) {
 		t.Errorf("expected 2 allowed models, got %d", len(resp.Data.AllowedModels))
 	}
 }
+
+// 7. Role management & RBAC: admin can promote/demote users, cannot demote self or root admin, non-admin rejected
+func TestSecurity_UpdateUserRole_RBAC(t *testing.T) {
+	repo, engine, _ := setupAuditTestEnv(t)
+
+	// Admin account
+	admin := &storage.UserRecord{Username: "superadmin", Role: "admin", Status: "active"}
+	_ = repo.CreateUser(admin)
+	adminToken, _ := controlplane.GenerateAdminToken("superadmin", "admin", 24*time.Hour)
+
+	// Target user
+	userDave := &storage.UserRecord{Username: "dave", Role: "user", Status: "active"}
+	_ = repo.CreateUser(userDave)
+
+	// Non-admin token
+	daveToken, _ := controlplane.GenerateAdminToken("dave", "user", 24*time.Hour)
+
+	// 1. Non-admin trying to update role should be 403
+	bodyUser, _ := json.Marshal(map[string]string{"role": "admin"})
+	w1 := httptest.NewRecorder()
+	req1, _ := http.NewRequest("POST", "/api/v1/admin/users/dave/role", bytes.NewReader(bodyUser))
+	req1.Header.Set("Authorization", "Bearer "+daveToken)
+	req1.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(w1, req1)
+	if w1.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for non-admin role update, got %d", w1.Code)
+	}
+
+	// 2. Admin promoting Dave to admin
+	w2 := httptest.NewRecorder()
+	req2, _ := http.NewRequest("POST", "/api/v1/admin/users/dave/role", bytes.NewReader(bodyUser))
+	req2.Header.Set("Authorization", "Bearer "+adminToken)
+	req2.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for admin promoting Dave, got %d", w2.Code)
+	}
+
+	updatedDave, _ := repo.GetUserByUsername("dave")
+	if updatedDave.Role != "admin" {
+		t.Fatalf("expected Dave role to become admin, got %s", updatedDave.Role)
+	}
+
+	// 3. Admin demoting self should be rejected (400 Bad Request)
+	bodyDemote, _ := json.Marshal(map[string]string{"role": "user"})
+	w3 := httptest.NewRecorder()
+	req3, _ := http.NewRequest("POST", "/api/v1/admin/users/superadmin/role", bytes.NewReader(bodyDemote))
+	req3.Header.Set("Authorization", "Bearer "+adminToken)
+	req3.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(w3, req3)
+	if w3.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request when admin tries to demote self, got %d", w3.Code)
+	}
+
+	// 4. Admin demoting Dave back to user
+	w4 := httptest.NewRecorder()
+	req4, _ := http.NewRequest("POST", "/api/v1/admin/users/dave/role", bytes.NewReader(bodyDemote))
+	req4.Header.Set("Authorization", "Bearer "+adminToken)
+	req4.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(w4, req4)
+	if w4.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK when admin demotes Dave to user, got %d", w4.Code)
+	}
+
+	demotedDave, _ := repo.GetUserByUsername("dave")
+	if demotedDave.Role != "user" {
+		t.Fatalf("expected Dave role to become user, got %s", demotedDave.Role)
+	}
+}

@@ -816,6 +816,15 @@ func (r *Repository) UpdateUserGroup(username, groupName string) error {
 	return err
 }
 
+// UpdateUserRole updates a user's system role ('admin' or 'user').
+func (r *Repository) UpdateUserRole(username, role string) error {
+	if role != "admin" && role != "user" {
+		role = "user"
+	}
+	_, err := r.db.Exec(`UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, role, username)
+	return err
+}
+
 // DeductUserBalance deducts quota/cost from user wallet. Admins are exempt.
 func (r *Repository) DeductUserBalance(userID int64, cost float64) error {
 	if userID <= 0 || cost <= 0 {

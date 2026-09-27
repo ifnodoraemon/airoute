@@ -236,6 +236,12 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
           </button>
         </div>
 
+        <div className="text-[11px] text-slate-500 text-center px-1">
+          {activeTab === 'login'
+            ? '统一身份登录：系统将根据账号角色（超级管理员 / 普通用户）呈现专属控制台'
+            : '注册成功即为普通用户角色，享有独立钱包、专属 API Key 及独立审计流水'}
+        </div>
+
         {error && (
           <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center space-x-2">
             <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
