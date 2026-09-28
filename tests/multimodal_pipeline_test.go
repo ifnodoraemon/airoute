@@ -10,10 +10,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ifnodoraemon/nano-gateway/internal/api"
-	"github.com/ifnodoraemon/nano-gateway/internal/config"
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
-	"github.com/ifnodoraemon/nano-gateway/internal/router"
+	"github.com/ifnodoraemon/airoute/internal/api"
+	"github.com/ifnodoraemon/airoute/internal/config"
+	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/router"
 )
 
 func TestMultimodalPipeline_ImageAudioVideo(t *testing.T) {
@@ -109,7 +109,7 @@ func TestMultimodalPipeline_ImageAudioVideo(t *testing.T) {
 
 	// 4. Test Audio Speech (/v1/audio/speech)
 	t.Run("Audio Speech TTS", func(t *testing.T) {
-		reqBody := `{"model": "tts-1", "input": "Welcome to Nano-Gateway!", "voice": "alloy"}`
+		reqBody := `{"model": "tts-1", "input": "Welcome to Airoute!", "voice": "alloy"}`
 		req := httptest.NewRequest(http.MethodPost, "/v1/audio/speech", bytes.NewReader([]byte(reqBody)))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()

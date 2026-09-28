@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/nano-gateway/internal/billing"
-	"github.com/ifnodoraemon/nano-gateway/internal/middleware"
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
-	"github.com/ifnodoraemon/nano-gateway/internal/router"
-	"github.com/ifnodoraemon/nano-gateway/internal/storage"
-	"github.com/ifnodoraemon/nano-gateway/internal/telemetry"
+	"github.com/ifnodoraemon/airoute/internal/billing"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
+	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/router"
+	"github.com/ifnodoraemon/airoute/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
 // AnthropicInboundMessage represents an inbound message from Claude SDK.

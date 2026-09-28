@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/model"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -52,7 +52,6 @@ type VirtualKeyRecord struct {
 type UsageLogRecord struct {
 	ID               int64     `json:"id"`
 	TraceID          string    `json:"trace_id"`
-	ChatID           string    `json:"chat_id"`
 	SessionID        string    `json:"session_id,omitempty"`
 	VirtualKey       string    `json:"virtual_key"`
 	TenantID         string    `json:"tenant_id"`
@@ -82,7 +81,7 @@ type ModelPriceRecord struct {
 	FixedPrice      float64   `json:"fixed_price"`      // per request (e.g. image/video)
 	Currency        string    `json:"currency"`          // CNY or USD
 	OffPeakEnabled  bool      `json:"off_peak_enabled"`  // whether time-of-use discount is active
-	OffPeakMode     string    `json:"off_peak_mode"`     // "deepseek", "night", "custom", "none"
+	OffPeakMode     string    `json:"off_peak_mode"`     // "custom", "night", "none"
 	OffPeakSlots    string    `json:"off_peak_slots"`    // JSON array of OffPeakSlot
 	WeekendAllDay   bool      `json:"weekend_all_day"`   // whether weekends are all-day off-peak
 	OffPeakStart    string    `json:"off_peak_start"`    // fallback/simple start
@@ -379,7 +378,6 @@ type LogFilter struct {
 	StartTime string // e.g. "2026-09-26 00:00:00" or ISO8601
 	EndTime   string
 	TraceID   string
-	ChatID    string
 	SessionID string
 	Model     string
 	TenantID  string
@@ -396,28 +394,19 @@ func (r *Repository) RecordUsageLog(log *UsageLogRecord) error {
 		discount = 1.0
 	}
 	if log.TraceID == "" {
-		if log.ChatID != "" {
-			log.TraceID = log.ChatID
-		} else if log.SessionID != "" {
+		if log.SessionID != "" {
 			log.TraceID = log.SessionID
 		} else {
 			log.TraceID = fmt.Sprintf("tr-%x", time.Now().UnixNano())
 		}
 	}
-	if log.ChatID == "" {
-		if log.SessionID != "" {
-			log.ChatID = log.SessionID
-		} else {
-			log.ChatID = fmt.Sprintf("chatcmpl-%x", time.Now().UnixNano())
-		}
-	}
 	var err error
 	if !log.CreatedAt.IsZero() {
-		_, err = r.db.Exec(`INSERT INTO usage_logs (trace_id, chat_id, session_id, virtual_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			log.TraceID, log.ChatID, log.SessionID, log.VirtualKey, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, log.CreatedAt.UTC().Format("2006-01-02 15:04:05"))
+		_, err = r.db.Exec(`INSERT INTO usage_logs (trace_id, session_id, virtual_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			log.TraceID, log.SessionID, log.VirtualKey, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, log.CreatedAt.UTC().Format("2006-01-02 15:04:05"))
 	} else {
-		_, err = r.db.Exec(`INSERT INTO usage_logs (trace_id, chat_id, session_id, virtual_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			log.TraceID, log.ChatID, log.SessionID, log.VirtualKey, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode)
+		_, err = r.db.Exec(`INSERT INTO usage_logs (trace_id, session_id, virtual_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			log.TraceID, log.SessionID, log.VirtualKey, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode)
 	}
 	if log.VirtualKey != "" && (log.Cost > 0 || log.TotalTokens > 0) {
 		_, _ = r.db.Exec(`UPDATE virtual_keys SET used_cost = used_cost + ?, used_tokens = used_tokens + ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?`,
@@ -445,7 +434,7 @@ func (r *Repository) ListUsageLogs(limit int, offset int) ([]*UsageLogRecord, er
 	return r.ListUsageLogsWithFilter(LogFilter{Limit: limit, Offset: offset})
 }
 
-// ListUsageLogsWithFilter queries logs with flexible filters (time range, trace ID, chat ID, session ID, model, tenant).
+// ListUsageLogsWithFilter queries logs with flexible filters (time range, trace ID, session ID, model, tenant).
 func (r *Repository) ListUsageLogsWithFilter(f LogFilter) ([]*UsageLogRecord, error) {
 	if f.Limit <= 0 || f.Limit > 200 {
 		f.Limit = 50
@@ -454,7 +443,7 @@ func (r *Repository) ListUsageLogsWithFilter(f LogFilter) ([]*UsageLogRecord, er
 		f.Offset = 0
 	}
 
-	query := `SELECT id, COALESCE(NULLIF(trace_id, ''), chat_id, session_id, ''), COALESCE(NULLIF(chat_id, ''), session_id, ''), COALESCE(session_id, ''), COALESCE(virtual_key, ''), COALESCE(tenant_id, ''), COALESCE(model, ''), COALESCE(channel, ''), prompt_tokens, completion_tokens, COALESCE(cached_tokens, 0), total_tokens, COALESCE(cost, 0.0), COALESCE(is_off_peak, 0), COALESCE(off_peak_discount, 1.0), duration_ms, ttft_ms, status_code, created_at FROM usage_logs WHERE 1=1`
+	query := `SELECT id, trace_id, COALESCE(session_id, ''), COALESCE(virtual_key, ''), COALESCE(tenant_id, ''), COALESCE(model, ''), COALESCE(channel, ''), prompt_tokens, completion_tokens, COALESCE(cached_tokens, 0), total_tokens, COALESCE(cost, 0.0), COALESCE(is_off_peak, 0), COALESCE(off_peak_discount, 1.0), duration_ms, ttft_ms, status_code, created_at FROM usage_logs WHERE 1=1`
 	var args []interface{}
 
 	if f.StartTime != "" {
@@ -469,12 +458,9 @@ func (r *Repository) ListUsageLogsWithFilter(f LogFilter) ([]*UsageLogRecord, er
 		query += ` AND (trace_id = ? OR trace_id LIKE ?)`
 		args = append(args, f.TraceID, "%"+f.TraceID+"%")
 	}
-	if f.ChatID != "" {
-		query += ` AND (chat_id = ? OR chat_id LIKE ? OR session_id = ? OR session_id LIKE ? OR trace_id = ? OR trace_id LIKE ?)`
-		args = append(args, f.ChatID, "%"+f.ChatID+"%", f.ChatID, "%"+f.ChatID+"%", f.ChatID, "%"+f.ChatID+"%")
-	} else if f.SessionID != "" {
-		query += ` AND (chat_id = ? OR chat_id LIKE ? OR session_id = ? OR session_id LIKE ? OR trace_id = ? OR trace_id LIKE ?)`
-		args = append(args, f.SessionID, "%"+f.SessionID+"%", f.SessionID, "%"+f.SessionID+"%", f.SessionID, "%"+f.SessionID+"%")
+	if f.SessionID != "" {
+		query += ` AND (session_id = ? OR session_id LIKE ?)`
+		args = append(args, f.SessionID, "%"+f.SessionID+"%")
 	}
 	if f.Model != "" {
 		query += ` AND model = ?`
@@ -499,11 +485,8 @@ func (r *Repository) ListUsageLogsWithFilter(f LogFilter) ([]*UsageLogRecord, er
 		var l UsageLogRecord
 		var isOff int
 		var createdAt time.Time
-		if err := rows.Scan(&l.ID, &l.TraceID, &l.ChatID, &l.SessionID, &l.VirtualKey, &l.TenantID, &l.Model, &l.Channel, &l.PromptTokens, &l.CompletionTokens, &l.CachedTokens, &l.TotalTokens, &l.Cost, &isOff, &l.OffPeakDiscount, &l.DurationMs, &l.TTFTMs, &l.StatusCode, &createdAt); err != nil {
+		if err := rows.Scan(&l.ID, &l.TraceID, &l.SessionID, &l.VirtualKey, &l.TenantID, &l.Model, &l.Channel, &l.PromptTokens, &l.CompletionTokens, &l.CachedTokens, &l.TotalTokens, &l.Cost, &isOff, &l.OffPeakDiscount, &l.DurationMs, &l.TTFTMs, &l.StatusCode, &createdAt); err != nil {
 			return nil, err
-		}
-		if l.TraceID == "" {
-			l.TraceID = l.ChatID
 		}
 		l.IsOffPeak = isOff == 1
 		l.CreatedAt = createdAt
@@ -905,7 +888,7 @@ func (r *Repository) EnsureDefaultAdmin(username, plainPass string) error {
 	}
 	return r.CreateUser(&UserRecord{
 		Username:     username,
-		Email:        "admin@nano-gateway.local",
+		Email:        "admin@airoute.local",
 		PasswordHash: string(hash),
 		Role:         "admin",
 		Status:       "active",
@@ -1214,7 +1197,7 @@ func (r *Repository) DeleteModelFallback(model string) error {
 
 // ListModelPrices returns all configured model pricing rates.
 func (r *Repository) ListModelPrices() ([]*ModelPriceRecord, error) {
-	rows, err := r.db.Query(`SELECT id, model, COALESCE(group_name, 'default'), prompt_price, completion_price, cache_read_price, fixed_price, currency, COALESCE(off_peak_enabled, 1), COALESCE(off_peak_start, '00:00'), COALESCE(off_peak_end, '08:30'), COALESCE(off_peak_discount, 0.5), COALESCE(off_peak_mode, 'deepseek'), COALESCE(off_peak_slots, ''), COALESCE(weekend_all_day, 1), created_at, updated_at FROM model_prices ORDER BY id ASC`)
+	rows, err := r.db.Query(`SELECT id, model, COALESCE(group_name, 'default'), prompt_price, completion_price, cache_read_price, fixed_price, currency, COALESCE(off_peak_enabled, 1), COALESCE(off_peak_start, '00:00'), COALESCE(off_peak_end, '08:30'), COALESCE(off_peak_discount, 0.5), COALESCE(off_peak_mode, 'custom'), COALESCE(off_peak_slots, ''), COALESCE(weekend_all_day, 1), created_at, updated_at FROM model_prices ORDER BY id ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -1244,7 +1227,7 @@ func (r *Repository) GetModelPriceExact(modelName, groupName string) (*ModelPric
 	if groupName == "" {
 		groupName = "default"
 	}
-	row := r.db.QueryRow(`SELECT id, model, COALESCE(group_name, 'default'), prompt_price, completion_price, cache_read_price, fixed_price, currency, COALESCE(off_peak_enabled, 1), COALESCE(off_peak_start, '00:00'), COALESCE(off_peak_end, '08:30'), COALESCE(off_peak_discount, 0.5), COALESCE(off_peak_mode, 'deepseek'), COALESCE(off_peak_slots, ''), COALESCE(weekend_all_day, 1), created_at, updated_at FROM model_prices WHERE model = ? AND group_name = ?`, modelName, groupName)
+	row := r.db.QueryRow(`SELECT id, model, COALESCE(group_name, 'default'), prompt_price, completion_price, cache_read_price, fixed_price, currency, COALESCE(off_peak_enabled, 1), COALESCE(off_peak_start, '00:00'), COALESCE(off_peak_end, '08:30'), COALESCE(off_peak_discount, 0.5), COALESCE(off_peak_mode, 'custom'), COALESCE(off_peak_slots, ''), COALESCE(weekend_all_day, 1), created_at, updated_at FROM model_prices WHERE model = ? AND group_name = ?`, modelName, groupName)
 	var rec ModelPriceRecord
 	var offEnabled, weekendAllDay int
 	if err := row.Scan(&rec.ID, &rec.Model, &rec.GroupName, &rec.PromptPrice, &rec.CompletionPrice, &rec.CacheReadPrice, &rec.FixedPrice, &rec.Currency, &offEnabled, &rec.OffPeakStart, &rec.OffPeakEnd, &rec.OffPeakDiscount, &rec.OffPeakMode, &rec.OffPeakSlots, &weekendAllDay, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
@@ -1280,7 +1263,10 @@ func (r *Repository) SaveModelPrice(rec *ModelPriceRecord) error {
 		rec.Currency = "CNY"
 	}
 	if rec.OffPeakMode == "" {
-		rec.OffPeakMode = "deepseek"
+		rec.OffPeakMode = "custom"
+	}
+	if rec.OffPeakSlots == "" && rec.OffPeakEnabled {
+		rec.OffPeakSlots = `[{"start":"00:00","end":"08:30","discount":0.5}]`
 	}
 	if rec.OffPeakStart == "" {
 		rec.OffPeakStart = "00:00"

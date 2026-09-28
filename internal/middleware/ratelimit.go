@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/nano-gateway/internal/distributed"
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/distributed"
+	"github.com/ifnodoraemon/airoute/internal/model"
 )
 
 // tokenBucket tracks request tokens for a key.

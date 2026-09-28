@@ -1,14 +1,14 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "nano-gateway.name" -}}
+{{- define "airoute.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Create a default fully qualified app name.
 */}}
-{{- define "nano-gateway.fullname" -}}
+{{- define "airoute.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -24,16 +24,16 @@ Create a default fully qualified app name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "nano-gateway.chart" -}}
+{{- define "airoute.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "nano-gateway.labels" -}}
-helm.sh/chart: {{ include "nano-gateway.chart" . }}
-{{ include "nano-gateway.selectorLabels" . }}
+{{- define "airoute.labels" -}}
+helm.sh/chart: {{ include "airoute.chart" . }}
+{{ include "airoute.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -43,7 +43,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "nano-gateway.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "nano-gateway.name" . }}
+{{- define "airoute.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "airoute.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}

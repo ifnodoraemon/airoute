@@ -87,13 +87,13 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
               <span className="text-slate-500 font-medium">链路追踪 ID (Trace ID)</span>
               <div className="flex items-center space-x-2">
                 <span className="font-mono text-xs font-bold text-purple-700 dark:text-purple-300">
-                  {log.trace_id || log.chat_id || '未生成'}
+                  {log.trace_id || '未生成'}
                 </span>
-                {(log.trace_id || log.chat_id) && (
+                {log.trace_id && (
                   <>
                     <button
                       onClick={() => {
-                        onCopy(log.trace_id || log.chat_id);
+                        onCopy(log.trace_id);
                         setCopied(true);
                         setTimeout(() => setCopied(false), 2000);
                       }}
@@ -105,7 +105,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
                     {onFilterBySession && (
                       <button
                         onClick={() => {
-                          onFilterBySession(log.trace_id || log.chat_id);
+                          onFilterBySession(log.trace_id);
                           onClose();
                         }}
                         className="px-2 py-0.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-medium transition cursor-pointer"
@@ -117,44 +117,36 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
                 )}
               </div>
             </div>
-            <div className="p-3 flex items-center justify-between bg-indigo-50/40 dark:bg-indigo-950/30">
-              <span className="text-slate-500 font-medium">对话 ID (Chat ID)</span>
-              <div className="flex items-center space-x-2">
-                <span className="font-mono text-xs font-bold text-indigo-700 dark:text-indigo-300">
-                  {log.chat_id || log.session_id || '未指定 (自动生成)'}
-                </span>
-                {(log.chat_id || log.session_id) && (
-                  <>
+            {log.session_id && (
+              <div className="p-3 flex items-center justify-between bg-indigo-50/40 dark:bg-indigo-950/30">
+                <span className="text-slate-500 font-medium">会话 ID (Session ID)</span>
+                <div className="flex items-center space-x-2">
+                  <span className="font-mono text-xs font-bold text-indigo-700 dark:text-indigo-300">
+                    {log.session_id}
+                  </span>
+                  <button
+                    onClick={() => {
+                      onCopy(log.session_id);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }}
+                    className="p-1 hover:bg-white dark:hover:bg-slate-800 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer"
+                    title="复制会话 ID"
+                  >
+                    <Copy className="w-3 h-3" />
+                  </button>
+                  {onFilterBySession && (
                     <button
                       onClick={() => {
-                        onCopy(log.chat_id || log.session_id);
-                        setCopied(true);
-                        setTimeout(() => setCopied(false), 2000);
+                        onFilterBySession(log.session_id);
+                        onClose();
                       }}
-                      className="p-1 hover:bg-white dark:hover:bg-slate-800 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer"
-                      title="复制对话 ID"
+                      className="px-2 py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-medium transition cursor-pointer"
                     >
-                      <Copy className="w-3 h-3" />
+                      筛选此会话
                     </button>
-                    {onFilterBySession && (
-                      <button
-                        onClick={() => {
-                          onFilterBySession(log.chat_id || log.session_id);
-                          onClose();
-                        }}
-                        className="px-2 py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-medium transition cursor-pointer"
-                      >
-                        筛选此对话
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-            {log.session_id && log.session_id !== log.chat_id && (
-              <div className="p-3 flex items-center justify-between">
-                <span className="text-slate-500 font-medium">关联会话 (Session)</span>
-                <span className="font-mono text-xs text-slate-600 dark:text-slate-400">{log.session_id}</span>
+                  )}
+                </div>
               </div>
             )}
             <div className="p-3 flex justify-between bg-slate-50/50 dark:bg-slate-900/30">

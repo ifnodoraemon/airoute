@@ -1,4 +1,4 @@
-// Internationalization (i18n) Dictionary for Nano-Gateway
+// Internationalization (i18n) Dictionary for Airoute
 // Clean, professional, product-first terminology
 
 export const translations = {

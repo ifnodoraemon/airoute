@@ -1,18 +1,18 @@
-# Nano-Gateway 高可用 (HA) 与极致性能架构指南
+# Airoute 高可用 (HA) 与极致性能架构指南
 
-本文档全面阐述 **Nano-Gateway** 如何在生产环境中实现 **极致稳定、极致性能与极致高可用**。
+本文档全面阐述 **Airoute** 如何在生产环境中实现 **极致稳定、极致性能与极致高可用**。
 
 ---
 
 ## 1. 架构总览与核心组件划分
 
-Nano-Gateway 采用严格的 **数据面 (Data Plane)** 与 **控制面 (Control Plane)** 解耦架构：
+Airoute 采用严格的 **数据面 (Data Plane)** 与 **控制面 (Control Plane)** 解耦架构：
 
 ```mermaid
 flowchart TD
     Client["下游客户端 (OpenAI SDK / Claude SDK / 业务系统)"] --> LB["负载均衡器 (Nginx / K8s Ingress / Cloud LB)"]
     
-    subgraph HA_Cluster["Nano-Gateway 无状态高可用集群"]
+    subgraph HA_Cluster["Airoute 无状态高可用集群"]
         Node1["Gateway 实例 #1"]
         Node2["Gateway 实例 #2"]
         Node3["Gateway 实例 #N"]
@@ -104,24 +104,24 @@ flowchart TD
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: nano-gateway
+  name: airoute
   namespace: default
   labels:
-    app: nano-gateway
+    app: airoute
 spec:
   replicas: 3 # 3副本高可用部署
   selector:
     matchLabels:
-      app: nano-gateway
+      app: airoute
   template:
     metadata:
       labels:
-        app: nano-gateway
+        app: airoute
     spec:
       containers:
       - name: gateway
-        image: nano-gateway:latest
-        command: ["/app/nano-gateway", "-config", "/etc/nano-gateway/config.yaml", "-db", "/data/gateway.db"]
+        image: airoute:latest
+        command: ["/app/airoute", "-config", "/etc/airoute/config.yaml", "-db", "/data/gateway.db"]
         ports:
         - containerPort: 8080
           name: http
@@ -148,23 +148,23 @@ spec:
         - name: data-vol
           mountPath: /data
         - name: config-vol
-          mountPath: /etc/nano-gateway
+          mountPath: /etc/airoute
       volumes:
       - name: data-vol
         persistentVolumeClaim:
-          claimName: nano-gateway-pvc
+          claimName: airoute-pvc
       - name: config-vol
         configMap:
-          name: nano-gateway-config
+          name: airoute-config
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: nano-gateway-svc
+  name: airoute-svc
 spec:
   type: ClusterIP
   selector:
-    app: nano-gateway
+    app: airoute
   ports:
   - port: 8080
     targetPort: 8080
@@ -175,7 +175,7 @@ spec:
 ## 5. Nginx 高可用负载均衡配置 (`deploy/nginx.conf`)
 
 ```nginx
-upstream nano_gateway_cluster {
+upstream airoute_cluster {
     # 负载均衡算法：支持 least_conn 最小连接数
     least_conn;
     server 10.0.1.10:8080 max_fails=2 fail_timeout=10s;
@@ -191,7 +191,7 @@ server {
     server_name gateway.internal.net;
 
     location / {
-        proxy_pass http://nano_gateway_cluster;
+        proxy_pass http://airoute_cluster;
         proxy_http_version 1.1;
         proxy_set_header Connection "";
         proxy_set_header Host $host;

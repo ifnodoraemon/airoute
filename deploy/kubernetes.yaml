@@ -1,25 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: nano-gateway
+  name: airoute
   namespace: default
   labels:
-    app: nano-gateway
+    app: airoute
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: nano-gateway
+      app: airoute
   template:
     metadata:
       labels:
-        app: nano-gateway
+        app: airoute
     spec:
       containers:
       - name: gateway
-        image: ghcr.io/ifnodoraemon/nano-gateway:latest
+        image: ghcr.io/ifnodoraemon/airoute:latest
         imagePullPolicy: IfNotPresent
-        command: ["/app/nano-gateway", "-config", "/etc/nano-gateway/config.yaml", "-db", "/data/gateway.db"]
+        command: ["/app/airoute", "-config", "/etc/airoute/config.yaml", "-db", "/data/gateway.db"]
         ports:
         - containerPort: 8080
           name: http
@@ -46,23 +46,23 @@ spec:
         - name: data-vol
           mountPath: /data
         - name: config-vol
-          mountPath: /etc/nano-gateway
+          mountPath: /etc/airoute
       volumes:
       - name: data-vol
         persistentVolumeClaim:
-          claimName: nano-gateway-pvc
+          claimName: airoute-pvc
       - name: config-vol
         configMap:
-          name: nano-gateway-config
+          name: airoute-config
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: nano-gateway-svc
+  name: airoute-svc
 spec:
   type: ClusterIP
   selector:
-    app: nano-gateway
+    app: airoute
   ports:
   - port: 8080
     targetPort: 8080

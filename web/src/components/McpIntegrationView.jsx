@@ -178,7 +178,7 @@ nano mcp stdio`;
       router: {
         url: sseUrl,
         disabled: false,
-        autoApprove: ["nano_search_skills", "nano_inspect_skill", "nano_get_skill_manifest"]
+        autoApprove: ["airoute_search_skills", "airoute_inspect_skill", "airoute_get_skill_manifest"]
       }
     }
   }, null, 2);
@@ -194,24 +194,24 @@ async def main():
             await session.initialize()
 
             # 阶段 1：搜索技能 (仅消耗 ~30 tokens，避免上下文臃肿)
-            found = await session.call_tool("nano_search_skills", {"query": "计算"})
+            found = await session.call_tool("airoute_search_skills", {"query": "计算"})
             print("1. 搜索匹配技能:\\n", found)
 
             # 阶段 2：确认单个技能签名与触发条件 (~60 tokens)
-            inspected = await session.call_tool("nano_inspect_skill", {"skill_id": "code_runner"})
+            inspected = await session.call_tool("airoute_inspect_skill", {"skill_id": "code_runner"})
             print("2. 确认技能规范:\\n", inspected)
 
             # 阶段 3：按需拉取完整 SKILL.md 规范与指令
-            manifest = await session.call_tool("nano_get_skill_manifest", {"skill_id": "code_runner"})
+            manifest = await session.call_tool("airoute_get_skill_manifest", {"skill_id": "code_runner"})
             print("3. 完整指令清单:\\n", manifest)
 
             # 阶段 4：执行具体工具调用
-            res = await session.call_tool("nano_calc_eval", {"expression": "(128 * 1024) / 0.85"})
+            res = await session.call_tool("airoute_calc_eval", {"expression": "(128 * 1024) / 0.85"})
             print("4. 计算执行结果:", res)
 
 asyncio.run(main())`;
 
-  const runTestMcp = async (toolName = 'nano_list_models', args = {}, customMethod = 'tools/call') => {
+  const runTestMcp = async (toolName = 'airoute_list_models', args = {}, customMethod = 'tools/call') => {
     setTestLoading(true);
     setTestOutput(null);
     try {
@@ -647,32 +647,32 @@ asyncio.run(main())`;
             <span>0. 协议发现: server/discover (2026 最新规范)</span>
           </button>
           <button
-            onClick={() => runTestMcp('nano_search_skills', { query: '计算' })}
+            onClick={() => runTestMcp('airoute_search_skills', { query: '计算' })}
             disabled={testLoading}
             className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-mono font-medium transition cursor-pointer"
           >
-            <span>1. 搜索技能: nano_search_skills("计算")</span>
+            <span>1. 搜索技能: airoute_search_skills("计算")</span>
           </button>
           <button
-            onClick={() => runTestMcp('nano_inspect_skill', { skill_id: 'code_runner' })}
+            onClick={() => runTestMcp('airoute_inspect_skill', { skill_id: 'code_runner' })}
             disabled={testLoading}
             className="px-3.5 py-2 bg-sky-50 hover:bg-sky-100 text-sky-700 rounded-xl text-xs font-mono font-medium transition cursor-pointer"
           >
-            <span>2. 确认技能: nano_inspect_skill("code_runner")</span>
+            <span>2. 确认技能: airoute_inspect_skill("code_runner")</span>
           </button>
           <button
-            onClick={() => runTestMcp('nano_get_skill_manifest', { skill_id: 'code_runner' })}
+            onClick={() => runTestMcp('airoute_get_skill_manifest', { skill_id: 'code_runner' })}
             disabled={testLoading}
             className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-mono font-medium transition cursor-pointer"
           >
-            <span>3. 拉取规范: nano_get_skill_manifest("code_runner")</span>
+            <span>3. 拉取规范: airoute_get_skill_manifest("code_runner")</span>
           </button>
           <button
-            onClick={() => runTestMcp('nano_calc_eval', { expression: '(128 * 1024) / 0.85' })}
+            onClick={() => runTestMcp('airoute_calc_eval', { expression: '(128 * 1024) / 0.85' })}
             disabled={testLoading}
             className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-mono transition cursor-pointer"
           >
-            <span>4. 执行计算: nano_calc_eval("(128*1024)/0.85")</span>
+            <span>4. 执行计算: airoute_calc_eval("(128*1024)/0.85")</span>
           </button>
         </div>
 

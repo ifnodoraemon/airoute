@@ -6,7 +6,7 @@ services:
   # ============================================================================
   redis:
     image: redis:7-alpine
-    container_name: nano-gateway-redis
+    container_name: airoute-redis
     restart: always
     command: redis-server --appendonly yes --save ""
     ports:
@@ -26,8 +26,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: nano-gateway:latest
-    container_name: nano-gateway-1
+    image: airoute:latest
+    container_name: airoute-1
     restart: always
     environment:
       - TZ=Asia/Shanghai
@@ -53,8 +53,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: nano-gateway:latest
-    container_name: nano-gateway-2
+    image: airoute:latest
+    container_name: airoute-2
     restart: always
     environment:
       - TZ=Asia/Shanghai
@@ -78,7 +78,7 @@ services:
   # ============================================================================
   lb:
     image: nginx:alpine
-    container_name: nano-gateway-lb
+    container_name: airoute-lb
     restart: always
     ports:
       - "8080:80"

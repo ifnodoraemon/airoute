@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ifnodoraemon/nano-gateway/internal/config"
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
-	"github.com/ifnodoraemon/nano-gateway/internal/router"
+	"github.com/ifnodoraemon/airoute/internal/config"
+	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/router"
 )
 
 // TestSafeFallbackWindow verifies that if the primary channel returns HTTP 500,
@@ -219,7 +219,7 @@ func TestAnthropicProviderAdapter(t *testing.T) {
 			"content": []map[string]any{
 				{
 					"type": "text",
-					"text": "Hello, I am Claude converted by nano-gateway!",
+					"text": "Hello, I am Claude converted by airoute!",
 				},
 			},
 			"model":       "claude-3-5-sonnet-20241022",
@@ -266,7 +266,7 @@ func TestAnthropicProviderAdapter(t *testing.T) {
 		t.Errorf("expected ID msg_anthropic_test_999, got %s", resp.ID)
 	}
 	content := resp.Choices[0].Message.GetContentString()
-	if !strings.Contains(content, "I am Claude converted by nano-gateway") {
+	if !strings.Contains(content, "I am Claude converted by airoute") {
 		t.Errorf("expected translated content, got %s", content)
 	}
 	if resp.Usage == nil || resp.Usage.TotalTokens != 37 {

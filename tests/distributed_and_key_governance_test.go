@@ -11,13 +11,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/nano-gateway/internal/api"
-	"github.com/ifnodoraemon/nano-gateway/internal/config"
-	"github.com/ifnodoraemon/nano-gateway/internal/controlplane"
-	"github.com/ifnodoraemon/nano-gateway/internal/middleware"
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
-	"github.com/ifnodoraemon/nano-gateway/internal/router"
-	"github.com/ifnodoraemon/nano-gateway/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/api"
+	"github.com/ifnodoraemon/airoute/internal/config"
+	"github.com/ifnodoraemon/airoute/internal/controlplane"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
+	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/router"
+	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
 // TestVirtualKey_ActiveVsDisabled verifies that disabled keys are immediately rejected on the hot path

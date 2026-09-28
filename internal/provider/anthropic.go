@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/model"
 )
 
 // AnthropicProvider implements Provider for Anthropic Messages API.

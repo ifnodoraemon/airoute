@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ifnodoraemon/nano-gateway/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
 func TestBillingEngine_IsOffPeak_CustomMultiSlots(t *testing.T) {

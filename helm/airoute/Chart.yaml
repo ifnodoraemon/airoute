@@ -1,5 +1,5 @@
 apiVersion: v2
-name: nano-gateway
+name: airoute
 description: Production-grade, high-performance, HA LLM Gateway with Any-to-Any protocol matrix and zero-latency routing.
 type: application
 version: 0.1.0
@@ -15,4 +15,4 @@ keywords:
   - ai
 maintainers:
   - name: ifnodoraemon
-    url: https://github.com/ifnodoraemon/nano-gateway
+    url: https://github.com/ifnodoraemon/airoute

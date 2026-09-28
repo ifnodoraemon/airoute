@@ -7,10 +7,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ifnodoraemon/nano-gateway/internal/api"
-	"github.com/ifnodoraemon/nano-gateway/internal/controlplane"
-	"github.com/ifnodoraemon/nano-gateway/internal/router"
-	"github.com/ifnodoraemon/nano-gateway/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/api"
+	"github.com/ifnodoraemon/airoute/internal/controlplane"
+	"github.com/ifnodoraemon/airoute/internal/router"
+	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
 func TestAdminAuth_LoginAndProtectedRoutes(t *testing.T) {
@@ -35,7 +35,7 @@ func TestAdminAuth_LoginAndProtectedRoutes(t *testing.T) {
 		"username": "admin",
 		"password": "wrongpassword",
 	})
-	reqBad := httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/login", bytes.NewReader(badLoginPayload))
+	reqBad := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(badLoginPayload))
 	reqBad.Header.Set("Content-Type", "application/json")
 	wBad := httptest.NewRecorder()
 	engine.ServeHTTP(wBad, reqBad)
@@ -49,7 +49,7 @@ func TestAdminAuth_LoginAndProtectedRoutes(t *testing.T) {
 		"username": "admin",
 		"password": "admin123",
 	})
-	reqGood := httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/login", bytes.NewReader(goodLoginPayload))
+	reqGood := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(goodLoginPayload))
 	reqGood.Header.Set("Content-Type", "application/json")
 	wGood := httptest.NewRecorder()
 	engine.ServeHTTP(wGood, reqGood)
@@ -78,8 +78,8 @@ func TestAdminAuth_LoginAndProtectedRoutes(t *testing.T) {
 		t.Fatalf("expected username 'admin', got '%s'", resp.Data.User.Username)
 	}
 
-	// 3. Verify /api/v1/admin/auth/me using token
-	reqMe := httptest.NewRequest(http.MethodGet, "/api/v1/admin/auth/me", nil)
+	// 3. Verify /api/v1/user/me using token
+	reqMe := httptest.NewRequest(http.MethodGet, "/api/v1/user/me", nil)
 	reqMe.Header.Set("Authorization", "Bearer "+resp.Data.Token)
 	wMe := httptest.NewRecorder()
 	engine.ServeHTTP(wMe, reqMe)
@@ -126,7 +126,7 @@ func TestAdminAuth_LoginAndProtectedRoutes(t *testing.T) {
 		"username": "operator1",
 		"password": "operator123456",
 	})
-	reqOpLogin := httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/login", bytes.NewReader(opLoginPayload))
+	reqOpLogin := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(opLoginPayload))
 	reqOpLogin.Header.Set("Content-Type", "application/json")
 	wOpLogin := httptest.NewRecorder()
 	engine.ServeHTTP(wOpLogin, reqOpLogin)
@@ -152,7 +152,7 @@ func TestAdminAuth_LoginAndProtectedRoutes(t *testing.T) {
 		"username": "operator1",
 		"password": "operator_newpass999",
 	})
-	reqNewOpLogin := httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/login", bytes.NewReader(newOpLoginPayload))
+	reqNewOpLogin := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(newOpLoginPayload))
 	reqNewOpLogin.Header.Set("Content-Type", "application/json")
 	wNewOpLogin := httptest.NewRecorder()
 	engine.ServeHTTP(wNewOpLogin, reqNewOpLogin)

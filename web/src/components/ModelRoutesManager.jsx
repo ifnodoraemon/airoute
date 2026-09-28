@@ -433,7 +433,7 @@ export default function ModelRoutesManager({
                               </span>
                               {price.off_peak_enabled !== false && (
                                 <span className="bg-indigo-50 border border-indigo-200 text-indigo-700 px-1.5 py-0.2 rounded font-medium text-[10px]">
-                                  {price.off_peak_mode === 'deepseek' ? '⚡ 峰谷5折' : '🌙 闲时5折'}
+                                  🌙 闲时优惠
                                 </span>
                               )}
                             </div>

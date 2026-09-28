@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/nano-gateway/internal/api"
-	"github.com/ifnodoraemon/nano-gateway/internal/controlplane"
-	"github.com/ifnodoraemon/nano-gateway/internal/router"
-	"github.com/ifnodoraemon/nano-gateway/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/api"
+	"github.com/ifnodoraemon/airoute/internal/controlplane"
+	"github.com/ifnodoraemon/airoute/internal/router"
+	"github.com/ifnodoraemon/airoute/internal/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

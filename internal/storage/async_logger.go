@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ifnodoraemon/nano-gateway/internal/distributed"
-	"github.com/ifnodoraemon/nano-gateway/internal/telemetry"
+	"github.com/ifnodoraemon/airoute/internal/distributed"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
 const (
@@ -76,21 +76,12 @@ func (al *AsyncLogger) Record(rec *UsageLogRecord) {
 		return
 	}
 
-	// Ensure trace_id and chat_id are always set
+	// Ensure trace_id is always set
 	if rec.TraceID == "" {
-		if rec.ChatID != "" {
-			rec.TraceID = rec.ChatID
-		} else if rec.SessionID != "" {
+		if rec.SessionID != "" {
 			rec.TraceID = rec.SessionID
 		} else {
 			rec.TraceID = fmt.Sprintf("tr-%x", time.Now().UnixNano())
-		}
-	}
-	if rec.ChatID == "" {
-		if rec.SessionID != "" {
-			rec.ChatID = rec.SessionID
-		} else {
-			rec.ChatID = fmt.Sprintf("chatcmpl-%x", time.Now().UnixNano())
 		}
 	}
 

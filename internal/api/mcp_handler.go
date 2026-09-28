@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
-	"github.com/ifnodoraemon/nano-gateway/internal/router"
-	"github.com/ifnodoraemon/nano-gateway/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/router"
+	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
 // MCPHandler implements the Model Context Protocol (MCP 2024-11-05) over HTTP & SSE.
@@ -195,7 +195,7 @@ func (h *MCPHandler) ProcessRPC(ctx context.Context, req *mcpRequest) mcpRespons
 					"name":    "AI路由器",
 					"version": "1.0.0",
 				},
-				"instructions": "AI路由器 (nano-gateway) 统一大模型与扩展广场服务，支持 MCP 2026-07-28 无状态标准与三阶段渐进式按需加载 (nano_search_skills ➔ nano_inspect_skill ➔ nano_get_skill_manifest)。",
+				"instructions": "AI路由器 (airoute) 统一大模型与扩展广场服务，支持 MCP 2026-07-28 无状态标准与三阶段渐进式按需加载 (nano_search_skills ➔ nano_inspect_skill ➔ nano_get_skill_manifest)。",
 			},
 			Meta: gin.H{
 				"io.modelcontextprotocol/protocolVersion": "2026-07-28",
@@ -332,7 +332,7 @@ func (h *MCPHandler) ProcessRPC(ctx context.Context, req *mcpRequest) mcpRespons
 			},
 			{
 				"name":        "nano_query_logs",
-				"description": "Query request audit logs, token consumption, and session history from Nano Gateway",
+				"description": "Query request audit logs, token consumption, and session history from Airoute",
 				"inputSchema": gin.H{
 					"type": "object",
 					"properties": gin.H{

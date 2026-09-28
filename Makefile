@@ -2,7 +2,7 @@ export PATH := /usr/local/go/bin:$(PATH)
 
 .PHONY: all build run test tidy clean
 
-APP_NAME = nano-gateway
+APP_NAME = airoute
 BIN_DIR = bin
 ENTRY = cmd/gateway/main.go
 CONFIG = configs/config.yaml

@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ifnodoraemon/nano-gateway/internal/storage"
-	"github.com/ifnodoraemon/nano-gateway/internal/telemetry"
+	"github.com/ifnodoraemon/airoute/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
 // GlobalEngine is the singleton billing calculator used by all data plane handlers.
@@ -45,7 +45,7 @@ func NewEngine(repo *storage.Repository) *BillingEngine {
 			FixedPrice:      0.0,
 			Currency:        "CNY",
 			OffPeakEnabled:  true,
-			OffPeakMode:     "deepseek",
+			OffPeakMode:     "custom",
 			OffPeakDiscount: 0.5,
 			WeekendAllDay:   true,
 			OffPeakStart:    "00:00",
@@ -169,10 +169,9 @@ func (e *BillingEngine) GetPriceWithGroup(modelName, groupName string) *storage.
 
 // IsOffPeak evaluates whether the specified time is within the model's off-peak time window.
 // Supports:
-// 1. "deepseek" (DeepSeek official rule: Mon-Fri 09:00-12:00, 14:00-18:00 Peak, all other times and weekends 50% discount)
+// 1. "custom" (multiple customizable slots + weekend all-day toggle)
 // 2. "night" (00:00 - 08:30 discount)
-// 3. "custom" (multiple customizable slots + weekend all-day toggle)
-// 4. "none" (no discount)
+// 3. "none" (no discount)
 func (e *BillingEngine) IsOffPeak(p *storage.ModelPriceRecord, t time.Time) (bool, float64) {
 	if p == nil || !p.OffPeakEnabled {
 		return false, 1.0
@@ -199,23 +198,10 @@ func (e *BillingEngine) IsOffPeak(p *storage.ModelPriceRecord, t time.Time) (boo
 
 	mode := strings.ToLower(strings.TrimSpace(p.OffPeakMode))
 	if mode == "" {
-		mode = "deepseek"
+		mode = "custom"
 	}
 
 	switch mode {
-	case "deepseek":
-		// DeepSeek Official Schedule:
-		// Peak: Mon-Fri 09:00 - 12:00 & 14:00 - 18:00
-		// Off-Peak: Weekends all day, plus Mon-Fri 18:00-09:00 (nights) & 12:00-14:00 (noon)
-		if isWeekend {
-			return true, discount
-		}
-		// Check peak 1 (09:00 - 12:00) and peak 2 (14:00 - 18:00)
-		if (currentM >= 540 && currentM < 720) || (currentM >= 840 && currentM < 1080) {
-			return false, 1.0 // Peak
-		}
-		return true, discount // Off-peak (night or noon)
-
 	case "night":
 		startM := parseTimeToMinutes(p.OffPeakStart)
 		endM := parseTimeToMinutes(p.OffPeakEnd)

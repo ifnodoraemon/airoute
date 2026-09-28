@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "nano-gateway.fullname" . }}
+  name: {{ include "airoute.fullname" . }}
   labels:
-    {{- include "nano-gateway.labels" . | nindent 4 }}
+    {{- include "airoute.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
   selector:
     matchLabels:
-      {{- include "nano-gateway.selectorLabels" . | nindent 6 }}
+      {{- include "airoute.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -18,7 +18,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "nano-gateway.selectorLabels" . | nindent 8 }}
+        {{- include "airoute.selectorLabels" . | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -34,9 +34,9 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
-            - /app/nano-gateway
+            - /app/airoute
             - -config
-            - /etc/nano-gateway/config.yaml
+            - /etc/airoute/config.yaml
             - -db
             - /app/data/gateway.db
           ports:
@@ -59,7 +59,7 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             - name: config-volume
-              mountPath: /etc/nano-gateway
+              mountPath: /etc/airoute
             {{- if .Values.persistence.enabled }}
             - name: data-volume
               mountPath: {{ .Values.persistence.mountPath }}
@@ -67,11 +67,11 @@ spec:
       volumes:
         - name: config-volume
           configMap:
-            name: {{ include "nano-gateway.fullname" . }}-config
+            name: {{ include "airoute.fullname" . }}-config
         {{- if .Values.persistence.enabled }}
         - name: data-volume
           persistentVolumeClaim:
-            claimName: {{ include "nano-gateway.fullname" . }}-pvc
+            claimName: {{ include "airoute.fullname" . }}-pvc
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

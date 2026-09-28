@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/model"
 )
 
 // GeminiProvider handles Google's specialized Gemini Developer API & Vertex AI protocols.

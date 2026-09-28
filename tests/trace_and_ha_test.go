@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/nano-gateway/internal/middleware"
-	"github.com/ifnodoraemon/nano-gateway/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
+	"github.com/ifnodoraemon/airoute/internal/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -74,7 +74,6 @@ func TestRepository_TraceIDPersistenceAndFilter(t *testing.T) {
 	// Insert log 1
 	err = repo.RecordUsageLog(&storage.UsageLogRecord{
 		TraceID:          traceID1,
-		ChatID:           "chatcmpl-node1-aaa",
 		SessionID:        "sess-1",
 		VirtualKey:       "sk-test-1",
 		TenantID:         "tenant-a",
@@ -93,7 +92,6 @@ func TestRepository_TraceIDPersistenceAndFilter(t *testing.T) {
 	// Insert log 2
 	err = repo.RecordUsageLog(&storage.UsageLogRecord{
 		TraceID:          traceID2,
-		ChatID:           "chatcmpl-node2-bbb",
 		SessionID:        "sess-2",
 		VirtualKey:       "sk-test-2",
 		TenantID:         "tenant-b",
@@ -126,7 +124,6 @@ func TestRepository_TraceIDPersistenceAndFilter(t *testing.T) {
 
 	// 3. Fallback auto trace_id if empty
 	err = repo.RecordUsageLog(&storage.UsageLogRecord{
-		ChatID:     "chatcmpl-no-trace",
 		Model:      "deepseek-v3",
 		DurationMs: 120,
 		StatusCode: 200,

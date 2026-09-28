@@ -5,7 +5,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/model"
 	"gopkg.in/yaml.v3"
 )
 

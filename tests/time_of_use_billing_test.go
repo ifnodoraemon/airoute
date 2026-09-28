@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ifnodoraemon/nano-gateway/internal/billing"
-	"github.com/ifnodoraemon/nano-gateway/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/billing"
+	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
 func TestTimeOfUseBilling(t *testing.T) {
@@ -22,7 +22,7 @@ func TestTimeOfUseBilling(t *testing.T) {
 	repo := storage.NewRepository(db)
 	engine := billing.NewEngine(repo)
 
-	// Model 1: DeepSeek Official Mode (Workday 09:00-12:00, 14:00-18:00 Peak, all other times + weekends 50% discount)
+	// Model 1: Custom Multi-Slot Mode (Workday 00:00-09:00, 12:00-14:00, 18:00-24:00 + weekends 50% discount)
 	priceRec := &storage.ModelPriceRecord{
 		Model:           "deepseek-chat",
 		PromptPrice:     2.0,  // ¥2.00 / 1M
@@ -31,8 +31,9 @@ func TestTimeOfUseBilling(t *testing.T) {
 		FixedPrice:      0.0,
 		Currency:        "CNY",
 		OffPeakEnabled:  true,
-		OffPeakMode:     "deepseek",
+		OffPeakMode:     "custom",
 		OffPeakDiscount: 0.5,
+		OffPeakSlots:    `[{"start":"00:00","end":"09:00","discount":0.5},{"start":"12:00","end":"14:00","discount":0.5},{"start":"18:00","end":"24:00","discount":0.5}]`,
 		WeekendAllDay:   true,
 	}
 	if err := repo.SaveModelPrice(priceRec); err != nil {

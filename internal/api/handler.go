@@ -12,12 +12,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/nano-gateway/internal/billing"
-	"github.com/ifnodoraemon/nano-gateway/internal/middleware"
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
-	"github.com/ifnodoraemon/nano-gateway/internal/router"
-	"github.com/ifnodoraemon/nano-gateway/internal/storage"
-	"github.com/ifnodoraemon/nano-gateway/internal/telemetry"
+	"github.com/ifnodoraemon/airoute/internal/billing"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
+	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/router"
+	"github.com/ifnodoraemon/airoute/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
 // Handler processes API endpoints.
@@ -127,7 +127,6 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 		if storage.GlobalAsyncLogger != nil {
 			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 				TraceID:          middleware.GetTraceID(c),
-				ChatID:           chatID,
 				SessionID:        sessionID,
 				VirtualKey:       c.GetString("virtual_key"),
 				TenantID:         c.GetString("tenant_id"),
@@ -143,14 +142,20 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 				StatusCode:       http.StatusOK,
 			})
 		}
+		c.Header("X-Airoute-Trace-ID", chatID)
 		c.Header("X-Nano-Chat-ID", chatID)
+		c.Header("X-Airoute-Cost", fmt.Sprintf("%.6f", cost))
 		c.Header("X-Nano-Cost", fmt.Sprintf("%.6f", cost))
 		if isOffPeak {
+			c.Header("X-Airoute-Off-Peak", "true")
 			c.Header("X-Nano-Off-Peak", "true")
+			c.Header("X-Airoute-Off-Peak-Discount", fmt.Sprintf("%.2f", offPeakDiscount))
 			c.Header("X-Nano-Off-Peak-Discount", fmt.Sprintf("%.2f", offPeakDiscount))
 		}
 		if cachedTokens > 0 {
+			c.Header("X-Airoute-Cached-Tokens", fmt.Sprintf("%d", cachedTokens))
 			c.Header("X-Nano-Cached-Tokens", fmt.Sprintf("%d", cachedTokens))
+			c.Header("X-Airoute-Saved-Cost", fmt.Sprintf("%.6f", savedCost))
 			c.Header("X-Nano-Saved-Cost", fmt.Sprintf("%.6f", savedCost))
 		}
 		c.JSON(http.StatusOK, resp)
@@ -177,6 +182,7 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no")
+	c.Header("X-Airoute-Trace-ID", streamChatID)
 	c.Header("X-Nano-Chat-ID", streamChatID)
 	c.Status(http.StatusOK)
 
@@ -207,7 +213,6 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 		if storage.GlobalAsyncLogger != nil {
 			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 				TraceID:          middleware.GetTraceID(c),
-				ChatID:           streamChatID,
 				SessionID:        sessionID,
 				VirtualKey:       c.GetString("virtual_key"),
 				TenantID:         c.GetString("tenant_id"),
@@ -303,7 +308,7 @@ func (h *Handler) HandleModels(c *gin.Context) {
 			ID:      m,
 			Object:  "model",
 			Created: now,
-			OwnedBy: "nano-gateway",
+			OwnedBy: "airoute",
 		})
 	}
 
@@ -354,7 +359,7 @@ func (h *Handler) HandleModelDetail(c *gin.Context) {
 		ID:      modelID,
 		Object:  "model",
 		Created: time.Now().Unix(),
-		OwnedBy: "nano-gateway",
+		OwnedBy: "airoute",
 	})
 }
 
@@ -476,7 +481,7 @@ func (h *Handler) HandleModerations(c *gin.Context) {
 func (h *Handler) HandleHealth(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":    "healthy",
-		"service":   "nano-gateway",
+		"service":   "airoute",
 		"version":   "0.1.0",
 		"timestamp": time.Now().Unix(),
 	})
@@ -541,224 +546,6 @@ func (h *Handler) HandlePublicStatus(c *gin.Context) {
 	})
 }
 
-// HandleCompletions handles legacy text completions POST /v1/completions.
-func (h *Handler) HandleCompletions(c *gin.Context) {
-	var req model.TextCompletionRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"message": fmt.Sprintf("Invalid JSON request body: %v", err),
-				"type":    "invalid_request_error",
-			},
-		})
-		return
-	}
-
-	if req.Model == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"message": "Missing 'model' in request",
-				"type":    "invalid_request_error",
-			},
-		})
-		return
-	}
-
-	if !middleware.ValidateModelAllowed(c, req.Model) {
-		c.JSON(http.StatusForbidden, gin.H{
-			"error": gin.H{
-				"message": fmt.Sprintf("Model '%s' not allowed for this key", req.Model),
-				"type":    "permission_error",
-			},
-		})
-		return
-	}
-
-	telemetry.GlobalMetrics.IncActiveConns()
-	defer telemetry.GlobalMetrics.DecActiveConns()
-
-	start := time.Now()
-	promptStr := req.GetPromptString()
-
-	canonicalReq := &model.ChatCompletionRequest{
-		Model: req.Model,
-		Messages: []model.ChatMessage{
-			{Role: "user", Content: promptStr},
-		},
-		Temperature: req.Temperature,
-		TopP:        req.TopP,
-		MaxTokens:   req.MaxTokens,
-		Stream:      req.Stream,
-	}
-
-	sessionID := resolveSessionID(c, req.Model, canonicalReq.Messages, "")
-	reqCtx := c.Request.Context()
-	if sessionID != "" {
-		reqCtx = context.WithValue(reqCtx, router.ContextKeySessionID, sessionID)
-	}
-
-	// Non-streaming /v1/completions
-	if !req.Stream {
-		resp, err := h.dispatcher.Dispatch(reqCtx, canonicalReq)
-		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{
-				"error": gin.H{
-					"message": err.Error(),
-					"type":    "gateway_error",
-				},
-			})
-			return
-		}
-
-		replyText := ""
-		var finishReason *string
-		if len(resp.Choices) > 0 {
-			replyText = resp.Choices[0].Message.GetContentString()
-			finishReason = resp.Choices[0].FinishReason
-		}
-
-		textResp := model.TextCompletionResponse{
-			ID:      resp.ID,
-			Object:  "text_completion",
-			Created: resp.Created,
-			Model:   req.Model,
-			Choices: []model.TextCompletionChoice{
-				{
-					Text:         replyText,
-					Index:        0,
-					FinishReason: finishReason,
-				},
-			},
-			Usage: resp.Usage,
-		}
-
-		dur := time.Since(start)
-		pTokens := 0
-		cTokens := 0
-		if resp.Usage != nil {
-			pTokens = resp.Usage.PromptTokens
-			cTokens = resp.Usage.CompletionTokens
-		}
-		if storage.GlobalAsyncLogger != nil {
-			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
-				TraceID:          middleware.GetTraceID(c),
-				SessionID:        sessionID,
-				VirtualKey:       c.GetString("virtual_key"),
-				TenantID:         c.GetString("tenant_id"),
-				Model:            req.Model,
-				PromptTokens:     pTokens,
-				CompletionTokens: cTokens,
-				TotalTokens:      pTokens + cTokens,
-				DurationMs:       dur.Milliseconds(),
-				StatusCode:       http.StatusOK,
-			})
-		}
-
-		c.JSON(http.StatusOK, textResp)
-		return
-	}
-
-	// Streaming SSE /v1/completions
-	streamChan, err := h.dispatcher.DispatchStream(c.Request.Context(), canonicalReq)
-	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{
-			"error": gin.H{
-				"message": err.Error(),
-				"type":    "gateway_error",
-			},
-		})
-		return
-	}
-
-	c.Header("Content-Type", "text/event-stream")
-	c.Header("Cache-Control", "no-cache")
-	c.Header("Connection", "keep-alive")
-	c.Header("X-Accel-Buffering", "no")
-	c.Status(http.StatusOK)
-
-	flusher, ok := c.Writer.(http.Flusher)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Streaming unsupported"})
-		return
-	}
-	flusher.Flush()
-
-	w := c.Writer
-	totalPromptTokens := 0
-	totalCompTokens := 0
-
-	recordStreamEnd := func() {
-		dur := time.Since(start)
-		telemetry.GlobalMetrics.RecordRequest(true, dur, totalPromptTokens, totalCompTokens)
-		if storage.GlobalAsyncLogger != nil {
-			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
-				TraceID:          middleware.GetTraceID(c),
-				SessionID:        sessionID,
-				VirtualKey:       c.GetString("virtual_key"),
-				TenantID:         c.GetString("tenant_id"),
-				Model:            req.Model,
-				PromptTokens:     totalPromptTokens,
-				CompletionTokens: totalCompTokens,
-				TotalTokens:      totalPromptTokens + totalCompTokens,
-				DurationMs:       dur.Milliseconds(),
-				StatusCode:       http.StatusOK,
-			})
-		}
-	}
-
-	for {
-		select {
-		case <-c.Request.Context().Done():
-			return
-		case event, open := <-streamChan:
-			if !open {
-				fmt.Fprintf(w, "data: [DONE]\n\n")
-				flusher.Flush()
-				recordStreamEnd()
-				return
-			}
-
-			if event.Err != nil {
-				fmt.Fprintf(w, "data: {\"error\":\"%s\"}\n\n", event.Err.Error())
-				fmt.Fprintf(w, "data: [DONE]\n\n")
-				flusher.Flush()
-				return
-			}
-
-			if event.IsDone {
-				fmt.Fprintf(w, "data: [DONE]\n\n")
-				flusher.Flush()
-				recordStreamEnd()
-				return
-			}
-
-			if event.Chunk != nil && len(event.Chunk.Choices) > 0 {
-				delta := event.Chunk.Choices[0].Delta
-				textChunk := gin.H{
-					"id":      event.Chunk.ID,
-					"object":  "text_completion",
-					"created": event.Chunk.Created,
-					"model":   req.Model,
-					"choices": []gin.H{
-						{
-							"text":          delta.Content,
-							"index":         0,
-							"finish_reason": event.Chunk.Choices[0].FinishReason,
-						},
-					},
-				}
-				chunkBytes, _ := json.Marshal(textChunk)
-				fmt.Fprintf(w, "data: %s\n\n", chunkBytes)
-				flusher.Flush()
-
-				if event.Chunk.Usage != nil {
-					totalPromptTokens = event.Chunk.Usage.PromptTokens
-					totalCompTokens = event.Chunk.Usage.CompletionTokens
-				}
-			}
-		}
-	}
-}
 
 // HandleAnthropicCountTokens handles POST /v1/messages/count_tokens for Anthropic Claude SDK compatibility.
 func (h *Handler) HandleAnthropicCountTokens(c *gin.Context) {
@@ -852,7 +639,9 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 		sessionID = resolveSessionID(c, chatReq.Model, chatReq.Messages, req.User)
 	} else {
 		sessionID = "resp_" + sessionID
+		c.Header("X-Airoute-Session-ID", sessionID)
 		c.Header("X-Nano-Session-ID", sessionID)
+		c.SetCookie("airoute_session", sessionID, 1800, "/", "", false, false)
 		c.SetCookie("nano_session", sessionID, 1800, "/", "", false, false)
 	}
 	reqCtx := c.Request.Context()
@@ -1105,6 +894,9 @@ func extractSessionID(c *gin.Context, userField string) string {
 	if s := c.GetHeader("Conversation-Id"); s != "" {
 		return strings.TrimSpace(s)
 	}
+	if cookie, err := c.Cookie("airoute_session"); err == nil && cookie != "" {
+		return strings.TrimSpace(cookie)
+	}
 	if cookie, err := c.Cookie("nano_session"); err == nil && cookie != "" {
 		return strings.TrimSpace(cookie)
 	}
@@ -1176,8 +968,10 @@ func resolveSessionID(c *gin.Context, modelName string, messages []model.ChatMes
 		sID = fmt.Sprintf("sess_%d_%x", time.Now().Unix(), time.Now().UnixNano()%1000000)
 	}
 	if sID != "" {
+		c.Header("X-Airoute-Session-ID", sID)
 		c.Header("X-Nano-Session-ID", sID)
 		// Set cookie for browser-based clients (NextChat, OpenWebUI, LibreChat, Web App)
+		c.SetCookie("airoute_session", sID, 1800, "/", "", false, false)
 		c.SetCookie("nano_session", sID, 1800, "/", "", false, false)
 	}
 	return sID

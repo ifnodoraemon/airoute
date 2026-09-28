@@ -74,21 +74,21 @@ import { translations } from './i18n';
 
 export default function App() {
   // Language State (bilingual i18n)
-  const [lang, setLang] = useState(() => localStorage.getItem('nano_gateway_lang') || 'zh');
+  const [lang, setLang] = useState(() => localStorage.getItem('airoute_lang') || 'zh');
   const t = translations[lang] || translations.zh;
 
   const toggleLang = () => {
     const nextLang = lang === 'zh' ? 'en' : 'zh';
     setLang(nextLang);
-    localStorage.setItem('nano_gateway_lang', nextLang);
+    localStorage.setItem('airoute_lang', nextLang);
   };
 
   // Enforce pure light mode only & dynamic document title
   useEffect(() => {
     document.documentElement.classList.remove('dark');
     document.documentElement.classList.add('light');
-    localStorage.setItem('nano_theme', 'light');
-    document.title = lang === 'zh' ? 'AI路由器' : 'nano-gateway';
+    localStorage.setItem('airoute_theme', 'light');
+    document.title = lang === 'zh' ? 'Airoute · AI路由器' : 'Airoute';
   }, [lang]);
 
   const [toast, setToast] = useState({ show: false, message: '', type: 'info' });
@@ -102,41 +102,96 @@ export default function App() {
     }, 3200);
   };
 
-  // View mode: 'landing' (公共门户首页) or 'console' (工作台)
-  const [viewMode, setViewMode] = useState(() => {
-    return localStorage.getItem('nano_admin_token') ? 'console' : 'landing';
-  });
+  const ALL_CONSOLE_TABS = [
+    'dashboard', 'status', 'models', 'pricing', 'channels',
+    'keys', 'wallet', 'logs', 'mcp', 'users', 'playground', 'docs'
+  ];
+
+  const getRouteFromURL = () => {
+    if (typeof window === 'undefined') return { viewMode: 'landing', tab: 'dashboard', authTab: 'login' };
+    const rawHash = window.location.hash.replace(/^#\/?/, '').trim().toLowerCase();
+    const searchParams = new URLSearchParams(window.location.search);
+    const tabParam = (searchParams.get('tab') || '').toLowerCase();
+    const route = rawHash || tabParam || '';
+    const token = localStorage.getItem('airoute_admin_token');
+    const savedUser = localStorage.getItem('airoute_admin_user');
+    let role = 'admin';
+    if (savedUser) {
+      try { role = JSON.parse(savedUser)?.role || 'admin'; } catch {}
+    }
+    const defaultTab = role === 'admin' ? 'dashboard' : 'wallet';
+
+    if (route === 'status' || route === 'service-status') {
+      if (token) {
+        return { viewMode: 'console', tab: 'status', authTab: 'login' };
+      }
+      return { viewMode: 'status', tab: 'status', authTab: 'login' };
+    }
+
+    if (route === 'auth' || route === 'login') {
+      return { viewMode: 'auth', tab: defaultTab, authTab: 'login' };
+    }
+    if (route === 'register') {
+      return { viewMode: 'auth', tab: defaultTab, authTab: 'register' };
+    }
+
+    if (route === 'landing' || route === 'home') {
+      return { viewMode: 'landing', tab: defaultTab, authTab: 'login' };
+    }
+
+    if (ALL_CONSOLE_TABS.includes(route)) {
+      if (token) {
+        const adminOnlyTabs = ['channels', 'users', 'mcp', 'dashboard'];
+        if (role !== 'admin' && adminOnlyTabs.includes(route)) {
+          return { viewMode: 'console', tab: 'wallet', authTab: 'login' };
+        }
+        return { viewMode: 'console', tab: route, authTab: 'login' };
+      } else {
+        return { viewMode: 'landing', tab: defaultTab, authTab: 'login' };
+      }
+    }
+
+    if (token) {
+      return { viewMode: 'console', tab: defaultTab, authTab: 'login' };
+    }
+    return { viewMode: 'landing', tab: defaultTab, authTab: 'login' };
+  };
+
+  const initialRoute = getRouteFromURL();
+
+  // View mode: 'landing' (公共门户首页), 'console' (工作台), 'status' (对外状态页), 'auth' (认证页)
+  const [viewMode, setViewMode] = useState(() => initialRoute.viewMode);
 
   // Account & Authentication state
-  const [adminToken, setAdminToken] = useState(() => localStorage.getItem('nano_admin_token') || '');
+  const [adminToken, setAdminToken] = useState(() => localStorage.getItem('airoute_admin_token') || '');
   const [adminUser, setAdminUser] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem('nano_admin_user') || 'null');
+      return JSON.parse(localStorage.getItem('airoute_admin_user') || 'null');
     } catch {
       return null;
     }
   });
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
-  const [authTab, setAuthTab] = useState('login');
+  const [authTab, setAuthTab] = useState(() => initialRoute.authTab);
 
   // Validate admin token on startup to prevent stale token UI issues
   useEffect(() => {
-    const savedToken = localStorage.getItem('nano_admin_token');
+    const savedToken = localStorage.getItem('airoute_admin_token');
     if (savedToken) {
-      fetch('/api/v1/admin/auth/me', {
+      fetch('/api/v1/user/me', {
         headers: { 'Authorization': `Bearer ${savedToken}` }
       })
         .then(res => res.json())
         .then(data => {
           if (data.code === 0 && data.data) {
             setAdminUser(data.data);
-            localStorage.setItem('nano_admin_user', JSON.stringify(data.data));
+            localStorage.setItem('airoute_admin_user', JSON.stringify(data.data));
           } else {
             setAdminToken('');
             setAdminUser(null);
-            localStorage.removeItem('nano_admin_token');
-            localStorage.removeItem('nano_admin_user');
+            localStorage.removeItem('airoute_admin_token');
+            localStorage.removeItem('airoute_admin_user');
             if (viewMode === 'console') {
               setViewMode('landing');
               setShowLoginModal(true);
@@ -158,8 +213,8 @@ export default function App() {
       if (res.status === 401 && viewMode === 'console') {
         setAdminToken('');
         setAdminUser(null);
-        localStorage.removeItem('nano_admin_token');
-        localStorage.removeItem('nano_admin_user');
+        localStorage.removeItem('airoute_admin_token');
+        localStorage.removeItem('airoute_admin_user');
         setShowLoginModal(true);
         showToast('登录凭证已失效，请重新登录', 'warning');
       }
@@ -172,8 +227,8 @@ export default function App() {
   const handleLogout = () => {
     setAdminToken('');
     setAdminUser(null);
-    localStorage.removeItem('nano_admin_token');
-    localStorage.removeItem('nano_admin_user');
+    localStorage.removeItem('airoute_admin_token');
+    localStorage.removeItem('airoute_admin_user');
     setViewMode('landing');
     showToast('已安全退出账号', 'info');
   };
@@ -181,13 +236,13 @@ export default function App() {
   const fetchUserProfile = async () => {
     if (!adminToken) return;
     try {
-      const res = await fetch('/api/v1/admin/auth/me', {
+      const res = await fetch('/api/v1/user/me', {
         headers: { 'Authorization': `Bearer ${adminToken}` }
       });
       const data = await res.json();
       if (res.ok && data.code === 0 && data.data) {
         setAdminUser(data.data);
-        localStorage.setItem('nano_admin_user', JSON.stringify(data.data));
+        localStorage.setItem('airoute_admin_user', JSON.stringify(data.data));
       }
     } catch (e) {}
   };
@@ -199,21 +254,49 @@ export default function App() {
   const [batchTesting, setBatchTesting] = useState(false);
   const [channelLatencies, setChannelLatencies] = useState({});
 
-  const [currentTab, setCurrentTab] = useState(() => {
-    const savedUser = localStorage.getItem('nano_admin_user');
-    if (savedUser) {
-      try {
-        const u = JSON.parse(savedUser);
-        if (u && u.role !== 'admin') return 'wallet';
-      } catch (e) {}
+  const [currentTab, setCurrentTab] = useState(() => initialRoute.tab);
+
+  // Synchronize browser address bar URL hash with active view and tab
+  useEffect(() => {
+    let targetHash = '';
+    if (viewMode === 'landing') {
+      if (window.location.hash && window.location.hash !== '#/' && window.location.hash !== '#/landing') {
+        targetHash = '#/';
+      }
+    } else if (viewMode === 'auth') {
+      targetHash = authTab === 'register' ? '#/register' : '#/login';
+    } else if (viewMode === 'status') {
+      targetHash = '#/status';
+    } else if (viewMode === 'console') {
+      targetHash = `#/${currentTab}`;
     }
-    return 'dashboard';
-  });
+
+    if (targetHash && window.location.hash !== targetHash) {
+      window.history.replaceState(null, '', targetHash);
+    }
+  }, [viewMode, currentTab, authTab]);
+
+  // Listen to browser Back / Forward buttons (hashchange and popstate)
+  useEffect(() => {
+    const handleLocationChange = () => {
+      const routeInfo = getRouteFromURL();
+      setViewMode(prev => prev !== routeInfo.viewMode ? routeInfo.viewMode : prev);
+      setCurrentTab(prev => prev !== routeInfo.tab ? routeInfo.tab : prev);
+      setAuthTab(prev => prev !== routeInfo.authTab ? routeInfo.authTab : prev);
+    };
+
+    window.addEventListener('hashchange', handleLocationChange);
+    window.addEventListener('popstate', handleLocationChange);
+    return () => {
+      window.removeEventListener('hashchange', handleLocationChange);
+      window.removeEventListener('popstate', handleLocationChange);
+    };
+  }, []);
 
   // Automatically ensure regular user stays within permitted tabs
   useEffect(() => {
     if (adminUser && adminUser.role !== 'admin') {
-      const allowedTabs = ['wallet', 'keys', 'playground', 'pricing', 'logs', 'docs'];
+      const allowedTabs = ['wallet', 'status', 'keys', 'playground', 'pricing', 'logs', 'docs', 'models'];
       if (!allowedTabs.includes(currentTab)) {
         setCurrentTab('wallet');
       }
@@ -775,7 +858,7 @@ export default function App() {
 
   const generateCurlForPlayground = () => {
     const origin = window.location.origin || 'http://localhost:8080';
-    const key = playApiKey || (keys.length > 0 ? keys[0].key : 'sk-nano-your-key');
+    const key = playApiKey || (keys.length > 0 ? keys[0].key : 'sk-airoute-your-key');
     return `curl -X POST "${origin}/v1/chat/completions" \\
   -H "Authorization: Bearer ${key}" \\
   -H "Content-Type: application/json" \\
@@ -1059,7 +1142,7 @@ export default function App() {
 
   // Handle Key Modal Opening with Auto-Generated Credentials
   const handleOpenCreateKey = () => {
-    const rand = 'sk-nano-' + Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 6);
+    const rand = 'sk-airoute-' + Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 6);
     const tenantNum = (keys?.length || 0) + 1;
     setNewKey({
       tenant_id: `密钥-${tenantNum}`,
@@ -1173,14 +1256,6 @@ export default function App() {
       body = {
         model: playModel,
         messages: [{ role: 'user', content }],
-        stream: playStream,
-        max_tokens: 1024,
-      };
-    } else if (playProtocol === 'openai_text') {
-      url = '/v1/completions';
-      body = {
-        model: playModel,
-        prompt: playPrompt,
         stream: playStream,
         max_tokens: 1024,
       };
@@ -1603,7 +1678,6 @@ export default function App() {
     const f = logFilter.toLowerCase();
     return (
       (l.trace_id && l.trace_id.toLowerCase().includes(f)) ||
-      (l.chat_id && l.chat_id.toLowerCase().includes(f)) ||
       (l.session_id && l.session_id.toLowerCase().includes(f)) ||
       (l.model && l.model.toLowerCase().includes(f)) ||
       (l.channel && l.channel.toLowerCase().includes(f)) ||
@@ -1711,6 +1785,8 @@ export default function App() {
           probeLatencies={channelLatencies}
           adminFetch={adminFetch}
           showToast={showToast}
+          onBatchProbe={handleBatchPing}
+          batchTesting={batchTesting}
         />
         <LoginModal
           isOpen={showLoginModal}
@@ -1789,7 +1865,7 @@ export default function App() {
             </div>
             <div>
               <h1 className="font-bold text-base text-slate-900 tracking-tight group-hover:text-indigo-600 transition">
-                {lang === 'zh' ? 'AI路由器' : 'nano-gateway'}
+                Airoute
               </h1>
               <span className="text-[11px] text-indigo-600 font-semibold tracking-wide block">
                 {t.brandSubtitle}
@@ -1938,6 +2014,18 @@ export default function App() {
             /* Regular User Navigation */
             <>
               <button
+                onClick={() => setCurrentTab('status')}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
+                  currentTab === 'status'
+                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                }`}
+              >
+                <Activity className="w-4 h-4 text-emerald-500" />
+                <span>{t.navStatus || '服务状态'}</span>
+              </button>
+
+              <button
                 onClick={() => setCurrentTab('wallet')}
                 className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
                   currentTab === 'wallet'
@@ -2025,13 +2113,7 @@ export default function App() {
           <div className="flex items-center justify-between">
             <button
               type="button"
-              onClick={() => {
-                if (adminUser?.role === 'admin') {
-                  setCurrentTab('status');
-                } else {
-                  setViewMode('status');
-                }
-              }}
+              onClick={() => setCurrentTab('status')}
               className="flex items-center space-x-1.5 text-emerald-600 hover:text-emerald-700 font-medium text-xs cursor-pointer hover:underline"
               title="查看系统运维与服务状态详情"
             >
@@ -2083,7 +2165,7 @@ export default function App() {
             </button>
 
             <a
-              href="https://github.com/ifnodoraemon/nano-gateway"
+              href="https://github.com/ifnodoraemon/airoute"
               target="_blank"
               rel="noreferrer"
               className="text-xs px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 font-medium flex items-center space-x-1.5 transition"
@@ -2511,6 +2593,8 @@ export default function App() {
               probeLatencies={channelLatencies}
               adminFetch={adminFetch}
               showToast={showToast}
+              onBatchProbe={handleBatchPing}
+              batchTesting={batchTesting}
               t={t}
             />
           )}
@@ -3270,46 +3354,39 @@ export default function App() {
                         </td>
                         <td className="py-4 px-6 font-mono text-xs">
                           <div className="flex items-center space-x-1.5">
-                            <span className="text-purple-600 dark:text-purple-400 truncate max-w-[130px] font-semibold" title={log.trace_id || log.chat_id || log.session_id}>
-                              {log.trace_id ? log.trace_id : (log.chat_id ? log.chat_id : (log.session_id ? log.session_id : <span className="text-slate-400 font-sans">-</span>))}
+                            <span className="text-purple-600 dark:text-purple-400 truncate max-w-[130px] font-semibold" title={log.trace_id}>
+                              {log.trace_id ? log.trace_id : <span className="text-slate-400 font-sans">-</span>}
                             </span>
-                            {(log.trace_id || log.chat_id || log.session_id) && (
+                            {log.trace_id && (
                               <>
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    const tid = log.trace_id || log.chat_id || log.session_id;
-                                    navigator.clipboard.writeText(tid);
-                                    showToast('Trace ID / 对话 ID 已复制', 'success');
+                                    navigator.clipboard.writeText(log.trace_id);
+                                    showToast('Trace ID 已复制', 'success');
                                   }}
                                   className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-slate-600 transition"
-                                  title="复制 Trace / 对话 ID"
+                                  title="复制 Trace ID"
                                 >
                                   <Copy className="w-3 h-3" />
                                 </button>
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    const targetId = log.trace_id || log.chat_id || log.session_id;
-                                    setSessionFilter(targetId);
-                                    fetchLogs({ sessionFilter: targetId });
-                                    showToast(`已筛选: ${targetId}`, 'info');
+                                    setSessionFilter(log.trace_id);
+                                    fetchLogs({ sessionFilter: log.trace_id });
+                                    showToast(`已筛选: ${log.trace_id}`, 'info');
                                   }}
                                   className="p-1 hover:bg-purple-50 dark:hover:bg-purple-900/50 rounded text-purple-600 dark:text-purple-400 transition"
-                                  title="按 Trace/Chat ID 快速过滤"
+                                  title="按 Trace ID 快速过滤"
                                 >
                                   <Search className="w-3 h-3" />
                                 </button>
                               </>
                             )}
                           </div>
-                          {log.chat_id && log.trace_id && log.chat_id !== log.trace_id && (
-                            <span className="block text-[10px] text-slate-400 truncate max-w-[130px]" title={`对话 ID: ${log.chat_id}`}>
-                              对话: {log.chat_id}
-                            </span>
-                          )}
-                          {log.session_id && log.session_id !== log.chat_id && log.session_id !== log.trace_id && (
-                            <span className="block text-[10px] text-slate-400 truncate max-w-[130px]" title={`关联会话: ${log.session_id}`}>
+                          {log.session_id && (
+                            <span className="block text-[10px] text-slate-400 truncate max-w-[130px]" title={`会话: ${log.session_id}`}>
                               会话: {log.session_id}
                             </span>
                           )}
@@ -3443,7 +3520,7 @@ export default function App() {
               onUserUpdated={(updatedUser) => {
                 setAdminUser(prev => {
                   const merged = prev ? { ...prev, ...updatedUser } : updatedUser;
-                  localStorage.setItem('nano_gateway_user', JSON.stringify(merged));
+                  localStorage.setItem('airoute_user', JSON.stringify(merged));
                   return merged;
                 });
                 fetchUserProfile();
@@ -3451,7 +3528,7 @@ export default function App() {
               onBalanceUpdate={(newBal) => {
                 setAdminUser(prev => {
                   const merged = prev ? { ...prev, balance: newBal } : prev;
-                  localStorage.setItem('nano_gateway_user', JSON.stringify(merged));
+                  localStorage.setItem('airoute_user', JSON.stringify(merged));
                   return merged;
                 });
                 fetchUserProfile();
@@ -3520,7 +3597,7 @@ export default function App() {
                       type="text"
                       value={playApiKey}
                       onChange={(e) => setPlayApiKey(e.target.value)}
-                      placeholder={keys.length > 0 ? `留空默认使用: ${keys[0].key} (${keys[0].tenant_id || '首个密钥'})` : 'sk-nano-xxxx (留空将使用网关免密直通)'}
+                      placeholder={keys.length > 0 ? `留空默认使用: ${keys[0].key} (${keys[0].tenant_id || '首个密钥'})` : 'sk-airoute-xxxx (留空将使用网关免密直通)'}
                       className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono"
                     />
                   </div>
@@ -3537,7 +3614,6 @@ export default function App() {
                         >
                           <option value="openai_chat">OpenAI Chat (/v1/chat/completions 对话补全)</option>
                           <option value="openai_response">OpenAI Responses (/v1/responses 官方新代智能体协议)</option>
-                          <option value="openai_text">OpenAI Text (/v1/completions 传统补全)</option>
                           <option value="anthropic_messages">Anthropic Claude (/v1/messages 原生协议)</option>
                         </select>
                       </div>
@@ -3893,7 +3969,7 @@ export default function App() {
                             <div className="flex items-center space-x-3">
                               <a
                                 href={imgResult.url || `data:image/png;base64,${imgResult.b64_json}`}
-                                download="nano-gateway-generated.png"
+                                download="airoute-generated.png"
                                 target="_blank"
                                 rel="noreferrer"
                                 className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white text-xs font-semibold rounded-xl flex items-center space-x-1.5 transition shadow-xs"
@@ -3938,7 +4014,7 @@ export default function App() {
                             <audio controls autoPlay src={ttsAudioUrl} className="w-full" />
                             <a
                               href={ttsAudioUrl}
-                              download="nano-gateway-speech.mp3"
+                              download="airoute-speech.mp3"
                               className="inline-flex items-center space-x-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-semibold shadow-xs transition"
                             >
                               <Download className="w-3.5 h-3.5" />
@@ -4011,7 +4087,7 @@ export default function App() {
                                 <video controls autoPlay src={videoResultUrl} className="w-full rounded-xl max-h-[320px] bg-black" />
                                 <a
                                   href={videoResultUrl}
-                                  download="nano-gateway-video.mp4"
+                                  download="airoute-video.mp4"
                                   target="_blank"
                                   rel="noreferrer"
                                   className="inline-flex items-center space-x-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-semibold shadow-xs transition"
@@ -4447,7 +4523,7 @@ export default function App() {
                       <div className="flex items-center space-x-2">
                         <Shield className="w-5 h-5 text-indigo-500" />
                         <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                          Nano-Gateway 核心架构与高可用设计规范
+                          Airoute 核心架构与高可用设计规范
                         </h3>
                       </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -4472,7 +4548,7 @@ export default function App() {
                       <div className="bg-white dark:bg-[#0b0f19] p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-900/50 text-xs space-y-2">
                         <span className="font-semibold text-slate-800 dark:text-slate-200 block">容灾工作流时序:</span>
                         <div className="font-mono text-[11px] text-slate-600 dark:text-slate-400 space-y-1">
-                          <div>[客户端请求] ➔ Nano-Gateway ➔ 首选渠道 A (Primary Provider)</div>
+                          <div>[客户端请求] ➔ Airoute ➔ 首选渠道 A (Primary Provider)</div>
                           <div className="text-amber-600 dark:text-amber-400">↳ 发生 429 Rate Limit / 500 错误 (未输出首字 chunk)</div>
                           <div className="text-emerald-600 dark:text-emerald-400">↳ 网关拦截异常并在 15ms 内重定向至备份渠道 B (Backup Provider)</div>
                           <div>↳ 客户端正常接收首字分块及完整 SSE 数据流，业务层调用成功率稳定保持 100%</div>
@@ -4580,7 +4656,7 @@ export default function App() {
                   <div className="space-y-4">
                     <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
                       <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Python OpenAI SDK 接入指南</h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">将官方 OpenAI SDK 的 base_url 直接指向 Nano-Gateway 网关入口即可。</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">将官方 OpenAI SDK 的 base_url 直接指向 Airoute 网关入口即可。</p>
                     </div>
 
                     <div className="relative group">
@@ -4588,8 +4664,8 @@ export default function App() {
 {`from openai import OpenAI
 
 client = OpenAI(
-    base_url="http://localhost:8080/v1",  # Nano-Gateway 负载均衡端口
-    api_key="sk-nano-xxxx",               # 在工作台签发的客户端访问密钥
+    base_url="http://localhost:8080/v1",  # Airoute 负载均衡端口
+    api_key="sk-airoute-xxxx",               # 在工作台签发的客户端访问密钥
 )
 
 response = client.chat.completions.create(
@@ -4603,7 +4679,7 @@ for chunk in response:
     print(content, end="", flush=True)`}
                       </pre>
                       <button
-                        onClick={() => copyToClipboard(`from openai import OpenAI\n\nclient = OpenAI(\n    base_url="http://localhost:8080/v1",\n    api_key="sk-nano-xxxx",\n)\n\nresponse = client.chat.completions.create(\n    model="deepseek-v3",\n    messages=[{"role": "user", "content": "你好！"}],\n    stream=True,\n)\n\nfor chunk in response:\n    content = chunk.choices[0].delta.content or ""\n    print(content, end="", flush=True)`)}
+                        onClick={() => copyToClipboard(`from openai import OpenAI\n\nclient = OpenAI(\n    base_url="http://localhost:8080/v1",\n    api_key="sk-airoute-xxxx",\n)\n\nresponse = client.chat.completions.create(\n    model="deepseek-v3",\n    messages=[{"role": "user", "content": "你好！"}],\n    stream=True,\n)\n\nfor chunk in response:\n    content = chunk.choices[0].delta.content or ""\n    print(content, end="", flush=True)`)}
                         className="absolute top-3 right-3 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] font-mono flex items-center space-x-1"
                       >
                         <Copy className="w-3 h-3" />
@@ -4625,7 +4701,7 @@ for chunk in response:
                       <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-2">cURL 极速调试命令:</h4>
                       <pre className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-mono text-slate-700 dark:text-slate-300 overflow-x-auto">
 {`curl -X POST http://localhost:8080/v1/chat/completions \\
-  -H "Authorization: Bearer sk-nano-xxxx" \\
+  -H "Authorization: Bearer sk-airoute-xxxx" \\
   -H "Content-Type: application/json" \\
   -d '{"model": "deepseek-v3", "messages": [{"role": "user", "content": "Ping"}], "stream": true}'`}
                       </pre>
@@ -4645,7 +4721,7 @@ for chunk in response:
 
 client = anthropic.Anthropic(
     base_url="http://localhost:8080",  # 网关根路径，将自动请求 /v1/messages
-    api_key="sk-nano-xxxx",            # 在工作台签发的客户端访问密钥
+    api_key="sk-airoute-xxxx",            # 在工作台签发的客户端访问密钥
 )
 
 message = client.messages.create(
@@ -4669,7 +4745,7 @@ print(message.content[0].text)`}
                       <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">Anthropic Token 预估计算 (/v1/messages/count_tokens):</h4>
                       <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl text-xs font-mono overflow-x-auto">
 {`curl -X POST http://localhost:8080/v1/messages/count_tokens \\
-  -H "x-api-key: sk-nano-xxxx" \\
+  -H "x-api-key: sk-airoute-xxxx" \\
   -H "anthropic-version: 2023-06-01" \\
   -H "Content-Type: application/json" \\
   -d '{"model": "claude-3-5-sonnet", "messages": [{"role": "user", "content": "Hello world"}]}'
@@ -4782,13 +4858,13 @@ GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
                         <span className="font-bold text-slate-900">1. 重排请求格式 (POST /v1/rerank):</span>
                         <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl font-mono overflow-x-auto text-[11px] leading-relaxed">
 {`curl -X POST http://localhost:8080/v1/rerank \\
-  -H "Authorization: Bearer sk-nano-xxxx" \\
+  -H "Authorization: Bearer sk-airoute-xxxx" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "bge-reranker-large",
     "query": "什么是企业级大模型网关的高可用与容灾设计？",
     "documents": [
-      "Nano-Gateway 采用全双工流式转发，首字分块前支持透明故障转移与熔断兜底。",
+      "Airoute 采用全双工流式转发，首字分块前支持透明故障转移与熔断兜底。",
       "今天天气非常晴朗，公园里的樱花盛开了，很适合去散步或野餐。",
       "基于 Raft 协议的分布式数据库能保证网络分区状态下的强一致性与多副本高可用。"
     ],
@@ -4808,7 +4884,7 @@ GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
       "index": 0,
       "relevance_score": 0.9856,
       "document": {
-        "text": "Nano-Gateway 采用全双工流式转发，首字分块前支持透明故障转移与熔断兜底。"
+        "text": "Airoute 采用全双工流式转发，首字分块前支持透明故障转移与熔断兜底。"
       }
     },
     {
@@ -4830,7 +4906,7 @@ GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
                       <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
                         <span className="font-bold">🎯 高可用熔断与透明兜底保障:</span>
                         <p className="leading-relaxed">
-                          当首选重排提供商（如私有部署的集群实例）发生 OOM、503 或网络异常时，Nano-Gateway 会在毫秒级内自动安全切换至备选重排提供商，为企业级 RAG 知识库检索流水线提供全天候 99.99% 的 SLA 稳定可用保障。
+                          当首选重排提供商（如私有部署的集群实例）发生 OOM、503 或网络异常时，Airoute 会在毫秒级内自动安全切换至备选重排提供商，为企业级 RAG 知识库检索流水线提供全天候 99.99% 的 SLA 稳定可用保障。
                         </p>
                       </div>
                     </div>
@@ -4852,7 +4928,7 @@ docker compose up -d --build
 
                       <h4 className="text-xs font-bold text-slate-800 pt-2">2. Kubernetes Helm 一键部署:</h4>
                       <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl text-xs font-mono overflow-x-auto">
-helm install nano-gateway ./helm/nano-gateway -n gateway --create-namespace
+helm install airoute ./helm/airoute -n gateway --create-namespace
                       </pre>
                     </div>
                   </div>
@@ -5168,7 +5244,7 @@ helm install nano-gateway ./helm/nano-gateway -n gateway --create-namespace
                   <button
                     type="button"
                     onClick={() => {
-                      const rand = 'sk-nano-' + Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 6);
+                      const rand = 'sk-airoute-' + Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 6);
                       setNewKey(prev => ({ ...prev, key: rand }));
                     }}
                     className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 cursor-pointer"

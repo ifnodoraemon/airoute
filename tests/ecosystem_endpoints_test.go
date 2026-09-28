@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/nano-gateway/internal/api"
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
-	"github.com/ifnodoraemon/nano-gateway/internal/router"
+	"github.com/ifnodoraemon/airoute/internal/api"
+	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/router"
 )
 
 func TestModelDetailEndpoint(t *testing.T) {
@@ -48,8 +48,8 @@ func TestModelDetailEndpoint(t *testing.T) {
 	if modelItem.ID != "gpt-4o" {
 		t.Errorf("expected model id 'gpt-4o', got %s", modelItem.ID)
 	}
-	if modelItem.OwnedBy != "nano-gateway" {
-		t.Errorf("expected owned_by 'nano-gateway', got %s", modelItem.OwnedBy)
+	if modelItem.OwnedBy != "airoute" {
+		t.Errorf("expected owned_by 'airoute', got %s", modelItem.OwnedBy)
 	}
 
 	// 2. 404 case: non-existent model
@@ -110,7 +110,7 @@ func TestGeminiInboundProtocol(t *testing.T) {
 					"index": 0,
 					"message": {
 						"role": "assistant",
-						"content": "Hello from nano-gateway via Gemini Inbound!"
+						"content": "Hello from airoute via Gemini Inbound!"
 					},
 					"finish_reason": "stop"
 				}
@@ -190,7 +190,7 @@ func TestGeminiInboundProtocol(t *testing.T) {
 	part0 := parts[0].(map[string]any)
 	text := part0["text"].(string)
 
-	if text != "Hello from nano-gateway via Gemini Inbound!" {
+	if text != "Hello from airoute via Gemini Inbound!" {
 		t.Errorf("unexpected translated text: %s", text)
 	}
 }

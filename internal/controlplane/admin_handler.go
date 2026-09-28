@@ -13,13 +13,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/nano-gateway/internal/billing"
-	"github.com/ifnodoraemon/nano-gateway/internal/distributed"
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
-	"github.com/ifnodoraemon/nano-gateway/internal/provider"
-	"github.com/ifnodoraemon/nano-gateway/internal/router"
-	"github.com/ifnodoraemon/nano-gateway/internal/storage"
-	"github.com/ifnodoraemon/nano-gateway/internal/telemetry"
+	"github.com/ifnodoraemon/airoute/internal/billing"
+	"github.com/ifnodoraemon/airoute/internal/distributed"
+	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/provider"
+	"github.com/ifnodoraemon/airoute/internal/router"
+	"github.com/ifnodoraemon/airoute/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
 // AdminHandler handles REST endpoints for the Control Plane.
@@ -1032,10 +1032,12 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 		StartTime: c.Query("start_time"),
 		EndTime:   c.Query("end_time"),
 		TraceID:   c.Query("trace_id"),
-		ChatID:    c.Query("chat_id"),
 		SessionID: c.Query("session_id"),
 		Model:     c.Query("model"),
 		TenantID:  c.Query("tenant_id"),
+	}
+	if filter.TraceID == "" && c.Query("chat_id") != "" {
+		filter.TraceID = c.Query("chat_id")
 	}
 
 	claimsVal, exists := c.Get("admin_claims")

@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/nano-gateway/internal/billing"
-	"github.com/ifnodoraemon/nano-gateway/internal/middleware"
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
-	"github.com/ifnodoraemon/nano-gateway/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/billing"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
+	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
 // HandleRerank handles cross-encoder rerank POST /v1/rerank.
@@ -86,11 +86,15 @@ func (h *Handler) HandleRerank(c *gin.Context) {
 
 	sessionID := c.GetHeader("X-Session-ID")
 	if sessionID == "" {
+		sessionID = c.GetHeader("X-Airoute-Session-ID")
+	}
+	if sessionID == "" {
 		sessionID = c.GetHeader("X-Nano-Session-ID")
 	}
 	if sessionID == "" {
 		sessionID = fmt.Sprintf("sess_rrk_%d_%x", time.Now().Unix(), time.Now().UnixNano()%1000000)
 	}
+	c.Header("X-Airoute-Session-ID", sessionID)
 	c.Header("X-Nano-Session-ID", sessionID)
 
 	dur := time.Since(start)

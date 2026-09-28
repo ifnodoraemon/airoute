@@ -2,14 +2,14 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "nano-gateway.fullname" . }}
+  name: {{ include "airoute.fullname" . }}
   labels:
-    {{- include "nano-gateway.labels" . | nindent 4 }}
+    {{- include "airoute.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "nano-gateway.fullname" . }}
+    name: {{ include "airoute.fullname" . }}
   minReplicas: {{ .Values.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.autoscaling.maxReplicas }}
   metrics:

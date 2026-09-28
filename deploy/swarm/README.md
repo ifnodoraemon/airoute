@@ -1,6 +1,6 @@
-# Nano-Gateway 企业级高可用多机部署方案 (Docker Swarm)
+# Airoute 企业级高可用多机部署方案 (Docker Swarm)
 
-本文档介绍 **Nano-Gateway** 基于 **Docker Swarm** 的多机分布式高可用（HA）、高性能、高扩展部署方案，涵盖分布式数据库（PostgreSQL）、分布式缓存与消息队列（Redis Streams）、负载均衡与流式穿透（NGINX Ingress）、以及全链路 `TraceID` 日志归集架构。
+本文档介绍 **Airoute** 基于 **Docker Swarm** 的多机分布式高可用（HA）、高性能、高扩展部署方案，涵盖分布式数据库（PostgreSQL）、分布式缓存与消息队列（Redis Streams）、负载均衡与流式穿透（NGINX Ingress）、以及全链路 `TraceID` 日志归集架构。
 
 ---
 
@@ -18,7 +18,7 @@
                      ┌───────────────────────────┴───────────────────────────┐
                      ▼                                                       ▼
         ┌─────────────────────────┐                             ┌─────────────────────────┐
-        │  Nano-Gateway 节点 1    │  ... (可水平扩缩至 N 个节点)  │  Nano-Gateway 节点 N    │
+        │  Airoute 节点 1    │  ... (可水平扩缩至 N 个节点)  │  Airoute 节点 N    │
         │  - TraceID 注入与传播    │                             │  - TraceID 注入与传播    │
         │  - 分布式滑动窗口限流    │                             │  - 分布式滑动窗口限流    │
         │  - 会话粘滞与分时计费   │                             │  - 会话粘滞与分时计费   │
@@ -47,7 +47,7 @@
 
 ### 核心特性亮点
 1. **多机跨节点容器编排 (Docker Swarm Overlay Network)**:
-   - 网关服务 `nano-gateway` 跨多台物理机/虚拟机无缝扩缩容（默认 3 副本，支持一键 `scale=10`）。
+   - 网关服务 `airoute` 跨多台物理机/虚拟机无缝扩缩容（默认 3 副本，支持一键 `scale=10`）。
    - Swarm 内部加密 Overlay 专用子网 `nano-swarm-net`，节点间通信完全内网隔离。
 2. **分布式数据库架构 (PostgreSQL 16 + Dialect Rebinding)**:
    - 从单机 SQLite 扩展至企业级分布式 PostgreSQL，彻底解决 SQLite 多节点并发写锁死问题。
@@ -78,7 +78,7 @@ docker swarm init --advertise-addr <主节点IP>
 
 ### 步骤 2：一键部署 Stack
 ```bash
-cd nano-gateway
+cd airoute
 
 # 自动创建 overlay 网络并部署服务
 ./deploy/swarm/deploy.sh --build
@@ -96,7 +96,7 @@ docker stack ps nano-stack
 预期输出示例：
 ```
 ID             NAME                       MODE         REPLICAS   IMAGE                 PORTS
-o12a9bc3def    nano-stack_nano-gateway    replicated   3/3        nano-gateway:latest   
+o12a9bc3def    nano-stack_airoute    replicated   3/3        airoute:latest   
 p456def789a    nano-stack_nano-lb         replicated   2/2        nginx:alpine          *:8080->80/tcp
 q789abc012d    nano-stack_nano-postgres   replicated   1/1        postgres:16-alpine    
 r012def345e    nano-stack_nano-redis      replicated   1/1        redis:7-alpine        
@@ -110,8 +110,8 @@ r012def345e    nano-stack_nano-redis      replicated   1/1        redis:7-alpine
 `docker-stack.yml` 已配置 `order: start-first` 与 `parallelism: 1`：
 ```bash
 # 重新构建新版本镜像并滚动部署
-docker build -t nano-gateway:v1.1.0 .
-docker service update --image nano-gateway:v1.1.0 nano-stack_nano-gateway
+docker build -t airoute:v1.1.0 .
+docker service update --image airoute:v1.1.0 nano-stack_airoute
 ```
 Swarm 将先拉起健康的新容器，等待 `/health` 健康检查通过后，再优雅销毁旧容器；若升级失败将自动回滚（`rollback`）。
 
@@ -119,7 +119,7 @@ Swarm 将先拉起健康的新容器，等待 `/health` 健康检查通过后，
 业务流量突增时，一键秒级扩容网关计算节点：
 ```bash
 # 将网关节点扩容到 10 个实例
-docker service scale nano-stack_nano-gateway=10
+docker service scale nano-stack_airoute=10
 ```
 
 ### 3.3 全链路 TraceID 排查日志
@@ -127,6 +127,6 @@ docker service scale nano-stack_nano-gateway=10
 1. 打开 Web 控制台 -> **调用审计日志** -> 点击详情，顶部显示醒目的 **Trace ID**，支持一键点击复制与“追踪全链路”。
 2. 或者在服务器端直接通过 `Trace ID` 检索集群容器日志：
 ```bash
-docker service logs nano-stack_nano-gateway | grep "tr-xxxx-yyyy"
+docker service logs nano-stack_airoute | grep "tr-xxxx-yyyy"
 ```
 JSON 日志将完整展示该请求的请求时间、上游耗时、TTFT、扣减费用、客户端 IP 以及上游错误上下文。

@@ -1,9 +1,9 @@
-# Nano-Gateway 🚀
+# Airoute 🚀
 
-[![CI Quality Gate & Automated Testing](https://github.com/ifnodoraemon/nano-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/ifnodoraemon/nano-gateway/actions/workflows/ci.yml)
-[![Build & Publish Multi-Arch Docker Image](https://github.com/ifnodoraemon/nano-gateway/actions/workflows/docker.yml/badge.svg)](https://github.com/ifnodoraemon/nano-gateway/actions/workflows/docker.yml)
+[![CI Quality Gate & Automated Testing](https://github.com/ifnodoraemon/airoute/actions/workflows/ci.yml/badge.svg)](https://github.com/ifnodoraemon/airoute/actions/workflows/ci.yml)
+[![Build & Publish Multi-Arch Docker Image](https://github.com/ifnodoraemon/airoute/actions/workflows/docker.yml/badge.svg)](https://github.com/ifnodoraemon/airoute/actions/workflows/docker.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/github.com/ifnodoraemon/nano-gateway)](https://goreportcard.com/report/github.com/ifnodoraemon/nano-gateway)
+[![Go Report Card](https://goreportcard.com/badge/github.com/ifnodoraemon/airoute)](https://goreportcard.com/report/github.com/ifnodoraemon/airoute)
 
 生产级、极速并发、极致高可用且高韧性的企业级 LLM 与全模态智能网关。从零以 Go 语言构建，原生支持 **Any-to-Any 协议矩阵**、**级联模型源 (Cascading Providers)**、**下游智能探测 (Auto-Probe)** 与 **全双工协议自动转译**。
 
@@ -65,7 +65,7 @@
 flowchart TD
     Client["下游客户端 (OpenAI SDK / Claude SDK / 业务 Agent)"] --> LB["负载均衡器 (Nginx / K8s Ingress)"]
     
-    subgraph Cluster["Nano-Gateway 高可用集群 (无状态水平扩展)"]
+    subgraph Cluster["Airoute 高可用集群 (无状态水平扩展)"]
         Node1["Gateway 节点 1"]
         Node2["Gateway 节点 2"]
         NodeN["Gateway 节点 N"]
@@ -121,7 +121,7 @@ flowchart TD
 make build
 
 # 2. 启动网关
-./bin/nano-gateway -config configs/config.yaml
+./bin/airoute -config configs/config.yaml
 ```
 - 工作台地址：`http://localhost:8080/app/` 或 `http://localhost:8080/`
 - Prometheus 指标：`http://localhost:8080/metrics`
@@ -137,7 +137,7 @@ Nginx 会自动在 `http://localhost:80` 暴露统一入口，并以 `least_conn
 ### 方式 C: Kubernetes Helm Chart 部署
 ```bash
 # 使用 Helm 一键部署至 K8s
-helm install nano-gateway ./helm/nano-gateway -n gateway --create-namespace
+helm install airoute ./helm/airoute -n gateway --create-namespace
 ```
 
 ---

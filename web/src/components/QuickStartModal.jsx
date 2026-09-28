@@ -9,7 +9,7 @@ export default function QuickStartModal({ virtualKey, onClose, onCopy }) {
 
   const origin = window.location.origin || 'http://localhost:8080';
   const baseUrl = `${origin}/v1`;
-  const keyStr = virtualKey.key || 'sk-nano-xxxx';
+  const keyStr = virtualKey.key || 'sk-airoute-xxxx';
 
   const pythonCode = `from openai import OpenAI
 
@@ -89,7 +89,7 @@ async function main() {
 main();
 `;
 
-  const claudeEnvCode = `# 在终端中配置环境变量后，Claude Code / Cline / Cursor 将直接经由 Nano-Gateway 分发
+  const claudeEnvCode = `# 在终端中配置环境变量后，Claude Code / Cline / Cursor 将直接经由 Airoute 分发
 export ANTHROPIC_BASE_URL="${origin}"
 export ANTHROPIC_API_KEY="${keyStr}"
 

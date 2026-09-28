@@ -5,9 +5,9 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/nano-gateway/internal/config"
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
-	"github.com/ifnodoraemon/nano-gateway/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/config"
+	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
 const (
@@ -44,10 +44,18 @@ func AuthMiddleware() gin.HandlerFunc {
 			rawKey = strings.TrimSpace(c.GetHeader("x-api-key"))
 		}
 
+		// Also support Google Gemini SDK's query param 'key' and header 'x-goog-api-key'
+		if rawKey == "" {
+			rawKey = strings.TrimSpace(c.Query("key"))
+		}
+		if rawKey == "" {
+			rawKey = strings.TrimSpace(c.GetHeader("x-goog-api-key"))
+		}
+
 		if rawKey == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error": gin.H{
-					"message": "Missing authentication key. Please provide 'Authorization: Bearer <key>' or 'x-api-key: <key>'",
+					"message": "Missing authentication key. Please provide 'Authorization: Bearer <key>', 'x-api-key: <key>', 'x-goog-api-key: <key>', or query parameter '?key=<key>'",
 					"type":    "invalid_request_error",
 					"code":    "missing_api_key",
 				},

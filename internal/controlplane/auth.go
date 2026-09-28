@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/nano-gateway/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/storage"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -24,7 +24,7 @@ var (
 	adminSecret = func() []byte {
 		sec := os.Getenv("GATEWAY_ADMIN_SECRET")
 		if sec == "" {
-			sec = "nano-gateway-cluster-hmac-secret-v1"
+			sec = "airoute-cluster-hmac-secret-v1"
 		}
 		return []byte(sec)
 	}()

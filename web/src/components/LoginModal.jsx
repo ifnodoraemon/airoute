@@ -52,8 +52,8 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
       const data = await res.json();
 
       if (res.ok && data.code === 0 && data.data?.token) {
-        localStorage.setItem('nano_admin_token', data.data.token);
-        localStorage.setItem('nano_admin_user', JSON.stringify(data.data.user));
+        localStorage.setItem('airoute_admin_token', data.data.token);
+        localStorage.setItem('airoute_admin_user', JSON.stringify(data.data.user));
         onLoginSuccess(data.data.token, data.data.user);
         onClose();
       } else {
@@ -131,8 +131,8 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
       const data = await res.json();
 
       if (res.ok && data.code === 0 && data.data?.token) {
-        localStorage.setItem('nano_admin_token', data.data.token);
-        localStorage.setItem('nano_admin_user', JSON.stringify(data.data.user));
+        localStorage.setItem('airoute_admin_token', data.data.token);
+        localStorage.setItem('airoute_admin_user', JSON.stringify(data.data.user));
         onLoginSuccess(data.data.token, data.data.user);
         onClose();
       } else {
@@ -157,8 +157,8 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
       });
       const data = await res.json();
       if (res.ok && data.code === 0 && data.data?.token) {
-        localStorage.setItem('nano_admin_token', data.data.token);
-        localStorage.setItem('nano_admin_user', JSON.stringify(data.data.user));
+        localStorage.setItem('airoute_admin_token', data.data.token);
+        localStorage.setItem('airoute_admin_user', JSON.stringify(data.data.user));
         onLoginSuccess(data.data.token, data.data.user);
         onClose();
       } else {
@@ -188,7 +188,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
             </div>
             <div>
               <h3 className="font-bold text-base text-slate-900 tracking-tight">
-                Nano Gateway 统一门户
+                Airoute 统一门户
               </h3>
               <p className="text-[11px] text-slate-500">统一身份验证与额度管理</p>
             </div>

@@ -45,7 +45,7 @@ export default function LandingPage({
 
 client = OpenAI(
     base_url="${origin}/v1",
-    api_key="sk-nano-your-api-key",
+    api_key="sk-airoute-your-api-key",
     default_headers={"X-Session-ID": "session_user_001"}
 )
 
@@ -62,7 +62,7 @@ for chunk in response:
 
 client = anthropic.Anthropic(
     base_url="${origin}",
-    api_key="sk-nano-your-api-key",
+    api_key="sk-airoute-your-api-key",
 )
 
 message = client.messages.create(
@@ -74,7 +74,7 @@ print(message.content[0].text)`;
 
   const curlSnippet = `# 标准对话推理 (Chat Completions)
 curl -X POST "${origin}/v1/chat/completions" \\
-  -H "Authorization: Bearer sk-nano-your-api-key" \\
+  -H "Authorization: Bearer sk-airoute-your-api-key" \\
   -H "X-Session-ID: session_user_001" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -85,24 +85,24 @@ curl -X POST "${origin}/v1/chat/completions" \\
 
   const multimodalSnippet = `# 1. 图像生成 (FLUX.1-Pro)
 curl -X POST "${origin}/v1/images/generations" \\
-  -H "Authorization: Bearer sk-nano-your-api-key" \\
+  -H "Authorization: Bearer sk-airoute-your-api-key" \\
   -H "Content-Type: application/json" \\
   -d '{"model": "flux-1.1-pro", "prompt": "极简科技风云原生 AI 路由器", "size": "1024x1024"}'
 
 # 2. 语音转写 (Whisper-Large-V3-Turbo，支持 16kHz mono Opus 压缩格式)
 curl -X POST "${origin}/v1/audio/transcriptions" \\
-  -H "Authorization: Bearer sk-nano-your-api-key" \\
+  -H "Authorization: Bearer sk-airoute-your-api-key" \\
   -F file="@speech.opus" \\
   -F model="whisper-large-v3-turbo"
 
 # 3. 影视级视频生成与状态轮询 (Sora 2)
 curl -X POST "${origin}/v1/videos/generations" \\
-  -H "Authorization: Bearer sk-nano-your-api-key" \\
+  -H "Authorization: Bearer sk-airoute-your-api-key" \\
   -H "Content-Type: application/json" \\
   -d '{"model": "sora-2", "prompt": "未来赛博朋克城市雨夜飞车", "aspect_ratio": "16:9"}'
 
 curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
-  -H "Authorization: Bearer sk-nano-your-api-key"`;
+  -H "Authorization: Bearer sk-airoute-your-api-key"`;
 
   const sessionSnippet = `# 会话黏连与 Prompt 缓存降本
 #
@@ -641,7 +641,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
             <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
               <div className="flex items-center justify-between">
-                <span className="font-mono font-bold text-slate-800">Authorization: Bearer sk-nano-...</span>
+                <span className="font-mono font-bold text-slate-800">Authorization: Bearer sk-airoute-...</span>
                 <span className="text-indigo-600 font-semibold text-[10px] bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">必填</span>
               </div>
               <p className="text-[11px] text-slate-500">工作台签发的 API 密钥，毫秒级内存校验、租户限流与余额计费。</p>
@@ -657,7 +657,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
 
             <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
               <div className="flex items-center justify-between">
-                <span className="font-mono font-bold text-slate-800">x-api-key: sk-nano-...</span>
+                <span className="font-mono font-bold text-slate-800">x-api-key: sk-airoute-...</span>
                 <span className="text-slate-400 text-[10px]">SDK 兼容</span>
               </div>
               <p className="text-[11px] text-slate-500">Anthropic Claude 原生 SDK 请求头，网关双向透明自动识别转译。</p>
@@ -677,7 +677,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
             2026 旗舰模型矩阵与基准费率
           </h2>
           <p className="text-sm text-slate-500">
-            支持 Prompt 缓存优惠（立减 90%）与夜间闲时分时优惠（00:00 - 08:30 半价），折上折最高节约 95% 成本
+            支持 Prompt 缓存优惠（立减 90%）与灵活分时策略优惠（支持多时段与周末半价），折上折最高节约 95% 成本
           </p>
         </div>
 
@@ -686,12 +686,12 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
           <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h3 className="font-bold text-sm text-slate-900">主流模型费率对照表 (Rates per 1M Tokens)</h3>
-              <p className="text-xs text-slate-500 mt-0.5">网关实时计算 Token 与时间段，并在响应头返回 X-Nano-Cost 计费信息</p>
+              <p className="text-xs text-slate-500 mt-0.5">网关实时计算 Token 与时间段，并在响应头返回 X-Airoute-Cost 计费信息</p>
             </div>
             <div className="flex items-center space-x-2">
               <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center space-x-1">
                 <Moon className="w-3 h-3" />
-                <span>🌙 闲时 00:00-08:30 享 5 折</span>
+                <span>🌙 灵活分时时段优惠</span>
               </span>
               <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">
                 ⚡ 缓存省 90%
@@ -706,7 +706,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                   <th className="py-3 px-5 font-semibold">模型标识 (Model)</th>
                   <th className="py-3 px-4 font-semibold">基准输入 (/1M)</th>
                   <th className="py-3 px-4 font-semibold">基准输出 (/1M)</th>
-                  <th className="py-3 px-4 font-semibold">🌙 闲时优惠 (5折)</th>
+                  <th className="py-3 px-4 font-semibold">🌙 闲时优惠折率</th>
                   <th className="py-3 px-4 font-semibold">Prompt 缓存命中 (/1M)</th>
                   <th className="py-3 px-4 font-semibold">固定单次费用</th>
                   <th className="py-3 px-5 font-semibold">最高降本</th>
@@ -938,7 +938,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
       <footer className="mt-auto border-t border-slate-200 bg-white py-12 px-6 text-xs text-slate-500">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center space-x-2">
-            <span className="font-extrabold text-slate-800 text-sm">Nano</span>
+            <span className="font-extrabold text-slate-800 text-sm">Airoute</span>
             <span>· © {new Date().getFullYear()} 极简高性能 AI 路由器</span>
           </div>
 
@@ -955,7 +955,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
             <button onClick={onViewStatus} className="hover:text-slate-800 cursor-pointer">
               服务运行状态 (SLA)
             </button>
-            <a href="https://github.com/ifnodoraemon/nano-gateway" target="_blank" rel="noreferrer" className="hover:text-slate-800">
+            <a href="https://github.com/ifnodoraemon/airoute" target="_blank" rel="noreferrer" className="hover:text-slate-800">
               GitHub 源码
             </a>
           </div>

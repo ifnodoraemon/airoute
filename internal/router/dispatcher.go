@@ -14,11 +14,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ifnodoraemon/nano-gateway/internal/distributed"
-	"github.com/ifnodoraemon/nano-gateway/internal/middleware"
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
-	"github.com/ifnodoraemon/nano-gateway/internal/provider"
-	"github.com/ifnodoraemon/nano-gateway/internal/telemetry"
+	"github.com/ifnodoraemon/airoute/internal/distributed"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
+	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/provider"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
 // Dispatcher routes requests to appropriate providers with intelligent fallback.
@@ -108,7 +108,7 @@ func (d *Dispatcher) GetAllModelFallbacks() map[string]string {
 // ContextKeySession is the context key type for sticky session IDs.
 type ContextKeySession string
 
-const ContextKeySessionID ContextKeySession = "nano_session_id"
+const ContextKeySessionID ContextKeySession = "airoute_session_id"
 
 // GetChannelsForModel returns matching channels for a given model, sorted by priority.
 func (d *Dispatcher) GetChannelsForModel(modelName string) []*model.ChannelConfig {

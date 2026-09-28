@@ -3,8 +3,8 @@ package tests
 import (
 	"testing"
 
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
-	"github.com/ifnodoraemon/nano-gateway/internal/router"
+	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/router"
 	"github.com/stretchr/testify/assert"
 )
 

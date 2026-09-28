@@ -1,7 +1,8 @@
 # Binaries
 bin/
-nano
-nano-gateway
+/airoute
+/nano
+/nano-gateway
 *.exe
 *.exe~
 *.dll

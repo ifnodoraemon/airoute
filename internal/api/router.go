@@ -2,11 +2,11 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/nano-gateway/internal/controlplane"
-	"github.com/ifnodoraemon/nano-gateway/internal/middleware"
-	"github.com/ifnodoraemon/nano-gateway/internal/router"
-	"github.com/ifnodoraemon/nano-gateway/internal/storage"
-	"github.com/ifnodoraemon/nano-gateway/web"
+	"github.com/ifnodoraemon/airoute/internal/controlplane"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
+	"github.com/ifnodoraemon/airoute/internal/router"
+	"github.com/ifnodoraemon/airoute/internal/storage"
+	"github.com/ifnodoraemon/airoute/web"
 )
 
 // SetupRouter initializes and configures the Gin engine.
@@ -54,6 +54,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 			authGroup.GET("/oauth/:provider", adminHandler.OAuthInitiate)
 			authGroup.POST("/oauth/:provider/callback", adminHandler.OAuthCallback)
 			authGroup.GET("/oauth/:provider/callback", adminHandler.OAuthCallback)
+			authGroup.GET("/me", adminHandler.AdminAuthMiddleware(), adminHandler.GetMe)
 		}
 
 		// Public Payment Webhooks
@@ -63,6 +64,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 		userGroup := r.Group("/api/v1/user")
 		userGroup.Use(adminHandler.AdminAuthMiddleware())
 		{
+			userGroup.GET("/me", adminHandler.GetMe)
 			userGroup.GET("/wallet", adminHandler.GetUserWallet)
 			userGroup.POST("/wallet/redeem", adminHandler.RedeemWalletCode)
 			userGroup.POST("/wallet/recharge/stripe/session", adminHandler.CreateStripeRechargeSession)
@@ -76,17 +78,10 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 
 		admin := r.Group("/api/v1/admin")
 		{
-			// Public Auth Endpoint (backward compatibility)
-			admin.POST("/auth/login", adminHandler.Login)
-
 			// Protected Admin API group
 			protected := admin.Group("")
 			protected.Use(adminHandler.AdminAuthMiddleware())
 			{
-				// User-accessible endpoints under /api/v1/admin
-				protected.GET("/auth/me", adminHandler.GetMe)
-				protected.POST("/auth/password", adminHandler.ChangePassword)
-
 				// Virtual Keys (scoped to owner for non-admins)
 				protected.GET("/keys", adminHandler.ListVirtualKeys)
 				protected.POST("/keys", adminHandler.CreateVirtualKey)
@@ -156,10 +151,9 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 	v1.Use(middleware.AuthMiddleware())
 	v1.Use(middleware.RateLimitMiddleware())
 	{
-		// OpenAI ingress (Chat completions + Responses + Text completions + Models + Embeddings + Rerank + Moderations)
+		// OpenAI ingress (Chat completions + Responses + Models + Embeddings + Rerank + Moderations)
 		v1.POST("/chat/completions", handler.HandleChatCompletions)
 		v1.POST("/responses", handler.HandleResponses)
-		v1.POST("/completions", handler.HandleCompletions)
 		v1.GET("/models", handler.HandleModels)
 		v1.GET("/models/:model", handler.HandleModelDetail)
 		v1.POST("/moderations", handler.HandleModerations)
@@ -180,8 +174,10 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 		v1.GET("/videos/tasks/:id", mmHandler.HandleVideoTask)
 	}
 
-	// Google Gemini v1beta Ingress group
+	// Google Gemini v1beta Ingress group (protected by unified Auth & RateLimit middlewares)
 	v1beta := r.Group("/v1beta")
+	v1beta.Use(middleware.AuthMiddleware())
+	v1beta.Use(middleware.RateLimitMiddleware())
 	{
 		v1beta.GET("/models", handler.HandleGeminiModels)
 		v1beta.GET("/models/*modelAction", handler.HandleGeminiModelDetail)

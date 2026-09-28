@@ -57,8 +57,8 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
       const data = await res.json();
 
       if (res.ok && data.code === 0 && data.data?.token) {
-        localStorage.setItem('nano_admin_token', data.data.token);
-        localStorage.setItem('nano_admin_user', JSON.stringify(data.data.user));
+        localStorage.setItem('airoute_admin_token', data.data.token);
+        localStorage.setItem('airoute_admin_user', JSON.stringify(data.data.user));
         onLoginSuccess(data.data.token, data.data.user);
       } else {
         setError(data.error || '登录失败，请核对用户名/邮箱与密码');
@@ -134,8 +134,8 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
       const data = await res.json();
 
       if (res.ok && data.code === 0 && data.data?.token) {
-        localStorage.setItem('nano_admin_token', data.data.token);
-        localStorage.setItem('nano_admin_user', JSON.stringify(data.data.user));
+        localStorage.setItem('airoute_admin_token', data.data.token);
+        localStorage.setItem('airoute_admin_user', JSON.stringify(data.data.user));
         onLoginSuccess(data.data.token, data.data.user);
       } else {
         setError(data.error || '注册失败，请检查填写内容');
@@ -169,8 +169,8 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
           });
           const simData = await simRes.json();
           if (simRes.ok && simData.code === 0 && simData.data?.token) {
-            localStorage.setItem('nano_admin_token', simData.data.token);
-            localStorage.setItem('nano_admin_user', JSON.stringify(simData.data.user));
+            localStorage.setItem('airoute_admin_token', simData.data.token);
+            localStorage.setItem('airoute_admin_user', JSON.stringify(simData.data.user));
             onLoginSuccess(simData.data.token, simData.data.user);
             return;
           }
@@ -482,7 +482,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
 
       {/* Footer copyright */}
       <div className="max-w-md w-full mx-auto text-center text-xs text-slate-400">
-        © {new Date().getFullYear()} Nano Gateway · 极简高性能 AI 路由器
+        © {new Date().getFullYear()} Airoute · 极简高性能 AI 路由器
       </div>
     </div>
   );

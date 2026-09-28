@@ -65,7 +65,7 @@ export default function AccountManageModal({
 
     setLoading(true);
     try {
-      const res = await adminFetch('/api/v1/admin/auth/password', {
+      const res = await adminFetch('/api/v1/user/password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

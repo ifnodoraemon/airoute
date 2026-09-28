@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/nano-gateway/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/storage"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -756,7 +756,7 @@ func (h *AdminHandler) CreateStripeRechargeSession(c *gin.Context) {
 		data.Set("client_reference_id", orderNo)
 		data.Set("line_items[0][price_data][currency]", strings.ToLower(currency))
 		data.Set("line_items[0][price_data][unit_amount]", strconv.FormatInt(int64(req.Amount*100), 10))
-		data.Set("line_items[0][price_data][product_data][name]", fmt.Sprintf("Nano Gateway 钱包充值 (¥%.2f)", req.Amount))
+		data.Set("line_items[0][price_data][product_data][name]", fmt.Sprintf("Airoute 钱包充值 (¥%.2f)", req.Amount))
 		data.Set("line_items[0][quantity]", "1")
 
 		httpReq, _ := http.NewRequest("POST", "https://api.stripe.com/v1/checkout/sessions", strings.NewReader(data.Encode()))

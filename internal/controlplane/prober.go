@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
-	"github.com/ifnodoraemon/nano-gateway/internal/provider"
+	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/provider"
 )
 
 // ProbeRequest contains connection parameters for probing downstream services.

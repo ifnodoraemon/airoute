@@ -1,6 +1,6 @@
 # Downstream Provider Integration Guide
 
-Nano-Gateway supports native multi-protocol downstream engines with zero special-casing and automatic capability probing.
+Airoute supports native multi-protocol downstream engines with zero special-casing and automatic capability probing.
 
 ---
 
@@ -53,4 +53,4 @@ Nano-Gateway supports native multi-protocol downstream engines with zero special
 
 - **vLLM / SGLang**: Base URL usually `http://localhost:8000/v1`. Supports ultra-fast continuous batching and SSE streams.
 - **Ollama**: Base URL usually `http://localhost:11434/v1`. Auto-Probe detects local model tags from `/api/tags`.
-- **Pure Text Downstreams**: If the local engine only serves `/v1/completions`, Nano-Gateway transparently translates all incoming Chat requests into completion prompts, converting the response into standard Chat choices and streaming chunks.
+- **Pure Text Downstreams**: If the local engine only serves `/v1/completions`, Airoute transparently translates all incoming Chat requests into completion prompts, converting the response into standard Chat choices and streaming chunks.

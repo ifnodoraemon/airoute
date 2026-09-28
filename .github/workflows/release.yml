@@ -18,19 +18,19 @@ jobs:
         include:
           - os: linux
             arch: amd64
-            artifact_name: nano-gateway-linux-amd64
+            artifact_name: airoute-linux-amd64
           - os: linux
             arch: arm64
-            artifact_name: nano-gateway-linux-arm64
+            artifact_name: airoute-linux-arm64
           - os: darwin
             arch: amd64
-            artifact_name: nano-gateway-darwin-amd64
+            artifact_name: airoute-darwin-amd64
           - os: darwin
             arch: arm64
-            artifact_name: nano-gateway-darwin-arm64
+            artifact_name: airoute-darwin-arm64
           - os: windows
             arch: amd64
-            artifact_name: nano-gateway-windows-amd64.exe
+            artifact_name: airoute-windows-amd64.exe
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4

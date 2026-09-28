@@ -2,13 +2,13 @@
 set -e
 
 # ==============================================================================
-# Nano-Gateway Docker Swarm Multi-Node Deployment Helper
+# Airoute Docker Swarm Multi-Node Deployment Helper
 # ==============================================================================
 
 STACK_NAME="nano-stack"
 
 echo "=========================================================="
-echo " Nano-Gateway Enterprise Docker Swarm Deployment"
+echo " Airoute Enterprise Docker Swarm Deployment"
 echo "=========================================================="
 
 # Check if Docker Swarm is active
@@ -25,9 +25,9 @@ if ! docker network ls --filter name=^nano-swarm-net$ --format '{{.Name}}' | gre
 fi
 
 # Build local gateway image if not present or requested
-if [ "$1" == "--build" ] || ! docker image inspect nano-gateway:latest >/dev/null 2>&1; then
-    echo "[*] Building nano-gateway:latest production image..."
-    docker build -t nano-gateway:latest .
+if [ "$1" == "--build" ] || ! docker image inspect airoute:latest >/dev/null 2>&1; then
+    echo "[*] Building airoute:latest production image..."
+    docker build -t airoute:latest .
 fi
 
 echo "[*] Deploying stack: ${STACK_NAME}..."
@@ -42,7 +42,7 @@ echo "[*] To inspect task allocation across Swarm nodes:"
 echo "    docker stack ps ${STACK_NAME}"
 echo ""
 echo "[*] To follow cluster logs (with distributed TraceID):"
-echo "    docker service logs -f ${STACK_NAME}_nano-gateway"
+echo "    docker service logs -f ${STACK_NAME}_airoute"
 echo ""
 echo "[*] Web 工作台 & API are available at:"
 echo "    http://<swarm-node-ip>:8080/app/ (或 http://<swarm-node-ip>:8080/)"

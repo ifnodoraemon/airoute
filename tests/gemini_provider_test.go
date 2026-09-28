@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
-	"github.com/ifnodoraemon/nano-gateway/internal/provider"
+	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/provider"
 )
 
 // TestGeminiProvider_NonStreaming tests Google Gemini specialized adapter.
@@ -47,7 +47,7 @@ func TestGeminiProvider_NonStreaming(t *testing.T) {
 				{
 					"content": {
 						"parts": [
-							{"text": "Hello! I am Google Gemini translated by nano-gateway."}
+							{"text": "Hello! I am Google Gemini translated by airoute."}
 						],
 						"role": "model"
 					},
@@ -96,7 +96,7 @@ func TestGeminiProvider_NonStreaming(t *testing.T) {
 	}
 
 	content := resp.Choices[0].Message.GetContentString()
-	if !strings.Contains(content, "Google Gemini translated by nano-gateway") {
+	if !strings.Contains(content, "Google Gemini translated by airoute") {
 		t.Errorf("unexpected content: %s", content)
 	}
 

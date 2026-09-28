@@ -3,7 +3,7 @@ package provider
 import (
 	"context"
 
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/model"
 )
 
 // Provider defines the interface for interacting with upstream LLM engines.

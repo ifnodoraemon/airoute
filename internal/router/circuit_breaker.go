@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ifnodoraemon/nano-gateway/internal/telemetry"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
 // CircuitState represents the current state of a circuit breaker.

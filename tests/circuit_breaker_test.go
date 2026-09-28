@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ifnodoraemon/nano-gateway/internal/router"
+	"github.com/ifnodoraemon/airoute/internal/router"
 )
 
 func TestCircuitBreaker_StateTransitions(t *testing.T) {

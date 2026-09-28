@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ifnodoraemon/nano-gateway/internal/telemetry"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 	"github.com/redis/go-redis/v9"
 )
 

@@ -9,21 +9,25 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/nano-gateway/internal/billing"
-	"github.com/ifnodoraemon/nano-gateway/internal/middleware"
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
-	"github.com/ifnodoraemon/nano-gateway/internal/router"
-	"github.com/ifnodoraemon/nano-gateway/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/billing"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
+	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/router"
+	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
 func resolveMMSessionID(c *gin.Context, prefix string) string {
 	sID := c.GetHeader("X-Session-ID")
+	if sID == "" {
+		sID = c.GetHeader("X-Airoute-Session-ID")
+	}
 	if sID == "" {
 		sID = c.GetHeader("X-Nano-Session-ID")
 	}
 	if sID == "" {
 		sID = fmt.Sprintf("sess_%s_%d_%x", prefix, time.Now().Unix(), time.Now().UnixNano()%1000000)
 	}
+	c.Header("X-Airoute-Session-ID", sID)
 	c.Header("X-Nano-Session-ID", sID)
 	return sID
 }

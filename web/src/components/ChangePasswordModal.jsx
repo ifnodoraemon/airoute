@@ -27,7 +27,7 @@ export default function ChangePasswordModal({ isOpen, onClose, token, onPassword
 
     setLoading(true);
     try {
-      const res = await fetch('/api/v1/admin/auth/password', {
+      const res = await fetch('/api/v1/user/password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

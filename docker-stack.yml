@@ -1,7 +1,7 @@
 version: '3.8'
 
 # ==============================================================================
-# Nano-Gateway High-Availability Enterprise Docker Swarm Stack
+# Airoute High-Availability Enterprise Docker Swarm Stack
 # Multi-Node Cluster with Distributed PostgreSQL, Redis Streams Queue, and Ingress
 # ==============================================================================
 
@@ -73,11 +73,11 @@ services:
         delay: 5s
 
   # ============================================================================
-  # 3. High-Concurrency Nano-Gateway Service (Multi-Node Replicated)
+  # 3. High-Concurrency Airoute Service (Multi-Node Replicated)
   # Zero-downtime rolling upgrades, trace ID correlation, Redis Streams log queue.
   # ============================================================================
-  nano-gateway:
-    image: ${GATEWAY_IMAGE:-nano-gateway:latest}
+  airoute:
+    image: ${GATEWAY_IMAGE:-airoute:latest}
     environment:
       - TZ=Asia/Shanghai
       - GATEWAY_HOST=0.0.0.0

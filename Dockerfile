@@ -30,7 +30,7 @@ COPY web/web.go web/web.go
 COPY --from=web-builder /app/web/dist web/dist
 
 # Build statically linked binary
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/nano-gateway cmd/gateway/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/airoute cmd/gateway/main.go
 
 # ==============================================================================
 # Stage 3: Minimal Production Image
@@ -42,7 +42,7 @@ RUN apk add --no-cache ca-certificates tzdata curl && \
 
 WORKDIR /app
 
-COPY --from=go-builder /bin/nano-gateway /app/nano-gateway
+COPY --from=go-builder /bin/airoute /app/airoute
 COPY configs/config.yaml /app/configs/config.yaml
 
 RUN mkdir -p /app/data && chown -R gateway:gateway /app
@@ -54,5 +54,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:8080/health || exit 1
 
-ENTRYPOINT ["/app/nano-gateway"]
+ENTRYPOINT ["/app/airoute"]
 CMD ["-config", "/app/configs/config.yaml", "-db", "/app/data/gateway.db"]

@@ -1,6 +1,6 @@
-# Nano-Gateway API Reference Specification
+# Airoute API Reference Specification
 
-Nano-Gateway provides high-performance, unified API endpoints conforming to OpenAI standard specifications, Anthropic Claude native specifications, and multimodal generation interfaces.
+Airoute provides high-performance, unified API endpoints conforming to OpenAI standard specifications, Anthropic Claude native specifications, and multimodal generation interfaces.
 
 ---
 
@@ -19,7 +19,7 @@ If no virtual keys are configured, the gateway operates in open bypass mode (no 
 ### 2.1 Chat Completions
 - **Endpoint**: `POST /v1/chat/completions`
 - **Supported Providers**: All (OpenAI, DeepSeek, vLLM, SGLang, GPUStack, Sub2API, Anthropic Claude, Google Gemini).
-- **Protocol Adaptation**: If downstream only supports text completion (`/v1/completions`), Nano-Gateway automatically formats messages into a prompt and translates the response back.
+- **Protocol Adaptation**: If downstream only supports text completion (`/v1/completions`), Airoute automatically formats messages into a prompt and translates the response back.
 
 #### Request Example:
 ```bash
@@ -136,7 +136,7 @@ curl -X POST http://localhost:8080/v1/audio/speech \
   -H "Content-Type: application/json" \
   -d '{
     "model": "tts-1",
-    "input": "欢迎体验 Nano-Gateway 极致性能企业级多模态网关系统。",
+    "input": "欢迎体验 Airoute 极致性能企业级多模态网关系统。",
     "voice": "alloy",
     "response_format": "mp3"
   }' --output output.mp3
@@ -244,7 +244,7 @@ curl -X POST http://localhost:8080/v1/rerank \
     "model": "bge-reranker-large",
     "query": "What is high availability in enterprise LLM gateways?",
     "documents": [
-      "Nano-Gateway provides zero-copy streaming and pre-first-token fallback.",
+      "Airoute provides zero-copy streaming and pre-first-token fallback.",
       "The weather today in Tokyo is sunny with blooming cherry blossoms.",
       "Distributed databases using Raft consensus ensure strong consistency."
     ],
@@ -262,7 +262,7 @@ curl -X POST http://localhost:8080/v1/rerank \
       "index": 0,
       "relevance_score": 0.9856,
       "document": {
-        "text": "Nano-Gateway provides zero-copy streaming and pre-first-token fallback."
+        "text": "Airoute provides zero-copy streaming and pre-first-token fallback."
       }
     },
     {

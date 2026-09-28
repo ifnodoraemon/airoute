@@ -2,9 +2,9 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "nano-gateway.fullname" . }}-pvc
+  name: {{ include "airoute.fullname" . }}-pvc
   labels:
-    {{- include "nano-gateway.labels" . | nindent 4 }}
+    {{- include "airoute.labels" . | nindent 4 }}
 spec:
   accessModes:
     - {{ .Values.persistence.accessMode | quote }}

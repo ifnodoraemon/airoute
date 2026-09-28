@@ -9,69 +9,16 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/nano-gateway/internal/config"
-	"github.com/ifnodoraemon/nano-gateway/internal/middleware"
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
-	"github.com/ifnodoraemon/nano-gateway/internal/provider"
-	"github.com/ifnodoraemon/nano-gateway/internal/router"
-	"github.com/ifnodoraemon/nano-gateway/internal/storage"
-	"github.com/ifnodoraemon/nano-gateway/internal/telemetry"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
+	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/provider"
+	"github.com/ifnodoraemon/airoute/internal/router"
+	"github.com/ifnodoraemon/airoute/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
-
-// authenticateGemini checks API key passed via query parameter 'key', header 'x-goog-api-key', or Bearer token.
-func authenticateGemini(c *gin.Context) bool {
-	cfg := config.GetGlobalConfig()
-	if len(cfg.VirtualKeys) == 0 {
-		return true // open dev mode
-	}
-
-	apiKey := c.Query("key")
-	if apiKey == "" {
-		apiKey = c.GetHeader("x-goog-api-key")
-	}
-	if apiKey == "" {
-		authH := c.GetHeader("Authorization")
-		if strings.HasPrefix(authH, "Bearer ") {
-			apiKey = strings.TrimPrefix(authH, "Bearer ")
-		}
-	}
-
-	if apiKey == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": gin.H{
-				"code":    401,
-				"message": "Missing API key. Please pass key via query parameter '?key=...', 'x-goog-api-key', or 'Authorization: Bearer <key>'",
-				"status":  "UNAUTHENTICATED",
-			},
-		})
-		return false
-	}
-
-	for _, vk := range cfg.VirtualKeys {
-		if vk.Key == apiKey {
-			c.Set(middleware.ContextKeyTenant, vk.TenantID)
-			c.Set(middleware.ContextKeyVirtualKey, vk.Key)
-			c.Set(middleware.ContextKeyVirtualKeyConfig, &vk)
-			return true
-		}
-	}
-
-	c.JSON(http.StatusUnauthorized, gin.H{
-		"error": gin.H{
-			"code":    401,
-			"message": "API key not valid. Please pass a valid API key.",
-			"status":  "UNAUTHENTICATED",
-		},
-	})
-	return false
-}
 
 // HandleGeminiModels handles GET /v1beta/models.
 func (h *Handler) HandleGeminiModels(c *gin.Context) {
-	if !authenticateGemini(c) {
-		return
-	}
-
 	models := h.dispatcher.GetAllSupportedModels()
 	type geminiModelInfo struct {
 		Name                       string   `json:"name"`
@@ -97,10 +44,6 @@ func (h *Handler) HandleGeminiModels(c *gin.Context) {
 
 // HandleGeminiModelDetail handles GET /v1beta/models/*modelAction.
 func (h *Handler) HandleGeminiModelDetail(c *gin.Context) {
-	if !authenticateGemini(c) {
-		return
-	}
-
 	param := strings.TrimPrefix(c.Param("modelAction"), "/")
 	modelName := strings.TrimPrefix(param, "models/")
 
@@ -126,9 +69,6 @@ func (h *Handler) HandleGeminiModelDetail(c *gin.Context) {
 
 // HandleGeminiAction handles POST /v1beta/models/*modelAction for Google Gemini SDKs.
 func (h *Handler) HandleGeminiAction(c *gin.Context) {
-	if !authenticateGemini(c) {
-		return
-	}
 
 	param := strings.TrimPrefix(c.Param("modelAction"), "/")
 	param = strings.TrimPrefix(param, "models/")

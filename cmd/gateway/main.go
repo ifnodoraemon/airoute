@@ -11,14 +11,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ifnodoraemon/nano-gateway/internal/api"
-	"github.com/ifnodoraemon/nano-gateway/internal/billing"
-	"github.com/ifnodoraemon/nano-gateway/internal/config"
-	"github.com/ifnodoraemon/nano-gateway/internal/controlplane"
-	"github.com/ifnodoraemon/nano-gateway/internal/distributed"
-	"github.com/ifnodoraemon/nano-gateway/internal/router"
-	"github.com/ifnodoraemon/nano-gateway/internal/storage"
-	"github.com/ifnodoraemon/nano-gateway/internal/telemetry"
+	"github.com/ifnodoraemon/airoute/internal/api"
+	"github.com/ifnodoraemon/airoute/internal/billing"
+	"github.com/ifnodoraemon/airoute/internal/config"
+	"github.com/ifnodoraemon/airoute/internal/controlplane"
+	"github.com/ifnodoraemon/airoute/internal/distributed"
+	"github.com/ifnodoraemon/airoute/internal/router"
+	"github.com/ifnodoraemon/airoute/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
 func main() {
@@ -55,7 +55,7 @@ func main() {
 
 	// Initialize Logger
 	telemetry.InitLogger(cfg.Server.LogLevel)
-	telemetry.Logger.Info("starting nano-gateway",
+	telemetry.Logger.Info("starting airoute",
 		"version", "0.1.0",
 		"config", *configPath,
 		"db", *dbPath,
@@ -164,7 +164,7 @@ func main() {
 
 	// Run server in background goroutine
 	go func() {
-		telemetry.Logger.Info(fmt.Sprintf("🚀 Nano-Gateway listening on http://%s", addr))
+		telemetry.Logger.Info(fmt.Sprintf("🚀 Airoute listening on http://%s", addr))
 		telemetry.Logger.Info(fmt.Sprintf("🌐 工作台入口: http://%s/app/ (或 http://%s/)", addr, addr))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			telemetry.Logger.Error("server fatal error", "error", err.Error())
@@ -177,7 +177,7 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	telemetry.Logger.Info("shutting down nano-gateway gracefully...")
+	telemetry.Logger.Info("shutting down airoute gracefully...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -186,5 +186,5 @@ func main() {
 		telemetry.Logger.Error("server forced to shutdown", "error", err.Error())
 	}
 
-	telemetry.Logger.Info("nano-gateway exited smoothly.")
+	telemetry.Logger.Info("airoute exited smoothly.")
 }

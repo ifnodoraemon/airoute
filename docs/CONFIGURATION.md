@@ -1,6 +1,6 @@
-# Nano-Gateway Configuration & Tuning Manual
+# Airoute Configuration & Tuning Manual
 
-This document details the configuration options, cascading model rewrite syntax, circuit breaker parameters, and performance tuning for Nano-Gateway.
+This document details the configuration options, cascading model rewrite syntax, circuit breaker parameters, and performance tuning for Airoute.
 
 ---
 
@@ -15,10 +15,10 @@ server:
 
 database:
   driver: "sqlite"
-  dsn: "nano_gateway.db"
+  dsn: "airoute.db"
   # For PostgreSQL:
   # driver: "postgres"
-  # dsn: "postgres://user:password@localhost:5432/nano_gateway?sslmode=disable"
+  # dsn: "postgres://user:password@localhost:5432/airoute?sslmode=disable"
 
 # High-Performance HTTP Connection Pool
 connection_pool:
@@ -100,14 +100,14 @@ All settings can be overridden via environment variables for cloud-native Docker
 | `GATEWAY_PORT` | `8080` | HTTP listen port |
 | `GATEWAY_CONFIG` | `configs/config.yaml` | Path to YAML configuration file |
 | `GATEWAY_DB_DRIVER` | `sqlite` | Database driver (`sqlite` or `postgres`) |
-| `GATEWAY_DB_DSN` | `nano_gateway.db` | Database connection DSN or SQLite file path |
+| `GATEWAY_DB_DSN` | `airoute.db` | Database connection DSN or SQLite file path |
 | `GIN_MODE` | `release` | Web engine mode (`release` or `debug`) |
 
 ---
 
 ## 3. Cascading Model Mapping Syntax
 
-Nano-Gateway supports unconstrained cascading model aliasing and prefix stripping:
+Airoute supports unconstrained cascading model aliasing and prefix stripping:
 
 ### Rule 1: Exact Model Alias
 ```yaml
@@ -132,7 +132,7 @@ When multiple channels configure the same model (e.g. `gpt-4o` on both `sub2api`
 
 ## 4. Stability & Circuit Breaker Architecture
 
-Nano-Gateway implements a Tri-State Circuit Breaker state machine:
+Airoute implements a Tri-State Circuit Breaker state machine:
 
 ```
     [ CLOSED ] --- (Consecutive Failures >= 3) ---> [ OPEN ]

@@ -85,41 +85,41 @@ func (m *Metrics) ToPrometheusFormat() string {
 	m.mu.RUnlock()
 
 	var sb strings.Builder
-	sb.WriteString("# HELP nano_gateway_requests_total Total number of HTTP requests\n")
-	sb.WriteString("# TYPE nano_gateway_requests_total counter\n")
-	sb.WriteString(fmt.Sprintf("nano_gateway_requests_total %d\n", m.TotalRequests.Load()))
+	sb.WriteString("# HELP airoute_requests_total Total number of HTTP requests\n")
+	sb.WriteString("# TYPE airoute_requests_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_requests_total %d\n", m.TotalRequests.Load()))
 
-	sb.WriteString("# HELP nano_gateway_requests_success_total Total successful requests\n")
-	sb.WriteString("# TYPE nano_gateway_requests_success_total counter\n")
-	sb.WriteString(fmt.Sprintf("nano_gateway_requests_success_total %d\n", m.SuccessfulRequests.Load()))
+	sb.WriteString("# HELP airoute_requests_success_total Total successful requests\n")
+	sb.WriteString("# TYPE airoute_requests_success_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_requests_success_total %d\n", m.SuccessfulRequests.Load()))
 
-	sb.WriteString("# HELP nano_gateway_requests_failed_total Total failed requests\n")
-	sb.WriteString("# TYPE nano_gateway_requests_failed_total counter\n")
-	sb.WriteString(fmt.Sprintf("nano_gateway_requests_failed_total %d\n", m.FailedRequests.Load()))
+	sb.WriteString("# HELP airoute_requests_failed_total Total failed requests\n")
+	sb.WriteString("# TYPE airoute_requests_failed_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_requests_failed_total %d\n", m.FailedRequests.Load()))
 
-	sb.WriteString("# HELP nano_gateway_fallback_total Total channel fallback events\n")
-	sb.WriteString("# TYPE nano_gateway_fallback_total counter\n")
-	sb.WriteString(fmt.Sprintf("nano_gateway_fallback_total %d\n", m.FallbackRequests.Load()))
+	sb.WriteString("# HELP airoute_fallback_total Total channel fallback events\n")
+	sb.WriteString("# TYPE airoute_fallback_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_fallback_total %d\n", m.FallbackRequests.Load()))
 
-	sb.WriteString("# HELP nano_gateway_active_connections Current active connections\n")
-	sb.WriteString("# TYPE nano_gateway_active_connections gauge\n")
-	sb.WriteString(fmt.Sprintf("nano_gateway_active_connections %d\n", m.ActiveConnections.Load()))
+	sb.WriteString("# HELP airoute_active_connections Current active connections\n")
+	sb.WriteString("# TYPE airoute_active_connections gauge\n")
+	sb.WriteString(fmt.Sprintf("airoute_active_connections %d\n", m.ActiveConnections.Load()))
 
-	sb.WriteString("# HELP nano_gateway_prompt_tokens_total Total prompt tokens processed\n")
-	sb.WriteString("# TYPE nano_gateway_prompt_tokens_total counter\n")
-	sb.WriteString(fmt.Sprintf("nano_gateway_prompt_tokens_total %d\n", m.TotalPromptTokens.Load()))
+	sb.WriteString("# HELP airoute_prompt_tokens_total Total prompt tokens processed\n")
+	sb.WriteString("# TYPE airoute_prompt_tokens_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_prompt_tokens_total %d\n", m.TotalPromptTokens.Load()))
 
-	sb.WriteString("# HELP nano_gateway_completion_tokens_total Total completion tokens generated\n")
-	sb.WriteString("# TYPE nano_gateway_completion_tokens_total counter\n")
-	sb.WriteString(fmt.Sprintf("nano_gateway_completion_tokens_total %d\n", m.TotalCompletionTokens.Load()))
+	sb.WriteString("# HELP airoute_completion_tokens_total Total completion tokens generated\n")
+	sb.WriteString("# TYPE airoute_completion_tokens_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_completion_tokens_total %d\n", m.TotalCompletionTokens.Load()))
 
-	sb.WriteString("# HELP nano_gateway_ttft_avg_ms Average Time To First Token in milliseconds\n")
-	sb.WriteString("# TYPE nano_gateway_ttft_avg_ms gauge\n")
-	sb.WriteString(fmt.Sprintf("nano_gateway_ttft_avg_ms %.2f\n", avgTTFT))
+	sb.WriteString("# HELP airoute_ttft_avg_ms Average Time To First Token in milliseconds\n")
+	sb.WriteString("# TYPE airoute_ttft_avg_ms gauge\n")
+	sb.WriteString(fmt.Sprintf("airoute_ttft_avg_ms %.2f\n", avgTTFT))
 
-	sb.WriteString("# HELP nano_gateway_latency_avg_ms Average request latency in milliseconds\n")
-	sb.WriteString("# TYPE nano_gateway_latency_avg_ms gauge\n")
-	sb.WriteString(fmt.Sprintf("nano_gateway_latency_avg_ms %.2f\n", avgLatency))
+	sb.WriteString("# HELP airoute_latency_avg_ms Average request latency in milliseconds\n")
+	sb.WriteString("# TYPE airoute_latency_avg_ms gauge\n")
+	sb.WriteString(fmt.Sprintf("airoute_latency_avg_ms %.2f\n", avgLatency))
 
 	return sb.String()
 }

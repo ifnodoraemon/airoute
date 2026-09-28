@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ifnodoraemon/nano-gateway/internal/api"
-	"github.com/ifnodoraemon/nano-gateway/internal/config"
-	"github.com/ifnodoraemon/nano-gateway/internal/controlplane"
-	"github.com/ifnodoraemon/nano-gateway/internal/model"
-	"github.com/ifnodoraemon/nano-gateway/internal/router"
-	"github.com/ifnodoraemon/nano-gateway/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/api"
+	"github.com/ifnodoraemon/airoute/internal/config"
+	"github.com/ifnodoraemon/airoute/internal/controlplane"
+	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/router"
+	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
 func setupTestEnvironment(t *testing.T) (*router.Dispatcher, *controlplane.AdminHandler, *storage.Repository) {
@@ -68,8 +68,8 @@ func TestAPI_HealthMetricsAndWebUI(t *testing.T) {
 	if wRoot.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for root /, got %d", wRoot.Code)
 	}
-	if !bytes.Contains(wRoot.Body.Bytes(), []byte("AI路由器")) && !bytes.Contains(wRoot.Body.Bytes(), []byte("Nano")) {
-		t.Errorf("expected root / to contain 'AI路由器' or 'Nano'")
+	if !bytes.Contains(wRoot.Body.Bytes(), []byte("Airoute")) && !bytes.Contains(wRoot.Body.Bytes(), []byte("AI路由器")) {
+		t.Errorf("expected root / to contain 'Airoute' or 'AI路由器'")
 	}
 
 	// 3b. Test GET /app/ (Concise web application path)
@@ -223,79 +223,5 @@ func TestAPI_ChatCompletions_ModelForbidden(t *testing.T) {
 	}
 }
 
-func TestAPI_TextCompletions(t *testing.T) {
-	// Mock upstream OpenAI provider
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := model.ChatCompletionResponse{
-			ID:      "cmpl-test-123",
-			Object:  "chat.completion",
-			Created: time.Now().Unix(),
-			Model:   "deepseek-coder",
-			Choices: []model.ChatCompletionChoice{
-				{
-					Index: 0,
-					Message: model.ChatMessage{
-						Role:    "assistant",
-						Content: "    return x + y",
-					},
-				},
-			},
-			Usage: &model.Usage{
-				PromptTokens:     5,
-				CompletionTokens: 5,
-				TotalTokens:      10,
-			},
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
-	}))
-	defer mockServer.Close()
-
-	channels := []model.ChannelConfig{
-		{
-			Name:     "upstream-coder",
-			Type:     model.ProviderOpenAI,
-			BaseURL:  mockServer.URL,
-			APIKey:   "none",
-			Models:   []string{"deepseek-coder"},
-			Priority: 1,
-		},
-	}
-	testCfg := &config.Config{
-		Channels: channels,
-	}
-	config.SetGlobalConfig(testCfg)
-
-	dispatcher := router.NewDispatcher(channels)
-	engine := api.SetupRouter(dispatcher, nil)
-
-	// Call OpenAI legacy text completion endpoint /v1/completions
-	body := model.TextCompletionRequest{
-		Model:  "deepseek-coder",
-		Prompt: "def add(x, y):",
-	}
-	bodyBytes, _ := json.Marshal(body)
-
-	req := httptest.NewRequest(http.MethodPost, "/v1/completions", bytes.NewReader(bodyBytes))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	engine.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK for /v1/completions, got %d: %s", w.Code, w.Body.String())
-	}
-
-	var resp model.TextCompletionResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("failed to parse /v1/completions response: %v", err)
-	}
-
-	if resp.Object != "text_completion" {
-		t.Errorf("expected object text_completion, got %s", resp.Object)
-	}
-	if len(resp.Choices) == 0 || resp.Choices[0].Text != "    return x + y" {
-		t.Errorf("unexpected text choice: %+v", resp.Choices)
-	}
-}
-
 var _ = time.Now
+
