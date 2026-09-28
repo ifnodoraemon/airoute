@@ -49,7 +49,7 @@ export default function LandingPage({
 
   const pythonSnippet = `from openai import OpenAI
 
-# 1. base_url 指向 Nano-Gateway 集群入口，使用管理员在控制台签发的客户端 Key
+# 1. base_url 指向 Nano-Gateway 集群入口，使用在工作台签发的客户端 Key
 client = OpenAI(
     base_url="${origin}/v1",
     api_key="sk-nano-your-client-key",
@@ -61,7 +61,7 @@ client = OpenAI(
 
 # 2. 发起对话推理请求 (支持毫秒级打字机流式输出与首字前无感容灾)
 response = client.chat.completions.create(
-    model="deepseek-chat",
+    model="deepseek-v3",
     messages=[
         {"role": "system", "content": "你是一位资深架构师"},
         {"role": "user", "content": "请用 Go 实现高性能平滑加权轮询 (SWRR) 算法"}
@@ -78,7 +78,7 @@ curl -X POST "${origin}/v1/chat/completions" \\
   -H "X-Session-ID: session_user_001" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "deepseek-chat",
+    "model": "deepseek-v3",
     "messages": [
       {"role": "user", "content": "你好，请介绍 Nano-Gateway 的核心优势"}
     ],
@@ -95,7 +95,7 @@ client = anthropic.Anthropic(
 )
 
 message = client.messages.create(
-    model="claude-3-5-sonnet",
+    model="claude-3-7-sonnet",
     max_tokens=1024,
     messages=[
         {"role": "user", "content": "解释分布式网关的数据面与控制面分离架构"}
@@ -115,7 +115,7 @@ const openai = new OpenAI({
 });
 
 const stream = await openai.chat.completions.create({
-  model: 'deepseek-chat',
+  model: 'deepseek-v3',
   messages: [{ role: 'user', content: '介绍大模型网关的 Pre-Token Fallback 机制' }],
   stream: true,
 });
@@ -124,17 +124,17 @@ for await (const chunk of stream) {
   process.stdout.write(chunk.choices[0]?.delta?.content || '');
 }`;
 
-  const multimodalSnippet = `# 1. 图像生成 (DALL-E 3 / Flux / SeaDream)
+  const multimodalSnippet = `# 1. 图像生成 (FLUX.1-Pro / SD3.5 / DALL-E 3)
 curl -X POST "${origin}/v1/images/generations" \\
   -H "Authorization: Bearer sk-nano-your-client-key" \\
   -H "Content-Type: application/json" \\
-  -d '{"model": "dall-e-3", "prompt": "极简科技风云原生分布式网关架构图", "n": 1, "size": "1024x1024"}'
+  -d '{"model": "flux-1.1-pro", "prompt": "极简科技风云原生分布式网关架构图", "n": 1, "size": "1024x1024"}'
 
-# 2. 视频生成与异步任务轮询 (Sora / Kling / CogVideoX / 豆包 SeaDance)
+# 2. 视频生成与异步任务轮询 (Sora 2 / Kling 1.5 / CogVideoX)
 curl -X POST "${origin}/v1/videos/generations" \\
   -H "Authorization: Bearer sk-nano-your-client-key" \\
   -H "Content-Type: application/json" \\
-  -d '{"model": "cogvideox", "prompt": "未来赛博朋克城市雨夜飞车", "aspect_ratio": "16:9"}'
+  -d '{"model": "sora-2", "prompt": "未来赛博朋克城市雨夜飞车", "aspect_ratio": "16:9"}'
 
 # 轮询视频生成状态直到 SUCCESS 并获取播放下载直链：
 curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
@@ -257,7 +257,7 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
                 className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-sm font-bold shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2"
               >
                 <Server className="w-4 h-4" />
-                <span>进入控制台工作台</span>
+                <span>进入工作台</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             ) : (
@@ -668,7 +668,7 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
                   <span className="font-mono font-bold text-slate-800">Authorization: Bearer sk-nano-...</span>
                   <span className="text-indigo-600 font-medium">必填</span>
                 </div>
-                <p className="text-[11px] text-slate-500 mt-0.5">控制台签发的 API 密钥，毫秒级内存校验、租户限流与余额计费。</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">工作台签发的 API 密钥，毫秒级内存校验、租户限流与余额计费。</p>
               </div>
 
               <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
@@ -699,7 +699,7 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
             <span>企业级分时计费与成本节省引擎</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-            基准模型费率 · Prompt 缓存 · 夜间闲时 5 折
+            2026 旗舰模型矩阵 · 基准费率 · Prompt 缓存 · 夜间闲时 5 折
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 max-w-2xl mx-auto">
             支持针对不同模型差异化定价。原生支持 <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-emerald-600 font-semibold">cached_tokens</code> 缓存读取优惠（立减 90%）与夜间闲时分时优惠（00:00 - 08:30 半价），折上折最高节约 95% 成本！
@@ -710,7 +710,7 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
         <div className="bg-white border border-slate-200/90 rounded-3xl overflow-hidden shadow-sm">
           <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h3 className="font-bold text-sm text-slate-900">模型费率对照表 (Rates per 1M Tokens)</h3>
+              <h3 className="font-bold text-sm text-slate-900">2026 主流模型费率对照表 (Rates per 1M Tokens)</h3>
               <p className="text-xs text-slate-500 mt-0.5">网关实时计算 Token 与时间段，并在响应头实时返回 X-Nano-Cost 与 X-Nano-Off-Peak 标识</p>
             </div>
             <div className="flex items-center space-x-2">
@@ -741,7 +741,7 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-                    <span>deepseek-chat (V3)</span>
+                    <span>deepseek-v3</span>
                   </td>
                   <td className="py-3.5 px-4">¥2.00</td>
                   <td className="py-3.5 px-4">¥8.00</td>
@@ -758,7 +758,7 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-                    <span>deepseek-reasoner (R1)</span>
+                    <span>deepseek-r1</span>
                   </td>
                   <td className="py-3.5 px-4">¥4.00</td>
                   <td className="py-3.5 px-4">¥16.00</td>
@@ -774,25 +774,8 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
 
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-sky-500"></span>
-                    <span>gpt-4o</span>
-                  </td>
-                  <td className="py-3.5 px-4">¥18.00</td>
-                  <td className="py-3.5 px-4">¥72.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥9.00 / ¥36.00</td>
-                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥9.00</td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-5 font-sans">
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
-                      立省 50%
-                    </span>
-                  </td>
-                </tr>
-
-                <tr className="hover:bg-slate-50/60 transition">
-                  <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-purple-500"></span>
-                    <span>claude-3-5-sonnet</span>
+                    <span>claude-3-7-sonnet</span>
                   </td>
                   <td className="py-3.5 px-4">¥21.00</td>
                   <td className="py-3.5 px-4">¥105.00</td>
@@ -808,27 +791,95 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
 
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
+                    <span className="w-2 h-2 rounded-full bg-sky-500"></span>
+                    <span>o3-mini</span>
+                  </td>
+                  <td className="py-3.5 px-4">¥7.50</td>
+                  <td className="py-3.5 px-4">¥30.00</td>
+                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥3.75 / ¥15.00</td>
+                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥1.80</td>
+                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-5 font-sans">
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
+                      立省 85%
+                    </span>
+                  </td>
+                </tr>
+
+                <tr className="hover:bg-slate-50/60 transition">
+                  <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
+                    <span className="w-2 h-2 rounded-full bg-sky-500"></span>
+                    <span>gpt-4.5</span>
+                  </td>
+                  <td className="py-3.5 px-4">¥35.00</td>
+                  <td className="py-3.5 px-4">¥140.00</td>
+                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥17.50 / ¥70.00</td>
+                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥8.75</td>
+                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-5 font-sans">
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
+                      立省 75%
+                    </span>
+                  </td>
+                </tr>
+
+                <tr className="hover:bg-slate-50/60 transition">
+                  <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                    <span>gemini-2.5-pro</span>
+                  </td>
+                  <td className="py-3.5 px-4">¥8.50</td>
+                  <td className="py-3.5 px-4">¥34.00</td>
+                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥4.25 / ¥17.00</td>
+                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥2.10</td>
+                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-5 font-sans">
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
+                      立省 85%
+                    </span>
+                  </td>
+                </tr>
+
+                <tr className="hover:bg-slate-50/60 transition">
+                  <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
+                    <span className="w-2 h-2 rounded-full bg-teal-500"></span>
+                    <span>qwen-2.5-max</span>
+                  </td>
+                  <td className="py-3.5 px-4">¥6.00</td>
+                  <td className="py-3.5 px-4">¥24.00</td>
+                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥3.00 / ¥12.00</td>
+                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥1.20</td>
+                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-5 font-sans">
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
+                      立省 90%
+                    </span>
+                  </td>
+                </tr>
+
+                <tr className="hover:bg-slate-50/60 transition">
+                  <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                    <span>dall-e-3</span>
+                    <span>flux-1.1-pro</span>
                   </td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥0.14 / 张</td>
+                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥0.10 / 张</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-4 font-bold text-slate-900">¥0.28 / 张</td>
+                  <td className="py-3.5 px-4 font-bold text-slate-900">¥0.20 / 张</td>
                   <td className="py-3.5 px-5 font-sans text-slate-500">5 折优惠</td>
                 </tr>
 
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-                    <span>tts-1 / whisper-1</span>
+                    <span>sora-2</span>
                   </td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥0.05 / 次</td>
+                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥0.75 / 次</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-4 font-bold text-slate-900">¥0.10 / 次</td>
+                  <td className="py-3.5 px-4 font-bold text-slate-900">¥1.50 / 次</td>
                   <td className="py-3.5 px-5 font-sans text-slate-500">5 折优惠</td>
                 </tr>
               </tbody>
@@ -848,7 +899,7 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
           <div className="flex items-center space-x-4">
             {isLoggedIn ? (
               <button onClick={onEnterConsole} className="text-indigo-600 hover:underline font-semibold">
-                进入管理控制台
+                进入工作台
               </button>
             ) : (
               <button onClick={onOpenLogin} className="text-indigo-600 hover:underline font-semibold cursor-pointer">

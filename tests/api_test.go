@@ -61,16 +61,16 @@ func TestAPI_HealthMetricsAndWebUI(t *testing.T) {
 		t.Fatalf("expected 200 OK for /api/v1/public/status, got %d", wStatus.Code)
 	}
 
-	// 3. Test GET /ui/ (embedded Web UI)
-	reqUI := httptest.NewRequest(http.MethodGet, "/ui/", nil)
+	// 3. Test GET /workspace/ (embedded Workspace)
+	reqUI := httptest.NewRequest(http.MethodGet, "/workspace/", nil)
 	wUI := httptest.NewRecorder()
 	engine.ServeHTTP(wUI, reqUI)
 
 	if wUI.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK for embedded Web UI /ui/, got %d", wUI.Code)
+		t.Fatalf("expected 200 OK for embedded workspace /workspace/, got %d", wUI.Code)
 	}
 	if !bytes.Contains(wUI.Body.Bytes(), []byte("AI路由器")) && !bytes.Contains(wUI.Body.Bytes(), []byte("Nano")) {
-		t.Errorf("expected Web UI to contain 'AI路由器' or 'Nano'")
+		t.Errorf("expected Workspace to contain 'AI路由器' or 'Nano'")
 	}
 }
 

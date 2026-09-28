@@ -1345,10 +1345,18 @@ func (r *Repository) SeedDefaultModelPrices() error {
 	}
 
 	defaults := []ModelPriceRecord{
+		{Model: "deepseek-v3", PromptPrice: 2.0, CompletionPrice: 8.0, CacheReadPrice: 0.2, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: true, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
+		{Model: "deepseek-r1", PromptPrice: 4.0, CompletionPrice: 16.0, CacheReadPrice: 0.4, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: true, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
+		{Model: "claude-3-7-sonnet", PromptPrice: 21.0, CompletionPrice: 105.0, CacheReadPrice: 2.1, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: true, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
+		{Model: "o3-mini", PromptPrice: 7.5, CompletionPrice: 30.0, CacheReadPrice: 1.8, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: true, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
+		{Model: "gpt-4.5", PromptPrice: 35.0, CompletionPrice: 140.0, CacheReadPrice: 8.75, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: true, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
+		{Model: "gemini-2.5-pro", PromptPrice: 8.5, CompletionPrice: 34.0, CacheReadPrice: 2.1, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: true, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
+		{Model: "qwen-2.5-max", PromptPrice: 6.0, CompletionPrice: 24.0, CacheReadPrice: 1.2, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: true, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
+		{Model: "flux-1.1-pro", PromptPrice: 0, CompletionPrice: 0, CacheReadPrice: 0, FixedPrice: 0.20, Currency: "CNY", OffPeakEnabled: true, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
+		{Model: "sora-2", PromptPrice: 0, CompletionPrice: 0, CacheReadPrice: 0, FixedPrice: 1.50, Currency: "CNY", OffPeakEnabled: true, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
 		{Model: "deepseek-chat", PromptPrice: 2.0, CompletionPrice: 8.0, CacheReadPrice: 0.2, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: true, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
 		{Model: "deepseek-reasoner", PromptPrice: 4.0, CompletionPrice: 16.0, CacheReadPrice: 0.4, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: true, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
 		{Model: "gpt-4o", PromptPrice: 18.0, CompletionPrice: 72.0, CacheReadPrice: 9.0, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: true, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
-		{Model: "gpt-4o-mini", PromptPrice: 1.1, CompletionPrice: 4.4, CacheReadPrice: 0.55, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: true, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
 		{Model: "claude-3-5-sonnet", PromptPrice: 21.0, CompletionPrice: 105.0, CacheReadPrice: 2.1, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: true, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
 		{Model: "dall-e-3", PromptPrice: 0, CompletionPrice: 0, CacheReadPrice: 0, FixedPrice: 0.28, Currency: "CNY", OffPeakEnabled: false, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
 		{Model: "tts-1", PromptPrice: 0, CompletionPrice: 0, CacheReadPrice: 0, FixedPrice: 0.10, Currency: "CNY", OffPeakEnabled: false, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},

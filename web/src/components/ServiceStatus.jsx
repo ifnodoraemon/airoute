@@ -468,7 +468,7 @@ export default function ServiceStatus({
                 className="px-4 py-1.5 bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center space-x-1.5 transition cursor-pointer"
               >
                 <Server className="w-3.5 h-3.5" />
-                <span>{lang === 'zh' ? '进入控制台 →' : 'Console →'}</span>
+                <span>{lang === 'zh' ? '进入工作台 →' : 'Workspace →'}</span>
               </button>
             ) : (
               <button

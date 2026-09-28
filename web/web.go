@@ -20,11 +20,21 @@ func RegisterStaticRoutes(r *gin.Engine) {
 
 	httpFS := http.FS(sub)
 
-	// Serve static assets under /ui/
-	r.StaticFS("/ui", httpFS)
+	// Serve static assets under /workspace and /console
+	r.StaticFS("/workspace", httpFS)
+	r.StaticFS("/console", httpFS)
 
-	// Redirect root / to /ui/
+	// Backward compatibility: redirect /ui to /workspace
+	r.GET("/ui", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/workspace/")
+	})
+	r.GET("/ui/*filepath", func(c *gin.Context) {
+		p := c.Param("filepath")
+		c.Redirect(http.StatusMovedPermanently, "/workspace"+p)
+	})
+
+	// Redirect root / to /workspace/
 	r.GET("/", func(c *gin.Context) {
-		c.Redirect(http.StatusFound, "/ui/")
+		c.Redirect(http.StatusFound, "/workspace/")
 	})
 }

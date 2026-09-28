@@ -238,7 +238,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
 
         <div className="text-[11px] text-slate-500 text-center px-1">
           {activeTab === 'login'
-            ? '统一身份登录：系统将根据账号角色（超级管理员 / 普通用户）呈现专属控制台'
+            ? '统一身份登录：系统将根据账号角色（超级管理员 / 普通用户）呈现专属工作台'
             : '注册成功即为普通用户角色，享有独立钱包、专属 API Key 及独立审计流水'}
         </div>
 

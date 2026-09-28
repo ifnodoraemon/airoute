@@ -19,8 +19,8 @@
   kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:$CONTAINER_PORT
 {{- end }}
 
-2. Access the Bright Web UI Console:
-   http://127.0.0.1:8080/ui/
+2. Access the Web Workspace:
+   http://127.0.0.1:8080/workspace/
 
 3. Test Chat Completion:
    curl -X POST http://127.0.0.1:8080/v1/chat/completions \

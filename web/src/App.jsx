@@ -102,7 +102,7 @@ export default function App() {
     }, 3200);
   };
 
-  // View mode: 'landing' (公共门户首页) or 'console' (管理控制台)
+  // View mode: 'landing' (公共门户首页) or 'console' (工作台)
   const [viewMode, setViewMode] = useState(() => {
     return localStorage.getItem('nano_admin_token') ? 'console' : 'landing';
   });
@@ -4608,11 +4608,11 @@ export default function App() {
 
 client = OpenAI(
     base_url="http://localhost:8080/v1",  # Nano-Gateway 负载均衡端口
-    api_key="sk-nano-xxxx",               # 在控制台签发的客户端访问密钥
+    api_key="sk-nano-xxxx",               # 在工作台签发的客户端访问密钥
 )
 
 response = client.chat.completions.create(
-    model="deepseek-chat",               # 支持任意映射模型
+    model="deepseek-v3",                 # 支持任意映射模型
     messages=[{"role": "user", "content": "你好！"}],
     stream=True,                         # 原生毫秒级 SSE 流式传输
 )
@@ -4622,7 +4622,7 @@ for chunk in response:
     print(content, end="", flush=True)`}
                       </pre>
                       <button
-                        onClick={() => copyToClipboard(`from openai import OpenAI\n\nclient = OpenAI(\n    base_url="http://localhost:8080/v1",\n    api_key="sk-nano-xxxx",\n)\n\nresponse = client.chat.completions.create(\n    model="deepseek-chat",\n    messages=[{"role": "user", "content": "你好！"}],\n    stream=True,\n)\n\nfor chunk in response:\n    content = chunk.choices[0].delta.content or ""\n    print(content, end="", flush=True)`)}
+                        onClick={() => copyToClipboard(`from openai import OpenAI\n\nclient = OpenAI(\n    base_url="http://localhost:8080/v1",\n    api_key="sk-nano-xxxx",\n)\n\nresponse = client.chat.completions.create(\n    model="deepseek-v3",\n    messages=[{"role": "user", "content": "你好！"}],\n    stream=True,\n)\n\nfor chunk in response:\n    content = chunk.choices[0].delta.content or ""\n    print(content, end="", flush=True)`)}
                         className="absolute top-3 right-3 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] font-mono flex items-center space-x-1"
                       >
                         <Copy className="w-3 h-3" />
@@ -4646,7 +4646,7 @@ for chunk in response:
 {`curl -X POST http://localhost:8080/v1/chat/completions \\
   -H "Authorization: Bearer sk-nano-xxxx" \\
   -H "Content-Type: application/json" \\
-  -d '{"model": "deepseek-chat", "messages": [{"role": "user", "content": "Ping"}], "stream": true}'`}
+  -d '{"model": "deepseek-v3", "messages": [{"role": "user", "content": "Ping"}], "stream": true}'`}
                       </pre>
                     </div>
                   </div>
@@ -4664,11 +4664,11 @@ for chunk in response:
 
 client = anthropic.Anthropic(
     base_url="http://localhost:8080",  # 网关根路径，将自动请求 /v1/messages
-    api_key="sk-nano-xxxx",            # 在控制台签发的客户端访问密钥
+    api_key="sk-nano-xxxx",            # 在工作台签发的客户端访问密钥
 )
 
 message = client.messages.create(
-    model="claude-3-5-sonnet",
+    model="claude-3-7-sonnet",
     max_tokens=1024,
     messages=[
         {"role": "user", "content": "请介绍量子计算的核心原理。"}
