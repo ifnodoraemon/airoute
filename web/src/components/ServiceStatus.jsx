@@ -12,8 +12,11 @@ import {
   ArrowRight,
   Cpu,
   Layers,
-  HardDrive
+  HardDrive,
+  Globe,
+  Network
 } from 'lucide-react';
+import MiddlewareStatusMatrix from './MiddlewareStatusMatrix';
 
 export default function ServiceStatus({
   isStandalone = true,
@@ -28,6 +31,8 @@ export default function ServiceStatus({
   t,
   onRefresh,
   probeLatencies = {},
+  adminFetch,
+  showToast,
 }) {
   const [hoveredDay, setHoveredDay] = useState(null);
   const [publicData, setPublicData] = useState(null);
@@ -153,7 +158,159 @@ export default function ServiceStatus({
         </div>
       </div>
 
-      {/* 2. Core Model Health & 30-Day Uptime Grid */}
+      {/* 2. Cluster High-Availability Topology */}
+      <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div className="flex items-center space-x-3.5">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 shrink-0">
+              <Network className="w-5 h-5" />
+            </div>
+            <div className="flex items-center space-x-2">
+              <h3 className="font-bold text-base text-slate-900">
+                {lang === 'zh' ? '集群高可用拓扑与节点' : 'Cluster Topology & Nodes'}
+              </h3>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>
+                {lang === 'zh' ? '多节点双活' : 'Multi-Node Active'}
+              </span>
+            </div>
+          </div>
+          <span className="text-xs text-slate-400 font-mono">
+            {lang === 'zh' ? '无单点故障 · 零停机平滑转发' : 'Zero Single Point of Failure'}
+          </span>
+        </div>
+
+        {/* Topology Nodes Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+          {/* Node 1: Nginx LB */}
+          <div className="p-4 rounded-2xl bg-slate-50/70 border border-slate-200/70 flex flex-col justify-between space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <span className="p-1.5 rounded-xl bg-sky-100 text-sky-600">
+                  <Globe className="w-4 h-4" />
+                </span>
+                <span className="font-semibold text-xs text-slate-800">负载均衡 (LB)</span>
+              </div>
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded-lg bg-emerald-100/70 text-emerald-700 font-semibold">
+                :8080
+              </span>
+            </div>
+            <div className="text-[11px] text-slate-500 flex justify-between font-mono">
+              <span>Nginx 代理</span>
+              <span className="text-emerald-600">Round-Robin</span>
+            </div>
+          </div>
+
+          {/* Node 2: Gateway Instance 1 */}
+          <div className="p-4 rounded-2xl bg-slate-50/70 border border-slate-200/70 flex flex-col justify-between space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <span className="p-1.5 rounded-xl bg-indigo-100 text-indigo-600">
+                  <Server className="w-4 h-4" />
+                </span>
+                <span className="font-semibold text-xs text-slate-800">计算节点 #1</span>
+              </div>
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded-lg bg-indigo-100/70 text-indigo-700 font-semibold">
+                :8081
+              </span>
+            </div>
+            <div className="text-[11px] text-slate-500 flex justify-between font-mono">
+              <span>gateway-1</span>
+              <span className="text-emerald-600">Active</span>
+            </div>
+          </div>
+
+          {/* Node 3: Gateway Instance 2 */}
+          <div className="p-4 rounded-2xl bg-slate-50/70 border border-slate-200/70 flex flex-col justify-between space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <span className="p-1.5 rounded-xl bg-purple-100 text-purple-600">
+                  <Server className="w-4 h-4" />
+                </span>
+                <span className="font-semibold text-xs text-slate-800">计算节点 #2</span>
+              </div>
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded-lg bg-purple-100/70 text-purple-700 font-semibold">
+                :8082
+              </span>
+            </div>
+            <div className="text-[11px] text-slate-500 flex justify-between font-mono">
+              <span>gateway-2</span>
+              <span className="text-emerald-600">Active</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Core Middlewares & Infrastructure Matrix */}
+      {adminFetch ? (
+        <MiddlewareStatusMatrix adminFetch={adminFetch} showToast={showToast} />
+      ) : (
+        <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Server className="w-4 h-4 text-indigo-500" />
+              <h3 className="font-semibold text-slate-900 text-sm">
+                {lang === 'zh' ? '系统基础设施组件' : 'Infrastructure Components'}
+              </h3>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              {
+                name: 'Nginx 负载均衡',
+                desc: '反向代理与统一入口',
+                status: 'Operational',
+                badge: '100.0%',
+                icon: Server
+              },
+              {
+                name: '数据面网关集群',
+                desc: 'Nano-Gateway 双节点',
+                status: 'Operational',
+                badge: '100.0%',
+                icon: Cpu
+              },
+              {
+                name: 'Redis 分布式协调',
+                desc: '状态缓存与分布式限流',
+                status: 'Operational',
+                badge: '100.0%',
+                icon: HardDrive
+              },
+              {
+                name: '会话黏连与熔断',
+                desc: '自动容灾降级保障',
+                status: 'Active',
+                badge: '已就绪',
+                icon: ShieldCheck
+              },
+            ].map((item, idx) => {
+              const Icon = item.icon;
+              return (
+                <div key={idx} className="p-3.5 rounded-2xl bg-slate-50/70 border border-slate-200/60 flex items-start space-x-3">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
+                    <Icon className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800 truncate">{item.name}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 truncate mt-0.5">{item.desc}</p>
+                    <div className="flex items-center space-x-1.5 mt-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      <span className="text-[11px] font-semibold text-emerald-600">{item.status}</span>
+                      <span className="text-[10px] font-mono text-slate-400 bg-white px-1.5 py-0.5 rounded border border-slate-200">{item.badge}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 4. Core Model Health & 30-Day Uptime Grid */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-slate-900 flex items-center space-x-2">
@@ -268,72 +425,7 @@ export default function ServiceStatus({
         )}
       </div>
 
-      {/* 3. Core Infrastructure Components (SLA & Redundancy) */}
-      <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Server className="w-4 h-4 text-indigo-500" />
-            <h3 className="font-semibold text-slate-900 text-sm">
-              集群基础设施状态
-            </h3>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            {
-              name: 'Nginx 负载均衡',
-              desc: '反向代理与统一入口',
-              status: 'Operational',
-              badge: '100.0%',
-              icon: Server
-            },
-            {
-              name: '数据面网关集群',
-              desc: 'Nano-Gateway 双节点',
-              status: 'Operational',
-              badge: '100.0%',
-              icon: Cpu
-            },
-            {
-              name: 'Redis 分布式协调',
-              desc: '状态缓存与分布式限流',
-              status: 'Operational',
-              badge: '100.0%',
-              icon: HardDrive
-            },
-            {
-              name: '会话黏连与熔断',
-              desc: '自动容灾降级保障',
-              status: 'Active',
-              badge: '已就绪',
-              icon: ShieldCheck
-            },
-          ].map((item, idx) => {
-            const Icon = item.icon;
-            return (
-              <div key={idx} className="p-3.5 rounded-2xl bg-slate-50/70 border border-slate-200/60 flex items-start space-x-3">
-                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
-                  <Icon className="w-4 h-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-800 truncate">{item.name}</span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 truncate mt-0.5">{item.desc}</p>
-                  <div className="flex items-center space-x-1.5 mt-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span className="text-[11px] font-semibold text-emerald-600">{item.status}</span>
-                    <span className="text-[10px] font-mono text-slate-400 bg-white px-1.5 py-0.5 rounded border border-slate-200">{item.badge}</span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 4. Upstream Provider Channels (If channels provided by admin view) */}
+      {/* 5. Upstream Provider Channels (If channels provided by admin view) */}
       {channels.length > 0 && (
         <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs space-y-4">
           <div className="flex items-center justify-between">

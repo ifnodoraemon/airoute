@@ -1709,6 +1709,8 @@ export default function App() {
           channels={channels}
           onRefresh={fetchData}
           probeLatencies={channelLatencies}
+          adminFetch={adminFetch}
+          showToast={showToast}
         />
         <LoginModal
           isOpen={showLoginModal}
@@ -1808,8 +1810,20 @@ export default function App() {
                     : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
                 }`}
               >
-                <Activity className="w-4 h-4 text-indigo-500" />
+                <BarChart3 className="w-4 h-4 text-indigo-500" />
                 <span>{t.navDashboard}</span>
+              </button>
+
+              <button
+                onClick={() => setCurrentTab('status')}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
+                  currentTab === 'status'
+                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                }`}
+              >
+                <Activity className="w-4 h-4 text-emerald-500" />
+                <span>{t.navStatus || '服务状态'}</span>
               </button>
 
               <button
@@ -2009,10 +2023,21 @@ export default function App() {
         {/* Sidebar bottom status */}
         <div className="p-4 border-t border-slate-100 text-xs text-slate-500 flex flex-col space-y-2 bg-slate-50/60">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-1.5 text-emerald-600 font-medium text-xs">
+            <button
+              type="button"
+              onClick={() => {
+                if (adminUser?.role === 'admin') {
+                  setCurrentTab('status');
+                } else {
+                  setViewMode('status');
+                }
+              }}
+              className="flex items-center space-x-1.5 text-emerald-600 hover:text-emerald-700 font-medium text-xs cursor-pointer hover:underline"
+              title="查看系统运维与服务状态详情"
+            >
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span>{t.statusOperationalBadge}</span>
-            </div>
+            </button>
             <button
               type="button"
               onClick={() => setViewMode('status')}
@@ -2032,6 +2057,7 @@ export default function App() {
           <div className="flex items-center space-x-3">
             <h2 className="text-base font-bold text-slate-900 tracking-tight">
               {currentTab === 'dashboard' && t.navDashboard}
+              {currentTab === 'status' && (t.navStatus || '服务状态')}
               {currentTab === 'models' && t.navModels}
               {currentTab === 'pricing' && t.navPricing}
               {currentTab === 'channels' && t.navChannels}
@@ -2151,110 +2177,51 @@ export default function App() {
             </div>
           )}
 
-          {/* 1. ENTERPRISE OPERATIONS DASHBOARD */}
+          {/* 1. ENTERPRISE BUSINESS & TELEMETRY DASHBOARD */}
           {currentTab === 'dashboard' && (
             <div className="space-y-6">
-              {/* 1.1 CLUSTER HIGH-AVAILABILITY TOPOLOGY */}
-              <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-3xl p-6 shadow-xs space-y-4">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800/80">
-                  <div className="flex items-center space-x-3.5">
-                    <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800/60 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
-                      <Network className="w-5 h-5" />
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
-                        集群架构
-                      </h3>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
-                        运行正常
-                      </span>
-                    </div>
-                  </div>
+              {/* 1.0 OVERVIEW HEADER BAR */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-3xl p-5 shadow-xs">
+                <div>
                   <div className="flex items-center space-x-2.5">
-                    <button
-                      onClick={() => {
-                        fetchData();
-                        fetchLogs();
-                        showToast('状态已刷新', 'info');
-                      }}
-                      className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition flex items-center space-x-1.5"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      <span>刷新</span>
-                    </button>
+                    <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
+                      用量与业务概览
+                    </h3>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>
+                      实时同步中
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    实时调用量、Token 吞吐、各上游通道连通性与调用审计流水
+                  </p>
+                </div>
+
+                <div className="flex items-center space-x-2.5">
+                  <button
+                    onClick={() => {
+                      fetchData();
+                      fetchLogs();
+                      showToast('数据已刷新', 'info');
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition flex items-center space-x-1.5 cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>刷新</span>
+                  </button>
+                  {adminUser?.role === 'admin' && (
                     <button
                       onClick={() => setShowChannelModal(true)}
-                      className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-xs font-semibold text-white transition shadow-xs flex items-center space-x-1.5"
+                      className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-xs font-semibold text-white transition shadow-xs flex items-center space-x-1.5 cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>接入服务商</span>
                     </button>
-                  </div>
-                </div>
-
-                {/* Topology Nodes Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
-                  {/* Node 1: Nginx LB */}
-                  <div className="p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-800/60 flex flex-col justify-between space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span className="p-1.5 rounded-xl bg-sky-100 dark:bg-sky-950/70 text-sky-600 dark:text-sky-400">
-                          <Globe className="w-4 h-4" />
-                        </span>
-                        <span className="font-semibold text-xs text-slate-800 dark:text-slate-200">负载均衡 (LB)</span>
-                      </div>
-                      <span className="text-[11px] font-mono px-2 py-0.5 rounded-lg bg-emerald-100/70 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-400 font-semibold">
-                        :8080
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 flex justify-between font-mono">
-                      <span>Nginx 代理</span>
-                      <span className="text-emerald-600 dark:text-emerald-400">Round-Robin</span>
-                    </div>
-                  </div>
-
-                  {/* Node 2: Gateway Instance 1 */}
-                  <div className="p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-800/60 flex flex-col justify-between space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span className="p-1.5 rounded-xl bg-indigo-100 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400">
-                          <Server className="w-4 h-4" />
-                        </span>
-                        <span className="font-semibold text-xs text-slate-800 dark:text-slate-200">计算节点 #1</span>
-                      </div>
-                      <span className="text-[11px] font-mono px-2 py-0.5 rounded-lg bg-indigo-100/70 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-400 font-semibold">
-                        :8081
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 flex justify-between font-mono">
-                      <span>gateway-1</span>
-                      <span className="text-emerald-600 dark:text-emerald-400">Active</span>
-                    </div>
-                  </div>
-
-                  {/* Node 3: Gateway Instance 2 */}
-                  <div className="p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-800/60 flex flex-col justify-between space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span className="p-1.5 rounded-xl bg-purple-100 dark:bg-purple-950/70 text-purple-600 dark:text-purple-400">
-                          <Server className="w-4 h-4" />
-                        </span>
-                        <span className="font-semibold text-xs text-slate-800 dark:text-slate-200">计算节点 #2</span>
-                      </div>
-                      <span className="text-[11px] font-mono px-2 py-0.5 rounded-lg bg-purple-100/70 dark:bg-purple-950/70 text-purple-700 dark:text-purple-400 font-semibold">
-                        :8082
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 flex justify-between font-mono">
-                      <span>gateway-2</span>
-                      <span className="text-emerald-600 dark:text-emerald-400">Active</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
 
-              {/* 1.2 CORE SLA & TELEMETRY KPIS */}
+              {/* 1.1 CORE SLA & TELEMETRY KPIS */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                 <div className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-xs hover:border-indigo-400 transition group">
                   <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">累计请求量</span>
@@ -2323,10 +2290,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 1.25 MIDDLEWARE INFRASTRUCTURE HEALTH STATUS MATRIX */}
-              <MiddlewareStatusMatrix adminFetch={adminFetch} showToast={showToast} />
-
-              {/* 1.3 UPSTREAM PROVIDERS HEALTH & CIRCUIT BREAKER MATRIX */}
+              {/* 1.2 UPSTREAM PROVIDERS HEALTH & CIRCUIT BREAKER MATRIX */}
               <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-3xl overflow-hidden shadow-xs">
                 <div className="p-5 border-b border-slate-100 dark:border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                   <div>
@@ -2532,6 +2496,23 @@ export default function App() {
                 )}
               </div>
             </div>
+          )}
+
+          {/* 1.1 SERVICE STATUS & INFRASTRUCTURE TAB */}
+          {currentTab === 'status' && (
+            <ServiceStatus
+              isStandalone={false}
+              isLoggedIn={!!adminToken}
+              lang={lang}
+              setLang={setLang}
+              modelRoutes={modelRoutes}
+              channels={channels}
+              onRefresh={fetchData}
+              probeLatencies={channelLatencies}
+              adminFetch={adminFetch}
+              showToast={showToast}
+              t={t}
+            />
           )}
 
           {/* 1.5. MODEL ROUTES TAB */}
