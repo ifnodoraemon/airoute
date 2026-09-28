@@ -199,6 +199,14 @@ func (db *DB) runMigrations(migrations []Migration) error {
 	return nil
 }
 
+func ensureSQLiteColumn(db *sql.DB, table, col, colType string) {
+	var count int
+	_ = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM pragma_table_info('%s') WHERE name='%s';", table, col)).Scan(&count)
+	if count == 0 {
+		_, _ = db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s;", table, col, colType))
+	}
+}
+
 // migrate creates required tables if they don't exist for SQLite.
 func (db *DB) migrate() error {
 	migrations := []Migration{
@@ -206,6 +214,36 @@ func (db *DB) migrate() error {
 			Version: 1,
 			Name:    "initial_authoritative_schema_v1",
 			Up: func(db *DB) error {
+				// Handle seamless upgrade from pre-migration legacy databases
+				var ulCount int
+				_ = db.DB.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='usage_logs';").Scan(&ulCount)
+				if ulCount > 0 {
+					ensureSQLiteColumn(db.DB, "usage_logs", "trace_id", "TEXT DEFAULT ''")
+					ensureSQLiteColumn(db.DB, "usage_logs", "session_id", "TEXT DEFAULT ''")
+					ensureSQLiteColumn(db.DB, "usage_logs", "api_key", "TEXT DEFAULT ''")
+					ensureSQLiteColumn(db.DB, "usage_logs", "cached_tokens", "INTEGER DEFAULT 0")
+					ensureSQLiteColumn(db.DB, "usage_logs", "cost", "REAL DEFAULT 0")
+					ensureSQLiteColumn(db.DB, "usage_logs", "is_off_peak", "INTEGER DEFAULT 0")
+					ensureSQLiteColumn(db.DB, "usage_logs", "off_peak_discount", "REAL DEFAULT 1.0")
+				}
+				var vkCount int
+				_ = db.DB.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='virtual_keys';").Scan(&vkCount)
+				if vkCount > 0 {
+					var akCount int
+					_ = db.DB.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='api_keys';").Scan(&akCount)
+					if akCount == 0 {
+						_, _ = db.DB.Exec("ALTER TABLE virtual_keys RENAME TO api_keys;")
+					}
+				}
+				var akExists int
+				_ = db.DB.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='api_keys';").Scan(&akExists)
+				if akExists > 0 {
+					ensureSQLiteColumn(db.DB, "api_keys", "used_cost", "REAL DEFAULT 0")
+					ensureSQLiteColumn(db.DB, "api_keys", "group_name", "TEXT DEFAULT 'default'")
+					ensureSQLiteColumn(db.DB, "api_keys", "user_id", "INTEGER DEFAULT 0")
+					ensureSQLiteColumn(db.DB, "api_keys", "format_validation", "TEXT DEFAULT ''")
+				}
+
 				schema := `
 				CREATE TABLE IF NOT EXISTS channels (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
