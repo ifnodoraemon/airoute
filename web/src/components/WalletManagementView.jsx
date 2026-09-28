@@ -18,7 +18,7 @@ import {
   DollarSign
 } from 'lucide-react';
 
-export default function WalletManagementView({ adminUser, adminFetch, showToast, onUserUpdated }) {
+export default function WalletManagementView({ adminUser, adminFetch, showToast, onUserUpdated, onBalanceUpdate }) {
   const isAdmin = adminUser?.role === 'admin';
   const [walletData, setWalletData] = useState({
     balance: adminUser?.balance || 0,
@@ -61,6 +61,9 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
         if (onUserUpdated) {
           onUserUpdated(data.data);
         }
+        if (onBalanceUpdate && data.data.balance !== undefined) {
+          onBalanceUpdate(data.data.balance);
+        }
       }
     } catch (err) {
       console.error('fetch wallet err:', err);
@@ -88,6 +91,18 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
       fetchRedemptions();
     }
   }, []);
+
+  useEffect(() => {
+    if (adminUser) {
+      setWalletData(prev => ({
+        ...prev,
+        balance: adminUser.balance !== undefined ? adminUser.balance : prev.balance,
+        role: adminUser.role || prev.role,
+        status: adminUser.status || prev.status,
+        group_name: adminUser.group_name || prev.group_name
+      }));
+    }
+  }, [adminUser?.balance, adminUser?.role, adminUser?.status, adminUser?.group_name]);
 
   const handleRedeem = async (e) => {
     if (e) e.preventDefault();

@@ -163,6 +163,8 @@ func (db *DB) migrate() error {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		key TEXT UNIQUE NOT NULL,
 		tenant_id TEXT NOT NULL,
+		user_id INTEGER DEFAULT 0,
+		group_name TEXT DEFAULT 'default',
 		allowed_models TEXT,
 		rpm INTEGER DEFAULT 60,
 		tpm INTEGER DEFAULT 100000,
@@ -292,6 +294,12 @@ func (db *DB) migrate() error {
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_usage_created ON usage_logs(created_at);
+	CREATE INDEX IF NOT EXISTS idx_usage_vk ON usage_logs(virtual_key);
+	CREATE INDEX IF NOT EXISTS idx_usage_tenant ON usage_logs(tenant_id);
+	CREATE INDEX IF NOT EXISTS idx_usage_model ON usage_logs(model);
+	CREATE INDEX IF NOT EXISTS idx_vk_user_id ON virtual_keys(user_id);
+	CREATE INDEX IF NOT EXISTS idx_vk_tenant_id ON virtual_keys(tenant_id);
+	CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 	CREATE INDEX IF NOT EXISTS idx_redemption_code ON redemption_codes(code);
 	CREATE INDEX IF NOT EXISTS idx_recharge_user ON recharge_orders(username);
 	CREATE INDEX IF NOT EXISTS idx_recharge_order ON recharge_orders(order_no);
@@ -315,9 +323,14 @@ func (db *DB) migrate() error {
 	_, _ = db.Exec("ALTER TABLE usage_logs ADD COLUMN cost REAL DEFAULT 0;")
 	_, _ = db.Exec("ALTER TABLE usage_logs ADD COLUMN is_off_peak INTEGER DEFAULT 0;")
 	_, _ = db.Exec("ALTER TABLE usage_logs ADD COLUMN off_peak_discount REAL DEFAULT 1.0;")
+	_, _ = db.Exec("CREATE INDEX IF NOT EXISTS idx_usage_vk ON usage_logs(virtual_key);")
+	_, _ = db.Exec("CREATE INDEX IF NOT EXISTS idx_usage_tenant ON usage_logs(tenant_id);")
+	_, _ = db.Exec("CREATE INDEX IF NOT EXISTS idx_usage_model ON usage_logs(model);")
 	_, _ = db.Exec("ALTER TABLE virtual_keys ADD COLUMN used_cost REAL DEFAULT 0;")
 	_, _ = db.Exec("ALTER TABLE virtual_keys ADD COLUMN group_name TEXT DEFAULT 'default';")
 	_, _ = db.Exec("ALTER TABLE virtual_keys ADD COLUMN user_id INTEGER DEFAULT 0;")
+	_, _ = db.Exec("CREATE INDEX IF NOT EXISTS idx_vk_user_id ON virtual_keys(user_id);")
+	_, _ = db.Exec("CREATE INDEX IF NOT EXISTS idx_vk_tenant_id ON virtual_keys(tenant_id);")
 	_, _ = db.Exec("ALTER TABLE model_prices ADD COLUMN off_peak_enabled INTEGER DEFAULT 1;")
 	_, _ = db.Exec("ALTER TABLE model_prices ADD COLUMN off_peak_start TEXT DEFAULT '00:00';")
 	_, _ = db.Exec("ALTER TABLE model_prices ADD COLUMN off_peak_end TEXT DEFAULT '08:30';")
@@ -329,6 +342,7 @@ func (db *DB) migrate() error {
 	_, _ = db.Exec("CREATE INDEX IF NOT EXISTS idx_model_price_group ON model_prices(model, group_name);")
 	_, _ = db.Exec("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'admin';")
 	_, _ = db.Exec("ALTER TABLE users ADD COLUMN email TEXT DEFAULT '';")
+	_, _ = db.Exec("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);")
 	_, _ = db.Exec("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active';")
 	_, _ = db.Exec("ALTER TABLE users ADD COLUMN balance REAL DEFAULT 0.0;")
 	_, _ = db.Exec("ALTER TABLE users ADD COLUMN group_name TEXT DEFAULT 'default';")
@@ -366,6 +380,8 @@ func (db *DB) migratePostgres() error {
 		id BIGSERIAL PRIMARY KEY,
 		key VARCHAR(255) UNIQUE NOT NULL,
 		tenant_id VARCHAR(128) NOT NULL,
+		user_id BIGINT DEFAULT 0,
+		group_name VARCHAR(64) DEFAULT 'default',
 		allowed_models TEXT,
 		rpm INT DEFAULT 60,
 		tpm INT DEFAULT 100000,
@@ -500,6 +516,12 @@ func (db *DB) migratePostgres() error {
 	CREATE INDEX IF NOT EXISTS idx_usage_trace ON usage_logs(trace_id);
 	CREATE INDEX IF NOT EXISTS idx_usage_chat ON usage_logs(chat_id);
 	CREATE INDEX IF NOT EXISTS idx_usage_session ON usage_logs(session_id);
+	CREATE INDEX IF NOT EXISTS idx_usage_vk ON usage_logs(virtual_key);
+	CREATE INDEX IF NOT EXISTS idx_usage_tenant ON usage_logs(tenant_id);
+	CREATE INDEX IF NOT EXISTS idx_usage_model ON usage_logs(model);
+	CREATE INDEX IF NOT EXISTS idx_vk_user_id ON virtual_keys(user_id);
+	CREATE INDEX IF NOT EXISTS idx_vk_tenant_id ON virtual_keys(tenant_id);
+	CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 	CREATE INDEX IF NOT EXISTS idx_redemption_code ON redemption_codes(code);
 	CREATE INDEX IF NOT EXISTS idx_recharge_user ON recharge_orders(username);
 	CREATE INDEX IF NOT EXISTS idx_recharge_order ON recharge_orders(order_no);
@@ -511,11 +533,17 @@ func (db *DB) migratePostgres() error {
 
 	// Idempotent migrations for existing deployments
 	_, _ = db.DB.Exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255) DEFAULT '';")
+	_, _ = db.DB.Exec("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);")
 	_, _ = db.DB.Exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(32) DEFAULT 'active';")
 	_, _ = db.DB.Exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS balance DOUBLE PRECISION DEFAULT 0.0;")
 	_, _ = db.DB.Exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS group_name VARCHAR(64) DEFAULT 'default';")
 	_, _ = db.DB.Exec("ALTER TABLE virtual_keys ADD COLUMN IF NOT EXISTS group_name VARCHAR(64) DEFAULT 'default';")
 	_, _ = db.DB.Exec("ALTER TABLE virtual_keys ADD COLUMN IF NOT EXISTS user_id BIGINT DEFAULT 0;")
+	_, _ = db.DB.Exec("CREATE INDEX IF NOT EXISTS idx_vk_user_id ON virtual_keys(user_id);")
+	_, _ = db.DB.Exec("CREATE INDEX IF NOT EXISTS idx_vk_tenant_id ON virtual_keys(tenant_id);")
+	_, _ = db.DB.Exec("CREATE INDEX IF NOT EXISTS idx_usage_vk ON usage_logs(virtual_key);")
+	_, _ = db.DB.Exec("CREATE INDEX IF NOT EXISTS idx_usage_tenant ON usage_logs(tenant_id);")
+	_, _ = db.DB.Exec("CREATE INDEX IF NOT EXISTS idx_usage_model ON usage_logs(model);")
 	_, _ = db.DB.Exec("ALTER TABLE model_prices ADD COLUMN IF NOT EXISTS group_name VARCHAR(64) DEFAULT 'default';")
 	_, _ = db.DB.Exec("CREATE INDEX IF NOT EXISTS idx_model_price_group ON model_prices(model, group_name);")
 	_, _ = db.DB.Exec("INSERT INTO system_settings (key, value) VALUES ('mcp_enabled', 'true') ON CONFLICT (key) DO NOTHING;")

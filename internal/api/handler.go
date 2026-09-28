@@ -30,6 +30,16 @@ func NewHandler(dispatcher *router.Dispatcher) *Handler {
 	return &Handler{dispatcher: dispatcher}
 }
 
+// getKeyGroup returns the pricing group assigned to the current request's virtual key.
+func getKeyGroup(c *gin.Context) string {
+	if vkAny, exists := c.Get(middleware.ContextKeyVirtualKeyConfig); exists {
+		if vk, ok := vkAny.(*model.VirtualKeyConfig); ok && vk.GroupName != "" {
+			return vk.GroupName
+		}
+	}
+	return "default"
+}
+
 // HandleChatCompletions handles POST /v1/chat/completions.
 func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	var req model.ChatCompletionRequest
@@ -109,12 +119,7 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 		var cost, savedCost float64
 		var isOffPeak bool
 		var offPeakDiscount float64 = 1.0
-		keyGroup := "default"
-		if vkAny, exists := c.Get(middleware.ContextKeyVirtualKeyConfig); exists {
-			if vk, ok := vkAny.(*model.VirtualKeyConfig); ok && vk.GroupName != "" {
-				keyGroup = vk.GroupName
-			}
-		}
+		keyGroup := getKeyGroup(c)
 		if billing.GlobalEngine != nil {
 			cost, savedCost, _, isOffPeak, offPeakDiscount = billing.GlobalEngine.CalculateCostDetailedWithGroup(req.Model, keyGroup, pTokens, cTokens, cachedTokens, time.Now())
 		}
@@ -193,12 +198,7 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 		var cost, savedCost float64
 		var isOffPeak bool
 		var offPeakDiscount float64 = 1.0
-		keyGroup := "default"
-		if vkAny, exists := c.Get(middleware.ContextKeyVirtualKeyConfig); exists {
-			if vk, ok := vkAny.(*model.VirtualKeyConfig); ok && vk.GroupName != "" {
-				keyGroup = vk.GroupName
-			}
-		}
+		keyGroup := getKeyGroup(c)
 		if billing.GlobalEngine != nil {
 			cost, savedCost, _, isOffPeak, offPeakDiscount = billing.GlobalEngine.CalculateCostDetailedWithGroup(req.Model, keyGroup, totalPromptTokens, totalCompTokens, totalCachedTokens, time.Now())
 		}

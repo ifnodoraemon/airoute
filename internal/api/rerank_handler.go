@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/nano-gateway/internal/billing"
 	"github.com/ifnodoraemon/nano-gateway/internal/middleware"
 	"github.com/ifnodoraemon/nano-gateway/internal/model"
 	"github.com/ifnodoraemon/nano-gateway/internal/storage"
@@ -93,6 +94,10 @@ func (h *Handler) HandleRerank(c *gin.Context) {
 	c.Header("X-Nano-Session-ID", sessionID)
 
 	dur := time.Since(start)
+	var cost float64
+	if billing.GlobalEngine != nil {
+		cost, _ = billing.GlobalEngine.CalculateCostWithGroup(req.Model, getKeyGroup(c), resp.Usage.TotalTokens, 0, 0)
+	}
 	if storage.GlobalAsyncLogger != nil {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 			TraceID:          middleware.GetTraceID(c),
@@ -103,6 +108,7 @@ func (h *Handler) HandleRerank(c *gin.Context) {
 			PromptTokens:     resp.Usage.TotalTokens,
 			CompletionTokens: 0,
 			TotalTokens:      resp.Usage.TotalTokens,
+			Cost:             cost,
 			DurationMs:       dur.Milliseconds(),
 			StatusCode:       http.StatusOK,
 		})

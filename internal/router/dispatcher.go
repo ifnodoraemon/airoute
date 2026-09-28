@@ -285,6 +285,35 @@ func (d *Dispatcher) GetAllSupportedModels() []string {
 	return list
 }
 
+type fallbackChainKey struct{}
+
+func getFallbackChain(ctx context.Context) []string {
+	if val := ctx.Value(fallbackChainKey{}); val != nil {
+		if chain, ok := val.([]string); ok {
+			return chain
+		}
+	}
+	return nil
+}
+
+func nextFallbackContext(ctx context.Context, currentModel, nextModel string) (context.Context, error) {
+	const maxFallbackDepth = 4
+	chain := getFallbackChain(ctx)
+	if len(chain) == 0 {
+		chain = []string{currentModel}
+	}
+	if len(chain) >= maxFallbackDepth {
+		return ctx, fmt.Errorf("cross-model fallback limit (%d) reached (chain: %s -> %s)", maxFallbackDepth, strings.Join(chain, " -> "), nextModel)
+	}
+	for _, m := range chain {
+		if strings.EqualFold(m, nextModel) {
+			return ctx, fmt.Errorf("cross-model fallback cycle detected (%s -> %s)", strings.Join(chain, " -> "), nextModel)
+		}
+	}
+	newChain := append(append([]string(nil), chain...), nextModel)
+	return context.WithValue(ctx, fallbackChainKey{}, newChain), nil
+}
+
 // Dispatch executes non-streaming chat with automatic fallback.
 func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequest) (*model.ChatCompletionResponse, error) {
 	channels := d.GetChannelsForModelAndProtocolWithContext(ctx, req.Model, "chat")
@@ -292,14 +321,19 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		channels = d.GetChannelsForModelAndProtocolWithContext(ctx, req.Model, "")
 	}
 	if len(channels) == 0 {
-		if fb := d.GetModelFallback(req.Model); fb != "" && fb != req.Model {
+		if fb := d.GetModelFallback(req.Model); fb != "" && !strings.EqualFold(fb, req.Model) {
+			nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
+			if fbErr != nil {
+				telemetry.Logger.Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
+				return nil, fmt.Errorf("no upstream provider available for requested model '%s': %w", req.Model, fbErr)
+			}
 			telemetry.Logger.Warn("no upstream provider for model, triggering cross-model fallback",
 				"requested_model", req.Model,
 				"fallback_model", fb,
 			)
 			reqCopy := *req
 			reqCopy.Model = fb
-			return d.Dispatch(ctx, &reqCopy)
+			return d.Dispatch(nextCtx, &reqCopy)
 		}
 		return nil, fmt.Errorf("no upstream provider available for requested model '%s'", req.Model)
 	}
@@ -359,7 +393,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		)
 	}
 
-	if fb := d.GetModelFallback(req.Model); fb != "" && fb != req.Model {
+	if fb := d.GetModelFallback(req.Model); fb != "" && !strings.EqualFold(fb, req.Model) {
+		nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
+		if fbErr != nil {
+			telemetry.Logger.Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
+			return nil, fmt.Errorf("all %d candidate channels failed for model %s (last error: %v); cannot fallback to %s: %w", len(channels), req.Model, lastErr, fb, fbErr)
+		}
 		telemetry.Logger.Warn("all candidate channels failed, triggering cross-model fallback",
 			"requested_model", req.Model,
 			"fallback_model", fb,
@@ -367,7 +406,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		)
 		reqCopy := *req
 		reqCopy.Model = fb
-		return d.Dispatch(ctx, &reqCopy)
+		return d.Dispatch(nextCtx, &reqCopy)
 	}
 
 	telemetry.GlobalMetrics.RecordRequest(false, 0, 0, 0)
@@ -381,14 +420,19 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		channels = d.GetChannelsForModelAndProtocolWithContext(ctx, req.Model, "")
 	}
 	if len(channels) == 0 {
-		if fb := d.GetModelFallback(req.Model); fb != "" && fb != req.Model {
+		if fb := d.GetModelFallback(req.Model); fb != "" && !strings.EqualFold(fb, req.Model) {
+			nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
+			if fbErr != nil {
+				telemetry.Logger.Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
+				return nil, fmt.Errorf("no upstream provider available for requested model '%s': %w", req.Model, fbErr)
+			}
 			telemetry.Logger.Warn("no upstream provider for stream model, triggering cross-model fallback",
 				"requested_model", req.Model,
 				"fallback_model", fb,
 			)
 			reqCopy := *req
 			reqCopy.Model = fb
-			return d.DispatchStream(ctx, &reqCopy)
+			return d.DispatchStream(nextCtx, &reqCopy)
 		}
 		return nil, fmt.Errorf("no upstream provider available for requested model '%s'", req.Model)
 	}
@@ -476,7 +520,12 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		}
 	}
 
-	if fb := d.GetModelFallback(req.Model); fb != "" && fb != req.Model {
+	if fb := d.GetModelFallback(req.Model); fb != "" && !strings.EqualFold(fb, req.Model) {
+		nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
+		if fbErr != nil {
+			telemetry.Logger.Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
+			return nil, fmt.Errorf("all channels failed for stream request on model %s (last error: %v); cannot fallback to %s: %w", req.Model, lastErr, fb, fbErr)
+		}
 		telemetry.Logger.Warn("all stream channels failed, triggering cross-model fallback",
 			"requested_model", req.Model,
 			"fallback_model", fb,
@@ -484,7 +533,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		)
 		reqCopy := *req
 		reqCopy.Model = fb
-		return d.DispatchStream(ctx, &reqCopy)
+		return d.DispatchStream(nextCtx, &reqCopy)
 	}
 
 	return nil, fmt.Errorf("all channels failed for stream request on model %s. Last error: %w", req.Model, lastErr)

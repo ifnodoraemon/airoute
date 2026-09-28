@@ -2,10 +2,12 @@ package tests
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/ifnodoraemon/nano-gateway/internal/api"
 	"github.com/ifnodoraemon/nano-gateway/internal/config"
 	"github.com/ifnodoraemon/nano-gateway/internal/controlplane"
+	"github.com/ifnodoraemon/nano-gateway/internal/model"
 	"github.com/ifnodoraemon/nano-gateway/internal/router"
 	"github.com/ifnodoraemon/nano-gateway/internal/storage"
 	"golang.org/x/crypto/bcrypt"
@@ -397,5 +400,135 @@ func TestSecurity_UpdateUserRole_RBAC(t *testing.T) {
 	demotedDave, _ := repo.GetUserByUsername("dave")
 	if demotedDave.Role != "user" {
 		t.Fatalf("expected Dave role to become user, got %s", demotedDave.Role)
+	}
+}
+
+// 8. Circular Fallback Prevention Test
+func TestDispatcher_CircularFallback_Prevention(t *testing.T) {
+	dispatcher := router.NewDispatcher(nil)
+	// Set circular fallback: model-x -> model-y -> model-x
+	dispatcher.SetModelFallbacks(map[string]string{
+		"model-x": "model-y",
+		"model-y": "model-x",
+	})
+
+	req := &model.ChatCompletionRequest{
+		Model: "model-x",
+		Messages: []model.ChatMessage{
+			{Role: "user", Content: "Hello test"},
+		},
+	}
+
+	// 1. Non-streaming dispatch should cleanly abort and return cycle error
+	resp, err := dispatcher.Dispatch(context.Background(), req)
+	if resp != nil {
+		t.Fatalf("expected nil response on circular fallback, got %v", resp)
+	}
+	if err == nil {
+		t.Fatalf("expected error on circular fallback, got nil")
+	}
+	if !strings.Contains(err.Error(), "cycle detected") {
+		t.Fatalf("expected error to mention 'cycle detected', got: %v", err)
+	}
+
+	// 2. Streaming dispatch should also cleanly abort without panic or stack exhaustion
+	streamChan, sErr := dispatcher.DispatchStream(context.Background(), req)
+	if streamChan != nil {
+		t.Fatalf("expected nil channel on circular fallback stream, got %v", streamChan)
+	}
+	if sErr == nil {
+		t.Fatalf("expected stream error on circular fallback, got nil")
+	}
+	if !strings.Contains(sErr.Error(), "cycle detected") {
+		t.Fatalf("expected error to mention 'cycle detected', got: %v", sErr)
+	}
+}
+
+// 9. Authoritative DB Budget Check Test
+func TestVirtualKey_AuthoritativeBudgetCheck(t *testing.T) {
+	repo, engine, _ := setupAuditTestEnv(t)
+
+	// Create user
+	user := &storage.UserRecord{
+		Username:     "budgetuser",
+		Email:        "budget@example.com",
+		PasswordHash: "pass",
+		Role:         "user",
+		Status:       "active",
+		Balance:      100.0,
+	}
+	_ = repo.CreateUser(user)
+	createdUser, _ := repo.GetUserByUsername("budgetuser")
+
+	// Create virtual key in DB with a strict budget of 10.0 and already used 12.0
+	vk := &storage.VirtualKeyRecord{
+		Key:       "sk-audit-budget-test-key",
+		TenantID:  "budgetuser",
+		UserID:    createdUser.ID,
+		Budget:    10.0,
+		UsedCost:  12.0,
+		Status:    "active",
+		GroupName: "default",
+	}
+	_ = repo.CreateVirtualKey(vk)
+
+	// In-memory config has Budget = 0 (not aware yet of the DB budget limit)
+	cfg := config.DefaultConfig()
+	cfg.VirtualKeys = []model.VirtualKeyConfig{
+		{
+			Key:      "sk-audit-budget-test-key",
+			TenantID: "budgetuser",
+			UserID:   createdUser.ID,
+			Budget:   0.0, // Stale or missing in memory
+		},
+	}
+	config.SetGlobalConfig(cfg)
+
+	w := httptest.NewRecorder()
+	reqBody, _ := json.Marshal(map[string]interface{}{
+		"model": "gpt-4o",
+		"messages": []map[string]string{
+			{"role": "user", "content": "ping"},
+		},
+	})
+	httpReq, _ := http.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(reqBody))
+	httpReq.Header.Set("Authorization", "Bearer sk-audit-budget-test-key")
+	httpReq.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(w, httpReq)
+
+	// Should be rejected with 402 Payment Required due to DB authoritative budget
+	if w.Code != http.StatusPaymentRequired {
+		t.Fatalf("expected 402 Payment Required due to authoritative DB budget check, got %d (body: %s)", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "key_budget_exceeded") {
+		t.Fatalf("expected key_budget_exceeded error code in response, got %s", w.Body.String())
+	}
+}
+
+// 10. Database Secondary Indexes Verification Test
+func TestDB_SecondaryIndexes_Created(t *testing.T) {
+	db, err := storage.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("failed to open memory db: %v", err)
+	}
+
+	requiredIndexes := []string{
+		"idx_vk_user_id",
+		"idx_vk_tenant_id",
+		"idx_usage_vk",
+		"idx_usage_tenant",
+		"idx_usage_model",
+		"idx_users_email",
+	}
+
+	for _, idx := range requiredIndexes {
+		var name string
+		err := db.QueryRow("SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?", idx).Scan(&name)
+		if err != nil {
+			t.Errorf("expected index %s to be created, but query returned error: %v", idx, err)
+		}
+		if name != idx {
+			t.Errorf("expected index %s, got %s", idx, name)
+		}
 	}
 }

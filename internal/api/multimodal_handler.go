@@ -89,7 +89,7 @@ func (h *MultimodalHandler) HandleImageGenerations(c *gin.Context) {
 	dur := time.Since(start)
 	var cost float64
 	if billing.GlobalEngine != nil {
-		cost, _ = billing.GlobalEngine.CalculateCost(req.Model, 0, 0, 0)
+		cost, _ = billing.GlobalEngine.CalculateCostWithGroup(req.Model, getKeyGroup(c), 0, 0, 0)
 	}
 	if storage.GlobalAsyncLogger != nil {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
@@ -164,7 +164,7 @@ func (h *MultimodalHandler) HandleAudioSpeech(c *gin.Context) {
 	dur := time.Since(start)
 	var cost float64
 	if billing.GlobalEngine != nil {
-		cost, _ = billing.GlobalEngine.CalculateCost(req.Model, 0, 0, 0)
+		cost, _ = billing.GlobalEngine.CalculateCostWithGroup(req.Model, getKeyGroup(c), 0, 0, 0)
 	}
 	if storage.GlobalAsyncLogger != nil {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
@@ -241,7 +241,7 @@ func (h *MultimodalHandler) HandleAudioTranscriptions(c *gin.Context) {
 	dur := time.Since(start)
 	var cost float64
 	if billing.GlobalEngine != nil {
-		cost, _ = billing.GlobalEngine.CalculateCost(modelName, 0, 0, 0)
+		cost, _ = billing.GlobalEngine.CalculateCostWithGroup(modelName, getKeyGroup(c), 0, 0, 0)
 	}
 	if storage.GlobalAsyncLogger != nil {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
@@ -312,7 +312,7 @@ func (h *MultimodalHandler) HandleAudioTranslations(c *gin.Context) {
 	dur := time.Since(start)
 	var cost float64
 	if billing.GlobalEngine != nil {
-		cost, _ = billing.GlobalEngine.CalculateCost(modelName, 0, 0, 0)
+		cost, _ = billing.GlobalEngine.CalculateCostWithGroup(modelName, getKeyGroup(c), 0, 0, 0)
 	}
 	if storage.GlobalAsyncLogger != nil {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
@@ -387,7 +387,7 @@ func (h *MultimodalHandler) HandleVideoGenerations(c *gin.Context) {
 	dur := time.Since(start)
 	var cost float64
 	if billing.GlobalEngine != nil {
-		cost, _ = billing.GlobalEngine.CalculateCost(req.Model, 0, 0, 0)
+		cost, _ = billing.GlobalEngine.CalculateCostWithGroup(req.Model, getKeyGroup(c), 0, 0, 0)
 	}
 	if storage.GlobalAsyncLogger != nil {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{

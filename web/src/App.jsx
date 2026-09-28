@@ -3404,8 +3404,20 @@ export default function App() {
               adminToken={adminToken}
               adminFetch={adminFetch}
               showToast={showToast}
+              onUserUpdated={(updatedUser) => {
+                setAdminUser(prev => {
+                  const merged = prev ? { ...prev, ...updatedUser } : updatedUser;
+                  localStorage.setItem('nano_gateway_user', JSON.stringify(merged));
+                  return merged;
+                });
+                fetchUserProfile();
+              }}
               onBalanceUpdate={(newBal) => {
-                setAdminUser(prev => prev ? { ...prev, balance: newBal } : prev);
+                setAdminUser(prev => {
+                  const merged = prev ? { ...prev, balance: newBal } : prev;
+                  localStorage.setItem('nano_gateway_user', JSON.stringify(merged));
+                  return merged;
+                });
                 fetchUserProfile();
               }}
             />

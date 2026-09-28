@@ -91,7 +91,11 @@ func AuthMiddleware() gin.HandlerFunc {
 					})
 					return
 				}
-				if matchedKey.Budget > 0 && vkRec.UsedCost >= matchedKey.Budget {
+				effectiveBudget := vkRec.Budget
+				if effectiveBudget <= 0 {
+					effectiveBudget = matchedKey.Budget
+				}
+				if effectiveBudget > 0 && vkRec.UsedCost >= effectiveBudget {
 					c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
 						"error": gin.H{
 							"message": "This API key has exceeded its assigned quota budget limit.",
@@ -100,6 +104,9 @@ func AuthMiddleware() gin.HandlerFunc {
 						},
 					})
 					return
+				}
+				if vkRec.GroupName != "" && (matchedKey.GroupName == "" || matchedKey.GroupName == "default") {
+					matchedKey.GroupName = vkRec.GroupName
 				}
 			}
 
