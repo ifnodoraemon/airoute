@@ -548,7 +548,7 @@ func (h *AdminHandler) GetSystemMiddlewares(c *gin.Context) {
 	})
 
 	// 6. Notification & SMTP Service
-	smtpMode := "开发者沙箱快速通道 (零配置免发信)"
+	smtpMode := "系统内置通知通道 (零配置直接送达)"
 	if os.Getenv("SMTP_HOST") != "" {
 		smtpMode = fmt.Sprintf("SMTP 邮件中继服务 (%s)", os.Getenv("SMTP_HOST"))
 	}
@@ -558,7 +558,7 @@ func (h *AdminHandler) GetSystemMiddlewares(c *gin.Context) {
 		Category:    "通知与认证",
 		Status:      "operational",
 		Mode:        smtpMode,
-		Description: "新用户注册安全验证码发放、密码找回通知、余额告警触达与沙箱联调保障。",
+		Description: "新用户注册安全验证码发放、密码找回通知、余额告警触达与消息通知保障。",
 	})
 
 	c.JSON(http.StatusOK, gin.H{

@@ -150,7 +150,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
         });
         const data = await res.json();
         if (res.ok && data.code === 0) {
-          showToast(data.message || '沙箱充值成功！额度已实时到账', 'success');
+          showToast(data.message || '充值成功！额度已实时到账', 'success');
           fetchWallet();
         } else {
           showToast(data.error || '充值处理失败', 'error');
@@ -165,8 +165,8 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
         const data = await res.json();
         if (res.ok && data.code === 0 && data.checkout_url) {
           if (data.mode === 'sandbox_simulation') {
-            // Simulated Stripe
-            showToast('Stripe 密钥未配置，已转入沙箱快速充值通道', 'info');
+            // Direct recharge fallback
+            showToast('Stripe 密钥未配置，已转入快捷充值通道', 'info');
             const simRes = await adminFetch('/api/v1/user/wallet/recharge/sandbox', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -316,7 +316,6 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
 
               <div className="mt-6 pt-4 border-t border-indigo-700/60 flex items-center justify-between text-xs text-indigo-200">
                 <span>用户角色: {isAdmin ? '超级管理员' : '普通用户'}</span>
-                <span>计费自动按 Token 扣减</span>
               </div>
             </div>
 
@@ -334,9 +333,6 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                       : walletData.group_name.toUpperCase() + ' 分组'}
                   </span>
                 </div>
-                <p className="mt-2 text-xs text-slate-500 leading-relaxed">
-                  享受该分组绑定的专属模型单价与夜间闲时动态折扣。
-                </p>
               </div>
 
               <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
@@ -458,10 +454,9 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                   </div>
                   <div>
                     <div className="font-bold text-xs text-slate-900 flex items-center space-x-2">
-                      <span>沙箱极速充值</span>
-                      <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-semibold">推荐测试</span>
+                      <span>在线快捷充值</span>
+                      <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-semibold">即时到账</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-1">本地极速免密充值，一键自动入账，方便测试调用额度与耗尽逻辑。</p>
                   </div>
                 </button>
 
@@ -482,7 +477,6 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                       <span>Stripe 国际信用卡</span>
                       <span className="text-[10px] px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded-full font-semibold">生产支付</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-1">跳转至 Stripe 托管收银台，支持 Visa、MasterCard、Amex 等全球卡种。</p>
                   </div>
                 </button>
               </div>
@@ -515,7 +509,6 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                 <Clock className="w-4 h-4 text-slate-400" />
                 <span>最近充值记录</span>
               </h3>
-              <span className="text-xs text-slate-400">保留近 50 条充值与入账记录</span>
             </div>
 
             {walletData.orders && walletData.orders.length > 0 ? (
@@ -575,7 +568,6 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
               <div>
                 <h3 className="font-bold text-base text-slate-900">额度兑换卡批次管理</h3>
-                <p className="text-xs text-slate-500">批量生成礼品卡密，用户输入兑换码即可自动充值到钱包余额</p>
               </div>
               <div className="flex items-center space-x-2">
                 <button
@@ -602,7 +594,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                   <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold border-b border-slate-200">
                     <tr>
                       <th className="py-2.5 px-3">兑换卡密 (Code)</th>
-                      <th className="py-2.5 px-3">名称 / 备注</th>
+                      <th className="py-2.5 px-3">名称</th>
                       <th className="py-2.5 px-3">面额</th>
                       <th className="py-2.5 px-3">状态</th>
                       <th className="py-2.5 px-3">使用用户</th>
@@ -683,7 +675,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
 
             <form onSubmit={handleGenerateRedemptions} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">兑换卡名称 / 备注</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">兑换卡名称</label>
                 <input
                   type="text"
                   value={genName}

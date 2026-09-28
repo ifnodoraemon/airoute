@@ -636,9 +636,6 @@ asyncio.run(main())`;
               在线探针演练 (三阶段渐进式验证)
             </h3>
           </div>
-          <span className="text-xs text-slate-400">
-            单点点击实时执行对应阶段
-          </span>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">

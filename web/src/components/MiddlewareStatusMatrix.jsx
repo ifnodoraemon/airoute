@@ -78,9 +78,6 @@ export default function MiddlewareStatusMatrix({ adminFetch, showToast }) {
                 全组件协同在线
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
-              监控存储引擎、分布式缓存、消息流队列、熔断容灾与计费通知等中间件健康状态
-            </p>
           </div>
         </div>
 
@@ -155,9 +152,6 @@ export default function MiddlewareStatusMatrix({ adminFetch, showToast }) {
                     </span>
                   </div>
                 )}
-                <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-2 pt-0.5">
-                  {item.description}
-                </p>
               </div>
             </div>
           );

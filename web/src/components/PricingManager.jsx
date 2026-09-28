@@ -825,7 +825,6 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                     <span className={`px-2.5 py-1 rounded-xl text-xs font-semibold border ${getGroupBadge(formData.group_name).className}`}>
                       {getGroupBadge(formData.group_name).label} ({formData.group_name})
                     </span>
-                    <span className="text-[11px] text-slate-400">（已生效规则分组不可变更）</span>
                   </div>
                 ) : (
                   <div className="space-y-2">

@@ -1076,7 +1076,7 @@ export default function App() {
   const handleCreateKey = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (!newKey.tenant_id.trim()) {
-      showToast('请输入密钥名称或备注', 'warning');
+      showToast('请输入密钥名称', 'warning');
       return;
     }
     try {
@@ -2264,9 +2264,6 @@ export default function App() {
                       <Zap className="w-4 h-4" />
                     </div>
                   </div>
-                  <div className="mt-2 text-[11px] text-slate-400">
-                    SLA: <span className="text-emerald-600 font-semibold">99.99%</span>
-                  </div>
                 </div>
 
                 <div className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-xs hover:border-emerald-400 transition group">
@@ -2277,9 +2274,6 @@ export default function App() {
                       <Layers className="w-4 h-4" />
                     </div>
                   </div>
-                  <div className="mt-2 text-[11px] text-slate-400">
-                    收录 <span className="text-emerald-600 font-semibold">{models.length}</span> 个模型
-                  </div>
                 </div>
 
                 <div className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-xs hover:border-sky-400 transition group">
@@ -2289,9 +2283,6 @@ export default function App() {
                     <div className="p-2 bg-sky-50 rounded-xl text-sky-600 group-hover:scale-110 transition">
                       <Activity className="w-4 h-4" />
                     </div>
-                  </div>
-                  <div className="mt-2 text-[11px] text-slate-400 truncate">
-                    入: <span className="font-mono text-slate-700">{stats.prompt_tokens || 0}</span> · 出: <span className="font-mono text-slate-700">{stats.completion_tokens || 0}</span>
                   </div>
                 </div>
 
@@ -2305,9 +2296,6 @@ export default function App() {
                       <Clock className="w-4 h-4" />
                     </div>
                   </div>
-                  <div className="mt-2 text-[11px] text-slate-400 truncate">
-                    全链路: <span className="font-mono text-slate-700">{(stats.avg_duration_ms || 0).toFixed(0)} ms</span>
-                  </div>
                 </div>
 
                 <div className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-xs hover:border-indigo-400 transition group">
@@ -2320,9 +2308,6 @@ export default function App() {
                       <DollarSign className="w-4 h-4" />
                     </div>
                   </div>
-                  <div className="mt-2 text-[11px] text-slate-400 truncate">
-                    API 密钥消耗总和
-                  </div>
                 </div>
 
                 <div className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-xs hover:border-emerald-400 transition group">
@@ -2334,9 +2319,6 @@ export default function App() {
                     <div className="p-2 bg-emerald-50 rounded-xl text-emerald-600 group-hover:scale-110 transition">
                       <Sparkles className="w-4 h-4" />
                     </div>
-                  </div>
-                  <div className="mt-2 text-[11px] text-emerald-600 font-semibold truncate">
-                    Prompt Cache
                   </div>
                 </div>
               </div>
@@ -3111,9 +3093,6 @@ export default function App() {
                       <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
                         对话审计与请求日志
                       </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        精确记录分布式链路 Trace ID、对话 Chat ID、关联会话、路由渠道、Token 明细与分时计费扣费
-                      </p>
                     </div>
                   </div>
 
@@ -5155,7 +5134,7 @@ helm install nano-gateway ./helm/nano-gateway -n gateway --create-namespace
             <div className="space-y-4 text-xs">
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  密钥名称 / 备注 <span className="text-rose-500">*</span>
+                  密钥名称 <span className="text-rose-500">*</span>
                 </label>
                 <input
                   value={newKey.tenant_id}
@@ -5170,28 +5149,25 @@ helm install nano-gateway ./helm/nano-gateway -n gateway --create-namespace
                   计费分组 (Pricing Group)
                 </label>
                 {adminUser?.role === 'admin' ? (
-                  <div className="space-y-1.5">
-                    <div className="flex items-center space-x-1.5">
-                      {[
-                        { id: 'default', label: '默认组 (default)' },
-                        { id: 'vip', label: 'VIP组 (vip)' },
-                        { id: 'enterprise', label: '企业组 (enterprise)' }
-                      ].map(g => (
-                        <button
-                          key={g.id}
-                          type="button"
-                          onClick={() => setNewKey({ ...newKey, group_name: g.id })}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition cursor-pointer ${
-                            (newKey.group_name || 'default') === g.id
-                              ? 'bg-indigo-600 text-white border-indigo-600 font-semibold shadow-xs'
-                              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
-                          }`}
-                        >
-                          {g.label}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-[11px] text-slate-400">调用将按该分组在「模型定价」中设定的专属模型费率进行扣费。</p>
+                  <div className="flex items-center space-x-1.5">
+                    {[
+                      { id: 'default', label: '默认组 (default)' },
+                      { id: 'vip', label: 'VIP组 (vip)' },
+                      { id: 'enterprise', label: '企业组 (enterprise)' }
+                    ].map(g => (
+                      <button
+                        key={g.id}
+                        type="button"
+                        onClick={() => setNewKey({ ...newKey, group_name: g.id })}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition cursor-pointer ${
+                          (newKey.group_name || 'default') === g.id
+                            ? 'bg-indigo-600 text-white border-indigo-600 font-semibold shadow-xs'
+                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        {g.label}
+                      </button>
+                    ))}
                   </div>
                 ) : (
                   <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
@@ -5201,7 +5177,6 @@ helm install nano-gateway ./helm/nano-gateway -n gateway --create-namespace
                         {adminUser?.group_name ? `${adminUser.group_name} 组` : '默认组'}
                       </span>
                     </div>
-                    <span className="text-[11px] text-slate-400">自动享有该等级专属折扣</span>
                   </div>
                 )}
               </div>
@@ -5257,7 +5232,6 @@ helm install nano-gateway ./helm/nano-gateway -n gateway --create-namespace
                   onChange={(e) => setNewKey({ ...newKey, budget: parseFloat(e.target.value) || 0 })}
                   className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-xs"
                 />
-                <p className="text-[10px] text-slate-400 mt-1">💡 独立子预算上限：达到上限后该 Key 将停止调用；实际费用将扣减您账户的钱包总余额。</p>
               </div>
 
               <div>

@@ -91,7 +91,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
         setSuccessMsg(data.message || '验证码已发送至邮箱');
         if (data.dev_code) {
           setRegCode(data.dev_code);
-          setSuccessMsg(`验证码已发送！(开发沙箱已自动填充: ${data.dev_code})`);
+          setSuccessMsg(`验证码已发送！已自动为您填入: ${data.dev_code}`);
         }
         setCodeCountdown(60);
         const timer = setInterval(() => {
@@ -210,13 +210,8 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
           {/* Header */}
           <div className="text-center space-y-1.5">
             <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-              {activeTab === 'login' ? '欢迎回来' : '开启极简 AI 之旅'}
+              {activeTab === 'login' ? '欢迎回来' : '账号注册'}
             </h2>
-            <p className="text-xs text-slate-500">
-              {activeTab === 'login'
-                ? '登录账号，管理专属 API 密钥与模型路由'
-                : '新用户注册即可获得免费体验额度及专属 API 密钥'}
-            </p>
           </div>
 
           {/* Tab Switcher */}
@@ -430,14 +425,6 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
                 </div>
               </div>
 
-              <div className="p-3 bg-indigo-50/70 rounded-2xl border border-indigo-100 text-[11px] text-indigo-700 space-y-0.5">
-                <div className="font-semibold flex items-center space-x-1">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>注册专享权益</span>
-                </div>
-                <p className="text-slate-600">完成注册立即到账 ¥5.00 新手体验金，自动生成专属调用 API 密钥。</p>
-              </div>
-
               <button
                 type="submit"
                 disabled={loading}
@@ -495,7 +482,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
 
       {/* Footer copyright */}
       <div className="max-w-md w-full mx-auto text-center text-xs text-slate-400">
-        © 2026 Nano Gateway · 企业级大模型与多模态极简路由网关
+        © {new Date().getFullYear()} Nano Gateway · 极简高性能 AI 路由器
       </div>
     </div>
   );

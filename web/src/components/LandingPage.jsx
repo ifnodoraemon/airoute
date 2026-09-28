@@ -842,7 +842,7 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center space-x-2">
             <span className="font-extrabold text-slate-800 text-sm">Nano</span>
-            <span>· 极简高性能 AI 路由器 & MCP 服务</span>
+            <span>· © {new Date().getFullYear()} 极简高性能 AI 路由器 & MCP 服务</span>
           </div>
 
           <div className="flex items-center space-x-4">

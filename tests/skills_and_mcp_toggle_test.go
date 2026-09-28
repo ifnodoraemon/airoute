@@ -125,7 +125,7 @@ func TestSkills_OnDemandTogglingAndMCP(t *testing.T) {
 	wMan := httptest.NewRecorder()
 	engine.ServeHTTP(wMan, reqMan)
 	assert.Equal(t, http.StatusOK, wMan.Code)
-	assert.Contains(t, wMan.Body.String(), "# 轻量沙箱与数学表达式计算")
+	assert.Contains(t, wMan.Body.String(), "# 轻量代码执行与数学表达式计算")
 	assert.Contains(t, wMan.Body.String(), "nano_calc_eval")
 
 	// 3. Test nano_get_current_time tool

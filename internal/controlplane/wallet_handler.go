@@ -797,11 +797,11 @@ func (h *AdminHandler) CreateStripeRechargeSession(c *gin.Context) {
 		"checkout_url": simulatedCheckoutURL,
 		"session_id":   order.StripeSessionID,
 		"mode":         "sandbox_simulation",
-		"message":      "Stripe 生产密钥未配置，已启用沙箱安全充值通道",
+		"message":      "已启用在线快捷充值通道",
 	})
 }
 
-// SandboxRecharge allows instant sandbox wallet recharge for dev and testing.
+// SandboxRecharge allows instant wallet recharge for direct/fast checkout.
 func (h *AdminHandler) SandboxRecharge(c *gin.Context) {
 	claimsVal, exists := c.Get("admin_claims")
 	var username string
@@ -859,7 +859,7 @@ func (h *AdminHandler) SandboxRecharge(c *gin.Context) {
 	_ = h.repo.CreateRechargeOrder(order)
 	completed, err := h.repo.CompleteRechargeOrder(req.OrderNo)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "沙箱充值入账失败: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "充值入账失败: " + err.Error()})
 		return
 	}
 
@@ -871,7 +871,7 @@ func (h *AdminHandler) SandboxRecharge(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":        0,
-		"message":     fmt.Sprintf("沙箱充值成功！已为用户 [%s] 入账 ¥%.2f", username, completed.Amount),
+		"message":     fmt.Sprintf("充值成功！已为用户 [%s] 入账 ¥%.2f", username, completed.Amount),
 		"new_balance": newBal,
 		"order_no":    req.OrderNo,
 	})

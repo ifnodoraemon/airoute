@@ -1517,7 +1517,7 @@ tools:
 		},
 		{
 			ID:          "code_runner",
-			Name:        "轻量沙箱与数学表达式计算",
+			Name:        "轻量代码执行与数学表达式计算",
 			Description: "提供安全的四则运算、高精度数学计算、单位换算与逻辑求值",
 			Category:    "utility",
 			Tools:       []string{"nano_calc_eval"},
@@ -1527,7 +1527,7 @@ tools:
 			Enabled:     true,
 			Manifest: `---
 name: code_runner
-description: 轻量沙箱与数学表达式计算
+description: 轻量代码执行与数学表达式计算
 category: utility
 author: Nano Official
 version: 1.0.0
@@ -1536,7 +1536,7 @@ tools:
   - nano_calc_eval
 ---
 
-# 轻量沙箱与数学表达式计算 (code_runner)
+# 轻量代码执行与数学表达式计算 (code_runner)
 
 提供高精度的四则运算、指数对数、复合数学公式求值，消除大语言模型的计算幻觉。
 
