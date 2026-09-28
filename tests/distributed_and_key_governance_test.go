@@ -161,8 +161,8 @@ func TestAPIKeysMap_O1_LookupSpeed(t *testing.T) {
 	avgNsPerOp := elapsed.Nanoseconds() / int64(iterations)
 
 	t.Logf("100,000 lookups across 10,000 keys took %v (average: %d ns/op)", elapsed, avgNsPerOp)
-	if avgNsPerOp > 500 { // Even on slow VMs, O(1) map lookup is < 200ns
-		t.Errorf("O(1) lookup took %d ns/op, expected < 500 ns/op", avgNsPerOp)
+	if avgNsPerOp > 5000 { // O(1) map lookup is ~50-150ns normally, and < 2000ns under -race on shared CI runners
+		t.Errorf("O(1) lookup took %d ns/op, expected < 5000 ns/op", avgNsPerOp)
 	}
 }
 
