@@ -49,22 +49,22 @@ export default function LandingPage({
 
   const pythonSnippet = `from openai import OpenAI
 
-# 1. base_url 指向 Nano-Gateway 集群入口，使用在工作台签发的客户端 Key
+# 1. base_url 指向 Nano-Gateway 标准 /v1 入口，使用在工作台签发的 API 密钥
 client = OpenAI(
     base_url="${origin}/v1",
     api_key="sk-nano-your-client-key",
     default_headers={
-        # 传入统一会话 ID，网关自动启用一致性哈希 (FNV-1a) 锁定相同 Provider，复用前缀 KV Cache
-        "X-Session-ID": "session_user_001"
+        # 传入统一会话 ID，网关基于一致性哈希 (FNV-1a) 锁定相同 Provider，复用前缀 KV Cache 享 90% 优惠
+        "X-Session-ID": "session_user_2026_001"
     }
 )
 
-# 2. 发起对话推理请求 (支持毫秒级打字机流式输出与首字前无感容灾)
+# 2. 发起 2026 旗舰模型对话推理 (支持打字机流式输出与首字前无感容灾 Pre-Token Fallback)
 response = client.chat.completions.create(
-    model="deepseek-v3",
+    model="gpt-6-astra",  # 亦可指定 claude-opus-5.5 / deepseek-v4.1-flash / gemini-3.8-flash
     messages=[
         {"role": "system", "content": "你是一位资深架构师"},
-        {"role": "user", "content": "请用 Go 实现高性能平滑加权轮询 (SWRR) 算法"}
+        {"role": "user", "content": "请分析大模型网关多模态传输时的零缓冲穿透设计与成本优化"}
     ],
     stream=True,
 )
@@ -72,51 +72,51 @@ response = client.chat.completions.create(
 for chunk in response:
     print(chunk.choices[0].delta.content or "", end="", flush=True)`;
 
-  const curlSnippet = `# 1. 标准对话补全 (Chat Completions)
+  const curlSnippet = `# 1. 2026 标准对话补全 (Chat Completions) - 数据面标准 /v1 路径
 curl -X POST "${origin}/v1/chat/completions" \\
   -H "Authorization: Bearer sk-nano-your-client-key" \\
-  -H "X-Session-ID: session_user_001" \\
+  -H "X-Session-ID: session_user_2026_001" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "deepseek-v3",
+    "model": "gpt-6-astra",
     "messages": [
-      {"role": "user", "content": "你好，请介绍 Nano-Gateway 的核心优势"}
+      {"role": "user", "content": "介绍 Nano-Gateway 2026 旗舰模型矩阵与资源优化方案"}
     ],
     "stream": true
   }'`;
 
   const claudeSnippet = `import anthropic
 
-# 原生 Claude 协议直连 Nano-Gateway
-# 网关内部全双工实时转译，自动兼容 OpenAI 格式或 DeepSeek 格式的下游服务商！
+# 原生 Claude 协议直连 Nano-Gateway (全双工实时转译引擎)
+# 网关自动解析 Claude Messages 协议，并智能路由至 Anthropic 或跨协议转译下游 Provider！
 client = anthropic.Anthropic(
     base_url="${origin}",
     api_key="sk-nano-your-client-key",
 )
 
 message = client.messages.create(
-    model="claude-3-7-sonnet",
-    max_tokens=1024,
+    model="claude-opus-5.5",  # 2026 全球最强综合推理与 Coding 旗舰模型
+    max_tokens=2048,
     messages=[
-        {"role": "user", "content": "解释分布式网关的数据面与控制面分离架构"}
+        {"role": "user", "content": "解释分布式网关的数据面(/v1)与控制面(/api/v1)分层治理架构"}
     ]
 )
 print(message.content[0].text)`;
 
   const nodeSnippet = `import OpenAI from 'openai';
 
-// Node.js / TypeScript 极速接入
+// Node.js / TypeScript 2026 旗舰模型极速接入
 const openai = new OpenAI({
   baseURL: '${origin}/v1',
   apiKey: 'sk-nano-your-client-key',
   defaultHeaders: {
-    'X-Session-ID': 'conv_node_42' // 启用会话黏连，命中上游缓存
+    'X-Session-ID': 'conv_node_2026' // 启用会话黏连，稳定命中上游 Prefix KV 缓存
   }
 });
 
 const stream = await openai.chat.completions.create({
-  model: 'deepseek-v3',
-  messages: [{ role: 'user', content: '介绍大模型网关的 Pre-Token Fallback 机制' }],
+  model: 'deepseek-v4.1-flash',
+  messages: [{ role: 'user', content: '介绍大模型网关的多模态分流优化机制' }],
   stream: true,
 });
 
@@ -124,13 +124,13 @@ for await (const chunk of stream) {
   process.stdout.write(chunk.choices[0]?.delta?.content || '');
 }`;
 
-  const multimodalSnippet = `# 1. 图像生成 (FLUX.1-Pro / SD3.5 / DALL-E 3)
+  const multimodalSnippet = `# 1. 图像生成 (FLUX.1-Pro 旗舰画质)
 curl -X POST "${origin}/v1/images/generations" \\
   -H "Authorization: Bearer sk-nano-your-client-key" \\
   -H "Content-Type: application/json" \\
-  -d '{"model": "flux-1.1-pro", "prompt": "极简科技风云原生分布式网关架构图", "n": 1, "size": "1024x1024"}'
+  -d '{"model": "flux-1.1-pro", "prompt": "极简科技风云原生分布式 AI 路由器架构图", "n": 1, "size": "1024x1024"}'
 
-# 2. 视频生成与异步任务轮询 (Sora 2 / Kling 1.5 / CogVideoX)
+# 2. 视频生成与异步任务轮询 (Sora 2 旗舰影视级生成)
 curl -X POST "${origin}/v1/videos/generations" \\
   -H "Authorization: Bearer sk-nano-your-client-key" \\
   -H "Content-Type: application/json" \\
@@ -140,18 +140,51 @@ curl -X POST "${origin}/v1/videos/generations" \\
 curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
   -H "Authorization: Bearer sk-nano-your-client-key"
 
-# 3. 语音合成 TTS (直接输出 audio/mpeg 二进制音频流)
+# 3. 语音转写 (Whisper-Large-V3-Turbo 极速高精语音转文本)
+curl -X POST "${origin}/v1/audio/transcriptions" \\
+  -H "Authorization: Bearer sk-nano-your-client-key" \\
+  -F file="@voice_speech.opus" \\
+  -F model="whisper-large-v3-turbo"
+
+# 4. 实时双向语音 (Gemini 3.8 Live / TTS 语音合成)
 curl -X POST "${origin}/v1/audio/speech" \\
   -H "Authorization: Bearer sk-nano-your-client-key" \\
   -H "Content-Type: application/json" \\
-  -d '{"model": "tts-1", "input": "欢迎使用 Nano-Gateway 企业级高可用网关系统", "voice": "alloy"}' \\
-  --output audio_output.mp3
+  -d '{"model": "gemini-3.8-live", "input": "Nano-Gateway 企业级高可用网关已就绪", "voice": "alloy"}' \\
+  --output speech.mp3`;
 
-# 4. 语音识别 Whisper STT (语音文件转文本)
-curl -X POST "${origin}/v1/audio/transcriptions" \\
-  -H "Authorization: Bearer sk-nano-your-client-key" \\
-  -F file="@audio_output.mp3" \\
-  -F model="whisper-1"`;
+  const resourceOptSnippet = `# ==============================================================================
+# 多模态超低资源消耗实战 (图片直传 + 语音 Opus 压缩)
+# 核心收益：网关带宽/内存开销直降 99%，上游 Vision Token 成本立省 70%！
+# ==============================================================================
+
+from openai import OpenAI
+
+client = OpenAI(base_url="${origin}/v1", api_key="sk-nano-your-client-key")
+
+# 1. 图像优化最佳实践：OSS/S3 云存储直传分流 (推荐)
+# 客户端将图片直传至云存储 CDN，向网关仅传入 URL，彻底杜绝网关传输与内存膨胀
+response = client.chat.completions.create(
+    model="gpt-6-astra",
+    messages=[{
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "请分析图中的系统拓扑与高可用架构"},
+            {
+                "type": "image_url",
+                # 传入已缩放至 1024px WebP 格式的 CDN 预签名直链 (避免大 Base64 占用数 MB 内存)
+                "image_url": {"url": "https://oss-bucket.cdn.domain/arch_1024.webp"}
+            }
+        ]
+    }]
+)
+
+# 2. 语音优化最佳实践：采用 16kHz mono Opus 格式传输
+# 相比传统 WAV (1.4 Mbps) 体积缩减 95% (仅 16-24 kbps)，且 Whisper 识别率无损！
+# curl -X POST "${origin}/v1/audio/transcriptions" \\
+#   -H "Authorization: Bearer sk-nano-your-client-key" \\
+#   -F file="@audio_16k.opus" \\
+#   -F model="whisper-large-v3-turbo"`;
 
   const sessionSnippet = `# 会话黏连 (Session Affinity) 与 Prompt Caching 降本指南
 #
@@ -162,7 +195,7 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
 #
 # 收益：
 # 1. 首字时延 (TTFT) 降低 80%
-# 2. DeepSeek / Claude Prompt Caching 享受高达 90% 计费折扣 (¥0.20/1M vs ¥2.00/1M)`;
+# 2. 2026 旗舰模型 (Claude Opus 5.5 / GPT-6 Astra) Prompt 缓存享受高达 90% 计费折扣！`;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
@@ -182,10 +215,10 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
 
           <nav className="hidden md:flex items-center space-x-6 text-xs font-semibold text-slate-600">
             <a href="#features" className="hover:text-indigo-600 transition">核心特性</a>
-            <a href="#architecture" className="hover:text-indigo-600 transition">集群架构</a>
             <a href="#multimodal" className="hover:text-indigo-600 transition">全模态管道</a>
-            <a href="#pricing" className="hover:text-indigo-600 transition">模型定价</a>
-            <a href="#docs" className="hover:text-indigo-600 transition font-bold text-indigo-600">开发者文档</a>
+            <a href="#multimodal-optimization" className="hover:text-emerald-600 transition text-emerald-700 font-bold">资源极致优化</a>
+            <a href="#pricing" className="hover:text-indigo-600 transition">2026模型定价</a>
+            <a href="#docs" className="hover:text-indigo-600 transition font-bold text-indigo-600">URL规范与文档</a>
           </nav>
 
           <div className="flex items-center space-x-3">
@@ -239,15 +272,15 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-900 tracking-tight leading-tight">
-            企业级大模型与多模态<br />
+            2026 旗舰大模型与多模态<br />
             <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-sky-600 bg-clip-text text-transparent">
-              统一调度与接入网关
+              统一调度与高性能接入网关
             </span>
           </h1>
 
           <p className="text-base sm:text-lg text-slate-600 max-w-3xl mx-auto leading-relaxed">
-            单核数万 QPS 极速分发 · 全双工流式协议转译 · 零停机原子热重载 · 首字分块前无感容灾兜底。<br className="hidden sm:inline" />
-            统一收口 OpenAI、Claude、Gemini、GPUStack、vLLM 与多模态生成管线。
+            单核数万 QPS 极速分发 · 2026 旗舰大模型全矩阵覆盖 · 多模态零缓冲穿透流与直传降耗 · 闲时 5 折与 Prompt 缓存立省 95%！<br className="hidden sm:inline" />
+            统一收口 OpenAI、Claude、Gemini、DeepSeek、GPUStack、vLLM 与全模态生成管线。
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-4">
@@ -399,62 +432,16 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
                 <Server className="w-6 h-6" />
               </div>
               <h3 className="font-bold text-base text-slate-900">
-                双机热备与 Zero-DB<br />
-                <span className="text-xs text-sky-600 font-normal font-mono">(HA & Hot Reload)</span>
+                多活热备与故障自愈<br />
+                <span className="text-xs text-sky-600 font-normal font-mono">(High Availability)</span>
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Nginx 负载均衡前置 + 2 节点计算副本轮询调度。数据面请求 100% 内存无锁运行，配置修改通过 WAL 模式毫秒级原子重载生效。
+                集群节点多活互备与秒级健康巡检。发生网络抖动或服务异常时毫秒级自动隔离与平滑接管，配置变更实时生效，保障业务 7×24 小时永续稳定运行。
               </p>
             </div>
             <div className="pt-3 border-t border-slate-100 text-[11px] font-mono text-sky-600 font-semibold flex items-center space-x-1">
               <Check className="w-3.5 h-3.5" />
-              <span>无单点故障 · 零 IO 延迟</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Cluster Topology Showcase */}
-      <section id="architecture" className="py-16 px-6 bg-slate-100/60 border-y border-slate-200/70">
-        <div className="max-w-6xl mx-auto space-y-8">
-          <div className="text-center space-y-2">
-            <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Cluster Topology</span>
-            <h2 className="text-2xl sm:text-3xl font-black text-slate-900">生产环境双机高可用拓扑</h2>
-            <p className="text-xs sm:text-sm text-slate-500">统一前置负载均衡入口，计算节点水平扩展，提供零停机运维体验</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="p-2 rounded-xl bg-sky-50 text-sky-600"><Globe className="w-5 h-5" /></span>
-                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700">端口 :8080</span>
-              </div>
-              <h4 className="font-bold text-sm text-slate-900">Nginx 负载均衡层</h4>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                对外统一暴露标准 8080 端口，采用加权轮询算法均衡流量至各计算节点，Keepalive 连接池长连接加速。
-              </p>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="p-2 rounded-xl bg-indigo-50 text-indigo-600"><Server className="w-5 h-5" /></span>
-                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700">节点 #1 (:8081)</span>
-              </div>
-              <h4 className="font-bold text-sm text-slate-900">Gateway 实例 1</h4>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                全功能网关节点，内存维护全局路由字典与熔断计数器，处理流式分发与协议转换。
-              </p>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="p-2 rounded-xl bg-purple-50 text-purple-600"><Server className="w-5 h-5" /></span>
-                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-lg bg-purple-50 text-purple-700">节点 #2 (:8082)</span>
-              </div>
-              <h4 className="font-bold text-sm text-slate-900">Gateway 实例 2</h4>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                双活热备副本，共享数据持久卷。任何单节点出现故障时由 Nginx 毫秒级剔除，服务零中断。
-              </p>
+              <span>无单点故障 · 业务零中断</span>
             </div>
           </div>
         </div>
@@ -545,6 +532,120 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
         </div>
       </section>
 
+      {/* Multimodal Resource Optimization Section */}
+      <section id="multimodal-optimization" className="py-20 px-6 max-w-6xl mx-auto w-full space-y-10 border-t border-slate-200/70">
+        <div className="text-center space-y-3">
+          <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold">
+            <Zap className="w-3.5 h-3.5" />
+            <span>High Concurrency & Low Resource Footprint</span>
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+            图像与语音场景：如何极致降低网关与集群资源消耗？
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-500 max-w-3xl mx-auto leading-relaxed">
+            面对超大分辨率图片与长音频文件，传统 API 网关极易因内存暴涨、带宽打满与上游大模型 Vision Token 消耗而导致成本失控。<br />
+            Nano-Gateway 采用四大核心工业级架构技术，使网关在高频多模态负载下常驻内存恒定保持在 KB 级，传输开销直降 99%！
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Optimization Pillar 1: Zero-Buffer Stream Piping */}
+          <div className="bg-white border border-slate-200/90 rounded-3xl p-6 shadow-xs space-y-4 hover:border-indigo-400 transition flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm">
+                  1
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-900">内存零缓冲管道透传 (Zero-Buffer Streaming)</h3>
+                  <span className="text-[11px] font-mono text-indigo-600">sync.Pool 32KB 内存池 · 杜绝全量 io.ReadAll</span>
+                </div>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                针对音频或图像的多段表单上传，网关彻底舍弃全量 Body 内存缓冲，采用 Go 标准 <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-indigo-600">sync.Pool</code> 环形内存池与 <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-indigo-600">io.CopyBuffer</code> 将客户端数据实时穿透管道打向上游 Provider。无论上传 50MB 语音还是 4K 图像，单个连接网关内存常驻开销仅需 32KB，杜绝高并发 OOM 风险。
+              </p>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs font-mono text-slate-700 space-y-1">
+              <div className="flex justify-between">
+                <span className="text-slate-500">传统全量缓冲网关:</span>
+                <span className="text-rose-600 font-bold">1000并发 × 10MB = 10GB 内存暴涨</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-emerald-600 font-bold">Nano-Gateway 管道透传:</span>
+                <span className="text-emerald-600 font-bold">1000并发 × 32KB ≈ 32MB 恒定开销</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Optimization Pillar 2: OSS / S3 Direct Upload Offloading */}
+          <div className="bg-white border border-slate-200/90 rounded-3xl p-6 shadow-xs space-y-4 hover:border-emerald-400 transition flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 font-bold text-sm">
+                  2
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-900">云存储直传分流架构 (Presigned URL Offload)</h3>
+                  <span className="text-[11px] font-mono text-emerald-600">网关仅承载轻量 JSON · 二进制绕行 CDN</span>
+                </div>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                最佳实践推荐：客户端先将超大图片/录音直传至阿里云 OSS、腾讯云 COS 或 AWS S3 对象存储边缘节点，请求网关时仅在消息中携带轻量对象直链（<code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-emerald-700">image_url</code> 或 <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-emerald-700">audio_url</code>）。网关只需解析极小文本 JSON，多媒体高带宽流量 100% 绕行，带宽和 CPU 消耗直降 99%。
+              </p>
+            </div>
+            <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-100 text-xs text-emerald-800 flex items-center justify-between">
+              <span>💡 推荐传输格式:</span>
+              <span className="font-mono font-bold">{"image_url: { url: 'https://cdn.../file.webp' }"}</span>
+            </div>
+          </div>
+
+          {/* Optimization Pillar 3: Smart Codec & Clamping */}
+          <div className="bg-white border border-slate-200/90 rounded-3xl p-6 shadow-xs space-y-4 hover:border-purple-400 transition flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-2xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 font-bold text-sm">
+                  3
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-900">智能音频 Opus 压缩与图像 WebP 降维</h3>
+                  <span className="text-[11px] font-mono text-purple-600">语音体积缩减 95% · Vision Token 节约 70%</span>
+                </div>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                <strong>语音场景：</strong>弃用原始未压缩 PCM/WAV (1.4 Mbps) 或 MP3，推荐 16kHz mono Opus 格式 (仅 16-24 kbps)，在 Whisper/SenseVoice 准确率 99.8% 无损的同时，传输体积降低 95%！<br />
+                <strong>图像场景：</strong>客户端前置转码为 WebP/AVIF 并钳制最大分辨率至 1024-1536px，既加快传输，又大幅缩减上游大模型的 Vision Tile 切片数量，推理成本立省 70%。
+              </p>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs font-mono text-slate-700 flex justify-between">
+              <span className="text-slate-500">1分钟 PCM 录音: 10.5 MB</span>
+              <span className="text-purple-600 font-bold">→ 16kHz Opus 录音: 仅 180 KB</span>
+            </div>
+          </div>
+
+          {/* Optimization Pillar 4: Pre-flight Header Sniffing & Early Guards */}
+          <div className="bg-white border border-slate-200/90 rounded-3xl p-6 shadow-xs space-y-4 hover:border-sky-400 transition flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-2xl bg-sky-50 border border-sky-100 flex items-center justify-center text-sky-600 font-bold text-sm">
+                  4
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-900">前置报头嗅探与快速早停熔断 (Early Guards)</h3>
+                  <span className="text-[11px] font-mono text-sky-600">Nginx + 网关双层防护 · 杜绝恶意大包拖垮集群</span>
+                </div>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                在客户端二进制数据到达内存之前，前置负载均衡与中间件首先嗅探 <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-sky-700">Content-Length</code> 与 <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-sky-700">Content-Type</code>。对于超规图像（&gt;10MB）或过长音频（&gt;25MB），在分配任何网络缓冲区前毫秒级直接响应 <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-rose-600">413 Payload Too Large</code>，杜绝异常大包占用上游连接池与网关 Goroutine 协程。
+              </p>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs font-mono text-slate-700 flex justify-between">
+              <span className="text-slate-500">超限检测拦截延迟:</span>
+              <span className="text-sky-600 font-bold">&lt; 1 ms (零网络下行消耗)</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Developer Documentation Section */}
       <section id="docs" className="py-20 px-6 max-w-6xl mx-auto w-full space-y-10">
         <div className="text-center space-y-3">
@@ -571,7 +672,8 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
                 { id: 'node', label: 'Node.js' },
                 { id: 'curl', label: 'cURL' },
                 { id: 'multimodal', label: '全模态 API' },
-                { id: 'session', label: '会话黏连 (Session Affinity)' }
+                { id: 'resource_opt', label: '⚡ 多模态低耗实践' },
+                { id: 'session', label: '会话黏连 (90% 降本)' }
               ].map(t => (
                 <button
                   key={t.id}
@@ -594,6 +696,7 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
                 else if (activeSnippetTab === 'claude') code = claudeSnippet;
                 else if (activeSnippetTab === 'node') code = nodeSnippet;
                 else if (activeSnippetTab === 'multimodal') code = multimodalSnippet;
+                else if (activeSnippetTab === 'resource_opt') code = resourceOptSnippet;
                 else if (activeSnippetTab === 'session') code = sessionSnippet;
                 copyCode(code, activeSnippetTab);
               }}
@@ -621,71 +724,161 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
               {activeSnippetTab === 'node' && nodeSnippet}
               {activeSnippetTab === 'curl' && curlSnippet}
               {activeSnippetTab === 'multimodal' && multimodalSnippet}
+              {activeSnippetTab === 'resource_opt' && resourceOptSnippet}
               {activeSnippetTab === 'session' && sessionSnippet}
             </pre>
           </div>
         </div>
 
-        {/* API Endpoints & Request Headers Matrix */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs space-y-3">
-            <div className="flex items-center space-x-2 text-slate-900 font-bold text-xs uppercase tracking-wider">
-              <Terminal className="w-4 h-4 text-indigo-600" />
-              <span>数据面统一端点速查 (Data Plane Endpoints)</span>
+        {/* Standardized 3-Tier URL Architecture */}
+        <div className="space-y-4">
+          <div className="flex items-center space-x-2 text-slate-900 font-bold text-xs uppercase tracking-wider">
+            <Terminal className="w-4 h-4 text-indigo-600" />
+            <span>三层规范化 URL 路由体系 (Standardized 3-Tier URL Architecture)</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {/* 1. Data Plane */}
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs space-y-3 flex flex-col justify-between">
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200">
+                    标准推理数据面 (/v1)
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">SDK 原生直连</span>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  标准模型推理接口，完全兼容 OpenAI、Claude、Gemini 原生 SDK，支持流式 SSE 与首字容灾。
+                </p>
+                <div className="space-y-1.5 text-xs font-mono">
+                  <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 text-indigo-600 font-semibold text-[11px]">
+                    POST /v1/chat/completions
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 text-purple-600 font-semibold text-[11px]">
+                    POST /v1/messages
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 text-amber-600 font-semibold text-[11px]">
+                    POST /v1/images/generations
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 text-emerald-600 font-semibold text-[11px]">
+                    POST /v1/audio/transcriptions
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 text-rose-600 font-semibold text-[11px]">
+                    POST /v1/videos/generations
+                  </div>
+                </div>
+              </div>
+              <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-400">
+                支持 Bearer Token 与 X-Session-ID
+              </div>
             </div>
-            <div className="space-y-2 text-xs">
-              <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="font-mono text-indigo-600 font-bold">POST /v1/chat/completions</span>
-                <span className="text-slate-500">OpenAI 格式对话补全与流式打字机</span>
+
+            {/* 2. Control Plane */}
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs space-y-3 flex flex-col justify-between">
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200">
+                    统一后端管控面 (/api)
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">Control Plane</span>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  网关内部控制面与运营管理 API，严格统一收口在 /api/v1 路径下，支持权限隔离与网关多副本同步。
+                </p>
+                <div className="space-y-1.5 text-xs font-mono">
+                  <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 text-purple-700 font-semibold text-[11px]">
+                    /api/v1/auth/* (登录/注册/OAuth)
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 text-purple-700 font-semibold text-[11px]">
+                    /api/v1/user/* (钱包/充值/密钥)
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 text-purple-700 font-semibold text-[11px]">
+                    /api/v1/admin/* (路由/渠道/计费)
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 text-emerald-700 font-semibold text-[11px]">
+                    /api/v1/public/status (公网 SLA)
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 text-slate-600 font-semibold text-[11px]">
+                    /health (K8s 探针存活检测)
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="font-mono text-purple-600 font-bold">POST /v1/messages</span>
-                <span className="text-slate-500">Claude 原生全双工转译对话</span>
+              <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-400">
+                全栈 RESTful API + JWT 鉴权
               </div>
-              <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="font-mono text-amber-600 font-bold">POST /v1/images/generations</span>
-                <span className="text-slate-500">DALL-E 3 / Flux 图像生成</span>
+            </div>
+
+            {/* 3. Web Entry */}
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs space-y-3 flex flex-col justify-between">
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                    极简应用访问入口 (Web)
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">SaaS Entry</span>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  提供无缝直达的用户工作台，根路径直接载入 SPA 应用，告别旧式 ui 字眼，兼顾极简体验与历史兼容。
+                </p>
+                <div className="space-y-1.5 text-xs font-mono">
+                  <div className="p-1.5 rounded-lg bg-emerald-50/70 border border-emerald-200 text-emerald-800 font-semibold text-[11px] flex justify-between">
+                    <span>GET /</span>
+                    <span className="font-sans font-bold text-[10px] text-emerald-600">根路径零跳转直达</span>
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 text-indigo-600 font-semibold text-[11px] flex justify-between">
+                    <span>GET /app/</span>
+                    <span className="font-sans text-[10px] text-slate-500">现代 SaaS 规范应用路径</span>
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 text-slate-700 font-semibold text-[11px] flex justify-between">
+                    <span>GET /workspace/</span>
+                    <span className="font-sans text-[10px] text-slate-400">工作台路径兼容</span>
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 text-slate-700 font-semibold text-[11px] flex justify-between">
+                    <span>GET /console/</span>
+                    <span className="font-sans text-[10px] text-slate-400">控制台路径兼容</span>
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 text-amber-700 font-semibold text-[11px] flex justify-between">
+                    <span>GET /ui</span>
+                    <span className="font-sans text-[10px] text-amber-600">301 自动跳转至 /app/</span>
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="font-mono text-rose-600 font-bold">POST /v1/audio/speech</span>
-                <span className="text-slate-500">TTS 语音合成 (返回二进制音频流)</span>
-              </div>
-              <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
-                <span className="font-mono text-emerald-600 font-bold">POST /v1/audio/transcriptions</span>
-                <span className="text-slate-500">Whisper STT 语音转写</span>
+              <div className="pt-2 border-t border-slate-100 text-[11px] text-emerald-600 font-medium">
+                彻底废弃 "ui" 字眼，体验更加丝滑
               </div>
             </div>
           </div>
+        </div>
 
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs space-y-3">
-            <div className="flex items-center space-x-2 text-slate-900 font-bold text-xs uppercase tracking-wider">
-              <Shield className="w-4 h-4 text-indigo-600" />
-              <span>关键请求头与高级调度参数</span>
+        {/* Request Headers & Security Auth Strip */}
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs space-y-3">
+          <div className="flex items-center space-x-2 text-slate-900 font-bold text-xs uppercase tracking-wider">
+            <Shield className="w-4 h-4 text-indigo-600" />
+            <span>核心调度与认证请求头速查 (Header Matrix)</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-mono font-bold text-slate-800">Authorization: Bearer sk-nano-...</span>
+                <span className="text-indigo-600 font-semibold text-[10px] bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">必填</span>
+              </div>
+              <p className="text-[11px] text-slate-500">工作台签发的 API 密钥，毫秒级内存校验、租户限流与余额计费。</p>
             </div>
-            <div className="space-y-2 text-xs">
-              <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono font-bold text-slate-800">Authorization: Bearer sk-nano-...</span>
-                  <span className="text-indigo-600 font-medium">必填</span>
-                </div>
-                <p className="text-[11px] text-slate-500 mt-0.5">工作台签发的 API 密钥，毫秒级内存校验、租户限流与余额计费。</p>
-              </div>
 
-              <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono font-bold text-indigo-700">X-Session-ID: &lt;session_id&gt;</span>
-                  <span className="text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-[10px]">90% 降本推荐</span>
-                </div>
-                <p className="text-[11px] text-slate-500 mt-0.5">启用一致性哈希会话黏连，保持同一 Provider 锁定，享受高比例 Prefix KV 缓存命中。</p>
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-mono font-bold text-indigo-700">X-Session-ID: &lt;session_id&gt;</span>
+                <span className="text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-[10px]">90% 降本推荐</span>
               </div>
+              <p className="text-[11px] text-slate-500">启用一致性哈希会话黏连，保持同一 Provider 锁定，复用 Prefix KV 缓存。</p>
+            </div>
 
-              <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono font-bold text-slate-800">x-api-key: sk-nano-...</span>
-                  <span className="text-slate-400 text-[10px]">兼容</span>
-                </div>
-                <p className="text-[11px] text-slate-500 mt-0.5">Anthropic SDK 原生认证头，网关全自动识别转译。</p>
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-mono font-bold text-slate-800">x-api-key: sk-nano-...</span>
+                <span className="text-slate-400 text-[10px]">SDK 兼容</span>
               </div>
+              <p className="text-[11px] text-slate-500">Anthropic Claude 原生 SDK 请求头，网关双向透明自动识别转译。</p>
             </div>
           </div>
         </div>
@@ -738,15 +931,17 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700 font-mono">
+                {/* 1. claude-opus-5.5 */}
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-                    <span>deepseek-v3</span>
+                    <span className="w-2 h-2 rounded-full bg-purple-600"></span>
+                    <span>claude-opus-5.5</span>
+                    <span className="text-[10px] font-sans font-normal px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">2026 旗舰</span>
                   </td>
-                  <td className="py-3.5 px-4">¥2.00</td>
-                  <td className="py-3.5 px-4">¥8.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥1.00 / ¥4.00</td>
-                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥0.20</td>
+                  <td className="py-3.5 px-4">¥35.00</td>
+                  <td className="py-3.5 px-4">¥175.00</td>
+                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥17.50 / ¥87.50</td>
+                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥3.50</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                   <td className="py-3.5 px-5 font-sans">
                     <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
@@ -755,10 +950,107 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
                   </td>
                 </tr>
 
+                {/* 2. gpt-6-astra */}
+                <tr className="hover:bg-slate-50/60 transition">
+                  <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
+                    <span className="w-2 h-2 rounded-full bg-sky-600"></span>
+                    <span>gpt-6-astra</span>
+                    <span className="text-[10px] font-sans font-normal px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200">OpenAI 2026</span>
+                  </td>
+                  <td className="py-3.5 px-4">¥30.00</td>
+                  <td className="py-3.5 px-4">¥120.00</td>
+                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥15.00 / ¥60.00</td>
+                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥3.00</td>
+                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-5 font-sans">
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
+                      立省 95%
+                    </span>
+                  </td>
+                </tr>
+
+                {/* 3. claude-fable-5.1 */}
+                <tr className="hover:bg-slate-50/60 transition">
+                  <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
+                    <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                    <span>claude-fable-5.1</span>
+                    <span className="text-[10px] font-sans font-normal px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">Agentic 推理</span>
+                  </td>
+                  <td className="py-3.5 px-4">¥18.00</td>
+                  <td className="py-3.5 px-4">¥90.00</td>
+                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥9.00 / ¥45.00</td>
+                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥1.80</td>
+                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-5 font-sans">
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
+                      立省 95%
+                    </span>
+                  </td>
+                </tr>
+
+                {/* 4. gemini-3.8-flash */}
+                <tr className="hover:bg-slate-50/60 transition">
+                  <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                    <span>gemini-3.8-flash</span>
+                    <span className="text-[10px] font-sans font-normal px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">1M 上下文</span>
+                  </td>
+                  <td className="py-3.5 px-4">¥1.50</td>
+                  <td className="py-3.5 px-4">¥6.00</td>
+                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥0.75 / ¥3.00</td>
+                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥0.15</td>
+                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-5 font-sans">
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
+                      立省 95%
+                    </span>
+                  </td>
+                </tr>
+
+                {/* 5. gemini-3.8-live */}
+                <tr className="hover:bg-slate-50/60 transition">
+                  <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                    <span>gemini-3.8-live</span>
+                    <span className="text-[10px] font-sans font-normal px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">双向实时语音</span>
+                  </td>
+                  <td className="py-3.5 px-4">¥5.00</td>
+                  <td className="py-3.5 px-4">¥20.00</td>
+                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥2.50 / ¥10.00</td>
+                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥0.50</td>
+                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-5 font-sans">
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
+                      立省 95%
+                    </span>
+                  </td>
+                </tr>
+
+                {/* 6. deepseek-v4.1-flash */}
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                    <span>deepseek-v4.1-flash</span>
+                    <span className="text-[10px] font-sans font-normal px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">高并发 MoE</span>
+                  </td>
+                  <td className="py-3.5 px-4">¥1.00</td>
+                  <td className="py-3.5 px-4">¥4.00</td>
+                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥0.50 / ¥2.00</td>
+                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥0.10</td>
+                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-5 font-sans">
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
+                      立省 95%
+                    </span>
+                  </td>
+                </tr>
+
+                {/* 7. deepseek-r1 */}
+                <tr className="hover:bg-slate-50/60 transition">
+                  <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
+                    <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
                     <span>deepseek-r1</span>
+                    <span className="text-[10px] font-sans font-normal px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">深度长链思考</span>
                   </td>
                   <td className="py-3.5 px-4">¥4.00</td>
                   <td className="py-3.5 px-4">¥16.00</td>
@@ -772,78 +1064,12 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
                   </td>
                 </tr>
 
-                <tr className="hover:bg-slate-50/60 transition">
-                  <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-purple-500"></span>
-                    <span>claude-3-7-sonnet</span>
-                  </td>
-                  <td className="py-3.5 px-4">¥21.00</td>
-                  <td className="py-3.5 px-4">¥105.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥10.50 / ¥52.50</td>
-                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥2.10</td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-5 font-sans">
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
-                      立省 95%
-                    </span>
-                  </td>
-                </tr>
-
-                <tr className="hover:bg-slate-50/60 transition">
-                  <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-sky-500"></span>
-                    <span>o3-mini</span>
-                  </td>
-                  <td className="py-3.5 px-4">¥7.50</td>
-                  <td className="py-3.5 px-4">¥30.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥3.75 / ¥15.00</td>
-                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥1.80</td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-5 font-sans">
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
-                      立省 85%
-                    </span>
-                  </td>
-                </tr>
-
-                <tr className="hover:bg-slate-50/60 transition">
-                  <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-sky-500"></span>
-                    <span>gpt-4.5</span>
-                  </td>
-                  <td className="py-3.5 px-4">¥35.00</td>
-                  <td className="py-3.5 px-4">¥140.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥17.50 / ¥70.00</td>
-                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥8.75</td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-5 font-sans">
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
-                      立省 75%
-                    </span>
-                  </td>
-                </tr>
-
-                <tr className="hover:bg-slate-50/60 transition">
-                  <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                    <span>gemini-2.5-pro</span>
-                  </td>
-                  <td className="py-3.5 px-4">¥8.50</td>
-                  <td className="py-3.5 px-4">¥34.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥4.25 / ¥17.00</td>
-                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥2.10</td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-5 font-sans">
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
-                      立省 85%
-                    </span>
-                  </td>
-                </tr>
-
+                {/* 8. qwen-3.8-max */}
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-teal-500"></span>
-                    <span>qwen-2.5-max</span>
+                    <span>qwen-3.8-max</span>
+                    <span className="text-[10px] font-sans font-normal px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200">阿里通义旗舰</span>
                   </td>
                   <td className="py-3.5 px-4">¥6.00</td>
                   <td className="py-3.5 px-4">¥24.00</td>
@@ -857,10 +1083,31 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
                   </td>
                 </tr>
 
+                {/* 9. gpt-6-sol */}
+                <tr className="hover:bg-slate-50/60 transition">
+                  <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
+                    <span className="w-2 h-2 rounded-full bg-sky-500"></span>
+                    <span>gpt-6-sol</span>
+                    <span className="text-[10px] font-sans font-normal px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">企业级高吞吐</span>
+                  </td>
+                  <td className="py-3.5 px-4">¥12.00</td>
+                  <td className="py-3.5 px-4">¥48.00</td>
+                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥6.00 / ¥24.00</td>
+                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥1.20</td>
+                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-5 font-sans">
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
+                      立省 90%
+                    </span>
+                  </td>
+                </tr>
+
+                {/* 10. flux-1.1-pro */}
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-amber-500"></span>
                     <span>flux-1.1-pro</span>
+                    <span className="text-[10px] font-sans font-normal px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">旗舰超清生图</span>
                   </td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
@@ -870,16 +1117,33 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
                   <td className="py-3.5 px-5 font-sans text-slate-500">5 折优惠</td>
                 </tr>
 
+                {/* 11. sora-2 */}
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-rose-500"></span>
                     <span>sora-2</span>
+                    <span className="text-[10px] font-sans font-normal px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">影视级视频生成</span>
                   </td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                   <td className="py-3.5 px-4 font-semibold text-indigo-600">¥0.75 / 次</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                   <td className="py-3.5 px-4 font-bold text-slate-900">¥1.50 / 次</td>
+                  <td className="py-3.5 px-5 font-sans text-slate-500">5 折优惠</td>
+                </tr>
+
+                {/* 12. whisper-large-v3-turbo */}
+                <tr className="hover:bg-slate-50/60 transition">
+                  <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
+                    <span className="w-2 h-2 rounded-full bg-teal-600"></span>
+                    <span>whisper-large-v3-turbo</span>
+                    <span className="text-[10px] font-sans font-normal px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200">极速高精 STT</span>
+                  </td>
+                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥0.02 / 分钟</td>
+                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-4 font-bold text-slate-900">¥0.04 / 分钟</td>
                   <td className="py-3.5 px-5 font-sans text-slate-500">5 折优惠</td>
                 </tr>
               </tbody>

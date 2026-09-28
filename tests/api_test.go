@@ -61,16 +61,39 @@ func TestAPI_HealthMetricsAndWebUI(t *testing.T) {
 		t.Fatalf("expected 200 OK for /api/v1/public/status, got %d", wStatus.Code)
 	}
 
-	// 3. Test GET /workspace/ (embedded Workspace)
+	// 3a. Test GET / (Direct root landing page / SPA serving)
+	reqRoot := httptest.NewRequest(http.MethodGet, "/", nil)
+	wRoot := httptest.NewRecorder()
+	engine.ServeHTTP(wRoot, reqRoot)
+	if wRoot.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for root /, got %d", wRoot.Code)
+	}
+	if !bytes.Contains(wRoot.Body.Bytes(), []byte("AI路由器")) && !bytes.Contains(wRoot.Body.Bytes(), []byte("Nano")) {
+		t.Errorf("expected root / to contain 'AI路由器' or 'Nano'")
+	}
+
+	// 3b. Test GET /app/ (Concise web application path)
+	reqApp := httptest.NewRequest(http.MethodGet, "/app/", nil)
+	wApp := httptest.NewRecorder()
+	engine.ServeHTTP(wApp, reqApp)
+	if wApp.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for /app/, got %d", wApp.Code)
+	}
+
+	// 3c. Test GET /workspace/ (embedded Workspace for backward compatibility)
 	reqUI := httptest.NewRequest(http.MethodGet, "/workspace/", nil)
 	wUI := httptest.NewRecorder()
 	engine.ServeHTTP(wUI, reqUI)
-
 	if wUI.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for embedded workspace /workspace/, got %d", wUI.Code)
 	}
-	if !bytes.Contains(wUI.Body.Bytes(), []byte("AI路由器")) && !bytes.Contains(wUI.Body.Bytes(), []byte("Nano")) {
-		t.Errorf("expected Workspace to contain 'AI路由器' or 'Nano'")
+
+	// 3d. Test GET /ui (Backward compatibility redirect to /app/)
+	reqLegacyUI := httptest.NewRequest(http.MethodGet, "/ui", nil)
+	wLegacyUI := httptest.NewRecorder()
+	engine.ServeHTTP(wLegacyUI, reqLegacyUI)
+	if wLegacyUI.Code != http.StatusMovedPermanently {
+		t.Fatalf("expected 301 Moved Permanently for /ui, got %d", wLegacyUI.Code)
 	}
 }
 
