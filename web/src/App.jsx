@@ -220,12 +220,6 @@ export default function App() {
     }
   }, [adminUser, currentTab]);
 
-  // Auto-select first available virtual key for Playground
-  useEffect(() => {
-    if (!playApiKey && keys.length > 0) {
-      setPlayApiKey(keys[0].key);
-    }
-  }, [keys, playApiKey]);
   const [stats, setStats] = useState({});
   const [channels, setChannels] = useState([]);
   const [keys, setKeys] = useState([]);
@@ -279,6 +273,13 @@ export default function App() {
   const [playLoading, setPlayLoading] = useState(false);
   const [playDurationMs, setPlayDurationMs] = useState(0);
   const [playOutput, setPlayOutput] = useState('');
+
+  // Auto-select first available API key for Playground
+  useEffect(() => {
+    if (!playApiKey && keys.length > 0) {
+      setPlayApiKey(keys[0].key);
+    }
+  }, [keys, playApiKey]);
 
   // 1. Chat & Completions state
   const [playModel, setPlayModel] = useState('');
