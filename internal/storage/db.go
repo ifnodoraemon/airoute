@@ -141,6 +141,12 @@ func OpenDB(dataSourceName string) (*DB, error) {
 
 // migrate creates required tables if they don't exist.
 func (db *DB) migrate() error {
+	// Pre-migration column additions to ensure existing tables have required columns before indexing
+	_, _ = db.Exec("ALTER TABLE virtual_keys ADD COLUMN user_id INTEGER DEFAULT 0;")
+	_, _ = db.Exec("ALTER TABLE virtual_keys ADD COLUMN group_name TEXT DEFAULT 'default';")
+	_, _ = db.Exec("ALTER TABLE users ADD COLUMN email TEXT DEFAULT '';")
+	_, _ = db.Exec("ALTER TABLE users ADD COLUMN group_name TEXT DEFAULT 'default';")
+
 	schema := `
 	CREATE TABLE IF NOT EXISTS channels (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -297,9 +303,7 @@ func (db *DB) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_usage_vk ON usage_logs(virtual_key);
 	CREATE INDEX IF NOT EXISTS idx_usage_tenant ON usage_logs(tenant_id);
 	CREATE INDEX IF NOT EXISTS idx_usage_model ON usage_logs(model);
-	CREATE INDEX IF NOT EXISTS idx_vk_user_id ON virtual_keys(user_id);
 	CREATE INDEX IF NOT EXISTS idx_vk_tenant_id ON virtual_keys(tenant_id);
-	CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 	CREATE INDEX IF NOT EXISTS idx_redemption_code ON redemption_codes(code);
 	CREATE INDEX IF NOT EXISTS idx_recharge_user ON recharge_orders(username);
 	CREATE INDEX IF NOT EXISTS idx_recharge_order ON recharge_orders(order_no);
@@ -358,6 +362,12 @@ func (db *DB) migrate() error {
 
 // migratePostgres creates required tables and indexes for PostgreSQL deployments.
 func (db *DB) migratePostgres() error {
+	// Pre-migration column additions to ensure existing tables have required columns before indexing
+	_, _ = db.DB.Exec("ALTER TABLE virtual_keys ADD COLUMN IF NOT EXISTS user_id BIGINT DEFAULT 0;")
+	_, _ = db.DB.Exec("ALTER TABLE virtual_keys ADD COLUMN IF NOT EXISTS group_name VARCHAR(64) DEFAULT 'default';")
+	_, _ = db.DB.Exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255) DEFAULT '';")
+	_, _ = db.DB.Exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS group_name VARCHAR(64) DEFAULT 'default';")
+
 	schema := `
 	CREATE TABLE IF NOT EXISTS channels (
 		id BIGSERIAL PRIMARY KEY,
@@ -519,9 +529,7 @@ func (db *DB) migratePostgres() error {
 	CREATE INDEX IF NOT EXISTS idx_usage_vk ON usage_logs(virtual_key);
 	CREATE INDEX IF NOT EXISTS idx_usage_tenant ON usage_logs(tenant_id);
 	CREATE INDEX IF NOT EXISTS idx_usage_model ON usage_logs(model);
-	CREATE INDEX IF NOT EXISTS idx_vk_user_id ON virtual_keys(user_id);
 	CREATE INDEX IF NOT EXISTS idx_vk_tenant_id ON virtual_keys(tenant_id);
-	CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 	CREATE INDEX IF NOT EXISTS idx_redemption_code ON redemption_codes(code);
 	CREATE INDEX IF NOT EXISTS idx_recharge_user ON recharge_orders(username);
 	CREATE INDEX IF NOT EXISTS idx_recharge_order ON recharge_orders(order_no);
