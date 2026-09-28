@@ -30,8 +30,8 @@ type ChannelRecord struct {
 	UpdatedAt      time.Time          `json:"updated_at"`
 }
 
-// VirtualKeyRecord represents the database row for virtual keys.
-type VirtualKeyRecord struct {
+// APIKeyRecord represents the database row for API keys.
+type APIKeyRecord struct {
 	ID            int64     `json:"id"`
 	Key           string    `json:"key"`
 	TenantID      string    `json:"tenant_id"`
@@ -42,10 +42,11 @@ type VirtualKeyRecord struct {
 	UsedTokens    int64     `json:"used_tokens"`
 	UsedCost      float64   `json:"used_cost"`
 	GroupName     string    `json:"group_name"`
-	UserID        int64     `json:"user_id"`
-	Status        string    `json:"status"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	UserID           int64     `json:"user_id"`
+	Status           string    `json:"status"`
+	FormatValidation string    `json:"format_validation,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // UsageLogRecord represents an audit log entry.
@@ -53,7 +54,7 @@ type UsageLogRecord struct {
 	ID               int64     `json:"id"`
 	TraceID          string    `json:"trace_id"`
 	SessionID        string    `json:"session_id,omitempty"`
-	VirtualKey       string    `json:"virtual_key"`
+	APIKey           string    `json:"api_key"`
 	TenantID         string    `json:"tenant_id"`
 	Model            string    `json:"model"`
 	Channel          string    `json:"channel"`
@@ -253,19 +254,19 @@ func (r *Repository) DeleteChannel(id int64) error {
 	return err
 }
 
-// ListVirtualKeys returns all virtual keys.
-func (r *Repository) ListVirtualKeys() ([]*VirtualKeyRecord, error) {
-	rows, err := r.db.Query(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, created_at, updated_at FROM virtual_keys ORDER BY id ASC`)
+// ListAPIKeys returns all API keys.
+func (r *Repository) ListAPIKeys() ([]*APIKeyRecord, error) {
+	rows, err := r.db.Query(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys ORDER BY id ASC`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	list := make([]*VirtualKeyRecord, 0)
+	list := make([]*APIKeyRecord, 0)
 	for rows.Next() {
-		var rec VirtualKeyRecord
+		var rec APIKeyRecord
 		var allowedJSON string
-		err := rows.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.GroupName, &rec.UserID, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt)
+		err := rows.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.GroupName, &rec.UserID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -277,19 +278,19 @@ func (r *Repository) ListVirtualKeys() ([]*VirtualKeyRecord, error) {
 	return list, nil
 }
 
-// ListVirtualKeysByUser returns virtual keys belonging to a specific user.
-func (r *Repository) ListVirtualKeysByUser(userID int64) ([]*VirtualKeyRecord, error) {
-	rows, err := r.db.Query(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, created_at, updated_at FROM virtual_keys WHERE user_id = ? ORDER BY id ASC`, userID)
+// ListAPIKeysByUser returns API keys belonging to a specific user.
+func (r *Repository) ListAPIKeysByUser(userID int64) ([]*APIKeyRecord, error) {
+	rows, err := r.db.Query(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE user_id = ? ORDER BY id ASC`, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	list := make([]*VirtualKeyRecord, 0)
+	list := make([]*APIKeyRecord, 0)
 	for rows.Next() {
-		var rec VirtualKeyRecord
+		var rec APIKeyRecord
 		var allowedJSON string
-		err := rows.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.GroupName, &rec.UserID, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt)
+		err := rows.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.GroupName, &rec.UserID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -301,8 +302,8 @@ func (r *Repository) ListVirtualKeysByUser(userID int64) ([]*VirtualKeyRecord, e
 	return list, nil
 }
 
-// CreateVirtualKey inserts a new virtual key.
-func (r *Repository) CreateVirtualKey(rec *VirtualKeyRecord) error {
+// CreateAPIKey inserts a new API key.
+func (r *Repository) CreateAPIKey(rec *APIKeyRecord) error {
 	allowedBytes, _ := json.Marshal(rec.AllowedModels)
 	if rec.Status == "" {
 		rec.Status = "active"
@@ -314,8 +315,8 @@ func (r *Repository) CreateVirtualKey(rec *VirtualKeyRecord) error {
 		rec.GroupName = "default"
 	}
 
-	res, err := r.db.Exec(`INSERT INTO virtual_keys (key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, used_cost, group_name, user_id, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-		rec.Key, rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, rec.UsedTokens, rec.UsedCost, rec.GroupName, rec.UserID, rec.Status)
+	res, err := r.db.Exec(`INSERT INTO api_keys (key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, used_cost, group_name, user_id, status, format_validation, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		rec.Key, rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, rec.UsedTokens, rec.UsedCost, rec.GroupName, rec.UserID, rec.Status, rec.FormatValidation)
 	if err != nil {
 		return err
 	}
@@ -323,18 +324,18 @@ func (r *Repository) CreateVirtualKey(rec *VirtualKeyRecord) error {
 	return nil
 }
 
-// DeleteVirtualKey deletes a key by ID.
-func (r *Repository) DeleteVirtualKey(id int64) error {
-	_, err := r.db.Exec(`DELETE FROM virtual_keys WHERE id=?`, id)
+// DeleteAPIKey deletes an API key by ID.
+func (r *Repository) DeleteAPIKey(id int64) error {
+	_, err := r.db.Exec(`DELETE FROM api_keys WHERE id=?`, id)
 	return err
 }
 
-// GetVirtualKey returns a single virtual key by ID.
-func (r *Repository) GetVirtualKey(id int64) (*VirtualKeyRecord, error) {
-	row := r.db.QueryRow(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, created_at, updated_at FROM virtual_keys WHERE id = ?`, id)
-	var rec VirtualKeyRecord
+// GetAPIKey returns a single API key by ID.
+func (r *Repository) GetAPIKey(id int64) (*APIKeyRecord, error) {
+	row := r.db.QueryRow(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE id = ?`, id)
+	var rec APIKeyRecord
 	var allowedJSON string
-	if err := row.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.GroupName, &rec.UserID, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+	if err := row.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.GroupName, &rec.UserID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
 		return nil, err
 	}
 	if allowedJSON != "" {
@@ -343,12 +344,12 @@ func (r *Repository) GetVirtualKey(id int64) (*VirtualKeyRecord, error) {
 	return &rec, nil
 }
 
-// GetVirtualKeyByKey returns a single virtual key by key string.
-func (r *Repository) GetVirtualKeyByKey(key string) (*VirtualKeyRecord, error) {
-	row := r.db.QueryRow(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, created_at, updated_at FROM virtual_keys WHERE key = ?`, key)
-	var rec VirtualKeyRecord
+// GetAPIKeyByKey returns a single API key by key string.
+func (r *Repository) GetAPIKeyByKey(key string) (*APIKeyRecord, error) {
+	row := r.db.QueryRow(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE key = ?`, key)
+	var rec APIKeyRecord
 	var allowedJSON string
-	if err := row.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.GroupName, &rec.UserID, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+	if err := row.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.GroupName, &rec.UserID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
 		return nil, err
 	}
 	if allowedJSON != "" {
@@ -357,8 +358,8 @@ func (r *Repository) GetVirtualKeyByKey(key string) (*VirtualKeyRecord, error) {
 	return &rec, nil
 }
 
-// UpdateVirtualKey updates an existing virtual key (e.g. status, RPM, tenant, allowed models, group).
-func (r *Repository) UpdateVirtualKey(rec *VirtualKeyRecord) error {
+// UpdateAPIKey updates an existing API key (e.g. status, RPM, tenant, allowed models, group, format_validation).
+func (r *Repository) UpdateAPIKey(rec *APIKeyRecord) error {
 	allowedBytes, _ := json.Marshal(rec.AllowedModels)
 	if rec.Status == "" {
 		rec.Status = "active"
@@ -366,8 +367,8 @@ func (r *Repository) UpdateVirtualKey(rec *VirtualKeyRecord) error {
 	if rec.GroupName == "" {
 		rec.GroupName = "default"
 	}
-	_, err := r.db.Exec(`UPDATE virtual_keys SET tenant_id = ?, allowed_models = ?, rpm = ?, tpm = ?, budget = ?, group_name = ?, user_id = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-		rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, rec.GroupName, rec.UserID, rec.Status, rec.ID)
+	_, err := r.db.Exec(`UPDATE api_keys SET tenant_id = ?, allowed_models = ?, rpm = ?, tpm = ?, budget = ?, group_name = ?, user_id = ?, status = ?, format_validation = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, rec.GroupName, rec.UserID, rec.Status, rec.FormatValidation, rec.ID)
 	return err
 }
 
@@ -383,7 +384,7 @@ type LogFilter struct {
 	TenantID  string
 }
 
-// RecordUsageLog records an audit log asynchronously and updates key quota/cost.
+// RecordUsageLog records an audit log asynchronously and updates key quota/cost atomically.
 func (r *Repository) RecordUsageLog(log *UsageLogRecord) error {
 	isOff := 0
 	if log.IsOffPeak {
@@ -400,33 +401,48 @@ func (r *Repository) RecordUsageLog(log *UsageLogRecord) error {
 			log.TraceID = fmt.Sprintf("tr-%x", time.Now().UnixNano())
 		}
 	}
-	var err error
-	if !log.CreatedAt.IsZero() {
-		_, err = r.db.Exec(`INSERT INTO usage_logs (trace_id, session_id, virtual_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			log.TraceID, log.SessionID, log.VirtualKey, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, log.CreatedAt.UTC().Format("2006-01-02 15:04:05"))
-	} else {
-		_, err = r.db.Exec(`INSERT INTO usage_logs (trace_id, session_id, virtual_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			log.TraceID, log.SessionID, log.VirtualKey, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode)
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
 	}
-	if log.VirtualKey != "" && (log.Cost > 0 || log.TotalTokens > 0) {
-		_, _ = r.db.Exec(`UPDATE virtual_keys SET used_cost = used_cost + ?, used_tokens = used_tokens + ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?`,
-			log.Cost, log.TotalTokens, log.VirtualKey)
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	keyVal := log.APIKey
+
+	if !log.CreatedAt.IsZero() {
+		_, err = tx.Exec(`INSERT INTO usage_logs (trace_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			log.TraceID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, log.CreatedAt.UTC().Format("2006-01-02 15:04:05"))
+	} else {
+		_, err = tx.Exec(`INSERT INTO usage_logs (trace_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			log.TraceID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode)
+	}
+	if err != nil {
+		return err
+	}
+
+	if keyVal != "" && (log.Cost > 0 || log.TotalTokens > 0) {
+		_, _ = tx.Exec(`UPDATE api_keys SET used_cost = used_cost + ?, used_tokens = used_tokens + ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?`,
+			log.Cost, log.TotalTokens, keyVal)
 		if log.Cost > 0 {
-			res, _ := r.db.Exec(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT user_id FROM virtual_keys WHERE key = ?) AND role != 'admin'`,
-				log.Cost, log.VirtualKey)
+			res, _ := tx.Exec(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT user_id FROM api_keys WHERE key = ?) AND role != 'admin'`,
+				log.Cost, keyVal)
 			if res != nil {
 				affected, _ := res.RowsAffected()
 				if affected == 0 && log.TenantID != "" {
-					_, _ = r.db.Exec(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`,
+					_, _ = tx.Exec(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`,
 						log.Cost, log.TenantID, log.TenantID)
 				}
 			}
 		}
 	} else if log.TenantID != "" && log.Cost > 0 {
-		_, _ = r.db.Exec(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`,
+		_, _ = tx.Exec(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`,
 			log.Cost, log.TenantID, log.TenantID)
 	}
-	return err
+
+	return tx.Commit()
 }
 
 // ListUsageLogs returns recent usage logs for audit and monitoring.
@@ -443,7 +459,7 @@ func (r *Repository) ListUsageLogsWithFilter(f LogFilter) ([]*UsageLogRecord, er
 		f.Offset = 0
 	}
 
-	query := `SELECT id, trace_id, COALESCE(session_id, ''), COALESCE(virtual_key, ''), COALESCE(tenant_id, ''), COALESCE(model, ''), COALESCE(channel, ''), prompt_tokens, completion_tokens, COALESCE(cached_tokens, 0), total_tokens, COALESCE(cost, 0.0), COALESCE(is_off_peak, 0), COALESCE(off_peak_discount, 1.0), duration_ms, ttft_ms, status_code, created_at FROM usage_logs WHERE 1=1`
+	query := `SELECT id, trace_id, COALESCE(session_id, ''), COALESCE(api_key, ''), COALESCE(tenant_id, ''), COALESCE(model, ''), COALESCE(channel, ''), prompt_tokens, completion_tokens, COALESCE(cached_tokens, 0), total_tokens, COALESCE(cost, 0.0), COALESCE(is_off_peak, 0), COALESCE(off_peak_discount, 1.0), duration_ms, ttft_ms, status_code, created_at FROM usage_logs WHERE 1=1`
 	var args []interface{}
 
 	if f.StartTime != "" {
@@ -485,7 +501,7 @@ func (r *Repository) ListUsageLogsWithFilter(f LogFilter) ([]*UsageLogRecord, er
 		var l UsageLogRecord
 		var isOff int
 		var createdAt time.Time
-		if err := rows.Scan(&l.ID, &l.TraceID, &l.SessionID, &l.VirtualKey, &l.TenantID, &l.Model, &l.Channel, &l.PromptTokens, &l.CompletionTokens, &l.CachedTokens, &l.TotalTokens, &l.Cost, &isOff, &l.OffPeakDiscount, &l.DurationMs, &l.TTFTMs, &l.StatusCode, &createdAt); err != nil {
+		if err := rows.Scan(&l.ID, &l.TraceID, &l.SessionID, &l.APIKey, &l.TenantID, &l.Model, &l.Channel, &l.PromptTokens, &l.CompletionTokens, &l.CachedTokens, &l.TotalTokens, &l.Cost, &isOff, &l.OffPeakDiscount, &l.DurationMs, &l.TTFTMs, &l.StatusCode, &createdAt); err != nil {
 			return nil, err
 		}
 		l.IsOffPeak = isOff == 1
@@ -565,8 +581,8 @@ func (r *Repository) BatchUpdateChannelStatus(ids []int64, status string) (int64
 	return res.RowsAffected()
 }
 
-// BatchDeleteVirtualKeys deletes multiple virtual keys.
-func (r *Repository) BatchDeleteVirtualKeys(ids []int64) (int64, error) {
+// BatchDeleteAPIKeys deletes multiple API keys.
+func (r *Repository) BatchDeleteAPIKeys(ids []int64) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
@@ -576,7 +592,7 @@ func (r *Repository) BatchDeleteVirtualKeys(ids []int64) (int64, error) {
 		placeholders[i] = "?"
 		args[i] = id
 	}
-	q := fmt.Sprintf(`DELETE FROM virtual_keys WHERE id IN (%s)`, strings.Join(placeholders, ","))
+	q := fmt.Sprintf(`DELETE FROM api_keys WHERE id IN (%s)`, strings.Join(placeholders, ","))
 	res, err := r.db.Exec(q, args...)
 	if err != nil {
 		return 0, err
@@ -584,8 +600,8 @@ func (r *Repository) BatchDeleteVirtualKeys(ids []int64) (int64, error) {
 	return res.RowsAffected()
 }
 
-// BatchUpdateVirtualKeyStatus updates status ('active'/'disabled') for multiple virtual keys.
-func (r *Repository) BatchUpdateVirtualKeyStatus(ids []int64, status string) (int64, error) {
+// BatchUpdateAPIKeyStatus updates status ('active'/'disabled') for multiple API keys.
+func (r *Repository) BatchUpdateAPIKeyStatus(ids []int64, status string) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
@@ -596,7 +612,7 @@ func (r *Repository) BatchUpdateVirtualKeyStatus(ids []int64, status string) (in
 		placeholders[i] = "?"
 		args[i+1] = id
 	}
-	q := fmt.Sprintf(`UPDATE virtual_keys SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id IN (%s)`, strings.Join(placeholders, ","))
+	q := fmt.Sprintf(`UPDATE api_keys SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id IN (%s)`, strings.Join(placeholders, ","))
 	res, err := r.db.Exec(q, args...)
 	if err != nil {
 		return 0, err
@@ -666,7 +682,7 @@ func (r *Repository) GetStatsOverview() (*StatsOverview, error) {
 	}
 
 	_ = r.db.QueryRow(`SELECT COUNT(*) FROM channels WHERE status='active'`).Scan(&stats.ActiveChannels)
-	_ = r.db.QueryRow(`SELECT COUNT(*) FROM virtual_keys WHERE status='active'`).Scan(&stats.ActiveKeys)
+	_ = r.db.QueryRow(`SELECT COUNT(*) FROM api_keys WHERE status='active'`).Scan(&stats.ActiveKeys)
 
 	return stats, nil
 }
@@ -700,26 +716,27 @@ func (r *Repository) ToModelChannels() ([]model.ChannelConfig, error) {
 	return res, nil
 }
 
-// ToModelVirtualKeys converts database VirtualKeyRecords to Data Plane model.VirtualKeyConfigs.
-func (r *Repository) ToModelVirtualKeys() ([]model.VirtualKeyConfig, error) {
-	records, err := r.ListVirtualKeys()
+// ToModelAPIKeys converts database APIKeyRecords to Data Plane model.APIKeyConfigs.
+func (r *Repository) ToModelAPIKeys() ([]model.APIKeyConfig, error) {
+	records, err := r.ListAPIKeys()
 	if err != nil {
 		return nil, err
 	}
-	var res []model.VirtualKeyConfig
+	var res []model.APIKeyConfig
 	for _, rec := range records {
 		if rec.Status != "active" {
 			continue
 		}
-		res = append(res, model.VirtualKeyConfig{
-			Key:           rec.Key,
-			TenantID:      rec.TenantID,
-			AllowedModels: rec.AllowedModels,
-			RPM:           rec.RPM,
-			TPM:           rec.TPM,
-			Budget:        rec.Budget,
-			GroupName:     rec.GroupName,
-			UserID:        rec.UserID,
+		res = append(res, model.APIKeyConfig{
+			Key:              rec.Key,
+			TenantID:         rec.TenantID,
+			AllowedModels:    rec.AllowedModels,
+			RPM:              rec.RPM,
+			TPM:              rec.TPM,
+			Budget:           rec.Budget,
+			GroupName:        rec.GroupName,
+			UserID:           rec.UserID,
+			FormatValidation: rec.FormatValidation,
 		})
 	}
 	return res, nil
@@ -984,11 +1001,15 @@ func (r *Repository) RedeemCode(code, username string) (*RedemptionCodeRecord, e
 		return nil, fmt.Errorf("该兑换码已被使用或已失效")
 	}
 
-	// Mark as used
+	// Mark as used with atomic status check to prevent race-condition double redemption
 	now := time.Now()
-	_, err = tx.Exec(`UPDATE redemption_codes SET status = 'used', used_by = ?, used_at = CURRENT_TIMESTAMP WHERE id = ?`, username, rec.ID)
+	res, err := tx.Exec(`UPDATE redemption_codes SET status = 'used', used_by = ?, used_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'active'`, username, rec.ID)
 	if err != nil {
 		return nil, fmt.Errorf("更新兑换状态失败: %w", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil || affected == 0 {
+		return nil, fmt.Errorf("该兑换码已被使用或已失效")
 	}
 
 	// Credit user balance

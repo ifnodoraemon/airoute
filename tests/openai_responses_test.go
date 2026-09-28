@@ -54,7 +54,7 @@ func TestOpenAIResponses_NonStreaming(t *testing.T) {
 	oldCfg := config.GetGlobalConfig()
 	defer config.SetGlobalConfig(oldCfg)
 	config.SetGlobalConfig(&config.Config{
-		VirtualKeys: []model.VirtualKeyConfig{
+		APIKeys: []model.APIKeyConfig{
 			{
 				Key:      "sk-test-client-key",
 				TenantID: "default-tenant",
@@ -146,7 +146,7 @@ func TestOpenAIResponses_Streaming(t *testing.T) {
 	oldCfg := config.GetGlobalConfig()
 	defer config.SetGlobalConfig(oldCfg)
 	config.SetGlobalConfig(&config.Config{
-		VirtualKeys: []model.VirtualKeyConfig{
+		APIKeys: []model.APIKeyConfig{
 			{
 				Key:      "sk-test-client-key",
 				TenantID: "default-tenant",

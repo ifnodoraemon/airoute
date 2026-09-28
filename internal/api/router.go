@@ -82,13 +82,13 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 			protected := admin.Group("")
 			protected.Use(adminHandler.AdminAuthMiddleware())
 			{
-				// Virtual Keys (scoped to owner for non-admins)
-				protected.GET("/keys", adminHandler.ListVirtualKeys)
-				protected.POST("/keys", adminHandler.CreateVirtualKey)
-				protected.PUT("/keys/:id", adminHandler.UpdateVirtualKey)
-				protected.DELETE("/keys/:id", adminHandler.DeleteVirtualKey)
-				protected.POST("/keys/batch-delete", adminHandler.BatchDeleteVirtualKeys)
-				protected.POST("/keys/batch-status", adminHandler.BatchStatusVirtualKeys)
+				// API Keys (scoped to owner for non-admins)
+				protected.GET("/keys", adminHandler.ListAPIKeys)
+				protected.POST("/keys", adminHandler.CreateAPIKey)
+				protected.PUT("/keys/:id", adminHandler.UpdateAPIKey)
+				protected.DELETE("/keys/:id", adminHandler.DeleteAPIKey)
+				protected.POST("/keys/batch-delete", adminHandler.BatchDeleteAPIKeys)
+				protected.POST("/keys/batch-status", adminHandler.BatchStatusAPIKeys)
 
 				// Read-only inspection endpoints
 				protected.GET("/stats/overview", adminHandler.GetStatsOverview)

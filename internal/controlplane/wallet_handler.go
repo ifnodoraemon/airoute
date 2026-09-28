@@ -59,13 +59,16 @@ func (h *AdminHandler) SendVerificationCode(c *gin.Context) {
 		return
 	}
 
-	// In cloud or production, SMTP email can be sent if SMTP_HOST is set.
-	// For dev/test and smooth user onboarding, return dev_code in response as well.
-	c.JSON(http.StatusOK, gin.H{
-		"code":     0,
-		"message":  fmt.Sprintf("验证码已成功发送至邮箱 %s (10分钟内有效)", email),
-		"dev_code": code,
-	})
+	// In automated test or development mode, return dev_code for testing convenience
+	isDevOrTest := strings.HasSuffix(os.Args[0], ".test") || strings.Contains(os.Args[0], "/_test/") || os.Getenv("ENV") == "development"
+	resp := gin.H{
+		"code":    0,
+		"message": fmt.Sprintf("验证码已成功发送至邮箱 %s (10分钟内有效)", email),
+	}
+	if isDevOrTest {
+		resp["dev_code"] = code
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // RegisterRequest defines user registration payload.
@@ -143,7 +146,7 @@ func (h *AdminHandler) Register(c *gin.Context) {
 	_, _ = rand.Read(keyBytes)
 	newKey := "sk-nano-" + hex.EncodeToString(keyBytes)
 
-	_ = h.repo.CreateVirtualKey(&storage.VirtualKeyRecord{
+	_ = h.repo.CreateAPIKey(&storage.APIKeyRecord{
 		Key:           newKey,
 		TenantID:      username,
 		UserID:        user.ID,
@@ -259,6 +262,12 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 		user, _ = h.repo.GetUserByUsername(email)
 	}
 
+	// Security: disallow demo/simulated OAuth to log in as administrator
+	if (req.Simulated || req.Code == "demo" || req.Code == "") && user != nil && strings.EqualFold(user.Role, "admin") {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "管理员账号不允许通过模拟演示登录，请使用标准密码登录"})
+		return
+	}
+
 	if user == nil {
 		// New OAuth user: create with trial balance
 		randPassBytes := make([]byte, 16)
@@ -279,7 +288,7 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 		// Create default API key
 		keyBytes := make([]byte, 16)
 		_, _ = rand.Read(keyBytes)
-		_ = h.repo.CreateVirtualKey(&storage.VirtualKeyRecord{
+		_ = h.repo.CreateAPIKey(&storage.APIKeyRecord{
 			Key:           "sk-nano-" + hex.EncodeToString(keyBytes),
 			TenantID:      username,
 			UserID:        user.ID,
@@ -804,10 +813,16 @@ func (h *AdminHandler) CreateStripeRechargeSession(c *gin.Context) {
 // SandboxRecharge allows instant wallet recharge for direct/fast checkout.
 func (h *AdminHandler) SandboxRecharge(c *gin.Context) {
 	claimsVal, exists := c.Get("admin_claims")
-	var username string
-	if exists {
-		username = claimsVal.(*AdminClaims).Username
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "未登录或登录凭证已失效"})
+		return
 	}
+	claims, ok := claimsVal.(*AdminClaims)
+	if !ok || claims == nil || claims.Username == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "无效的认证凭证"})
+		return
+	}
+	username := claims.Username
 
 	var req struct {
 		OrderNo string  `json:"order_no"`
@@ -830,20 +845,6 @@ func (h *AdminHandler) SandboxRecharge(c *gin.Context) {
 
 	if req.OrderNo == "" {
 		req.OrderNo = fmt.Sprintf("SANDBOX%d", time.Now().UnixNano()%1000000)
-	}
-
-	if username == "" {
-		// Look up order owner
-		orders, _ := h.repo.ListRechargeOrders("")
-		for _, o := range orders {
-			if o.OrderNo == req.OrderNo {
-				username = o.Username
-				break
-			}
-		}
-	}
-	if username == "" {
-		username = "admin"
 	}
 
 	// Create or complete order
@@ -909,7 +910,7 @@ func (h *AdminHandler) ListUserKeys(c *gin.Context) {
 		return
 	}
 
-	keys, err := h.repo.ListVirtualKeysByUser(user.ID)
+	keys, err := h.repo.ListAPIKeysByUser(user.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "查询密钥列表失败: " + err.Error()})
 		return
@@ -927,7 +928,7 @@ type CreateUserKeyRequest struct {
 	Budget        float64  `json:"budget"`
 }
 
-// CreateUserKey generates a new virtual API key for the current user.
+// CreateUserKey generates a new API key for the current user.
 func (h *AdminHandler) CreateUserKey(c *gin.Context) {
 	claimsVal, exists := c.Get("admin_claims")
 	if !exists {
@@ -972,7 +973,7 @@ func (h *AdminHandler) CreateUserKey(c *gin.Context) {
 	_, _ = rand.Read(keyBytes)
 	newKey := "sk-nano-" + hex.EncodeToString(keyBytes)
 
-	rec := &storage.VirtualKeyRecord{
+	rec := &storage.APIKeyRecord{
 		Key:           newKey,
 		TenantID:      tenantID,
 		UserID:        user.ID,
@@ -984,7 +985,7 @@ func (h *AdminHandler) CreateUserKey(c *gin.Context) {
 		Status:        "active",
 	}
 
-	if err := h.repo.CreateVirtualKey(rec); err != nil {
+	if err := h.repo.CreateAPIKey(rec); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "创建 API 密钥失败: " + err.Error()})
 		return
 	}
@@ -1019,18 +1020,18 @@ func (h *AdminHandler) DeleteUserKey(c *gin.Context) {
 		return
 	}
 
-	vk, err := h.repo.GetVirtualKey(id)
-	if err != nil || vk == nil {
+	k, err := h.repo.GetAPIKey(id)
+	if err != nil || k == nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": 404, "error": "密钥不存在"})
 		return
 	}
 
-	if vk.UserID != user.ID && claims.Role != "admin" {
+	if k.UserID != user.ID && claims.Role != "admin" {
 		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "无权删除非本人的 API 密钥"})
 		return
 	}
 
-	if err := h.repo.DeleteVirtualKey(id); err != nil {
+	if err := h.repo.DeleteAPIKey(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "删除密钥失败: " + err.Error()})
 		return
 	}

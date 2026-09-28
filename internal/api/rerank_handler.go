@@ -106,7 +106,7 @@ func (h *Handler) HandleRerank(c *gin.Context) {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 			TraceID:          middleware.GetTraceID(c),
 			SessionID:        sessionID,
-			VirtualKey:       c.GetString("virtual_key"),
+			APIKey:           getRequestAPIKey(c),
 			TenantID:         c.GetString("tenant_id"),
 			Model:            req.Model,
 			PromptTokens:     resp.Usage.TotalTokens,

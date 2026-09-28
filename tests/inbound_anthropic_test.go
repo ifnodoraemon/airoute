@@ -69,7 +69,7 @@ func TestInboundAnthropic_ToOpenAIUpstream(t *testing.T) {
 	}
 
 	testCfg := &config.Config{
-		VirtualKeys: []model.VirtualKeyConfig{
+		APIKeys: []model.APIKeyConfig{
 			{
 				Key:      "sk-gw-anthropic-client",
 				TenantID: "claude-client-app",
@@ -177,7 +177,7 @@ func TestInboundAnthropic_Streaming(t *testing.T) {
 	}
 
 	testCfg := &config.Config{
-		VirtualKeys: []model.VirtualKeyConfig{
+		APIKeys: []model.APIKeyConfig{
 			{
 				Key:      "sk-gw-stream-key",
 				TenantID: "stream-tenant",

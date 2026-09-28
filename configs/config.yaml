@@ -14,4 +14,27 @@ channels: []
 
 # 客户端 API 访问密钥 (Client API Keys)
 # 默认清空，由管理员在控制台或通过 Admin API 为下游应用按需签发
-virtual_keys: []
+# 支持单独为特定 key 开启校验: format_validation: "strict" / "lenient" / "off"
+api_keys: []
+
+# 模型协议与内容格式校验规则 (Model Validation Governance)
+# 三大协议 (OpenAI / Anthropic / Gemini) 默认不校验 ("off")，保障网关透传性能与极致兼容性。
+# 仅对个别配置了规则的模型，或个别配置了 format_validation 的 API Key 单独开启校验。
+# 校验级别: "off" (关闭), "lenient" (智能纠错清洗), "strict" (严格拦截返回协议标准400)
+model_validation:
+  default_level: "off"
+  rules:
+    # 示例：仅对部分特殊模型按需开启格式严格校验
+    - model: "claude-*"
+      protocol: "anthropic"
+      level: "strict"
+    - model: "o1*"
+      protocol: "openai"
+      level: "strict"
+      disallow_temperature: true
+    - model: "o3*"
+      protocol: "openai"
+      level: "strict"
+      disallow_temperature: true
+
+

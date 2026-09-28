@@ -274,7 +274,7 @@ func TestUserLockAndQuotaExhaustion(t *testing.T) {
 	})
 	u, _ := repo.GetUserByUsername("broke_user")
 
-	_ = repo.CreateVirtualKey(&storage.VirtualKeyRecord{
+	_ = repo.CreateAPIKey(&storage.APIKeyRecord{
 		Key:           "sk-broke-key",
 		TenantID:      "broke_user",
 		UserID:        u.ID,
@@ -284,7 +284,7 @@ func TestUserLockAndQuotaExhaustion(t *testing.T) {
 
 	// Setup Config
 	cfg := config.DefaultConfig()
-	cfg.VirtualKeys = []model.VirtualKeyConfig{
+	cfg.APIKeys = []model.APIKeyConfig{
 		{
 			Key:      "sk-broke-key",
 			TenantID: "broke_user",
@@ -430,8 +430,8 @@ func TestUserKeyScopingAndBatchPriceDelete(t *testing.T) {
 		t.Fatalf("bob create key failed: %d %s", w.Code, w.Body.String())
 	}
 	var createdKeyResp struct {
-		Code int                      `json:"code"`
-		Data storage.VirtualKeyRecord `json:"data"`
+		Code int                  `json:"code"`
+		Data storage.APIKeyRecord `json:"data"`
 	}
 	_ = json.Unmarshal(w.Body.Bytes(), &createdKeyResp)
 	if createdKeyResp.Data.UserID != bob.ID {
@@ -448,8 +448,8 @@ func TestUserKeyScopingAndBatchPriceDelete(t *testing.T) {
 	engine.ServeHTTP(w, req)
 
 	var listResp struct {
-		Code int                         `json:"code"`
-		Data []*storage.VirtualKeyRecord `json:"data"`
+		Code int                     `json:"code"`
+		Data []*storage.APIKeyRecord `json:"data"`
 	}
 	_ = json.Unmarshal(w.Body.Bytes(), &listResp)
 	if len(listResp.Data) != 1 {
@@ -457,7 +457,7 @@ func TestUserKeyScopingAndBatchPriceDelete(t *testing.T) {
 	}
 }
 
-func TestVirtualKey_BudgetLimitEnforcement(t *testing.T) {
+func TestAPIKey_BudgetLimitEnforcement(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, err := storage.OpenDB(":memory:")
 	if err != nil {
@@ -486,7 +486,7 @@ func TestVirtualKey_BudgetLimitEnforcement(t *testing.T) {
 
 	// Create key with Budget: 10.0
 	vkKey := "sk-nano-budget-test"
-	_ = repo.CreateVirtualKey(&storage.VirtualKeyRecord{
+	_ = repo.CreateAPIKey(&storage.APIKeyRecord{
 		Key:      vkKey,
 		TenantID: "budget-user",
 		UserID:   user.ID,
@@ -505,7 +505,7 @@ func TestVirtualKey_BudgetLimitEnforcement(t *testing.T) {
 	}
 
 	// 2. Simulate exceeding key budget: used_cost = 10.5
-	_, _ = db.Exec(`UPDATE virtual_keys SET used_cost = 10.5 WHERE key = ?`, vkKey)
+	_, _ = db.Exec(`UPDATE api_keys SET used_cost = 10.5 WHERE key = ?`, vkKey)
 
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest("GET", "/v1/models", nil)
@@ -565,7 +565,7 @@ func TestModelsEndpoint_AllowedModelsFiltering(t *testing.T) {
 
 	// Create key restricted to ONLY gpt-4o
 	vkKey := "sk-nano-model-filter"
-	_ = repo.CreateVirtualKey(&storage.VirtualKeyRecord{
+	_ = repo.CreateAPIKey(&storage.APIKeyRecord{
 		Key:           vkKey,
 		TenantID:      "model-user",
 		UserID:        user.ID,

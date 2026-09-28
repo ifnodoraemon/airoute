@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
@@ -19,24 +20,102 @@ type ServerConfig struct {
 	RedisURL        string `yaml:"redis_url"`
 }
 
+// ModelValidationRule defines per-model format validation rules.
+type ModelValidationRule struct {
+	Model               string `yaml:"model" json:"model"`                             // glob/prefix pattern, e.g. "claude-3-5-sonnet*", "o1*"
+	Protocol            string `yaml:"protocol" json:"protocol"`                       // "openai", "anthropic", "gemini" (optional)
+	Level               string `yaml:"level" json:"level"`                             // "off", "lenient", "strict"
+	DisallowTemperature bool   `yaml:"disallow_temperature" json:"disallow_temperature"` // e.g. for o1/o3 reasoning models
+}
+
+// ModelValidationConfig defines format validation configurations.
+type ModelValidationConfig struct {
+	DefaultLevel string                `yaml:"default_level" json:"default_level"` // "off" | "lenient" | "strict" (default: "off")
+	Rules        []ModelValidationRule `yaml:"rules" json:"rules"`
+}
+
 // Config represents the complete gateway configuration.
 type Config struct {
 	Server                 ServerConfig              `yaml:"server"`
 	Channels               []model.ChannelConfig     `yaml:"channels"`
-	VirtualKeys            []model.VirtualKeyConfig  `yaml:"virtual_keys"`
+	APIKeys                []model.APIKeyConfig      `yaml:"api_keys"`
+	ModelValidation        ModelValidationConfig     `yaml:"model_validation"`
 	EnableFallback         bool                      `yaml:"enable_fallback"`
 	MaxRetries             int                       `yaml:"max_retries"`
 	DefaultTimeoutSeconds  int                       `yaml:"default_timeout_seconds"`
 	HasConfiguredKeys      bool                      `yaml:"-"`
-	virtualKeysMap         map[string]*model.VirtualKeyConfig
+	keyMu                  sync.RWMutex              `yaml:"-"`
+	apiKeysMap             map[string]*model.APIKeyConfig
 }
 
-// GetVirtualKey returns the VirtualKeyConfig in O(1) constant time.
-func (c *Config) GetVirtualKey(key string) *model.VirtualKeyConfig {
-	if c == nil || c.virtualKeysMap == nil {
+// GetAPIKey returns the APIKeyConfig in O(1) constant time safely.
+func (c *Config) GetAPIKey(key string) *model.APIKeyConfig {
+	if c == nil {
 		return nil
 	}
-	return c.virtualKeysMap[key]
+	c.keyMu.RLock()
+	defer c.keyMu.RUnlock()
+	if c.apiKeysMap == nil {
+		return nil
+	}
+	return c.apiKeysMap[key]
+}
+
+// GetValidationRule resolves the validation rule and level for a given model and protocol.
+func (c *Config) GetValidationRule(modelName, protocol string) (string, *ModelValidationRule) {
+	defaultLvl := "off"
+	if c != nil && c.ModelValidation.DefaultLevel != "" {
+		defaultLvl = c.ModelValidation.DefaultLevel
+	}
+
+	if c == nil || len(c.ModelValidation.Rules) == 0 {
+		return defaultLvl, nil
+	}
+
+	modelLower := strings.ToLower(strings.TrimSpace(modelName))
+	protoLower := strings.ToLower(strings.TrimSpace(protocol))
+
+	for i := range c.ModelValidation.Rules {
+		r := &c.ModelValidation.Rules[i]
+		// Protocol match check if rule specifies protocol
+		if r.Protocol != "" && protoLower != "" && !strings.EqualFold(r.Protocol, protoLower) {
+			continue
+		}
+
+		pat := strings.ToLower(strings.TrimSpace(r.Model))
+		matched := false
+		if pat == "*" || pat == "" {
+			matched = true
+		} else if strings.HasSuffix(pat, "*") {
+			prefix := strings.TrimSuffix(pat, "*")
+			matched = strings.HasPrefix(modelLower, prefix)
+		} else if strings.HasPrefix(pat, "*") {
+			suffix := strings.TrimPrefix(pat, "*")
+			matched = strings.HasSuffix(modelLower, suffix)
+		} else {
+			matched = (pat == modelLower)
+		}
+
+		if matched {
+			lvl := r.Level
+			if lvl == "" {
+				lvl = defaultLvl
+			}
+			return lvl, r
+		}
+	}
+
+	return defaultLvl, nil
+}
+
+// ResolveValidationLevel resolves the effective validation level and rule given model, protocol, and an optional key config.
+// Individual API keys or explicit per-model rules can enable validation ("strict" or "lenient"), while defaulting to "off".
+func (c *Config) ResolveValidationLevel(modelName, protocol string, keyCfg *model.APIKeyConfig) (string, *ModelValidationRule) {
+	level, rule := c.GetValidationRule(modelName, protocol)
+	if keyCfg != nil && keyCfg.FormatValidation != "" {
+		level = strings.ToLower(strings.TrimSpace(keyCfg.FormatValidation))
+	}
+	return level, rule
 }
 
 var (
@@ -60,8 +139,12 @@ func DefaultConfig() *Config {
 		MaxRetries:            3,
 		DefaultTimeoutSeconds: 60,
 		Channels:              []model.ChannelConfig{},
-		VirtualKeys:           []model.VirtualKeyConfig{},
-		virtualKeysMap:        make(map[string]*model.VirtualKeyConfig),
+		APIKeys:               []model.APIKeyConfig{},
+		ModelValidation: ModelValidationConfig{
+			DefaultLevel: "off",
+			Rules:        []ModelValidationRule{},
+		},
+		apiKeysMap: make(map[string]*model.APIKeyConfig),
 	}
 }
 
@@ -94,17 +177,19 @@ func LoadConfig(path string) (*Config, error) {
 
 // SetGlobalConfig sets the singleton config.
 func SetGlobalConfig(cfg *Config) {
-	configMutex.Lock()
-	defer configMutex.Unlock()
 	if cfg != nil {
-		m := make(map[string]*model.VirtualKeyConfig, len(cfg.VirtualKeys))
-		for i := range cfg.VirtualKeys {
-			vk := &cfg.VirtualKeys[i]
-			m[vk.Key] = vk
+		m := make(map[string]*model.APIKeyConfig, len(cfg.APIKeys))
+		for i := range cfg.APIKeys {
+			k := &cfg.APIKeys[i]
+			m[k.Key] = k
 		}
-		cfg.virtualKeysMap = m
+		cfg.keyMu.Lock()
+		cfg.apiKeysMap = m
+		cfg.keyMu.Unlock()
 	}
+	configMutex.Lock()
 	globalConfig = cfg
+	configMutex.Unlock()
 }
 
 // GetGlobalConfig returns the singleton config.

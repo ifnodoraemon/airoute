@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/config"
@@ -11,20 +12,59 @@ import (
 )
 
 const (
-	ContextKeyTenant           = "tenant_id"
-	ContextKeyVirtualKey       = "virtual_key"
-	ContextKeyVirtualKeyConfig = "virtual_key_config"
-	ContextKeyUserRecord       = "user_record"
+	ContextKeyTenant       = "tenant_id"
+	ContextKeyAPIKey       = "api_key"
+	ContextKeyAPIKeyConfig = "api_key_config"
+	ContextKeyUserRecord   = "user_record"
 )
+
+// UserQuotaTracker manages in-flight request reserves to prevent concurrent overdraft attacks.
+type UserQuotaTracker struct {
+	mu             sync.Mutex
+	inFlightUsers  map[int64]int
+	minReserveCost float64
+}
+
+var globalQuotaTracker = &UserQuotaTracker{
+	inFlightUsers:  make(map[int64]int),
+	minReserveCost: 0.0005, // minimal reserved credit per in-flight request
+}
+
+func (t *UserQuotaTracker) TryAcquire(userID int64, balance float64) bool {
+	if userID <= 0 {
+		return true
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	inFlight := t.inFlightUsers[userID]
+	if balance-float64(inFlight+1)*t.minReserveCost < 0 {
+		return false
+	}
+	t.inFlightUsers[userID] = inFlight + 1
+	return true
+}
+
+func (t *UserQuotaTracker) Release(userID int64) {
+	if userID <= 0 {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.inFlightUsers[userID] > 1 {
+		t.inFlightUsers[userID]--
+	} else {
+		delete(t.inFlightUsers, userID)
+	}
+}
 
 // AuthMiddleware authenticates incoming requests via Bearer API keys.
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cfg := config.GetGlobalConfig()
 
-		// If no virtual keys configured in system and no keys ever created, allow all requests in open dev mode.
+		// If no API keys configured in system and no keys ever created, allow all requests in open dev mode.
 		// If keys have been registered in the gateway (even if currently disabled/revoked), strictly enforce auth!
-		if len(cfg.VirtualKeys) == 0 && !cfg.HasConfiguredKeys {
+		if len(cfg.APIKeys) == 0 && !cfg.HasConfiguredKeys {
 			c.Next()
 			return
 		}
@@ -62,7 +102,7 @@ func AuthMiddleware() gin.HandlerFunc {
 			})
 			return
 		}
-		matchedKey := cfg.GetVirtualKey(rawKey)
+		matchedKey := cfg.GetAPIKey(rawKey)
 
 		if matchedKey == nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
@@ -75,21 +115,23 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		effectiveKey := *matchedKey
+
 		// Check associated user account status and wallet quota balance
 		repo := storage.GetGlobalRepository()
 		if repo != nil {
 			var user *storage.UserRecord
-			if matchedKey.UserID > 0 {
-				user, _ = repo.GetUserByID(matchedKey.UserID)
+			if effectiveKey.UserID > 0 {
+				user, _ = repo.GetUserByID(effectiveKey.UserID)
 			}
-			if user == nil && matchedKey.TenantID != "" {
-				user, _ = repo.GetUserByUsername(matchedKey.TenantID)
+			if user == nil && effectiveKey.TenantID != "" {
+				user, _ = repo.GetUserByUsername(effectiveKey.TenantID)
 			}
 
 			// Key budget and status check
-			vkRec, _ := repo.GetVirtualKeyByKey(matchedKey.Key)
-			if vkRec != nil {
-				if vkRec.Status != "" && vkRec.Status != "active" {
+			keyRec, _ := repo.GetAPIKeyByKey(effectiveKey.Key)
+			if keyRec != nil {
+				if keyRec.Status != "" && keyRec.Status != "active" {
 					c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 						"error": gin.H{
 							"message": "The API key has been revoked or disabled.",
@@ -99,11 +141,11 @@ func AuthMiddleware() gin.HandlerFunc {
 					})
 					return
 				}
-				effectiveBudget := vkRec.Budget
+				effectiveBudget := keyRec.Budget
 				if effectiveBudget <= 0 {
-					effectiveBudget = matchedKey.Budget
+					effectiveBudget = effectiveKey.Budget
 				}
-				if effectiveBudget > 0 && vkRec.UsedCost >= effectiveBudget {
+				if effectiveBudget > 0 && keyRec.UsedCost >= effectiveBudget {
 					c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
 						"error": gin.H{
 							"message": "This API key has exceeded its assigned quota budget limit.",
@@ -113,8 +155,8 @@ func AuthMiddleware() gin.HandlerFunc {
 					})
 					return
 				}
-				if vkRec.GroupName != "" && (matchedKey.GroupName == "" || matchedKey.GroupName == "default") {
-					matchedKey.GroupName = vkRec.GroupName
+				if keyRec.GroupName != "" && (effectiveKey.GroupName == "" || effectiveKey.GroupName == "default") {
+					effectiveKey.GroupName = keyRec.GroupName
 				}
 			}
 
@@ -132,46 +174,60 @@ func AuthMiddleware() gin.HandlerFunc {
 				}
 
 				// 2. Wallet balance check (admin accounts have unlimited quota)
-				if !strings.EqualFold(user.Role, "admin") && user.Balance <= 0 {
-					c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
-						"error": gin.H{
-							"message": "You have exceeded your current balance/quota (insufficient_quota). Please recharge your wallet at the console.",
-							"type":    "insufficient_quota",
-							"code":    "insufficient_quota",
-						},
-					})
-					return
+				if !strings.EqualFold(user.Role, "admin") {
+					if user.Balance <= 0 {
+						c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
+							"error": gin.H{
+								"message": "You have exceeded your current balance/quota (insufficient_quota). Please recharge your wallet at the console.",
+								"type":    "insufficient_quota",
+								"code":    "insufficient_quota",
+							},
+						})
+						return
+					}
+					// Pre-flight in-flight reservation to prevent concurrent overdraft storm
+					if !globalQuotaTracker.TryAcquire(user.ID, user.Balance) {
+						c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
+							"error": gin.H{
+								"message": "Concurrent requests exceed available wallet balance reserve. Please wait for pending requests to finish or recharge.",
+								"type":    "insufficient_quota",
+								"code":    "insufficient_quota",
+							},
+						})
+						return
+					}
+					defer globalQuotaTracker.Release(user.ID)
 				}
 
 				// Inherit user's group if key does not have an explicit group
-				if (matchedKey.GroupName == "" || matchedKey.GroupName == "default") && user.GroupName != "" {
-					matchedKey.GroupName = user.GroupName
+				if (effectiveKey.GroupName == "" || effectiveKey.GroupName == "default") && user.GroupName != "" {
+					effectiveKey.GroupName = user.GroupName
 				}
 				c.Set(ContextKeyUserRecord, user)
 			}
 		}
 
 		// Save context info
-		c.Set(ContextKeyTenant, matchedKey.TenantID)
-		c.Set(ContextKeyVirtualKey, matchedKey.Key)
-		c.Set(ContextKeyVirtualKeyConfig, matchedKey)
+		c.Set(ContextKeyTenant, effectiveKey.TenantID)
+		c.Set(ContextKeyAPIKey, effectiveKey.Key)
+		c.Set(ContextKeyAPIKeyConfig, &effectiveKey)
 		c.Next()
 	}
 }
 
-// ValidateModelAllowed checks if the requested model is permitted for this virtual key.
+// ValidateModelAllowed checks if the requested model is permitted for this API key.
 func ValidateModelAllowed(c *gin.Context, requestedModel string) bool {
-	vkAny, exists := c.Get(ContextKeyVirtualKeyConfig)
+	keyAny, exists := c.Get(ContextKeyAPIKeyConfig)
 	if !exists {
 		return true // open mode
 	}
 
-	vk, ok := vkAny.(*model.VirtualKeyConfig)
-	if !ok || len(vk.AllowedModels) == 0 {
+	keyCfg, ok := keyAny.(*model.APIKeyConfig)
+	if !ok || len(keyCfg.AllowedModels) == 0 {
 		return true // all models allowed
 	}
 
-	for _, m := range vk.AllowedModels {
+	for _, m := range keyCfg.AllowedModels {
 		if m == "*" || m == requestedModel {
 			return true
 		}

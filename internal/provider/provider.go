@@ -17,3 +17,14 @@ type Provider interface {
 	// ChatCompleteStream executes a streaming chat completion request, returning a channel of SSE events.
 	ChatCompleteStream(ctx context.Context, req *model.ChatCompletionRequest, channel *model.ChannelConfig) (<-chan *model.StreamEvent, error)
 }
+
+// EmbeddingProvider defines the capability interface for generating text embeddings.
+type EmbeddingProvider interface {
+	Embed(ctx context.Context, req *model.EmbeddingRequest, channel *model.ChannelConfig) (*model.EmbeddingResponse, error)
+}
+
+// RerankProvider defines the capability interface for cross-encoder document reranking.
+type RerankProvider interface {
+	Rerank(ctx context.Context, req *model.RerankRequest, channel *model.ChannelConfig) (*model.RerankResponse, error)
+}
+

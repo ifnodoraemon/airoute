@@ -3,6 +3,7 @@ package billing
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,6 +16,15 @@ import (
 // GlobalEngine is the singleton billing calculator used by all data plane handlers.
 var GlobalEngine *BillingEngine
 
+// Cached Asia/Shanghai timezone to avoid repeated disk I/O on every request
+var shanghaiLoc = func() *time.Location {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		return time.FixedZone("CST", 8*3600)
+	}
+	return loc
+}()
+
 // OffPeakSlot represents a discrete discount time window.
 type OffPeakSlot struct {
 	Start    string  `json:"start"`          // e.g. "00:00"
@@ -22,6 +32,136 @@ type OffPeakSlot struct {
 	Discount float64 `json:"discount"`       // e.g. 0.5
 	Name     string  `json:"name,omitempty"` // e.g. "夜间优惠"
 	Days     []int   `json:"days,omitempty"` // 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 7=Sun (empty = all days)
+}
+
+// OffPeakEvaluationContext carries time context for strategy evaluation.
+type OffPeakEvaluationContext struct {
+	LocalTime time.Time
+	Weekday   time.Weekday
+	IsWeekend bool
+	ISODay    int
+	CurrentM  int
+	Discount  float64
+}
+
+// OffPeakStrategy defines the strategy interface for off-peak discount computation.
+type OffPeakStrategy interface {
+	Evaluate(p *storage.ModelPriceRecord, ctx *OffPeakEvaluationContext) (bool, float64)
+}
+
+// NightOffPeakStrategy evaluates night-time discounts.
+type NightOffPeakStrategy struct{}
+
+func (s *NightOffPeakStrategy) Evaluate(p *storage.ModelPriceRecord, ctx *OffPeakEvaluationContext) (bool, float64) {
+	startM := parseTimeToMinutes(p.OffPeakStart)
+	endM := parseTimeToMinutes(p.OffPeakEnd)
+	if startM == 0 && endM == 0 {
+		startM = 0
+		endM = 510 // 08:30
+	}
+	var isOff bool
+	if startM <= endM {
+		isOff = ctx.CurrentM >= startM && ctx.CurrentM < endM
+	} else {
+		isOff = ctx.CurrentM >= startM || ctx.CurrentM < endM
+	}
+	if isOff {
+		return true, ctx.Discount
+	}
+	return false, 1.0
+}
+
+// CustomOffPeakStrategy evaluates configurable multi-slot time and day-of-week discounts.
+type CustomOffPeakStrategy struct{}
+
+func (s *CustomOffPeakStrategy) Evaluate(p *storage.ModelPriceRecord, ctx *OffPeakEvaluationContext) (bool, float64) {
+	bestDiscount := 1.0
+	matched := false
+
+	// 1. Weekend all-day evaluation if enabled
+	if p.WeekendAllDay && ctx.IsWeekend {
+		matched = true
+		bestDiscount = ctx.Discount
+	}
+
+	// 2. Parse slots
+	var slots []OffPeakSlot
+	if p.OffPeakSlots != "" {
+		_ = json.Unmarshal([]byte(p.OffPeakSlots), &slots)
+	}
+
+	// 3. Evaluate each slot with conflict resolution: Best Discount Rule (lowest discount multiplier)
+	for _, slot := range slots {
+		if len(slot.Days) > 0 {
+			dayMatch := false
+			for _, d := range slot.Days {
+				if d == ctx.ISODay {
+					dayMatch = true
+					break
+				}
+			}
+			if !dayMatch {
+				continue
+			}
+		}
+
+		sM := parseTimeToMinutes(slot.Start)
+		eM := parseTimeToMinutes(slot.End)
+		d := slot.Discount
+		if d <= 0 || d >= 1.0 {
+			d = ctx.Discount
+		}
+
+		var inSlot bool
+		if sM <= eM {
+			inSlot = ctx.CurrentM >= sM && ctx.CurrentM < eM
+		} else {
+			inSlot = ctx.CurrentM >= sM || ctx.CurrentM < eM
+		}
+
+		if inSlot {
+			matched = true
+			if d < bestDiscount {
+				bestDiscount = d
+			}
+		}
+	}
+
+	if matched {
+		return true, bestDiscount
+	}
+	return false, 1.0
+}
+
+// NoneOffPeakStrategy disables off-peak discounts.
+type NoneOffPeakStrategy struct{}
+
+func (s *NoneOffPeakStrategy) Evaluate(p *storage.ModelPriceRecord, ctx *OffPeakEvaluationContext) (bool, float64) {
+	return false, 1.0
+}
+
+// WindowOffPeakStrategy handles default start/end single window discounts.
+type WindowOffPeakStrategy struct{}
+
+func (s *WindowOffPeakStrategy) Evaluate(p *storage.ModelPriceRecord, ctx *OffPeakEvaluationContext) (bool, float64) {
+	startM := parseTimeToMinutes(p.OffPeakStart)
+	endM := parseTimeToMinutes(p.OffPeakEnd)
+	var isOff bool
+	if startM <= endM {
+		isOff = ctx.CurrentM >= startM && ctx.CurrentM < endM
+	} else {
+		isOff = ctx.CurrentM >= startM || ctx.CurrentM < endM
+	}
+	if isOff {
+		return true, ctx.Discount
+	}
+	return false, 1.0
+}
+
+var offPeakStrategies = map[string]OffPeakStrategy{
+	"night":  &NightOffPeakStrategy{},
+	"custom": &CustomOffPeakStrategy{},
+	"none":   &NoneOffPeakStrategy{},
 }
 
 // BillingEngine manages model pricing rates and real-time cost calculation.
@@ -168,10 +308,7 @@ func (e *BillingEngine) GetPriceWithGroup(modelName, groupName string) *storage.
 }
 
 // IsOffPeak evaluates whether the specified time is within the model's off-peak time window.
-// Supports:
-// 1. "custom" (multiple customizable slots + weekend all-day toggle)
-// 2. "night" (00:00 - 08:30 discount)
-// 3. "none" (no discount)
+// Uses Strategy Pattern across modes: "custom", "night", "none", and single-window default.
 func (e *BillingEngine) IsOffPeak(p *storage.ModelPriceRecord, t time.Time) (bool, float64) {
 	if p == nil || !p.OffPeakEnabled {
 		return false, 1.0
@@ -182,122 +319,29 @@ func (e *BillingEngine) IsOffPeak(p *storage.ModelPriceRecord, t time.Time) (boo
 		discount = 0.5
 	}
 
-	// China Standard Time (CST / UTC+8) evaluation
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*3600)
-	}
-	localT := t.In(loc)
+	localT := t.In(shanghaiLoc)
 	weekday := localT.Weekday()
-	isWeekend := (weekday == time.Saturday || weekday == time.Sunday)
 	isoDay := int(weekday)
 	if isoDay == 0 {
-		isoDay = 7 // Sunday = 7
+		isoDay = 7
 	}
-	currentM := localT.Hour()*60 + localT.Minute()
+
+	evalCtx := &OffPeakEvaluationContext{
+		LocalTime: localT,
+		Weekday:   weekday,
+		IsWeekend: (weekday == time.Saturday || weekday == time.Sunday),
+		ISODay:    isoDay,
+		CurrentM:  localT.Hour()*60 + localT.Minute(),
+		Discount:  discount,
+	}
 
 	mode := strings.ToLower(strings.TrimSpace(p.OffPeakMode))
-	if mode == "" {
-		mode = "custom"
+	strategy, exists := offPeakStrategies[mode]
+	if !exists {
+		strategy = &WindowOffPeakStrategy{}
 	}
 
-	switch mode {
-	case "night":
-		startM := parseTimeToMinutes(p.OffPeakStart)
-		endM := parseTimeToMinutes(p.OffPeakEnd)
-		if startM == 0 && endM == 0 {
-			startM = 0
-			endM = 510 // 08:30
-		}
-		var isOff bool
-		if startM <= endM {
-			isOff = currentM >= startM && currentM < endM
-		} else {
-			isOff = currentM >= startM || currentM < endM
-		}
-		if isOff {
-			return true, discount
-		}
-		return false, 1.0
-
-	case "custom":
-		bestDiscount := 1.0
-		matched := false
-
-		// 1. Weekend all-day evaluation if enabled
-		if p.WeekendAllDay && isWeekend {
-			matched = true
-			bestDiscount = discount
-		}
-
-		// 2. Parse slots
-		var slots []OffPeakSlot
-		if p.OffPeakSlots != "" {
-			_ = json.Unmarshal([]byte(p.OffPeakSlots), &slots)
-		}
-
-		// 3. Evaluate each slot with conflict resolution: Best Discount Rule (lowest discount multiplier)
-		for _, slot := range slots {
-			// Day of week match: empty means all days (1-7)
-			if len(slot.Days) > 0 {
-				dayMatch := false
-				for _, d := range slot.Days {
-					if d == isoDay {
-						dayMatch = true
-						break
-					}
-				}
-				if !dayMatch {
-					continue
-				}
-			}
-
-			sM := parseTimeToMinutes(slot.Start)
-			eM := parseTimeToMinutes(slot.End)
-			d := slot.Discount
-			if d <= 0 || d >= 1.0 {
-				d = discount
-			}
-
-			var inSlot bool
-			if sM <= eM {
-				inSlot = currentM >= sM && currentM < eM
-			} else {
-				// Cross midnight, e.g. 22:00 -> 06:00
-				inSlot = currentM >= sM || currentM < eM
-			}
-
-			if inSlot {
-				matched = true
-				if d < bestDiscount {
-					bestDiscount = d
-				}
-			}
-		}
-
-		if matched {
-			return true, bestDiscount
-		}
-		return false, 1.0
-
-	case "none":
-		return false, 1.0
-
-	default:
-		// Fallback to start/end window
-		startM := parseTimeToMinutes(p.OffPeakStart)
-		endM := parseTimeToMinutes(p.OffPeakEnd)
-		var isOff bool
-		if startM <= endM {
-			isOff = currentM >= startM && currentM < endM
-		} else {
-			isOff = currentM >= startM || currentM < endM
-		}
-		if isOff {
-			return true, discount
-		}
-		return false, 1.0
-	}
+	return strategy.Evaluate(p, evalCtx)
 }
 
 // ValidateSlotsOverlap ensures discrete time windows do not overlap on the same day of the week.
@@ -426,11 +470,7 @@ func ValidateSlotsOverlap(slotsJSON string) error {
 
 // IsOffPeakDefault evaluates whether current server time matches DeepSeek official off-peak hours.
 func IsOffPeakDefault(t time.Time) bool {
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*3600)
-	}
-	localT := t.In(loc)
+	localT := t.In(shanghaiLoc)
 	weekday := localT.Weekday()
 	if weekday == time.Saturday || weekday == time.Sunday {
 		return true
@@ -501,7 +541,17 @@ func (e *BillingEngine) CalculateCostDetailedWithGroup(modelName, groupName stri
 		discount = 1.0
 	}
 
+	cost = roundPrecision(cost)
+	totalSaved = roundPrecision(totalSaved)
+	cacheSaved = roundPrecision(cacheSaved)
+
 	return cost, totalSaved, cacheSaved, isOffPeak, discount
+}
+
+// roundPrecision rounds monetary amounts to 8 decimal places (fraction of micro-cents)
+// to eliminate IEEE-754 binary floating point precision drift.
+func roundPrecision(val float64) float64 {
+	return math.Round(val*1e8) / 1e8
 }
 
 // CalculateCostDetailed computes total request cost, total saved amount, cache savings, and off-peak discount metrics using the default group.

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"hash/fnv"
 	"io"
 	"math"
 	"net/http"
@@ -14,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ifnodoraemon/airoute/internal/distributed"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/provider"
@@ -174,89 +172,13 @@ func (d *Dispatcher) GetChannelsForModelAndProtocolWithContext(ctx context.Conte
 			continue
 		}
 
-		// 1. Session Affinity for Primary Pool (highest priority tier)
+		var selector ChannelSelectorStrategy
 		if groupIdx == 0 && sessionID != "" {
-			var chosen *model.ChannelConfig
-			chosenIdx := -1
-
-			// Check Distributed Redis cache pin first
-			if client := distributed.GetClient(); client != nil && client.IsActive() {
-				if pinnedName, err := client.GetSessionChannel(ctx, modelName, sessionID); err == nil && pinnedName != "" {
-					for i, ch := range group {
-						if ch.Name == pinnedName {
-							chosen = ch
-							chosenIdx = i
-							break
-						}
-					}
-				}
-			}
-
-			// If not in Redis, compute Consistent Hash via FNV-1a
-			if chosen == nil {
-				h := fnv.New32a()
-				_, _ = h.Write([]byte(sessionID))
-				_, _ = h.Write([]byte(":"))
-				_, _ = h.Write([]byte(modelName))
-				chosenIdx = int(h.Sum32() % uint32(len(group)))
-				chosen = group[chosenIdx]
-
-				// Persist pin in Redis (30-minute TTL)
-				if client := distributed.GetClient(); client != nil && client.IsActive() {
-					go func(m, s, chName string) {
-						_ = client.SetSessionChannel(context.Background(), m, s, chName, 30*time.Minute)
-					}(modelName, sessionID, chosen.Name)
-				}
-			}
-
-			telemetry.Logger.Debug("routed via LLM session affinity",
-				"session_id", sessionID,
-				"model", modelName,
-				"channel", chosen.Name,
-			)
-
-			result = append(result, chosen)
-			for i, ch := range group {
-				if i != chosenIdx {
-					result = append(result, ch)
-				}
-			}
-			continue
+			selector = &SessionAffinitySelector{}
+		} else {
+			selector = NewSWRRSelector(d.wrrWeights)
 		}
-
-		// 2. Smooth Weighted Round-Robin (SWRR)
-		totalWeight := 0
-		maxWeight := -1 << 31
-		winnerIdx := 0
-
-		for i, ch := range group {
-			w := ch.Weight
-			if w <= 0 {
-				w = 1
-			}
-			totalWeight += w
-
-			key := modelName + ":" + ch.Name
-			cur := d.wrrWeights[key] + w
-			d.wrrWeights[key] = cur
-			if cur > maxWeight {
-				maxWeight = cur
-				winnerIdx = i
-			}
-		}
-
-		winnerKey := modelName + ":" + group[winnerIdx].Name
-		d.wrrWeights[winnerKey] -= totalWeight
-
-		// Winner is tried first
-		result = append(result, group[winnerIdx])
-
-		// Remaining channels in this tier serve as immediate fallbacks
-		for i, ch := range group {
-			if i != winnerIdx {
-				result = append(result, ch)
-			}
-		}
+		result = append(result, selector.Select(ctx, group, modelName, sessionID)...)
 	}
 
 	return result
@@ -496,13 +418,29 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			// First token healthy! Mark healthy in circuit breaker
 			d.circuitBreaker.RecordSuccess(ch.Name)
 
-			// Wrap and return combined stream
+			// Wrap and return combined stream with leak-proof cancellation context
 			outChan := make(chan *model.StreamEvent, 64)
 			go func(first *model.StreamEvent, in <-chan *model.StreamEvent) {
 				defer close(outChan)
-				outChan <- first
-				for event := range in {
-					outChan <- event
+				select {
+				case outChan <- first:
+				case <-ctx.Done():
+					return
+				}
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case event, ok := <-in:
+						if !ok {
+							return
+						}
+						select {
+						case outChan <- event:
+						case <-ctx.Done():
+							return
+						}
+					}
 				}
 			}(firstEvent, streamChan)
 
@@ -862,19 +800,21 @@ func (d *Dispatcher) DispatchEmbedding(ctx context.Context, req *model.Embedding
 		var resp *model.EmbeddingResponse
 		var err error
 
-		if ch.Type == model.ProviderGemini {
-			geminiProv, ok := d.providers[model.ProviderGemini].(*provider.GeminiProvider)
-			if !ok {
-				geminiProv = provider.NewGeminiProvider(nil)
-			}
-			resp, err = geminiProv.Embed(ctx, req, ch)
-		} else {
-			openAIProv, ok := d.providers[model.ProviderOpenAI].(*provider.OpenAIProvider)
-			if !ok {
-				openAIProv = provider.NewOpenAIProvider(nil)
-			}
-			resp, err = openAIProv.Embed(ctx, req, ch)
+		d.mu.RLock()
+		prov, exists := d.providers[ch.Type]
+		d.mu.RUnlock()
+
+		if !exists {
+			lastErr = fmt.Errorf("unsupported provider type '%s' on channel %s", ch.Type, ch.Name)
+			continue
 		}
+
+		embedProv, ok := prov.(provider.EmbeddingProvider)
+		if !ok {
+			lastErr = fmt.Errorf("provider '%s' on channel %s does not support embedding", ch.Type, ch.Name)
+			continue
+		}
+		resp, err = embedProv.Embed(ctx, req, ch)
 
 		if err != nil {
 			d.circuitBreaker.RecordFailure(ch.Name)
@@ -916,12 +856,22 @@ func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankReques
 		}
 
 		start := time.Now()
-		openAIProv, ok := d.providers[model.ProviderOpenAI].(*provider.OpenAIProvider)
-		if !ok {
-			openAIProv = provider.NewOpenAIProvider(nil)
+		d.mu.RLock()
+		prov, exists := d.providers[ch.Type]
+		d.mu.RUnlock()
+
+		if !exists {
+			lastErr = fmt.Errorf("unsupported provider type '%s' on channel %s", ch.Type, ch.Name)
+			continue
 		}
 
-		resp, err := openAIProv.Rerank(ctx, req, ch)
+		rerankProv, ok := prov.(provider.RerankProvider)
+		if !ok {
+			lastErr = fmt.Errorf("provider '%s' on channel %s does not support reranking", ch.Type, ch.Name)
+			continue
+		}
+
+		resp, err := rerankProv.Rerank(ctx, req, ch)
 		if err != nil {
 			d.circuitBreaker.RecordFailure(ch.Name)
 			lastErr = err

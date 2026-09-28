@@ -84,7 +84,7 @@ func TestMultimodalPipeline_ImageAudioVideo(t *testing.T) {
 	engine := api.SetupRouter(dispatcher, nil)
 
 	// Open access mode for tests
-	config.SetGlobalConfig(&config.Config{VirtualKeys: nil})
+	config.SetGlobalConfig(&config.Config{APIKeys: nil})
 
 	// 3. Test Image Generation (/v1/images/generations)
 	t.Run("Image Generation", func(t *testing.T) {

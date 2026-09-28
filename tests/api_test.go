@@ -140,7 +140,7 @@ func TestAPI_AdminCRUDAndHotReload(t *testing.T) {
 		t.Errorf("expected Data Plane memory to hot-reload 'deepseek-chat', found: %v", supportedModels)
 	}
 
-	// 4. Create a virtual key via Admin API
+	// 4. Create an API key via Admin API
 	keyPayload := []byte(`{"tenant_id": "test-team", "key": "sk-gw-admin-test", "rpm": 120}`)
 	reqKey := httptest.NewRequest(http.MethodPost, "/api/v1/admin/keys", bytes.NewReader(keyPayload))
 	reqKey.Header.Set("Content-Type", "application/json")
@@ -163,7 +163,7 @@ func TestAPI_AdminCRUDAndHotReload(t *testing.T) {
 
 	// 6. Test GET /api/v1/admin/logs
 	_ = repo.RecordUsageLog(&storage.UsageLogRecord{
-		VirtualKey: "sk-gw-admin-test",
+		APIKey:     "sk-gw-admin-test",
 		TenantID:   "dev-team",
 		Model:      "deepseek-chat",
 		Channel:    "upstream-primary",
@@ -183,7 +183,7 @@ func TestAPI_AdminCRUDAndHotReload(t *testing.T) {
 
 func TestAPI_ChatCompletions_ModelForbidden(t *testing.T) {
 	testCfg := &config.Config{
-		VirtualKeys: []model.VirtualKeyConfig{
+		APIKeys: []model.APIKeyConfig{
 			{
 				Key:           "sk-gw-restricted",
 				TenantID:      "restricted-tenant",

@@ -28,8 +28,9 @@ func (m *ChatMessage) GetContentString() string {
 
 // ToolCall represents a tool invocation.
 type ToolCall struct {
-	ID       string       `json:"id"`
-	Type     string       `json:"type"`
+	Index    *int         `json:"index,omitempty"`
+	ID       string       `json:"id,omitempty"`
+	Type     string       `json:"type,omitempty"`
 	Function FunctionCall `json:"function"`
 }
 

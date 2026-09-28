@@ -160,8 +160,11 @@ local clearBefore = now - window
 redis.call('ZREMRANGEBYSCORE', key, 0, clearBefore)
 local current = redis.call('ZCARD', key)
 if current < limit then
-    redis.call('ZADD', key, now, now)
+    local seq = redis.call('INCR', key .. ':seq')
+    local member = tostring(now) .. ':' .. tostring(seq)
+    redis.call('ZADD', key, now, member)
     redis.call('PEXPIRE', key, window)
+    redis.call('PEXPIRE', key .. ':seq', window)
     return 1
 else
     return 0
@@ -169,12 +172,12 @@ end
 `)
 
 // AllowRPM checks rate limiting using Redis Sliding Window across the entire cluster.
-func (c *Client) AllowRPM(ctx context.Context, virtualKey string, rpm int) (bool, error) {
+func (c *Client) AllowRPM(ctx context.Context, apiKey string, rpm int) (bool, error) {
 	if !c.IsActive() || rpm <= 0 {
 		return true, nil // unmetered or not active
 	}
 
-	key := fmt.Sprintf("nano:ratelimit:rpm:%s", virtualKey)
+	key := fmt.Sprintf("nano:ratelimit:rpm:%s", apiKey)
 	nowMs := time.Now().UnixNano() / int64(time.Millisecond)
 
 	res, err := slidingWindowLua.Run(ctx, c.rdb, []string{key}, rpm, nowMs).Result()
@@ -191,13 +194,13 @@ func (c *Client) AllowRPM(ctx context.Context, virtualKey string, rpm int) (bool
 	return true, nil
 }
 
-// RecordTokens atomically increments the distributed usage counter for a virtual key.
-func (c *Client) RecordTokens(ctx context.Context, virtualKey string, tokens int) error {
+// RecordTokens atomically increments the distributed usage counter for an API key.
+func (c *Client) RecordTokens(ctx context.Context, apiKey string, tokens int) error {
 	if !c.IsActive() || tokens <= 0 {
 		return nil
 	}
 	key := "nano:keys:tokens"
-	return c.rdb.HIncrBy(ctx, key, virtualKey, int64(tokens)).Err()
+	return c.rdb.HIncrBy(ctx, key, apiKey, int64(tokens)).Err()
 }
 
 // GetSessionChannel retrieves the pinned provider channel name for a sticky session.

@@ -6,13 +6,47 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/provider"
 )
+
+// validateProbeURL verifies that the downstream URL does not target forbidden metadata endpoints (SSRF prevention).
+func validateProbeURL(targetURL string) error {
+	u, err := url.Parse(targetURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL format: %w", err)
+	}
+
+	hostname := u.Hostname()
+	if hostname == "" {
+		return fmt.Errorf("empty hostname in URL")
+	}
+
+	// Always block cloud metadata link-local addresses (AWS/GCP/Azure/Alibaba metadata endpoint 169.254.169.254)
+	if hostname == "169.254.169.254" || strings.HasPrefix(hostname, "169.254.") {
+		return fmt.Errorf("probing cloud metadata IP (%s) is strictly forbidden for security", hostname)
+	}
+
+	// Strict SSRF protection mode if enabled
+	if os.Getenv("GATEWAY_BLOCK_PRIVATE_PROBE") == "true" {
+		ips, err := net.LookupIP(hostname)
+		if err == nil {
+			for _, ip := range ips {
+				if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+					return fmt.Errorf("probing private/loopback IP address (%s) is forbidden in strict mode", ip.String())
+				}
+			}
+		}
+	}
+	return nil
+}
 
 // ProbeRequest contains connection parameters for probing downstream services.
 type ProbeRequest struct {
@@ -60,6 +94,10 @@ func (p *DownstreamProber) Probe(ctx context.Context, req *ProbeRequest) (*Probe
 		} else {
 			baseURL = "http://" + baseURL
 		}
+	}
+
+	if err := validateProbeURL(baseURL); err != nil {
+		return nil, err
 	}
 
 	start := time.Now()

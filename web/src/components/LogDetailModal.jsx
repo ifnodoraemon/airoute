@@ -155,7 +155,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
             </div>
             <div className="p-3 flex justify-between">
               <span className="text-slate-500 font-medium">API 密钥</span>
-              <span className="font-mono text-indigo-600 dark:text-indigo-400">{log.virtual_key || '无'}</span>
+              <span className="font-mono text-indigo-600 dark:text-indigo-400">{log.api_key || '无'}</span>
             </div>
             <div className="p-3 flex justify-between bg-slate-50/50 dark:bg-slate-900/30">
               <span className="text-slate-500 font-medium">Token 明细</span>

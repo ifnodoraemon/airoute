@@ -6,15 +6,19 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/adapter"
+	"github.com/ifnodoraemon/airoute/internal/billing"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/provider"
 	"github.com/ifnodoraemon/airoute/internal/router"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
+	"github.com/ifnodoraemon/airoute/internal/validator"
 )
 
 // HandleGeminiModels handles GET /v1beta/models.
@@ -105,6 +109,16 @@ func (h *Handler) HandleGeminiAction(c *gin.Context) {
 		return
 	}
 
+	// Validate Gemini protocol and schema rules with optional key config
+	valRes := validator.ValidateGeminiRequest(modelName, &geminiReq, getAPIKeyConfig(c))
+	if !valRes.Valid && valRes.Error != nil {
+		valRes.Error.WriteGinResponse(c)
+		return
+	}
+	if len(valRes.Warnings) > 0 {
+		c.Header("X-Airoute-Warning", strings.Join(valRes.Warnings, "; "))
+	}
+
 	canonicalReq := convertInboundGeminiToCanonical(modelName, &geminiReq, isStream)
 
 	sessionID := resolveSessionID(c, canonicalReq.Model, canonicalReq.Messages, "")
@@ -139,16 +153,27 @@ func (h *Handler) HandleGeminiAction(c *gin.Context) {
 			pTokens = resp.Usage.PromptTokens
 			cTokens = resp.Usage.CompletionTokens
 		}
+		var cost float64
+		var isOffPeak bool
+		var offPeakDiscount float64 = 1.0
+		keyGroup := getKeyGroup(c)
+		if billing.GlobalEngine != nil {
+			cost, _, _, isOffPeak, offPeakDiscount = billing.GlobalEngine.CalculateCostDetailedWithGroup(modelName, keyGroup, pTokens, cTokens, 0, time.Now())
+		}
+		telemetry.GlobalMetrics.RecordRequestWithModel(modelName, true, dur, pTokens, cTokens)
 		if storage.GlobalAsyncLogger != nil {
 			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 				TraceID:          middleware.GetTraceID(c),
 				SessionID:        sessionID,
-				VirtualKey:       c.GetString(middleware.ContextKeyVirtualKey),
+				APIKey:           getRequestAPIKey(c),
 				TenantID:         c.GetString(middleware.ContextKeyTenant),
 				Model:            modelName,
 				PromptTokens:     pTokens,
 				CompletionTokens: cTokens,
 				TotalTokens:      pTokens + cTokens,
+				Cost:             cost,
+				IsOffPeak:        isOffPeak,
+				OffPeakDiscount:  offPeakDiscount,
 				DurationMs:       dur.Milliseconds(),
 				StatusCode:       http.StatusOK,
 			})
@@ -187,28 +212,44 @@ func (h *Handler) HandleGeminiAction(c *gin.Context) {
 	totalCompTokens := 0
 	firstTokenRecorded := false
 
+	var recordOnce sync.Once
+	recordStreamEnd := func() {
+		dur := time.Since(start)
+		var cost float64
+		var isOffPeak bool
+		var offPeakDiscount float64 = 1.0
+		keyGroup := getKeyGroup(c)
+		if billing.GlobalEngine != nil {
+			cost, _, _, isOffPeak, offPeakDiscount = billing.GlobalEngine.CalculateCostDetailedWithGroup(modelName, keyGroup, totalPromptTokens, totalCompTokens, 0, time.Now())
+		}
+		telemetry.GlobalMetrics.RecordRequest(true, dur, totalPromptTokens, totalCompTokens)
+		if storage.GlobalAsyncLogger != nil {
+			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
+				TraceID:          middleware.GetTraceID(c),
+				SessionID:        sessionID,
+				APIKey:           getRequestAPIKey(c),
+				TenantID:         c.GetString(middleware.ContextKeyTenant),
+				Model:            modelName,
+				PromptTokens:     totalPromptTokens,
+				CompletionTokens: totalCompTokens,
+				TotalTokens:      totalPromptTokens + totalCompTokens,
+				Cost:             cost,
+				IsOffPeak:        isOffPeak,
+				OffPeakDiscount:  offPeakDiscount,
+				DurationMs:       dur.Milliseconds(),
+				StatusCode:       http.StatusOK,
+			})
+		}
+	}
+	defer recordOnce.Do(recordStreamEnd)
+
 	for {
 		select {
 		case <-c.Request.Context().Done():
 			return
 		case event, open := <-streamChan:
 			if !open {
-				dur := time.Since(start)
-				telemetry.GlobalMetrics.RecordRequest(true, dur, totalPromptTokens, totalCompTokens)
-				if storage.GlobalAsyncLogger != nil {
-					storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
-						TraceID:          middleware.GetTraceID(c),
-						SessionID:        sessionID,
-						VirtualKey:       c.GetString(middleware.ContextKeyVirtualKey),
-						TenantID:         c.GetString(middleware.ContextKeyTenant),
-						Model:            modelName,
-						PromptTokens:     totalPromptTokens,
-						CompletionTokens: totalCompTokens,
-						TotalTokens:      totalPromptTokens + totalCompTokens,
-						DurationMs:       dur.Milliseconds(),
-						StatusCode:       http.StatusOK,
-					})
-				}
+				recordOnce.Do(recordStreamEnd)
 				return
 			}
 
@@ -299,101 +340,15 @@ func (h *Handler) HandleGeminiAction(c *gin.Context) {
 	}
 }
 
+var defaultGeminiAdapter = adapter.NewGeminiAdapter()
+
 func convertInboundGeminiToCanonical(modelName string, geminiReq *provider.GeminiRequest, stream bool) *model.ChatCompletionRequest {
-	var msgs []model.ChatMessage
-
-	if geminiReq.SystemInstruction != nil {
-		var sysText strings.Builder
-		for _, p := range geminiReq.SystemInstruction.Parts {
-			sysText.WriteString(p.Text)
-		}
-		if sysText.Len() > 0 {
-			msgs = append(msgs, model.ChatMessage{
-				Role:    "system",
-				Content: sysText.String(),
-			})
-		}
+	req, err := defaultGeminiAdapter.ToCanonical(context.Background(), geminiReq)
+	if err != nil {
+		return &model.ChatCompletionRequest{Model: modelName, Stream: stream}
 	}
-
-	for _, content := range geminiReq.Contents {
-		role := content.Role
-		if role == "model" {
-			role = "assistant"
-		} else if role == "" {
-			role = "user"
-		}
-
-		var textBuilder strings.Builder
-		var toolCalls []model.ToolCall
-		var hasFunctionResponse bool
-
-		for _, p := range content.Parts {
-			if p.Text != "" {
-				textBuilder.WriteString(p.Text)
-			}
-			if p.FunctionCall != nil {
-				argsBytes, _ := json.Marshal(p.FunctionCall.Args)
-				toolCalls = append(toolCalls, model.ToolCall{
-					ID:   fmt.Sprintf("call_%s_%d", p.FunctionCall.Name, time.Now().UnixNano()),
-					Type: "function",
-					Function: model.FunctionCall{
-						Name:      p.FunctionCall.Name,
-						Arguments: string(argsBytes),
-					},
-				})
-			}
-			if p.FunctionResponse != nil {
-				hasFunctionResponse = true
-				respBytes, _ := json.Marshal(p.FunctionResponse.Response)
-				msgs = append(msgs, model.ChatMessage{
-					Role:       "tool",
-					Name:       p.FunctionResponse.Name,
-					ToolCallID: p.FunctionResponse.Name,
-					Content:    string(respBytes),
-				})
-			}
-		}
-
-		if !hasFunctionResponse {
-			msgs = append(msgs, model.ChatMessage{
-				Role:      role,
-				Content:   textBuilder.String(),
-				ToolCalls: toolCalls,
-			})
-		}
-	}
-
-	var tools []model.Tool
-	for _, tc := range geminiReq.Tools {
-		for _, fd := range tc.FunctionDeclarations {
-			params := fd.Parameters
-			if params == nil {
-				params = map[string]any{"type": "object", "properties": map[string]any{}}
-			}
-			tools = append(tools, model.Tool{
-				Type: "function",
-				Function: map[string]any{
-					"name":        fd.Name,
-					"description": fd.Description,
-					"parameters":  params,
-				},
-			})
-		}
-	}
-
-	req := &model.ChatCompletionRequest{
-		Model:    modelName,
-		Messages: msgs,
-		Stream:   stream,
-		Tools:    tools,
-	}
-
-	if geminiReq.GenerationConfig != nil {
-		req.Temperature = geminiReq.GenerationConfig.Temperature
-		req.TopP = geminiReq.GenerationConfig.TopP
-		req.MaxTokens = geminiReq.GenerationConfig.MaxOutputTokens
-	}
-
+	req.Model = modelName
+	req.Stream = stream
 	return req
 }
 

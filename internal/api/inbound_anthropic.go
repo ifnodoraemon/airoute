@@ -9,31 +9,21 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/adapter"
 	"github.com/ifnodoraemon/airoute/internal/billing"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/router"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
+	"github.com/ifnodoraemon/airoute/internal/validator"
 )
 
 // AnthropicInboundMessage represents an inbound message from Claude SDK.
-type AnthropicInboundMessage struct {
-	Role    string `json:"role"`
-	Content any    `json:"content"` // can be string or content blocks
-}
+type AnthropicInboundMessage = model.AnthropicInboundMessage
 
 // AnthropicInboundRequest represents the incoming payload from Anthropic SDK.
-type AnthropicInboundRequest struct {
-	Model       string                    `json:"model"`
-	Messages    []AnthropicInboundMessage `json:"messages"`
-	System      string                    `json:"system,omitempty"`
-	MaxTokens   int                       `json:"max_tokens"`
-	Temperature *float64                  `json:"temperature,omitempty"`
-	TopP        *float64                  `json:"top_p,omitempty"`
-	Stream      bool                      `json:"stream,omitempty"`
-	Tools       []any                     `json:"tools,omitempty"`
-}
+type AnthropicInboundRequest = model.AnthropicInboundRequest
 
 // extractMessageContent extracts string text from an Anthropic message content field.
 func extractMessageContent(content any) string {
@@ -60,111 +50,15 @@ func extractMessageContent(content any) string {
 	return string(b)
 }
 
-// ConvertAnthropicToCanonical converts an Anthropic request to the canonical OpenAI request format.
+var defaultAnthropicAdapter = adapter.NewAnthropicAdapter()
+
+// ConvertAnthropicToCanonical converts an Anthropic request to the canonical OpenAI request format via Adapter Pattern.
 func ConvertAnthropicToCanonical(req *AnthropicInboundRequest) *model.ChatCompletionRequest {
-	var canonicalMsgs []model.ChatMessage
-
-	if req.System != "" {
-		canonicalMsgs = append(canonicalMsgs, model.ChatMessage{
-			Role:    "system",
-			Content: req.System,
-		})
+	res, err := defaultAnthropicAdapter.ToCanonical(context.Background(), req)
+	if err != nil {
+		return &model.ChatCompletionRequest{Model: req.Model}
 	}
-
-	for _, msg := range req.Messages {
-		if blocks, ok := msg.Content.([]any); ok {
-			var textParts []string
-			var toolCalls []model.ToolCall
-			var hasToolResult bool
-
-			for _, b := range blocks {
-				if m, ok := b.(map[string]any); ok {
-					bType, _ := m["type"].(string)
-					switch bType {
-					case "text":
-						if t, ok := m["text"].(string); ok {
-							textParts = append(textParts, t)
-						}
-					case "tool_use":
-						id, _ := m["id"].(string)
-						name, _ := m["name"].(string)
-						inputBytes, _ := json.Marshal(m["input"])
-						toolCalls = append(toolCalls, model.ToolCall{
-							ID:   id,
-							Type: "function",
-							Function: model.FunctionCall{
-								Name:      name,
-								Arguments: string(inputBytes),
-							},
-						})
-					case "tool_result":
-						hasToolResult = true
-						toolID, _ := m["tool_use_id"].(string)
-						var contentStr string
-						if cs, ok := m["content"].(string); ok {
-							contentStr = cs
-						} else {
-							b, _ := json.Marshal(m["content"])
-							contentStr = string(b)
-						}
-						canonicalMsgs = append(canonicalMsgs, model.ChatMessage{
-							Role:       "tool",
-							ToolCallID: toolID,
-							Content:    contentStr,
-						})
-					}
-				}
-			}
-
-			if !hasToolResult {
-				canonicalMsgs = append(canonicalMsgs, model.ChatMessage{
-					Role:      msg.Role,
-					Content:   strings.Join(textParts, "\n"),
-					ToolCalls: toolCalls,
-				})
-			}
-		} else {
-			canonicalMsgs = append(canonicalMsgs, model.ChatMessage{
-				Role:    msg.Role,
-				Content: extractMessageContent(msg.Content),
-			})
-		}
-	}
-
-	var canonicalTools []model.Tool
-	for _, t := range req.Tools {
-		if tm, ok := t.(map[string]any); ok {
-			name, _ := tm["name"].(string)
-			desc, _ := tm["description"].(string)
-			schema := tm["input_schema"]
-			if schema == nil {
-				schema = map[string]any{"type": "object", "properties": map[string]any{}}
-			}
-			canonicalTools = append(canonicalTools, model.Tool{
-				Type: "function",
-				Function: map[string]any{
-					"name":        name,
-					"description": desc,
-					"parameters":  schema,
-				},
-			})
-		}
-	}
-
-	maxTokens := req.MaxTokens
-	if maxTokens <= 0 {
-		maxTokens = 4096
-	}
-
-	return &model.ChatCompletionRequest{
-		Model:       req.Model,
-		Messages:    canonicalMsgs,
-		Temperature: req.Temperature,
-		TopP:        req.TopP,
-		MaxTokens:   &maxTokens,
-		Stream:      req.Stream,
-		Tools:       canonicalTools,
-	}
+	return res
 }
 
 // HandleAnthropicMessages handles POST /v1/messages for Anthropic SDK clients.
@@ -201,6 +95,16 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 			},
 		})
 		return
+	}
+
+	// Validate Anthropic protocol and schema rules with optional key config
+	valRes := validator.ValidateAnthropicRequest(&req, getAPIKeyConfig(c))
+	if !valRes.Valid && valRes.Error != nil {
+		valRes.Error.WriteGinResponse(c)
+		return
+	}
+	if len(valRes.Warnings) > 0 {
+		c.Header("X-Airoute-Warning", strings.Join(valRes.Warnings, "; "))
 	}
 
 	telemetry.GlobalMetrics.IncActiveConns()
@@ -281,21 +185,18 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 		}
 
 		var cost, savedCost float64
-		keyGroup := "default"
-		if vkAny, exists := c.Get(middleware.ContextKeyVirtualKeyConfig); exists {
-			if vk, ok := vkAny.(*model.VirtualKeyConfig); ok && vk.GroupName != "" {
-				keyGroup = vk.GroupName
-			}
-		}
+		keyGroup := getKeyGroup(c)
 		if billing.GlobalEngine != nil {
 			cost, savedCost = billing.GlobalEngine.CalculateCostWithGroup(req.Model, keyGroup, inputTokens, outputTokens, 0)
 		}
 		_ = savedCost
+		dur := time.Since(start)
+		telemetry.GlobalMetrics.RecordRequestWithModel(req.Model, true, dur, inputTokens, outputTokens)
 		if storage.GlobalAsyncLogger != nil {
 			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 				TraceID:          middleware.GetTraceID(c),
 				SessionID:        sessionID,
-				VirtualKey:       c.GetString("virtual_key"),
+				APIKey:           getRequestAPIKey(c),
 				TenantID:         c.GetString("tenant_id"),
 				Model:            req.Model,
 				PromptTokens:     inputTokens,
@@ -411,12 +312,7 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 
 				dur := time.Since(start)
 				var cost, savedCost float64
-				keyGroup := "default"
-				if vkAny, exists := c.Get(middleware.ContextKeyVirtualKeyConfig); exists {
-					if vk, ok := vkAny.(*model.VirtualKeyConfig); ok && vk.GroupName != "" {
-						keyGroup = vk.GroupName
-					}
-				}
+				keyGroup := getKeyGroup(c)
 				if billing.GlobalEngine != nil {
 					cost, savedCost = billing.GlobalEngine.CalculateCostWithGroup(req.Model, keyGroup, totalPromptTokens, totalCompTokens, 0)
 				}
@@ -426,7 +322,7 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 					storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 						TraceID:          middleware.GetTraceID(c),
 						SessionID:        sessionID,
-						VirtualKey:       c.GetString("virtual_key"),
+						APIKey:           getRequestAPIKey(c),
 						TenantID:         c.GetString("tenant_id"),
 						Model:            req.Model,
 						PromptTokens:     totalPromptTokens,

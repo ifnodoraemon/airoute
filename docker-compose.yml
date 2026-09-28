@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # ============================================================================
   # High-Performance Distributed Cache & Cluster Invalidation Broker (Redis)

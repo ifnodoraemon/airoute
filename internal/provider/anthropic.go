@@ -146,10 +146,53 @@ func convertOpenAIToAnthropic(req *model.ChatCompletionRequest, channel *model.C
 			continue
 		}
 
-		anthropicMsgs = append(anthropicMsgs, AnthropicMessage{
-			Role:    msg.Role,
-			Content: msg.GetContentString(),
-		})
+		parts := model.ParseMessageContent(msg.Content)
+		hasImage := false
+		for _, p := range parts {
+			if p.Type == model.ContentPartImageURL {
+				hasImage = true
+				break
+			}
+		}
+
+		if !hasImage {
+			anthropicMsgs = append(anthropicMsgs, AnthropicMessage{
+				Role:    msg.Role,
+				Content: msg.GetContentString(),
+			})
+		} else {
+			var blocks []any
+			for _, p := range parts {
+				switch p.Type {
+				case model.ContentPartText:
+					if p.Text != "" {
+						blocks = append(blocks, map[string]any{
+							"type": "text",
+							"text": p.Text,
+						})
+					}
+				case model.ContentPartImageURL:
+					if p.ImageURL != nil && p.ImageURL.URL != "" {
+						mime, b64 := model.ParseDataURI(p.ImageURL.URL)
+						if mime == "" {
+							mime = "image/jpeg"
+						}
+						blocks = append(blocks, map[string]any{
+							"type": "image",
+							"source": map[string]any{
+								"type":       "base64",
+								"media_type": mime,
+								"data":       b64,
+							},
+						})
+					}
+				}
+			}
+			anthropicMsgs = append(anthropicMsgs, AnthropicMessage{
+				Role:    msg.Role,
+				Content: blocks,
+			})
+		}
 	}
 
 	var tools []AnthropicTool
@@ -391,6 +434,10 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 					eventChan <- &model.StreamEvent{Chunk: chunk}
 
 				case "content_block_start":
+					blockIdx := 0
+					if bi, ok := eventMap["index"].(float64); ok {
+						blockIdx = int(bi)
+					}
 					if cb, ok := eventMap["content_block"].(map[string]any); ok {
 						if cb["type"] == "tool_use" {
 							toolID, _ := cb["id"].(string)
@@ -406,8 +453,9 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 										Delta: model.ChunkDelta{
 											ToolCalls: []model.ToolCall{
 												{
-													ID:   toolID,
-													Type: "function",
+													Index: &blockIdx,
+													ID:    toolID,
+													Type:  "function",
 													Function: model.FunctionCall{
 														Name: toolName,
 													},
@@ -422,6 +470,10 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 					}
 
 				case "content_block_delta":
+					blockIdx := 0
+					if bi, ok := eventMap["index"].(float64); ok {
+						blockIdx = int(bi)
+					}
 					if delta, ok := eventMap["delta"].(map[string]any); ok {
 						if text, ok := delta["text"].(string); ok && text != "" {
 							chunk := &model.ChatCompletionChunk{
@@ -451,7 +503,8 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 										Delta: model.ChunkDelta{
 											ToolCalls: []model.ToolCall{
 												{
-													Type: "function",
+													Index: &blockIdx,
+													Type:  "function",
 													Function: model.FunctionCall{
 														Arguments: partial,
 													},

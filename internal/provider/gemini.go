@@ -270,8 +270,18 @@ func convertOpenAIToGemini(req *model.ChatCompletionRequest) *GeminiRequest {
 		}
 	}
 
+	// Merge consecutive same-role contents to strictly adhere to Gemini's alternating turns contract
+	var mergedContents []GeminiContent
+	for _, c := range contents {
+		if len(mergedContents) > 0 && mergedContents[len(mergedContents)-1].Role == c.Role {
+			mergedContents[len(mergedContents)-1].Parts = append(mergedContents[len(mergedContents)-1].Parts, c.Parts...)
+		} else {
+			mergedContents = append(mergedContents, c)
+		}
+	}
+
 	geminiReq := &GeminiRequest{
-		Contents: contents,
+		Contents: mergedContents,
 		Tools:    toolContainers,
 		GenerationConfig: &GeminiGenerationConfig{
 			Temperature:     req.Temperature,

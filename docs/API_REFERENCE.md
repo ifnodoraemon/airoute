@@ -6,11 +6,11 @@ Airoute provides high-performance, unified API endpoints conforming to OpenAI st
 
 ## 1. Authentication & Rate Limiting
 
-Client requests to Data Plane endpoints under `/v1` require virtual key authentication via standard HTTP headers:
+Client requests to Data Plane endpoints under `/v1` require API key authentication via standard HTTP headers:
 - `Authorization: Bearer sk-nano-xxxx`
 - Or `x-api-key: sk-nano-xxxx`
 
-If no virtual keys are configured, the gateway operates in open bypass mode (no authentication required).
+If no API keys are configured, the gateway operates in open bypass mode (no authentication required).
 
 ---
 
@@ -294,9 +294,9 @@ All Admin APIs are under `/api/v1/admin`:
 | `POST` | `/api/v1/admin/channels/probe` | **Deep Auto-Probe**: Automatically normalize URL, probe live models, fingerprint upstream engine (GPUStack, vLLM, SGLang, Ollama, DeepSeek, Gemini, Anthropic, Sub2API), infer protocols (`chat`, `completion`, `messages`, `embeddings`, `rerank`, etc.) |
 | `POST` | `/api/v1/admin/channels/:id/test` | Ping downstream provider for latency & response verification |
 | `DELETE`| `/api/v1/admin/channels/:id` | Delete provider and remove from routing |
-| `GET` | `/api/v1/admin/keys` | List all client virtual keys with rate limits & budgets |
-| `POST` | `/api/v1/admin/keys` | Create client virtual key |
-| `DELETE`| `/api/v1/admin/keys/:id` | Revoke client virtual key |
+| `GET` | `/api/v1/admin/keys` | List all client API keys with rate limits & budgets |
+| `POST` | `/api/v1/admin/keys` | Create client API key |
+| `DELETE`| `/api/v1/admin/keys/:id` | Revoke client API key |
 | `GET` | `/api/v1/admin/logs?limit=50` | Query real-time audit logs with TTFT, tokens, latency, status code |
 | `GET` | `/api/v1/admin/stats/overview` | Query aggregated gateway statistics (QPS, TTFT, Tokens) |
 | `GET` | `/api/v1/admin/models` | List all active models across providers |

@@ -224,7 +224,7 @@ func (db *DB) migrate() error {
 					updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 				);
 
-				CREATE TABLE IF NOT EXISTS virtual_keys (
+				CREATE TABLE IF NOT EXISTS api_keys (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
 					key TEXT UNIQUE NOT NULL,
 					tenant_id TEXT NOT NULL,
@@ -237,6 +237,7 @@ func (db *DB) migrate() error {
 					used_tokens INTEGER DEFAULT 0,
 					used_cost REAL DEFAULT 0,
 					status TEXT DEFAULT 'active',
+					format_validation TEXT DEFAULT '',
 					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 					updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 				);
@@ -245,7 +246,7 @@ func (db *DB) migrate() error {
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
 					trace_id TEXT DEFAULT '',
 					session_id TEXT DEFAULT '',
-					virtual_key TEXT,
+					api_key TEXT,
 					tenant_id TEXT,
 					model TEXT,
 					channel TEXT,
@@ -362,11 +363,11 @@ func (db *DB) migrate() error {
 				CREATE INDEX IF NOT EXISTS idx_usage_created ON usage_logs(created_at);
 				CREATE INDEX IF NOT EXISTS idx_usage_trace ON usage_logs(trace_id);
 				CREATE INDEX IF NOT EXISTS idx_usage_session ON usage_logs(session_id);
-				CREATE INDEX IF NOT EXISTS idx_usage_vk ON usage_logs(virtual_key);
+				CREATE INDEX IF NOT EXISTS idx_usage_key ON usage_logs(api_key);
 				CREATE INDEX IF NOT EXISTS idx_usage_tenant ON usage_logs(tenant_id);
 				CREATE INDEX IF NOT EXISTS idx_usage_model ON usage_logs(model);
-				CREATE INDEX IF NOT EXISTS idx_vk_user_id ON virtual_keys(user_id);
-				CREATE INDEX IF NOT EXISTS idx_vk_tenant_id ON virtual_keys(tenant_id);
+				CREATE INDEX IF NOT EXISTS idx_key_user_id ON api_keys(user_id);
+				CREATE INDEX IF NOT EXISTS idx_key_tenant_id ON api_keys(tenant_id);
 				CREATE INDEX IF NOT EXISTS idx_model_price_group ON model_prices(model, group_name);
 				CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 				CREATE INDEX IF NOT EXISTS idx_redemption_code ON redemption_codes(code);
@@ -392,6 +393,31 @@ func (db *DB) migrate() error {
 			Up: func(db *DB) error {
 				_, err := db.DB.Exec("UPDATE model_prices SET off_peak_mode = 'custom' WHERE off_peak_mode = 'deepseek' OR off_peak_mode = '';")
 				return err
+			},
+		},
+		{
+			Version: 4,
+			Name:    "rename_virtual_keys_to_api_keys",
+			Up: func(db *DB) error {
+				var count int
+				_ = db.DB.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='virtual_keys';").Scan(&count)
+				if count > 0 {
+					_, _ = db.DB.Exec("ALTER TABLE virtual_keys RENAME TO api_keys;")
+				}
+				_, _ = db.DB.Exec("ALTER TABLE usage_logs RENAME COLUMN virtual_key TO api_key;")
+				return nil
+			},
+		},
+		{
+			Version: 5,
+			Name:    "add_format_validation_to_api_keys",
+			Up: func(db *DB) error {
+				var colCount int
+				_ = db.DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('api_keys') WHERE name='format_validation';").Scan(&colCount)
+				if colCount == 0 {
+					_, _ = db.DB.Exec("ALTER TABLE api_keys ADD COLUMN format_validation TEXT DEFAULT '';")
+				}
+				return nil
 			},
 		},
 	}
@@ -423,7 +449,7 @@ func (db *DB) migratePostgres() error {
 					updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 				);
 
-				CREATE TABLE IF NOT EXISTS virtual_keys (
+				CREATE TABLE IF NOT EXISTS api_keys (
 					id BIGSERIAL PRIMARY KEY,
 					key VARCHAR(255) UNIQUE NOT NULL,
 					tenant_id VARCHAR(128) NOT NULL,
@@ -436,6 +462,7 @@ func (db *DB) migratePostgres() error {
 					used_tokens BIGINT DEFAULT 0,
 					used_cost DOUBLE PRECISION DEFAULT 0,
 					status VARCHAR(32) DEFAULT 'active',
+					format_validation VARCHAR(32) DEFAULT '',
 					created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 					updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 				);
@@ -444,7 +471,7 @@ func (db *DB) migratePostgres() error {
 					id BIGSERIAL PRIMARY KEY,
 					trace_id TEXT DEFAULT '',
 					session_id TEXT DEFAULT '',
-					virtual_key VARCHAR(255),
+					api_key VARCHAR(255),
 					tenant_id VARCHAR(128),
 					model VARCHAR(128),
 					channel VARCHAR(128),
@@ -561,11 +588,11 @@ func (db *DB) migratePostgres() error {
 				CREATE INDEX IF NOT EXISTS idx_usage_created ON usage_logs(created_at);
 				CREATE INDEX IF NOT EXISTS idx_usage_trace ON usage_logs(trace_id);
 				CREATE INDEX IF NOT EXISTS idx_usage_session ON usage_logs(session_id);
-				CREATE INDEX IF NOT EXISTS idx_usage_vk ON usage_logs(virtual_key);
+				CREATE INDEX IF NOT EXISTS idx_usage_key ON usage_logs(api_key);
 				CREATE INDEX IF NOT EXISTS idx_usage_tenant ON usage_logs(tenant_id);
 				CREATE INDEX IF NOT EXISTS idx_usage_model ON usage_logs(model);
-				CREATE INDEX IF NOT EXISTS idx_vk_user_id ON virtual_keys(user_id);
-				CREATE INDEX IF NOT EXISTS idx_vk_tenant_id ON virtual_keys(tenant_id);
+				CREATE INDEX IF NOT EXISTS idx_key_user_id ON api_keys(user_id);
+				CREATE INDEX IF NOT EXISTS idx_key_tenant_id ON api_keys(tenant_id);
 				CREATE INDEX IF NOT EXISTS idx_model_price_group ON model_prices(model, group_name);
 				CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 				CREATE INDEX IF NOT EXISTS idx_redemption_code ON redemption_codes(code);
@@ -591,6 +618,39 @@ func (db *DB) migratePostgres() error {
 			Up: func(db *DB) error {
 				_, err := db.DB.Exec("UPDATE model_prices SET off_peak_mode = 'custom' WHERE off_peak_mode = 'deepseek' OR off_peak_mode = '';")
 				return err
+			},
+		},
+		{
+			Version: 4,
+			Name:    "rename_virtual_keys_to_api_keys",
+			Up: func(db *DB) error {
+				_, _ = db.DB.Exec(`
+				DO $$
+				BEGIN
+					IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'virtual_keys') THEN
+						ALTER TABLE virtual_keys RENAME TO api_keys;
+					END IF;
+					IF EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'usage_logs' AND column_name = 'virtual_key') THEN
+						ALTER TABLE usage_logs RENAME COLUMN virtual_key TO api_key;
+					END IF;
+				END $$;
+				`)
+				return nil
+			},
+		},
+		{
+			Version: 5,
+			Name:    "add_format_validation_to_api_keys",
+			Up: func(db *DB) error {
+				_, _ = db.DB.Exec(`
+				DO $$
+				BEGIN
+					IF NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'api_keys' AND column_name = 'format_validation') THEN
+						ALTER TABLE api_keys ADD COLUMN format_validation VARCHAR(32) DEFAULT '';
+					END IF;
+				END $$;
+				`)
+				return nil
 			},
 		},
 	}

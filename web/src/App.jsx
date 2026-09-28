@@ -1682,7 +1682,7 @@ export default function App() {
       (l.model && l.model.toLowerCase().includes(f)) ||
       (l.channel && l.channel.toLowerCase().includes(f)) ||
       (l.tenant_id && l.tenant_id.toLowerCase().includes(f)) ||
-      (l.virtual_key && l.virtual_key.toLowerCase().includes(f))
+      (l.api_key && l.api_key.toLowerCase().includes(f))
     );
   });
 
@@ -1813,7 +1813,7 @@ export default function App() {
       {/* Quick Start Modal */}
       {activeQuickKey && (
         <QuickStartModal
-          virtualKey={activeQuickKey}
+          apiKey={activeQuickKey}
           onClose={() => setActiveQuickKey(null)}
           onCopy={(txt) => {
             navigator.clipboard.writeText(txt);
@@ -3407,9 +3407,9 @@ export default function App() {
                         </td>
                         <td className="py-4 px-6 text-slate-600 dark:text-slate-300 font-sans">
                           <span className="font-semibold text-slate-800 dark:text-slate-200">{log.tenant_id || 'anonymous'}</span>
-                          {log.virtual_key && (
+                          {log.api_key && (
                             <span className="block text-[10px] text-slate-400 font-mono mt-0.5 truncate max-w-[120px]">
-                              {log.virtual_key}
+                              {log.api_key}
                             </span>
                           )}
                         </td>

@@ -20,11 +20,17 @@ import (
 )
 
 var (
-	// Default shared secret across cluster replicas for stateless HMAC token verification
+	// Secure shared secret across cluster replicas for stateless HMAC token verification.
+	// Defaults to a cryptographically secure random 256-bit secret if not explicitly configured in environment.
 	adminSecret = func() []byte {
 		sec := os.Getenv("GATEWAY_ADMIN_SECRET")
 		if sec == "" {
-			sec = "airoute-cluster-hmac-secret-v1"
+			b := make([]byte, 32)
+			if _, err := rand.Read(b); err == nil {
+				sec = hex.EncodeToString(b)
+			} else {
+				sec = fmt.Sprintf("airoute-rnd-%d", time.Now().UnixNano())
+			}
 		}
 		return []byte(sec)
 	}()
@@ -365,7 +371,7 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 	keyBytes := make([]byte, 16)
 	_, _ = rand.Read(keyBytes)
 	newKey := "sk-nano-" + hex.EncodeToString(keyBytes)
-	_ = h.repo.CreateVirtualKey(&storage.VirtualKeyRecord{
+	_ = h.repo.CreateAPIKey(&storage.APIKeyRecord{
 		Key:           newKey,
 		TenantID:      user.Username,
 		UserID:        user.ID,
@@ -490,9 +496,9 @@ func (h *AdminHandler) AdminAuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// In test mode, allow tests without auth headers to succeed
-		isTest := gin.Mode() == gin.TestMode || strings.HasSuffix(os.Args[0], ".test") || strings.Contains(os.Args[0], "/_test/")
-		if isTest && c.GetHeader("Authorization") == "" && c.Query("token") == "" && c.GetHeader("x-admin-token") == "" {
+		// In automated Go test runners (*.test or /_test/), allow tests that do not inject auth headers
+		isTestingBinary := strings.HasSuffix(os.Args[0], ".test") || strings.Contains(os.Args[0], "/_test/")
+		if isTestingBinary && c.GetHeader("Authorization") == "" && c.Query("token") == "" && c.GetHeader("x-admin-token") == "" {
 			c.Set("admin_claims", &AdminClaims{Username: "test-admin", Role: "admin"})
 			c.Set("admin_username", "test-admin")
 			c.Next()

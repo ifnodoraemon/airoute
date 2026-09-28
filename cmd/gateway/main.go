@@ -21,6 +21,9 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
+// Version is dynamically populated at build time via -ldflags="-X main.Version=vX.Y.Z"
+var Version = "0.1.0"
+
 func main() {
 	defaultConfig := "configs/config.yaml"
 	if env := os.Getenv("GATEWAY_CONFIG"); env != "" {
@@ -56,7 +59,7 @@ func main() {
 	// Initialize Logger
 	telemetry.InitLogger(cfg.Server.LogLevel)
 	telemetry.Logger.Info("starting airoute",
-		"version", "0.1.0",
+		"version", Version,
 		"config", *configPath,
 		"db", *dbPath,
 	)
@@ -99,16 +102,16 @@ func main() {
 		}
 	}
 
-	existingKeys, _ := repo.ListVirtualKeys()
-	if len(existingKeys) == 0 && len(cfg.VirtualKeys) > 0 {
-		for _, vk := range cfg.VirtualKeys {
-			_ = repo.CreateVirtualKey(&storage.VirtualKeyRecord{
-				Key:           vk.Key,
-				TenantID:      vk.TenantID,
-				AllowedModels: vk.AllowedModels,
-				RPM:           vk.RPM,
-				TPM:           vk.TPM,
-				Budget:        vk.Budget,
+	existingKeys, _ := repo.ListAPIKeys()
+	if len(existingKeys) == 0 && len(cfg.APIKeys) > 0 {
+		for _, k := range cfg.APIKeys {
+			_ = repo.CreateAPIKey(&storage.APIKeyRecord{
+				Key:           k.Key,
+				TenantID:      k.TenantID,
+				AllowedModels: k.AllowedModels,
+				RPM:           k.RPM,
+				TPM:           k.TPM,
+				Budget:        k.Budget,
 			})
 		}
 	}

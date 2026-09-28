@@ -59,3 +59,41 @@ func TestCircuitBreaker_StateTransitions(t *testing.T) {
 		t.Fatalf("expected CanExecute to be true after recovery")
 	}
 }
+
+func TestCircuitBreaker_CanaryConcurrencyLimit(t *testing.T) {
+	cooldown := 30 * time.Millisecond
+	threshold := 2
+	cb := router.NewCircuitBreaker(threshold, cooldown)
+	name := "canary-test"
+
+	cb.RecordFailure(name)
+	cb.RecordFailure(name)
+	if cb.GetStatus(name) != router.StateOpen {
+		t.Fatalf("expected StateOpen")
+	}
+
+	time.Sleep(cooldown + 10*time.Millisecond)
+
+	// First call in half-open should succeed as canary
+	if !cb.CanExecute(name) {
+		t.Fatalf("expected first canary call to succeed")
+	}
+	if cb.GetStatus(name) != router.StateHalfOpen {
+		t.Fatalf("expected StateHalfOpen")
+	}
+
+	// Concurrent second call in half-open without RecordSuccess should be throttled
+	if cb.CanExecute(name) {
+		t.Fatalf("expected second concurrent canary call to be blocked in HalfOpen")
+	}
+
+	// Now canary succeeds
+	cb.RecordSuccess(name)
+	if cb.GetStatus(name) != router.StateClosed {
+		t.Fatalf("expected StateClosed after canary success")
+	}
+	if !cb.CanExecute(name) {
+		t.Fatalf("expected CanExecute true in Closed state")
+	}
+}
+

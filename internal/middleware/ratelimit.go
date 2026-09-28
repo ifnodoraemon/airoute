@@ -40,7 +40,7 @@ func (tb *tokenBucket) allow() bool {
 	return false
 }
 
-// RateLimiter manages buckets for all virtual keys.
+// RateLimiter manages buckets for all API keys.
 type RateLimiter struct {
 	mu      sync.RWMutex
 	buckets map[string]*tokenBucket
@@ -75,20 +75,20 @@ func (rl *RateLimiter) getBucket(key string, rpm int) *tokenBucket {
 	return b
 }
 
-// RateLimitMiddleware enforces RPM rate limits per virtual key.
+// RateLimitMiddleware enforces RPM rate limits per API key.
 // Priority:
 // 1. Enterprise Redis Distributed Sliding Window (if REDIS_URL is configured and reachable)
 // 2. Local In-Memory Token Bucket (graceful zero-dependency fallback)
 func RateLimitMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		vkAny, exists := c.Get(ContextKeyVirtualKeyConfig)
+		kAny, exists := c.Get(ContextKeyAPIKeyConfig)
 		if !exists {
 			c.Next()
 			return
 		}
 
-		vk, ok := vkAny.(*model.VirtualKeyConfig)
-		if !ok || vk.RPM <= 0 {
+		k, ok := kAny.(*model.APIKeyConfig)
+		if !ok || k.RPM <= 0 {
 			c.Next()
 			return
 		}
@@ -96,7 +96,7 @@ func RateLimitMiddleware() gin.HandlerFunc {
 		// 1. Check Enterprise Distributed Redis cluster rate limit
 		client := distributed.GetClient()
 		if client != nil && client.IsActive() {
-			allowed, err := client.AllowRPM(c.Request.Context(), vk.Key, vk.RPM)
+			allowed, err := client.AllowRPM(c.Request.Context(), k.Key, k.RPM)
 			if err == nil {
 				if !allowed {
 					c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
@@ -115,7 +115,7 @@ func RateLimitMiddleware() gin.HandlerFunc {
 		}
 
 		// 2. Fallback to high-performance local in-memory token bucket
-		bucket := GlobalRateLimiter.getBucket(vk.Key, vk.RPM)
+		bucket := GlobalRateLimiter.getBucket(k.Key, k.RPM)
 		if !bucket.allow() {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"error": gin.H{

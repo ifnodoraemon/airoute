@@ -74,13 +74,13 @@ func TestAPI_Embeddings_OpenAICompatible(t *testing.T) {
 	}
 	_ = repo.CreateChannel(&ch)
 
-	vKey := storage.VirtualKeyRecord{
+	vKey := storage.APIKeyRecord{
 		Key:           "sk-nano-embed-key",
 		TenantID:      "tenant-embed",
 		AllowedModels: []string{"*"},
 		Status:        "active",
 	}
-	_ = repo.CreateVirtualKey(&vKey)
+	_ = repo.CreateAPIKey(&vKey)
 
 	// Update dispatcher with channel
 	dispatcher.UpdateChannels([]model.ChannelConfig{
@@ -308,7 +308,7 @@ func TestAPI_Embeddings_ForbiddenModel(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	testCfg := &config.Config{
-		VirtualKeys: []model.VirtualKeyConfig{
+		APIKeys: []model.APIKeyConfig{
 			{
 				Key:           "sk-restricted-key",
 				TenantID:      "tenant-r",

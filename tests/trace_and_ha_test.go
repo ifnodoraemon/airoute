@@ -75,7 +75,7 @@ func TestRepository_TraceIDPersistenceAndFilter(t *testing.T) {
 	err = repo.RecordUsageLog(&storage.UsageLogRecord{
 		TraceID:          traceID1,
 		SessionID:        "sess-1",
-		VirtualKey:       "sk-test-1",
+		APIKey:           "sk-test-1",
 		TenantID:         "tenant-a",
 		Model:            "gpt-4o",
 		Channel:          "openai-prod",
@@ -93,7 +93,7 @@ func TestRepository_TraceIDPersistenceAndFilter(t *testing.T) {
 	err = repo.RecordUsageLog(&storage.UsageLogRecord{
 		TraceID:          traceID2,
 		SessionID:        "sess-2",
-		VirtualKey:       "sk-test-2",
+		APIKey:           "sk-test-2",
 		TenantID:         "tenant-b",
 		Model:            "claude-3-5-sonnet",
 		Channel:          "anthropic-prod",

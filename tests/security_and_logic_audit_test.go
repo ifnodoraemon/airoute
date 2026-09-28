@@ -136,33 +136,33 @@ func TestSecurity_NonAdminCannotAccessAdminEndpoints(t *testing.T) {
 	}
 }
 
-// 3. IDOR Prevention in Virtual Key Batch Operations
-func TestSecurity_IDOR_VirtualKeyBatchOperations(t *testing.T) {
+// 3. IDOR Prevention in API Key Batch Operations
+func TestSecurity_IDOR_APIKeyBatchOperations(t *testing.T) {
 	repo, engine, _ := setupAuditTestEnv(t)
 
 	// User A
 	uA := &storage.UserRecord{Username: "userA", Role: "user", Status: "active"}
 	_ = repo.CreateUser(uA)
-	keyA := &storage.VirtualKeyRecord{
+	keyA := &storage.APIKeyRecord{
 		Key:      "sk-nano-userA-key1",
 		TenantID: "userA",
 		UserID:   uA.ID,
 		Status:   "active",
 		RPM:      60,
 	}
-	_ = repo.CreateVirtualKey(keyA)
+	_ = repo.CreateAPIKey(keyA)
 
 	// User B
 	uB := &storage.UserRecord{Username: "userB", Role: "user", Status: "active"}
 	_ = repo.CreateUser(uB)
-	keyB := &storage.VirtualKeyRecord{
+	keyB := &storage.APIKeyRecord{
 		Key:      "sk-nano-userB-key2",
 		TenantID: "userB",
 		UserID:   uB.ID,
 		Status:   "active",
 		RPM:      60,
 	}
-	_ = repo.CreateVirtualKey(keyB)
+	_ = repo.CreateAPIKey(keyB)
 
 	tokenB, _ := controlplane.GenerateAdminToken("userB", "user", 24*time.Hour)
 
@@ -181,7 +181,7 @@ func TestSecurity_IDOR_VirtualKeyBatchOperations(t *testing.T) {
 	}
 
 	// Verify key A is still alive
-	foundA, err := repo.GetVirtualKey(keyA.ID)
+	foundA, err := repo.GetAPIKey(keyA.ID)
 	if err != nil || foundA == nil {
 		t.Fatalf("key A was deleted despite IDOR attempt!")
 	}
@@ -202,30 +202,30 @@ func TestSecurity_IDOR_VirtualKeyBatchOperations(t *testing.T) {
 	}
 
 	// Verify key A status was not changed to disabled
-	foundA2, _ := repo.GetVirtualKey(keyA.ID)
+	foundA2, _ := repo.GetAPIKey(keyA.ID)
 	if foundA2.Status != "active" {
 		t.Fatalf("key A status was modified despite IDOR attempt! status=%s", foundA2.Status)
 	}
 }
 
-// 4. Virtual Key RPM = 0 is preserved as unlimited
-func TestLogic_VirtualKeyRPM0_Unlimited(t *testing.T) {
+// 4. API Key RPM = 0 is preserved as unlimited
+func TestLogic_APIKeyRPM0_Unlimited(t *testing.T) {
 	repo, _, _ := setupAuditTestEnv(t)
 
-	key := &storage.VirtualKeyRecord{
+	key := &storage.APIKeyRecord{
 		Key:      "sk-nano-unlimited-rpm",
 		TenantID: "unlimited-tenant",
 		RPM:      0, // Unlimited
 		TPM:      0,
 		Status:   "active",
 	}
-	if err := repo.CreateVirtualKey(key); err != nil {
-		t.Fatalf("failed to create virtual key: %v", err)
+	if err := repo.CreateAPIKey(key); err != nil {
+		t.Fatalf("failed to create api key: %v", err)
 	}
 
-	saved, err := repo.GetVirtualKeyByKey("sk-nano-unlimited-rpm")
+	saved, err := repo.GetAPIKeyByKey("sk-nano-unlimited-rpm")
 	if err != nil {
-		t.Fatalf("failed to get virtual key: %v", err)
+		t.Fatalf("failed to get api key: %v", err)
 	}
 
 	if saved.RPM != 0 {
@@ -247,17 +247,17 @@ func TestLogic_RecordUsageLog_FallbackDeduction(t *testing.T) {
 	_ = repo.CreateUser(user)
 
 	// Key with UserID == 0
-	key := &storage.VirtualKeyRecord{
+	key := &storage.APIKeyRecord{
 		Key:      "sk-nano-legacy-bob",
 		TenantID: "bobtenant",
 		UserID:   0,
 		Status:   "active",
 	}
-	_ = repo.CreateVirtualKey(key)
+	_ = repo.CreateAPIKey(key)
 
 	// Record usage log with Cost = 2.5
 	log := &storage.UsageLogRecord{
-		VirtualKey:  "sk-nano-legacy-bob",
+		APIKey:      "sk-nano-legacy-bob",
 		TenantID:    "bobtenant",
 		Model:       "gpt-4o",
 		PromptTokens: 100,
@@ -315,8 +315,8 @@ func TestLogic_CreateUserKey_Options(t *testing.T) {
 	}
 
 	var resp struct {
-		Code int                      `json:"code"`
-		Data storage.VirtualKeyRecord `json:"data"`
+		Code int                  `json:"code"`
+		Data storage.APIKeyRecord `json:"data"`
 	}
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 
@@ -445,7 +445,7 @@ func TestDispatcher_CircularFallback_Prevention(t *testing.T) {
 }
 
 // 9. Authoritative DB Budget Check Test
-func TestVirtualKey_AuthoritativeBudgetCheck(t *testing.T) {
+func TestAPIKey_AuthoritativeBudgetCheck(t *testing.T) {
 	repo, engine, _ := setupAuditTestEnv(t)
 
 	// Create user
@@ -460,8 +460,8 @@ func TestVirtualKey_AuthoritativeBudgetCheck(t *testing.T) {
 	_ = repo.CreateUser(user)
 	createdUser, _ := repo.GetUserByUsername("budgetuser")
 
-	// Create virtual key in DB with a strict budget of 10.0 and already used 12.0
-	vk := &storage.VirtualKeyRecord{
+	// Create API key in DB with a strict budget of 10.0 and already used 12.0
+	vk := &storage.APIKeyRecord{
 		Key:       "sk-audit-budget-test-key",
 		TenantID:  "budgetuser",
 		UserID:    createdUser.ID,
@@ -470,11 +470,11 @@ func TestVirtualKey_AuthoritativeBudgetCheck(t *testing.T) {
 		Status:    "active",
 		GroupName: "default",
 	}
-	_ = repo.CreateVirtualKey(vk)
+	_ = repo.CreateAPIKey(vk)
 
 	// In-memory config has Budget = 0 (not aware yet of the DB budget limit)
 	cfg := config.DefaultConfig()
-	cfg.VirtualKeys = []model.VirtualKeyConfig{
+	cfg.APIKeys = []model.APIKeyConfig{
 		{
 			Key:      "sk-audit-budget-test-key",
 			TenantID: "budgetuser",
@@ -513,9 +513,9 @@ func TestDB_SecondaryIndexes_Created(t *testing.T) {
 	}
 
 	requiredIndexes := []string{
-		"idx_vk_user_id",
-		"idx_vk_tenant_id",
-		"idx_usage_vk",
+		"idx_key_user_id",
+		"idx_key_tenant_id",
+		"idx_usage_key",
 		"idx_usage_tenant",
 		"idx_usage_model",
 		"idx_users_email",

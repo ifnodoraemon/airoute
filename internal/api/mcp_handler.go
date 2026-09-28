@@ -15,16 +15,48 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/billing"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/router"
 	"github.com/ifnodoraemon/airoute/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
+
+// mcpSession wraps a channel with mutual exclusion and state tracking to prevent panics on closed channels.
+type mcpSession struct {
+	mu     sync.Mutex
+	ch     chan []byte
+	closed bool
+}
+
+func (s *mcpSession) Close() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.closed {
+		s.closed = true
+		close(s.ch)
+	}
+}
+
+func (s *mcpSession) Send(msg []byte) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return false
+	}
+	select {
+	case s.ch <- msg:
+		return true
+	default:
+		return false
+	}
+}
 
 // MCPHandler implements the Model Context Protocol (MCP 2024-11-05) over HTTP & SSE.
 type MCPHandler struct {
 	dispatcher *router.Dispatcher
 	repo       *storage.Repository
-	sessions   sync.Map // sessionId -> chan []byte
+	sessions   sync.Map // sessionId -> *mcpSession
 }
 
 // NewMCPHandler creates a new MCPHandler instance.
@@ -94,11 +126,11 @@ func (h *MCPHandler) HandleMCPSSE(c *gin.Context) {
 	}
 
 	sessionID := genSessionID()
-	msgChan := make(chan []byte, 32)
-	h.sessions.Store(sessionID, msgChan)
+	sess := &mcpSession{ch: make(chan []byte, 32)}
+	h.sessions.Store(sessionID, sess)
 	defer func() {
 		h.sessions.Delete(sessionID)
-		close(msgChan)
+		sess.Close()
 	}()
 
 	// Send endpoint event as required by MCP SSE transport
@@ -113,7 +145,7 @@ func (h *MCPHandler) HandleMCPSSE(c *gin.Context) {
 		select {
 		case <-c.Request.Context().Done():
 			return
-		case msg, open := <-msgChan:
+		case msg, open := <-sess.ch:
 			if !open {
 				return
 			}
@@ -148,12 +180,10 @@ func (h *MCPHandler) HandleMCPMessages(c *gin.Context) {
 	// If this request came via an SSE session, push to SSE channel too
 	sessionID := c.Query("sessionId")
 	if sessionID != "" {
-		if chVal, ok := h.sessions.Load(sessionID); ok {
-			ch := chVal.(chan []byte)
-			if resBytes, err := json.Marshal(res); err == nil {
-				select {
-				case ch <- resBytes:
-				default:
+		if sVal, ok := h.sessions.Load(sessionID); ok {
+			if sess, ok := sVal.(*mcpSession); ok {
+				if resBytes, err := json.Marshal(res); err == nil {
+					sess.Send(resBytes)
 				}
 			}
 		}
@@ -681,10 +711,46 @@ func (h *MCPHandler) executeTool(ctx context.Context, name string, args map[stri
 		}
 
 		if h.dispatcher != nil {
+			start := time.Now()
 			resp, err := h.dispatcher.Dispatch(reqCtx, chatReq)
 			if err != nil {
 				return fmt.Sprintf("Upstream Dispatch Error: %v", err), true
 			}
+			dur := time.Since(start)
+
+			pTokens, cTokens, cachedTokens := 0, 0, 0
+			if resp.Usage != nil {
+				pTokens = resp.Usage.PromptTokens
+				cTokens = resp.Usage.CompletionTokens
+				cachedTokens = resp.Usage.GetCachedTokens()
+			}
+
+			var cost float64
+			var isOffPeak bool
+			var offPeakDiscount float64 = 1.0
+			if billing.GlobalEngine != nil {
+				cost, _, _, isOffPeak, offPeakDiscount = billing.GlobalEngine.CalculateCostDetailedWithGroup(chatReq.Model, "default", pTokens, cTokens, cachedTokens, time.Now())
+			}
+
+			telemetry.GlobalMetrics.RecordRequest(true, dur, pTokens, cTokens)
+			if storage.GlobalAsyncLogger != nil {
+				storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
+					TraceID:          fmt.Sprintf("tr-mcp-%d", time.Now().UnixNano()),
+					SessionID:        sessionID,
+					APIKey:           "mcp-session",
+					Model:            chatReq.Model,
+					PromptTokens:     pTokens,
+					CompletionTokens: cTokens,
+					CachedTokens:     cachedTokens,
+					TotalTokens:      pTokens + cTokens,
+					Cost:             cost,
+					IsOffPeak:        isOffPeak,
+					OffPeakDiscount:  offPeakDiscount,
+					DurationMs:       dur.Milliseconds(),
+					StatusCode:       http.StatusOK,
+				})
+			}
+
 			if len(resp.Choices) > 0 {
 				return resp.Choices[0].Message.GetContentString(), false
 			}

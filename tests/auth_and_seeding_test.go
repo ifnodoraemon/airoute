@@ -15,17 +15,17 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func TestAuthMiddleware_VirtualKeyContextAndLogging(t *testing.T) {
+func TestAuthMiddleware_APIKeyContextAndLogging(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	oldCfg := config.GetGlobalConfig()
 	defer config.SetGlobalConfig(oldCfg)
 
-	// Setup config with a virtual key
+	// Setup config with an API key
 	testKey := "sk-gw-audit-test-key"
 	testTenant := "tenant-alpha"
 	cfg := &config.Config{
-		VirtualKeys: []model.VirtualKeyConfig{
+		APIKeys: []model.APIKeyConfig{
 			{
 				Key:           testKey,
 				TenantID:      testTenant,
@@ -45,7 +45,7 @@ func TestAuthMiddleware_VirtualKeyContextAndLogging(t *testing.T) {
 	var modelAllowedDisallowed bool
 
 	r.GET("/test-auth", func(c *gin.Context) {
-		capturedKey = c.GetString(middleware.ContextKeyVirtualKey)
+		capturedKey = c.GetString(middleware.ContextKeyAPIKey)
 		capturedTenant = c.GetString(middleware.ContextKeyTenant)
 		modelAllowedGPT4o = middleware.ValidateModelAllowed(c, "gpt-4o")
 		modelAllowedClaudeSonnet = middleware.ValidateModelAllowed(c, "claude/3-5-sonnet")
@@ -62,9 +62,9 @@ func TestAuthMiddleware_VirtualKeyContextAndLogging(t *testing.T) {
 		t.Fatalf("expected 200 OK, got %d", w.Code)
 	}
 
-	// Verify c.GetString("virtual_key") is NOT empty string
+	// Verify c.GetString(middleware.ContextKeyAPIKey) is NOT empty string
 	if capturedKey != testKey {
-		t.Fatalf("virtual key was lost in context! expected '%s', got '%s'", testKey, capturedKey)
+		t.Fatalf("api key was lost in context! expected '%s', got '%s'", testKey, capturedKey)
 	}
 	if capturedTenant != testTenant {
 		t.Fatalf("tenant id was lost in context! expected '%s', got '%s'", testTenant, capturedTenant)
@@ -138,7 +138,7 @@ func TestRateLimitMiddleware_Enforcement(t *testing.T) {
 
 	testKey := "sk-gw-ratelimit-test"
 	cfg := &config.Config{
-		VirtualKeys: []model.VirtualKeyConfig{
+		APIKeys: []model.APIKeyConfig{
 			{
 				Key:      testKey,
 				TenantID: "tenant-limit",

@@ -40,7 +40,7 @@ func NewAdminHandler(repo *storage.Repository, sync *Synchronizer, dispatcher *r
 	}
 }
 
-// syncDataPlane synchronizes updated channels, virtual keys, and routing rules into memory and cluster replicas.
+// syncDataPlane synchronizes updated channels, API keys, and routing rules into memory and cluster replicas.
 func (h *AdminHandler) syncDataPlane(events ...string) {
 	if h.sync != nil {
 		event := "data_plane_updated"
@@ -262,15 +262,15 @@ func (h *AdminHandler) TestChannel(c *gin.Context) {
 	})
 }
 
-// ListVirtualKeys returns all virtual keys (scoped to current user if non-admin).
-func (h *AdminHandler) ListVirtualKeys(c *gin.Context) {
+// ListAPIKeys returns all API keys (scoped to current user if non-admin).
+func (h *AdminHandler) ListAPIKeys(c *gin.Context) {
 	claimsVal, exists := c.Get("admin_claims")
 	if exists {
 		claims := claimsVal.(*AdminClaims)
 		if claims.Role != "admin" {
 			user, _ := h.repo.GetUserByUsername(claims.Username)
 			if user != nil {
-				keys, err := h.repo.ListVirtualKeysByUser(user.ID)
+				keys, err := h.repo.ListAPIKeysByUser(user.ID)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 					return
@@ -281,7 +281,7 @@ func (h *AdminHandler) ListVirtualKeys(c *gin.Context) {
 		}
 	}
 
-	keys, err := h.repo.ListVirtualKeys()
+	keys, err := h.repo.ListAPIKeys()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -289,9 +289,9 @@ func (h *AdminHandler) ListVirtualKeys(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": keys})
 }
 
-// CreateVirtualKey generates a new virtual API key.
-func (h *AdminHandler) CreateVirtualKey(c *gin.Context) {
-	var rec storage.VirtualKeyRecord
+// CreateAPIKey generates a new API key.
+func (h *AdminHandler) CreateAPIKey(c *gin.Context) {
+	var rec storage.APIKeyRecord
 	if err := c.ShouldBindJSON(&rec); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -318,18 +318,18 @@ func (h *AdminHandler) CreateVirtualKey(c *gin.Context) {
 		rec.TenantID = "default-app"
 	}
 
-	if err := h.repo.CreateVirtualKey(&rec); err != nil {
+	if err := h.repo.CreateAPIKey(&rec); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	_ = h.sync.ReloadAndBroadcast(c.Request.Context(), "virtual_key_created")
+	_ = h.sync.ReloadAndBroadcast(c.Request.Context(), "api_key_created")
 
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": rec, "message": "Virtual Key created successfully"})
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": rec, "message": "API Key created successfully"})
 }
 
-// UpdateVirtualKey updates an existing virtual key (e.g. status toggle, RPM, tenant, allowed models).
-func (h *AdminHandler) UpdateVirtualKey(c *gin.Context) {
+// UpdateAPIKey updates an existing API key (e.g. status toggle, RPM, tenant, allowed models).
+func (h *AdminHandler) UpdateAPIKey(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -337,9 +337,9 @@ func (h *AdminHandler) UpdateVirtualKey(c *gin.Context) {
 		return
 	}
 
-	existing, err := h.repo.GetVirtualKey(id)
+	existing, err := h.repo.GetAPIKey(id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "virtual key not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "api key not found"})
 		return
 	}
 
@@ -356,12 +356,13 @@ func (h *AdminHandler) UpdateVirtualKey(c *gin.Context) {
 	}
 
 	var req struct {
-		TenantID      *string   `json:"tenant_id"`
-		AllowedModels []string  `json:"allowed_models"`
-		RPM           *int      `json:"rpm"`
-		TPM           *int      `json:"tpm"`
-		Budget        *float64  `json:"budget"`
-		Status        *string   `json:"status"`
+		TenantID         *string   `json:"tenant_id"`
+		AllowedModels    []string  `json:"allowed_models"`
+		RPM              *int      `json:"rpm"`
+		TPM              *int      `json:"tpm"`
+		Budget           *float64  `json:"budget"`
+		Status           *string   `json:"status"`
+		FormatValidation *string   `json:"format_validation"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -386,19 +387,22 @@ func (h *AdminHandler) UpdateVirtualKey(c *gin.Context) {
 	if req.Status != nil {
 		existing.Status = *req.Status
 	}
+	if req.FormatValidation != nil {
+		existing.FormatValidation = *req.FormatValidation
+	}
 
-	if err := h.repo.UpdateVirtualKey(existing); err != nil {
+	if err := h.repo.UpdateAPIKey(existing); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	_ = h.sync.ReloadAndBroadcast(c.Request.Context(), "virtual_key_updated")
+	_ = h.sync.ReloadAndBroadcast(c.Request.Context(), "api_key_updated")
 
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": existing, "message": "Virtual Key updated successfully"})
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": existing, "message": "API Key updated successfully"})
 }
 
-// DeleteVirtualKey removes a virtual key.
-func (h *AdminHandler) DeleteVirtualKey(c *gin.Context) {
+// DeleteAPIKey removes an API key.
+func (h *AdminHandler) DeleteAPIKey(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -415,7 +419,7 @@ func (h *AdminHandler) DeleteVirtualKey(c *gin.Context) {
 				c.JSON(http.StatusForbidden, gin.H{"error": "用户不存在"})
 				return
 			}
-			existing, err := h.repo.GetVirtualKey(id)
+			existing, err := h.repo.GetAPIKey(id)
 			if err != nil || existing == nil || existing.UserID != user.ID {
 				c.JSON(http.StatusForbidden, gin.H{"error": "无权操作该密钥"})
 				return
@@ -423,14 +427,14 @@ func (h *AdminHandler) DeleteVirtualKey(c *gin.Context) {
 		}
 	}
 
-	if err := h.repo.DeleteVirtualKey(id); err != nil {
+	if err := h.repo.DeleteAPIKey(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	_ = h.sync.ReloadAndBroadcast(c.Request.Context(), "virtual_key_deleted")
+	_ = h.sync.ReloadAndBroadcast(c.Request.Context(), "api_key_deleted")
 
-	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "Virtual Key deleted successfully"})
+	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "API Key deleted successfully"})
 }
 
 // GetStatsOverview returns dashboard overview metrics.
@@ -1046,7 +1050,7 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 		if claims.Role != "admin" {
 			user, _ := h.repo.GetUserByUsername(claims.Username)
 			if user != nil {
-				userKeys, _ := h.repo.ListVirtualKeysByUser(user.ID)
+				userKeys, _ := h.repo.ListAPIKeysByUser(user.ID)
 				if len(userKeys) == 0 {
 					c.JSON(http.StatusOK, gin.H{"code": 0, "data": []*storage.UsageLogRecord{}})
 					return
@@ -1062,7 +1066,7 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 				}
 				userFiltered := make([]*storage.UsageLogRecord, 0)
 				for _, l := range logs {
-					if userKeyMap[l.VirtualKey] {
+					if userKeyMap[l.APIKey] {
 						userFiltered = append(userFiltered, l)
 					}
 				}
@@ -1300,8 +1304,8 @@ func (h *AdminHandler) BatchStatusChannels(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": fmt.Sprintf("已批量%s %d 个服务商渠道", action, n)})
 }
 
-// BatchDeleteVirtualKeys deletes multiple virtual keys.
-func (h *AdminHandler) BatchDeleteVirtualKeys(c *gin.Context) {
+// BatchDeleteAPIKeys deletes multiple API keys.
+func (h *AdminHandler) BatchDeleteAPIKeys(c *gin.Context) {
 	var req struct {
 		IDs []int64 `json:"ids"`
 	}
@@ -1320,7 +1324,7 @@ func (h *AdminHandler) BatchDeleteVirtualKeys(c *gin.Context) {
 				c.JSON(http.StatusForbidden, gin.H{"error": "用户不存在"})
 				return
 			}
-			userKeys, err := h.repo.ListVirtualKeysByUser(user.ID)
+			userKeys, err := h.repo.ListAPIKeysByUser(user.ID)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
@@ -1343,7 +1347,7 @@ func (h *AdminHandler) BatchDeleteVirtualKeys(c *gin.Context) {
 		}
 	}
 
-	n, err := h.repo.BatchDeleteVirtualKeys(targetIDs)
+	n, err := h.repo.BatchDeleteAPIKeys(targetIDs)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1352,8 +1356,8 @@ func (h *AdminHandler) BatchDeleteVirtualKeys(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": fmt.Sprintf("已批量注销 %d 个 API 访问密钥", n), "deleted_count": n})
 }
 
-// BatchStatusVirtualKeys toggles status for multiple virtual keys.
-func (h *AdminHandler) BatchStatusVirtualKeys(c *gin.Context) {
+// BatchStatusAPIKeys toggles status for multiple API keys.
+func (h *AdminHandler) BatchStatusAPIKeys(c *gin.Context) {
 	var req struct {
 		IDs    []int64 `json:"ids"`
 		Status string  `json:"status"` // "active" or "disabled"
@@ -1376,7 +1380,7 @@ func (h *AdminHandler) BatchStatusVirtualKeys(c *gin.Context) {
 				c.JSON(http.StatusForbidden, gin.H{"error": "用户不存在"})
 				return
 			}
-			userKeys, err := h.repo.ListVirtualKeysByUser(user.ID)
+			userKeys, err := h.repo.ListAPIKeysByUser(user.ID)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
@@ -1399,7 +1403,7 @@ func (h *AdminHandler) BatchStatusVirtualKeys(c *gin.Context) {
 		}
 	}
 
-	n, err := h.repo.BatchUpdateVirtualKeyStatus(targetIDs, req.Status)
+	n, err := h.repo.BatchUpdateAPIKeyStatus(targetIDs, req.Status)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

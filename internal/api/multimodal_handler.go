@@ -99,7 +99,7 @@ func (h *MultimodalHandler) HandleImageGenerations(c *gin.Context) {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 			TraceID:    middleware.GetTraceID(c),
 			SessionID:  sessionID,
-			VirtualKey: c.GetString("virtual_key"),
+			APIKey:     getRequestAPIKey(c),
 			TenantID:   c.GetString("tenant_id"),
 			Model:      req.Model,
 			Cost:       cost,
@@ -174,7 +174,7 @@ func (h *MultimodalHandler) HandleAudioSpeech(c *gin.Context) {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 			TraceID:    middleware.GetTraceID(c),
 			SessionID:  sessionID,
-			VirtualKey: c.GetString("virtual_key"),
+			APIKey:     getRequestAPIKey(c),
 			TenantID:   c.GetString("tenant_id"),
 			Model:      req.Model,
 			Cost:       cost,
@@ -251,7 +251,7 @@ func (h *MultimodalHandler) HandleAudioTranscriptions(c *gin.Context) {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 			TraceID:    middleware.GetTraceID(c),
 			SessionID:  sessionID,
-			VirtualKey: c.GetString("virtual_key"),
+			APIKey:     getRequestAPIKey(c),
 			TenantID:   c.GetString("tenant_id"),
 			Model:      modelName,
 			Cost:       cost,
@@ -322,7 +322,7 @@ func (h *MultimodalHandler) HandleAudioTranslations(c *gin.Context) {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 			TraceID:    middleware.GetTraceID(c),
 			SessionID:  sessionID,
-			VirtualKey: c.GetString("virtual_key"),
+			APIKey:     getRequestAPIKey(c),
 			TenantID:   c.GetString("tenant_id"),
 			Model:      modelName,
 			Cost:       cost,
@@ -397,7 +397,7 @@ func (h *MultimodalHandler) HandleVideoGenerations(c *gin.Context) {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 			TraceID:    middleware.GetTraceID(c),
 			SessionID:  sessionID,
-			VirtualKey: c.GetString("virtual_key"),
+			APIKey:     getRequestAPIKey(c),
 			TenantID:   c.GetString("tenant_id"),
 			Model:      req.Model,
 			Cost:       cost,

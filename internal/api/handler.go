@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -18,6 +19,7 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/router"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
+	"github.com/ifnodoraemon/airoute/internal/validator"
 )
 
 // Handler processes API endpoints.
@@ -30,14 +32,30 @@ func NewHandler(dispatcher *router.Dispatcher) *Handler {
 	return &Handler{dispatcher: dispatcher}
 }
 
-// getKeyGroup returns the pricing group assigned to the current request's virtual key.
+// getKeyGroup returns the pricing group assigned to the current request's API key.
 func getKeyGroup(c *gin.Context) string {
-	if vkAny, exists := c.Get(middleware.ContextKeyVirtualKeyConfig); exists {
-		if vk, ok := vkAny.(*model.VirtualKeyConfig); ok && vk.GroupName != "" {
-			return vk.GroupName
+	if kAny, exists := c.Get(middleware.ContextKeyAPIKeyConfig); exists {
+		if k, ok := kAny.(*model.APIKeyConfig); ok && k.GroupName != "" {
+			return k.GroupName
 		}
 	}
 	return "default"
+}
+
+func getRequestAPIKey(c *gin.Context) string {
+	return c.GetString(middleware.ContextKeyAPIKey)
+}
+
+func getAPIKeyConfig(c *gin.Context) *model.APIKeyConfig {
+	if c == nil {
+		return nil
+	}
+	if v, exists := c.Get(middleware.ContextKeyAPIKeyConfig); exists {
+		if cfg, ok := v.(*model.APIKeyConfig); ok {
+			return cfg
+		}
+	}
+	return nil
 }
 
 // HandleChatCompletions handles POST /v1/chat/completions.
@@ -75,6 +93,16 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 			},
 		})
 		return
+	}
+
+	// Protocol format and content validation per-model rules and optional per-key overrides
+	valRes := validator.ValidateOpenAIRequest(&req, getAPIKeyConfig(c))
+	if !valRes.Valid && valRes.Error != nil {
+		valRes.Error.WriteGinResponse(c)
+		return
+	}
+	if len(valRes.Warnings) > 0 {
+		c.Header("X-Airoute-Warning", strings.Join(valRes.Warnings, "; "))
 	}
 
 	telemetry.GlobalMetrics.IncActiveConns()
@@ -123,12 +151,12 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 		if billing.GlobalEngine != nil {
 			cost, savedCost, _, isOffPeak, offPeakDiscount = billing.GlobalEngine.CalculateCostDetailedWithGroup(req.Model, keyGroup, pTokens, cTokens, cachedTokens, time.Now())
 		}
-		telemetry.GlobalMetrics.RecordRequest(true, dur, pTokens, cTokens)
+		telemetry.GlobalMetrics.RecordRequestWithModel(req.Model, true, dur, pTokens, cTokens)
 		if storage.GlobalAsyncLogger != nil {
 			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 				TraceID:          middleware.GetTraceID(c),
 				SessionID:        sessionID,
-				VirtualKey:       c.GetString("virtual_key"),
+				APIKey:           getRequestAPIKey(c),
 				TenantID:         c.GetString("tenant_id"),
 				Model:            req.Model,
 				PromptTokens:     pTokens,
@@ -199,6 +227,7 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	totalCompTokens := 0
 	totalCachedTokens := 0
 
+	var recordOnce sync.Once
 	recordStreamEnd := func() {
 		dur := time.Since(start)
 		var cost, savedCost float64
@@ -209,12 +238,12 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 			cost, savedCost, _, isOffPeak, offPeakDiscount = billing.GlobalEngine.CalculateCostDetailedWithGroup(req.Model, keyGroup, totalPromptTokens, totalCompTokens, totalCachedTokens, time.Now())
 		}
 		_ = savedCost
-		telemetry.GlobalMetrics.RecordRequest(true, dur, totalPromptTokens, totalCompTokens)
+		telemetry.GlobalMetrics.RecordRequestWithModel(req.Model, true, dur, totalPromptTokens, totalCompTokens)
 		if storage.GlobalAsyncLogger != nil {
 			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 				TraceID:          middleware.GetTraceID(c),
 				SessionID:        sessionID,
-				VirtualKey:       c.GetString("virtual_key"),
+				APIKey:           getRequestAPIKey(c),
 				TenantID:         c.GetString("tenant_id"),
 				Model:            req.Model,
 				PromptTokens:     totalPromptTokens,
@@ -230,6 +259,7 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 			})
 		}
 	}
+	defer recordOnce.Do(recordStreamEnd)
 
 	w := c.Writer
 	for {
@@ -240,7 +270,7 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 			if !open {
 				fmt.Fprintf(w, "data: [DONE]\n\n")
 				flusher.Flush()
-				recordStreamEnd()
+				recordOnce.Do(recordStreamEnd)
 				return
 			}
 
@@ -261,7 +291,7 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 			if event.IsDone {
 				fmt.Fprintf(w, "data: [DONE]\n\n")
 				flusher.Flush()
-				recordStreamEnd()
+				recordOnce.Do(recordStreamEnd)
 				return
 			}
 
@@ -677,7 +707,7 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 				TraceID:          middleware.GetTraceID(c),
 				SessionID:        sessionID,
-				VirtualKey:       c.GetString("virtual_key"),
+				APIKey:           getRequestAPIKey(c),
 				TenantID:         c.GetString("tenant_id"),
 				Model:            req.Model,
 				PromptTokens:     pTokens,
@@ -834,7 +864,7 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 			TraceID:          middleware.GetTraceID(c),
 			SessionID:        sessionID,
-			VirtualKey:       c.GetString("virtual_key"),
+			APIKey:           getRequestAPIKey(c),
 			TenantID:         c.GetString("tenant_id"),
 			Model:            req.Model,
 			PromptTokens:     totalPromptTokens,
@@ -946,7 +976,7 @@ func deriveContextFingerprint(c *gin.Context, modelName string, messages []model
 
 	tenant := c.GetString("tenant_id")
 	if tenant == "" {
-		tenant = c.GetString("virtual_key")
+		tenant = getRequestAPIKey(c)
 	}
 	if tenant == "" {
 		tenant = c.ClientIP()

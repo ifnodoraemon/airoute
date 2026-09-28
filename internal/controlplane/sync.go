@@ -29,7 +29,7 @@ func NewSynchronizer(repo *storage.Repository, dispatcher *router.Dispatcher) *S
 	}
 }
 
-// ReloadFromDB pulls active channels and virtual keys from DB and atomically updates the Data Plane.
+// ReloadFromDB pulls active channels and API keys from DB and atomically updates the Data Plane.
 func (s *Synchronizer) ReloadFromDB() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -41,18 +41,19 @@ func (s *Synchronizer) ReloadFromDB() error {
 	}
 	s.dispatcher.UpdateChannels(channels)
 
-	// 2. Sync Virtual Keys to Global Config
-	keys, err := s.repo.ToModelVirtualKeys()
+	// 2. Sync API Keys to Global Config
+	keys, err := s.repo.ToModelAPIKeys()
 	if err != nil {
-		return fmt.Errorf("load virtual keys from db error: %w", err)
+		return fmt.Errorf("load api keys from db error: %w", err)
 	}
 
-	allKeys, _ := s.repo.ListVirtualKeys()
+	allKeys, _ := s.repo.ListAPIKeys()
 
-	cfg := config.GetGlobalConfig()
-	cfg.VirtualKeys = keys
-	cfg.HasConfiguredKeys = len(allKeys) > 0
-	config.SetGlobalConfig(cfg)
+	current := config.GetGlobalConfig()
+	newCfg := *current
+	newCfg.APIKeys = keys
+	newCfg.HasConfiguredKeys = len(allKeys) > 0
+	config.SetGlobalConfig(&newCfg)
 
 	// 3. Sync Model Fallbacks to Dispatcher
 	if fallbacks, err := s.repo.GetModelFallbacks(); err == nil {

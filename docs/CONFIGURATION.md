@@ -81,7 +81,7 @@ channels:
     weight: 10
 
 # 客户端 API 访问密钥 (Client API Keys, 可通过 Web 控制台动态签发)
-virtual_keys:
+api_keys:
   - key: "sk-nano-8f92a1c4b7e3"
     tenant_id: "engineering-dept"
     allowed_models: []          # Empty means all models permitted
@@ -148,3 +148,37 @@ Airoute implements a Tri-State Circuit Breaker state machine:
 When streaming requests fail:
 - If an upstream returns HTTP `429`, `500`, or network error **before the first token is emitted to the client**, the gateway seamlessly retries with the next healthy backup provider.
 - Zero error frames or disconnects are experienced by the client.
+
+---
+
+## 5. Model & Key Protocol Validation Governance
+
+Airoute includes an intelligent protocol validation engine for OpenAI, Anthropic Claude, and Google Gemini schemas.
+
+### Default Behavior
+- **Default validation is `off`**: Raw requests are passed directly to upstream providers with zero parsing overhead and maximum compatibility.
+- **Granular Activation**: Validation can be enabled selectively per model or per API Key (`strict` or `lenient`).
+
+### Configuration Syntax (`configs/config.yaml`)
+
+```yaml
+model_validation:
+  default_level: "off"  # "off" | "lenient" | "strict"
+  rules:
+    # Strict validation on reasoning models (rejects temperature/top_p)
+    - model: "o1*"
+      protocol: "openai"
+      level: "strict"
+      disallow_temperature: true
+    # Strict validation for Anthropic Claude (requires max_tokens > 0)
+    - model: "claude-*"
+      protocol: "anthropic"
+      level: "strict"
+
+api_keys:
+  # Enable strict protocol validation for a specific client key
+  - key: "sk-strict-auditor"
+    tenant_id: "qa-testing"
+    format_validation: "strict"
+```
+

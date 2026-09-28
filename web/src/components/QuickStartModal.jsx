@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import { X, Copy, Check, Terminal, Code, Cpu, Sparkles, BookOpen } from 'lucide-react';
 
-export default function QuickStartModal({ virtualKey, onClose, onCopy }) {
-  if (!virtualKey) return null;
+export default function QuickStartModal({ apiKey, onClose, onCopy }) {
+  if (!apiKey) return null;
 
   const [activeTab, setActiveTab] = useState('python');
   const [copiedTab, setCopiedTab] = useState('');
 
   const origin = window.location.origin || 'http://localhost:8080';
   const baseUrl = `${origin}/v1`;
-  const keyStr = virtualKey.key || 'sk-airoute-xxxx';
+  const keyStr = apiKey.key || 'sk-airoute-xxxx';
 
   const pythonCode = `from openai import OpenAI
 
@@ -145,7 +145,7 @@ export ANTHROPIC_API_KEY="${keyStr}"
                 接入代码示例
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                密钥: <code className="font-mono text-indigo-600 dark:text-indigo-400 font-semibold">{keyStr}</code> (应用: {virtualKey.tenant_id})
+                密钥: <code className="font-mono text-indigo-600 dark:text-indigo-400 font-semibold">{keyStr}</code> (应用: {apiKey.tenant_id})
               </p>
             </div>
           </div>

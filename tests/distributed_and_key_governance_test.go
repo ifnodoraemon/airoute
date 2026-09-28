@@ -20,9 +20,9 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
-// TestVirtualKey_ActiveVsDisabled verifies that disabled keys are immediately rejected on the hot path
+// TestAPIKey_ActiveVsDisabled verifies that disabled keys are immediately rejected on the hot path
 // and that toggling status via the Admin API dynamically evicts/re-enables them in Data Plane memory.
-func TestVirtualKey_ActiveVsDisabled(t *testing.T) {
+func TestAPIKey_ActiveVsDisabled(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	savedCfg := *config.GetGlobalConfig()
@@ -44,16 +44,16 @@ func TestVirtualKey_ActiveVsDisabled(t *testing.T) {
 	synchronizer := controlplane.NewSynchronizer(repo, dispatcher)
 	adminHandler := controlplane.NewAdminHandler(repo, synchronizer, dispatcher)
 
-	// Create test virtual key
-	keyRec := &storage.VirtualKeyRecord{
+	// Create test API key
+	keyRec := &storage.APIKeyRecord{
 		Key:           "sk-nano-test-toggle-key",
 		TenantID:      "qa-department",
 		AllowedModels: []string{"gpt-4o"},
 		RPM:           100,
 		Status:        "active",
 	}
-	if err := repo.CreateVirtualKey(keyRec); err != nil {
-		t.Fatalf("CreateVirtualKey failed: %v", err)
+	if err := repo.CreateAPIKey(keyRec); err != nil {
+		t.Fatalf("CreateAPIKey failed: %v", err)
 	}
 
 	// Hot reload into memory
@@ -87,7 +87,7 @@ func TestVirtualKey_ActiveVsDisabled(t *testing.T) {
 	}
 
 	// Verify DB record status
-	fetched, err := repo.GetVirtualKey(keyRec.ID)
+	fetched, err := repo.GetAPIKey(keyRec.ID)
 	if err != nil || fetched.Status != "disabled" {
 		t.Fatalf("expected key status in DB to be 'disabled', got %v (err: %v)", fetched.Status, err)
 	}
@@ -124,18 +124,18 @@ func TestVirtualKey_ActiveVsDisabled(t *testing.T) {
 	}
 }
 
-// TestVirtualKeysMap_O1_LookupSpeed verifies nanosecond O(1) hash map lookup performance
-// for per-request authentication checks across thousands of virtual keys.
-func TestVirtualKeysMap_O1_LookupSpeed(t *testing.T) {
+// TestAPIKeysMap_O1_LookupSpeed verifies nanosecond O(1) hash map lookup performance
+// for per-request authentication checks across thousands of API keys.
+func TestAPIKeysMap_O1_LookupSpeed(t *testing.T) {
 	savedCfg := *config.GetGlobalConfig()
 	defer func() {
 		config.SetGlobalConfig(&savedCfg)
 	}()
 
 	keyCount := 10000
-	keys := make([]model.VirtualKeyConfig, keyCount)
+	keys := make([]model.APIKeyConfig, keyCount)
 	for i := 0; i < keyCount; i++ {
-		keys[i] = model.VirtualKeyConfig{
+		keys[i] = model.APIKeyConfig{
 			Key:      fmt.Sprintf("sk-nano-perf-test-key-%06d", i),
 			TenantID: fmt.Sprintf("tenant-%d", i),
 			RPM:      1000,
@@ -143,7 +143,7 @@ func TestVirtualKeysMap_O1_LookupSpeed(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		VirtualKeys: keys,
+		APIKeys: keys,
 	}
 	config.SetGlobalConfig(cfg)
 
@@ -152,8 +152,8 @@ func TestVirtualKeysMap_O1_LookupSpeed(t *testing.T) {
 	start := time.Now()
 	iterations := 100000
 	for i := 0; i < iterations; i++ {
-		vk := cfg.GetVirtualKey(targetKey)
-		if vk == nil || vk.Key != targetKey {
+		k := cfg.GetAPIKey(targetKey)
+		if k == nil || k.Key != targetKey {
 			t.Fatalf("failed to lookup key")
 		}
 	}
@@ -178,7 +178,7 @@ func TestRateLimitMiddleware_RedisGracefulDegradation(t *testing.T) {
 
 	testKey := "sk-nano-degrade-test"
 	cfg := &config.Config{
-		VirtualKeys: []model.VirtualKeyConfig{
+		APIKeys: []model.APIKeyConfig{
 			{
 				Key:      testKey,
 				TenantID: "tenant-degrade",

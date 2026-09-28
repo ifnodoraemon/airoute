@@ -85,4 +85,4 @@ config:
     read_timeout_sec: 180
     write_timeout_sec: 180
   channels: []
-  virtual_keys: []
+  api_keys: []
