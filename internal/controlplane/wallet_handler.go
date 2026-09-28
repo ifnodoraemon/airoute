@@ -743,14 +743,14 @@ func (h *AdminHandler) CreateStripeRechargeSession(c *gin.Context) {
 	stripeKey := os.Getenv("STRIPE_API_KEY")
 	successURL := os.Getenv("STRIPE_SUCCESS_URL")
 	if successURL == "" {
-		successURL = fmt.Sprintf("http://%s/console?tab=wallet&recharge=success&order_no=%s", c.Request.Host, orderNo)
+		successURL = fmt.Sprintf("http://%s/app/?tab=wallet&recharge=success&order_no=%s", c.Request.Host, orderNo)
 	}
 
 	if stripeKey != "" {
 		// Real Stripe checkout session creation
 		data := url.Values{}
 		data.Set("success_url", successURL)
-		data.Set("cancel_url", fmt.Sprintf("http://%s/console?tab=wallet&recharge=cancel", c.Request.Host))
+		data.Set("cancel_url", fmt.Sprintf("http://%s/app/?tab=wallet&recharge=cancel", c.Request.Host))
 		data.Set("payment_method_types[0]", "card")
 		data.Set("mode", "payment")
 		data.Set("client_reference_id", orderNo)

@@ -307,4 +307,4 @@ All Admin APIs are under `/api/v1/admin`:
 
 - **Health Check**: `GET /health` (`{"status": "healthy"}`)
 - **Prometheus Metrics**: `GET /metrics` (Standard Prometheus exposition format)
-- **Web Workspace**: `GET /workspace/` (Embedded React dashboard)
+- **Web App**: `GET /app/` or `GET /` (Embedded React dashboard)

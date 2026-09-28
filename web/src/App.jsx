@@ -4492,7 +4492,7 @@ export default function App() {
                         </span>
                       </div>
                       <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
-                        自动识别 GPUStack、vLLM、Sub2API、Claude Messages、Gemini 与 OpenAI 原生协议，并实现全双工实时转译。客户端使用任何协议均可调用任意异构上游！
+                        原生支持 OpenAI、Claude Messages、Gemini 与主流推理协议，并实现全双工流式实时转译。客户端使用任何主流 SDK 均可自由互通！
                       </p>
                       <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse text-xs">
@@ -4507,7 +4507,7 @@ export default function App() {
                             <tr>
                               <td className="py-2 px-3 font-mono text-indigo-600 dark:text-indigo-400 font-semibold">OpenAI Chat</td>
                               <td className="py-2 px-3 font-mono">/v1/chat/completions</td>
-                              <td className="py-2 px-3">OpenAI, DeepSeek, GPUStack, vLLM, Claude, Gemini</td>
+                              <td className="py-2 px-3">OpenAI, DeepSeek, Claude, Gemini 及主流推理集群</td>
                             </tr>
                             <tr>
                               <td className="py-2 px-3 font-mono text-indigo-600 dark:text-indigo-400 font-semibold">OpenAI Responses</td>
@@ -4517,7 +4517,7 @@ export default function App() {
                             <tr>
                               <td className="py-2 px-3 font-mono text-indigo-600 dark:text-indigo-400 font-semibold">Claude Messages</td>
                               <td className="py-2 px-3 font-mono">/v1/messages</td>
-                              <td className="py-2 px-3">Anthropic 官方、OpenAI 格式上游、GPUStack 集群</td>
+                              <td className="py-2 px-3">Anthropic 官方、OpenAI 格式上游、主流私有推理集群</td>
                             </tr>
                             <tr>
                               <td className="py-2 px-3 font-mono text-indigo-600 dark:text-indigo-400 font-semibold">Google Gemini</td>
@@ -4661,7 +4661,7 @@ print(message.content[0].text)`}
                     <div className="p-4 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 rounded-xl text-xs text-indigo-900 dark:text-indigo-200 space-y-1">
                       <span className="font-bold">💡 全双工协议转换特性:</span>
                       <p>
-                        即使您的下游供应商是仅支持 OpenAI 协议的私有 GPUStack 集群，客户端通过 Anthropic SDK 请求时，网关也会在内存零拷贝将 Claude Messages 双向转换为 OpenAI Completions 并在返回时转回 Anthropic 格式。
+                        即使您的下游供应商是仅支持 OpenAI 协议的私有集群，客户端通过 Anthropic SDK 请求时，网关也会在内存零拷贝将 Claude Messages 双向转换为 OpenAI Completions 并在返回时转回 Anthropic 格式。
                       </p>
                     </div>
 
@@ -4736,7 +4736,7 @@ GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
                         <pre className="mt-1 font-mono text-slate-700">
 {`POST /v1/embeddings
 {"model": "text-embedding-3-small", "input": "企业级超高性能大模型网关"}
-(支持单文本或数组批量输入，自动适配 GPUStack、vLLM、Ollama、Gemini 与 OpenAI 原生接口)`}
+(支持单文本或数组批量输入，自动适配各类私有集群、Ollama、Gemini 与 OpenAI 原生接口)`}
                         </pre>
                       </div>
                     </div>
@@ -4774,7 +4774,7 @@ GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
                   <div className="space-y-4">
                     <div className="border-b border-slate-100 pb-3">
                       <h3 className="text-base font-bold text-slate-900">Rerank 检索重排 API 规范 (/v1/rerank)</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">全面兼容 Cohere、Hugging Face TEI、GPUStack、Xinference 与 Infinity 重排标准协议。</p>
+                      <p className="text-xs text-slate-500 mt-0.5">全面兼容 Cohere、Hugging Face TEI、Xinference 与 Infinity 等重排标准协议。</p>
                     </div>
 
                     <div className="space-y-3 text-xs">
@@ -4830,7 +4830,7 @@ GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
                       <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
                         <span className="font-bold">🎯 高可用熔断与透明兜底保障:</span>
                         <p className="leading-relaxed">
-                          当首选重排提供商（如私有部署的 GPUStack 实例）发生 OOM、503 或网络异常时，Nano-Gateway 会在毫秒级内自动安全切换至备选重排提供商，为企业级 RAG 知识库检索流水线提供全天候 99.99% 的 SLA 稳定可用保障。
+                          当首选重排提供商（如私有部署的集群实例）发生 OOM、503 或网络异常时，Nano-Gateway 会在毫秒级内自动安全切换至备选重排提供商，为企业级 RAG 知识库检索流水线提供全天候 99.99% 的 SLA 稳定可用保障。
                         </p>
                       </div>
                     </div>

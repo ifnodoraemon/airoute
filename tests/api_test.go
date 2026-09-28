@@ -80,20 +80,19 @@ func TestAPI_HealthMetricsAndWebUI(t *testing.T) {
 		t.Fatalf("expected 200 OK for /app/, got %d", wApp.Code)
 	}
 
-	// 3c. Test GET /workspace/ (embedded Workspace for backward compatibility)
-	reqUI := httptest.NewRequest(http.MethodGet, "/workspace/", nil)
-	wUI := httptest.NewRecorder()
-	engine.ServeHTTP(wUI, reqUI)
-	if wUI.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK for embedded workspace /workspace/, got %d", wUI.Code)
-	}
-
-	// 3d. Test GET /ui (Backward compatibility redirect to /app/)
+	// 3c. Verify legacy paths /ui and /workspace are completely gone (404)
 	reqLegacyUI := httptest.NewRequest(http.MethodGet, "/ui", nil)
 	wLegacyUI := httptest.NewRecorder()
 	engine.ServeHTTP(wLegacyUI, reqLegacyUI)
-	if wLegacyUI.Code != http.StatusMovedPermanently {
-		t.Fatalf("expected 301 Moved Permanently for /ui, got %d", wLegacyUI.Code)
+	if wLegacyUI.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 Not Found for legacy /ui, got %d", wLegacyUI.Code)
+	}
+
+	reqLegacyWS := httptest.NewRequest(http.MethodGet, "/workspace/", nil)
+	wLegacyWS := httptest.NewRecorder()
+	engine.ServeHTTP(wLegacyWS, reqLegacyWS)
+	if wLegacyWS.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 Not Found for legacy /workspace/, got %d", wLegacyWS.Code)
 	}
 }
 

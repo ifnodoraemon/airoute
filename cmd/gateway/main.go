@@ -165,7 +165,7 @@ func main() {
 	// Run server in background goroutine
 	go func() {
 		telemetry.Logger.Info(fmt.Sprintf("🚀 Nano-Gateway listening on http://%s", addr))
-		telemetry.Logger.Info(fmt.Sprintf("🌐 工作台入口: http://%s/workspace/", addr))
+		telemetry.Logger.Info(fmt.Sprintf("🌐 工作台入口: http://%s/app/ (或 http://%s/)", addr, addr))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			telemetry.Logger.Error("server fatal error", "error", err.Error())
 			os.Exit(1)

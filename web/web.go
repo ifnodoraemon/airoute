@@ -20,10 +20,8 @@ func RegisterStaticRoutes(r *gin.Engine) {
 
 	httpFS := http.FS(sub)
 
-	// Serve static assets under /app, /workspace, and /console
+	// Serve static assets under /app
 	r.StaticFS("/app", httpFS)
-	r.StaticFS("/workspace", httpFS)
-	r.StaticFS("/console", httpFS)
 
 	// Serve assets subdirectory at /assets so relative ./assets works from root /
 	if assetsSub, err := fs.Sub(distFS, "dist/assets"); err == nil {
@@ -41,13 +39,4 @@ func RegisterStaticRoutes(r *gin.Engine) {
 			c.Redirect(http.StatusFound, "/app/")
 		})
 	}
-
-	// Backward compatibility: redirect /ui to /app/
-	r.GET("/ui", func(c *gin.Context) {
-		c.Redirect(http.StatusMovedPermanently, "/app/")
-	})
-	r.GET("/ui/*filepath", func(c *gin.Context) {
-		p := c.Param("filepath")
-		c.Redirect(http.StatusMovedPermanently, "/app"+p)
-	})
 }

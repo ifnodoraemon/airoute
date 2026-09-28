@@ -7,7 +7,7 @@
 
 生产级、极速并发、极致高可用且高韧性的企业级 LLM 与全模态智能网关。从零以 Go 语言构建，原生支持 **Any-to-Any 协议矩阵**、**级联模型源 (Cascading Providers)**、**下游智能探测 (Auto-Probe)** 与 **全双工协议自动转译**。
 
-彻底解耦 **数据面 (Data Plane - 极致并发转发内核)** 与 **控制面 (Control Plane - 运维治理内核)**，单二进制内嵌 **现代化明亮工作台 (React 19 + Tailwind CSS Workspace)**。
+彻底解耦 **数据面 (Data Plane - 极致并发转发内核)** 与 **控制面 (Control Plane - 运维治理内核)**，单二进制内嵌 **现代化工作台 (React 19 + Tailwind CSS)**。
 
 ---
 
@@ -123,7 +123,7 @@ make build
 # 2. 启动网关
 ./bin/nano-gateway -config configs/config.yaml
 ```
-- 工作台地址：`http://localhost:8080/workspace/`
+- 工作台地址：`http://localhost:8080/app/` 或 `http://localhost:8080/`
 - Prometheus 指标：`http://localhost:8080/metrics`
 - 健康检查：`http://localhost:8080/health`
 
