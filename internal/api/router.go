@@ -97,6 +97,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 
 				// Read-only inspection endpoints
 				protected.GET("/stats/overview", adminHandler.GetStatsOverview)
+				protected.GET("/system/middlewares", adminHandler.GetSystemMiddlewares)
 				protected.GET("/models", adminHandler.ListModels)
 				protected.GET("/models/routes", adminHandler.GetModelRoutes)
 				protected.GET("/pricing", adminHandler.GetPricingRates)

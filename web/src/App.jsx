@@ -60,6 +60,7 @@ import ModelChipManager from './components/ModelChipManager';
 import ModelMappingEditor from './components/ModelMappingEditor';
 import CapabilitiesSelector from './components/CapabilitiesSelector';
 import LandingPage from './components/LandingPage';
+import AuthPage from './components/AuthPage';
 import LoginModal from './components/LoginModal';
 import AccountManageModal from './components/AccountManageModal';
 import ModelRoutesManager from './components/ModelRoutesManager';
@@ -68,6 +69,7 @@ import PricingManager from './components/PricingManager';
 import McpIntegrationView from './components/McpIntegrationView';
 import UserManagementView from './components/UserManagementView';
 import WalletManagementView from './components/WalletManagementView';
+import MiddlewareStatusMatrix from './components/MiddlewareStatusMatrix';
 import { translations } from './i18n';
 
 export default function App() {
@@ -116,6 +118,7 @@ export default function App() {
   });
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
+  const [authTab, setAuthTab] = useState('login');
 
   // Validate admin token on startup to prevent stale token UI issues
   useEffect(() => {
@@ -1614,12 +1617,16 @@ export default function App() {
         <LandingPage
           isLoggedIn={!!adminToken}
           adminUser={adminUser}
-          onOpenLogin={() => setShowLoginModal(true)}
+          onOpenLogin={() => {
+            setAuthTab('login');
+            setViewMode('auth');
+          }}
           onEnterConsole={() => {
             if (adminToken) {
               setViewMode('console');
             } else {
-              setShowLoginModal(true);
+              setAuthTab('login');
+              setViewMode('auth');
             }
           }}
           onViewDocs={() => {
@@ -1627,7 +1634,8 @@ export default function App() {
             if (adminToken) {
               setViewMode('console');
             } else {
-              setShowLoginModal(true);
+              setAuthTab('login');
+              setViewMode('auth');
             }
           }}
           onViewStatus={() => setViewMode('status')}
@@ -1652,6 +1660,26 @@ export default function App() {
     );
   }
 
+  if (viewMode === 'auth') {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-indigo-500 selection:text-white">
+        <Toast toast={toast} onClose={() => setToast(prev => ({ ...prev, show: false }))} />
+        <AuthPage
+          initialTab={authTab}
+          onLoginSuccess={(token, user) => {
+            setAdminToken(token);
+            setAdminUser(user);
+            setViewMode('console');
+            showToast(`欢迎回来，${user.username}！`, 'success');
+            fetchData();
+            fetchLogs();
+          }}
+          onBackHome={() => setViewMode('landing')}
+        />
+      </div>
+    );
+  }
+
   if (viewMode === 'status') {
     return (
       <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-indigo-500 selection:text-white">
@@ -1663,10 +1691,14 @@ export default function App() {
             if (adminToken) {
               setViewMode('console');
             } else {
-              setShowLoginModal(true);
+              setAuthTab('login');
+              setViewMode('auth');
             }
           }}
-          onOpenLogin={() => setShowLoginModal(true)}
+          onOpenLogin={() => {
+            setAuthTab('login');
+            setViewMode('auth');
+          }}
           isLoggedIn={!!adminToken}
           lang={lang}
           setLang={setLang}
@@ -2260,7 +2292,7 @@ export default function App() {
                     </div>
                   </div>
                   <div className="mt-2 text-[11px] text-slate-400 truncate">
-                    虚拟 Key 消耗总和
+                    API 密钥消耗总和
                   </div>
                 </div>
 
@@ -2279,6 +2311,9 @@ export default function App() {
                   </div>
                 </div>
               </div>
+
+              {/* 1.25 MIDDLEWARE INFRASTRUCTURE HEALTH STATUS MATRIX */}
+              <MiddlewareStatusMatrix adminFetch={adminFetch} showToast={showToast} />
 
               {/* 1.3 UPSTREAM PROVIDERS HEALTH & CIRCUIT BREAKER MATRIX */}
               <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-3xl overflow-hidden shadow-xs">
@@ -3200,7 +3235,7 @@ export default function App() {
                       <th className="py-3.5 px-6 font-semibold">Trace ID / 对话 ID</th>
                       <th className="py-3.5 px-6 font-semibold">请求模型 (Model)</th>
                       <th className="py-3.5 px-6 font-semibold">命中渠道 (Provider)</th>
-                      <th className="py-3.5 px-6 font-semibold">租户 / 虚拟 Key</th>
+                      <th className="py-3.5 px-6 font-semibold">租户 / API 密钥</th>
                       <th className="py-3.5 px-6 font-semibold">Token (输入/输出/总)</th>
                       <th className="py-3.5 px-6 font-semibold">扣费 / 缓存命中</th>
                       <th className="py-3.5 px-6 font-semibold">耗时 / TTFT</th>

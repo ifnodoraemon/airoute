@@ -109,7 +109,7 @@ func (h *AdminHandler) Register(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "该用户名已被注册"})
 		return
 	}
-	existingEmail, _ := h.repo.GetUserByUsername(email)
+	existingEmail, _ := h.repo.GetUserByEmail(email)
 	if existingEmail != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "该邮箱已被绑定注册"})
 		return

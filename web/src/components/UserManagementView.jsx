@@ -840,8 +840,15 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                 </div>
               </div>
 
-              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200/80 text-[11px] text-slate-500">
-                创建成功后系统将自动为该用户生成专属 API Key，方便直接开始调用。
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 text-[11px] text-slate-600 space-y-1">
+                <div className="font-semibold text-slate-800">
+                  {newRole === 'admin' ? '🛡️ 超级管理员账号' : '👤 普通用户账号'}
+                </div>
+                <p>
+                  {newRole === 'admin'
+                    ? '拥有全局管理权限（渠道配置、模型路由、用户授权与全量日志），调用额度无上限。'
+                    : '享有个人独立工作台，自动签发专属 API 密钥，调用将扣减个人钱包额度。'}
+                </p>
               </div>
 
               <div className="pt-2 flex items-center justify-end space-x-2">

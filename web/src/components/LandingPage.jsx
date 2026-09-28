@@ -204,7 +204,7 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
                 className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition"
               >
                 <Server className="w-3.5 h-3.5" />
-                <span>进入管理控制台 →</span>
+                <span>进入工作台 →</span>
               </button>
             ) : (
               <button
@@ -257,7 +257,7 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
                 className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-sm font-bold shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2"
               >
                 <Server className="w-4 h-4" />
-                <span>进入管理控制台</span>
+                <span>进入控制台工作台</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             ) : (
@@ -266,7 +266,7 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
                 className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-sm font-bold shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2"
               >
                 <Key className="w-4 h-4" />
-                <span>立即登录控制台</span>
+                <span>立即登录 / 免费注册</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             )}
@@ -668,7 +668,7 @@ curl -X POST "${origin}/v1/audio/transcriptions" \\
                   <span className="font-mono font-bold text-slate-800">Authorization: Bearer sk-nano-...</span>
                   <span className="text-indigo-600 font-medium">必填</span>
                 </div>
-                <p className="text-[11px] text-slate-500 mt-0.5">控制台签发的虚拟 Key，毫秒级内存校验、租户限流与余额计费。</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">控制台签发的 API 密钥，毫秒级内存校验、租户限流与余额计费。</p>
               </div>
 
               <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">

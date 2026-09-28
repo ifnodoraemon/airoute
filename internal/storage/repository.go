@@ -131,6 +131,22 @@ func NewRepository(db *DB) *Repository {
 	return r
 }
 
+// GetDB returns the database instance.
+func (r *Repository) GetDB() *DB {
+	if r == nil {
+		return nil
+	}
+	return r.db
+}
+
+// Dialect returns the database engine dialect ("sqlite" or "postgres").
+func (r *Repository) Dialect() string {
+	if r == nil || r.db == nil {
+		return "sqlite"
+	}
+	return r.db.Dialect()
+}
+
 // ListChannels returns all channels.
 func (r *Repository) ListChannels() ([]*ChannelRecord, error) {
 	rows, err := r.db.Query(`SELECT id, name, type, base_url, api_key, models, model_mapping, protocols, priority, weight, timeout_seconds, status, created_at, updated_at FROM channels ORDER BY priority ASC, id ASC`)
@@ -753,6 +769,19 @@ func (r *Repository) GetUserByUsername(username string) (*UserRecord, error) {
 // GetUserByID finds a user by primary key ID.
 func (r *Repository) GetUserByID(id int64) (*UserRecord, error) {
 	row := r.db.QueryRow(`SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE id = ?`, id)
+	var u UserRecord
+	if err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.Balance, &u.GroupName, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+// GetUserByEmail finds a user by email address.
+func (r *Repository) GetUserByEmail(email string) (*UserRecord, error) {
+	if r == nil || r.db == nil || strings.TrimSpace(email) == "" {
+		return nil, sql.ErrNoRows
+	}
+	row := r.db.QueryRow(`SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE email = ?`, strings.TrimSpace(email))
 	var u UserRecord
 	if err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.Balance, &u.GroupName, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		return nil, err
