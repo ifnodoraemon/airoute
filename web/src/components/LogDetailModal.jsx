@@ -194,6 +194,20 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
               </div>
             </div>
             <div className="p-3 flex justify-between bg-slate-50/50 dark:bg-slate-900/30">
+              <span className="text-slate-500 font-medium">计费核算公式</span>
+              <span className="font-mono text-xs text-slate-700 dark:text-slate-300">
+                {log.cost > 0 ? (
+                  <>
+                    <span>(输入 {log.prompt_tokens} + 输出 {log.completion_tokens}) × 模型单价</span>
+                    {log.is_off_peak && <span className="text-indigo-600 font-semibold"> × 闲时 {Math.round((log.off_peak_discount || 0.5) * 10)}折</span>}
+                    <span> = ¥{(log.cost || 0).toFixed(4)}</span>
+                  </>
+                ) : (
+                  <span className="text-emerald-600 font-medium">免费模型或管理员免计费</span>
+                )}
+              </span>
+            </div>
+            <div className="p-3 flex justify-between bg-slate-50/50 dark:bg-slate-900/30">
               <span className="text-slate-500 font-medium">客户端 IP</span>
               <span className="font-mono text-slate-600 dark:text-slate-300">{log.ip || '127.0.0.1'}</span>
             </div>

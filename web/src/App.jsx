@@ -2123,6 +2123,33 @@ export default function App() {
         </header>
 
         <div className="p-8 max-w-7xl w-full mx-auto space-y-6">
+          {/* Low Balance Warning Banner for Regular Users */}
+          {adminUser && adminUser.role !== 'admin' && Number(adminUser.balance || 0) < 5 && (
+            <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-3xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs animate-in fade-in">
+              <div className="flex items-center space-x-3.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-amber-900 dark:text-amber-200">
+                    {Number(adminUser.balance || 0) <= 0 ? '钱包额度已耗尽 (余额不足)' : '钱包余额偏低预警'}
+                  </h4>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                    当前可用额度为 <strong className="font-mono font-bold">¥{Number(adminUser.balance || 0).toFixed(4)}</strong>。为避免生产 API 接口调用中断，请及时充值或兑换卡密。
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2 shrink-0">
+                <button
+                  onClick={() => setCurrentTab('wallet')}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer"
+                >
+                  前往充值 / 兑换卡密 →
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* 1. ENTERPRISE OPERATIONS DASHBOARD */}
           {currentTab === 'dashboard' && (
             <div className="space-y-6">
