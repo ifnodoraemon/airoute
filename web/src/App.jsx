@@ -1066,6 +1066,7 @@ export default function App() {
       rpm: 0,
       budget: 0,
       allowed_models: [],
+      group_name: adminUser?.role === 'admin' ? 'default' : (adminUser?.group_name || 'default'),
     });
     setShowKeyModal(true);
   };
@@ -2953,6 +2954,7 @@ export default function App() {
                           </th>
                           <th className="py-3.5 px-6 font-semibold">密钥名称</th>
                           <th className="py-3.5 px-6 font-semibold">密钥 (API Key)</th>
+                          <th className="py-3.5 px-6 font-semibold">计费分组</th>
                           <th className="py-3.5 px-6 font-semibold">已用 / 额度</th>
                           <th className="py-3.5 px-6 font-semibold">授权模型</th>
                           <th className="py-3.5 px-6 font-semibold">速率 (RPM)</th>
@@ -2992,6 +2994,17 @@ export default function App() {
                                   <Copy className="w-3.5 h-3.5" />
                                 )}
                               </button>
+                            </td>
+                            <td className="py-4 px-6 text-xs">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-lg text-[11px] font-semibold border ${
+                                (k.group_name === 'vip')
+                                  ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/60'
+                                  : (k.group_name === 'enterprise')
+                                  ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-800/60'
+                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                              }`}>
+                                {(k.group_name === 'vip' ? '⭐ VIP 组' : k.group_name === 'enterprise' ? '👑 企业组' : (k.group_name && k.group_name !== 'default' ? `${k.group_name} 组` : '默认组'))}
+                              </span>
                             </td>
                             <td className="py-4 px-6 text-xs font-mono">
                               <span className="text-slate-900 dark:text-slate-100 font-bold">¥{Number(k.used_cost || 0).toFixed(4)}</span>
@@ -5125,6 +5138,47 @@ helm install nano-gateway ./helm/nano-gateway -n gateway --create-namespace
               </div>
 
               <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  计费分组 (Pricing Group)
+                </label>
+                {adminUser?.role === 'admin' ? (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center space-x-1.5">
+                      {[
+                        { id: 'default', label: '默认组 (default)' },
+                        { id: 'vip', label: 'VIP组 (vip)' },
+                        { id: 'enterprise', label: '企业组 (enterprise)' }
+                      ].map(g => (
+                        <button
+                          key={g.id}
+                          type="button"
+                          onClick={() => setNewKey({ ...newKey, group_name: g.id })}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition cursor-pointer ${
+                            (newKey.group_name || 'default') === g.id
+                              ? 'bg-indigo-600 text-white border-indigo-600 font-semibold shadow-xs'
+                              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          {g.label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-slate-400">调用将按该分组在「模型定价」中设定的专属模型费率进行扣费。</p>
+                  </div>
+                ) : (
+                  <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-slate-600 dark:text-slate-300 font-medium">绑定您的账号等级:</span>
+                      <span className="px-2 py-0.5 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        {adminUser?.group_name ? `${adminUser.group_name} 组` : '默认组'}
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-slate-400">自动享有该等级专属折扣</span>
+                  </div>
+                )}
+              </div>
+
+              <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="font-semibold text-slate-700 dark:text-slate-300">API 密钥</label>
                   <button
@@ -5175,6 +5229,7 @@ helm install nano-gateway ./helm/nano-gateway -n gateway --create-namespace
                   onChange={(e) => setNewKey({ ...newKey, budget: parseFloat(e.target.value) || 0 })}
                   className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-xs"
                 />
+                <p className="text-[10px] text-slate-400 mt-1">💡 独立子预算上限：达到上限后该 Key 将停止调用；实际费用将扣减您账户的钱包总余额。</p>
               </div>
 
               <div>

@@ -162,7 +162,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
               <span className="font-semibold text-slate-800 dark:text-slate-200">{log.tenant_id || 'anonymous'}</span>
             </div>
             <div className="p-3 flex justify-between">
-              <span className="text-slate-500 font-medium">访问密钥</span>
+              <span className="text-slate-500 font-medium">API 密钥</span>
               <span className="font-mono text-indigo-600 dark:text-indigo-400">{log.virtual_key || '无'}</span>
             </div>
             <div className="p-3 flex justify-between bg-slate-50/50 dark:bg-slate-900/30">
