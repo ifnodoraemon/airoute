@@ -86,6 +86,7 @@ func (p *OpenAIProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
 		return nil, fmt.Errorf("unmarshal chat response error: %w", err)
 	}
+	chatResp.Model = req.Model
 
 	return &chatResp, nil
 }
@@ -170,6 +171,7 @@ func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 				eventChan <- &model.StreamEvent{Raw: line}
 				continue
 			}
+			chunk.Model = req.Model
 
 			eventChan <- &model.StreamEvent{
 				Chunk: &chunk,

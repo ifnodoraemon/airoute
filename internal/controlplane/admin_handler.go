@@ -304,8 +304,34 @@ func (h *AdminHandler) CreateAPIKey(c *gin.Context) {
 			user, _ := h.repo.GetUserByUsername(claims.Username)
 			if user != nil {
 				rec.UserID = user.ID
-				rec.GroupName = user.GroupName
+				userGroup := strings.ToLower(strings.TrimSpace(user.GroupName))
+				if userGroup == "" {
+					userGroup = "default"
+				}
+				reqGroup := strings.ToLower(strings.TrimSpace(rec.GroupName))
+				if reqGroup == "" {
+					reqGroup = userGroup
+				}
+				if reqGroup != "default" && reqGroup != userGroup {
+					c.JSON(http.StatusForbidden, gin.H{
+						"error": fmt.Sprintf("无权使用分组 [%s]，您的账号保障分组等级为 [%s]", reqGroup, userGroup),
+					})
+					return
+				}
+				rec.GroupName = reqGroup
 			}
+		} else {
+			if strings.TrimSpace(rec.GroupName) == "" {
+				rec.GroupName = "default"
+			} else {
+				rec.GroupName = strings.ToLower(strings.TrimSpace(rec.GroupName))
+			}
+		}
+	} else {
+		if strings.TrimSpace(rec.GroupName) == "" {
+			rec.GroupName = "default"
+		} else {
+			rec.GroupName = strings.ToLower(strings.TrimSpace(rec.GroupName))
 		}
 	}
 
@@ -328,7 +354,7 @@ func (h *AdminHandler) CreateAPIKey(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": rec, "message": "API Key created successfully"})
 }
 
-// UpdateAPIKey updates an existing API key (e.g. status toggle, RPM, tenant, allowed models).
+// UpdateAPIKey updates an existing API key (e.g. status toggle, RPM, tenant, allowed models, group_name).
 func (h *AdminHandler) UpdateAPIKey(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -343,12 +369,16 @@ func (h *AdminHandler) UpdateAPIKey(c *gin.Context) {
 		return
 	}
 
+	var currentUser *storage.UserRecord
+	isAdmin := false
 	claimsVal, exists := c.Get("admin_claims")
 	if exists {
 		claims := claimsVal.(*AdminClaims)
-		if claims.Role != "admin" {
-			user, _ := h.repo.GetUserByUsername(claims.Username)
-			if user == nil || existing.UserID != user.ID {
+		if claims.Role == "admin" {
+			isAdmin = true
+		} else {
+			currentUser, _ = h.repo.GetUserByUsername(claims.Username)
+			if currentUser == nil || existing.UserID != currentUser.ID {
 				c.JSON(http.StatusForbidden, gin.H{"error": "无权修改该密钥"})
 				return
 			}
@@ -363,6 +393,7 @@ func (h *AdminHandler) UpdateAPIKey(c *gin.Context) {
 		Budget           *float64  `json:"budget"`
 		Status           *string   `json:"status"`
 		FormatValidation *string   `json:"format_validation"`
+		GroupName        *string   `json:"group_name"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -389,6 +420,25 @@ func (h *AdminHandler) UpdateAPIKey(c *gin.Context) {
 	}
 	if req.FormatValidation != nil {
 		existing.FormatValidation = *req.FormatValidation
+	}
+	if req.GroupName != nil {
+		targetGroup := strings.ToLower(strings.TrimSpace(*req.GroupName))
+		if targetGroup == "" {
+			targetGroup = "default"
+		}
+		if !isAdmin && currentUser != nil {
+			userGroup := strings.ToLower(strings.TrimSpace(currentUser.GroupName))
+			if userGroup == "" {
+				userGroup = "default"
+			}
+			if targetGroup != "default" && targetGroup != userGroup {
+				c.JSON(http.StatusForbidden, gin.H{
+					"error": fmt.Sprintf("无权切换至分组 [%s]，您的账号保障分组等级为 [%s]", targetGroup, userGroup),
+				})
+				return
+			}
+		}
+		existing.GroupName = targetGroup
 	}
 
 	if err := h.repo.UpdateAPIKey(existing); err != nil {

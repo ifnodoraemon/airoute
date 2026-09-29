@@ -147,6 +147,9 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 			chatID = fmt.Sprintf("chatcmpl-%x", time.Now().UnixNano())
 			resp.ID = chatID
 		}
+		if req.Model != "" {
+			resp.Model = req.Model
+		}
 		pTokens := 0
 		cTokens := 0
 		cachedTokens := 0
@@ -318,6 +321,9 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 			}
 
 			if event.Chunk != nil {
+				if req.Model != "" {
+					event.Chunk.Model = req.Model
+				}
 				if !firstTokenRecorded && len(event.Chunk.Choices) > 0 {
 					delta := event.Chunk.Choices[0].Delta
 					if delta.Content != "" || delta.Role != "" {
@@ -547,6 +553,12 @@ func (h *Handler) HandleMetrics(c *gin.Context) {
 // HandlePublicStatus handles GET /api/v1/public/status for public status page.
 func (h *Handler) HandlePublicStatus(c *gin.Context) {
 	models := h.dispatcher.GetAllSupportedModels()
+	if len(models) == 0 {
+		models = []string{
+			"claude-opus-5.5", "gpt-6-astra", "deepseek-r1", "deepseek-v4.1-flash",
+			"gemini-3.8-flash", "flux-1.1-pro", "whisper-large-v3-turbo", "sora-2",
+		}
+	}
 	type publicModelStatus struct {
 		Model     string `json:"model"`
 		Modality  string `json:"modality"`

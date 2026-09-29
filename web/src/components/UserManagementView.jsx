@@ -66,6 +66,8 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
     return pass;
   };
 
+  const [pricingGroups, setPricingGroups] = useState([]);
+
   const fetchUsers = async () => {
     if (!adminFetch) return;
     setLoading(true);
@@ -86,7 +88,26 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
 
   useEffect(() => {
     fetchUsers();
+    if (adminFetch) {
+      adminFetch('/api/v1/admin/pricing')
+        .then(r => r.json())
+        .then(d => {
+          if (d.code === 0 && Array.isArray(d.data)) {
+            const set = new Set();
+            d.data.forEach(p => { if (p.group_name) set.add(p.group_name.trim().toLowerCase()); });
+            setPricingGroups(Array.from(set));
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
+
+  const allAvailableGroups = React.useMemo(() => {
+    const set = new Set(['default']);
+    (pricingGroups || []).forEach(g => set.add(g));
+    users.forEach(u => { if (u.group_name) set.add(u.group_name.trim().toLowerCase()); });
+    return Array.from(set);
+  }, [pricingGroups, users]);
 
   const handleCreateUser = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
@@ -484,7 +505,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                 <th className="py-3.5 px-4">角色</th>
                 <th className="py-3.5 px-4">状态</th>
                 <th className="py-3.5 px-4">钱包余额 / 额度</th>
-                <th className="py-3.5 px-4">计费分组</th>
+                <th className="py-3.5 px-4" title="管理员为该用户分配的保障等级，用户创建 Key 时可享此等级或默认组">账号保障分组</th>
                 <th className="py-3.5 px-4">注册时间</th>
                 <th className="py-3.5 px-4 text-right">操作</th>
               </tr>
@@ -592,12 +613,24 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                       <td className="py-3 px-4">
                         <select
                           value={u.group_name || 'default'}
-                          onChange={(e) => handleUpdateGroup(u, e.target.value)}
-                          className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-800 focus:outline-none focus:border-indigo-500"
+                          onChange={(e) => {
+                            if (e.target.value === '__custom__') {
+                              const custom = window.prompt(`请输入用户 [${u.username}] 的新保障分组标识 (如 partner / promo):`);
+                              if (custom && custom.trim()) {
+                                handleUpdateGroup(u, custom.trim().toLowerCase());
+                              }
+                            } else {
+                              handleUpdateGroup(u, e.target.value);
+                            }
+                          }}
+                          className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
                         >
-                          <option value="default">默认组 (default)</option>
-                          <option value="vip">VIP 组 (vip)</option>
-                          <option value="enterprise">企业组 (enterprise)</option>
+                          {allAvailableGroups.map(g => (
+                            <option key={g} value={g}>
+                              {g === 'default' ? '默认组 (default)' : g === 'vip' ? 'VIP 组 (vip)' : g === 'enterprise' ? '企业组 (enterprise)' : `${g} 组`}
+                            </option>
+                          ))}
+                          <option value="__custom__">+ 输入自定义分组...</option>
                         </select>
                       </td>
 
@@ -771,16 +804,34 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">计费分组</label>
-                  <select
-                    value={newGroupName}
-                    onChange={(e) => setNewGroupName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
-                  >
-                    <option value="default">默认分组 (default)</option>
-                    <option value="vip">VIP 分组 (vip)</option>
-                    <option value="enterprise">企业分组 (enterprise)</option>
-                  </select>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">账号保障分组 (Tier)</label>
+                  <div className="space-y-1.5">
+                    <select
+                      value={allAvailableGroups.includes(newGroupName) ? newGroupName : '__custom__'}
+                      onChange={(e) => {
+                        if (e.target.value !== '__custom__') {
+                          setNewGroupName(e.target.value);
+                        }
+                      }}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                    >
+                      {allAvailableGroups.map(g => (
+                        <option key={g} value={g}>
+                          {g === 'default' ? '默认组 (default)' : g === 'vip' ? 'VIP 组 (vip)' : g === 'enterprise' ? '企业组 (enterprise)' : `${g} 组`}
+                        </option>
+                      ))}
+                      <option value="__custom__">自定义输入新分组...</option>
+                    </select>
+                    {(!allAvailableGroups.includes(newGroupName) || newGroupName === '') && (
+                      <input
+                        type="text"
+                        placeholder="输入新保障分组标识 (如 partner / dev)"
+                        value={newGroupName}
+                        onChange={(e) => setNewGroupName(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 font-mono"
+                      />
+                    )}
+                  </div>
                 </div>
               </div>
 

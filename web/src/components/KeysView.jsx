@@ -13,7 +13,62 @@ export default function KeysView({
   handleToggleKeyStatus,
   setActiveQuickKey,
   handleDeleteKey,
+  handleUpdateKeyGroup,
+  adminUser,
+  pricingGroups = [],
 }) {
+  const isAdmin = adminUser?.role === 'admin';
+  const userGuaranteedGroup = adminUser?.group_name && adminUser.group_name !== 'default' ? adminUser.group_name : null;
+  const canUserSwitch = isAdmin || !!userGuaranteedGroup;
+
+  const getGroupBadge = (group) => {
+    const g = (group || 'default').toLowerCase();
+    if (g === 'vip') {
+      return {
+        label: '⭐ VIP 组',
+        className: 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/60'
+      };
+    }
+    if (g === 'enterprise') {
+      return {
+        label: '👑 企业组',
+        className: 'bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-800/60'
+      };
+    }
+    if (g === 'default') {
+      return {
+        label: '默认组',
+        className: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+      };
+    }
+    return {
+      label: `${group} 组`,
+      className: 'bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-300 border-sky-200 dark:border-sky-800/60'
+    };
+  };
+
+  const getGroupOptions = (currentKeyGroup) => {
+    if (isAdmin) {
+      const set = new Set(['default']);
+      (pricingGroups || []).forEach(g => set.add(g));
+      if (currentKeyGroup) set.add(currentKeyGroup);
+      return Array.from(set).map(g => ({
+        id: g,
+        label: g === 'default' ? '默认组 (default)' : g === 'vip' ? 'VIP 组 (vip)' : g === 'enterprise' ? '企业组 (enterprise)' : `${g} 组`
+      }));
+    }
+    if (userGuaranteedGroup) {
+      const set = new Set(['default', userGuaranteedGroup]);
+      if (currentKeyGroup) set.add(currentKeyGroup);
+      return Array.from(set).map(g => ({
+        id: g,
+        label: g === 'default' ? '默认标准组 (default)' : `${g} 组 (账号专属)`
+      }));
+    }
+    return [
+      { id: currentKeyGroup || 'default', label: currentKeyGroup && currentKeyGroup !== 'default' ? `${currentKeyGroup} 组` : '默认组' }
+    ];
+  };
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white dark:bg-[#111726] p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs gap-3">
@@ -147,23 +202,26 @@ export default function KeysView({
                       </button>
                     </td>
                     <td className="py-4 px-6 text-xs">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-lg text-[11px] font-semibold border ${
-                          k.group_name === 'vip'
-                            ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/60'
-                            : k.group_name === 'enterprise'
-                            ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-800/60'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-                        }`}
-                      >
-                        {k.group_name === 'vip'
-                          ? '⭐ VIP 组'
-                          : k.group_name === 'enterprise'
-                          ? '👑 企业组'
-                          : k.group_name && k.group_name !== 'default'
-                          ? `${k.group_name} 组`
-                          : '默认组'}
-                      </span>
+                      {canUserSwitch ? (
+                        <select
+                          value={k.group_name || 'default'}
+                          onChange={(e) => handleUpdateKeyGroup && handleUpdateKeyGroup(k.id, e.target.value)}
+                          className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-2xs hover:border-slate-300 dark:hover:border-slate-600 transition"
+                          title="切换该密钥的扣费分组"
+                        >
+                          {getGroupOptions(k.group_name).map(opt => (
+                            <option key={opt.id} value={opt.id}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-lg text-[11px] font-semibold border ${getGroupBadge(k.group_name).className}`}
+                        >
+                          {getGroupBadge(k.group_name).label}
+                        </span>
+                      )}
                     </td>
                     <td className="py-4 px-6 text-xs font-mono">
                       <span className="text-slate-900 dark:text-slate-100 font-bold">

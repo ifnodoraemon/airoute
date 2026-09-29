@@ -180,7 +180,7 @@ func AuthMiddleware() gin.HandlerFunc {
 					})
 					return
 				}
-				if keyRec.GroupName != "" && (effectiveKey.GroupName == "" || effectiveKey.GroupName == "default") {
+				if keyRec.GroupName != "" {
 					effectiveKey.GroupName = keyRec.GroupName
 				}
 			}
@@ -224,8 +224,8 @@ func AuthMiddleware() gin.HandlerFunc {
 					defer globalQuotaTracker.Release(user.ID)
 				}
 
-				// Inherit user's group if key does not have an explicit group
-				if (effectiveKey.GroupName == "" || effectiveKey.GroupName == "default") && user.GroupName != "" {
+				// Inherit user's group only if key does not have an explicit database group
+				if (effectiveKey.GroupName == "" || (keyRec == nil && effectiveKey.GroupName == "default")) && user.GroupName != "" {
 					effectiveKey.GroupName = user.GroupName
 				}
 				c.Set(ContextKeyUserRecord, user)

@@ -324,14 +324,17 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
               <div>
                 <div className="text-xs font-semibold text-slate-500 flex items-center space-x-2">
                   <Sparkles className="w-4 h-4 text-amber-500" />
-                  <span>当前计费分组等级</span>
+                  <span>账号保障等级 (Account Tier)</span>
                 </div>
                 <div className="mt-3">
                   <span className="inline-flex items-center px-3 py-1 rounded-xl text-sm font-bold bg-amber-50 text-amber-700 border border-amber-200">
                     {walletData.group_name === 'default'
                       ? '默认分组 (Standard)'
-                      : walletData.group_name.toUpperCase() + ' 分组'}
+                      : walletData.group_name.toUpperCase() + ' 专属保障'}
                   </span>
+                  <div className="text-[11px] text-slate-400 mt-1.5">
+                    创建 API Key 时可使用该等级专属费率或选择标准默认组
+                  </div>
                 </div>
               </div>
 

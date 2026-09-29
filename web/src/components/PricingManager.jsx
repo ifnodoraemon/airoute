@@ -182,9 +182,9 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
   };
 
   const availableGroups = React.useMemo(() => {
-    const set = new Set(['default', 'vip', 'enterprise']);
+    const set = new Set(['default']);
     prices.forEach(p => {
-      if (p.group_name) set.add(p.group_name);
+      if (p.group_name) set.add(p.group_name.trim().toLowerCase());
     });
     return Array.from(set);
   }, [prices]);
@@ -542,10 +542,10 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
           <span className="text-xs text-slate-400 font-medium mr-1">价格分组:</span>
           {[
             { id: 'all', label: '全部规则' },
-            { id: 'default', label: '默认组 (default)' },
-            { id: 'vip', label: 'VIP组 (vip)' },
-            { id: 'enterprise', label: '企业组 (enterprise)' },
-            ...availableGroups.filter(g => !['default', 'vip', 'enterprise'].includes(g)).map(g => ({ id: g, label: `${g} 组` }))
+            ...availableGroups.map(g => ({
+              id: g,
+              label: g === 'default' ? '默认组 (default)' : g === 'vip' ? 'VIP组 (vip)' : g === 'enterprise' ? '企业组 (enterprise)' : `${g} 组`
+            }))
           ].map(tab => {
             const count = tab.id === 'all' ? prices.length : prices.filter(p => (p.group_name || 'default') === tab.id).length;
             const isActive = groupFilter === tab.id;
@@ -829,22 +829,18 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                 ) : (
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      {[
-                        { id: 'default', label: '默认组 (default)' },
-                        { id: 'vip', label: 'VIP组 (vip)' },
-                        { id: 'enterprise', label: '企业组 (enterprise)' }
-                      ].map(g => (
+                      {availableGroups.map(g => (
                         <button
-                          key={g.id}
+                          key={g}
                           type="button"
-                          onClick={() => setFormData({ ...formData, group_name: g.id })}
+                          onClick={() => setFormData({ ...formData, group_name: g })}
                           className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition cursor-pointer ${
-                            formData.group_name === g.id
+                            formData.group_name === g
                               ? 'bg-indigo-600 text-white border-indigo-600 font-semibold shadow-2xs'
                               : 'bg-white hover:bg-indigo-50/60 border-slate-200 text-slate-700'
                           }`}
                         >
-                          {g.label}
+                          {g === 'default' ? '默认组 (default)' : g === 'vip' ? 'VIP组 (vip)' : g === 'enterprise' ? '企业组 (enterprise)' : `${g} 组`}
                         </button>
                       ))}
                     </div>

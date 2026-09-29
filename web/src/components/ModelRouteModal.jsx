@@ -10,8 +10,38 @@ import {
   DollarSign,
   Shield,
   Layers,
-  Moon
+  Moon,
+  Edit3
 } from 'lucide-react';
+
+export const getChannelModels = (ch) => {
+  if (!ch) return [];
+  const set = new Set();
+  if (Array.isArray(ch.models)) {
+    ch.models.forEach(m => {
+      const trimmed = (m || '').trim();
+      if (trimmed) set.add(trimmed);
+    });
+  } else if (typeof ch.models === 'string') {
+    ch.models.split(',').forEach(s => {
+      const trimmed = s.trim();
+      if (trimmed) set.add(trimmed);
+    });
+  }
+  if (typeof ch.models_str === 'string') {
+    ch.models_str.split(',').forEach(s => {
+      const trimmed = s.trim();
+      if (trimmed) set.add(trimmed);
+    });
+  }
+  if (ch.model_mapping && typeof ch.model_mapping === 'object') {
+    Object.entries(ch.model_mapping).forEach(([k, v]) => {
+      if (v && typeof v === 'string' && v.trim()) set.add(v.trim());
+      else if (k && typeof k === 'string' && k.trim()) set.add(k.trim());
+    });
+  }
+  return Array.from(set);
+};
 
 export default function ModelRouteModal({
   isOpen,
@@ -49,6 +79,9 @@ export default function ModelRouteModal({
   });
 
   const [selectedChannelToAdd, setSelectedChannelToAdd] = useState('');
+  const [selectedModelToAdd, setSelectedModelToAdd] = useState('');
+  const [customAddMode, setCustomAddMode] = useState(false);
+  const [customModeMap, setCustomModeMap] = useState({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -65,6 +98,28 @@ export default function ModelRouteModal({
     setProviders(prev => prev.filter(p => p.channel_id !== channelId));
   };
 
+  const handleSelectChannelToAdd = (channelIdStr) => {
+    setSelectedChannelToAdd(channelIdStr);
+    setCustomAddMode(false);
+    if (!channelIdStr) {
+      setSelectedModelToAdd('');
+      return;
+    }
+    const targetChannel = allChannels.find(c => c.id === parseInt(channelIdStr));
+    const chModels = getChannelModels(targetChannel);
+    if (chModels.length > 0) {
+      const curModel = modelName.trim().toLowerCase();
+      const exact = chModels.find(m => m.trim().toLowerCase() === curModel);
+      const sub = curModel ? chModels.find(m => {
+        const ml = m.trim().toLowerCase();
+        return ml.includes(curModel) || curModel.includes(ml);
+      }) : null;
+      setSelectedModelToAdd(exact || sub || chModels[0]);
+    } else {
+      setSelectedModelToAdd(modelName.trim());
+    }
+  };
+
   const handleAddChannel = () => {
     if (!selectedChannelToAdd) return;
     const chId = parseInt(selectedChannelToAdd);
@@ -76,6 +131,8 @@ export default function ModelRouteModal({
       return;
     }
 
+    const mapped = (selectedModelToAdd || '').trim() || modelName.trim() || targetChannel.name;
+
     setProviders(prev => [
       ...prev,
       {
@@ -84,11 +141,16 @@ export default function ModelRouteModal({
         channel_type: targetChannel.type,
         priority: 1,
         weight: 50,
-        mapped_model: modelName.trim() || targetChannel.name
+        mapped_model: mapped
       }
     ]);
     setSelectedChannelToAdd('');
+    setSelectedModelToAdd('');
+    setCustomAddMode(false);
   };
+
+  const selectedAddChannel = allChannels.find(c => c.id === parseInt(selectedChannelToAdd));
+  const addChannelModels = React.useMemo(() => getChannelModels(selectedAddChannel), [selectedAddChannel]);
 
   const availableChannelsToAdd = allChannels.filter(
     ch => !providers.some(p => p.channel_id === ch.id)
@@ -98,11 +160,7 @@ export default function ModelRouteModal({
   const channelModelCandidates = React.useMemo(() => {
     const list = [];
     (allChannels || []).forEach(ch => {
-      let mList = [];
-      if (Array.isArray(ch.models)) mList = ch.models;
-      else if (typeof ch.models === 'string') mList = ch.models.split(',').map(s => s.trim()).filter(Boolean);
-      else if (typeof ch.models_str === 'string') mList = ch.models_str.split(',').map(s => s.trim()).filter(Boolean);
-
+      const mList = getChannelModels(ch);
       mList.forEach(m => {
         if (!list.some(item => item.model === m)) {
           list.push({ model: m, channel: ch });
@@ -301,75 +359,192 @@ export default function ModelRouteModal({
               </div>
             ) : (
               <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100">
-                {providers.map((p) => (
-                  <div key={p.channel_id} className="p-2.5 flex items-center justify-between gap-3 bg-white hover:bg-slate-50/50">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-semibold text-slate-800 truncate">{p.channel_name}</span>
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
-                          {p.channel_type}
-                        </span>
-                      </div>
-                      <input
-                        type="text"
-                        value={p.mapped_model}
-                        onChange={(e) => handleMappedModelChange(p.channel_id, e.target.value)}
-                        placeholder="远端模型标识 (可选)"
-                        className="mt-1 w-full bg-slate-50 border border-slate-200 rounded px-2 py-0.5 text-[11px] font-mono text-slate-700 focus:outline-none focus:border-indigo-400"
-                      />
-                    </div>
+                {providers.map((p) => {
+                  const pChannel = allChannels.find(c => c.id === p.channel_id);
+                  const pModels = getChannelModels(pChannel);
+                  const isCustomMode = !!customModeMap[p.channel_id];
 
-                    <div className="flex items-center space-x-2 shrink-0">
-                      <div className="flex items-center space-x-1">
-                        <span className="text-[11px] text-slate-400">权重:</span>
-                        <input
-                          type="number"
-                          min="1"
-                          max="1000"
-                          value={p.weight}
-                          onChange={(e) => handleWeightChange(p.channel_id, e.target.value)}
-                          className="w-14 bg-slate-50 border border-slate-200 rounded px-1.5 py-1 text-center font-mono text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
-                        />
+                  return (
+                    <div key={p.channel_id} className="p-3 bg-white hover:bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-semibold text-slate-800 truncate">{p.channel_name}</span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                            {p.channel_type}
+                          </span>
+                          {pModels.length > 0 && (
+                            <span className="text-[10px] text-slate-400">
+                              ({pModels.length} 个可用模型)
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-[11px] text-slate-400 shrink-0">上游模型:</span>
+                          {isCustomMode || pModels.length === 0 ? (
+                            <div className="flex-1 flex items-center space-x-1.5">
+                              <input
+                                type="text"
+                                value={p.mapped_model}
+                                onChange={(e) => handleMappedModelChange(p.channel_id, e.target.value)}
+                                placeholder="远端模型标识 (可选)"
+                                className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-[11px] font-mono text-slate-700 focus:outline-none focus:border-indigo-400"
+                              />
+                              {pModels.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setCustomModeMap(prev => ({ ...prev, [p.channel_id]: false }))}
+                                  className="text-[10px] text-indigo-600 hover:text-indigo-800 px-2 py-1 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition cursor-pointer shrink-0 font-medium"
+                                  title="切换为服务商模型下拉列表"
+                                >
+                                  从渠道选择
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex-1 flex items-center space-x-1.5">
+                              <select
+                                value={p.mapped_model}
+                                onChange={(e) => {
+                                  if (e.target.value === '__custom__') {
+                                    setCustomModeMap(prev => ({ ...prev, [p.channel_id]: true }));
+                                  } else {
+                                    handleMappedModelChange(p.channel_id, e.target.value);
+                                  }
+                                }}
+                                className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-[11px] font-mono text-slate-700 focus:outline-none focus:border-indigo-400 truncate cursor-pointer"
+                              >
+                                {p.mapped_model && !pModels.includes(p.mapped_model) && (
+                                  <option value={p.mapped_model}>当前: {p.mapped_model}</option>
+                                )}
+                                {modelName.trim() && !pModels.includes(modelName.trim()) && p.mapped_model !== modelName.trim() && (
+                                  <option value={modelName.trim()}>与路由同名 ({modelName.trim()})</option>
+                                )}
+                                {pModels.map((m) => (
+                                  <option key={m} value={m}>
+                                    {m} {m === modelName.trim() ? '(与路由同名)' : ''}
+                                  </option>
+                                ))}
+                                <option value="__custom__">✏️ 自定义手填模型名...</option>
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => setCustomModeMap(prev => ({ ...prev, [p.channel_id]: true }))}
+                                className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer shrink-0"
+                                title="手动输入自定义模型标识"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveProvider(p.channel_id)}
-                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition cursor-pointer"
-                        title="移除服务商"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center space-x-3 shrink-0 self-end sm:self-center">
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-[11px] text-slate-400">权重:</span>
+                          <input
+                            type="number"
+                            min="1"
+                            max="1000"
+                            value={p.weight}
+                            onChange={(e) => handleWeightChange(p.channel_id, e.target.value)}
+                            className="w-14 bg-slate-50 border border-slate-200 rounded-lg px-1.5 py-1 text-center font-mono text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveProvider(p.channel_id)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                          title="移除服务商"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
             {/* Quick Add Provider Row */}
             {availableChannelsToAdd.length > 0 && (
-              <div className="flex items-center space-x-2 pt-1">
-                <select
-                  value={selectedChannelToAdd}
-                  onChange={(e) => setSelectedChannelToAdd(e.target.value)}
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="">-- 选择上游服务商 --</option>
-                  {availableChannelsToAdd.map((ch) => (
-                    <option key={ch.id} value={ch.id}>
-                      {ch.name} ({ch.type})
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={handleAddChannel}
-                  disabled={!selectedChannelToAdd}
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl font-semibold shadow-xs flex items-center space-x-1 transition shrink-0 cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>添加</span>
-                </button>
+              <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <select
+                    value={selectedChannelToAdd}
+                    onChange={(e) => handleSelectChannelToAdd(e.target.value)}
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                  >
+                    <option value="">-- 选择上游服务商 --</option>
+                    {availableChannelsToAdd.map((ch) => (
+                      <option key={ch.id} value={ch.id}>
+                        {ch.name} ({ch.type})
+                      </option>
+                    ))}
+                  </select>
+
+                  {selectedChannelToAdd && (
+                    <div className="flex-1 flex items-center space-x-1.5">
+                      {customAddMode || addChannelModels.length === 0 ? (
+                        <input
+                          type="text"
+                          value={selectedModelToAdd}
+                          onChange={(e) => setSelectedModelToAdd(e.target.value)}
+                          placeholder="上游模型标识"
+                          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 font-mono text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
+                        />
+                      ) : (
+                        <select
+                          value={selectedModelToAdd}
+                          onChange={(e) => {
+                            if (e.target.value === '__custom__') {
+                              setCustomAddMode(true);
+                              setSelectedModelToAdd(modelName.trim());
+                            } else {
+                              setSelectedModelToAdd(e.target.value);
+                            }
+                          }}
+                          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 font-mono text-xs text-slate-800 focus:outline-none focus:border-indigo-500 truncate cursor-pointer"
+                        >
+                          {modelName.trim() && !addChannelModels.includes(modelName.trim()) && (
+                            <option value={modelName.trim()}>与路由同名 ({modelName.trim()})</option>
+                          )}
+                          {addChannelModels.map(m => (
+                            <option key={m} value={m}>
+                              {m} {m === modelName.trim() ? '(同名)' : ''}
+                            </option>
+                          ))}
+                          <option value="__custom__">✏️ 自定义输入...</option>
+                        </select>
+                      )}
+
+                      {addChannelModels.length > 0 && customAddMode && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomAddMode(false);
+                            setSelectedModelToAdd(addChannelModels[0] || modelName.trim());
+                          }}
+                          className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-[10px] whitespace-nowrap cursor-pointer"
+                        >
+                          列表
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleAddChannel}
+                    disabled={!selectedChannelToAdd}
+                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl font-semibold shadow-xs flex items-center justify-center space-x-1 transition shrink-0 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>添加</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>

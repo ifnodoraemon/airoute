@@ -70,7 +70,6 @@ import PricingManager from './components/PricingManager';
 import McpIntegrationView from './components/McpIntegrationView';
 import UserManagementView from './components/UserManagementView';
 import WalletManagementView from './components/WalletManagementView';
-import MiddlewareStatusMatrix from './components/MiddlewareStatusMatrix';
 import ChannelsView from './components/ChannelsView';
 import KeysView from './components/KeysView';
 import LogsView from './components/LogsView';
@@ -350,6 +349,7 @@ export default function App() {
   const [customStartTime, setCustomStartTime] = useState('');
   const [customEndTime, setCustomEndTime] = useState('');
   const [sessionFilter, setSessionFilter] = useState('');
+  const [pricingGroups, setPricingGroups] = useState(['default']);
 
   // Modals & Forms
   const [showChannelModal, setShowChannelModal] = useState(false);
@@ -547,17 +547,28 @@ export default function App() {
   const fetchData = async (overrideToken) => {
     const opts = overrideToken ? { token: overrideToken } : {};
     try {
-      const [chRes, keyRes, statsRes, mRes, routesRes] = await Promise.all([
+      const [chRes, keyRes, statsRes, mRes, routesRes, pricingRes] = await Promise.all([
         adminFetch('/api/v1/admin/channels', opts).then(r => r.json()).catch(() => ({ code: 1 })),
         adminFetch('/api/v1/admin/keys', opts).then(r => r.json()).catch(() => ({ code: 1 })),
         adminFetch('/api/v1/admin/stats/overview', opts).then(r => r.json()).catch(() => ({ code: 1 })),
         adminFetch('/api/v1/admin/models', opts).then(r => r.json()).catch(() => ({ code: 1 })),
         adminFetch('/api/v1/admin/models/routes', opts).then(r => r.json()).catch(() => ({ code: 1 })),
+        adminFetch('/api/v1/admin/pricing', opts).then(r => r.json()).catch(() => ({ code: 1 })),
       ]);
 
       if (chRes.code === 0) setChannels(chRes.data || []);
       if (keyRes.code === 0) setKeys(keyRes.data || []);
       if (statsRes.code === 0) setStats(statsRes.data || {});
+      if (pricingRes.code === 0 && Array.isArray(pricingRes.data)) {
+        const grpSet = new Set(['default']);
+        pricingRes.data.forEach(p => {
+          if (p.group_name) grpSet.add(p.group_name.trim().toLowerCase());
+        });
+        if (adminUser?.group_name) {
+          grpSet.add(adminUser.group_name.trim().toLowerCase());
+        }
+        setPricingGroups(Array.from(grpSet));
+      }
       if (routesRes.code === 0) setModelRoutes(routesRes.data || []);
       if (mRes.code === 0 && mRes.data?.length) {
         const allM = mRes.data;
@@ -1274,6 +1285,26 @@ export default function App() {
       }
     } catch (e) {
       showToast('请求异常: ' + e.message, 'error');
+    }
+  };
+
+  // Handle Key Group Update
+  const handleUpdateKeyGroup = async (keyId, newGroup) => {
+    try {
+      const res = await adminFetch(`/api/v1/admin/keys/${keyId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ group_name: newGroup }),
+      });
+      const data = await res.json();
+      if (res.ok && data.code === 0) {
+        showToast(`密钥计费分组已成功调整为 [${newGroup}]`, 'success');
+        fetchData();
+      } else {
+        showToast(`调整分组失败: ${data.error || '未知错误'}`, 'error');
+      }
+    } catch (err) {
+      showToast(`请求异常: ${err.message}`, 'error');
     }
   };
 
@@ -2750,6 +2781,9 @@ export default function App() {
               handleToggleKeyStatus={handleToggleKeyStatus}
               setActiveQuickKey={setActiveQuickKey}
               handleDeleteKey={handleDeleteKey}
+              handleUpdateKeyGroup={handleUpdateKeyGroup}
+              adminUser={adminUser}
+              pricingGroups={pricingGroups}
             />
           )}
 
@@ -4584,38 +4618,77 @@ helm install airoute ./helm/airoute -n gateway --create-namespace
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 text-xs">
                   计费分组 (Pricing Group)
                 </label>
                 {adminUser?.role === 'admin' ? (
-                  <div className="flex items-center space-x-1.5">
-                    {[
-                      { id: 'default', label: '默认组 (default)' },
-                      { id: 'vip', label: 'VIP组 (vip)' },
-                      { id: 'enterprise', label: '企业组 (enterprise)' }
-                    ].map(g => (
-                      <button
-                        key={g.id}
-                        type="button"
-                        onClick={() => setNewKey({ ...newKey, group_name: g.id })}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition cursor-pointer ${
-                          (newKey.group_name || 'default') === g.id
-                            ? 'bg-indigo-600 text-white border-indigo-600 font-semibold shadow-xs'
-                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
-                        }`}
-                      >
-                        {g.label}
-                      </button>
-                    ))}
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {pricingGroups.map(g => (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => setNewKey({ ...newKey, group_name: g })}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition cursor-pointer ${
+                            (newKey.group_name || 'default') === g
+                              ? 'bg-indigo-600 text-white border-indigo-600 font-semibold shadow-xs'
+                              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          {g === 'default' ? '默认组 (default)' : g === 'vip' ? 'VIP组 (vip)' : g === 'enterprise' ? '企业组 (enterprise)' : `${g} 组`}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="或输入自定义计费分组标识"
+                      value={newKey.group_name || ''}
+                      onChange={(e) => setNewKey({ ...newKey, group_name: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '') })}
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 text-xs"
+                    />
                   </div>
                 ) : (
-                  <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-slate-600 dark:text-slate-300 font-medium">绑定您的账号等级:</span>
-                      <span className="px-2 py-0.5 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                        {adminUser?.group_name ? `${adminUser.group_name} 组` : '默认组'}
-                      </span>
-                    </div>
+                  <div className="space-y-2">
+                    {adminUser?.group_name && adminUser.group_name !== 'default' ? (
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setNewKey({ ...newKey, group_name: 'default' })}
+                          className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
+                            (newKey.group_name || 'default') === 'default'
+                              ? 'bg-indigo-50/70 dark:bg-indigo-950/40 border-indigo-500 text-indigo-950 dark:text-indigo-200 ring-1 ring-indigo-500'
+                              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="text-xs font-bold">默认基础组 (default)</div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">标准定价，适合常规调用或测试环境</div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewKey({ ...newKey, group_name: adminUser.group_name })}
+                          className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
+                            newKey.group_name === adminUser.group_name
+                              ? 'bg-amber-50/70 dark:bg-amber-950/40 border-amber-500 text-amber-950 dark:text-amber-200 ring-1 ring-amber-500'
+                              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                            {adminUser.group_name.toUpperCase()} 专属保障组
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">享受您账号签约的特权与优惠费率</div>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                        <div>
+                          <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">默认计费组 (Standard)</div>
+                          <div className="text-[11px] text-slate-400 mt-0.5">该密钥调用将按通用标准费率结算扣费</div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          标准费率
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

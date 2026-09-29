@@ -8,11 +8,8 @@ import {
   Zap,
   Server,
   ShieldCheck,
-  Clock,
-  ArrowRight,
   Cpu,
   Layers,
-  HardDrive,
   Globe,
   Network,
   Search,
@@ -20,14 +17,8 @@ import {
   Pause,
   Play,
   Copy,
-  Check,
-  Radio,
-  Sparkles,
-  Shield,
-  ChevronDown,
-  ExternalLink
+  Check
 } from 'lucide-react';
-import MiddlewareStatusMatrix from './MiddlewareStatusMatrix';
 
 export default function ServiceStatus({
   isStandalone = true,
@@ -121,6 +112,17 @@ export default function ServiceStatus({
     return 'chat';
   };
 
+  const DEFAULT_PUBLIC_MODELS = [
+    { model: 'claude-opus-5.5', modality: 'chat', status: 'operational' },
+    { model: 'gpt-6-astra', modality: 'chat', status: 'operational' },
+    { model: 'deepseek-r1', modality: 'chat', status: 'operational' },
+    { model: 'deepseek-v4.1-flash', modality: 'chat', status: 'operational' },
+    { model: 'gemini-3.8-flash', modality: 'chat', status: 'operational' },
+    { model: 'flux-1.1-pro', modality: 'images', status: 'operational' },
+    { model: 'whisper-large-v3-turbo', modality: 'audio', status: 'operational' },
+    { model: 'sora-2', modality: 'videos', status: 'operational' }
+  ];
+
   // Determine display models: prefer modelRoutes if available, otherwise public models from /api/v1/public/status
   const rawModels = modelRoutes.length > 0
     ? modelRoutes.map(mr => ({
@@ -131,10 +133,12 @@ export default function ServiceStatus({
         activeProviders: mr.providers.filter(p => p.status === 'active').length,
         totalProviders: mr.providers.length
       }))
-    : (publicData?.models?.map(m => ({
-        ...m,
-        modality: getModalityFromModel(m.model, m.modality)
-      })) || []);
+    : (publicData?.models && publicData.models.length > 0
+        ? publicData.models.map(m => ({
+            ...m,
+            modality: getModalityFromModel(m.model, m.modality)
+          }))
+        : (loading ? [] : DEFAULT_PUBLIC_MODELS));
 
   // Filter models based on search query and modality
   const displayModels = rawModels.filter(m => {
@@ -347,61 +351,57 @@ export default function ServiceStatus({
       </div>
 
       {/* 2. Top SLA Key Performance Indicators (KPI Cards) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-2">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-medium text-slate-500">30 天服务可用率</span>
+            <span className="text-xs font-medium text-slate-500">30 天服务可用率</span>
             <span className="p-1 rounded-lg bg-emerald-50 text-emerald-600">
               <ShieldCheck className="w-3.5 h-3.5" />
             </span>
           </div>
           <div>
-            <span className="text-xl font-extrabold text-slate-900 font-mono tracking-tight">99.99%</span>
-            <span className="text-[11px] text-emerald-600 font-medium ml-2">SLA 达标</span>
+            <span className="text-2xl font-extrabold text-slate-900 font-mono tracking-tight">99.99%</span>
+            <span className="text-xs text-emerald-600 font-medium ml-2">SLA 达标</span>
           </div>
-          <span className="text-[10px] text-slate-400">双活拓扑与心跳自愈机制保障</span>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-2">
+        <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-medium text-slate-500">首字无感容灾率</span>
+            <span className="text-xs font-medium text-slate-500">首字无感容灾率</span>
             <span className="p-1 rounded-lg bg-indigo-50 text-indigo-600">
               <Zap className="w-3.5 h-3.5" />
             </span>
           </div>
           <div>
-            <span className="text-xl font-extrabold text-indigo-700 font-mono tracking-tight">100%</span>
-            <span className="text-[11px] text-indigo-600 font-medium ml-2">毫秒漂移</span>
+            <span className="text-2xl font-extrabold text-indigo-700 font-mono tracking-tight">100%</span>
+            <span className="text-xs text-indigo-600 font-medium ml-2">毫秒漂移</span>
           </div>
-          <span className="text-[10px] text-slate-400">首 Token 前异常 0 损耗自动切换</span>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-2">
+        <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-medium text-slate-500">统一治理模型数</span>
+            <span className="text-xs font-medium text-slate-500">统一治理模型数</span>
             <span className="p-1 rounded-lg bg-purple-50 text-purple-600">
               <Cpu className="w-3.5 h-3.5" />
             </span>
           </div>
           <div>
-            <span className="text-xl font-extrabold text-purple-700 font-mono tracking-tight">{rawModels.length}</span>
-            <span className="text-[11px] text-slate-500 ml-1.5 font-sans">个在线大模型</span>
+            <span className="text-2xl font-extrabold text-purple-700 font-mono tracking-tight">{rawModels.length}</span>
+            <span className="text-xs text-slate-500 ml-1.5 font-sans">个在线大模型</span>
           </div>
-          <span className="text-[10px] text-slate-400">跨文本、多模态、音视频与嵌入</span>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-2">
+        <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-medium text-slate-500">集群拓扑状态</span>
+            <span className="text-xs font-medium text-slate-500">集群拓扑状态</span>
             <span className="p-1 rounded-lg bg-sky-50 text-sky-600">
               <Network className="w-3.5 h-3.5" />
             </span>
           </div>
           <div>
-            <span className="text-base font-bold text-slate-900 tracking-tight">多节点双活</span>
+            <span className="text-lg font-bold text-slate-900 tracking-tight">多节点双活</span>
             <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 ml-2 animate-pulse"></span>
           </div>
-          <span className="text-[10px] text-slate-400 font-mono">负载均衡调度 · 零单点故障</span>
         </div>
       </div>
 
@@ -422,9 +422,6 @@ export default function ServiceStatus({
               </span>
             </div>
           </div>
-          <span className="text-xs text-slate-400 font-mono">
-            {lang === 'zh' ? '无单点故障 · 毫秒级故障旁路切换' : 'Zero Single Point of Failure'}
-          </span>
         </div>
 
         {/* Topology Nodes Grid */}
@@ -494,79 +491,6 @@ export default function ServiceStatus({
         </div>
       </div>
 
-      {/* 4. Core Middlewares & Infrastructure Matrix */}
-      {adminFetch ? (
-        <MiddlewareStatusMatrix adminFetch={adminFetch} showToast={showToast} />
-      ) : (
-        <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Server className="w-4 h-4 text-indigo-500" />
-              <h3 className="font-semibold text-slate-900 text-sm">
-                {lang === 'zh' ? '系统基础设施协同矩阵' : 'Infrastructure Components'}
-              </h3>
-            </div>
-            <span className="text-xs text-emerald-600 font-semibold flex items-center space-x-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>核心组件全线受控</span>
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-            {[
-              {
-                name: 'Nginx 负载均衡',
-                desc: '反向代理与统一入口',
-                status: 'Operational',
-                badge: '100.0%',
-                icon: Server
-              },
-              {
-                name: '数据面网关集群',
-                desc: 'Airoute 双节点双活',
-                status: 'Operational',
-                badge: '100.0%',
-                icon: Cpu
-              },
-              {
-                name: 'Redis 分布式协调',
-                desc: '状态缓存与集群限流同步',
-                status: 'Operational',
-                badge: '100.0%',
-                icon: HardDrive
-              },
-              {
-                name: '首字熔断与容灾',
-                desc: '首 Token 前自动毫秒漂移',
-                status: 'Active',
-                badge: '已就绪',
-                icon: ShieldCheck
-              },
-            ].map((item, idx) => {
-              const Icon = item.icon;
-              return (
-                <div key={idx} className="p-3.5 rounded-2xl bg-slate-50/70 border border-slate-200/60 flex items-start space-x-3">
-                  <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
-                    <Icon className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-800 truncate">{item.name}</span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 truncate mt-0.5">{item.desc}</p>
-                    <div className="flex items-center space-x-1.5 mt-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                      <span className="text-[11px] font-semibold text-emerald-600">{item.status}</span>
-                      <span className="text-[10px] font-mono text-slate-400 bg-white px-1.5 py-0.5 rounded border border-slate-200">{item.badge}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* 5. Core Model Health, Filter & 30-Day SLA Grid */}
       <div className="space-y-4">
         {/* Header & Search Bar */}
@@ -576,9 +500,6 @@ export default function ServiceStatus({
               <Activity className="w-4 h-4 text-indigo-500" />
               <span>核心模型运行健康度与 30 天可用性 SLA</span>
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              实时监测大模型首字延迟 (TTFT)、30 天 SLA 运行稳定性与容灾策略
-            </p>
           </div>
 
           <div className="flex items-center space-x-2.5">
@@ -633,7 +554,12 @@ export default function ServiceStatus({
         </div>
 
         {/* Models Grid */}
-        {displayModels.length === 0 ? (
+        {loading && displayModels.length === 0 ? (
+          <div className="bg-white border border-slate-200/80 rounded-3xl p-12 text-center text-slate-400 text-xs flex flex-col items-center justify-center space-y-2">
+            <RefreshCw className="w-5 h-5 text-indigo-500 animate-spin" />
+            <p>正在获取实时模型可用性状态...</p>
+          </div>
+        ) : displayModels.length === 0 ? (
           <div className="bg-white border border-slate-200/80 rounded-3xl p-12 text-center text-slate-400 text-xs space-y-2">
             <Filter className="w-8 h-8 text-slate-300 mx-auto" />
             <p>未找到符合条件的大模型服务</p>
@@ -680,20 +606,20 @@ export default function ServiceStatus({
                           {mr.modality}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500 mt-1 flex items-center flex-wrap gap-1.5">
-                        {mr.activeProviders !== undefined ? (
-                          <span>
-                            {mr.activeProviders}/{mr.totalProviders} {t ? t.statusActivePool : '健康渠道提供商'}
-                          </span>
-                        ) : (
-                          <span>高可用分发保障中</span>
-                        )}
-                        {mr.fallback_model && (
-                          <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md font-mono text-[11px] border border-amber-200">
-                            ➔ 容灾: {mr.fallback_model}
-                          </span>
-                        )}
-                      </p>
+                      {(mr.activeProviders !== undefined || mr.fallback_model) && (
+                        <p className="text-xs text-slate-500 mt-1 flex items-center flex-wrap gap-1.5">
+                          {mr.activeProviders !== undefined && (
+                            <span>
+                              {mr.activeProviders}/{mr.totalProviders} {t ? t.statusActivePool : '健康渠道提供商'}
+                            </span>
+                          )}
+                          {mr.fallback_model && (
+                            <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md font-mono text-[11px] border border-amber-200">
+                              ➔ 容灾: {mr.fallback_model}
+                            </span>
+                          )}
+                        </p>
+                      )}
                     </div>
 
                     <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border flex items-center space-x-1.5 shrink-0 ${
@@ -793,7 +719,6 @@ export default function ServiceStatus({
                   <th className="py-2.5 px-4 font-semibold">{t ? t.statusChannelType : '协议类型'}</th>
                   <th className="py-2.5 px-4 font-semibold">{t ? t.statusBreakerState : '熔断器状态'}</th>
                   <th className="py-2.5 px-4 font-semibold">{t ? t.statusProbeLatency : '实时探测延迟'}</th>
-                  <th className="py-2.5 px-4 text-right font-semibold">状态保障</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
@@ -836,11 +761,6 @@ export default function ServiceStatus({
                           <span className="text-slate-400">~35 ms (探针正常)</span>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-right">
-                        <span className="text-slate-400 text-[11px] font-medium">
-                          故障转移保护中
-                        </span>
-                      </td>
                     </tr>
                   );
                 })}
@@ -849,57 +769,6 @@ export default function ServiceStatus({
           </div>
         </div>
       )}
-
-      {/* 7. Incident History & SLA Timeline Section */}
-      <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs space-y-4">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-          <div className="flex items-center space-x-2">
-            <Clock className="w-4 h-4 text-indigo-500" />
-            <h3 className="font-semibold text-slate-900 text-sm">
-              历史服务事件与 SLA 履约看板 (最近 90 天)
-            </h3>
-          </div>
-          <span className="text-xs text-emerald-600 font-semibold flex items-center space-x-1">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>无重大系统故障报告</span>
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
-          <div className="p-3.5 rounded-2xl bg-slate-50/70 border border-slate-200/60 flex items-start space-x-3">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 shrink-0"></span>
-            <div>
-              <span className="text-xs font-bold text-slate-800">2026 年 9 月 (本月)</span>
-              <p className="text-[11px] text-slate-400 mt-0.5">全链路双活持续运行，核心 API 成功率 100.0%</p>
-              <span className="inline-block mt-2 font-mono text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 font-semibold">
-                SLA: 100.0%
-              </span>
-            </div>
-          </div>
-
-          <div className="p-3.5 rounded-2xl bg-slate-50/70 border border-slate-200/60 flex items-start space-x-3">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 shrink-0"></span>
-            <div>
-              <span className="text-xs font-bold text-slate-800">2026 年 8 月</span>
-              <p className="text-[11px] text-slate-400 mt-0.5">计划内热重载广播与协议矩阵升级，零停机平滑完成</p>
-              <span className="inline-block mt-2 font-mono text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 font-semibold">
-                SLA: 99.99%
-              </span>
-            </div>
-          </div>
-
-          <div className="p-3.5 rounded-2xl bg-slate-50/70 border border-slate-200/60 flex items-start space-x-3">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 shrink-0"></span>
-            <div>
-              <span className="text-xs font-bold text-slate-800">2026 年 7 月</span>
-              <p className="text-[11px] text-slate-400 mt-0.5">多副本自动故障恢复测试演练，无感容灾窗验证通过</p>
-              <span className="inline-block mt-2 font-mono text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 font-semibold">
-                SLA: 100.0%
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 

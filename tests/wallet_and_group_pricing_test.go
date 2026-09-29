@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -454,6 +455,68 @@ func TestUserKeyScopingAndBatchPriceDelete(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &listResp)
 	if len(listResp.Data) != 1 {
 		t.Fatalf("expected bob to see 1 key, got %d", len(listResp.Data))
+	}
+
+	// Bob creates a 2nd key explicitly choosing 'default' group -> should succeed
+	key2Body, _ := json.Marshal(map[string]interface{}{
+		"tenant_id":  "bob-dev-app",
+		"group_name": "default",
+	})
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("POST", "/api/v1/admin/keys", bytes.NewReader(key2Body))
+	req.Header.Set("Authorization", "Bearer "+bobToken)
+	req.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("bob create default group key failed: %d %s", w.Code, w.Body.String())
+	}
+	var createdKey2Resp struct {
+		Code int                  `json:"code"`
+		Data storage.APIKeyRecord `json:"data"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &createdKey2Resp)
+	if createdKey2Resp.Data.GroupName != "default" {
+		t.Errorf("expected key2 group_name to be 'default', got %s", createdKey2Resp.Data.GroupName)
+	}
+
+	// Bob attempts to create key with unauthorized group 'enterprise' -> should be forbidden (403)
+	key3Body, _ := json.Marshal(map[string]interface{}{
+		"tenant_id":  "bob-enterprise-app",
+		"group_name": "enterprise",
+	})
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("POST", "/api/v1/admin/keys", bytes.NewReader(key3Body))
+	req.Header.Set("Authorization", "Bearer "+bobToken)
+	req.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden when bob requests enterprise group, got %d", w.Code)
+	}
+
+	// Bob updates key2 group from 'default' to 'vip' -> should succeed
+	updateBody, _ := json.Marshal(map[string]interface{}{
+		"group_name": "vip",
+	})
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("PUT", fmt.Sprintf("/api/v1/admin/keys/%d", createdKey2Resp.Data.ID), bytes.NewReader(updateBody))
+	req.Header.Set("Authorization", "Bearer "+bobToken)
+	req.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("bob update key group to vip failed: %d %s", w.Code, w.Body.String())
+	}
+
+	// Bob attempts to update key2 group to 'enterprise' -> should be forbidden (403)
+	updateBadBody, _ := json.Marshal(map[string]interface{}{
+		"group_name": "enterprise",
+	})
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("PUT", fmt.Sprintf("/api/v1/admin/keys/%d", createdKey2Resp.Data.ID), bytes.NewReader(updateBadBody))
+	req.Header.Set("Authorization", "Bearer "+bobToken)
+	req.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden when bob attempts to update key group to enterprise, got %d", w.Code)
 	}
 }
 
