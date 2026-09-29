@@ -205,7 +205,11 @@ func runServer(args []string) {
 	// Initialize Data Plane Dispatcher
 	dispatcher := router.NewDispatcher(nil)
 
+	// Initialize Enterprise Distributed Redis Layer FIRST (required by AsyncLogger for stream consumption)
+	redisClient := distributed.InitRedis(cfg.Server.RedisURL)
+
 	// Initialize Async Usage Logger for zero-latency audit logs
+	// NOTE: Must be after Redis init so redisStreamWorker can start consuming the stream
 	asyncLogger := storage.InitAsyncLogger(repo, 10000, 100, 500*time.Millisecond)
 	defer asyncLogger.Stop()
 
@@ -219,8 +223,7 @@ func runServer(args []string) {
 		dispatcher.UpdateChannels(cfg.Channels)
 	}
 
-	// Initialize Enterprise Distributed Redis Layer (if REDIS_URL configured)
-	redisClient := distributed.InitRedis(cfg.Server.RedisURL)
+	// Subscribe to cluster-wide reload broadcasts via Redis Pub/Sub
 	if redisClient != nil && redisClient.IsActive() {
 		stopRedis := make(chan struct{})
 		defer close(stopRedis)

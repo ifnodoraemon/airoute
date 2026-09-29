@@ -271,11 +271,12 @@ func (c *Client) XAddLog(ctx context.Context, stream string, data string) error 
 }
 
 // EnsureConsumerGroup ensures a Redis Stream consumer group exists.
+// Uses "0" as start ID to consume all existing messages including backlog.
 func (c *Client) EnsureConsumerGroup(ctx context.Context, stream, group string) error {
 	if !c.IsActive() {
 		return fmt.Errorf("redis client not active")
 	}
-	err := c.rdb.XGroupCreateMkStream(ctx, stream, group, "$").Err()
+	err := c.rdb.XGroupCreateMkStream(ctx, stream, group, "0").Err()
 	if err != nil && (strings.Contains(err.Error(), "BUSYGROUP") || strings.Contains(err.Error(), "already exists")) {
 		return nil
 	}
