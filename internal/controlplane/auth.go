@@ -16,14 +16,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 	"golang.org/x/crypto/bcrypt"
 )
 
 var (
 	// Secure shared secret across cluster replicas for stateless HMAC token verification.
-	// Defaults to a cryptographically secure random 256-bit secret if not explicitly configured in environment.
+	// Reads GATEWAY_ADMIN_SECRET or NANO_SECRET_KEY, falling back to a cryptographically secure random secret.
 	adminSecret = func() []byte {
 		sec := os.Getenv("GATEWAY_ADMIN_SECRET")
+		if sec == "" {
+			sec = os.Getenv("NANO_SECRET_KEY")
+		}
 		if sec == "" {
 			b := make([]byte, 32)
 			if _, err := rand.Read(b); err == nil {
@@ -130,19 +134,27 @@ func (h *AdminHandler) Login(c *gin.Context) {
 		return
 	}
 
+	isDefaultPass := false
+	if strings.EqualFold(user.Role, "admin") {
+		if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte("admin123")); err == nil {
+			isDefaultPass = true
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
 		"data": gin.H{
 			"token": token,
 			"user": gin.H{
-				"id":         user.ID,
-				"username":   user.Username,
-				"email":      user.Email,
-				"role":       user.Role,
-				"status":     user.Status,
-				"balance":    user.Balance,
-				"is_admin":   strings.EqualFold(user.Role, "admin"),
-				"group_name": user.GroupName,
+				"id":                  user.ID,
+				"username":            user.Username,
+				"email":               user.Email,
+				"role":                user.Role,
+				"status":              user.Status,
+				"balance":             user.Balance,
+				"is_admin":            strings.EqualFold(user.Role, "admin"),
+				"group_name":          user.GroupName,
+				"is_default_password": isDefaultPass,
 			},
 		},
 		"message": "登录成功",
@@ -163,28 +175,37 @@ func (h *AdminHandler) GetMe(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"code": 0,
 			"data": gin.H{
-				"username":   claims.Username,
-				"role":       claims.Role,
-				"status":     "active",
-				"balance":    0.0,
-				"is_admin":   strings.EqualFold(claims.Role, "admin"),
-				"group_name": "default",
+				"username":            claims.Username,
+				"role":                claims.Role,
+				"status":              "active",
+				"balance":             0.0,
+				"is_admin":            strings.EqualFold(claims.Role, "admin"),
+				"group_name":          "default",
+				"is_default_password": false,
 			},
 		})
 		return
 	}
 
+	isDefaultPass := false
+	if strings.EqualFold(user.Role, "admin") {
+		if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte("admin123")); err == nil {
+			isDefaultPass = true
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
 		"data": gin.H{
-			"id":         user.ID,
-			"username":   user.Username,
-			"email":      user.Email,
-			"role":       user.Role,
-			"status":     user.Status,
-			"balance":    user.Balance,
-			"is_admin":   strings.EqualFold(user.Role, "admin"),
-			"group_name": user.GroupName,
+			"id":                  user.ID,
+			"username":            user.Username,
+			"email":               user.Email,
+			"role":                user.Role,
+			"status":              user.Status,
+			"balance":             user.Balance,
+			"is_admin":            strings.EqualFold(user.Role, "admin"),
+			"group_name":          user.GroupName,
+			"is_default_password": isDefaultPass,
 		},
 	})
 }
@@ -577,5 +598,9 @@ func InitDefaultAdmin(repo *storage.Repository) {
 		if err == nil {
 			_ = repo.UpdateUserPassword(adminUser, string(hash))
 		}
+	}
+
+	if adminPass == "admin123" {
+		telemetry.Logger.Warn("⚠️ SECURITY WARNING: System initialized with default administrator credentials (admin/admin123). Please change the administrator password immediately via Web Console or set GATEWAY_ADMIN_PASSWORD for production environments!")
 	}
 }

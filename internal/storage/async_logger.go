@@ -132,9 +132,7 @@ func (al *AsyncLogger) worker() {
 		if len(batch) == 0 {
 			return
 		}
-		for _, rec := range batch {
-			_ = al.repo.RecordUsageLog(rec)
-		}
+		_ = al.repo.BatchRecordUsageLogs(batch)
 		batch = batch[:0]
 	}
 
@@ -199,6 +197,7 @@ func (al *AsyncLogger) redisStreamWorker(client *distributed.Client) {
 		}
 
 		ackIDs := make([]string, 0, len(msgs))
+		var streamBatch []*UsageLogRecord
 		for _, msg := range msgs {
 			ackIDs = append(ackIDs, msg.ID)
 			raw, ok := msg.Values["data"].(string)
@@ -207,8 +206,12 @@ func (al *AsyncLogger) redisStreamWorker(client *distributed.Client) {
 			}
 			var rec UsageLogRecord
 			if err := json.Unmarshal([]byte(raw), &rec); err == nil {
-				_ = al.repo.RecordUsageLog(&rec)
+				streamBatch = append(streamBatch, &rec)
 			}
+		}
+
+		if len(streamBatch) > 0 {
+			_ = al.repo.BatchRecordUsageLogs(streamBatch)
 		}
 
 		if len(ackIDs) > 0 {

@@ -445,6 +445,121 @@ func (r *Repository) RecordUsageLog(log *UsageLogRecord) error {
 	return tx.Commit()
 }
 
+// BatchRecordUsageLogs writes multiple usage logs in a single atomic transaction with aggregated cost updates.
+func (r *Repository) BatchRecordUsageLogs(logs []*UsageLogRecord) error {
+	if len(logs) == 0 {
+		return nil
+	}
+	if len(logs) == 1 {
+		return r.RecordUsageLog(logs[0])
+	}
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	keyCostMap := make(map[string]float64)
+	keyTokensMap := make(map[string]int64)
+	tenantCostMap := make(map[string]float64)
+
+	insertWithTimeSQL := r.db.Rebind(`INSERT INTO usage_logs (trace_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	insertSQL := r.db.Rebind(`INSERT INTO usage_logs (trace_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+
+	stmtWithTime, err := tx.Prepare(insertWithTimeSQL)
+	if err != nil {
+		return err
+	}
+	defer stmtWithTime.Close()
+
+	stmt, err := tx.Prepare(insertSQL)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, log := range logs {
+		if log == nil {
+			continue
+		}
+		isOff := 0
+		if log.IsOffPeak {
+			isOff = 1
+		}
+		discount := log.OffPeakDiscount
+		if discount <= 0 {
+			discount = 1.0
+		}
+		if log.TraceID == "" {
+			if log.SessionID != "" {
+				log.TraceID = log.SessionID
+			} else {
+				log.TraceID = fmt.Sprintf("tr-%x", time.Now().UnixNano())
+			}
+		}
+
+		keyVal := log.APIKey
+		if !log.CreatedAt.IsZero() {
+			_, err = stmtWithTime.Exec(log.TraceID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, log.CreatedAt.UTC().Format("2006-01-02 15:04:05"))
+		} else {
+			_, err = stmt.Exec(log.TraceID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode)
+		}
+		if err != nil {
+			return err
+		}
+
+		if keyVal != "" {
+			keyCostMap[keyVal] += log.Cost
+			keyTokensMap[keyVal] += int64(log.TotalTokens)
+		}
+		if log.TenantID != "" && log.Cost > 0 {
+			tenantCostMap[log.TenantID] += log.Cost
+		}
+	}
+
+	// Aggregated batch update for API keys
+	updateKeySQL := r.db.Rebind(`UPDATE api_keys SET used_cost = used_cost + ?, used_tokens = used_tokens + ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?`)
+	updateKeyStmt, err := tx.Prepare(updateKeySQL)
+	if err == nil {
+		defer updateKeyStmt.Close()
+		for k, cost := range keyCostMap {
+			tokens := keyTokensMap[k]
+			if cost > 0 || tokens > 0 {
+				_, _ = updateKeyStmt.Exec(cost, tokens, k)
+			}
+		}
+	}
+
+	// Aggregated batch update for user wallet balances
+	updateUserSQL := r.db.Rebind(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT user_id FROM api_keys WHERE key = ?) AND role != 'admin'`)
+	updateUserStmt, err := tx.Prepare(updateUserSQL)
+	if err == nil {
+		defer updateUserStmt.Close()
+		for k, cost := range keyCostMap {
+			if cost > 0 {
+				res, _ := updateUserStmt.Exec(cost, k)
+				if res != nil {
+					affected, _ := res.RowsAffected()
+					if affected == 0 {
+						// Fallback to tenant lookup
+						for tenantID, tCost := range tenantCostMap {
+							if tCost > 0 {
+								fallbackSQL := r.db.Rebind(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`)
+								_, _ = tx.Exec(fallbackSQL, tCost, tenantID, tenantID)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return tx.Commit()
+}
+
 // ListUsageLogs returns recent usage logs for audit and monitoring.
 func (r *Repository) ListUsageLogs(limit int, offset int) ([]*UsageLogRecord, error) {
 	return r.ListUsageLogsWithFilter(LogFilter{Limit: limit, Offset: offset})

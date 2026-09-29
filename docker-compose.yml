@@ -1,5 +1,28 @@
 services:
   # ============================================================================
+  # High-Availability Shared Relational Database (PostgreSQL 16)
+  # Provides cluster-wide transactional consistency and eliminates SQLite file lock contention
+  # ============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: airoute-postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=airoute
+      - POSTGRES_PASSWORD=airoute_cluster_secret_pass_2026
+      - POSTGRES_DB=airoute
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    expose:
+      - "5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airoute -d airoute"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ============================================================================
   # High-Performance Distributed Cache & Cluster Invalidation Broker (Redis)
   # ============================================================================
   redis:
@@ -7,8 +30,8 @@ services:
     container_name: airoute-redis
     restart: always
     command: redis-server --appendonly yes --save ""
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -29,18 +52,22 @@ services:
     restart: always
     environment:
       - TZ=Asia/Shanghai
+      - DATABASE_URL=postgres://airoute:airoute_cluster_secret_pass_2026@postgres:5432/airoute?sslmode=disable
       - REDIS_URL=redis://redis:6379/0
+      - GATEWAY_ADMIN_SECRET=airoute-cluster-admin-shared-secret-key-32b
     volumes:
       - gateway-data:/app/data
       - ./configs/config.yaml:/app/configs/config.yaml:ro
-    ports:
-      - "8081:8080"
+    expose:
+      - "8080"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 10s
       timeout: 3s
       retries: 3
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
 
@@ -56,18 +83,22 @@ services:
     restart: always
     environment:
       - TZ=Asia/Shanghai
+      - DATABASE_URL=postgres://airoute:airoute_cluster_secret_pass_2026@postgres:5432/airoute?sslmode=disable
       - REDIS_URL=redis://redis:6379/0
+      - GATEWAY_ADMIN_SECRET=airoute-cluster-admin-shared-secret-key-32b
     volumes:
       - gateway-data:/app/data
       - ./configs/config.yaml:/app/configs/config.yaml:ro
-    ports:
-      - "8082:8080"
+    expose:
+      - "8080"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 10s
       timeout: 3s
       retries: 3
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
 
@@ -87,6 +118,8 @@ services:
       - gateway-2
 
 volumes:
+  postgres-data:
+    driver: local
   gateway-data:
     driver: local
   redis-data:

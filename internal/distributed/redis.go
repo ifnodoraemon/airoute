@@ -295,3 +295,57 @@ func (c *Client) TrimStream(ctx context.Context, stream string, maxLen int64) er
 	}
 	return c.rdb.XTrimMaxLenApprox(ctx, stream, maxLen, 0).Err()
 }
+
+// inFlightQuotaAcquireLua atomically checks and reserves in-flight user quota across the cluster.
+var inFlightQuotaAcquireLua = redis.NewScript(`
+local key = KEYS[1]
+local balance = tonumber(ARGV[1])
+local minCost = tonumber(ARGV[2])
+local ttl = tonumber(ARGV[3])
+
+local current = tonumber(redis.call('GET', key) or '0')
+if balance - (current + 1) * minCost < 0 then
+    return 0
+else
+    redis.call('INCR', key)
+    redis.call('EXPIRE', key, ttl)
+    return 1
+end
+`)
+
+// inFlightQuotaReleaseLua atomically decrements user's in-flight request counter across the cluster.
+var inFlightQuotaReleaseLua = redis.NewScript(`
+local key = KEYS[1]
+local current = tonumber(redis.call('GET', key) or '0')
+if current <= 1 then
+    redis.call('DEL', key)
+else
+    redis.call('DECR', key)
+end
+return 1
+`)
+
+// TryAcquireInFlightQuota atomically checks and reserves in-flight user quota across the cluster.
+func (c *Client) TryAcquireInFlightQuota(ctx context.Context, userID int64, balance, minReserveCost float64) (bool, error) {
+	if !c.IsActive() || userID <= 0 {
+		return true, nil
+	}
+	key := fmt.Sprintf("nano:inflight:user:%d", userID)
+	ttl := 120 // 120s safety timeout to avoid permanently trapped in-flight quota if node crashes
+	res, err := inFlightQuotaAcquireLua.Run(ctx, c.rdb, []string{key}, balance, minReserveCost, ttl).Result()
+	if err != nil {
+		return false, err
+	}
+	val, ok := res.(int64)
+	return ok && val == 1, nil
+}
+
+// ReleaseInFlightQuota decrements user's in-flight request counter across the cluster.
+func (c *Client) ReleaseInFlightQuota(ctx context.Context, userID int64) error {
+	if !c.IsActive() || userID <= 0 {
+		return nil
+	}
+	key := fmt.Sprintf("nano:inflight:user:%d", userID)
+	return inFlightQuotaReleaseLua.Run(ctx, c.rdb, []string{key}).Err()
+}
+

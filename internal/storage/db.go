@@ -72,6 +72,46 @@ func (db *DB) QueryRow(query string, args ...any) *sql.Row {
 	return db.DB.QueryRow(db.Rebind(query), args...)
 }
 
+// Prepare creates a prepared statement using dialect rebind.
+func (db *DB) Prepare(query string) (*sql.Stmt, error) {
+	return db.DB.Prepare(db.Rebind(query))
+}
+
+// Tx wraps sql.Tx with dialect-aware query adaptation.
+type Tx struct {
+	*sql.Tx
+	db *DB
+}
+
+// Exec executes a query within transaction using dialect rebind.
+func (tx *Tx) Exec(query string, args ...any) (sql.Result, error) {
+	return tx.Tx.Exec(tx.db.Rebind(query), args...)
+}
+
+// Prepare creates a prepared statement within transaction using dialect rebind.
+func (tx *Tx) Prepare(query string) (*sql.Stmt, error) {
+	return tx.Tx.Prepare(tx.db.Rebind(query))
+}
+
+// Query executes a query returning rows within transaction using dialect rebind.
+func (tx *Tx) Query(query string, args ...any) (*sql.Rows, error) {
+	return tx.Tx.Query(tx.db.Rebind(query), args...)
+}
+
+// QueryRow executes a query returning a single row within transaction using dialect rebind.
+func (tx *Tx) QueryRow(query string, args ...any) *sql.Row {
+	return tx.Tx.QueryRow(tx.db.Rebind(query), args...)
+}
+
+// Begin begins a new transaction wrapped with dialect rebind support.
+func (db *DB) Begin() (*Tx, error) {
+	tx, err := db.DB.Begin()
+	if err != nil {
+		return nil, err
+	}
+	return &Tx{Tx: tx, db: db}, nil
+}
+
 // OpenDB opens either a SQLite or PostgreSQL database depending on dataSourceName.
 func OpenDB(dataSourceName string) (*DB, error) {
 	if dataSourceName == "" {

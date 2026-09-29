@@ -123,10 +123,16 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 	if !req.Stream {
 		resp, err := h.dispatcher.Dispatch(reqCtx, canonicalReq)
 		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{
+			statusCode := http.StatusBadGateway
+			errType := "api_error"
+			if strings.Contains(err.Error(), "no upstream provider available") {
+				statusCode = http.StatusNotFound
+				errType = "not_found_error"
+			}
+			c.JSON(statusCode, gin.H{
 				"type": "error",
 				"error": gin.H{
-					"type":    "api_error",
+					"type":    errType,
 					"message": err.Error(),
 				},
 			})
@@ -215,10 +221,16 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 	// Streaming SSE response for Anthropic clients
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, canonicalReq)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{
+		statusCode := http.StatusBadGateway
+		errType := "api_error"
+		if strings.Contains(err.Error(), "no upstream provider available") {
+			statusCode = http.StatusNotFound
+			errType = "not_found_error"
+		}
+		c.JSON(statusCode, gin.H{
 			"type": "error",
 			"error": gin.H{
-				"type":    "api_error",
+				"type":    errType,
 				"message": err.Error(),
 			},
 		})

@@ -121,13 +121,24 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	if !req.Stream {
 		resp, err := h.dispatcher.Dispatch(reqCtx, &req)
 		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{
-				"error": gin.H{
-					"message": err.Error(),
-					"type":    "gateway_error",
-					"code":    "upstream_failure",
-				},
-			})
+			if strings.Contains(err.Error(), "no upstream provider available") {
+				c.JSON(http.StatusNotFound, gin.H{
+					"error": gin.H{
+						"message": fmt.Sprintf("The model '%s' does not exist or has no active upstream providers configured.", req.Model),
+						"type":    "invalid_request_error",
+						"param":   "model",
+						"code":    "model_not_found",
+					},
+				})
+			} else {
+				c.JSON(http.StatusBadGateway, gin.H{
+					"error": gin.H{
+						"message": err.Error(),
+						"type":    "gateway_error",
+						"code":    "upstream_failure",
+					},
+				})
+			}
 			return
 		}
 		dur := time.Since(start)
@@ -193,13 +204,24 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	// Streaming SSE execution
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, &req)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{
-			"error": gin.H{
-				"message": err.Error(),
-				"type":    "gateway_error",
-				"code":    "upstream_failure",
-			},
-		})
+		if strings.Contains(err.Error(), "no upstream provider available") {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": gin.H{
+					"message": fmt.Sprintf("The model '%s' does not exist or has no active upstream providers configured.", req.Model),
+					"type":    "invalid_request_error",
+					"param":   "model",
+					"code":    "model_not_found",
+				},
+			})
+		} else {
+			c.JSON(http.StatusBadGateway, gin.H{
+				"error": gin.H{
+					"message": err.Error(),
+					"type":    "gateway_error",
+					"code":    "upstream_failure",
+				},
+			})
+		}
 		return
 	}
 

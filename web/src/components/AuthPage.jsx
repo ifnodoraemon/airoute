@@ -57,7 +57,9 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
       const data = await res.json();
 
       if (res.ok && data.code === 0 && data.data?.token) {
+        localStorage.setItem('airoute_token', data.data.token);
         localStorage.setItem('airoute_admin_token', data.data.token);
+        localStorage.setItem('airoute_user', JSON.stringify(data.data.user));
         localStorage.setItem('airoute_admin_user', JSON.stringify(data.data.user));
         onLoginSuccess(data.data.token, data.data.user);
       } else {
@@ -134,7 +136,9 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
       const data = await res.json();
 
       if (res.ok && data.code === 0 && data.data?.token) {
+        localStorage.setItem('airoute_token', data.data.token);
         localStorage.setItem('airoute_admin_token', data.data.token);
+        localStorage.setItem('airoute_user', JSON.stringify(data.data.user));
         localStorage.setItem('airoute_admin_user', JSON.stringify(data.data.user));
         onLoginSuccess(data.data.token, data.data.user);
       } else {
@@ -169,7 +173,9 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
           });
           const simData = await simRes.json();
           if (simRes.ok && simData.code === 0 && simData.data?.token) {
+            localStorage.setItem('airoute_token', simData.data.token);
             localStorage.setItem('airoute_admin_token', simData.data.token);
+            localStorage.setItem('airoute_user', JSON.stringify(simData.data.user));
             localStorage.setItem('airoute_admin_user', JSON.stringify(simData.data.user));
             onLoginSuccess(simData.data.token, simData.data.user);
             return;

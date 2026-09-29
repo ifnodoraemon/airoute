@@ -980,10 +980,14 @@ func (h *MCPHandler) HandleMCPInfo(c *gin.Context) {
 	origin := c.Request.Header.Get("Origin")
 	if origin == "" {
 		scheme := "http"
-		if c.Request.TLS != nil {
+		if c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https") {
 			scheme = "https"
 		}
-		origin = fmt.Sprintf("%s://%s", scheme, c.Request.Host)
+		host := c.GetHeader("X-Forwarded-Host")
+		if host == "" {
+			host = c.Request.Host
+		}
+		origin = fmt.Sprintf("%s://%s", scheme, host)
 	}
 
 	sseURL := fmt.Sprintf("%s/mcp/sse", origin)

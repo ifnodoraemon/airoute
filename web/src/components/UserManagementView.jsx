@@ -308,7 +308,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
       showToast('无法删除当前正在登录的账号', 'warning');
       return;
     }
-    if (!window.confirm(`确定要彻底删除用户 [${targetUsername}] 吗？此操作不可恢复。`)) {
+    if (!window.confirm(`确定要删除用户 [${targetUsername}] 吗？`)) {
       return;
     }
 
@@ -638,7 +638,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                           onClick={() => handleDeleteUser(u.username)}
                           disabled={isSysAdmin || isCurrentAdmin}
                           className="p-1.5 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 transition disabled:opacity-30"
-                          title="彻底删除用户"
+                          title="删除用户"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>

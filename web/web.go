@@ -4,6 +4,7 @@ import (
 	"embed"
 	"io/fs"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -33,6 +34,16 @@ func RegisterStaticRoutes(r *gin.Engine) {
 	if err == nil {
 		r.GET("/", func(c *gin.Context) {
 			c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
+		})
+
+		// SPA HTML5 History API fallback: return index.html for client-side routing under /app on page refresh
+		r.NoRoute(func(c *gin.Context) {
+			path := c.Request.URL.Path
+			if path == "/app" || strings.HasPrefix(path, "/app/") {
+				c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
+				return
+			}
+			c.JSON(http.StatusNotFound, gin.H{"error": "Endpoint not found"})
 		})
 	} else {
 		r.GET("/", func(c *gin.Context) {

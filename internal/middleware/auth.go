@@ -1,12 +1,15 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/config"
+	"github.com/ifnodoraemon/airoute/internal/distributed"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
@@ -34,6 +37,18 @@ func (t *UserQuotaTracker) TryAcquire(userID int64, balance float64) bool {
 	if userID <= 0 {
 		return true
 	}
+
+	// Cluster distributed check via Redis if active
+	if rClient := distributed.GetClient(); rClient != nil && rClient.IsActive() {
+		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+		defer cancel()
+		acquired, err := rClient.TryAcquireInFlightQuota(ctx, userID, balance, t.minReserveCost)
+		if err == nil {
+			return acquired
+		}
+		// On Redis failure, fall back to local memory below
+	}
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	inFlight := t.inFlightUsers[userID]
@@ -48,6 +63,16 @@ func (t *UserQuotaTracker) Release(userID int64) {
 	if userID <= 0 {
 		return
 	}
+
+	// Cluster distributed release via Redis if active
+	if rClient := distributed.GetClient(); rClient != nil && rClient.IsActive() {
+		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+		defer cancel()
+		if err := rClient.ReleaseInFlightQuota(ctx, userID); err == nil {
+			return
+		}
+	}
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.inFlightUsers[userID] > 1 {

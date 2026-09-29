@@ -6,6 +6,7 @@ import {
   Key,
   Terminal,
   Shield,
+  ShieldAlert,
   Send,
   Play,
   Trash2,
@@ -70,6 +71,9 @@ import McpIntegrationView from './components/McpIntegrationView';
 import UserManagementView from './components/UserManagementView';
 import WalletManagementView from './components/WalletManagementView';
 import MiddlewareStatusMatrix from './components/MiddlewareStatusMatrix';
+import ChannelsView from './components/ChannelsView';
+import KeysView from './components/KeysView';
+import LogsView from './components/LogsView';
 import { translations } from './i18n';
 
 export default function App() {
@@ -103,9 +107,46 @@ export default function App() {
   };
 
   const ALL_CONSOLE_TABS = [
-    'dashboard', 'status', 'models', 'pricing', 'channels',
+    'dashboard', 'models', 'pricing', 'channels',
     'keys', 'wallet', 'logs', 'mcp', 'users', 'playground', 'docs'
   ];
+
+  const getStoredToken = () => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem('airoute_token') || localStorage.getItem('airoute_admin_token') || '';
+  };
+
+  const getStoredUser = () => {
+    if (typeof window === 'undefined') return null;
+    const raw = localStorage.getItem('airoute_user') || localStorage.getItem('airoute_admin_user');
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  };
+
+  const setStoredAuth = (token, user) => {
+    if (typeof window === 'undefined') return;
+    if (token) {
+      localStorage.setItem('airoute_token', token);
+      localStorage.setItem('airoute_admin_token', token);
+    }
+    if (user) {
+      const userStr = typeof user === 'string' ? user : JSON.stringify(user);
+      localStorage.setItem('airoute_user', userStr);
+      localStorage.setItem('airoute_admin_user', userStr);
+    }
+  };
+
+  const clearStoredAuth = () => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem('airoute_token');
+    localStorage.removeItem('airoute_admin_token');
+    localStorage.removeItem('airoute_user');
+    localStorage.removeItem('airoute_admin_user');
+  };
 
   const getRouteFromURL = () => {
     if (typeof window === 'undefined') return { viewMode: 'landing', tab: 'dashboard', authTab: 'login' };
@@ -113,19 +154,18 @@ export default function App() {
     const searchParams = new URLSearchParams(window.location.search);
     const tabParam = (searchParams.get('tab') || '').toLowerCase();
     const route = rawHash || tabParam || '';
-    const token = localStorage.getItem('airoute_admin_token');
-    const savedUser = localStorage.getItem('airoute_admin_user');
-    let role = 'admin';
-    if (savedUser) {
-      try { role = JSON.parse(savedUser)?.role || 'admin'; } catch {}
+    const token = getStoredToken();
+    const savedUser = getStoredUser();
+    let role = 'user';
+    if (savedUser?.role) {
+      role = savedUser.role;
+    } else if (token) {
+      role = 'admin'; // fallback for legacy session
     }
     const defaultTab = role === 'admin' ? 'dashboard' : 'wallet';
 
     if (route === 'status' || route === 'service-status') {
-      if (token) {
-        return { viewMode: 'console', tab: 'status', authTab: 'login' };
-      }
-      return { viewMode: 'status', tab: 'status', authTab: 'login' };
+      return { viewMode: 'status', tab: defaultTab, authTab: 'login' };
     }
 
     if (route === 'auth' || route === 'login') {
@@ -162,22 +202,16 @@ export default function App() {
   // View mode: 'landing' (公共门户首页), 'console' (工作台), 'status' (对外状态页), 'auth' (认证页)
   const [viewMode, setViewMode] = useState(() => initialRoute.viewMode);
 
-  // Account & Authentication state
-  const [adminToken, setAdminToken] = useState(() => localStorage.getItem('airoute_admin_token') || '');
-  const [adminUser, setAdminUser] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('airoute_admin_user') || 'null');
-    } catch {
-      return null;
-    }
-  });
+  // Account & Authentication state (Unified token & user based on role)
+  const [adminToken, setAdminToken] = useState(() => getStoredToken());
+  const [adminUser, setAdminUser] = useState(() => getStoredUser());
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [authTab, setAuthTab] = useState(() => initialRoute.authTab);
 
-  // Validate admin token on startup to prevent stale token UI issues
+  // Validate token on startup to prevent stale token UI issues
   useEffect(() => {
-    const savedToken = localStorage.getItem('airoute_admin_token');
+    const savedToken = getStoredToken();
     if (savedToken) {
       fetch('/api/v1/user/me', {
         headers: { 'Authorization': `Bearer ${savedToken}` }
@@ -186,12 +220,11 @@ export default function App() {
         .then(data => {
           if (data.code === 0 && data.data) {
             setAdminUser(data.data);
-            localStorage.setItem('airoute_admin_user', JSON.stringify(data.data));
+            setStoredAuth(savedToken, data.data);
           } else {
             setAdminToken('');
             setAdminUser(null);
-            localStorage.removeItem('airoute_admin_token');
-            localStorage.removeItem('airoute_admin_user');
+            clearStoredAuth();
             if (viewMode === 'console') {
               setViewMode('landing');
               setShowLoginModal(true);
@@ -205,18 +238,20 @@ export default function App() {
   // Authenticated fetch helper for Control Plane APIs
   const adminFetch = async (url, options = {}) => {
     const headers = { ...(options.headers || {}) };
-    if (adminToken) {
-      headers['Authorization'] = `Bearer ${adminToken}`;
+    const effectiveToken = options.token || adminToken || getStoredToken();
+    if (effectiveToken) {
+      headers['Authorization'] = `Bearer ${effectiveToken}`;
     }
     try {
       const res = await fetch(url, { ...options, headers });
       if (res.status === 401 && viewMode === 'console') {
-        setAdminToken('');
-        setAdminUser(null);
-        localStorage.removeItem('airoute_admin_token');
-        localStorage.removeItem('airoute_admin_user');
-        setShowLoginModal(true);
-        showToast('登录凭证已失效，请重新登录', 'warning');
+        if (effectiveToken) {
+          setAdminToken('');
+          setAdminUser(null);
+          clearStoredAuth();
+          setShowLoginModal(true);
+          showToast('登录凭证已失效，请重新登录', 'warning');
+        }
       }
       return res;
     } catch (e) {
@@ -227,22 +262,22 @@ export default function App() {
   const handleLogout = () => {
     setAdminToken('');
     setAdminUser(null);
-    localStorage.removeItem('airoute_admin_token');
-    localStorage.removeItem('airoute_admin_user');
+    clearStoredAuth();
     setViewMode('landing');
     showToast('已安全退出账号', 'info');
   };
 
   const fetchUserProfile = async () => {
-    if (!adminToken) return;
+    const tok = adminToken || getStoredToken();
+    if (!tok) return;
     try {
       const res = await fetch('/api/v1/user/me', {
-        headers: { 'Authorization': `Bearer ${adminToken}` }
+        headers: { 'Authorization': `Bearer ${tok}` }
       });
       const data = await res.json();
       if (res.ok && data.code === 0 && data.data) {
         setAdminUser(data.data);
-        localStorage.setItem('airoute_admin_user', JSON.stringify(data.data));
+        setStoredAuth(tok, data.data);
       }
     } catch (e) {}
   };
@@ -296,7 +331,7 @@ export default function App() {
   // Automatically ensure regular user stays within permitted tabs
   useEffect(() => {
     if (adminUser && adminUser.role !== 'admin') {
-      const allowedTabs = ['wallet', 'status', 'keys', 'playground', 'pricing', 'logs', 'docs', 'models'];
+      const allowedTabs = ['wallet', 'keys', 'playground', 'pricing', 'logs', 'docs', 'models'];
       if (!allowedTabs.includes(currentTab)) {
         setCurrentTab('wallet');
       }
@@ -353,16 +388,28 @@ export default function App() {
   // Playground Modality Switcher
   const [playModality, setPlayModality] = useState('chat'); // 'chat' | 'images' | 'audio_speech' | 'audio_transcription' | 'videos' | 'embeddings'
   const [playApiKey, setPlayApiKey] = useState('');
+  const [isCustomKey, setIsCustomKey] = useState(false);
+  const [customKeyInput, setCustomKeyInput] = useState('');
   const [playLoading, setPlayLoading] = useState(false);
   const [playDurationMs, setPlayDurationMs] = useState(0);
   const [playOutput, setPlayOutput] = useState('');
 
   // Auto-select first available API key for Playground
   useEffect(() => {
-    if (!playApiKey && keys.length > 0) {
+    if (!playApiKey && keys.length > 0 && !isCustomKey) {
       setPlayApiKey(keys[0].key);
     }
-  }, [keys, playApiKey]);
+  }, [keys, playApiKey, isCustomKey]);
+
+  const getEffectivePlayApiKey = () => {
+    if (isCustomKey) return customKeyInput.trim();
+    if (playApiKey === '__none__') return '';
+    if (playApiKey) return playApiKey;
+    if (keys.length > 0) return keys[0].key;
+    return '';
+  };
+
+  const selectedKeyObj = keys.find(k => k.key === (isCustomKey ? customKeyInput.trim() : (playApiKey === '__none__' ? '' : playApiKey)));
 
   // 1. Chat & Completions state
   const [playModel, setPlayModel] = useState('');
@@ -434,30 +481,78 @@ export default function App() {
     return 'chat';
   };
 
-  // Helper to get platform-added models for a specific modality
+  // Helper to get platform-added models for a specific modality, dynamically filtered by selected API Key
   const getPlaygroundModels = (modality) => {
-    if (!models || models.length === 0) return [];
+    let list = [];
     if (modelRoutes && modelRoutes.length > 0) {
       const matched = modelRoutes.filter(r => r.modality === modality).map(r => r.model);
-      if (matched.length > 0) return matched;
+      if (matched.length > 0) list = matched;
     }
-    const matched = models.filter(m => inferClientModality(m) === modality);
-    if (matched.length > 0) return matched;
-    if (modality === 'chat') {
-      return models.filter(m => inferClientModality(m) === 'chat');
+    if (list.length === 0 && models && models.length > 0) {
+      const matched = models.filter(m => inferClientModality(m) === modality);
+      if (matched.length > 0) {
+        list = matched;
+      } else if (modality === 'chat') {
+        list = models.filter(m => inferClientModality(m) === 'chat');
+      }
     }
-    return [];
+
+    // Dynamic filtering based on currently selected API Key's allowed_models
+    if (selectedKeyObj && selectedKeyObj.allowed_models && selectedKeyObj.allowed_models.length > 0) {
+      if (!selectedKeyObj.allowed_models.includes('*')) {
+        const allowedSet = new Set(selectedKeyObj.allowed_models);
+        const filtered = list.filter(m => allowedSet.has(m));
+        // If the key explicitly configured models that match this modality
+        const extra = selectedKeyObj.allowed_models.filter(m => inferClientModality(m) === modality && !filtered.includes(m));
+        return [...filtered, ...extra];
+      }
+    }
+
+    return list;
   };
 
+  // Synchronize modality models whenever API key or available models change
+  useEffect(() => {
+    const chatModels = getPlaygroundModels('chat');
+    if (chatModels.length > 0 && !chatModels.includes(playModel)) {
+      setPlayModel(chatModels[0]);
+    }
+    const imgModels = getPlaygroundModels('images');
+    if (imgModels.length > 0 && !imgModels.includes(imgModel)) {
+      setImgModel(imgModels[0]);
+    }
+    const ttsModels = getPlaygroundModels('audio_speech');
+    if (ttsModels.length > 0 && !ttsModels.includes(ttsModel)) {
+      setTtsModel(ttsModels[0]);
+    }
+    const sttModels = getPlaygroundModels('audio_transcription');
+    if (sttModels.length > 0 && !sttModels.includes(sttModel)) {
+      setSttModel(sttModels[0]);
+    }
+    const vidModels = getPlaygroundModels('videos');
+    if (vidModels.length > 0 && !vidModels.includes(videoModel)) {
+      setVideoModel(vidModels[0]);
+    }
+    const embModels = getPlaygroundModels('embeddings');
+    if (embModels.length > 0 && !embModels.includes(embedModel)) {
+      setEmbedModel(embModels[0]);
+    }
+    const rrkModels = getPlaygroundModels('rerank');
+    if (rrkModels.length > 0 && !rrkModels.includes(rerankModel)) {
+      setRerankModel(rrkModels[0]);
+    }
+  }, [playApiKey, isCustomKey, customKeyInput, modelRoutes, models, keys]);
+
   // Load backend data
-  const fetchData = async () => {
+  const fetchData = async (overrideToken) => {
+    const opts = overrideToken ? { token: overrideToken } : {};
     try {
       const [chRes, keyRes, statsRes, mRes, routesRes] = await Promise.all([
-        adminFetch('/api/v1/admin/channels').then(r => r.json()).catch(() => ({ code: 1 })),
-        adminFetch('/api/v1/admin/keys').then(r => r.json()).catch(() => ({ code: 1 })),
-        adminFetch('/api/v1/admin/stats/overview').then(r => r.json()).catch(() => ({ code: 1 })),
-        adminFetch('/api/v1/admin/models').then(r => r.json()).catch(() => ({ code: 1 })),
-        adminFetch('/api/v1/admin/models/routes').then(r => r.json()).catch(() => ({ code: 1 })),
+        adminFetch('/api/v1/admin/channels', opts).then(r => r.json()).catch(() => ({ code: 1 })),
+        adminFetch('/api/v1/admin/keys', opts).then(r => r.json()).catch(() => ({ code: 1 })),
+        adminFetch('/api/v1/admin/stats/overview', opts).then(r => r.json()).catch(() => ({ code: 1 })),
+        adminFetch('/api/v1/admin/models', opts).then(r => r.json()).catch(() => ({ code: 1 })),
+        adminFetch('/api/v1/admin/models/routes', opts).then(r => r.json()).catch(() => ({ code: 1 })),
       ]);
 
       if (chRes.code === 0) setChannels(chRes.data || []);
@@ -497,7 +592,8 @@ export default function App() {
     }
   };
 
-  const fetchLogs = async (override = {}) => {
+  const fetchLogs = async (override = {}, overrideToken) => {
+    const opts = overrideToken ? { token: overrideToken } : {};
     setLogLoading(true);
     try {
       const p = new URLSearchParams();
@@ -525,7 +621,7 @@ export default function App() {
         if (et) p.set('end_time', new Date(et).toISOString());
       }
 
-      const res = await adminFetch(`/api/v1/admin/logs?${p.toString()}`);
+      const res = await adminFetch(`/api/v1/admin/logs?${p.toString()}`, opts);
       const data = await res.json();
       if (data.code === 0) {
         setLogs(data.data || []);
@@ -858,7 +954,7 @@ export default function App() {
 
   const generateCurlForPlayground = () => {
     const origin = window.location.origin || 'http://localhost:8080';
-    const key = playApiKey || (keys.length > 0 ? keys[0].key : 'sk-airoute-your-key');
+    const key = getEffectivePlayApiKey() || 'sk-airoute-your-key';
     return `curl -X POST "${origin}/v1/chat/completions" \\
   -H "Authorization: Bearer ${key}" \\
   -H "Content-Type: application/json" \\
@@ -1020,7 +1116,7 @@ export default function App() {
   };
 
   const handleClearLogs = async () => {
-    if (!window.confirm('⚠️ 警告：确认彻底清空所有调用日志？此操作无法撤销！')) return;
+    if (!window.confirm('⚠️ 确认清空所有调用日志？此操作无法撤销！')) return;
     try {
       const res = await adminFetch('/api/v1/admin/logs/clear', { method: 'POST' });
       const data = await res.json();
@@ -1227,7 +1323,7 @@ export default function App() {
     let firstTokenTime = null;
 
     const headers = { 'Content-Type': 'application/json' };
-    const activeKey = playApiKey || (keys.length > 0 ? keys[0].key : '');
+    const activeKey = getEffectivePlayApiKey();
     if (activeKey) {
       headers['Authorization'] = `Bearer ${activeKey}`;
       headers['x-api-key'] = activeKey;
@@ -1374,7 +1470,7 @@ export default function App() {
 
     try {
       const headers = { 'Content-Type': 'application/json' };
-      const activeKey = playApiKey || (keys.length > 0 ? keys[0].key : '');
+      const activeKey = getEffectivePlayApiKey();
       if (activeKey) {
         headers['Authorization'] = `Bearer ${activeKey}`;
       }
@@ -1419,7 +1515,7 @@ export default function App() {
 
     try {
       const headers = { 'Content-Type': 'application/json' };
-      const activeKey = playApiKey || (keys.length > 0 ? keys[0].key : '');
+      const activeKey = getEffectivePlayApiKey();
       if (activeKey) {
         headers['Authorization'] = `Bearer ${activeKey}`;
       }
@@ -1469,7 +1565,7 @@ export default function App() {
       formData.append('model', sttModel);
 
       const headers = {};
-      const activeKey = playApiKey || (keys.length > 0 ? keys[0].key : '');
+      const activeKey = getEffectivePlayApiKey();
       if (activeKey) {
         headers['Authorization'] = `Bearer ${activeKey}`;
       }
@@ -1502,7 +1598,7 @@ export default function App() {
       setVideoPollCount(attempts);
       try {
         const headers = {};
-        const activeKey = playApiKey || (keys.length > 0 ? keys[0].key : '');
+        const activeKey = getEffectivePlayApiKey();
         if (activeKey) headers['Authorization'] = `Bearer ${activeKey}`;
         const res = await fetch(`/v1/videos/tasks/${taskId}`, { headers });
         const data = await res.json();
@@ -1539,7 +1635,7 @@ export default function App() {
 
     try {
       const headers = { 'Content-Type': 'application/json' };
-      const activeKey = playApiKey || (keys.length > 0 ? keys[0].key : '');
+      const activeKey = getEffectivePlayApiKey();
       if (activeKey) {
         headers['Authorization'] = `Bearer ${activeKey}`;
       }
@@ -1590,7 +1686,7 @@ export default function App() {
 
     try {
       const headers = { 'Content-Type': 'application/json' };
-      const activeKey = playApiKey || (keys.length > 0 ? keys[0].key : '');
+      const activeKey = getEffectivePlayApiKey();
       if (activeKey) {
         headers['Authorization'] = `Bearer ${activeKey}`;
       }
@@ -1636,7 +1732,7 @@ export default function App() {
 
     try {
       const headers = { 'Content-Type': 'application/json' };
-      const activeKey = playApiKey || (keys.length > 0 ? keys[0].key : '');
+      const activeKey = getEffectivePlayApiKey();
       if (activeKey) {
         headers['Authorization'] = `Bearer ${activeKey}`;
       }
@@ -1723,13 +1819,16 @@ export default function App() {
           isOpen={showLoginModal}
           onClose={() => setShowLoginModal(false)}
           onLoginSuccess={(token, user) => {
+            setStoredAuth(token, user);
             setAdminToken(token);
             setAdminUser(user);
+            const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
+            setCurrentTab(defTab);
             setShowLoginModal(false);
             setViewMode('console');
             showToast(`欢迎回来，${user.username}！`, 'success');
-            fetchData();
-            fetchLogs();
+            fetchData(token);
+            fetchLogs({}, token);
           }}
         />
       </div>
@@ -1743,12 +1842,15 @@ export default function App() {
         <AuthPage
           initialTab={authTab}
           onLoginSuccess={(token, user) => {
+            setStoredAuth(token, user);
             setAdminToken(token);
             setAdminUser(user);
+            const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
+            setCurrentTab(defTab);
             setViewMode('console');
             showToast(`欢迎回来，${user.username}！`, 'success');
-            fetchData();
-            fetchLogs();
+            fetchData(token);
+            fetchLogs({}, token);
           }}
           onBackHome={() => setViewMode('landing')}
         />
@@ -1792,13 +1894,16 @@ export default function App() {
           isOpen={showLoginModal}
           onClose={() => setShowLoginModal(false)}
           onLoginSuccess={(token, user) => {
+            setStoredAuth(token, user);
             setAdminToken(token);
             setAdminUser(user);
+            const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
+            setCurrentTab(defTab);
             setShowLoginModal(false);
             setViewMode('console');
             showToast(`欢迎回来，${user.username}！`, 'success');
-            fetchData();
-            fetchLogs();
+            fetchData(token);
+            fetchLogs({}, token);
           }}
         />
       </div>
@@ -1888,18 +1993,6 @@ export default function App() {
               >
                 <BarChart3 className="w-4 h-4 text-indigo-500" />
                 <span>{t.navDashboard}</span>
-              </button>
-
-              <button
-                onClick={() => setCurrentTab('status')}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-                  currentTab === 'status'
-                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-                }`}
-              >
-                <Activity className="w-4 h-4 text-emerald-500" />
-                <span>{t.navStatus || '服务状态'}</span>
               </button>
 
               <button
@@ -2014,18 +2107,6 @@ export default function App() {
             /* Regular User Navigation */
             <>
               <button
-                onClick={() => setCurrentTab('status')}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-                  currentTab === 'status'
-                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-                }`}
-              >
-                <Activity className="w-4 h-4 text-emerald-500" />
-                <span>{t.navStatus || '服务状态'}</span>
-              </button>
-
-              <button
                 onClick={() => setCurrentTab('wallet')}
                 className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
                   currentTab === 'wallet'
@@ -2113,9 +2194,9 @@ export default function App() {
           <div className="flex items-center justify-between">
             <button
               type="button"
-              onClick={() => setCurrentTab('status')}
+              onClick={() => setViewMode('status')}
               className="flex items-center space-x-1.5 text-emerald-600 hover:text-emerald-700 font-medium text-xs cursor-pointer hover:underline"
-              title="查看系统运维与服务状态详情"
+              title="查看公开对外服务健康状态页面"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span>{t.statusOperationalBadge}</span>
@@ -2139,7 +2220,6 @@ export default function App() {
           <div className="flex items-center space-x-3">
             <h2 className="text-base font-bold text-slate-900 tracking-tight">
               {currentTab === 'dashboard' && t.navDashboard}
-              {currentTab === 'status' && (t.navStatus || '服务状态')}
               {currentTab === 'models' && t.navModels}
               {currentTab === 'pricing' && t.navPricing}
               {currentTab === 'channels' && t.navChannels}
@@ -2232,6 +2312,32 @@ export default function App() {
         </header>
 
         <div className="p-8 max-w-7xl w-full mx-auto space-y-6">
+          {/* Default Password Security Warning Banner for Admins */}
+          {adminUser && adminUser.role === 'admin' && adminUser.is_default_password && (
+            <div className="bg-rose-50 border border-rose-200 rounded-3xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs animate-in fade-in">
+              <div className="flex items-center space-x-3.5">
+                <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+                  <ShieldAlert className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-rose-900">
+                    安全风险预警：当前管理员使用默认初始密码 (admin123)
+                  </h4>
+                  <p className="text-xs text-rose-700 mt-0.5">
+                    为保障网关控制台与算力资产安全，强烈建议您立即修改初始密码，避免未授权访问风险。
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAccountModal(true)}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition shrink-0 cursor-pointer flex items-center space-x-1.5"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>立即修改密码</span>
+              </button>
+            </div>
+          )}
+
           {/* Low Balance Warning Banner for Regular Users */}
           {adminUser && adminUser.role !== 'admin' && Number(adminUser.balance || 0) < 5 && (
             <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-3xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs animate-in fade-in">
@@ -2580,25 +2686,6 @@ export default function App() {
             </div>
           )}
 
-          {/* 1.1 SERVICE STATUS & INFRASTRUCTURE TAB */}
-          {currentTab === 'status' && (
-            <ServiceStatus
-              isStandalone={false}
-              isLoggedIn={!!adminToken}
-              lang={lang}
-              setLang={setLang}
-              modelRoutes={modelRoutes}
-              channels={channels}
-              onRefresh={fetchData}
-              probeLatencies={channelLatencies}
-              adminFetch={adminFetch}
-              showToast={showToast}
-              onBatchProbe={handleBatchPing}
-              batchTesting={batchTesting}
-              t={t}
-            />
-          )}
-
           {/* 1.5. MODEL ROUTES TAB */}
           {currentTab === 'models' && (
             <ModelRoutesManager
@@ -2628,864 +2715,68 @@ export default function App() {
 
           {/* 2. CHANNELS / PROVIDERS TAB */}
           {currentTab === 'channels' && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white dark:bg-[#111726] p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs gap-3">
-                <div className="flex items-center space-x-2">
-                  <Server className="w-4 h-4 text-emerald-500" />
-                  <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
-                    模型服务商
-                  </h3>
-                </div>
-                <div className="flex items-center space-x-2.5">
-                  <button
-                    onClick={handleBatchPing}
-                    disabled={batchTesting || channels.length === 0}
-                    className="px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-xs font-semibold shadow-xs flex items-center space-x-1.5 transition disabled:opacity-50"
-                  >
-                    <Activity className={`w-3.5 h-3.5 ${batchTesting ? 'animate-spin' : ''}`} />
-                    <span>{batchTesting ? '体检中...' : '体检全部'}</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setEditingChannelId(null);
-                      setNewChannel({
-                        name: '',
-                        type: 'gpustack',
-                        base_url: 'http://10.232.16.83/v1-openai',
-                        api_key: '',
-                        priority: 1,
-                        weight: 10,
-                        timeout_seconds: 60,
-                        models_str: '',
-                        mapping_str: '',
-                        protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings', 'rerank', 'images'],
-                      });
-                      setProbeAlert(null);
-                      setShowChannelModal(true);
-                    }}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>接入服务商</span>
-                  </button>
-                </div>
-              </div>
-
-              {channels.length === 0 ? (
-                <div className="bg-white dark:bg-[#111726] border border-dashed border-slate-300 dark:border-slate-800 rounded-3xl p-10 text-center flex flex-col items-center justify-center space-y-3">
-                  <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800/80 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-                    <Server className="w-5 h-5" />
-                  </div>
-                  <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100">暂无服务商</h4>
-                  <button
-                    onClick={() => {
-                      setEditingChannelId(null);
-                      setNewChannel({
-                        name: '',
-                        type: 'gpustack',
-                        base_url: 'http://10.232.16.83/v1-openai',
-                        api_key: '',
-                        priority: 1,
-                        weight: 10,
-                        timeout_seconds: 60,
-                        models_str: '',
-                        mapping_str: '',
-                        protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings', 'rerank', 'images'],
-                      });
-                      setProbeAlert(null);
-                      setShowChannelModal(true);
-                    }}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>接入服务商</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {selectedChannelIds.length > 0 && (
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 px-5 py-3 rounded-2xl animate-in fade-in gap-3">
-                      <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-900 dark:text-indigo-200">
-                        <span>已选中 {selectedChannelIds.length} 项</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => handleBatchStatusChannels('active')}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer"
-                        >
-                          批量启用
-                        </button>
-                        <button
-                          onClick={() => handleBatchStatusChannels('disabled')}
-                          className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer"
-                        >
-                          批量停用
-                        </button>
-                        <button
-                          onClick={handleBatchDeleteChannels}
-                          className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl shadow-xs transition flex items-center space-x-1 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>批量删除</span>
-                        </button>
-                        <button
-                          onClick={() => setSelectedChannelIds([])}
-                          className="px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-medium rounded-xl hover:bg-slate-50 transition cursor-pointer"
-                        >
-                          取消选择
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-3xl overflow-hidden shadow-xs">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs uppercase bg-slate-50/80 dark:bg-slate-900/80">
-                          <th className="py-3.5 px-4 w-10 text-center">
-                            <input
-                              type="checkbox"
-                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                              checked={channels.length > 0 && selectedChannelIds.length === channels.length}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedChannelIds(channels.map(c => c.id));
-                                } else {
-                                  setSelectedChannelIds([]);
-                                }
-                              }}
-                            />
-                          </th>
-                          <th className="py-3.5 px-6 font-semibold">服务商名称 & 健康状态</th>
-                          <th className="py-3.5 px-6 font-semibold">服务引擎</th>
-                          <th className="py-3.5 px-6 font-semibold">下游 Base URL</th>
-                          <th className="py-3.5 px-6 font-semibold">开放功能模态</th>
-                          <th className="py-3.5 px-6 font-semibold">挂载模型与别名</th>
-                          <th className="py-3.5 px-6 font-semibold">路由优先级 / 权重</th>
-                          <th className="py-3.5 px-6 text-right font-semibold">操作</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-sm">
-                        {channels.map((ch) => (
-                          <tr key={ch.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition">
-                            <td className="py-4 px-4 text-center">
-                              <input
-                                type="checkbox"
-                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                                checked={selectedChannelIds.includes(ch.id)}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  if (e.target.checked) {
-                                    setSelectedChannelIds(prev => [...prev, ch.id]);
-                                  } else {
-                                    setSelectedChannelIds(prev => prev.filter(x => x !== ch.id));
-                                  }
-                                }}
-                              />
-                            </td>
-                            <td className="py-4 px-6 font-medium text-slate-900 dark:text-slate-100">
-                              <div className="flex items-center space-x-2">
-                              <span
-                                className={`w-2.5 h-2.5 rounded-full ${
-                                  ch.breaker_status === 'OPEN'
-                                    ? 'bg-rose-500 animate-ping'
-                                    : ch.status === 'active'
-                                    ? 'bg-emerald-500'
-                                    : 'bg-slate-400'
-                                }`}
-                              ></span>
-                              <span className="font-semibold">{ch.name}</span>
-                            </div>
-                            <div className="flex items-center space-x-1.5 mt-1">
-                              {ch.breaker_status && (
-                                <span className={`inline-block text-[10px] px-2 py-0.5 rounded font-mono font-medium ${
-                                  ch.breaker_status === 'OPEN'
-                                    ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300'
-                                    : ch.breaker_status === 'HALF-OPEN'
-                                    ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
-                                    : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
-                                }`}>
-                                  Breaker: {ch.breaker_status}
-                                </span>
-                              )}
-                              {channelLatencies[ch.id] && (
-                                <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-medium ${
-                                  channelLatencies[ch.id].success
-                                    ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                                    : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
-                                }`}>
-                                  {channelLatencies[ch.id].success ? `🟢 ${channelLatencies[ch.id].latency_ms}ms` : '🔴 异常'}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-4 px-6">
-                            <span
-                              className={`px-2.5 py-1 rounded-lg text-xs font-mono font-medium border ${
-                                ch.type === 'gemini'
-                                  ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
-                                  : ch.type === 'anthropic'
-                                  ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-                                  : ch.type === 'gpustack'
-                                  ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                                  : ch.type === 'sub2api'
-                                  ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
-                                  : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
-                              }`}
-                            >
-                              {ch.type}
-                            </span>
-                          </td>
-                          <td className="py-4 px-6 text-slate-600 dark:text-slate-400 font-mono text-xs max-w-xs">
-                            <div className="flex items-center space-x-1.5">
-                              <span className="truncate">{ch.base_url}</span>
-                              <button
-                                onClick={() => copyToClipboard(ch.base_url)}
-                                className="text-slate-400 hover:text-indigo-500 transition p-1"
-                                title="复制 Base URL"
-                              >
-                                <Copy className="w-3 h-3" />
-                              </button>
-                            </div>
-                          </td>
-                          <td className="py-4 px-6">
-                            <div className="flex flex-wrap gap-1">
-                              {(!ch.protocols || ch.protocols.length === 0) ? (
-                                <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px] text-slate-600 dark:text-slate-300 font-medium">全功能直通</span>
-                              ) : (
-                                ch.protocols.map(p => {
-                                  let label = p;
-                                  let colorClass = 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700';
-                                  if (p === 'openai_chat' || p === 'chat') { label = '💬 对话'; colorClass = 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'; }
-                                  else if (p === 'openai_response' || p === 'responses' || p === 'response') { label = '⚡ Responses'; colorClass = 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'; }
-                                  else if (p === 'openai_text' || p === 'completion') { label = '📝 补全'; colorClass = 'bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800'; }
-                                  else if (p === 'anthropic_messages' || p === 'messages') { label = '🧠 Claude'; colorClass = 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'; }
-                                  else if (p === 'images' || p === 'image_generation') { label = '🎨 生图'; colorClass = 'bg-pink-50 dark:bg-pink-950/50 text-pink-700 dark:text-pink-300 border border-pink-200 dark:border-pink-800'; }
-                                  else if (p === 'audio_speech' || p === 'tts') { label = '🔊 TTS'; colorClass = 'bg-cyan-50 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800'; }
-                                  else if (p === 'audio_transcription' || p === 'stt') { label = '🎙️ STT'; colorClass = 'bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800'; }
-                                  else if (p === 'videos' || p === 'video_generation') { label = '🎬 视频'; colorClass = 'bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'; }
-                                  else if (p === 'embeddings' || p === 'embedding') { label = '🧠 向量'; colorClass = 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'; }
-                                  else if (p === 'rerank' || p === 'reranker') { label = '🎯 重排'; colorClass = 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'; }
-                                  return (
-                                    <span key={p} className={`px-2 py-0.5 rounded text-[11px] font-medium ${colorClass}`}>
-                                      {label}
-                                    </span>
-                                  );
-                                })
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-4 px-6">
-                            <div className="flex flex-wrap gap-1 max-w-xs">
-                              {(!ch.models || ch.models.length === 0) ? (
-                                <span className="text-xs text-slate-400">未同步模型</span>
-                              ) : (
-                                ch.models.slice(0, 4).map((m) => (
-                                  <span key={m} className="px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 text-xs font-mono border border-indigo-100 dark:border-indigo-800">
-                                    {m}
-                                  </span>
-                                ))
-                              )}
-                              {ch.models && ch.models.length > 4 && (
-                                <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-mono" title={ch.models.slice(4).join(', ')}>
-                                  +{ch.models.length - 4} 更多
-                                </span>
-                              )}
-                              {ch.model_mapping && Object.keys(ch.model_mapping).length > 0 && (
-                                Object.entries(ch.model_mapping).map(([k, v]) => (
-                                  <span key={k} className="px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 text-[11px] font-mono border border-emerald-200 dark:border-emerald-800" title={`别名映射: ${k} -> ${v}`}>
-                                    🔗 {k} → {v}
-                                  </span>
-                                ))
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-4 px-6 text-slate-700 dark:text-slate-300 font-mono text-xs">
-                            <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">优先级: {ch.priority}</span>
-                            <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 ml-1">权重: {ch.weight}</span>
-                          </td>
-                          <td className="py-4 px-6 text-right space-x-2">
-                            <button
-                              onClick={() => handleTestChannel(ch)}
-                              disabled={testingId === ch.id}
-                              className="text-xs px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 font-medium transition inline-flex items-center space-x-1"
-                            >
-                              {testingId === ch.id ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
-                              <span>Ping</span>
-                            </button>
-                            <button
-                              onClick={() => handleEditChannel(ch)}
-                              className="text-xs px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/60 border border-amber-200 dark:border-amber-800 font-medium transition inline-flex items-center space-x-1"
-                            >
-                              <Edit3 className="w-3 h-3" />
-                              <span>编辑</span>
-                            </button>
-                            <button
-                              onClick={() => handleDeleteChannel(ch.id)}
-                              className="text-xs px-2.5 py-1.5 text-rose-600 dark:text-rose-400 hover:text-rose-800 dark:hover:text-rose-300 transition font-medium"
-                            >
-                              注销
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
+            <ChannelsView
+              channels={channels}
+              batchTesting={batchTesting}
+              handleBatchPing={handleBatchPing}
+              setEditingChannelId={setEditingChannelId}
+              setNewChannel={setNewChannel}
+              setProbeAlert={setProbeAlert}
+              setShowChannelModal={setShowChannelModal}
+              selectedChannelIds={selectedChannelIds}
+              setSelectedChannelIds={setSelectedChannelIds}
+              handleBatchStatusChannels={handleBatchStatusChannels}
+              handleBatchDeleteChannels={handleBatchDeleteChannels}
+              channelLatencies={channelLatencies}
+              copyToClipboard={copyToClipboard}
+              handleTestChannel={handleTestChannel}
+              testingId={testingId}
+              handleEditChannel={handleEditChannel}
+              handleDeleteChannel={handleDeleteChannel}
+            />
           )}
 
           {/* 3. API KEYS TAB */}
           {currentTab === 'keys' && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white dark:bg-[#111726] p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs gap-3">
-                <div className="flex items-center space-x-2">
-                  <Key className="w-4 h-4 text-amber-500" />
-                  <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
-                    API 访问密钥
-                  </h3>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={handleOpenCreateKey}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>新建密钥</span>
-                  </button>
-                </div>
-              </div>
-
-              {keys.length === 0 ? (
-                <div className="bg-white dark:bg-[#111726] border border-dashed border-slate-300 dark:border-slate-800 rounded-3xl p-10 text-center flex flex-col items-center justify-center space-y-3">
-                  <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800/80 flex items-center justify-center text-amber-600 dark:text-amber-400 shadow-sm">
-                    <Key className="w-6 h-6" />
-                  </div>
-                  <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100">暂无 API 密钥</h4>
-                  <button
-                    onClick={handleOpenCreateKey}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>新建密钥</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {selectedKeyIds.length > 0 && (
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 px-5 py-3 rounded-2xl animate-in fade-in gap-3">
-                      <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-900 dark:text-indigo-200">
-                        <span>已选中 {selectedKeyIds.length} 个密钥</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => handleBatchStatusKeys('active')}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer"
-                        >
-                          批量启用
-                        </button>
-                        <button
-                          onClick={() => handleBatchStatusKeys('disabled')}
-                          className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer"
-                        >
-                          批量停用
-                        </button>
-                        <button
-                          onClick={handleBatchDeleteKeys}
-                          className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl shadow-xs transition flex items-center space-x-1 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>批量注销</span>
-                        </button>
-                        <button
-                          onClick={() => setSelectedKeyIds([])}
-                          className="px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-medium rounded-xl hover:bg-slate-50 transition cursor-pointer"
-                        >
-                          取消选择
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-3xl overflow-hidden shadow-xs">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs uppercase bg-slate-50/80 dark:bg-slate-900/80">
-                          <th className="py-3.5 px-4 w-10 text-center">
-                            <input
-                              type="checkbox"
-                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                              checked={keys.length > 0 && selectedKeyIds.length === keys.length}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedKeyIds(keys.map(k => k.id));
-                                } else {
-                                  setSelectedKeyIds([]);
-                                }
-                              }}
-                            />
-                          </th>
-                          <th className="py-3.5 px-6 font-semibold">密钥名称</th>
-                          <th className="py-3.5 px-6 font-semibold">密钥 (API Key)</th>
-                          <th className="py-3.5 px-6 font-semibold">计费分组</th>
-                          <th className="py-3.5 px-6 font-semibold">已用 / 额度</th>
-                          <th className="py-3.5 px-6 font-semibold">授权模型</th>
-                          <th className="py-3.5 px-6 font-semibold">速率 (RPM)</th>
-                          <th className="py-3.5 px-6 font-semibold">状态</th>
-                          <th className="py-3.5 px-6 text-right font-semibold">操作</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-sm">
-                        {keys.map((k) => (
-                          <tr key={k.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition">
-                            <td className="py-4 px-4 text-center">
-                              <input
-                                type="checkbox"
-                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                                checked={selectedKeyIds.includes(k.id)}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  if (e.target.checked) {
-                                    setSelectedKeyIds(prev => [...prev, k.id]);
-                                  } else {
-                                    setSelectedKeyIds(prev => prev.filter(x => x !== k.id));
-                                  }
-                                }}
-                              />
-                            </td>
-                            <td className="py-4 px-6 text-slate-800 dark:text-slate-100 font-semibold">{k.tenant_id}</td>
-                            <td className="py-4 px-6 font-mono text-xs text-indigo-700 dark:text-indigo-400 font-semibold flex items-center space-x-2">
-                              <span>{k.key}</span>
-                              <button
-                                onClick={() => copyToClipboard(k.key)}
-                                className="p-1 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 transition flex items-center space-x-1 cursor-pointer"
-                                title="复制 Key"
-                              >
-                                {copiedKey === k.key ? (
-                                  <Check className="w-3.5 h-3.5 text-emerald-500" />
-                                ) : (
-                                  <Copy className="w-3.5 h-3.5" />
-                                )}
-                              </button>
-                            </td>
-                            <td className="py-4 px-6 text-xs">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-lg text-[11px] font-semibold border ${
-                                (k.group_name === 'vip')
-                                  ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/60'
-                                  : (k.group_name === 'enterprise')
-                                  ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-800/60'
-                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-                              }`}>
-                                {(k.group_name === 'vip' ? '⭐ VIP 组' : k.group_name === 'enterprise' ? '👑 企业组' : (k.group_name && k.group_name !== 'default' ? `${k.group_name} 组` : '默认组'))}
-                              </span>
-                            </td>
-                            <td className="py-4 px-6 text-xs font-mono">
-                              <span className="text-slate-900 dark:text-slate-100 font-bold">¥{Number(k.used_cost || 0).toFixed(4)}</span>
-                              <span className="text-slate-400 mx-1">/</span>
-                              <span className={k.budget > 0 ? "text-indigo-600 dark:text-indigo-400 font-medium" : "text-slate-400"}>
-                                {k.budget > 0 ? `¥${Number(k.budget).toFixed(2)}` : '不限'}
-                              </span>
-                            </td>
-                            <td className="py-4 px-6 text-xs text-slate-600 dark:text-slate-300 font-medium">
-                              {!k.allowed_models || k.allowed_models.length === 0 ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 font-semibold">全部允许</span>
-                              ) : (
-                                <span className="font-mono">{k.allowed_models.join(', ')}</span>
-                              )}
-                            </td>
-                            <td className="py-4 px-6 text-slate-600 dark:text-slate-400 font-mono text-xs">{k.rpm ? `${k.rpm} 次/分` : '不限'}</td>
-                          <td className="py-4 px-6">
-                            {k.status === 'disabled' ? (
-                              <span className="px-2.5 py-0.5 rounded-full text-xs bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60 font-medium inline-flex items-center space-x-1.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
-                                <span>已停用</span>
-                              </span>
-                            ) : (
-                              <span className="px-2.5 py-0.5 rounded-full text-xs bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 font-medium inline-flex items-center space-x-1.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                <span>正常</span>
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-4 px-6 text-right space-x-2">
-                            <button
-                              onClick={() => handleToggleKeyStatus(k)}
-                              className={`text-xs px-2.5 py-1.5 rounded-xl border font-medium transition ${
-                                k.status === 'disabled'
-                                  ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 border-emerald-200 dark:border-emerald-800/60'
-                                  : 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 hover:bg-amber-100 border-amber-200 dark:border-amber-800/60'
-                              }`}
-                              title={k.status === 'disabled' ? '恢复启用' : '暂停使用'}
-                            >
-                              {k.status === 'disabled' ? '启用' : '停用'}
-                            </button>
-                            <button
-                              onClick={() => setActiveQuickKey(k)}
-                              className="text-xs px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800/60 font-medium transition inline-flex items-center space-x-1"
-                            >
-                              <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
-                              <span>快速接入</span>
-                            </button>
-                            <button
-                              onClick={() => handleDeleteKey(k.id)}
-                              className="text-xs px-2.5 py-1.5 text-rose-600 dark:text-rose-400 hover:text-rose-800 dark:hover:text-rose-300 transition font-medium"
-                            >
-                              删除
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
+            <KeysView
+              keys={keys}
+              handleOpenCreateKey={handleOpenCreateKey}
+              selectedKeyIds={selectedKeyIds}
+              setSelectedKeyIds={setSelectedKeyIds}
+              handleBatchStatusKeys={handleBatchStatusKeys}
+              handleBatchDeleteKeys={handleBatchDeleteKeys}
+              copyToClipboard={copyToClipboard}
+              copiedKey={copiedKey}
+              handleToggleKeyStatus={handleToggleKeyStatus}
+              setActiveQuickKey={setActiveQuickKey}
+              handleDeleteKey={handleDeleteKey}
+            />
           )}
 
           {/* 4. AUDIT LOGS TAB */}
           {currentTab === 'logs' && (
-            <div className="space-y-6">
-              <div className="bg-white dark:bg-[#111726] p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-4">
-                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-9 h-9 rounded-2xl bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 flex items-center justify-center border border-sky-200/60 dark:border-sky-800/60">
-                      <History className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
-                        对话审计与请求日志
-                      </h3>
-                    </div>
-                  </div>
-
-                  {/* Actions & Search */}
-                  <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-                    {/* Active Chat/Session/Trace Filter Tag */}
-                    {sessionFilter && (
-                      <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 text-xs text-purple-700 dark:text-purple-300 animate-in fade-in">
-                        <span className="text-[11px] text-slate-400">已锁定链路/对话:</span>
-                        <span className="font-mono font-bold max-w-[140px] truncate">{sessionFilter}</span>
-                        <button
-                          onClick={() => {
-                            setSessionFilter('');
-                            fetchLogs({ sessionFilter: '' });
-                          }}
-                          className="hover:text-rose-500 ml-1 font-bold transition cursor-pointer"
-                          title="清除筛选"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    )}
-
-                    <div className="relative flex-1 sm:w-64">
-                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                      <input
-                        type="text"
-                        value={logFilter}
-                        onChange={(e) => setLogFilter(e.target.value)}
-                        placeholder="筛选 Trace ID / 对话 ID / 模型 / 渠道..."
-                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl pl-8 pr-3 py-2 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
-                      />
-                    </div>
-
-                    <button
-                      onClick={() => fetchLogs()}
-                      disabled={logLoading}
-                      className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition border border-slate-200 dark:border-slate-700 cursor-pointer"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${logLoading ? 'animate-spin' : ''}`} />
-                      <span>刷新</span>
-                    </button>
-
-                    <button
-                      onClick={handleClearLogs}
-                      className="px-3.5 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-900/60 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer"
-                      title="清空全部审计调用日志"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>清空日志</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Time Range Filter Bar */}
-                <div className="flex flex-wrap items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800/80 gap-3 text-xs">
-                  <div className="flex items-center space-x-2">
-                    <Clock className="w-3.5 h-3.5 text-slate-400" />
-                    <span className="text-slate-500 dark:text-slate-400 font-medium">时间段筛选:</span>
-                    <div className="inline-flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/80 dark:border-slate-800">
-                      {[
-                        { id: 'all', label: '全部时间' },
-                        { id: '1h', label: '最近 1 小时' },
-                        { id: 'today', label: '今天' },
-                        { id: '7d', label: '最近 7 天' },
-                        { id: 'custom', label: '自定义时间' },
-                      ].map((item) => (
-                        <button
-                          key={item.id}
-                          onClick={() => {
-                            setTimeRange(item.id);
-                            if (item.id !== 'custom') {
-                              fetchLogs({ timeRange: item.id });
-                            }
-                          }}
-                          className={`px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
-                            timeRange === item.id
-                              ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-2xs font-semibold'
-                              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                          }`}
-                        >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Custom time picker inputs */}
-                  {timeRange === 'custom' && (
-                    <div className="flex items-center space-x-2 animate-in fade-in">
-                      <input
-                        type="datetime-local"
-                        value={customStartTime}
-                        onChange={(e) => setCustomStartTime(e.target.value)}
-                        className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1 text-xs text-slate-700 dark:text-slate-200"
-                        title="开始时间"
-                      />
-                      <span className="text-slate-400">至</span>
-                      <input
-                        type="datetime-local"
-                        value={customEndTime}
-                        onChange={(e) => setCustomEndTime(e.target.value)}
-                        className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1 text-xs text-slate-700 dark:text-slate-200"
-                        title="结束时间"
-                      />
-                      <button
-                        onClick={() => fetchLogs({ timeRange: 'custom' })}
-                        className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition cursor-pointer"
-                      >
-                        查询
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Batch Action Bar */}
-              {selectedLogIds.length > 0 && (
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 px-5 py-3 rounded-2xl animate-in fade-in gap-3">
-                  <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-900 dark:text-indigo-200">
-                    <span>已选中 {selectedLogIds.length} 条调用日志</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={handleBatchDeleteLogs}
-                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl shadow-xs transition flex items-center space-x-1 cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>批量删除</span>
-                    </button>
-                    <button
-                      onClick={() => setSelectedLogIds([])}
-                      className="px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-medium rounded-xl hover:bg-slate-50 transition cursor-pointer"
-                    >
-                      取消选择
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-3xl overflow-hidden shadow-xs">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs uppercase bg-slate-50/80 dark:bg-slate-900/80">
-                      <th className="py-3.5 px-4 w-10 text-center">
-                        <input
-                          type="checkbox"
-                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                          checked={filteredLogs.length > 0 && selectedLogIds.length === filteredLogs.length}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedLogIds(filteredLogs.map(l => l.id));
-                            } else {
-                              setSelectedLogIds([]);
-                            }
-                          }}
-                        />
-                      </th>
-                      <th className="py-3.5 px-6 font-semibold">请求时间</th>
-                      <th className="py-3.5 px-6 font-semibold">Trace ID / 对话 ID</th>
-                      <th className="py-3.5 px-6 font-semibold">请求模型 (Model)</th>
-                      <th className="py-3.5 px-6 font-semibold">命中渠道 (Provider)</th>
-                      <th className="py-3.5 px-6 font-semibold">租户 / API 密钥</th>
-                      <th className="py-3.5 px-6 font-semibold">Token (输入/输出/总)</th>
-                      <th className="py-3.5 px-6 font-semibold">扣费 / 缓存命中</th>
-                      <th className="py-3.5 px-6 font-semibold">耗时 / TTFT</th>
-                      <th className="py-3.5 px-6 text-right font-semibold">状态与详情</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-sm font-mono text-xs">
-                    {filteredLogs.map((log) => (
-                      <tr
-                        key={log.id}
-                        onClick={() => setActiveLogDetail(log)}
-                        className="hover:bg-indigo-50/40 dark:hover:bg-indigo-950/30 transition cursor-pointer group"
-                      >
-                        <td className="py-4 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                            checked={selectedLogIds.includes(log.id)}
-                            onChange={(e) => {
-                              e.stopPropagation();
-                              if (e.target.checked) {
-                                setSelectedLogIds(prev => [...prev, log.id]);
-                              } else {
-                                setSelectedLogIds(prev => prev.filter(x => x !== log.id));
-                              }
-                            }}
-                          />
-                        </td>
-                        <td className="py-4 px-6 text-slate-500 dark:text-slate-400 font-sans whitespace-nowrap">
-                          {log.created_at ? new Date(log.created_at).toLocaleTimeString() : '刚刚'}
-                        </td>
-                        <td className="py-4 px-6 font-mono text-xs">
-                          <div className="flex items-center space-x-1.5">
-                            <span className="text-purple-600 dark:text-purple-400 truncate max-w-[130px] font-semibold" title={log.trace_id}>
-                              {log.trace_id ? log.trace_id : <span className="text-slate-400 font-sans">-</span>}
-                            </span>
-                            {log.trace_id && (
-                              <>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    navigator.clipboard.writeText(log.trace_id);
-                                    showToast('Trace ID 已复制', 'success');
-                                  }}
-                                  className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-slate-600 transition"
-                                  title="复制 Trace ID"
-                                >
-                                  <Copy className="w-3 h-3" />
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSessionFilter(log.trace_id);
-                                    fetchLogs({ sessionFilter: log.trace_id });
-                                    showToast(`已筛选: ${log.trace_id}`, 'info');
-                                  }}
-                                  className="p-1 hover:bg-purple-50 dark:hover:bg-purple-900/50 rounded text-purple-600 dark:text-purple-400 transition"
-                                  title="按 Trace ID 快速过滤"
-                                >
-                                  <Search className="w-3 h-3" />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                          {log.session_id && (
-                            <span className="block text-[10px] text-slate-400 truncate max-w-[130px]" title={`会话: ${log.session_id}`}>
-                              会话: {log.session_id}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-4 px-6 font-semibold text-slate-900 dark:text-slate-100 font-mono">
-                          <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 rounded-md border border-indigo-100 dark:border-indigo-800/60">
-                            {log.model || '-'}
-                          </span>
-                        </td>
-                        <td className="py-4 px-6 text-slate-700 dark:text-slate-300 font-sans">
-                          {log.channel ? (
-                            <span className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 rounded-md border border-emerald-100 dark:border-emerald-800/60">
-                              {log.channel}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400">直通/多源</span>
-                          )}
-                        </td>
-                        <td className="py-4 px-6 text-slate-600 dark:text-slate-300 font-sans">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200">{log.tenant_id || 'anonymous'}</span>
-                          {log.api_key && (
-                            <span className="block text-[10px] text-slate-400 font-mono mt-0.5 truncate max-w-[120px]">
-                              {log.api_key}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-4 px-6 text-slate-700 dark:text-slate-300 font-sans">
-                          {log.total_tokens > 0 ? (
-                            <span>
-                              {log.prompt_tokens} + {log.completion_tokens} = <strong className="text-indigo-600 dark:text-indigo-400">{log.total_tokens}</strong>
-                            </span>
-                          ) : (
-                            <span className="text-slate-400">-</span>
-                          )}
-                        </td>
-                        <td className="py-4 px-6 text-slate-700 dark:text-slate-300 font-sans">
-                          <div className="flex items-center space-x-1.5">
-                            <span className="font-bold text-slate-900 dark:text-slate-100 font-mono">
-                              ¥{(log.cost || 0).toFixed(4)}
-                            </span>
-                            {log.is_off_peak && (
-                              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200" title={`分时计费优惠 ${(log.off_peak_discount || 0.5) * 100}%`}>
-                                🌙 闲时 {Math.round((log.off_peak_discount || 0.5) * 10)}折
-                              </span>
-                            )}
-                          </div>
-                          {log.cached_tokens > 0 ? (
-                            <span className="block text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">
-                              ⚡ 缓存: {log.cached_tokens} (省 90%)
-                            </span>
-                          ) : (
-                            <span className="block text-[10px] text-slate-400 mt-0.5">无缓存命中</span>
-                          )}
-                        </td>
-                        <td className="py-4 px-6 text-slate-700 dark:text-slate-300 font-sans">
-                          <span className="font-bold text-slate-900 dark:text-slate-100">{log.duration_ms} ms</span>
-                          {log.ttft_ms > 0 && (
-                            <span className="block text-[11px] text-amber-600 dark:text-amber-400">TTFT: {log.ttft_ms} ms</span>
-                          )}
-                        </td>
-                        <td className="py-4 px-6 text-right font-sans space-x-2">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                              log.status_code === 200
-                                ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                                : log.status_code === 429
-                                ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
-                                : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
-                            }`}
-                          >
-                            {log.status_code || 200}
-                          </span>
-                          <span className="text-[11px] text-indigo-600 dark:text-indigo-400 group-hover:underline">
-                            详情 →
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteSingleLog(log.id);
-                            }}
-                            className="p-1 text-slate-400 hover:text-rose-600 transition rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/50 inline-flex items-center align-middle"
-                            title="删除此记录"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                    {filteredLogs.length === 0 && (
-                      <tr>
-                        <td colSpan="10" className="py-12 text-center text-slate-400 font-sans">
-                          暂无匹配的审计调用记录
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <LogsView
+              sessionFilter={sessionFilter}
+              setSessionFilter={setSessionFilter}
+              logFilter={logFilter}
+              setLogFilter={setLogFilter}
+              fetchLogs={fetchLogs}
+              logLoading={logLoading}
+              handleClearLogs={handleClearLogs}
+              timeRange={timeRange}
+              setTimeRange={setTimeRange}
+              customStartTime={customStartTime}
+              setCustomStartTime={setCustomStartTime}
+              customEndTime={customEndTime}
+              setCustomEndTime={setCustomEndTime}
+              selectedLogIds={selectedLogIds}
+              setSelectedLogIds={setSelectedLogIds}
+              handleBatchDeleteLogs={handleBatchDeleteLogs}
+              filteredLogs={filteredLogs}
+              setActiveLogDetail={setActiveLogDetail}
+              showToast={showToast}
+              handleDeleteSingleLog={handleDeleteSingleLog}
+            />
           )}
 
           {/* 5. MCP AGENT TAB */}
@@ -3579,27 +2870,97 @@ export default function App() {
                     </h3>
                   </div>
 
-                  {/* Common: API Key input */}
+                  {/* Common: API Key selector & Allowed Models link */}
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">API 访问密钥 (可选)</label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
+                        <Key className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>API 访问密钥 (关联模型权限)</span>
+                      </label>
                       {keys.length > 0 && (
                         <button
                           type="button"
-                          onClick={() => setPlayApiKey(keys[0].key)}
-                          className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline"
+                          onClick={() => {
+                            setIsCustomKey(!isCustomKey);
+                            if (isCustomKey && keys.length > 0) {
+                              setPlayApiKey(keys[0].key);
+                            }
+                          }}
+                          className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer font-medium"
                         >
-                          填入首个密钥 ({keys[0].tenant_id})
+                          {isCustomKey ? '切换为下拉选择' : '自定义输入密钥'}
                         </button>
                       )}
                     </div>
-                    <input
-                      type="text"
-                      value={playApiKey}
-                      onChange={(e) => setPlayApiKey(e.target.value)}
-                      placeholder={keys.length > 0 ? `留空默认使用: ${keys[0].key} (${keys[0].tenant_id || '首个密钥'})` : 'sk-airoute-xxxx (留空将使用网关免密直通)'}
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono"
-                    />
+
+                    {isCustomKey || keys.length === 0 ? (
+                      <div className="space-y-1">
+                        <input
+                          type="text"
+                          value={customKeyInput}
+                          onChange={(e) => setCustomKeyInput(e.target.value)}
+                          placeholder={keys.length > 0 ? 'sk-airoute-xxxx (输入自定义密钥)' : 'sk-airoute-xxxx (留空将使用网关免密直通)'}
+                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono"
+                        />
+                        <p className="text-[11px] text-slate-400">
+                          {keys.length === 0 ? '当前账号暂无 API Key，留空可直接测试免密直通' : '正在使用自定义手动输入的密钥进行演练测试'}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <select
+                          value={playApiKey}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '__custom__') {
+                              setIsCustomKey(true);
+                              setCustomKeyInput('');
+                            } else {
+                              setPlayApiKey(val);
+                            }
+                          }}
+                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono"
+                        >
+                          {keys.map((k) => {
+                            const isLimited = k.allowed_models && k.allowed_models.length > 0 && !k.allowed_models.includes('*');
+                            const modelDesc = isLimited ? `限定 ${k.allowed_models.length} 个模型` : '全模型可用';
+                            const title = `${k.tenant_id ? k.tenant_id + ' - ' : ''}${k.key.slice(0, 10)}...${k.key.slice(-4)} (${modelDesc})`;
+                            return (
+                              <option key={k.key || k.id} value={k.key}>
+                                {title}
+                              </option>
+                            );
+                          })}
+                          <option value="__none__">免密直通 (不带 API Key)</option>
+                          <option value="__custom__">+ 手动输入其它密钥...</option>
+                        </select>
+
+                        {/* Selected Key Permission Details */}
+                        {selectedKeyObj && (
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md font-medium border ${
+                              selectedKeyObj.allowed_models && selectedKeyObj.allowed_models.length > 0 && !selectedKeyObj.allowed_models.includes('*')
+                                ? 'bg-amber-50 text-amber-700 border-amber-200/80'
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-200/80'
+                            }`}>
+                              {selectedKeyObj.allowed_models && selectedKeyObj.allowed_models.length > 0 && !selectedKeyObj.allowed_models.includes('*')
+                                ? `授权模型 (${selectedKeyObj.allowed_models.length}个): ${selectedKeyObj.allowed_models.join(', ')}`
+                                : '模型权限: 全部可用'}
+                            </span>
+                            {selectedKeyObj.budget > 0 && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/80 font-medium">
+                                额度: ¥{Number(selectedKeyObj.budget).toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {playApiKey === '__none__' && (
+                          <div className="text-[11px] text-slate-500 bg-slate-100/80 px-2 py-1 rounded-md">
+                            💡 已选择免密直通模式，网关将跳过 API Key 校验直接代理转发
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* 1. CHAT CONTROLS */}
@@ -3634,7 +2995,9 @@ export default function App() {
                           </select>
                         ) : (
                           <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                            当前未挂载可用模型，请先前往【模型服务商】接入服务商并同步模型。
+                            {selectedKeyObj && selectedKeyObj.allowed_models && !selectedKeyObj.allowed_models.includes('*')
+                              ? `当前选中的 API Key 未授权对话模型权限 (已授权模型: ${selectedKeyObj.allowed_models.join(', ') || '无'})`
+                              : '当前未挂载可用模型，请先前往【模型服务商】接入服务商并同步模型。'}
                           </div>
                         )}
                       </div>
@@ -3687,7 +3050,9 @@ export default function App() {
                           </select>
                         ) : (
                           <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                            平台暂无已添加的生图模型，请先前往【模型路由】配置。
+                            {selectedKeyObj && selectedKeyObj.allowed_models && !selectedKeyObj.allowed_models.includes('*')
+                              ? `当前选中的 API Key 未授权生图模型权限 (已授权模型: ${selectedKeyObj.allowed_models.join(', ') || '无'})`
+                              : '平台暂无已添加的生图模型，请先前往【模型路由】配置。'}
                           </div>
                         )}
                       </div>
@@ -3738,7 +3103,9 @@ export default function App() {
                           </select>
                         ) : (
                           <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                            平台暂无已添加的语音合成模型，请先前往【模型路由】配置。
+                            {selectedKeyObj && selectedKeyObj.allowed_models && !selectedKeyObj.allowed_models.includes('*')
+                              ? `当前选中的 API Key 未授权 TTS 语音合成模型权限 (已授权模型: ${selectedKeyObj.allowed_models.join(', ') || '无'})`
+                              : '平台暂无已添加的语音合成模型，请先前往【模型路由】配置。'}
                           </div>
                         )}
                       </div>
@@ -3792,7 +3159,9 @@ export default function App() {
                           </select>
                         ) : (
                           <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                            平台暂无已添加的语音识别模型，请先前往【模型路由】配置。
+                            {selectedKeyObj && selectedKeyObj.allowed_models && !selectedKeyObj.allowed_models.includes('*')
+                              ? `当前选中的 API Key 未授权语音识别模型权限 (已授权模型: ${selectedKeyObj.allowed_models.join(', ') || '无'})`
+                              : '平台暂无已添加的语音识别模型，请先前往【模型路由】配置。'}
                           </div>
                         )}
                       </div>
@@ -3826,7 +3195,9 @@ export default function App() {
                           </select>
                         ) : (
                           <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                            平台暂无已添加的视频生成模型，请先前往【模型路由】配置。
+                            {selectedKeyObj && selectedKeyObj.allowed_models && !selectedKeyObj.allowed_models.includes('*')
+                              ? `当前选中的 API Key 未授权视频生成模型权限 (已授权模型: ${selectedKeyObj.allowed_models.join(', ') || '无'})`
+                              : '平台暂无已添加的视频生成模型，请先前往【模型路由】配置。'}
                           </div>
                         )}
                       </div>
@@ -3863,7 +3234,9 @@ export default function App() {
                           </select>
                         ) : (
                           <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                            平台暂无已添加的向量模型，请先前往【模型路由】配置。
+                            {selectedKeyObj && selectedKeyObj.allowed_models && !selectedKeyObj.allowed_models.includes('*')
+                              ? `当前选中的 API Key 未授权向量模型权限 (已授权模型: ${selectedKeyObj.allowed_models.join(', ') || '无'})`
+                              : '平台暂无已添加的向量模型，请先前往【模型路由】配置。'}
                           </div>
                         )}
                       </div>
@@ -3887,7 +3260,9 @@ export default function App() {
                           </select>
                         ) : (
                           <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                            平台暂无已添加的重排模型，请先前往【模型路由】配置。
+                            {selectedKeyObj && selectedKeyObj.allowed_models && !selectedKeyObj.allowed_models.includes('*')
+                              ? `当前选中的 API Key 未授权重排模型权限 (已授权模型: ${selectedKeyObj.allowed_models.join(', ') || '无'})`
+                              : '平台暂无已添加的重排模型，请先前往【模型路由】配置。'}
                           </div>
                         )}
                       </div>
@@ -4652,11 +4027,14 @@ export default function App() {
                   </div>
                 )}
 
-                {docsSection === 'quickstart' && (
+                {docsSection === 'quickstart' && (() => {
+                  const docOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080';
+                  const docBaseUrl = `${docOrigin}/v1`;
+                  return (
                   <div className="space-y-4">
                     <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
                       <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Python OpenAI SDK 接入指南</h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">将官方 OpenAI SDK 的 base_url 直接指向 Airoute 网关入口即可。</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">将官方 OpenAI SDK 的 base_url 直接指向 Airoute 网关入口即可（自适应当前访问域名与端口）。</p>
                     </div>
 
                     <div className="relative group">
@@ -4664,7 +4042,7 @@ export default function App() {
 {`from openai import OpenAI
 
 client = OpenAI(
-    base_url="http://localhost:8080/v1",  # Airoute 负载均衡端口
+    base_url="${docBaseUrl}",  # Airoute 网关入口 (自适应当前主机与端口)
     api_key="sk-airoute-xxxx",               # 在工作台签发的客户端访问密钥
 )
 
@@ -4679,7 +4057,7 @@ for chunk in response:
     print(content, end="", flush=True)`}
                       </pre>
                       <button
-                        onClick={() => copyToClipboard(`from openai import OpenAI\n\nclient = OpenAI(\n    base_url="http://localhost:8080/v1",\n    api_key="sk-airoute-xxxx",\n)\n\nresponse = client.chat.completions.create(\n    model="deepseek-v3",\n    messages=[{"role": "user", "content": "你好！"}],\n    stream=True,\n)\n\nfor chunk in response:\n    content = chunk.choices[0].delta.content or ""\n    print(content, end="", flush=True)`)}
+                        onClick={() => copyToClipboard(`from openai import OpenAI\n\nclient = OpenAI(\n    base_url="${docBaseUrl}",\n    api_key="sk-airoute-xxxx",\n)\n\nresponse = client.chat.completions.create(\n    model="deepseek-v3",\n    messages=[{"role": "user", "content": "你好！"}],\n    stream=True,\n)\n\nfor chunk in response:\n    content = chunk.choices[0].delta.content or ""\n    print(content, end="", flush=True)`)}
                         className="absolute top-3 right-3 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] font-mono flex items-center space-x-1"
                       >
                         <Copy className="w-3 h-3" />
@@ -4700,16 +4078,19 @@ for chunk in response:
                     <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
                       <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-2">cURL 极速调试命令:</h4>
                       <pre className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-mono text-slate-700 dark:text-slate-300 overflow-x-auto">
-{`curl -X POST http://localhost:8080/v1/chat/completions \\
+{`curl -X POST "${docBaseUrl}/chat/completions" \\
   -H "Authorization: Bearer sk-airoute-xxxx" \\
   -H "Content-Type: application/json" \\
   -d '{"model": "deepseek-v3", "messages": [{"role": "user", "content": "Ping"}], "stream": true}'`}
                       </pre>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
 
-                {docsSection === 'claude' && (
+                {docsSection === 'claude' && (() => {
+                  const docOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080';
+                  return (
                   <div className="space-y-4">
                     <div className="border-b border-slate-100 pb-3">
                       <h3 className="text-base font-bold text-slate-900">Anthropic Claude Messages API 接入</h3>
@@ -4720,7 +4101,7 @@ for chunk in response:
 {`import anthropic
 
 client = anthropic.Anthropic(
-    base_url="http://localhost:8080",  # 网关根路径，将自动请求 /v1/messages
+    base_url="${docOrigin}",  # 网关根路径，将自动请求 /v1/messages
     api_key="sk-airoute-xxxx",            # 在工作台签发的客户端访问密钥
 )
 
@@ -4744,7 +4125,7 @@ print(message.content[0].text)`}
                     <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
                       <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">Anthropic Token 预估计算 (/v1/messages/count_tokens):</h4>
                       <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl text-xs font-mono overflow-x-auto">
-{`curl -X POST http://localhost:8080/v1/messages/count_tokens \\
+{`curl -X POST "${docOrigin}/v1/messages/count_tokens" \\
   -H "x-api-key: sk-airoute-xxxx" \\
   -H "anthropic-version: 2023-06-01" \\
   -H "Content-Type: application/json" \\
@@ -4755,7 +4136,8 @@ print(message.content[0].text)`}
                       </pre>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
 
                 {docsSection === 'multimodal' && (
                   <div className="space-y-4">
@@ -5358,12 +4740,15 @@ helm install airoute ./helm/airoute -n gateway --create-namespace
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
         onLoginSuccess={(token, user) => {
+          setStoredAuth(token, user);
           setAdminToken(token);
           setAdminUser(user);
+          const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
+          setCurrentTab(defTab);
           setShowLoginModal(false);
           showToast(`欢迎回来，${user.username}！`, 'success');
-          fetchData();
-          fetchLogs();
+          fetchData(token);
+          fetchLogs({}, token);
         }}
       />
     </div>
