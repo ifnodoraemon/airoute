@@ -53,9 +53,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
 
       if (res.ok && data.code === 0 && data.data?.token) {
         localStorage.setItem('airoute_token', data.data.token);
-        localStorage.setItem('airoute_admin_token', data.data.token);
         localStorage.setItem('airoute_user', JSON.stringify(data.data.user));
-        localStorage.setItem('airoute_admin_user', JSON.stringify(data.data.user));
         onLoginSuccess(data.data.token, data.data.user);
         onClose();
       } else {
@@ -134,9 +132,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
 
       if (res.ok && data.code === 0 && data.data?.token) {
         localStorage.setItem('airoute_token', data.data.token);
-        localStorage.setItem('airoute_admin_token', data.data.token);
         localStorage.setItem('airoute_user', JSON.stringify(data.data.user));
-        localStorage.setItem('airoute_admin_user', JSON.stringify(data.data.user));
         onLoginSuccess(data.data.token, data.data.user);
         onClose();
       } else {
@@ -162,9 +158,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
       const data = await res.json();
       if (res.ok && data.code === 0 && data.data?.token) {
         localStorage.setItem('airoute_token', data.data.token);
-        localStorage.setItem('airoute_admin_token', data.data.token);
         localStorage.setItem('airoute_user', JSON.stringify(data.data.user));
-        localStorage.setItem('airoute_admin_user', JSON.stringify(data.data.user));
         onLoginSuccess(data.data.token, data.data.user);
         onClose();
       } else {

@@ -130,12 +130,10 @@ export default function App() {
     if (typeof window === 'undefined') return;
     if (token) {
       localStorage.setItem('airoute_token', token);
-      localStorage.setItem('airoute_admin_token', token);
     }
     if (user) {
       const userStr = typeof user === 'string' ? user : JSON.stringify(user);
       localStorage.setItem('airoute_user', userStr);
-      localStorage.setItem('airoute_admin_user', userStr);
     }
   };
 
@@ -159,7 +157,7 @@ export default function App() {
     if (savedUser?.role) {
       role = savedUser.role;
     } else if (token) {
-      role = 'admin'; // fallback for legacy session
+      role = 'user';
     }
     const defaultTab = role === 'admin' ? 'dashboard' : 'wallet';
 

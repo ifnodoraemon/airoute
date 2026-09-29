@@ -314,6 +314,18 @@ func (r *Repository) CreateAPIKey(rec *APIKeyRecord) error {
 	if rec.GroupName == "" {
 		rec.GroupName = "default"
 	}
+	if rec.UserID <= 0 {
+		if rec.TenantID != "" {
+			if u, _ := r.GetUserByUsername(rec.TenantID); u != nil && u.ID > 0 {
+				rec.UserID = u.ID
+			}
+		}
+		if rec.UserID <= 0 {
+			if admin, _ := r.GetUserByUsername("admin"); admin != nil && admin.ID > 0 {
+				rec.UserID = admin.ID
+			}
+		}
+	}
 
 	res, err := r.db.Exec(`INSERT INTO api_keys (key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, used_cost, group_name, user_id, status, format_validation, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 		rec.Key, rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, rec.UsedTokens, rec.UsedCost, rec.GroupName, rec.UserID, rec.Status, rec.FormatValidation)
@@ -432,8 +444,14 @@ func (r *Repository) RecordUsageLog(log *UsageLogRecord) error {
 			if res != nil {
 				affected, _ := res.RowsAffected()
 				if affected == 0 && log.TenantID != "" {
-					_, _ = tx.Exec(r.db.Rebind(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`),
-						log.Cost, log.TenantID, log.TenantID)
+					var isOwnerAdmin bool
+					row := tx.QueryRow(r.db.Rebind(`SELECT (role = 'admin') FROM users WHERE id = (SELECT user_id FROM api_keys WHERE key = ?)`), keyVal)
+					if err := row.Scan(&isOwnerAdmin); err == nil && isOwnerAdmin {
+						// Admin keys are exempt from balance deduction; do not fallback to tenant
+					} else {
+						_, _ = tx.Exec(r.db.Rebind(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`),
+							log.Cost, log.TenantID, log.TenantID)
+					}
 				}
 			}
 		}
@@ -547,9 +565,15 @@ func (r *Repository) BatchRecordUsageLogs(logs []*UsageLogRecord) error {
 				if res != nil {
 					affected, _ := res.RowsAffected()
 					if affected == 0 {
-						// Delegate to tenant deduction
-						if tID := keyTenantMap[k]; tID != "" {
-							orphanTenantCostMap[tID] += cost
+						var isOwnerAdmin bool
+						row := tx.QueryRow(r.db.Rebind(`SELECT (role = 'admin') FROM users WHERE id = (SELECT user_id FROM api_keys WHERE key = ?)`), k)
+						if err := row.Scan(&isOwnerAdmin); err == nil && isOwnerAdmin {
+							// Admin keys are exempt; do not fallback to tenant
+						} else {
+							// Delegate to tenant deduction
+							if tID := keyTenantMap[k]; tID != "" {
+								orphanTenantCostMap[tID] += cost
+							}
 						}
 					}
 				}

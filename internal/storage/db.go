@@ -498,6 +498,21 @@ func (db *DB) migrate() error {
 				return nil
 			},
 		},
+		{
+			Version: 6,
+			Name:    "clean_legacy_orphan_api_keys",
+			Up: func(db *DB) error {
+				_, _ = db.DB.Exec(`
+					UPDATE api_keys 
+					SET user_id = COALESCE((SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1), 1)
+					WHERE user_id <= 0 OR user_id NOT IN (SELECT id FROM users);
+					UPDATE api_keys SET group_name = 'default' WHERE group_name IS NULL OR group_name = '';
+					UPDATE api_keys SET status = 'active' WHERE status IS NULL OR status = '';
+					UPDATE api_keys SET format_validation = '' WHERE format_validation IS NULL;
+				`)
+				return nil
+			},
+		},
 	}
 	return db.runMigrations(migrations)
 }
@@ -727,6 +742,21 @@ func (db *DB) migratePostgres() error {
 						ALTER TABLE api_keys ADD COLUMN format_validation VARCHAR(32) DEFAULT '';
 					END IF;
 				END $$;
+				`)
+				return nil
+			},
+		},
+		{
+			Version: 6,
+			Name:    "clean_legacy_orphan_api_keys",
+			Up: func(db *DB) error {
+				_, _ = db.DB.Exec(`
+					UPDATE api_keys 
+					SET user_id = COALESCE((SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1), 1)
+					WHERE user_id <= 0 OR user_id NOT IN (SELECT id FROM users);
+					UPDATE api_keys SET group_name = 'default' WHERE group_name IS NULL OR group_name = '';
+					UPDATE api_keys SET status = 'active' WHERE status IS NULL OR status = '';
+					UPDATE api_keys SET format_validation = '' WHERE format_validation IS NULL;
 				`)
 				return nil
 			},

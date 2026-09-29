@@ -648,7 +648,7 @@ func ensureAdminToken(endpoint, token string) string {
 		"username": "admin",
 		"password": "admin123",
 	})
-	resp, err := http.Post(endpoint+"/api/v1/admin/auth/login", "application/json", bytes.NewReader(loginPayload))
+	resp, err := http.Post(endpoint+"/api/v1/auth/login", "application/json", bytes.NewReader(loginPayload))
 	if err == nil {
 		defer resp.Body.Close()
 		var res struct {

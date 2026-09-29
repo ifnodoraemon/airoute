@@ -224,3 +224,66 @@ func Test_UserDeletion_CascadesAPIKeys(t *testing.T) {
 	}
 }
 
+// Test_CleanLegacyTechDebt_OrphanKeysAndAdminExemption tests:
+// 1. Keys created without UserID are automatically bound to admin if no tenant matches.
+// 2. Admin keys do not trigger tenant balance deduction.
+func Test_CleanLegacyTechDebt_OrphanKeysAndAdminExemption(t *testing.T) {
+	db, err := storage.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("failed to open memory db: %v", err)
+	}
+	defer db.Close()
+
+	repo := storage.NewRepository(db)
+	_ = repo.EnsureDefaultAdmin("admin", "admin123")
+	admin, err := repo.GetUserByUsername("admin")
+	if err != nil || admin == nil {
+		t.Fatalf("failed to get admin user: %v", err)
+	}
+
+	// Create key without UserID
+	orphanKey := &storage.APIKeyRecord{
+		Key:      "sk-unassigned-test-key",
+		TenantID: "some-unregistered-tenant",
+	}
+	if err := repo.CreateAPIKey(orphanKey); err != nil {
+		t.Fatalf("failed to create key: %v", err)
+	}
+
+	savedKey, err := repo.GetAPIKeyByKey("sk-unassigned-test-key")
+	if err != nil || savedKey == nil {
+		t.Fatalf("failed to get key: %v", err)
+	}
+	if savedKey.UserID != admin.ID {
+		t.Fatalf("expected key to be bound to admin ID %d, got %d", admin.ID, savedKey.UserID)
+	}
+
+	// Now record usage log under admin's key but with a tenant that happens to match another user
+	bob := &storage.UserRecord{
+		Username: "bob_innocent",
+		Email:    "bob_innocent@example.com",
+		Role:     "user",
+		Balance:  100.0,
+	}
+	_ = repo.CreateUser(bob)
+
+	log := &storage.UsageLogRecord{
+		TraceID:      "tr-admin-req-1",
+		APIKey:       "sk-unassigned-test-key",
+		TenantID:     "bob_innocent",
+		Model:        "deepseek-chat",
+		PromptTokens: 100,
+		Cost:         10.0,
+	}
+	if err := repo.RecordUsageLog(log); err != nil {
+		t.Fatalf("failed to record log: %v", err)
+	}
+
+	// Bob's balance MUST remain 100.0 (no inadvertent fallback)
+	bobAfter, _ := repo.GetUserByUsername("bob_innocent")
+	if bobAfter.Balance != 100.0 {
+		t.Fatalf("expected bob's balance to remain untouched at 100.0, but got %f", bobAfter.Balance)
+	}
+}
+
+

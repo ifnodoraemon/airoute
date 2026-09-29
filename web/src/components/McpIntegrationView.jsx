@@ -139,22 +139,22 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast }) {
   };
 
   const cliSnippet = `# 1. 编译或安装极简 CLI
-go build -o /usr/local/bin/nano ./cmd/nano
+go build -o /usr/local/bin/airoute ./cmd/airoute
 
 # 2. 查看集群与模型状态
-nano status
-nano models
+airoute status
+airoute models
 
 # 3. 命令行按需开启 / 关闭技能
-nano skills list
-nano skills enable web_search
-nano skills disable web_search
+airoute skills list
+airoute skills enable web_search
+airoute skills disable web_search
 
 # 4. 终端直接与模型对话
-nano chat -m deepseek-chat "你好，请自我介绍"
+airoute chat -m deepseek-chat "你好，请自我介绍"
 
 # 5. 启动 Claude Desktop / Cursor 本地 stdio 桥接
-nano mcp stdio`;
+airoute mcp stdio`;
 
   const cursorConfig = JSON.stringify({
     mcpServers: {
@@ -167,7 +167,7 @@ nano mcp stdio`;
   const claudeConfig = JSON.stringify({
     mcpServers: {
       router: {
-        command: "nano",
+        command: "airoute",
         args: ["mcp", "stdio"]
       }
     }

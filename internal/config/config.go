@@ -61,6 +61,24 @@ func (c *Config) GetAPIKey(key string) *model.APIKeyConfig {
 	return c.apiKeysMap[key]
 }
 
+// UpdateAPIKeys safely updates keys and their lookup map in-place without copying lock values.
+func (c *Config) UpdateAPIKeys(keys []model.APIKeyConfig, hasConfiguredKeys bool) {
+	if c == nil {
+		return
+	}
+	m := make(map[string]*model.APIKeyConfig, len(keys))
+	for i := range keys {
+		k := &keys[i]
+		m[k.Key] = k
+	}
+	c.keyMu.Lock()
+	c.APIKeys = keys
+	c.HasConfiguredKeys = hasConfiguredKeys
+	c.apiKeysMap = m
+	c.keyMu.Unlock()
+}
+
+
 // GetValidationRule resolves the validation rule and level for a given model and protocol.
 func (c *Config) GetValidationRule(modelName, protocol string) (string, *ModelValidationRule) {
 	defaultLvl := "off"

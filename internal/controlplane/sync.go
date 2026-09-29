@@ -50,10 +50,7 @@ func (s *Synchronizer) ReloadFromDB() error {
 	allKeys, _ := s.repo.ListAPIKeys()
 
 	current := config.GetGlobalConfig()
-	newCfg := *current
-	newCfg.APIKeys = keys
-	newCfg.HasConfiguredKeys = len(allKeys) > 0
-	config.SetGlobalConfig(&newCfg)
+	current.UpdateAPIKeys(keys, len(allKeys) > 0)
 
 	// 3. Sync Model Fallbacks to Dispatcher
 	if fallbacks, err := s.repo.GetModelFallbacks(); err == nil {
