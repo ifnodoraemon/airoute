@@ -321,6 +321,12 @@ func (h *AdminHandler) CreateAPIKey(c *gin.Context) {
 				rec.GroupName = reqGroup
 			}
 		} else {
+			if rec.UserID <= 0 {
+				adminUser, _ := h.repo.GetUserByUsername(claims.Username)
+				if adminUser != nil {
+					rec.UserID = adminUser.ID
+				}
+			}
 			if strings.TrimSpace(rec.GroupName) == "" {
 				rec.GroupName = "default"
 			} else {

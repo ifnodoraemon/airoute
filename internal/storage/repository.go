@@ -1007,8 +1007,12 @@ func (r *Repository) ListUsers() ([]*UserRecord, error) {
 	return list, nil
 }
 
-// DeleteUser removes a user by username.
+// DeleteUser removes a user by username and cleans up associated API keys.
 func (r *Repository) DeleteUser(username string) error {
+	u, _ := r.GetUserByUsername(username)
+	if u != nil && u.ID > 0 {
+		_, _ = r.db.Exec(`DELETE FROM api_keys WHERE user_id = ?`, u.ID)
+	}
 	_, err := r.db.Exec(`DELETE FROM users WHERE username = ?`, username)
 	return err
 }

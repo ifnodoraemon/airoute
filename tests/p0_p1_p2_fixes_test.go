@@ -170,3 +170,57 @@ func TestP1_UserRedeemGiftCode(t *testing.T) {
 		t.Fatalf("expected double redeem to fail, but got 200 OK")
 	}
 }
+
+// Test_UserDeletion_CascadesAPIKeys verifies that deleting a user removes orphan api keys belonging to them.
+func Test_UserDeletion_CascadesAPIKeys(t *testing.T) {
+	db, err := storage.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("failed to open memory db: %v", err)
+	}
+	defer db.Close()
+
+	repo := storage.NewRepository(db)
+
+	u := &storage.UserRecord{
+		Username: "user_to_delete",
+		Email:    "del@example.com",
+		Role:     "user",
+		Balance:  50.0,
+	}
+	if err := repo.CreateUser(u); err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	createdUser, err := repo.GetUserByUsername("user_to_delete")
+	if err != nil || createdUser == nil {
+		t.Fatalf("failed to get created user: %v", err)
+	}
+
+	key := &storage.APIKeyRecord{
+		Key:       "sk-del-user-test-key",
+		TenantID:  "tenant-del",
+		UserID:    createdUser.ID,
+		GroupName: "default",
+	}
+	if err := repo.CreateAPIKey(key); err != nil {
+		t.Fatalf("failed to create api key: %v", err)
+	}
+
+	// Verify key exists
+	k, err := repo.GetAPIKeyByKey("sk-del-user-test-key")
+	if err != nil || k == nil {
+		t.Fatalf("expected key to exist")
+	}
+
+	// Delete user
+	if err := repo.DeleteUser("user_to_delete"); err != nil {
+		t.Fatalf("failed to delete user: %v", err)
+	}
+
+	// Verify key was cleaned up
+	kAfter, _ := repo.GetAPIKeyByKey("sk-del-user-test-key")
+	if kAfter != nil {
+		t.Fatalf("expected key to be deleted when user was deleted, but it remained: %+v", kAfter)
+	}
+}
+
