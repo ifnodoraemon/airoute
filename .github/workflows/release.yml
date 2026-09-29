@@ -61,7 +61,7 @@ jobs:
           CGO_ENABLED: 0
         run: |
           mkdir -p dist
-          go build -ldflags="-s -w -X main.Version=${{ github.ref_name }}" -o dist/${{ matrix.artifact_name }} cmd/gateway/main.go
+          go build -ldflags="-s -w -X main.Version=${{ github.ref_name }}" -o dist/${{ matrix.artifact_name }} cmd/airoute/main.go
           cd dist
           if [ "${{ matrix.os }}" = "windows" ]; then
             zip ${{ matrix.artifact_name }}.zip ${{ matrix.artifact_name }}

@@ -3,20 +3,35 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/signal"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
+
+	"github.com/ifnodoraemon/airoute/internal/api"
+	"github.com/ifnodoraemon/airoute/internal/billing"
+	"github.com/ifnodoraemon/airoute/internal/config"
+	"github.com/ifnodoraemon/airoute/internal/controlplane"
+	"github.com/ifnodoraemon/airoute/internal/distributed"
+	"github.com/ifnodoraemon/airoute/internal/router"
+	"github.com/ifnodoraemon/airoute/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
 const (
 	defaultEndpoint = "http://localhost:8080"
-	version         = "1.0.0"
 )
+
+// Version is dynamically populated at build time via -ldflags="-X main.Version=vX.Y.Z"
+var Version = "0.1.0"
 
 // ANSI color codes
 const (
@@ -33,31 +48,39 @@ const (
 
 func main() {
 	if len(os.Args) < 2 {
-		printHelp()
+		// Default action with no arguments: start the gateway server
+		runServer(nil)
 		return
 	}
 
 	command := os.Args[1]
 
-	endpoint := os.Getenv("AIROUTE_ENDPOINT")
-	if endpoint == "" {
-		endpoint = os.Getenv("NANO_ENDPOINT")
+	switch command {
+	case "help", "-h", "--help":
+		printHelp()
+		return
+	case "version", "-v", "--version":
+		fmt.Printf("Airoute v%s (AI Gateway & MCP Control Plane)\n", Version)
+		return
 	}
+
+	// Flags (e.g. -config, -db) or 'server' / 'start' command directly boot the gateway server
+	if strings.HasPrefix(command, "-") {
+		runServer(os.Args[1:])
+		return
+	}
+	if command == "server" || command == "start" {
+		runServer(os.Args[2:])
+		return
+	}
+
+	endpoint := os.Getenv("AIROUTE_ENDPOINT")
 	if endpoint == "" {
 		endpoint = defaultEndpoint
 	}
 	token := os.Getenv("AIROUTE_TOKEN")
-	if token == "" {
-		token = os.Getenv("NANO_TOKEN")
-	}
 
 	switch command {
-	case "help", "-h", "--help":
-		printHelp()
-
-	case "version", "-v", "--version":
-		fmt.Printf("Airoute CLI v%s (AI Gateway & MCP Control Plane)\n", version)
-
 	case "status":
 		handleStatus(endpoint, token)
 
@@ -85,49 +108,216 @@ func main() {
 	}
 }
 
+// runServer starts the authoritative AI Gateway server and control plane.
+func runServer(args []string) {
+	defaultConfig := "configs/config.yaml"
+	if env := os.Getenv("GATEWAY_CONFIG"); env != "" {
+		defaultConfig = env
+	}
+	defaultDB := "data/gateway.db"
+	if env := os.Getenv("GATEWAY_DB_DSN"); env != "" {
+		defaultDB = env
+	} else if env := os.Getenv("GATEWAY_DB"); env != "" {
+		defaultDB = env
+	}
+
+	fs := flag.NewFlagSet("server", flag.ExitOnError)
+	configPath := fs.String("config", defaultConfig, "Path to YAML configuration file")
+	dbPath := fs.String("db", defaultDB, "Path to SQLite database file")
+	_ = fs.Parse(args)
+
+	// Load file configuration
+	cfg, err := config.LoadConfig(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+
+	if portEnv := os.Getenv("GATEWAY_PORT"); portEnv != "" {
+		if p, err := strconv.Atoi(portEnv); err == nil && p > 0 {
+			cfg.Server.Port = p
+		}
+	}
+	if hostEnv := os.Getenv("GATEWAY_HOST"); hostEnv != "" {
+		cfg.Server.Host = hostEnv
+	}
+
+	// Initialize Logger
+	telemetry.InitLogger(cfg.Server.LogLevel)
+	telemetry.Logger.Info("starting airoute",
+		"version", Version,
+		"config", *configPath,
+		"db", *dbPath,
+	)
+
+	dataSource := *dbPath
+	if dbEnv := os.Getenv("DATABASE_URL"); dbEnv != "" {
+		dataSource = dbEnv
+	}
+
+	// Initialize Storage Layer (SQLite or Distributed PostgreSQL)
+	db, err := storage.OpenDB(dataSource)
+	if err != nil {
+		telemetry.Logger.Error("failed to open database", "error", err.Error())
+		os.Exit(1)
+	}
+	defer db.Close()
+
+	repo := storage.NewRepository(db)
+
+	// Ensure default admin user account exists
+	controlplane.InitDefaultAdmin(repo)
+
+	// Seed DB from YAML config if DB is currently empty
+	existingChannels, _ := repo.ListChannels()
+	if len(existingChannels) == 0 && len(cfg.Channels) > 0 {
+		telemetry.Logger.Info("seeding database from initial config file", "channels", len(cfg.Channels))
+		for _, ch := range cfg.Channels {
+			_ = repo.CreateChannel(&storage.ChannelRecord{
+				Name:           ch.Name,
+				Type:           ch.Type,
+				BaseURL:        ch.BaseURL,
+				APIKey:         ch.APIKey,
+				Models:         ch.Models,
+				ModelMapping:   ch.ModelMapping,
+				Protocols:      ch.Protocols,
+				Priority:       ch.Priority,
+				Weight:         ch.Weight,
+				TimeoutSeconds: ch.TimeoutSeconds,
+			})
+		}
+	}
+
+	existingKeys, _ := repo.ListAPIKeys()
+	if len(existingKeys) == 0 && len(cfg.APIKeys) > 0 {
+		for _, k := range cfg.APIKeys {
+			_ = repo.CreateAPIKey(&storage.APIKeyRecord{
+				Key:           k.Key,
+				TenantID:      k.TenantID,
+				AllowedModels: k.AllowedModels,
+				RPM:           k.RPM,
+				TPM:           k.TPM,
+				Budget:        k.Budget,
+			})
+		}
+	}
+
+	// Initialize Data Plane Dispatcher
+	dispatcher := router.NewDispatcher(nil)
+
+	// Initialize Async Usage Logger for zero-latency audit logs
+	asyncLogger := storage.InitAsyncLogger(repo, 10000, 100, 500*time.Millisecond)
+	defer asyncLogger.Stop()
+
+	// Initialize Real-Time Model Pricing & Prompt-Cache Billing Engine
+	billing.InitGlobalEngine(repo)
+
+	// Initialize Control Plane Synchronizer & load state into Data Plane memory
+	synchronizer := controlplane.NewSynchronizer(repo, dispatcher)
+	if err := synchronizer.ReloadFromDB(); err != nil {
+		telemetry.Logger.Warn("initial sync from db failed, using config file defaults", "error", err.Error())
+		dispatcher.UpdateChannels(cfg.Channels)
+	}
+
+	// Initialize Enterprise Distributed Redis Layer (if REDIS_URL configured)
+	redisClient := distributed.InitRedis(cfg.Server.RedisURL)
+	if redisClient != nil && redisClient.IsActive() {
+		stopRedis := make(chan struct{})
+		defer close(stopRedis)
+		redisClient.SubscribeReload(func(reason string) {
+			telemetry.Logger.Info("handling cluster-wide reload broadcast (<1ms latency)", "reason", reason)
+			if err := synchronizer.ReloadFromDB(); err != nil {
+				telemetry.Logger.Error("failed to reload data plane after cluster broadcast", "error", err.Error())
+			}
+		}, stopRedis)
+	}
+
+	// HA Multi-Replica Periodic Auto-Sync (10s interval as baseline fallback)
+	stopSync := make(chan struct{})
+	defer close(stopSync)
+	synchronizer.StartPeriodicSync(10*time.Second, stopSync)
+
+	// Initialize Admin Handler
+	adminHandler := controlplane.NewAdminHandler(repo, synchronizer, dispatcher)
+
+	// Setup HTTP Engine (Data Plane + Control Plane Admin API + Embedded Web UI)
+	engine := api.SetupRouter(dispatcher, adminHandler)
+
+	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
+	srv := &http.Server{
+		Addr:         addr,
+		Handler:      engine,
+		ReadTimeout:  time.Duration(cfg.Server.ReadTimeoutSec) * time.Second,
+		WriteTimeout: time.Duration(cfg.Server.WriteTimeoutSec) * time.Second,
+	}
+
+	// Run server in background goroutine
+	go func() {
+		telemetry.Logger.Info(fmt.Sprintf("🚀 Airoute listening on http://%s", addr))
+		telemetry.Logger.Info(fmt.Sprintf("🌐 工作台入口: http://%s/app/ (或 http://%s/)", addr, addr))
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			telemetry.Logger.Error("server fatal error", "error", err.Error())
+			os.Exit(1)
+		}
+	}()
+
+	// Graceful shutdown on SIGINT or SIGTERM
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	telemetry.Logger.Info("shutting down airoute gracefully...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		telemetry.Logger.Error("server forced to shutdown", "error", err.Error())
+	}
+
+	telemetry.Logger.Info("airoute exited smoothly.")
+}
+
 func printHelp() {
-	fmt.Printf(`%sAiroute CLI%s - 极简现代化 AI 智能网关与 Agent 扩展命令行工具 (v%s)
+	fmt.Printf(`%sAiroute%s - 企业级高性能大模型智能路由器与网关 (AI Gateway & Router) v%s
 
-%s使用方法:%s
-  airoute <command> [arguments] [options]
+%s使用方法 (Usage):%s
+  airoute [flags]                    启动网关 HTTP 服务 (默认模式)
+  airoute server [flags]             启动网关 HTTP 服务 (显式模式)
+  airoute status                     查看网关健康状态、节点信息与延迟
+  airoute models                     查询所有已接入的模型拓扑与渠道状态
+  airoute chat [flags] <message>     在终端直接与大模型对话交互
+  airoute keys [subcommand]          管理 API Key (list, create)
+  airoute users [subcommand]         管理系统用户账号与权限 (list, create, delete, passwd)
+  airoute skills [subcommand]        管理 MCP 扩展技能 (list, enable, disable)
+  airoute mcp [subcommand]           MCP 本地客户端接入与 stdio 桥接
+  airoute version                    查看版本信息
+  airoute help                       查看帮助信息
 
-%s核心管理与状态:%s
-  %sstatus%s        查看 Airoute 路由网关集群运行状态、上游提供商与延迟探针
-  %smodels%s        查询所有已接入的模型拓扑、支持模态与实时分时单价
-  %skeys%s          管理虚拟 API 访问密钥 (airoute keys list / create)
-  %susers%s         管理系统用户与角色权限 (airoute users list / create / delete / passwd)
+%s网关服务常用参数 (Server Flags):%s
+  -config <path>    YAML 配置文件路径 (默认: configs/config.yaml 或 $GATEWAY_CONFIG)
+  -db <path>        SQLite 数据库路径 (默认: data/gateway.db 或 $GATEWAY_DB_DSN)
 
-%sAgent 扩展与按需开关:%s
-  %sskills%s        查看与按需启闭 Agent 技能 (web_search, code_runner, etc.)
-                   • airoute skills list
-                   • airoute skills enable <id>
-                   • airoute skills disable <id>
-  %smcp%s           管理 MCP (Model Context Protocol) 服务与本地 stdio 桥接
-                   • airoute mcp status
-                   • airoute mcp enable / disable
-                   • airoute mcp stdio  (供 Claude Desktop / Cursor 零配置接入)
+%s环境变量 (Environment Variables):%s
+  AIROUTE_ENDPOINT  CLI 连接的网关地址 (默认: http://localhost:8080)
+  AIROUTE_TOKEN     CLI 认证 Token
+  DATABASE_URL      PostgreSQL 连接串 (配置后自动激活集群分布式存储)
+  REDIS_URL         Redis 连接串 (配置后自动激活多节点分布式缓存与热更新)
 
-%s终端交互与提问:%s
-  %schat%s          在终端直接与模型对话或进行单次提问
-                   • airoute chat -m deepseek-chat "你好，介绍一下你自己"
-                   • airoute chat (进入交互式多轮对话 REPL)
+%s示例 (Examples):%s
+  # 1. 启动网关服务
+  airoute -config configs/config.yaml
 
-%s全局环境变量:%s
-  AIROUTE_ENDPOINT 网关地址 (默认: http://localhost:8080)
-  AIROUTE_TOKEN   管理员 Token 或 API Key
+  # 2. 检查集群连通性
+  airoute status
+
+  # 3. 终端极速对话
+  airoute chat -m deepseek-chat "你好，请自我介绍"
 `,
-		colorBold+colorCyan, colorReset, version,
+		colorBold+colorCyan, colorReset, Version,
 		colorBold, colorReset,
 		colorBold, colorReset,
-		colorGreen, colorReset,
-		colorGreen, colorReset,
-		colorGreen, colorReset,
-		colorGreen, colorReset,
 		colorBold, colorReset,
-		colorPurple, colorReset,
-		colorPurple, colorReset,
-		colorBold, colorReset,
-		colorBlue, colorReset,
 		colorBold, colorReset,
 	)
 }

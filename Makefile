@@ -4,7 +4,7 @@ export PATH := /usr/local/go/bin:$(PATH)
 
 APP_NAME = airoute
 BIN_DIR = bin
-ENTRY = cmd/gateway/main.go
+ENTRY = cmd/airoute/main.go
 CONFIG = configs/config.yaml
 
 all: build

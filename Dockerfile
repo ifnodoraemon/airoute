@@ -30,7 +30,7 @@ COPY web/web.go web/web.go
 COPY --from=web-builder /app/web/dist web/dist
 
 # Build statically linked binary
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/airoute cmd/gateway/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/airoute cmd/airoute/main.go
 
 # ==============================================================================
 # Stage 3: Minimal Production Image

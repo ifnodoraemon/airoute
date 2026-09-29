@@ -45,7 +45,7 @@ jobs:
       - name: Compile Standalone Gateway Binary
         run: |
           mkdir -p bin
-          go build -v -o bin/airoute cmd/gateway/main.go
+          go build -v -o bin/airoute cmd/airoute/main.go
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
