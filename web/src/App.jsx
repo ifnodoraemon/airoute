@@ -2784,6 +2784,7 @@ export default function App() {
               handleUpdateKeyGroup={handleUpdateKeyGroup}
               adminUser={adminUser}
               pricingGroups={pricingGroups}
+              onNavigateToPricing={() => setCurrentTab('pricing')}
             />
           )}
 

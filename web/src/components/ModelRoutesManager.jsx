@@ -26,7 +26,7 @@ import {
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
-import ModelRouteModal from './ModelRouteModal';
+import ModelRouteModal, { getChannelModels } from './ModelRouteModal';
 
 export default function ModelRoutesManager({
   adminFetch,
@@ -395,17 +395,39 @@ export default function ModelRoutesManager({
                         {/* Providers & Weights */}
                         <td className="py-3.5 px-4">
                           <div className="flex flex-wrap items-center gap-1.5">
-                            {(route.providers || []).map((p) => (
-                              <span
-                                key={p.channel_id}
-                                className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[11px] text-slate-700 font-medium"
-                              >
-                                <span>{p.channel_name}</span>
-                                <strong className="text-indigo-600 font-mono font-bold">
-                                  {p.weight_percent ? `${p.weight_percent}%` : `权重${p.weight}`}
-                                </strong>
-                              </span>
-                            ))}
+                            {(route.providers || []).map((p) => {
+                              const ch = allChannels.find(c => c.id === p.channel_id);
+                              let warnMsg = null;
+                              if (!ch) {
+                                warnMsg = '渠道不存在或已删除';
+                              } else if (ch.status === 'inactive' || ch.status === 'disabled') {
+                                warnMsg = '渠道已停用';
+                              } else {
+                                const chModels = getChannelModels(ch);
+                                const mapped = p.mapped_model || route.model;
+                                if (chModels.length > 0 && !chModels.includes('*') && !chModels.includes(mapped)) {
+                                  warnMsg = `渠道未声明模型: ${mapped}`;
+                                }
+                              }
+
+                              return (
+                                <span
+                                  key={p.channel_id}
+                                  className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-md border text-[11px] font-medium ${
+                                    warnMsg
+                                      ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-2xs'
+                                      : 'bg-slate-100 border-slate-200 text-slate-700'
+                                  }`}
+                                  title={warnMsg ? `⚠️ ${warnMsg}` : p.mapped_model ? `上游模型: ${p.mapped_model}` : ''}
+                                >
+                                  {warnMsg && <span className="text-amber-500 font-bold">⚠️</span>}
+                                  <span>{p.channel_name}</span>
+                                  <strong className={`${warnMsg ? 'text-amber-700' : 'text-indigo-600'} font-mono font-bold`}>
+                                    {p.weight_percent ? `${p.weight_percent}%` : `权重${p.weight}`}
+                                  </strong>
+                                </span>
+                              );
+                            })}
                             {(route.providers || []).length === 0 && (
                               <span className="text-rose-500 text-[11px]">未绑定上游</span>
                             )}

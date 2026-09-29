@@ -438,6 +438,23 @@ export default function ModelRouteModal({
                             </div>
                           )}
                         </div>
+
+                        {pChannel && (
+                          <>
+                            {(pChannel.status === 'inactive' || pChannel.status === 'disabled') && (
+                              <div className="mt-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 flex items-center space-x-1">
+                                <span>⚠️</span>
+                                <span>该服务商渠道当前处于停用状态</span>
+                              </div>
+                            )}
+                            {pModels.length > 0 && !pModels.includes('*') && p.mapped_model && !pModels.includes(p.mapped_model) && (
+                              <div className="mt-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 flex items-center space-x-1">
+                                <span>⚠️</span>
+                                <span>渠道模型库中未声明「{p.mapped_model}」，请确认远端真实支持</span>
+                              </div>
+                            )}
+                          </>
+                        )}
                       </div>
 
                       <div className="flex items-center space-x-3 shrink-0 self-end sm:self-center">

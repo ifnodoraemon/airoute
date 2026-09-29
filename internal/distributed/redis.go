@@ -13,7 +13,8 @@ import (
 )
 
 const (
-	ReloadChannel = "nano:cluster:reload"
+	ReloadChannel    = "nano:cluster:reload"
+	ConfigVersionKey = "airoute:cluster:config_version"
 )
 
 // ClusterEvent represents an inter-node cluster message.
@@ -102,11 +103,13 @@ func (c *Client) IsActive() bool {
 	return c.active
 }
 
-// PublishReload broadcasts a cache-invalidation event across all cluster replicas.
+// PublishReload broadcasts a cache-invalidation event across all cluster replicas and increments config version.
 func (c *Client) PublishReload(ctx context.Context, reason string) error {
 	if !c.IsActive() {
 		return nil
 	}
+
+	newVer, _ := c.rdb.Incr(ctx, ConfigVersionKey).Result()
 
 	evt := ClusterEvent{
 		Event:     "reload",
@@ -115,10 +118,13 @@ func (c *Client) PublishReload(ctx context.Context, reason string) error {
 	}
 	payload, _ := json.Marshal(evt)
 
-	return c.rdb.Publish(ctx, ReloadChannel, string(payload)).Err()
+	err := c.rdb.Publish(ctx, ReloadChannel, string(payload)).Err()
+	telemetry.Logger.Info("published cluster reload broadcast", "reason", reason, "version", newVer)
+	return err
 }
 
-// SubscribeReload listens for real-time cache invalidation events from peer cluster nodes.
+// SubscribeReload listens for real-time cache invalidation events from peer cluster nodes
+// and periodically reconciles cluster configuration version to heal missed broadcasts.
 func (c *Client) SubscribeReload(onReload func(reason string), stopChan <-chan struct{}) {
 	if !c.IsActive() {
 		return
@@ -131,6 +137,15 @@ func (c *Client) SubscribeReload(onReload func(reason string), stopChan <-chan s
 		ch := pubsub.Channel()
 		telemetry.Logger.Info("subscribed to Redis cluster invalidation channel", "channel", ReloadChannel)
 
+		var localVersion int64
+		if v, err := c.rdb.Get(context.Background(), ConfigVersionKey).Int64(); err == nil {
+			localVersion = v
+		}
+
+		// Self-healing periodic ticker to catch any dropped pub/sub events
+		reconcileTicker := time.NewTicker(15 * time.Second)
+		defer reconcileTicker.Stop()
+
 		for {
 			select {
 			case msg, ok := <-ch:
@@ -140,7 +155,18 @@ func (c *Client) SubscribeReload(onReload func(reason string), stopChan <-chan s
 				var evt ClusterEvent
 				if err := json.Unmarshal([]byte(msg.Payload), &evt); err == nil {
 					telemetry.Logger.Info("received Redis cluster reload broadcast (<1ms latency)", "reason", evt.Reason)
+					if v, err := c.rdb.Get(context.Background(), ConfigVersionKey).Int64(); err == nil && v > localVersion {
+						localVersion = v
+					}
 					onReload(evt.Reason)
+				}
+			case <-reconcileTicker.C:
+				if v, err := c.rdb.Get(context.Background(), ConfigVersionKey).Int64(); err == nil {
+					if v > localVersion {
+						telemetry.Logger.Info("reconciled cluster config version divergence, triggering self-healing reload", "localVersion", localVersion, "remoteVersion", v)
+						localVersion = v
+						onReload("version_sync_reconciliation")
+					}
 				}
 			case <-stopChan:
 				return

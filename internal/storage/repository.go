@@ -424,21 +424,21 @@ func (r *Repository) RecordUsageLog(log *UsageLogRecord) error {
 	}
 
 	if keyVal != "" && (log.Cost > 0 || log.TotalTokens > 0) {
-		_, _ = tx.Exec(`UPDATE api_keys SET used_cost = used_cost + ?, used_tokens = used_tokens + ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?`,
+		_, _ = tx.Exec(r.db.Rebind(`UPDATE api_keys SET used_cost = used_cost + ?, used_tokens = used_tokens + ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?`),
 			log.Cost, log.TotalTokens, keyVal)
 		if log.Cost > 0 {
-			res, _ := tx.Exec(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT user_id FROM api_keys WHERE key = ?) AND role != 'admin'`,
+			res, _ := tx.Exec(r.db.Rebind(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT user_id FROM api_keys WHERE key = ?) AND role != 'admin'`),
 				log.Cost, keyVal)
 			if res != nil {
 				affected, _ := res.RowsAffected()
 				if affected == 0 && log.TenantID != "" {
-					_, _ = tx.Exec(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`,
+					_, _ = tx.Exec(r.db.Rebind(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`),
 						log.Cost, log.TenantID, log.TenantID)
 				}
 			}
 		}
 	} else if log.TenantID != "" && log.Cost > 0 {
-		_, _ = tx.Exec(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`,
+		_, _ = tx.Exec(r.db.Rebind(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`),
 			log.Cost, log.TenantID, log.TenantID)
 	}
 
@@ -464,7 +464,8 @@ func (r *Repository) BatchRecordUsageLogs(logs []*UsageLogRecord) error {
 
 	keyCostMap := make(map[string]float64)
 	keyTokensMap := make(map[string]int64)
-	tenantCostMap := make(map[string]float64)
+	keyTenantMap := make(map[string]string)
+	orphanTenantCostMap := make(map[string]float64)
 
 	insertWithTimeSQL := r.db.Rebind(`INSERT INTO usage_logs (trace_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	insertSQL := r.db.Rebind(`INSERT INTO usage_logs (trace_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -514,9 +515,11 @@ func (r *Repository) BatchRecordUsageLogs(logs []*UsageLogRecord) error {
 		if keyVal != "" {
 			keyCostMap[keyVal] += log.Cost
 			keyTokensMap[keyVal] += int64(log.TotalTokens)
-		}
-		if log.TenantID != "" && log.Cost > 0 {
-			tenantCostMap[log.TenantID] += log.Cost
+			if log.TenantID != "" {
+				keyTenantMap[keyVal] = log.TenantID
+			}
+		} else if log.TenantID != "" && log.Cost > 0 {
+			orphanTenantCostMap[log.TenantID] += log.Cost
 		}
 	}
 
@@ -544,15 +547,22 @@ func (r *Repository) BatchRecordUsageLogs(logs []*UsageLogRecord) error {
 				if res != nil {
 					affected, _ := res.RowsAffected()
 					if affected == 0 {
-						// Fallback to tenant lookup
-						for tenantID, tCost := range tenantCostMap {
-							if tCost > 0 {
-								fallbackSQL := r.db.Rebind(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`)
-								_, _ = tx.Exec(fallbackSQL, tCost, tenantID, tenantID)
-							}
+						// Delegate to tenant deduction
+						if tID := keyTenantMap[k]; tID != "" {
+							orphanTenantCostMap[tID] += cost
 						}
 					}
 				}
+			}
+		}
+	}
+
+	// Deduct for orphan or keyless tenant requests exactly once
+	if len(orphanTenantCostMap) > 0 {
+		fallbackSQL := r.db.Rebind(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`)
+		for tenantID, tCost := range orphanTenantCostMap {
+			if tCost > 0 {
+				_, _ = tx.Exec(fallbackSQL, tCost, tenantID, tenantID)
 			}
 		}
 	}
@@ -1104,7 +1114,7 @@ func (r *Repository) RedeemCode(code, username string) (*RedemptionCodeRecord, e
 
 	var rec RedemptionCodeRecord
 	var usedAt sql.NullTime
-	row := tx.QueryRow(`SELECT id, code, COALESCE(name, ''), amount, COALESCE(status, 'active'), COALESCE(used_by, ''), used_at, created_at FROM redemption_codes WHERE code = ?`, code)
+	row := tx.QueryRow(r.db.Rebind(`SELECT id, code, COALESCE(name, ''), amount, COALESCE(status, 'active'), COALESCE(used_by, ''), used_at, created_at FROM redemption_codes WHERE code = ?`), code)
 	if err := row.Scan(&rec.ID, &rec.Code, &rec.Name, &rec.Amount, &rec.Status, &rec.UsedBy, &usedAt, &rec.CreatedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("无效的兑换码")
@@ -1118,7 +1128,7 @@ func (r *Repository) RedeemCode(code, username string) (*RedemptionCodeRecord, e
 
 	// Mark as used with atomic status check to prevent race-condition double redemption
 	now := time.Now()
-	res, err := tx.Exec(`UPDATE redemption_codes SET status = 'used', used_by = ?, used_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'active'`, username, rec.ID)
+	res, err := tx.Exec(r.db.Rebind(`UPDATE redemption_codes SET status = 'used', used_by = ?, used_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'active'`), username, rec.ID)
 	if err != nil {
 		return nil, fmt.Errorf("更新兑换状态失败: %w", err)
 	}
@@ -1128,7 +1138,7 @@ func (r *Repository) RedeemCode(code, username string) (*RedemptionCodeRecord, e
 	}
 
 	// Credit user balance
-	_, err = tx.Exec(`UPDATE users SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, rec.Amount, username)
+	_, err = tx.Exec(r.db.Rebind(`UPDATE users SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`), rec.Amount, username)
 	if err != nil {
 		return nil, fmt.Errorf("充值到账户余额失败: %w", err)
 	}

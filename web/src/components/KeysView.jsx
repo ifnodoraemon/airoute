@@ -1,5 +1,5 @@
 import React from 'react';
-import { Key, Plus, Trash2, Copy, Check, Sparkles } from 'lucide-react';
+import { Key, Plus, Trash2, Copy, Check, Sparkles, DollarSign } from 'lucide-react';
 
 export default function KeysView({
   keys,
@@ -16,6 +16,7 @@ export default function KeysView({
   handleUpdateKeyGroup,
   adminUser,
   pricingGroups = [],
+  onNavigateToPricing,
 }) {
   const isAdmin = adminUser?.role === 'admin';
   const userGuaranteedGroup = adminUser?.group_name && adminUser.group_name !== 'default' ? adminUser.group_name : null;
@@ -79,6 +80,16 @@ export default function KeysView({
           </h3>
         </div>
         <div className="flex items-center space-x-2">
+          {onNavigateToPricing && (
+            <button
+              onClick={onNavigateToPricing}
+              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold shadow-2xs flex items-center space-x-1.5 transition cursor-pointer"
+              title="查看各计费分组的模型定价明细"
+            >
+              <DollarSign className="w-3.5 h-3.5 text-emerald-500" />
+              <span>查看组内费率</span>
+            </button>
+          )}
           <button
             onClick={handleOpenCreateKey}
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
@@ -160,7 +171,21 @@ export default function KeysView({
                   </th>
                   <th className="py-3.5 px-6 font-semibold">密钥名称</th>
                   <th className="py-3.5 px-6 font-semibold">密钥 (API Key)</th>
-                  <th className="py-3.5 px-6 font-semibold">计费分组</th>
+                  <th className="py-3.5 px-6 font-semibold">
+                    <div className="flex items-center space-x-1">
+                      <span>计费分组</span>
+                      {onNavigateToPricing && (
+                        <button
+                          type="button"
+                          onClick={onNavigateToPricing}
+                          className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-normal cursor-pointer ml-0.5"
+                          title="查看各分组费率详情"
+                        >
+                          (费率明细)
+                        </button>
+                      )}
+                    </div>
+                  </th>
                   <th className="py-3.5 px-6 font-semibold">已用 / 额度</th>
                   <th className="py-3.5 px-6 font-semibold">授权模型</th>
                   <th className="py-3.5 px-6 font-semibold">速率 (RPM)</th>

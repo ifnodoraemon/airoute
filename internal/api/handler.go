@@ -205,6 +205,12 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	}
 
 	// Streaming SSE execution
+	if req.StreamOptions == nil {
+		req.StreamOptions = &model.StreamOptions{IncludeUsage: true}
+	} else {
+		req.StreamOptions.IncludeUsage = true
+	}
+
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, &req)
 	if err != nil {
 		if strings.Contains(err.Error(), "no upstream provider available") {
@@ -251,10 +257,30 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	totalPromptTokens := 0
 	totalCompTokens := 0
 	totalCachedTokens := 0
+	accumulatedCompChars := 0
+
+	approxPromptChars := 0
+	for _, m := range req.Messages {
+		approxPromptChars += len(m.GetContentString())
+	}
 
 	var recordOnce sync.Once
 	recordStreamEnd := func() {
 		dur := time.Since(start)
+		// Fallback token estimation if upstream provider did not report usage
+		if totalPromptTokens == 0 && approxPromptChars > 0 {
+			totalPromptTokens = approxPromptChars / 3
+			if totalPromptTokens < 1 {
+				totalPromptTokens = 1
+			}
+		}
+		if totalCompTokens == 0 && accumulatedCompChars > 0 {
+			totalCompTokens = accumulatedCompChars / 3
+			if totalCompTokens < 1 {
+				totalCompTokens = 1
+			}
+		}
+
 		var cost, savedCost float64
 		var isOffPeak bool
 		var offPeakDiscount float64 = 1.0
@@ -331,6 +357,9 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 						telemetry.GlobalMetrics.RecordTTFT(ttftDuration)
 						firstTokenRecorded = true
 					}
+				}
+				if len(event.Chunk.Choices) > 0 && event.Chunk.Choices[0].Delta.Content != "" {
+					accumulatedCompChars += len(event.Chunk.Choices[0].Delta.Content)
 				}
 
 				if event.Chunk.Usage != nil {
@@ -758,6 +787,11 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 	}
 
 	// Streaming SSE execution
+	if chatReq.StreamOptions == nil {
+		chatReq.StreamOptions = &model.StreamOptions{IncludeUsage: true}
+	} else {
+		chatReq.StreamOptions.IncludeUsage = true
+	}
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, chatReq)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{
