@@ -75,6 +75,10 @@ import KeysView from './components/KeysView';
 import LogsView from './components/LogsView';
 import { translations } from './i18n';
 
+// Audit-log pagination: server-side page size, kept in one place for the
+// fetch limit, the offset stepping, and the page-number math in LogsView.
+const LOG_PAGE_SIZE = 50;
+
 export default function App() {
   // Language State (bilingual i18n)
   const [lang, setLang] = useState(() => localStorage.getItem('airoute_lang') || 'zh');
@@ -342,6 +346,10 @@ export default function App() {
   const [modelRoutes, setModelRoutes] = useState([]);
   const [logs, setLogs] = useState([]);
   const [logOffset, setLogOffset] = useState(0);
+  // Mirror of logOffset for the 8s polling interval: the interval closure
+  // captures the fetchLogs of the render it was created in, so state reads
+  // inside fetchLogs go stale — polls must fetch the page being *viewed*.
+  const logOffsetRef = useRef(0);
   const [logLoading, setLogLoading] = useState(false);
   const [logFilter, setLogFilter] = useState('');
   const [timeRange, setTimeRange] = useState('all'); // 'all' | '1h' | 'today' | '7d' | 'custom'
@@ -607,11 +615,19 @@ export default function App() {
     setLogLoading(true);
     try {
       const p = new URLSearchParams();
-      p.set('limit', '50');
-      // Server-side pagination: offset defaults to the current page so the
-      // 8s polling refresh keeps fetching the page being viewed.
-      const off = override.offset !== undefined ? override.offset : logOffset;
+      p.set('limit', String(LOG_PAGE_SIZE));
+      // Server-side pagination. Offset resolution rules:
+      //  - explicit override.offset wins (page buttons);
+      //  - a filter override (timeRange/sessionFilter) resets to page 1 —
+      //    the old offset is meaningless for the new result set;
+      //  - otherwise keep the currently viewed page (polling refresh).
+      const filterReset =
+        override.timeRange !== undefined || override.sessionFilter !== undefined;
+      const off =
+        override.offset !== undefined ? override.offset : (filterReset ? 0 : logOffsetRef.current);
       p.set('offset', String(off));
+      logOffsetRef.current = off;
+      setLogOffset((prev) => (prev === off ? prev : off));
 
       const tr = override.timeRange !== undefined ? override.timeRange : timeRange;
       const sf = override.sessionFilter !== undefined ? override.sessionFilter : sessionFilter;
@@ -666,9 +682,10 @@ export default function App() {
     }
   }, [currentTab, timeRange, sessionFilter]);
 
-  // Server-side pagination for audit logs (50 per page, offset-based).
+  // Server-side pagination for audit logs (offset-based, page size above).
   const handleLogPageChange = (newOffset) => {
     if (newOffset < 0) return;
+    logOffsetRef.current = newOffset;
     setLogOffset(newOffset);
     fetchLogs({ offset: newOffset });
   };
@@ -2823,6 +2840,7 @@ export default function App() {
               filteredLogs={filteredLogs}
               logsLength={logs.length}
               logOffset={logOffset}
+              logPageSize={LOG_PAGE_SIZE}
               onLogPageChange={handleLogPageChange}
               setActiveLogDetail={setActiveLogDetail}
               showToast={showToast}

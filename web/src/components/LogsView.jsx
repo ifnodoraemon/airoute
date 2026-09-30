@@ -39,6 +39,7 @@ export default function LogsView({
   filteredLogs,
   logsLength = 0,
   logOffset = 0,
+  logPageSize = 50,
   onLogPageChange,
   setActiveLogDetail,
   showToast,
@@ -415,25 +416,25 @@ export default function LogsView({
         </table>
         </div>
 
-        {/* Server-side pagination (50 rows per page, offset-based) */}
+        {/* Server-side pagination (offset-based, page size shared with App.jsx) */}
         <div className="flex items-center justify-between pt-4 mt-2 border-t border-slate-200/60 dark:border-slate-800/60">
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            第 {Math.floor(logOffset / 50) + 1} 页 · 本页 {filteredLogs.length} 条
+            第 {Math.floor(logOffset / logPageSize) + 1} 页 · 本页 {filteredLogs.length} 条
             {filteredLogs.length < logsLength ? ` (搜索命中 / 共 ${logsLength})` : ''}
           </span>
           <div className="flex items-center space-x-2">
             <button
               type="button"
-              onClick={() => onLogPageChange(logOffset - 50)}
-              disabled={logOffset <= 0}
+              onClick={() => onLogPageChange(logOffset - logPageSize)}
+              disabled={logLoading || logOffset <= 0}
               className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               上一页
             </button>
             <button
               type="button"
-              onClick={() => onLogPageChange(logOffset + 50)}
-              disabled={logsLength < 50}
+              onClick={() => onLogPageChange(logOffset + logPageSize)}
+              disabled={logLoading || logsLength < logPageSize}
               className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               下一页
