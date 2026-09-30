@@ -204,7 +204,7 @@ export default function LogsView({
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="text-slate-500 dark:text-slate-400 text-xs uppercase">
-              <th className="py-3.5 px-4 w-10 text-center sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+              <th className="py-2.5 px-3 w-10 text-center sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
                 <input
                   type="checkbox"
                   className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
@@ -218,25 +218,25 @@ export default function LogsView({
                   }}
                 />
               </th>
-              <th className="py-3.5 px-6 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">请求时间</th>
-              <th className="py-3.5 px-6 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">Trace ID / 对话 ID</th>
-              <th className="py-3.5 px-6 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">请求模型 (Model)</th>
-              <th className="py-3.5 px-6 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">命中渠道 (Provider)</th>
-              <th className="py-3.5 px-6 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">租户 / API 密钥</th>
-              <th className="py-3.5 px-6 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">Token (输入/输出/总)</th>
-              <th className="py-3.5 px-6 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">扣费 / 缓存命中</th>
-              <th className="py-3.5 px-6 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">耗时 / TTFT</th>
-              <th className="py-3.5 px-6 text-right font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">状态与详情</th>
+              <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">请求时间</th>
+              <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">Trace ID / 对话 ID</th>
+              <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">请求模型 (Model)</th>
+              <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">命中渠道 (Provider)</th>
+              <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">租户 / API 密钥</th>
+              <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">Token (输入/输出/总)</th>
+              <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">扣费 / 缓存命中</th>
+              <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">耗时 / TTFT</th>
+              <th className="py-2.5 px-4 text-right font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">状态与详情</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-sm font-mono text-xs">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
             {filteredLogs.map((log) => (
               <tr
                 key={log.id}
                 onClick={() => setActiveLogDetail(log)}
-                className="hover:bg-indigo-50/40 dark:hover:bg-indigo-950/30 transition cursor-pointer group"
+                className="even:bg-slate-50/50 dark:even:bg-slate-900/40 hover:bg-indigo-50/40 dark:hover:bg-indigo-950/30 transition cursor-pointer group"
               >
-                <td className="py-4 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                <td className="py-2.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
                   <input
                     type="checkbox"
                     className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
@@ -251,10 +251,10 @@ export default function LogsView({
                     }}
                   />
                 </td>
-                <td className="py-4 px-6 text-slate-500 dark:text-slate-400 font-sans whitespace-nowrap" title={log.created_at}>
+                <td className="py-2.5 px-4 text-slate-500 dark:text-slate-400 font-sans whitespace-nowrap" title={log.created_at}>
                   {log.created_at ? formatLogTime(log.created_at) : '刚刚'}
                 </td>
-                <td className="py-4 px-6 font-mono text-xs">
+                <td className="py-2.5 px-4 font-mono text-xs">
                   <div className="flex items-center space-x-1.5">
                     <span
                       className="text-purple-600 dark:text-purple-400 truncate max-w-[130px] font-semibold"
@@ -307,7 +307,7 @@ export default function LogsView({
                     </span>
                   )}
                 </td>
-                <td className="py-4 px-6 font-semibold text-slate-900 dark:text-slate-100 font-mono">
+                <td className="py-2.5 px-4 font-semibold text-slate-900 dark:text-slate-100 font-mono">
                   <span
                     className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 rounded-md border border-indigo-100 dark:border-indigo-800/60 max-w-[150px] inline-block truncate align-middle"
                     title={log.model}
@@ -315,7 +315,7 @@ export default function LogsView({
                     {log.model || '-'}
                   </span>
                 </td>
-                <td className="py-4 px-6 text-slate-700 dark:text-slate-300 font-sans">
+                <td className="py-2.5 px-4 text-slate-700 dark:text-slate-300 font-sans">
                   {log.channel ? (
                     <span
                       className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 rounded-md border border-emerald-100 dark:border-emerald-800/60 max-w-[170px] inline-block truncate align-middle"
@@ -327,17 +327,17 @@ export default function LogsView({
                     <span className="text-slate-400">直通/多源</span>
                   )}
                 </td>
-                <td className="py-4 px-6 text-slate-600 dark:text-slate-300 font-sans">
+                <td className="py-2.5 px-4 text-slate-600 dark:text-slate-300 font-sans">
                   <span className="font-semibold text-slate-800 dark:text-slate-200">
                     {log.tenant_id || 'anonymous'}
                   </span>
                   {log.api_key && (
-                    <span className="block text-[10px] text-slate-400 font-mono mt-0.5 truncate max-w-[120px]">
+                    <span className="block text-[10px] text-slate-400 font-mono mt-0 truncate max-w-[120px]">
                       {log.api_key}
                     </span>
                   )}
                 </td>
-                <td className="py-4 px-6 text-slate-700 dark:text-slate-300 font-sans">
+                <td className="py-2.5 px-4 text-slate-700 dark:text-slate-300 font-sans">
                   {log.total_tokens > 0 ? (
                     <span>
                       {log.prompt_tokens} + {log.completion_tokens} ={' '}
@@ -347,7 +347,7 @@ export default function LogsView({
                     <span className="text-slate-400">-</span>
                   )}
                 </td>
-                <td className="py-4 px-6 text-slate-700 dark:text-slate-300 font-sans">
+                <td className="py-2.5 px-4 text-slate-700 dark:text-slate-300 font-sans">
                   <div className="flex items-center space-x-1.5">
                     <span className="font-bold text-slate-900 dark:text-slate-100 font-mono">
                       ¥{(log.cost || 0).toFixed(4)}
@@ -362,14 +362,14 @@ export default function LogsView({
                     )}
                   </div>
                   {log.cached_tokens > 0 ? (
-                    <span className="block text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">
+                    <span className="block text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-0">
                       ⚡ 缓存: {log.cached_tokens} (省 90%)
                     </span>
                   ) : (
-                    <span className="block text-[10px] text-slate-400 mt-0.5">无缓存命中</span>
+                    <span className="block text-[10px] text-slate-400 mt-0">无缓存命中</span>
                   )}
                 </td>
-                <td className="py-4 px-6 text-slate-700 dark:text-slate-300 font-sans">
+                <td className="py-2.5 px-4 text-slate-700 dark:text-slate-300 font-sans">
                   <span className="font-bold text-slate-900 dark:text-slate-100">{formatDuration(log.duration_ms ?? 0)}</span>
                   {log.ttft_ms > 0 && (
                     <span className="block text-[11px] text-amber-600 dark:text-amber-400">
@@ -377,7 +377,7 @@ export default function LogsView({
                     </span>
                   )}
                 </td>
-                <td className="py-4 px-6 text-right font-sans space-x-2">
+                <td className="py-2.5 px-4 text-right font-sans space-x-2">
                   <span
                     className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
                       (log.status_code || 200) < 300
@@ -407,7 +407,7 @@ export default function LogsView({
             ))}
             {filteredLogs.length === 0 && (
               <tr>
-                <td colSpan="10" className="py-12 text-center text-slate-400 font-sans">
+                <td colSpan="10" className="py-8 text-center text-slate-400 font-sans">
                   暂无匹配的审计调用记录
                 </td>
               </tr>
