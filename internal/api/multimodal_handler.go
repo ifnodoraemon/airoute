@@ -22,13 +22,9 @@ func resolveMMSessionID(c *gin.Context, prefix string) string {
 		sID = c.GetHeader("X-Airoute-Session-ID")
 	}
 	if sID == "" {
-		sID = c.GetHeader("X-Nano-Session-ID")
-	}
-	if sID == "" {
 		sID = fmt.Sprintf("sess_%s_%d_%x", prefix, time.Now().Unix(), time.Now().UnixNano()%1000000)
 	}
 	c.Header("X-Airoute-Session-ID", sID)
-	c.Header("X-Nano-Session-ID", sID)
 	return sID
 }
 
@@ -98,6 +94,7 @@ func (h *MultimodalHandler) HandleImageGenerations(c *gin.Context) {
 	if storage.GlobalAsyncLogger != nil {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 			TraceID:    middleware.GetTraceID(c),
+			Channel:    resp.Channel,
 			SessionID:  sessionID,
 			APIKey:     getRequestAPIKey(c),
 			TenantID:   c.GetString("tenant_id"),
@@ -173,6 +170,7 @@ func (h *MultimodalHandler) HandleAudioSpeech(c *gin.Context) {
 	if storage.GlobalAsyncLogger != nil {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 			TraceID:    middleware.GetTraceID(c),
+			Channel:    resp.Channel,
 			SessionID:  sessionID,
 			APIKey:     getRequestAPIKey(c),
 			TenantID:   c.GetString("tenant_id"),
@@ -250,6 +248,7 @@ func (h *MultimodalHandler) HandleAudioTranscriptions(c *gin.Context) {
 	if storage.GlobalAsyncLogger != nil {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 			TraceID:    middleware.GetTraceID(c),
+			Channel:    resp.Channel,
 			SessionID:  sessionID,
 			APIKey:     getRequestAPIKey(c),
 			TenantID:   c.GetString("tenant_id"),
@@ -321,6 +320,7 @@ func (h *MultimodalHandler) HandleAudioTranslations(c *gin.Context) {
 	if storage.GlobalAsyncLogger != nil {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 			TraceID:    middleware.GetTraceID(c),
+			Channel:    resp.Channel,
 			SessionID:  sessionID,
 			APIKey:     getRequestAPIKey(c),
 			TenantID:   c.GetString("tenant_id"),
@@ -396,6 +396,7 @@ func (h *MultimodalHandler) HandleVideoGenerations(c *gin.Context) {
 	if storage.GlobalAsyncLogger != nil {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 			TraceID:    middleware.GetTraceID(c),
+			Channel:    resp.Channel,
 			SessionID:  sessionID,
 			APIKey:     getRequestAPIKey(c),
 			TenantID:   c.GetString("tenant_id"),

@@ -273,6 +273,14 @@ export default function LogsView({
                       会话: {log.session_id}
                     </span>
                   )}
+                  {log.chat_id && (
+                    <span
+                      className="block text-[10px] text-sky-500 dark:text-sky-400 truncate max-w-[130px]"
+                      title={`对话: ${log.chat_id}`}
+                    >
+                      对话: {log.chat_id}
+                    </span>
+                  )}
                 </td>
                 <td className="py-4 px-6 font-semibold text-slate-900 dark:text-slate-100 font-mono">
                   <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 rounded-md border border-indigo-100 dark:border-indigo-800/60">

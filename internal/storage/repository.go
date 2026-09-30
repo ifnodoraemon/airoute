@@ -53,6 +53,7 @@ type APIKeyRecord struct {
 type UsageLogRecord struct {
 	ID               int64     `json:"id"`
 	TraceID          string    `json:"trace_id"`
+	ChatID           string    `json:"chat_id,omitempty"`
 	SessionID        string    `json:"session_id,omitempty"`
 	APIKey           string    `json:"api_key"`
 	TenantID         string    `json:"tenant_id"`
@@ -391,9 +392,17 @@ type LogFilter struct {
 	StartTime string // e.g. "2026-09-26 00:00:00" or ISO8601
 	EndTime   string
 	TraceID   string
+	ChatID    string
 	SessionID string
 	Model     string
 	TenantID  string
+	// APIKeys restricts results to records produced by these key values.
+	// A nil/empty slice means NO key-based restriction (admin scope);
+	// callers scoping non-admin users must handle the zero-key case
+	// before calling, or the filter silently returns everything.
+	// Filtering happens in SQL so that LIMIT pagination stays correct
+	// (no post-filter truncation).
+	APIKeys []string
 }
 
 // RecordUsageLog records an audit log asynchronously and updates key quota/cost atomically.
@@ -425,11 +434,11 @@ func (r *Repository) RecordUsageLog(log *UsageLogRecord) error {
 	keyVal := log.APIKey
 
 	if !log.CreatedAt.IsZero() {
-		_, err = tx.Exec(`INSERT INTO usage_logs (trace_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			log.TraceID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, log.CreatedAt.UTC().Format("2006-01-02 15:04:05"))
+		_, err = tx.Exec(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, log.CreatedAt.UTC().Format("2006-01-02 15:04:05"))
 	} else {
-		_, err = tx.Exec(`INSERT INTO usage_logs (trace_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			log.TraceID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode)
+		_, err = tx.Exec(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode)
 	}
 	if err != nil {
 		return err
@@ -485,8 +494,8 @@ func (r *Repository) BatchRecordUsageLogs(logs []*UsageLogRecord) error {
 	keyTenantMap := make(map[string]string)
 	orphanTenantCostMap := make(map[string]float64)
 
-	insertWithTimeSQL := r.db.Rebind(`INSERT INTO usage_logs (trace_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-	insertSQL := r.db.Rebind(`INSERT INTO usage_logs (trace_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	insertWithTimeSQL := r.db.Rebind(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	insertSQL := r.db.Rebind(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 
 	stmtWithTime, err := tx.Prepare(insertWithTimeSQL)
 	if err != nil {
@@ -522,9 +531,9 @@ func (r *Repository) BatchRecordUsageLogs(logs []*UsageLogRecord) error {
 
 		keyVal := log.APIKey
 		if !log.CreatedAt.IsZero() {
-			_, err = stmtWithTime.Exec(log.TraceID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, log.CreatedAt.UTC().Format("2006-01-02 15:04:05"))
+			_, err = stmtWithTime.Exec(log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, log.CreatedAt.UTC().Format("2006-01-02 15:04:05"))
 		} else {
-			_, err = stmt.Exec(log.TraceID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode)
+			_, err = stmt.Exec(log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode)
 		}
 		if err != nil {
 			return err
@@ -608,7 +617,7 @@ func (r *Repository) ListUsageLogsWithFilter(f LogFilter) ([]*UsageLogRecord, er
 		f.Offset = 0
 	}
 
-	query := `SELECT id, trace_id, COALESCE(session_id, ''), COALESCE(api_key, ''), COALESCE(tenant_id, ''), COALESCE(model, ''), COALESCE(channel, ''), prompt_tokens, completion_tokens, COALESCE(cached_tokens, 0), total_tokens, COALESCE(cost, 0.0), COALESCE(is_off_peak, 0), COALESCE(off_peak_discount, 1.0), duration_ms, ttft_ms, status_code, created_at FROM usage_logs WHERE 1=1`
+	query := `SELECT id, trace_id, COALESCE(chat_id, ''), COALESCE(session_id, ''), COALESCE(api_key, ''), COALESCE(tenant_id, ''), COALESCE(model, ''), COALESCE(channel, ''), prompt_tokens, completion_tokens, COALESCE(cached_tokens, 0), total_tokens, COALESCE(cost, 0.0), COALESCE(is_off_peak, 0), COALESCE(off_peak_discount, 1.0), duration_ms, ttft_ms, status_code, created_at FROM usage_logs WHERE 1=1`
 	var args []interface{}
 
 	if f.StartTime != "" {
@@ -623,6 +632,10 @@ func (r *Repository) ListUsageLogsWithFilter(f LogFilter) ([]*UsageLogRecord, er
 		query += ` AND (trace_id = ? OR trace_id LIKE ?)`
 		args = append(args, f.TraceID, "%"+f.TraceID+"%")
 	}
+	if f.ChatID != "" {
+		query += ` AND (chat_id = ? OR chat_id LIKE ?)`
+		args = append(args, f.ChatID, "%"+f.ChatID+"%")
+	}
 	if f.SessionID != "" {
 		query += ` AND (session_id = ? OR session_id LIKE ?)`
 		args = append(args, f.SessionID, "%"+f.SessionID+"%")
@@ -634,6 +647,14 @@ func (r *Repository) ListUsageLogsWithFilter(f LogFilter) ([]*UsageLogRecord, er
 	if f.TenantID != "" {
 		query += ` AND tenant_id = ?`
 		args = append(args, f.TenantID)
+	}
+	if len(f.APIKeys) > 0 {
+		placeholders := make([]string, 0, len(f.APIKeys))
+		for _, k := range f.APIKeys {
+			placeholders = append(placeholders, "?")
+			args = append(args, k)
+		}
+		query += ` AND api_key IN (` + strings.Join(placeholders, ",") + `)`
 	}
 
 	query += ` ORDER BY id DESC LIMIT ? OFFSET ?`
@@ -650,7 +671,7 @@ func (r *Repository) ListUsageLogsWithFilter(f LogFilter) ([]*UsageLogRecord, er
 		var l UsageLogRecord
 		var isOff int
 		var createdAt time.Time
-		if err := rows.Scan(&l.ID, &l.TraceID, &l.SessionID, &l.APIKey, &l.TenantID, &l.Model, &l.Channel, &l.PromptTokens, &l.CompletionTokens, &l.CachedTokens, &l.TotalTokens, &l.Cost, &isOff, &l.OffPeakDiscount, &l.DurationMs, &l.TTFTMs, &l.StatusCode, &createdAt); err != nil {
+		if err := rows.Scan(&l.ID, &l.TraceID, &l.ChatID, &l.SessionID, &l.APIKey, &l.TenantID, &l.Model, &l.Channel, &l.PromptTokens, &l.CompletionTokens, &l.CachedTokens, &l.TotalTokens, &l.Cost, &isOff, &l.OffPeakDiscount, &l.DurationMs, &l.TTFTMs, &l.StatusCode, &createdAt); err != nil {
 			return nil, err
 		}
 		l.IsOffPeak = isOff == 1

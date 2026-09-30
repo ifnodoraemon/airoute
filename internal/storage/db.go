@@ -265,6 +265,7 @@ func (db *DB) migrate() error {
 					ensureSQLiteColumn(db.DB, "usage_logs", "cost", "REAL DEFAULT 0")
 					ensureSQLiteColumn(db.DB, "usage_logs", "is_off_peak", "INTEGER DEFAULT 0")
 					ensureSQLiteColumn(db.DB, "usage_logs", "off_peak_discount", "REAL DEFAULT 1.0")
+					ensureSQLiteColumn(db.DB, "usage_logs", "chat_id", "TEXT DEFAULT ''")
 				}
 				var vkCount int
 				_ = db.DB.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='virtual_keys';").Scan(&vkCount)
@@ -323,6 +324,7 @@ func (db *DB) migrate() error {
 				CREATE TABLE IF NOT EXISTS usage_logs (
 					id INTEGER PRIMARY KEY AUTOINCREMENT,
 					trace_id TEXT DEFAULT '',
+					chat_id TEXT DEFAULT '',
 					session_id TEXT DEFAULT '',
 					api_key TEXT,
 					tenant_id TEXT,
@@ -440,6 +442,7 @@ func (db *DB) migrate() error {
 
 				CREATE INDEX IF NOT EXISTS idx_usage_created ON usage_logs(created_at);
 				CREATE INDEX IF NOT EXISTS idx_usage_trace ON usage_logs(trace_id);
+				CREATE INDEX IF NOT EXISTS idx_usage_chat ON usage_logs(chat_id);
 				CREATE INDEX IF NOT EXISTS idx_usage_session ON usage_logs(session_id);
 				CREATE INDEX IF NOT EXISTS idx_usage_key ON usage_logs(api_key);
 				CREATE INDEX IF NOT EXISTS idx_usage_tenant ON usage_logs(tenant_id);
@@ -513,6 +516,17 @@ func (db *DB) migrate() error {
 				return nil
 			},
 		},
+		{
+			Version: 7,
+			Name:    "add_chat_id_to_usage_logs",
+			Up: func(db *DB) error {
+				ensureSQLiteColumn(db.DB, "usage_logs", "chat_id", "TEXT DEFAULT ''")
+				if _, err := db.DB.Exec(`CREATE INDEX IF NOT EXISTS idx_usage_chat ON usage_logs(chat_id);`); err != nil {
+					return err
+				}
+				return nil
+			},
+		},
 	}
 	return db.runMigrations(migrations)
 }
@@ -563,6 +577,7 @@ func (db *DB) migratePostgres() error {
 				CREATE TABLE IF NOT EXISTS usage_logs (
 					id BIGSERIAL PRIMARY KEY,
 					trace_id TEXT DEFAULT '',
+					chat_id TEXT DEFAULT '',
 					session_id TEXT DEFAULT '',
 					api_key VARCHAR(255),
 					tenant_id VARCHAR(128),
@@ -680,6 +695,7 @@ func (db *DB) migratePostgres() error {
 
 				CREATE INDEX IF NOT EXISTS idx_usage_created ON usage_logs(created_at);
 				CREATE INDEX IF NOT EXISTS idx_usage_trace ON usage_logs(trace_id);
+				CREATE INDEX IF NOT EXISTS idx_usage_chat ON usage_logs(chat_id);
 				CREATE INDEX IF NOT EXISTS idx_usage_session ON usage_logs(session_id);
 				CREATE INDEX IF NOT EXISTS idx_usage_key ON usage_logs(api_key);
 				CREATE INDEX IF NOT EXISTS idx_usage_tenant ON usage_logs(tenant_id);
@@ -759,6 +775,17 @@ func (db *DB) migratePostgres() error {
 					UPDATE api_keys SET format_validation = '' WHERE format_validation IS NULL;
 				`)
 				return nil
+			},
+		},
+		{
+			Version: 7,
+			Name:    "add_chat_id_to_usage_logs",
+			Up: func(db *DB) error {
+				if _, err := db.DB.Exec(`ALTER TABLE usage_logs ADD COLUMN IF NOT EXISTS chat_id TEXT DEFAULT '';`); err != nil {
+					return err
+				}
+				_, err := db.DB.Exec(`CREATE INDEX IF NOT EXISTS idx_usage_chat ON usage_logs(chat_id);`)
+				return err
 			},
 		},
 	}

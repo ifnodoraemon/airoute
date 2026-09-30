@@ -1803,6 +1803,7 @@ export default function App() {
     const f = logFilter.toLowerCase();
     return (
       (l.trace_id && l.trace_id.toLowerCase().includes(f)) ||
+      (l.chat_id && l.chat_id.toLowerCase().includes(f)) ||
       (l.session_id && l.session_id.toLowerCase().includes(f)) ||
       (l.model && l.model.toLowerCase().includes(f)) ||
       (l.channel && l.channel.toLowerCase().includes(f)) ||

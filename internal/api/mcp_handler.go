@@ -736,6 +736,8 @@ func (h *MCPHandler) executeTool(ctx context.Context, name string, args map[stri
 			if storage.GlobalAsyncLogger != nil {
 				storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 					TraceID:          fmt.Sprintf("tr-mcp-%d", time.Now().UnixNano()),
+					ChatID:           resp.ID,
+					Channel:          resp.Channel,
 					SessionID:        sessionID,
 					APIKey:           "mcp-session",
 					Model:            chatReq.Model,

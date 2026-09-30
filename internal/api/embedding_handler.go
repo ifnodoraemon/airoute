@@ -78,13 +78,9 @@ func (h *Handler) HandleEmbeddings(c *gin.Context) {
 		sessionID = c.GetHeader("X-Airoute-Session-ID")
 	}
 	if sessionID == "" {
-		sessionID = c.GetHeader("X-Nano-Session-ID")
-	}
-	if sessionID == "" {
 		sessionID = fmt.Sprintf("sess_emb_%d_%x", time.Now().Unix(), time.Now().UnixNano()%1000000)
 	}
 	c.Header("X-Airoute-Session-ID", sessionID)
-	c.Header("X-Nano-Session-ID", sessionID)
 
 	dur := time.Since(start)
 	var cost float64
@@ -94,6 +90,7 @@ func (h *Handler) HandleEmbeddings(c *gin.Context) {
 	if storage.GlobalAsyncLogger != nil {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 			TraceID:          middleware.GetTraceID(c),
+			Channel:          resp.Channel,
 			SessionID:        sessionID,
 			APIKey:           getRequestAPIKey(c),
 			TenantID:         c.GetString("tenant_id"),

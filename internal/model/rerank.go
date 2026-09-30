@@ -50,4 +50,8 @@ type RerankResponse struct {
 	Model   string       `json:"model"`
 	Results []RerankItem `json:"results"`
 	Usage   RerankUsage  `json:"usage"`
+
+	// Channel is the routing chain that served this request (e.g. "A" or
+	// "A→B" after fallback). Internal-only metadata for audit logging.
+	Channel string `json:"-"`
 }

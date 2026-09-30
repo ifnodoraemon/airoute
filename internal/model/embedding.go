@@ -55,4 +55,8 @@ type EmbeddingResponse struct {
 	Data   []EmbeddingItem `json:"data"`
 	Model  string          `json:"model"`
 	Usage  EmbeddingUsage  `json:"usage"`
+
+	// Channel is the routing chain that served this request (e.g. "A" or
+	// "A→B" after fallback). Internal-only metadata for audit logging.
+	Channel string `json:"-"`
 }

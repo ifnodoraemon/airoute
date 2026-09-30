@@ -106,6 +106,10 @@ type ChatCompletionResponse struct {
 	Model   string                 `json:"model"`
 	Choices []ChatCompletionChoice `json:"choices"`
 	Usage   *Usage                 `json:"usage,omitempty"`
+
+	// Channel is the name of the upstream channel that actually served this
+	// request. Internal-only metadata for audit logging; never serialized.
+	Channel string `json:"-"`
 }
 
 // ChunkDelta is the incremental message delta in a stream.
@@ -149,9 +153,12 @@ type ModelListResponse struct {
 
 // StreamEvent is an internal event passed over channels during streaming.
 type StreamEvent struct {
-	Chunk  *ChatCompletionChunk
-	Raw    []byte
-	IsDone bool
-	Err    error
+	Chunk *ChatCompletionChunk
+	Raw   []byte
+	// Channel is the name of the upstream channel serving the stream.
+	// Populated by the dispatcher on the first event; internal-only.
+	Channel string
+	IsDone  bool
+	Err     error
 }
 

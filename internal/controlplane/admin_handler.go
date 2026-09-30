@@ -1095,9 +1095,7 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 		SessionID: c.Query("session_id"),
 		Model:     c.Query("model"),
 		TenantID:  c.Query("tenant_id"),
-	}
-	if filter.TraceID == "" && c.Query("chat_id") != "" {
-		filter.TraceID = c.Query("chat_id")
+		ChatID:    c.Query("chat_id"),
 	}
 
 	claimsVal, exists := c.Get("admin_claims")
@@ -1111,22 +1109,21 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 					c.JSON(http.StatusOK, gin.H{"code": 0, "data": []*storage.UsageLogRecord{}})
 					return
 				}
-				userKeyMap := make(map[string]bool)
+				// Scope to the user's own keys in SQL so that LIMIT/OFFSET
+				// pagination applies after filtering, not before.
+				filter.APIKeys = make([]string, 0, len(userKeys))
 				for _, k := range userKeys {
-					userKeyMap[k.Key] = true
+					filter.APIKeys = append(filter.APIKeys, k.Key)
 				}
 				logs, err := h.repo.ListUsageLogsWithFilter(filter)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 					return
 				}
-				userFiltered := make([]*storage.UsageLogRecord, 0)
-				for _, l := range logs {
-					if userKeyMap[l.APIKey] {
-						userFiltered = append(userFiltered, l)
-					}
+				if logs == nil {
+					logs = make([]*storage.UsageLogRecord, 0)
 				}
-				c.JSON(http.StatusOK, gin.H{"code": 0, "data": userFiltered})
+				c.JSON(http.StatusOK, gin.H{"code": 0, "data": logs})
 				return
 			}
 		}

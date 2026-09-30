@@ -117,6 +117,27 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
                 )}
               </div>
             </div>
+            {log.chat_id && (
+              <div className="p-3 flex items-center justify-between bg-sky-50/40 dark:bg-sky-950/30">
+                <span className="text-slate-500 font-medium">对话 ID (Chat ID)</span>
+                <div className="flex items-center space-x-2">
+                  <span className="font-mono text-xs font-bold text-sky-700 dark:text-sky-300">
+                    {log.chat_id}
+                  </span>
+                  <button
+                    onClick={() => {
+                      onCopy(log.chat_id);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }}
+                    className="p-1 hover:bg-white dark:hover:bg-slate-800 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer"
+                    title="复制对话 ID"
+                  >
+                    <Copy className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            )}
             {log.session_id && (
               <div className="p-3 flex items-center justify-between bg-indigo-50/40 dark:bg-indigo-950/30">
                 <span className="text-slate-500 font-medium">会话 ID (Session ID)</span>

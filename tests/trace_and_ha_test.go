@@ -36,19 +36,19 @@ func TestTraceMiddleware_GenerationAndExtraction(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w1.Code)
 	assert.NotEmpty(t, capturedTraceID)
 	assert.Equal(t, capturedTraceID, capturedContextTraceID)
-	assert.Equal(t, capturedTraceID, w1.Header().Get(middleware.HeaderNanoTraceID))
+	assert.Equal(t, capturedTraceID, w1.Header().Get(middleware.HeaderAirouteTraceID))
 	assert.Equal(t, capturedTraceID, w1.Header().Get(middleware.HeaderRequestID))
 
-	// 2. Propagate existing X-Nano-Trace-ID
+	// 2. Propagate existing X-Airoute-Trace-ID
 	customTraceID := "tr-custom-trace-999"
 	req2 := httptest.NewRequest("GET", "/test-trace", nil)
-	req2.Header.Set(middleware.HeaderNanoTraceID, customTraceID)
+	req2.Header.Set(middleware.HeaderAirouteTraceID, customTraceID)
 	w2 := httptest.NewRecorder()
 	r.ServeHTTP(w2, req2)
 
 	assert.Equal(t, http.StatusOK, w2.Code)
 	assert.Equal(t, customTraceID, capturedTraceID)
-	assert.Equal(t, customTraceID, w2.Header().Get(middleware.HeaderNanoTraceID))
+	assert.Equal(t, customTraceID, w2.Header().Get(middleware.HeaderAirouteTraceID))
 
 	// 3. Propagate existing X-Request-ID
 	reqID := "req-abc-xyz-123"

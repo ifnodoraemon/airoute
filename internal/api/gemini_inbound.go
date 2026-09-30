@@ -164,6 +164,8 @@ func (h *Handler) HandleGeminiAction(c *gin.Context) {
 		if storage.GlobalAsyncLogger != nil {
 			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 				TraceID:          middleware.GetTraceID(c),
+				ChatID:           resp.ID,
+				Channel:          resp.Channel,
 				SessionID:        sessionID,
 				APIKey:           getRequestAPIKey(c),
 				TenantID:         c.GetString(middleware.ContextKeyTenant),
@@ -211,6 +213,8 @@ func (h *Handler) HandleGeminiAction(c *gin.Context) {
 	totalPromptTokens := 0
 	totalCompTokens := 0
 	firstTokenRecorded := false
+	upstreamChannel := ""      // populated from the first stream event
+	geminiUpstreamChatID := "" // upstream response ID, captured from the first chunk
 
 	var recordOnce sync.Once
 	recordStreamEnd := func() {
@@ -226,6 +230,8 @@ func (h *Handler) HandleGeminiAction(c *gin.Context) {
 		if storage.GlobalAsyncLogger != nil {
 			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 				TraceID:          middleware.GetTraceID(c),
+				ChatID:           geminiUpstreamChatID,
+				Channel:          upstreamChannel,
 				SessionID:        sessionID,
 				APIKey:           getRequestAPIKey(c),
 				TenantID:         c.GetString(middleware.ContextKeyTenant),
@@ -270,70 +276,84 @@ func (h *Handler) HandleGeminiAction(c *gin.Context) {
 				continue
 			}
 
-			if event.Chunk != nil && len(event.Chunk.Choices) > 0 {
-				chunkChoice := event.Chunk.Choices[0]
-				var geminiParts []gin.H
+			// Capture the channel that actually serves this stream.
+			// Checked at event level: the dispatcher stamps it on the first
+			// event, which may carry no choices (e.g. keep-alive frames).
+			if upstreamChannel == "" && event.Channel != "" {
+				upstreamChannel = event.Channel
+			}
 
-				if chunkChoice.Delta.Content != "" {
-					if !firstTokenRecorded {
-						telemetry.GlobalMetrics.RecordTTFT(time.Since(start))
-						firstTokenRecorded = true
-					}
-					totalCompTokens++
-					geminiParts = append(geminiParts, gin.H{"text": chunkChoice.Delta.Content})
+			if event.Chunk != nil {
+				// Capture the upstream response ID from the first chunk
+				if event.Chunk.ID != "" && geminiUpstreamChatID == "" {
+					geminiUpstreamChatID = event.Chunk.ID
 				}
 
-				for _, tc := range chunkChoice.Delta.ToolCalls {
-					var args map[string]any
-					_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
-					geminiParts = append(geminiParts, gin.H{
-						"functionCall": gin.H{
-							"name": tc.Function.Name,
-							"args": args,
-						},
-					})
-				}
+				if len(event.Chunk.Choices) > 0 {
+					chunkChoice := event.Chunk.Choices[0]
+					var geminiParts []gin.H
 
-				finishReason := ""
-				if chunkChoice.FinishReason != nil {
-					if *chunkChoice.FinishReason == "tool_calls" {
-						finishReason = "STOP"
-					} else if *chunkChoice.FinishReason == "length" {
-						finishReason = "MAX_TOKENS"
-					} else {
-						finishReason = "STOP"
-					}
-				}
-
-				if len(geminiParts) > 0 || finishReason != "" {
-					candidate := gin.H{
-						"index": 0,
-						"content": gin.H{
-							"role":  "model",
-							"parts": geminiParts,
-						},
-					}
-					if finishReason != "" {
-						candidate["finishReason"] = finishReason
+					if chunkChoice.Delta.Content != "" {
+						if !firstTokenRecorded {
+							telemetry.GlobalMetrics.RecordTTFT(time.Since(start))
+							firstTokenRecorded = true
+						}
+						totalCompTokens++
+						geminiParts = append(geminiParts, gin.H{"text": chunkChoice.Delta.Content})
 					}
 
-					chunkObj := gin.H{
-						"candidates": []gin.H{candidate},
+					for _, tc := range chunkChoice.Delta.ToolCalls {
+						var args map[string]any
+						_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
+						geminiParts = append(geminiParts, gin.H{
+							"functionCall": gin.H{
+								"name": tc.Function.Name,
+								"args": args,
+							},
+						})
 					}
 
-					if event.Chunk.Usage != nil {
-						totalPromptTokens = event.Chunk.Usage.PromptTokens
-						totalCompTokens = event.Chunk.Usage.CompletionTokens
-						chunkObj["usageMetadata"] = gin.H{
-							"promptTokenCount":     totalPromptTokens,
-							"candidatesTokenCount": totalCompTokens,
-							"totalTokenCount":      totalPromptTokens + totalCompTokens,
+					finishReason := ""
+					if chunkChoice.FinishReason != nil {
+						if *chunkChoice.FinishReason == "tool_calls" {
+							finishReason = "STOP"
+						} else if *chunkChoice.FinishReason == "length" {
+							finishReason = "MAX_TOKENS"
+						} else {
+							finishReason = "STOP"
 						}
 					}
 
-					chunkBytes, _ := json.Marshal(chunkObj)
-					fmt.Fprintf(w, "data: %s\n\n", chunkBytes)
-					flusher.Flush()
+					if len(geminiParts) > 0 || finishReason != "" {
+						candidate := gin.H{
+							"index": 0,
+							"content": gin.H{
+								"role":  "model",
+								"parts": geminiParts,
+							},
+						}
+						if finishReason != "" {
+							candidate["finishReason"] = finishReason
+						}
+
+						chunkObj := gin.H{
+							"candidates": []gin.H{candidate},
+						}
+
+						if event.Chunk.Usage != nil {
+							totalPromptTokens = event.Chunk.Usage.PromptTokens
+							totalCompTokens = event.Chunk.Usage.CompletionTokens
+							chunkObj["usageMetadata"] = gin.H{
+								"promptTokenCount":     totalPromptTokens,
+								"candidatesTokenCount": totalCompTokens,
+								"totalTokenCount":      totalPromptTokens + totalCompTokens,
+							}
+						}
+
+						chunkBytes, _ := json.Marshal(chunkObj)
+						fmt.Fprintf(w, "data: %s\n\n", chunkBytes)
+						flusher.Flush()
+					}
 				}
 			}
 		}

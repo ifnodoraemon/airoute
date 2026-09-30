@@ -169,6 +169,8 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 		if storage.GlobalAsyncLogger != nil {
 			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 				TraceID:          middleware.GetTraceID(c),
+				ChatID:           chatID,
+				Channel:          resp.Channel,
 				SessionID:        sessionID,
 				APIKey:           getRequestAPIKey(c),
 				TenantID:         c.GetString("tenant_id"),
@@ -184,21 +186,15 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 				StatusCode:       http.StatusOK,
 			})
 		}
-		c.Header("X-Airoute-Trace-ID", chatID)
-		c.Header("X-Nano-Chat-ID", chatID)
+		c.Header("X-Airoute-Chat-ID", chatID)
 		c.Header("X-Airoute-Cost", fmt.Sprintf("%.6f", cost))
-		c.Header("X-Nano-Cost", fmt.Sprintf("%.6f", cost))
 		if isOffPeak {
 			c.Header("X-Airoute-Off-Peak", "true")
-			c.Header("X-Nano-Off-Peak", "true")
 			c.Header("X-Airoute-Off-Peak-Discount", fmt.Sprintf("%.2f", offPeakDiscount))
-			c.Header("X-Nano-Off-Peak-Discount", fmt.Sprintf("%.2f", offPeakDiscount))
 		}
 		if cachedTokens > 0 {
 			c.Header("X-Airoute-Cached-Tokens", fmt.Sprintf("%d", cachedTokens))
-			c.Header("X-Nano-Cached-Tokens", fmt.Sprintf("%d", cachedTokens))
 			c.Header("X-Airoute-Saved-Cost", fmt.Sprintf("%.6f", savedCost))
-			c.Header("X-Nano-Saved-Cost", fmt.Sprintf("%.6f", savedCost))
 		}
 		c.JSON(http.StatusOK, resp)
 		return
@@ -241,8 +237,7 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no")
-	c.Header("X-Airoute-Trace-ID", streamChatID)
-	c.Header("X-Nano-Chat-ID", streamChatID)
+	c.Header("X-Airoute-Chat-ID", streamChatID)
 	c.Status(http.StatusOK)
 
 	flusher, ok := c.Writer.(http.Flusher)
@@ -258,6 +253,8 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	totalCompTokens := 0
 	totalCachedTokens := 0
 	accumulatedCompChars := 0
+	upstreamChatID := streamChatID // fallback to our generated ID
+	upstreamChannel := ""         // populated from the first stream event
 
 	approxPromptChars := 0
 	for _, m := range req.Messages {
@@ -293,6 +290,8 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 		if storage.GlobalAsyncLogger != nil {
 			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 				TraceID:          middleware.GetTraceID(c),
+				ChatID:           upstreamChatID,
+				Channel:          upstreamChannel,
 				SessionID:        sessionID,
 				APIKey:           getRequestAPIKey(c),
 				TenantID:         c.GetString("tenant_id"),
@@ -346,9 +345,20 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 				return
 			}
 
+			// Capture the channel that actually serves this stream.
+			// Checked at event level: the dispatcher stamps it on the first
+			// event, which may carry no choices (e.g. keep-alive frames).
+			if upstreamChannel == "" && event.Channel != "" {
+				upstreamChannel = event.Channel
+			}
+
 			if event.Chunk != nil {
 				if req.Model != "" {
 					event.Chunk.Model = req.Model
+				}
+				// Capture the upstream provider's response ID from the first chunk
+				if event.Chunk.ID != "" && upstreamChatID == streamChatID {
+					upstreamChatID = event.Chunk.ID
 				}
 				if !firstTokenRecorded && len(event.Chunk.Choices) > 0 {
 					delta := event.Chunk.Choices[0].Delta
@@ -733,7 +743,6 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 	} else {
 		sessionID = "resp_" + sessionID
 		c.Header("X-Airoute-Session-ID", sessionID)
-		c.Header("X-Nano-Session-ID", sessionID)
 		c.SetCookie("airoute_session", sessionID, 1800, "/", "", false, false)
 		c.SetCookie("nano_session", sessionID, 1800, "/", "", false, false)
 	}
@@ -769,6 +778,8 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 		if storage.GlobalAsyncLogger != nil {
 			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 				TraceID:          middleware.GetTraceID(c),
+				ChatID:           resp.ID,
+				Channel:          resp.Channel,
 				SessionID:        sessionID,
 				APIKey:           getRequestAPIKey(c),
 				TenantID:         c.GetString("tenant_id"),
@@ -863,6 +874,8 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 	var ttftDuration time.Duration
 	totalPromptTokens := 0
 	totalCompTokens := 0
+	respUpstreamChatID := respID // fallback to our generated ID
+	respUpstreamChannel := ""   // populated from the first stream event
 
 	for event := range streamChan {
 		if event.Err != nil {
@@ -882,7 +895,18 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 			break
 		}
 
+		// Capture the channel that actually serves this stream.
+		// Checked at event level: the dispatcher stamps it on the first
+		// event, which may carry no choices (e.g. keep-alive frames).
+		if respUpstreamChannel == "" && event.Channel != "" {
+			respUpstreamChannel = event.Channel
+		}
+
 		if event.Chunk != nil {
+			// Capture the upstream provider's response ID from the first chunk
+			if event.Chunk.ID != "" && respUpstreamChatID == respID {
+				respUpstreamChatID = event.Chunk.ID
+			}
 			if !firstTokenRecorded {
 				ttftDuration = time.Since(start)
 				telemetry.GlobalMetrics.RecordTTFT(ttftDuration)
@@ -931,6 +955,8 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 	if storage.GlobalAsyncLogger != nil {
 		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 			TraceID:          middleware.GetTraceID(c),
+			ChatID:           respUpstreamChatID,
+			Channel:          respUpstreamChannel,
 			SessionID:        sessionID,
 			APIKey:           getRequestAPIKey(c),
 			TenantID:         c.GetString("tenant_id"),
@@ -1067,7 +1093,6 @@ func resolveSessionID(c *gin.Context, modelName string, messages []model.ChatMes
 	}
 	if sID != "" {
 		c.Header("X-Airoute-Session-ID", sID)
-		c.Header("X-Nano-Session-ID", sID)
 		// Set cookie for browser-based clients (NextChat, OpenWebUI, LibreChat, Web App)
 		c.SetCookie("airoute_session", sID, 1800, "/", "", false, false)
 		c.SetCookie("nano_session", sID, 1800, "/", "", false, false)

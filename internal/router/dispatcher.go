@@ -236,6 +236,62 @@ func nextFallbackContext(ctx context.Context, currentModel, nextModel string) (c
 	return context.WithValue(ctx, fallbackChainKey{}, newChain), nil
 }
 
+// channelTrailKey carries the sequence of channels that were actually called
+// (and failed) across cross-model fallback recursions, so the final audit log
+// can show the full routing chain such as "A→B→C".
+type channelTrailKey struct{}
+
+func getChannelTrail(ctx context.Context) []string {
+	if val := ctx.Value(channelTrailKey{}); val != nil {
+		if trail, ok := val.([]string); ok {
+			return trail
+		}
+	}
+	return nil
+}
+
+// withChannelTrail returns a context carrying prior failures plus the given
+// attempted channels, for propagation into fallback recursion.
+func withChannelTrail(ctx context.Context, attempted []string) context.Context {
+	if len(attempted) == 0 {
+		return ctx
+	}
+	merged := append(append([]string(nil), getChannelTrail(ctx)...), attempted...)
+	return context.WithValue(ctx, channelTrailKey{}, merged)
+}
+
+// formatChannelTrail renders the full routing chain for the audit log:
+// channels attempted in prior models (from ctx) + channels attempted for the
+// current model + the channel that finally succeeded, joined with "→".
+// The result is capped to maxChannelTrailLen runes (the usage_logs.channel
+// column is VARCHAR(128) on Postgres); when capped, the most recent hops are
+// preserved and the chain is prefixed with "…".
+func formatChannelTrail(ctx context.Context, attempted []string, final string) string {
+	const maxChannelTrailLen = 128
+	prior := getChannelTrail(ctx)
+	all := make([]string, 0, len(prior)+len(attempted)+1)
+	all = append(all, prior...)
+	all = append(all, attempted...)
+	all = append(all, final)
+	joined := strings.Join(all, "→")
+	if len([]rune(joined)) <= maxChannelTrailLen {
+		return joined
+	}
+	// Keep the most recent hops so the serving channel always survives.
+	out := ""
+	for i := len(all) - 1; i >= 0; i-- {
+		candidate := all[i]
+		if out != "" {
+			candidate += "→" + out
+		}
+		if len([]rune(candidate))+len("…") > maxChannelTrailLen {
+			break
+		}
+		out = candidate
+	}
+	return "…" + out
+}
+
 // Dispatch executes non-streaming chat with automatic fallback.
 func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequest) (*model.ChatCompletionResponse, error) {
 	channels := d.GetChannelsForModelAndProtocolWithContext(ctx, req.Model, "chat")
@@ -261,6 +317,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 	}
 
 	var lastErr error
+	var attempted []string // channels actually called and failed for this model
 	for i, ch := range channels {
 		// High-Availability Circuit Breaker: fail fast if upstream is down
 		if !d.circuitBreaker.CanExecute(ch.Name) {
@@ -289,6 +346,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		resp, err := prov.ChatComplete(ctx, req, ch)
 		if err == nil {
 			d.circuitBreaker.RecordSuccess(ch.Name)
+			resp.Channel = formatChannelTrail(ctx, attempted, ch.Name)
 			dur := time.Since(start)
 			promptTokens := 0
 			compTokens := 0
@@ -307,6 +365,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 
 		d.circuitBreaker.RecordFailure(ch.Name)
 		lastErr = err
+		attempted = append(attempted, ch.Name)
 		telemetry.GlobalMetrics.RecordFallback()
 		telemetry.Logger.Warn("channel execution failed, triggering fallback",
 			"channel", ch.Name,
@@ -328,7 +387,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		)
 		reqCopy := *req
 		reqCopy.Model = fb
-		return d.Dispatch(nextCtx, &reqCopy)
+		return d.Dispatch(withChannelTrail(nextCtx, attempted), &reqCopy)
 	}
 
 	telemetry.GlobalMetrics.RecordRequest(false, 0, 0, 0)
@@ -360,6 +419,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 	}
 
 	var lastErr error
+	var attempted []string // channels actually called and failed for this model
 	for i, ch := range channels {
 		// High-Availability Circuit Breaker: fail fast if upstream is down
 		if !d.circuitBreaker.CanExecute(ch.Name) {
@@ -386,6 +446,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		if err != nil {
 			d.circuitBreaker.RecordFailure(ch.Name)
 			lastErr = err
+			attempted = append(attempted, ch.Name)
 			telemetry.GlobalMetrics.RecordFallback()
 			telemetry.Logger.Warn("stream connection failed, trying next channel",
 				"channel", ch.Name,
@@ -400,6 +461,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			if !ok {
 				d.circuitBreaker.RecordFailure(ch.Name)
 				lastErr = fmt.Errorf("channel %s closed stream without events", ch.Name)
+				attempted = append(attempted, ch.Name)
 				telemetry.GlobalMetrics.RecordFallback()
 				continue
 			}
@@ -407,6 +469,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			if firstEvent.Err != nil {
 				d.circuitBreaker.RecordFailure(ch.Name)
 				lastErr = firstEvent.Err
+				attempted = append(attempted, ch.Name)
 				telemetry.GlobalMetrics.RecordFallback()
 				telemetry.Logger.Warn("channel failed before first valid token, falling back",
 					"channel", ch.Name,
@@ -417,6 +480,8 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 
 			// First token healthy! Mark healthy in circuit breaker
 			d.circuitBreaker.RecordSuccess(ch.Name)
+			// Expose the full routing chain (e.g. "A→B") for audit logging
+			firstEvent.Channel = formatChannelTrail(ctx, attempted, ch.Name)
 
 			// Wrap and return combined stream with leak-proof cancellation context
 			outChan := make(chan *model.StreamEvent, 64)
@@ -449,6 +514,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		case <-time.After(15 * time.Second):
 			d.circuitBreaker.RecordFailure(ch.Name)
 			lastErr = fmt.Errorf("channel %s timed out waiting for first token", ch.Name)
+			attempted = append(attempted, ch.Name)
 			telemetry.GlobalMetrics.RecordFallback()
 			telemetry.Logger.Warn("first token timeout, falling back", "channel", ch.Name)
 			continue
@@ -471,7 +537,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		)
 		reqCopy := *req
 		reqCopy.Model = fb
-		return d.DispatchStream(nextCtx, &reqCopy)
+		return d.DispatchStream(withChannelTrail(nextCtx, attempted), &reqCopy)
 	}
 
 	return nil, fmt.Errorf("all channels failed for stream request on model %s. Last error: %w", req.Model, lastErr)
@@ -668,6 +734,9 @@ type UpstreamResponse struct {
 	Headers    http.Header
 	Body       []byte
 	Stream     io.ReadCloser
+	// Channel is the routing chain that served this request (e.g. "A" or
+	// "A→B" after fallback). Internal-only metadata for audit logging.
+	Channel string
 }
 
 // RewriteJSONModel cleanly updates the "model" field in a JSON payload.
@@ -698,6 +767,7 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 	}
 
 	var lastErr error
+	var attempted []string // channels actually called and failed
 	for i, ch := range channels {
 		// Circuit Breaker: fail fast if upstream is down
 		if !d.circuitBreaker.CanExecute(ch.Name) {
@@ -729,7 +799,7 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 			httpReq.Header.Set(k, v)
 		}
 		if tid := middleware.GetTraceIDFromContext(ctx); tid != "" {
-			httpReq.Header.Set(middleware.HeaderNanoTraceID, tid)
+			httpReq.Header.Set(middleware.HeaderAirouteTraceID, tid)
 			httpReq.Header.Set(middleware.HeaderRequestID, tid)
 			httpReq.Header.Set(middleware.HeaderTraceID, tid)
 		}
@@ -739,6 +809,7 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 		if err != nil {
 			d.circuitBreaker.RecordFailure(ch.Name)
 			lastErr = err
+			attempted = append(attempted, ch.Name)
 			telemetry.GlobalMetrics.RecordFallback()
 			telemetry.Logger.Warn("upstream HTTP request failed, falling back",
 				"channel", ch.Name,
@@ -754,6 +825,7 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 			bodyBytes, _ := io.ReadAll(httpResp.Body)
 			httpResp.Body.Close()
 			lastErr = fmt.Errorf("upstream %s returned status %d: %s", ch.Name, httpResp.StatusCode, string(bodyBytes))
+			attempted = append(attempted, ch.Name)
 			telemetry.GlobalMetrics.RecordFallback()
 			telemetry.Logger.Warn("upstream returned server error, falling back",
 				"channel", ch.Name,
@@ -772,6 +844,7 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 			StatusCode: httpResp.StatusCode,
 			Headers:    httpResp.Header,
 			Stream:     httpResp.Body,
+			Channel:    formatChannelTrail(ctx, attempted, ch.Name),
 		}, nil
 	}
 
@@ -790,6 +863,7 @@ func (d *Dispatcher) DispatchEmbedding(ctx context.Context, req *model.Embedding
 	}
 
 	var lastErr error
+	var attempted []string // channels actually called and failed
 	for i, ch := range channels {
 		if !d.circuitBreaker.CanExecute(ch.Name) {
 			telemetry.Logger.Warn("circuit breaker is OPEN, bypassing dead upstream", "channel", ch.Name)
@@ -819,6 +893,7 @@ func (d *Dispatcher) DispatchEmbedding(ctx context.Context, req *model.Embedding
 		if err != nil {
 			d.circuitBreaker.RecordFailure(ch.Name)
 			lastErr = err
+			attempted = append(attempted, ch.Name)
 			telemetry.GlobalMetrics.RecordFallback()
 			telemetry.Logger.Warn("upstream embedding request failed, falling back",
 				"channel", ch.Name,
@@ -829,6 +904,7 @@ func (d *Dispatcher) DispatchEmbedding(ctx context.Context, req *model.Embedding
 		}
 
 		d.circuitBreaker.RecordSuccess(ch.Name)
+		resp.Channel = formatChannelTrail(ctx, attempted, ch.Name)
 		dur := time.Since(start)
 		telemetry.GlobalMetrics.RecordRequest(true, dur, resp.Usage.PromptTokens, 0)
 		return resp, nil
@@ -849,6 +925,7 @@ func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankReques
 	}
 
 	var lastErr error
+	var attempted []string // channels actually called and failed
 	for i, ch := range channels {
 		if !d.circuitBreaker.CanExecute(ch.Name) {
 			telemetry.Logger.Warn("circuit breaker is OPEN, bypassing dead upstream", "channel", ch.Name)
@@ -875,6 +952,7 @@ func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankReques
 		if err != nil {
 			d.circuitBreaker.RecordFailure(ch.Name)
 			lastErr = err
+			attempted = append(attempted, ch.Name)
 			telemetry.GlobalMetrics.RecordFallback()
 			telemetry.Logger.Warn("upstream rerank request failed, falling back",
 				"channel", ch.Name,
@@ -885,6 +963,7 @@ func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankReques
 		}
 
 		d.circuitBreaker.RecordSuccess(ch.Name)
+		resp.Channel = formatChannelTrail(ctx, attempted, ch.Name)
 		dur := time.Since(start)
 		telemetry.GlobalMetrics.RecordRequest(true, dur, resp.Usage.TotalTokens, 0)
 		return resp, nil

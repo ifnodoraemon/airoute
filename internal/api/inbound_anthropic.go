@@ -201,6 +201,8 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 		if storage.GlobalAsyncLogger != nil {
 			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 				TraceID:          middleware.GetTraceID(c),
+				ChatID:           resp.ID,
+				Channel:          resp.Channel,
 				SessionID:        sessionID,
 				APIKey:           getRequestAPIKey(c),
 				TenantID:         c.GetString("tenant_id"),
@@ -254,6 +256,8 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 	firstTokenRecorded := false
 	totalPromptTokens := 0
 	totalCompTokens := 0
+	upstreamChannel := ""         // populated from the first stream event
+	anthropicUpstreamChatID := "" // upstream response ID, captured from the first chunk
 	currentBlockIndex := 0
 	textBlockOpened := true
 	toolBlockOpened := false
@@ -333,6 +337,8 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 				if storage.GlobalAsyncLogger != nil {
 					storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 						TraceID:          middleware.GetTraceID(c),
+						ChatID:           anthropicUpstreamChatID,
+						Channel:          upstreamChannel,
 						SessionID:        sessionID,
 						APIKey:           getRequestAPIKey(c),
 						TenantID:         c.GetString("tenant_id"),
@@ -365,86 +371,100 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 				continue
 			}
 
-			if event.Chunk != nil && len(event.Chunk.Choices) > 0 {
-				chunkChoice := event.Chunk.Choices[0]
-				chunkDelta := chunkChoice.Delta
+			// Capture the channel that actually serves this stream.
+			// Checked at event level: the dispatcher stamps it on the first
+			// event, which may carry no choices (e.g. keep-alive frames).
+			if upstreamChannel == "" && event.Channel != "" {
+				upstreamChannel = event.Channel
+			}
 
-				if chunkChoice.FinishReason != nil {
-					if *chunkChoice.FinishReason == "tool_calls" {
-						stopReason = "tool_use"
-					} else if *chunkChoice.FinishReason == "length" {
-						stopReason = "max_tokens"
-					}
+			if event.Chunk != nil {
+				// Capture the upstream response ID from the first chunk
+				if event.Chunk.ID != "" && anthropicUpstreamChatID == "" {
+					anthropicUpstreamChatID = event.Chunk.ID
 				}
 
-				if chunkDelta.Content != "" {
-					if !firstTokenRecorded {
-						telemetry.GlobalMetrics.RecordTTFT(time.Since(start))
-						firstTokenRecorded = true
-					}
-					totalCompTokens++
+				if len(event.Chunk.Choices) > 0 {
+					chunkChoice := event.Chunk.Choices[0]
+					chunkDelta := chunkChoice.Delta
 
-					blockDelta := gin.H{
-						"type":  "content_block_delta",
-						"index": 0,
-						"delta": gin.H{
-							"type": "text_delta",
-							"text": chunkDelta.Content,
-						},
-					}
-					deltaBytes, _ := json.Marshal(blockDelta)
-					fmt.Fprintf(w, "event: content_block_delta\ndata: %s\n\n", deltaBytes)
-					flusher.Flush()
-				}
-
-				if len(chunkDelta.ToolCalls) > 0 {
-					for _, tc := range chunkDelta.ToolCalls {
-						if tc.ID != "" && tc.Function.Name != "" {
-							if textBlockOpened {
-								fmt.Fprintf(w, "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":%d}\n\n", currentBlockIndex)
-								textBlockOpened = false
-							}
-							if toolBlockOpened {
-								fmt.Fprintf(w, "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":%d}\n\n", currentBlockIndex)
-							}
-							currentBlockIndex++
-							toolBlockOpened = true
+					if chunkChoice.FinishReason != nil {
+						if *chunkChoice.FinishReason == "tool_calls" {
 							stopReason = "tool_use"
-
-							tbStart := gin.H{
-								"type":  "content_block_start",
-								"index": currentBlockIndex,
-								"content_block": gin.H{
-									"type": "tool_use",
-									"id":   tc.ID,
-									"name": tc.Function.Name,
-								},
-							}
-							tbBytes, _ := json.Marshal(tbStart)
-							fmt.Fprintf(w, "event: content_block_start\ndata: %s\n\n", tbBytes)
-							flusher.Flush()
-						}
-
-						if tc.Function.Arguments != "" {
-							stopReason = "tool_use"
-							argDelta := gin.H{
-								"type":  "content_block_delta",
-								"index": currentBlockIndex,
-								"delta": gin.H{
-									"type":         "input_json_delta",
-									"partial_json": tc.Function.Arguments,
-								},
-							}
-							argBytes, _ := json.Marshal(argDelta)
-							fmt.Fprintf(w, "event: content_block_delta\ndata: %s\n\n", argBytes)
-							flusher.Flush()
+						} else if *chunkChoice.FinishReason == "length" {
+							stopReason = "max_tokens"
 						}
 					}
-				}
 
-				if event.Chunk.Usage != nil {
-					totalPromptTokens = event.Chunk.Usage.PromptTokens
-					totalCompTokens = event.Chunk.Usage.CompletionTokens
+					if chunkDelta.Content != "" {
+						if !firstTokenRecorded {
+							telemetry.GlobalMetrics.RecordTTFT(time.Since(start))
+							firstTokenRecorded = true
+						}
+						totalCompTokens++
+
+						blockDelta := gin.H{
+							"type":  "content_block_delta",
+							"index": 0,
+							"delta": gin.H{
+								"type": "text_delta",
+								"text": chunkDelta.Content,
+							},
+						}
+						deltaBytes, _ := json.Marshal(blockDelta)
+						fmt.Fprintf(w, "event: content_block_delta\ndata: %s\n\n", deltaBytes)
+						flusher.Flush()
+					}
+
+					if len(chunkDelta.ToolCalls) > 0 {
+						for _, tc := range chunkDelta.ToolCalls {
+							if tc.ID != "" && tc.Function.Name != "" {
+								if textBlockOpened {
+									fmt.Fprintf(w, "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":%d}\n\n", currentBlockIndex)
+									textBlockOpened = false
+								}
+								if toolBlockOpened {
+									fmt.Fprintf(w, "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":%d}\n\n", currentBlockIndex)
+								}
+								currentBlockIndex++
+								toolBlockOpened = true
+								stopReason = "tool_use"
+
+								tbStart := gin.H{
+									"type":  "content_block_start",
+									"index": currentBlockIndex,
+									"content_block": gin.H{
+										"type": "tool_use",
+										"id":   tc.ID,
+										"name": tc.Function.Name,
+									},
+								}
+								tbBytes, _ := json.Marshal(tbStart)
+								fmt.Fprintf(w, "event: content_block_start\ndata: %s\n\n", tbBytes)
+								flusher.Flush()
+							}
+
+							if tc.Function.Arguments != "" {
+								stopReason = "tool_use"
+								argDelta := gin.H{
+									"type":  "content_block_delta",
+									"index": currentBlockIndex,
+									"delta": gin.H{
+										"type":         "input_json_delta",
+										"partial_json": tc.Function.Arguments,
+									},
+								}
+								argBytes, _ := json.Marshal(argDelta)
+								fmt.Fprintf(w, "event: content_block_delta\ndata: %s\n\n", argBytes)
+								flusher.Flush()
+							}
+						}
+					}
+
+					if event.Chunk.Usage != nil {
+						totalPromptTokens = event.Chunk.Usage.PromptTokens
+						totalCompTokens = event.Chunk.Usage.CompletionTokens
+					}
 				}
 			}
 		}

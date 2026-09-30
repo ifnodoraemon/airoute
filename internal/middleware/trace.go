@@ -15,7 +15,6 @@ import (
 const (
 	ContextKeyTraceID    = "trace_id"
 	HeaderAirouteTraceID = "X-Airoute-Trace-ID"
-	HeaderNanoTraceID    = "X-Nano-Trace-ID"
 	HeaderRequestID      = "X-Request-ID"
 	HeaderTraceID        = "X-Trace-ID"
 	HeaderTraceParent    = "traceparent"
@@ -44,7 +43,6 @@ func TraceMiddleware() gin.HandlerFunc {
 
 		// Set response headers for client tracking
 		c.Writer.Header().Set(HeaderAirouteTraceID, traceID)
-		c.Writer.Header().Set(HeaderNanoTraceID, traceID)
 		c.Writer.Header().Set(HeaderRequestID, traceID)
 
 		c.Next()
@@ -54,9 +52,6 @@ func TraceMiddleware() gin.HandlerFunc {
 // extractTraceID inspects incoming headers (X-Airoute-Trace-ID, X-Request-ID, X-Trace-ID, W3C traceparent).
 func extractTraceID(c *gin.Context) string {
 	if tid := strings.TrimSpace(c.GetHeader(HeaderAirouteTraceID)); tid != "" {
-		return tid
-	}
-	if tid := strings.TrimSpace(c.GetHeader(HeaderNanoTraceID)); tid != "" {
 		return tid
 	}
 	if tid := strings.TrimSpace(c.GetHeader(HeaderRequestID)); tid != "" {

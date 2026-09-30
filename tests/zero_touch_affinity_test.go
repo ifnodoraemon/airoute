@@ -83,10 +83,10 @@ func TestZeroTouchSessionAffinity(t *testing.T) {
 		t.Fatalf("Turn 1 failed: status %d, body %s", w1.Code, w1.Body.String())
 	}
 
-	// Gateway must output X-Nano-Session-ID and Set-Cookie automatically
-	sessionID := w1.Header().Get("X-Nano-Session-ID")
+	// Gateway must output X-Airoute-Session-ID and Set-Cookie automatically
+	sessionID := w1.Header().Get("X-Airoute-Session-ID")
 	if sessionID == "" {
-		t.Fatalf("Expected X-Nano-Session-ID in response header, got empty")
+		t.Fatalf("Expected X-Airoute-Session-ID in response header, got empty")
 	}
 	t.Logf("Turn 1 automatically generated zero-touch Session ID: %s", sessionID)
 
@@ -137,7 +137,7 @@ func TestZeroTouchSessionAffinity(t *testing.T) {
 		t.Fatalf("Turn 2 failed: status %d, body %s", w2.Code, w2.Body.String())
 	}
 
-	sessionID2 := w2.Header().Get("X-Nano-Session-ID")
+	sessionID2 := w2.Header().Get("X-Airoute-Session-ID")
 	if sessionID2 != sessionID {
 		t.Fatalf("Expected Turn 2 to derive identical session ID %s, but got %s", sessionID, sessionID2)
 	}
