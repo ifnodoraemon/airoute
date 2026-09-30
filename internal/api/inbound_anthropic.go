@@ -366,6 +366,12 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 				return
 			}
 
+			// Capture the serving channel before any short-circuit (terminal
+			// events return/continue first); the dispatcher stamps every event.
+			if upstreamChannel == "" && event.Channel != "" {
+				upstreamChannel = event.Channel
+			}
+
 			if event.Err != nil {
 				errBytes, _ := json.Marshal(gin.H{
 					"type": "error",
@@ -381,13 +387,6 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 
 			if event.IsDone {
 				continue
-			}
-
-			// Capture the channel that actually serves this stream.
-			// Checked at event level: the dispatcher stamps it on the first
-			// event, which may carry no choices (e.g. keep-alive frames).
-			if upstreamChannel == "" && event.Channel != "" {
-				upstreamChannel = event.Channel
 			}
 
 			if event.Chunk != nil {

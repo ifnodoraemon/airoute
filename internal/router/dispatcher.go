@@ -284,10 +284,19 @@ func formatChannelTrail(ctx context.Context, attempted []string, final string) s
 		if out != "" {
 			candidate += "→" + out
 		}
-		if len([]rune(candidate))+len("…") > maxChannelTrailLen {
+		if len([]rune(candidate))+1 > maxChannelTrailLen { // +1 rune for the "…" prefix
 			break
 		}
 		out = candidate
+	}
+	if out == "" {
+		// The final hop alone exceeds the cap: keep its tail so the serving
+		// channel always survives in the audit trail (never a bare "…").
+		r := []rune(all[len(all)-1])
+		if keep := maxChannelTrailLen - 1; len(r) > keep {
+			r = r[len(r)-keep:]
+		}
+		return "…" + string(r)
 	}
 	return "…" + out
 }
@@ -480,8 +489,12 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 
 			// First token healthy! Mark healthy in circuit breaker
 			d.circuitBreaker.RecordSuccess(ch.Name)
-			// Expose the full routing chain (e.g. "A→B") for audit logging
-			firstEvent.Channel = formatChannelTrail(ctx, attempted, ch.Name)
+			// Expose the full routing chain (e.g. "A→B") for audit logging.
+			// Every forwarded event is stamped: consumers short-circuit on
+			// IsDone/Err before reading Channel, so a stream that ends on its
+			// first event would otherwise lose the audit stamp entirely.
+			trail := formatChannelTrail(ctx, attempted, ch.Name)
+			firstEvent.Channel = trail
 
 			// Wrap and return combined stream with leak-proof cancellation context
 			outChan := make(chan *model.StreamEvent, 64)
@@ -500,6 +513,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 						if !ok {
 							return
 						}
+						event.Channel = trail
 						select {
 						case outChan <- event:
 						case <-ctx.Done():

@@ -397,16 +397,46 @@ type LogFilter struct {
 	Model     string
 	TenantID  string
 	// APIKeys restricts results to records produced by these key values.
-	// A nil/empty slice means NO key-based restriction (admin scope);
-	// callers scoping non-admin users must handle the zero-key case
-	// before calling, or the filter silently returns everything.
 	// Filtering happens in SQL so that LIMIT pagination stays correct
-	// (no post-filter truncation).
+	// (no post-filter truncation). By default an empty slice means "no
+	// key-based restriction" (admin scope); set ScopeByAPIKeys to make
+	// an empty slice fail-closed instead (non-admin scope).
 	APIKeys []string
+	// ScopeByAPIKeys makes an empty APIKeys list return no rows instead
+	// of every row. Callers scoping non-admin users must set it.
+	ScopeByAPIKeys bool
 }
 
 // RecordUsageLog records an audit log asynchronously and updates key quota/cost atomically.
+// clampRunes returns s truncated to at most max runes ("" passes through).
+func clampRunes(s string, max int) string {
+	if s == "" {
+		return s
+	}
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max])
+}
+
+// normalizeUsageLog clamps string fields to their storage column limits
+// (model/channel/tenant_id VARCHAR(128), api_key VARCHAR(255) on Postgres).
+// Unbounded client input — e.g. a request-body model name — must never reach
+// the INSERT: a single oversized value fails the row, and in batched writes
+// it takes the whole audit batch down with it.
+func normalizeUsageLog(log *UsageLogRecord) {
+	if log == nil {
+		return
+	}
+	log.Model = clampRunes(log.Model, 128)
+	log.Channel = clampRunes(log.Channel, 128)
+	log.TenantID = clampRunes(log.TenantID, 128)
+	log.APIKey = clampRunes(log.APIKey, 255)
+}
+
 func (r *Repository) RecordUsageLog(log *UsageLogRecord) error {
+	normalizeUsageLog(log)
 	isOff := 0
 	if log.IsOffPeak {
 		isOff = 1
@@ -479,6 +509,9 @@ func (r *Repository) BatchRecordUsageLogs(logs []*UsageLogRecord) error {
 	}
 	if len(logs) == 1 {
 		return r.RecordUsageLog(logs[0])
+	}
+	for _, log := range logs {
+		normalizeUsageLog(log)
 	}
 
 	tx, err := r.db.Begin()
@@ -615,6 +648,12 @@ func (r *Repository) ListUsageLogsWithFilter(f LogFilter) ([]*UsageLogRecord, er
 	}
 	if f.Offset < 0 {
 		f.Offset = 0
+	}
+	if f.ScopeByAPIKeys && len(f.APIKeys) == 0 {
+		// Fail-closed: key scoping was requested but no keys remain (new
+		// user, revoked keys, failed lookup). Returning everything here
+		// would silently widen a non-admin scope to admin visibility.
+		return make([]*UsageLogRecord, 0), nil
 	}
 
 	query := `SELECT id, trace_id, COALESCE(chat_id, ''), COALESCE(session_id, ''), COALESCE(api_key, ''), COALESCE(tenant_id, ''), COALESCE(model, ''), COALESCE(channel, ''), prompt_tokens, completion_tokens, COALESCE(cached_tokens, 0), total_tokens, COALESCE(cost, 0.0), COALESCE(is_off_peak, 0), COALESCE(off_peak_discount, 1.0), duration_ms, ttft_ms, status_code, created_at FROM usage_logs WHERE 1=1`

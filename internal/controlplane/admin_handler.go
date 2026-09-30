@@ -1102,30 +1102,30 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 	if exists {
 		claims := claimsVal.(*AdminClaims)
 		if claims.Role != "admin" {
+			// Fail-closed scoping: even if the user lookup fails, an empty
+			// key list must never widen to full (admin) visibility — the
+			// repository returns no rows when scope is set and keys are empty.
+			filter.ScopeByAPIKeys = true
 			user, _ := h.repo.GetUserByUsername(claims.Username)
 			if user != nil {
 				userKeys, _ := h.repo.ListAPIKeysByUser(user.ID)
-				if len(userKeys) == 0 {
-					c.JSON(http.StatusOK, gin.H{"code": 0, "data": []*storage.UsageLogRecord{}})
-					return
-				}
 				// Scope to the user's own keys in SQL so that LIMIT/OFFSET
 				// pagination applies after filtering, not before.
 				filter.APIKeys = make([]string, 0, len(userKeys))
 				for _, k := range userKeys {
 					filter.APIKeys = append(filter.APIKeys, k.Key)
 				}
-				logs, err := h.repo.ListUsageLogsWithFilter(filter)
-				if err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-					return
-				}
-				if logs == nil {
-					logs = make([]*storage.UsageLogRecord, 0)
-				}
-				c.JSON(http.StatusOK, gin.H{"code": 0, "data": logs})
+			}
+			logs, err := h.repo.ListUsageLogsWithFilter(filter)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
+			if logs == nil {
+				logs = make([]*storage.UsageLogRecord, 0)
+			}
+			c.JSON(http.StatusOK, gin.H{"code": 0, "data": logs})
+			return
 		}
 	}
 

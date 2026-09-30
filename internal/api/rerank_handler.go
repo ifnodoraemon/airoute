@@ -72,8 +72,20 @@ func (h *Handler) HandleRerank(c *gin.Context) {
 	}
 
 	start := time.Now()
+	// Resolve the session ID before dispatch so failed requests can be
+	// audited with the same session identity as successful ones.
+	sessionID := c.GetHeader("X-Session-ID")
+	if sessionID == "" {
+		sessionID = c.GetHeader("X-Airoute-Session-ID")
+	}
+	if sessionID == "" {
+		sessionID = fmt.Sprintf("sess_rrk_%d_%x", time.Now().Unix(), time.Now().UnixNano()%1000000)
+	}
+	c.Header("X-Airoute-Session-ID", sessionID)
+
 	resp, err := h.dispatcher.DispatchRerank(c.Request.Context(), &req)
 	if err != nil {
+		recordFailedRequest(c, sessionID, req.Model, time.Since(start), http.StatusBadGateway)
 		c.JSON(http.StatusBadGateway, gin.H{
 			"error": gin.H{
 				"message": err.Error(),
@@ -83,15 +95,6 @@ func (h *Handler) HandleRerank(c *gin.Context) {
 		})
 		return
 	}
-
-	sessionID := c.GetHeader("X-Session-ID")
-	if sessionID == "" {
-		sessionID = c.GetHeader("X-Airoute-Session-ID")
-	}
-	if sessionID == "" {
-		sessionID = fmt.Sprintf("sess_rrk_%d_%x", time.Now().Unix(), time.Now().UnixNano()%1000000)
-	}
-	c.Header("X-Airoute-Session-ID", sessionID)
 
 	dur := time.Since(start)
 	var cost float64

@@ -376,3 +376,68 @@ func TestUsageLogTimeFilterSQLite(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, logs)
 }
+
+func TestChannelTrailFinalHopExceedsCap(t *testing.T) {
+	// A serving channel whose name alone exceeds the VARCHAR(128) cap must
+	// still survive in the trail as an ellipsis-prefixed tail — never a
+	// bare "…" that erases the channel identity.
+	gin.SetMode(gin.TestMode)
+
+	db, err := storage.OpenDB(":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	repo := storage.NewRepository(db)
+	dispatcher := router.NewDispatcher(nil)
+	sync := controlplane.NewSynchronizer(repo, dispatcher)
+
+	dispatcher.RegisterProvider(&channelReportingProvider{chatID: "chatcmpl-ok"})
+	hugeName := strings.Repeat("H", 200)
+	require.NoError(t, repo.CreateChannel(&storage.ChannelRecord{
+		Name: hugeName, Type: "mock-reporting", BaseURL: "http://mock.local", APIKey: "sk-test",
+		Models: []string{"huge-model"}, Priority: 1, Weight: 10, Status: "active",
+	}))
+	require.NoError(t, sync.ReloadFromDB())
+
+	resp, err := dispatcher.Dispatch(context.Background(), &model.ChatCompletionRequest{
+		Model:    "huge-model",
+		Messages: []model.ChatMessage{{Role: "user", Content: "hi"}},
+	})
+	require.NoError(t, err)
+	assert.NotEqual(t, "…", resp.Channel, "oversized final hop must not collapse to a bare ellipsis")
+	assert.LessOrEqual(t, len([]rune(resp.Channel)), 128)
+	assert.True(t, strings.HasPrefix(resp.Channel, "…"))
+	assert.True(t, strings.HasSuffix(resp.Channel, strings.Repeat("H", 127)),
+		"the tail of the serving channel name must survive")
+}
+
+func TestUsageLogStringClamp(t *testing.T) {
+	// Client-supplied model names are unbounded; the storage boundary must
+	// clamp them to the column limit so a single oversized value cannot
+	// fail the INSERT — and with batched writes, the whole batch.
+	gin.SetMode(gin.TestMode)
+
+	db, err := storage.OpenDB(":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	repo := storage.NewRepository(db)
+
+	longModel := strings.Repeat("m", 200)
+	expected := strings.Repeat("m", 128)
+
+	require.NoError(t, repo.RecordUsageLog(&storage.UsageLogRecord{
+		TraceID: "tr-clamp-1", Model: longModel, StatusCode: http.StatusOK,
+	}))
+	logs, err := repo.ListUsageLogsWithFilter(storage.LogFilter{TraceID: "tr-clamp-1"})
+	require.NoError(t, err)
+	require.Len(t, logs, 1)
+	assert.Equal(t, expected, logs[0].Model)
+
+	require.NoError(t, repo.BatchRecordUsageLogs([]*storage.UsageLogRecord{
+		{TraceID: "tr-clamp-2", Model: longModel, StatusCode: http.StatusOK},
+		{TraceID: "tr-clamp-3", Model: longModel, StatusCode: http.StatusOK},
+	}))
+	logs, err = repo.ListUsageLogsWithFilter(storage.LogFilter{TraceID: "tr-clamp-2"})
+	require.NoError(t, err)
+	require.Len(t, logs, 1)
+	assert.Equal(t, expected, logs[0].Model)
+}

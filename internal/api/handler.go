@@ -141,12 +141,15 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	if !req.Stream {
 		resp, err := h.dispatcher.Dispatch(reqCtx, &req)
 		if err != nil {
+			// Derive the failure status once: the audit row and the HTTP
+			// response must report the same outcome.
 			failedStatus := http.StatusBadGateway
-			if strings.Contains(err.Error(), "no upstream provider available") {
+			noUpstream := strings.Contains(err.Error(), "no upstream provider available")
+			if noUpstream {
 				failedStatus = http.StatusNotFound
 			}
 			recordFailedRequest(c, sessionID, req.Model, time.Since(start), failedStatus)
-			if strings.Contains(err.Error(), "no upstream provider available") {
+			if noUpstream {
 				c.JSON(http.StatusNotFound, gin.H{
 					"error": gin.H{
 						"message": fmt.Sprintf("The model '%s' does not exist or has no active upstream providers configured.", req.Model),
@@ -235,12 +238,15 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, &req)
 	if err != nil {
+		// Derive the failure status once: the audit row and the HTTP
+		// response must report the same outcome.
 		failedStatus := http.StatusBadGateway
-		if strings.Contains(err.Error(), "no upstream provider available") {
+		noUpstream := strings.Contains(err.Error(), "no upstream provider available")
+		if noUpstream {
 			failedStatus = http.StatusNotFound
 		}
 		recordFailedRequest(c, sessionID, req.Model, time.Since(start), failedStatus)
-		if strings.Contains(err.Error(), "no upstream provider available") {
+		if noUpstream {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error": gin.H{
 					"message": fmt.Sprintf("The model '%s' does not exist or has no active upstream providers configured.", req.Model),
@@ -352,6 +358,14 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 				return
 			}
 
+			// Capture the channel that actually serves this stream BEFORE
+			// any short-circuit: terminal events (IsDone/Err) return before
+			// the rest of the loop body, and a stream that ends on its very
+			// first event would lose the stamp. Dispatcher stamps every event.
+			if upstreamChannel == "" && event.Channel != "" {
+				upstreamChannel = event.Channel
+			}
+
 			if event.Err != nil {
 				telemetry.Logger.Error("stream error received mid-flight", "error", event.Err.Error())
 				errJSON, _ := json.Marshal(gin.H{
@@ -371,13 +385,6 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 				flusher.Flush()
 				recordOnce.Do(recordStreamEnd)
 				return
-			}
-
-			// Capture the channel that actually serves this stream.
-			// Checked at event level: the dispatcher stamps it on the first
-			// event, which may carry no choices (e.g. keep-alive frames).
-			if upstreamChannel == "" && event.Channel != "" {
-				upstreamChannel = event.Channel
 			}
 
 			if event.Chunk != nil {
@@ -784,6 +791,7 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 	if !req.Stream {
 		resp, err := h.dispatcher.Dispatch(reqCtx, chatReq)
 		if err != nil {
+			recordFailedRequest(c, sessionID, req.Model, time.Since(start), http.StatusBadGateway)
 			c.JSON(http.StatusBadGateway, gin.H{
 				"error": gin.H{
 					"message": err.Error(),
@@ -832,6 +840,7 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 	}
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, chatReq)
 	if err != nil {
+		recordFailedRequest(c, sessionID, req.Model, time.Since(start), http.StatusBadGateway)
 		c.JSON(http.StatusBadGateway, gin.H{
 			"error": gin.H{
 				"message": err.Error(),
@@ -905,6 +914,12 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 	respUpstreamChannel := "" // populated from the first stream event
 
 	for event := range streamChan {
+		// Capture the serving channel before any short-circuit (see chat SSE
+		// loop): terminal events break out first, dispatcher stamps every event.
+		if respUpstreamChannel == "" && event.Channel != "" {
+			respUpstreamChannel = event.Channel
+		}
+
 		if event.Err != nil {
 			errBytes, _ := json.Marshal(gin.H{
 				"type": "error",
@@ -920,13 +935,6 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 
 		if event.IsDone {
 			break
-		}
-
-		// Capture the channel that actually serves this stream.
-		// Checked at event level: the dispatcher stamps it on the first
-		// event, which may carry no choices (e.g. keep-alive frames).
-		if respUpstreamChannel == "" && event.Channel != "" {
-			respUpstreamChannel = event.Channel
 		}
 
 		if event.Chunk != nil {
