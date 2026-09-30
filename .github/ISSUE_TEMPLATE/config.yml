@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 项目文档
+    url: https://github.com/ifnodoraemon/airoute/tree/main/docs
+    about: API 参考 / 配置调优 / 供应商对接 / HA 架构手册

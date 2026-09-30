@@ -1,0 +1,44 @@
+name: 🐛 Bug 报告
+description: 某个功能不工作 / 行为不符合预期
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请先检索已有 issue,并确认[文档](https://github.com/ifnodoraemon/airoute/tree/main/docs)中没有对应说明。
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 发生了什么
+      description: 清晰描述现象。预期行为 vs 实际行为。
+      placeholder: 预期网关……,实际却……
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 请求 '...'
+        2. 带上头 '...'
+        3. 看到 '...'
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 响应体
+      description: 脱敏后的错误输出、审计日志行或上游响应(勿贴 API key)。
+      render: shell
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 镜像 tag / release 版本 / commit SHA
+      placeholder: v1.0.0 或 ghcr.io/ifnodoraemon/airoute@sha-xxxxxxx
+  - type: textarea
+    id: env
+    attributes:
+      label: 部署形态
+      description: 单二进制 / docker compose / k8s;数据库 SQLite 或 PostgreSQL;涉及的上游渠道类型。
+      placeholder: docker compose 双副本 + PostgreSQL,上游 vLLM
