@@ -620,12 +620,24 @@ func (r *Repository) ListUsageLogsWithFilter(f LogFilter) ([]*UsageLogRecord, er
 	query := `SELECT id, trace_id, COALESCE(chat_id, ''), COALESCE(session_id, ''), COALESCE(api_key, ''), COALESCE(tenant_id, ''), COALESCE(model, ''), COALESCE(channel, ''), prompt_tokens, completion_tokens, COALESCE(cached_tokens, 0), total_tokens, COALESCE(cost, 0.0), COALESCE(is_off_peak, 0), COALESCE(off_peak_discount, 1.0), duration_ms, ttft_ms, status_code, created_at FROM usage_logs WHERE 1=1`
 	var args []interface{}
 
+	// Time filters: SQLite normalizes both sides via datetime(); Postgres
+	// compares natively (timestamptz implicitly casts the string parameter).
+	// Rebind's string translation cannot cover the parameter-side datetime(?),
+	// so the dialect branch must be explicit here.
+	var startClause, endClause string
+	if r.db.Dialect() == "postgres" {
+		startClause = ` AND created_at >= ?`
+		endClause = ` AND created_at <= ?`
+	} else {
+		startClause = ` AND datetime(created_at) >= datetime(?)`
+		endClause = ` AND datetime(created_at) <= datetime(?)`
+	}
 	if f.StartTime != "" {
-		query += ` AND datetime(created_at) >= datetime(?)`
+		query += startClause
 		args = append(args, f.StartTime)
 	}
 	if f.EndTime != "" {
-		query += ` AND datetime(created_at) <= datetime(?)`
+		query += endClause
 		args = append(args, f.EndTime)
 	}
 	if f.TraceID != "" {
@@ -1333,8 +1345,14 @@ func (r *Repository) VerifyCode(email, code, purpose string) bool {
 	}
 
 	var id int64
-	row := r.db.QueryRow(`SELECT id FROM verification_codes WHERE email = ? AND code = ? AND purpose = ? AND used = 0 AND datetime(expires_at) > datetime('now') ORDER BY id DESC LIMIT 1`,
-		email, code, purpose)
+	// Expiry comparison: SQLite normalizes via datetime(); Postgres compares
+	// natively with NOW(). Rebind's string translation covers neither the
+	// expires_at column nor the 'now' literal, so the branch is explicit.
+	codeQuery := `SELECT id FROM verification_codes WHERE email = ? AND code = ? AND purpose = ? AND used = 0 AND datetime(expires_at) > datetime('now') ORDER BY id DESC LIMIT 1`
+	if r.db.Dialect() == "postgres" {
+		codeQuery = `SELECT id FROM verification_codes WHERE email = ? AND code = ? AND purpose = ? AND used = 0 AND expires_at > NOW() ORDER BY id DESC LIMIT 1`
+	}
+	row := r.db.QueryRow(codeQuery, email, code, purpose)
 	if err := row.Scan(&id); err != nil {
 		return false
 	}

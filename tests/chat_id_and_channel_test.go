@@ -347,3 +347,32 @@ func TestFailedRequestAuditTrail(t *testing.T) {
 	assert.Equal(t, 0, logs[0].PromptTokens)
 	assert.Empty(t, logs[0].Channel)
 }
+
+func TestUsageLogTimeFilterSQLite(t *testing.T) {
+	// Locks the SQLite normalization path of the time filter (the Postgres
+	// branch compares natively and is verified against the live cluster).
+	gin.SetMode(gin.TestMode)
+
+	db, err := storage.OpenDB(":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	repo := storage.NewRepository(db)
+
+	require.NoError(t, repo.RecordUsageLog(&storage.UsageLogRecord{
+		TraceID: "tr-time-1", Model: "time-model", StatusCode: http.StatusOK,
+	}))
+
+	// Wide window: ISO8601 input must normalize and match.
+	logs, err := repo.ListUsageLogsWithFilter(storage.LogFilter{
+		Model: "time-model", StartTime: "2000-01-01T00:00:00Z", EndTime: "2999-01-01T00:00:00Z",
+	})
+	require.NoError(t, err)
+	assert.Len(t, logs, 1)
+
+	// Future-only window: nothing matches.
+	logs, err = repo.ListUsageLogsWithFilter(storage.LogFilter{
+		Model: "time-model", StartTime: "2999-01-01T00:00:00Z",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, logs)
+}
