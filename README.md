@@ -1,13 +1,15 @@
 # Airoute 🚀
 
+> **A self-hosted LLM gateway in Go.** Bidirectional OpenAI / Anthropic / Gemini protocol translation, multi-provider failover with circuit breaking, session affinity, and per-request cost & channel audit — one binary with an embedded React admin console, SQLite or PostgreSQL.
+
 [![CI Quality Gate & Automated Testing](https://github.com/ifnodoraemon/airoute/actions/workflows/ci.yml/badge.svg)](https://github.com/ifnodoraemon/airoute/actions/workflows/ci.yml)
 [![Build & Publish Multi-Arch Docker Image](https://github.com/ifnodoraemon/airoute/actions/workflows/docker.yml/badge.svg)](https://github.com/ifnodoraemon/airoute/actions/workflows/docker.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/ifnodoraemon/airoute)](https://goreportcard.com/report/github.com/ifnodoraemon/airoute)
 
-生产级、极速并发、极致高可用且高韧性的企业级 LLM 与全模态智能网关。从零以 Go 语言构建，原生支持 **Any-to-Any 协议矩阵**、**级联模型源 (Cascading Providers)**、**下游智能探测 (Auto-Probe)** 与 **全双工协议自动转译**。
+生产级 LLM 与全模态智能网关，Go 语言构建。原生支持 **Any-to-Any 协议双向转译**（OpenAI ⇄ Anthropic ⇄ Gemini）、**级联模型命名与通配符前缀映射**、**下游智能探测自动建渠道**、**多渠道优先级 failover 与三态熔断**。
 
-彻底解耦 **数据面 (Data Plane - 极致并发转发内核)** 与 **控制面 (Control Plane - 运维治理内核)**，单二进制内嵌 **现代化工作台 (React 19 + Tailwind CSS)**。
+数据面（高并发转发内核）与控制面（运维治理）彻底解耦，单二进制内嵌现代化管理台（React 19 + Tailwind CSS），支持 SQLite 单机与 PostgreSQL 集群两种部署形态。
 
 ---
 
@@ -17,6 +19,7 @@
 - [⚙️ 系统全量配置与调优指南 (Configuration & Tuning)](docs/CONFIGURATION.md)
 - [🔌 供应商与下游对接指南 (Provider Integration Guide)](docs/PROVIDER_GUIDE.md)
 - [🛡️ 高可用集群与容灾部署架构 (HA Architecture)](docs/HA_ARCHITECTURE.md)
+- [📦 发版与镜像发布流程 (Release Guide)](docs/RELEASE_GUIDE.md)
 
 ---
 
@@ -132,7 +135,7 @@ make build
 # 一键启动 2 副本 Gateway + Nginx 负载均衡器
 docker compose up -d --build
 ```
-Nginx 会自动在 `http://localhost:80` 暴露统一入口，并以 `least_conn` 算法向双节点分发流量，自动关闭 SSE 缓冲 (`proxy_buffering off`)。
+Nginx 会自动在 `http://localhost:8080` 暴露统一入口（宿主端口见 `docker-compose.yml` 的 `8080:80` 映射），并以 `least_conn` 算法向双节点分发流量，自动关闭 SSE 缓冲 (`proxy_buffering off`)。
 
 ### 方式 C: Kubernetes Helm Chart 部署
 ```bash
@@ -144,7 +147,7 @@ helm install airoute ./helm/airoute -n gateway --create-namespace
 
 ## 🧪 自动化测试体系
 
-所有 19 个端到端及单元测试套件均在并发竞态检测 (`-race`) 模式下自动化运行：
+全部 96 个测试函数均在并发竞态检测 (`-race`) 模式下运行：
 ```bash
 make test
 ```
