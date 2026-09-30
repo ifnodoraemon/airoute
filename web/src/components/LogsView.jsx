@@ -1,6 +1,24 @@
 import React from 'react';
 import { History, Search, RefreshCw, Trash2, Clock, Copy } from 'lucide-react';
 
+// Same-day rows show time only; older days get a compact date prefix.
+const formatLogTime = (iso) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  const hm = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return sameDay
+    ? hm
+    : `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${hm}`;
+};
+
+// Durations past one second read better in seconds.
+const formatDuration = (ms) => (ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${ms} ms`);
+
 export default function LogsView({
   sessionFilter,
   setSessionFilter,
@@ -178,11 +196,14 @@ export default function LogsView({
         </div>
       )}
 
-      <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-3xl overflow-hidden shadow-xs">
+      <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-3xl overflow-hidden shadow-xs flex flex-col">
+        {/* The log list scrolls in its own pane, independent of the page:
+            filters and pagination stay put while rows scroll under a sticky header. */}
+        <div className="overflow-auto max-h-[calc(100vh-400px)]">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs uppercase bg-slate-50/80 dark:bg-slate-900/80">
-              <th className="py-3.5 px-4 w-10 text-center">
+            <tr className="text-slate-500 dark:text-slate-400 text-xs uppercase">
+              <th className="py-3.5 px-4 w-10 text-center sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
                 <input
                   type="checkbox"
                   className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
@@ -196,15 +217,15 @@ export default function LogsView({
                   }}
                 />
               </th>
-              <th className="py-3.5 px-6 font-semibold">请求时间</th>
-              <th className="py-3.5 px-6 font-semibold">Trace ID / 对话 ID</th>
-              <th className="py-3.5 px-6 font-semibold">请求模型 (Model)</th>
-              <th className="py-3.5 px-6 font-semibold">命中渠道 (Provider)</th>
-              <th className="py-3.5 px-6 font-semibold">租户 / API 密钥</th>
-              <th className="py-3.5 px-6 font-semibold">Token (输入/输出/总)</th>
-              <th className="py-3.5 px-6 font-semibold">扣费 / 缓存命中</th>
-              <th className="py-3.5 px-6 font-semibold">耗时 / TTFT</th>
-              <th className="py-3.5 px-6 text-right font-semibold">状态与详情</th>
+              <th className="py-3.5 px-6 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">请求时间</th>
+              <th className="py-3.5 px-6 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">Trace ID / 对话 ID</th>
+              <th className="py-3.5 px-6 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">请求模型 (Model)</th>
+              <th className="py-3.5 px-6 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">命中渠道 (Provider)</th>
+              <th className="py-3.5 px-6 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">租户 / API 密钥</th>
+              <th className="py-3.5 px-6 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">Token (输入/输出/总)</th>
+              <th className="py-3.5 px-6 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">扣费 / 缓存命中</th>
+              <th className="py-3.5 px-6 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">耗时 / TTFT</th>
+              <th className="py-3.5 px-6 text-right font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">状态与详情</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-sm font-mono text-xs">
@@ -229,8 +250,8 @@ export default function LogsView({
                     }}
                   />
                 </td>
-                <td className="py-4 px-6 text-slate-500 dark:text-slate-400 font-sans whitespace-nowrap">
-                  {log.created_at ? new Date(log.created_at).toLocaleTimeString() : '刚刚'}
+                <td className="py-4 px-6 text-slate-500 dark:text-slate-400 font-sans whitespace-nowrap" title={log.created_at}>
+                  {log.created_at ? formatLogTime(log.created_at) : '刚刚'}
                 </td>
                 <td className="py-4 px-6 font-mono text-xs">
                   <div className="flex items-center space-x-1.5">
@@ -286,13 +307,19 @@ export default function LogsView({
                   )}
                 </td>
                 <td className="py-4 px-6 font-semibold text-slate-900 dark:text-slate-100 font-mono">
-                  <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 rounded-md border border-indigo-100 dark:border-indigo-800/60">
+                  <span
+                    className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 rounded-md border border-indigo-100 dark:border-indigo-800/60 max-w-[150px] inline-block truncate align-middle"
+                    title={log.model}
+                  >
                     {log.model || '-'}
                   </span>
                 </td>
                 <td className="py-4 px-6 text-slate-700 dark:text-slate-300 font-sans">
                   {log.channel ? (
-                    <span className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 rounded-md border border-emerald-100 dark:border-emerald-800/60">
+                    <span
+                      className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 rounded-md border border-emerald-100 dark:border-emerald-800/60 max-w-[170px] inline-block truncate align-middle"
+                      title={log.channel}
+                    >
                       {log.channel}
                     </span>
                   ) : (
@@ -342,19 +369,19 @@ export default function LogsView({
                   )}
                 </td>
                 <td className="py-4 px-6 text-slate-700 dark:text-slate-300 font-sans">
-                  <span className="font-bold text-slate-900 dark:text-slate-100">{log.duration_ms} ms</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100">{formatDuration(log.duration_ms ?? 0)}</span>
                   {log.ttft_ms > 0 && (
                     <span className="block text-[11px] text-amber-600 dark:text-amber-400">
-                      TTFT: {log.ttft_ms} ms
+                      TTFT: {formatDuration(log.ttft_ms)}
                     </span>
                   )}
                 </td>
                 <td className="py-4 px-6 text-right font-sans space-x-2">
                   <span
                     className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                      log.status_code === 200
+                      (log.status_code || 200) < 300
                         ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                        : log.status_code === 429
+                        : (log.status_code || 200) < 500
                         ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
                         : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
                     }`}
@@ -386,6 +413,7 @@ export default function LogsView({
             )}
           </tbody>
         </table>
+        </div>
 
         {/* Server-side pagination (50 rows per page, offset-based) */}
         <div className="flex items-center justify-between pt-4 mt-2 border-t border-slate-200/60 dark:border-slate-800/60">

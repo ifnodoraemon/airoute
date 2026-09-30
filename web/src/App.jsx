@@ -1954,7 +1954,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-indigo-500 selection:text-white transition-colors duration-200">
+    <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-800 font-sans selection:bg-indigo-500 selection:text-white transition-colors duration-200">
       {/* Toast Notification */}
       <Toast toast={toast} onClose={() => setToast(prev => ({ ...prev, show: false }))} />
 
@@ -2023,7 +2023,7 @@ export default function App() {
           </div>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1.5">
+        <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto">
           {adminUser?.role === 'admin' ? (
             /* Admin Full Navigation */
             <>
