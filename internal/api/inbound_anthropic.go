@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -129,6 +130,7 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 				statusCode = http.StatusNotFound
 				errType = "not_found_error"
 			}
+			recordFailedRequest(c, sessionID, canonicalReq.Model, time.Since(start), statusCode)
 			c.JSON(statusCode, gin.H{
 				"type": "error",
 				"error": gin.H{
@@ -229,6 +231,7 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 			statusCode = http.StatusNotFound
 			errType = "not_found_error"
 		}
+		recordFailedRequest(c, sessionID, canonicalReq.Model, time.Since(start), statusCode)
 		c.JSON(statusCode, gin.H{
 			"type": "error",
 			"error": gin.H{
@@ -262,6 +265,39 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 	textBlockOpened := true
 	toolBlockOpened := false
 	stopReason := "end_turn"
+
+	// Audit record: persisted exactly once on every exit path — normal end,
+	// upstream mid-stream failure, or downstream client disconnect. Tokens
+	// counted so far are what get billed, so they must survive any break.
+	var recordOnce sync.Once
+	recordStreamEnd := func() {
+		dur := time.Since(start)
+		var cost, savedCost float64
+		keyGroup := getKeyGroup(c)
+		if billing.GlobalEngine != nil {
+			cost, savedCost = billing.GlobalEngine.CalculateCostWithGroup(req.Model, keyGroup, totalPromptTokens, totalCompTokens, 0)
+		}
+		_ = savedCost
+		telemetry.GlobalMetrics.RecordRequest(true, dur, totalPromptTokens, totalCompTokens)
+		if storage.GlobalAsyncLogger != nil {
+			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
+				TraceID:          middleware.GetTraceID(c),
+				ChatID:           anthropicUpstreamChatID,
+				Channel:          upstreamChannel,
+				SessionID:        sessionID,
+				APIKey:           getRequestAPIKey(c),
+				TenantID:         c.GetString("tenant_id"),
+				Model:            req.Model,
+				PromptTokens:     totalPromptTokens,
+				CompletionTokens: totalCompTokens,
+				TotalTokens:      totalPromptTokens + totalCompTokens,
+				Cost:             cost,
+				DurationMs:       dur.Milliseconds(),
+				StatusCode:       http.StatusOK,
+			})
+		}
+	}
+	defer recordOnce.Do(recordStreamEnd)
 
 	// 1. Emit event: message_start
 	startEvent := gin.H{
@@ -326,31 +362,7 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 				fmt.Fprintf(w, "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
 				flusher.Flush()
 
-				dur := time.Since(start)
-				var cost, savedCost float64
-				keyGroup := getKeyGroup(c)
-				if billing.GlobalEngine != nil {
-					cost, savedCost = billing.GlobalEngine.CalculateCostWithGroup(req.Model, keyGroup, totalPromptTokens, totalCompTokens, 0)
-				}
-				_ = savedCost
-				telemetry.GlobalMetrics.RecordRequest(true, dur, totalPromptTokens, totalCompTokens)
-				if storage.GlobalAsyncLogger != nil {
-					storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
-						TraceID:          middleware.GetTraceID(c),
-						ChatID:           anthropicUpstreamChatID,
-						Channel:          upstreamChannel,
-						SessionID:        sessionID,
-						APIKey:           getRequestAPIKey(c),
-						TenantID:         c.GetString("tenant_id"),
-						Model:            req.Model,
-						PromptTokens:     totalPromptTokens,
-						CompletionTokens: totalCompTokens,
-						TotalTokens:      totalPromptTokens + totalCompTokens,
-						Cost:             cost,
-						DurationMs:       dur.Milliseconds(),
-						StatusCode:       http.StatusOK,
-					})
-				}
+				recordOnce.Do(recordStreamEnd)
 				return
 			}
 

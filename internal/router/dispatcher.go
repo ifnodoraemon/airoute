@@ -972,6 +972,3 @@ func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankReques
 	telemetry.GlobalMetrics.RecordRequest(false, 0, 0, 0)
 	return nil, fmt.Errorf("all %d providers failed for rerank model '%s'. Last error: %w", len(channels), req.Model, lastErr)
 }
-
-
-

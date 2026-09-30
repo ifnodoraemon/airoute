@@ -266,3 +266,84 @@ func TestChannelTrailTruncation(t *testing.T) {
 	assert.True(t, strings.HasPrefix(resp.Channel, "…"), "truncated trail must be ellipsis-prefixed")
 	assert.True(t, strings.HasSuffix(resp.Channel, longOK), "serving channel must survive truncation")
 }
+
+func TestUpstreamMissingChatID(t *testing.T) {
+	// When the upstream returns no response ID, the audit chat_id must stay
+	// empty (a fabricated id would never reconcile with the provider), while
+	// the client-facing response body still carries a protocol-compliant id.
+	gin.SetMode(gin.TestMode)
+
+	db, err := storage.OpenDB(":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	repo := storage.NewRepository(db)
+	dispatcher := router.NewDispatcher(nil)
+	sync := controlplane.NewSynchronizer(repo, dispatcher)
+
+	dispatcher.RegisterProvider(&channelReportingProvider{chatID: ""})
+	require.NoError(t, repo.CreateChannel(&storage.ChannelRecord{
+		Name: "Silent Upstream", Type: "mock-reporting", BaseURL: "http://mock.local", APIKey: "sk-test",
+		Models: []string{"silent-model"}, Priority: 1, Weight: 10, Status: "active",
+	}))
+	require.NoError(t, sync.ReloadFromDB())
+
+	adminHandler := controlplane.NewAdminHandler(repo, sync, dispatcher)
+	r := api.SetupRouter(dispatcher, adminHandler)
+
+	req, _ := http.NewRequest(http.MethodPost, "/v1/chat/completions",
+		strings.NewReader(`{"model":"silent-model","messages":[{"role":"user","content":"hi"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	r.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &parsed))
+	assert.NotEmpty(t, parsed["id"], "response body must still carry a protocol-compliant id")
+}
+
+func TestFailedRequestAuditTrail(t *testing.T) {
+	// All upstream channels down: the failure itself must land in usage_logs
+	// (status 502, zero tokens) so failures are queryable in the audit UI,
+	// not only in service logs.
+	gin.SetMode(gin.TestMode)
+
+	db, err := storage.OpenDB(":memory:")
+	require.NoError(t, err)
+	defer db.Close()
+	repo := storage.NewRepository(db)
+	dispatcher := router.NewDispatcher(nil)
+	sync := controlplane.NewSynchronizer(repo, dispatcher)
+
+	dispatcher.RegisterProvider(&channelFailingProvider{})
+	require.NoError(t, repo.CreateChannel(&storage.ChannelRecord{
+		Name: "Dead Upstream", Type: "mock-fail", BaseURL: "http://mock.local", APIKey: "sk-test",
+		Models: []string{"dead-model"}, Priority: 1, Weight: 10, Status: "active",
+	}))
+	require.NoError(t, sync.ReloadFromDB())
+
+	// Enable the async audit logger with a fast flush for the test.
+	storage.InitAsyncLogger(repo, 100, 10, 30*time.Millisecond)
+	defer storage.GlobalAsyncLogger.Stop()
+	defer func() { storage.GlobalAsyncLogger = nil }()
+
+	adminHandler := controlplane.NewAdminHandler(repo, sync, dispatcher)
+	r := api.SetupRouter(dispatcher, adminHandler)
+
+	req, _ := http.NewRequest(http.MethodPost, "/v1/chat/completions",
+		strings.NewReader(`{"model":"dead-model","messages":[{"role":"user","content":"hi"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	r.ServeHTTP(resp, req)
+	require.Equal(t, http.StatusBadGateway, resp.Code)
+
+	// Allow the async worker a few flush cycles.
+	time.Sleep(200 * time.Millisecond)
+
+	logs, err := repo.ListUsageLogsWithFilter(storage.LogFilter{Model: "dead-model"})
+	require.NoError(t, err)
+	require.Len(t, logs, 1)
+	assert.Equal(t, http.StatusBadGateway, logs[0].StatusCode)
+	assert.Equal(t, 0, logs[0].PromptTokens)
+	assert.Empty(t, logs[0].Channel)
+}

@@ -135,6 +135,7 @@ func (h *Handler) HandleGeminiAction(c *gin.Context) {
 	if !isStream {
 		resp, err := h.dispatcher.Dispatch(reqCtx, canonicalReq)
 		if err != nil {
+			recordFailedRequest(c, sessionID, canonicalReq.Model, time.Since(start), http.StatusBadGateway)
 			c.JSON(http.StatusBadGateway, gin.H{
 				"error": gin.H{
 					"code":    502,
@@ -186,6 +187,7 @@ func (h *Handler) HandleGeminiAction(c *gin.Context) {
 
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, canonicalReq)
 	if err != nil {
+		recordFailedRequest(c, sessionID, canonicalReq.Model, time.Since(start), http.StatusBadGateway)
 		c.JSON(http.StatusBadGateway, gin.H{
 			"error": gin.H{
 				"code":    502,

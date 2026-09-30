@@ -341,6 +341,7 @@ export default function App() {
   const [models, setModels] = useState([]);
   const [modelRoutes, setModelRoutes] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [logOffset, setLogOffset] = useState(0);
   const [logLoading, setLogLoading] = useState(false);
   const [logFilter, setLogFilter] = useState('');
   const [timeRange, setTimeRange] = useState('all'); // 'all' | '1h' | 'today' | '7d' | 'custom'
@@ -607,6 +608,10 @@ export default function App() {
     try {
       const p = new URLSearchParams();
       p.set('limit', '50');
+      // Server-side pagination: offset defaults to the current page so the
+      // 8s polling refresh keeps fetching the page being viewed.
+      const off = override.offset !== undefined ? override.offset : logOffset;
+      p.set('offset', String(off));
 
       const tr = override.timeRange !== undefined ? override.timeRange : timeRange;
       const sf = override.sessionFilter !== undefined ? override.sessionFilter : sessionFilter;
@@ -656,9 +661,17 @@ export default function App() {
 
   useEffect(() => {
     if (currentTab === 'logs' || currentTab === 'dashboard') {
-      fetchLogs();
+      setLogOffset(0);
+      fetchLogs({ offset: 0 });
     }
   }, [currentTab, timeRange, sessionFilter]);
+
+  // Server-side pagination for audit logs (50 per page, offset-based).
+  const handleLogPageChange = (newOffset) => {
+    if (newOffset < 0) return;
+    setLogOffset(newOffset);
+    fetchLogs({ offset: newOffset });
+  };
 
   // Automatic Zero-Choice Debounced Probe
   const triggerProbe = async (url, apiKey, currentType) => {
@@ -1968,7 +1981,8 @@ export default function App() {
           }}
           onFilterBySession={(sid) => {
             setSessionFilter(sid);
-            fetchLogs({ sessionFilter: sid });
+            setLogOffset(0);
+            fetchLogs({ sessionFilter: sid, offset: 0 });
             showToast(`已按对话 ID: ${sid} 筛选`, 'info');
           }}
           onDeleteLog={handleDeleteSingleLog}
@@ -2807,6 +2821,9 @@ export default function App() {
               setSelectedLogIds={setSelectedLogIds}
               handleBatchDeleteLogs={handleBatchDeleteLogs}
               filteredLogs={filteredLogs}
+              logsLength={logs.length}
+              logOffset={logOffset}
+              onLogPageChange={handleLogPageChange}
               setActiveLogDetail={setActiveLogDetail}
               showToast={showToast}
               handleDeleteSingleLog={handleDeleteSingleLog}

@@ -46,6 +46,26 @@ func getRequestAPIKey(c *gin.Context) string {
 	return c.GetString(middleware.ContextKeyAPIKey)
 }
 
+// recordFailedRequest persists a failed request (all upstream channels down,
+// or no upstream configured) to the audit trail. Tokens are zero — the value
+// is the event itself: model, key, duration and status stay queryable in the
+// usage logs instead of living only in service logs. Error details remain in
+// service logs; the record carries the outcome, not the cause.
+func recordFailedRequest(c *gin.Context, sessionID, modelName string, dur time.Duration, statusCode int) {
+	if storage.GlobalAsyncLogger == nil {
+		return
+	}
+	storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
+		TraceID:    middleware.GetTraceID(c),
+		SessionID:  sessionID,
+		APIKey:     getRequestAPIKey(c),
+		TenantID:   c.GetString("tenant_id"),
+		Model:      modelName,
+		DurationMs: dur.Milliseconds(),
+		StatusCode: statusCode,
+	})
+}
+
 func getAPIKeyConfig(c *gin.Context) *model.APIKeyConfig {
 	if c == nil {
 		return nil
@@ -121,6 +141,11 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	if !req.Stream {
 		resp, err := h.dispatcher.Dispatch(reqCtx, &req)
 		if err != nil {
+			failedStatus := http.StatusBadGateway
+			if strings.Contains(err.Error(), "no upstream provider available") {
+				failedStatus = http.StatusNotFound
+			}
+			recordFailedRequest(c, sessionID, req.Model, time.Since(start), failedStatus)
 			if strings.Contains(err.Error(), "no upstream provider available") {
 				c.JSON(http.StatusNotFound, gin.H{
 					"error": gin.H{
@@ -142,10 +167,12 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 			return
 		}
 		dur := time.Since(start)
-		chatID := resp.ID
-		if chatID == "" {
-			chatID = fmt.Sprintf("chatcmpl-%x", time.Now().UnixNano())
-			resp.ID = chatID
+		// Audit chat_id is the raw upstream response ID only — a fabricated
+		// fallback is written into resp.ID for OpenAI protocol compliance but
+		// never persisted (it would never reconcile with the provider).
+		upstreamChatID := resp.ID
+		if resp.ID == "" {
+			resp.ID = fmt.Sprintf("chatcmpl-%x", time.Now().UnixNano())
 		}
 		if req.Model != "" {
 			resp.Model = req.Model
@@ -169,7 +196,7 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 		if storage.GlobalAsyncLogger != nil {
 			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 				TraceID:          middleware.GetTraceID(c),
-				ChatID:           chatID,
+				ChatID:           upstreamChatID,
 				Channel:          resp.Channel,
 				SessionID:        sessionID,
 				APIKey:           getRequestAPIKey(c),
@@ -208,6 +235,11 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, &req)
 	if err != nil {
+		failedStatus := http.StatusBadGateway
+		if strings.Contains(err.Error(), "no upstream provider available") {
+			failedStatus = http.StatusNotFound
+		}
+		recordFailedRequest(c, sessionID, req.Model, time.Since(start), failedStatus)
 		if strings.Contains(err.Error(), "no upstream provider available") {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error": gin.H{
@@ -229,8 +261,6 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 		return
 	}
 
-	streamChatID := fmt.Sprintf("chatcmpl-%x", time.Now().UnixNano())
-
 	// Set SSE HTTP response headers
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -251,8 +281,8 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	totalCompTokens := 0
 	totalCachedTokens := 0
 	accumulatedCompChars := 0
-	upstreamChatID := streamChatID // fallback to our generated ID
-	upstreamChannel := ""         // populated from the first stream event
+	upstreamChatID := ""  // real upstream response ID, captured from the first chunk (may stay empty)
+	upstreamChannel := "" // populated from the first stream event
 
 	approxPromptChars := 0
 	for _, m := range req.Messages {
@@ -355,7 +385,7 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 					event.Chunk.Model = req.Model
 				}
 				// Capture the upstream provider's response ID from the first chunk
-				if event.Chunk.ID != "" && upstreamChatID == streamChatID {
+				if event.Chunk.ID != "" && upstreamChatID == "" {
 					upstreamChatID = event.Chunk.ID
 				}
 				if !firstTokenRecorded && len(event.Chunk.Choices) > 0 {
@@ -647,7 +677,6 @@ func (h *Handler) HandlePublicStatus(c *gin.Context) {
 	})
 }
 
-
 // HandleAnthropicCountTokens handles POST /v1/messages/count_tokens for Anthropic Claude SDK compatibility.
 func (h *Handler) HandleAnthropicCountTokens(c *gin.Context) {
 	var req struct {
@@ -872,8 +901,8 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 	var ttftDuration time.Duration
 	totalPromptTokens := 0
 	totalCompTokens := 0
-	respUpstreamChatID := respID // fallback to our generated ID
-	respUpstreamChannel := ""   // populated from the first stream event
+	respUpstreamChatID := ""  // real upstream response ID, captured from the first chunk (may stay empty)
+	respUpstreamChannel := "" // populated from the first stream event
 
 	for event := range streamChan {
 		if event.Err != nil {
@@ -902,7 +931,7 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 
 		if event.Chunk != nil {
 			// Capture the upstream provider's response ID from the first chunk
-			if event.Chunk.ID != "" && respUpstreamChatID == respID {
+			if event.Chunk.ID != "" && respUpstreamChatID == "" {
 				respUpstreamChatID = event.Chunk.ID
 			}
 			if !firstTokenRecorded {
@@ -1097,5 +1126,3 @@ func resolveSessionID(c *gin.Context, modelName string, messages []model.ChatMes
 	}
 	return sID
 }
-
-
