@@ -66,8 +66,10 @@ func TestChatIDAndChannelAudit(t *testing.T) {
 		assert.NotContains(t, parsed, "channel")
 		assert.Equal(t, upstreamChatID, parsed["id"])
 
-		// Chat ID response header (X-Nano alias must be gone)
-		assert.Equal(t, upstreamChatID, resp.Header().Get("X-Airoute-Chat-ID"))
+		// Chat ID response header removed entirely: it could not be truthful
+		// on streams (SSE headers are written before the upstream ID is
+		// known), and the audit DB record carries the real upstream ID.
+		assert.Empty(t, resp.Header().Get("X-Airoute-Chat-ID"))
 		assert.Empty(t, resp.Header().Get("X-Nano-Chat-ID"))
 
 		// Async logger is not enabled in tests; verify via direct record readback

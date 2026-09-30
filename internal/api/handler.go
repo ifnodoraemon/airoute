@@ -186,7 +186,6 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 				StatusCode:       http.StatusOK,
 			})
 		}
-		c.Header("X-Airoute-Chat-ID", chatID)
 		c.Header("X-Airoute-Cost", fmt.Sprintf("%.6f", cost))
 		if isOffPeak {
 			c.Header("X-Airoute-Off-Peak", "true")
@@ -237,7 +236,6 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no")
-	c.Header("X-Airoute-Chat-ID", streamChatID)
 	c.Status(http.StatusOK)
 
 	flusher, ok := c.Writer.(http.Flusher)
