@@ -427,8 +427,27 @@ func (db *DB) migrate() error {
 					tools TEXT NOT NULL,
 					loading_mode TEXT DEFAULT 'lazy',
 					manifest TEXT DEFAULT '',
-					author TEXT DEFAULT 'Nano Official',
+					author TEXT DEFAULT 'Airoute Official',
 					version TEXT DEFAULT '1.0.0',
+					enabled INTEGER DEFAULT 1,
+					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+					updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+				);
+
+				CREATE TABLE IF NOT EXISTS system_mcp_servers (
+					id TEXT PRIMARY KEY,
+					name TEXT NOT NULL,
+					description TEXT NOT NULL,
+					category TEXT NOT NULL,
+					transport TEXT NOT NULL,
+					endpoint TEXT NOT NULL,
+					status TEXT DEFAULT 'online',
+					author TEXT DEFAULT 'Airoute Official',
+					version TEXT DEFAULT '1.0.0',
+					tools TEXT NOT NULL,
+					prompts TEXT DEFAULT '[]',
+					resources TEXT DEFAULT '[]',
+					env_vars TEXT DEFAULT '{}',
 					enabled INTEGER DEFAULT 1,
 					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 					updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -680,8 +699,27 @@ func (db *DB) migratePostgres() error {
 					tools TEXT NOT NULL,
 					loading_mode VARCHAR(32) DEFAULT 'lazy',
 					manifest TEXT DEFAULT '',
-					author VARCHAR(128) DEFAULT 'Nano Official',
+					author VARCHAR(128) DEFAULT 'Airoute Official',
 					version VARCHAR(32) DEFAULT '1.0.0',
+					enabled INT DEFAULT 1,
+					created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+					updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+				);
+
+				CREATE TABLE IF NOT EXISTS system_mcp_servers (
+					id VARCHAR(128) PRIMARY KEY,
+					name VARCHAR(255) NOT NULL,
+					description TEXT NOT NULL,
+					category VARCHAR(64) NOT NULL,
+					transport VARCHAR(32) NOT NULL,
+					endpoint TEXT NOT NULL,
+					status VARCHAR(32) DEFAULT 'online',
+					author VARCHAR(128) DEFAULT 'Airoute Official',
+					version VARCHAR(32) DEFAULT '1.0.0',
+					tools TEXT NOT NULL,
+					prompts TEXT DEFAULT '[]',
+					resources TEXT DEFAULT '[]',
+					env_vars TEXT DEFAULT '{}',
 					enabled INT DEFAULT 1,
 					created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 					updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP

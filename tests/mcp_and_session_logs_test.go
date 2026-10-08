@@ -113,19 +113,19 @@ func TestMCPServerAndSessionLogs(t *testing.T) {
 			toolMap := tItem.(map[string]interface{})
 			toolNames = append(toolNames, toolMap["name"].(string))
 		}
-		assert.Contains(t, toolNames, "nano_list_models")
-		assert.Contains(t, toolNames, "nano_chat")
-		assert.Contains(t, toolNames, "nano_query_logs")
-		assert.Contains(t, toolNames, "nano_check_status")
+		assert.Contains(t, toolNames, "airoute_model_topology")
+		assert.Contains(t, toolNames, "airoute_chat")
+		assert.Contains(t, toolNames, "airoute_query_logs")
+		assert.Contains(t, toolNames, "airoute_cluster_status")
 	})
 
-	t.Run("POST /mcp/messages tools/call nano_list_models", func(t *testing.T) {
+	t.Run("POST /mcp/messages tools/call airoute_model_topology", func(t *testing.T) {
 		payload := map[string]interface{}{
 			"jsonrpc": "2.0",
 			"id":      3,
 			"method":  "tools/call",
 			"params": map[string]interface{}{
-				"name":      "nano_list_models",
+				"name":      "airoute_model_topology",
 				"arguments": map[string]interface{}{},
 			},
 		}

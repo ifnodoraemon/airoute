@@ -1677,176 +1677,250 @@ type SkillRecord struct {
 	UpdatedAt   string   `json:"updated_at"`
 }
 
-// SeedDefaultSkills ensures built-in skills exist with rich manifests and progressive loading configs.
+// SeedDefaultSkills ensures standard open Agent Skills exist, complying with agentskills.io standard.
 func (r *Repository) SeedDefaultSkills() error {
+	// Clean up legacy skills to keep it clean and focused
+	_, _ = r.db.Exec(`DELETE FROM system_skills WHERE id NOT IN ('git-workflow', 'test-driven-development', 'browser-automation', 'security-audit') AND id NOT LIKE 'skill_%' AND id NOT LIKE 'custom_%'`)
+
 	defaults := []SkillRecord{
 		{
-			ID:          "gateway_ops",
-			Name:        "网关运维与状态探针",
-			Description: "查询实时可用模型拓扑、上游渠道熔断状态与历史审计日志",
-			Category:    "ops",
-			Tools:       []string{"nano_list_models", "nano_check_status", "nano_query_logs"},
+			ID:          "git-workflow",
+			Name:        "Git 规范协作与代码审查工作流",
+			Description: "标准化 Git 分支管理、Conventional Commits 提交规范、冲突解决与 GitHub PR 审查流",
+			Category:    "dev",
+			Tools:       []string{"run_command", "git", "view_file"},
 			LoadingMode: "lazy",
-			Author:      "Nano Official",
+			Author:      "Community Standard",
 			Version:     "1.0.0",
 			Enabled:     true,
 			Manifest: `---
-name: gateway_ops
-description: 网关运维与状态探针
-category: ops
-author: Nano Official
+name: git-workflow
+description: 标准化 Git 分支管理、Conventional Commits 提交规范、冲突解决与 GitHub PR 审查流。当用户需要提交代码、排查冲突、发起或审查 Pull Request 时自动激活。
+category: dev
+author: Community Standard
 version: 1.0.0
 loading_mode: lazy
-tools:
-  - nano_list_models
-  - nano_check_status
-  - nano_query_logs
+allowed-tools:
+  - run_command
+  - git
+  - view_file
+tool-runtime: native_agent_cli
+compatibility: claude-code, opencode, codex, cursor
 ---
 
-# 网关运维与状态探针 (gateway_ops)
+# Git 规范协作与代码审查工作流 (git-workflow)
 
-提供大模型网关集群的健康探针、模型拓扑治理与用量审计能力。
+遵循开源与企业级最佳实践的 Git 工作流规范。指导 Agent 在协助开发时保持清洁的 Git 历史与严谨的协作标准。
 
-## 触发场景
-- 查询网关当前可用模型列表及其支持的模态（如 chat, embeddings, images 等）
-- 检查各上游提供商与下游渠道的实时连通性、时延与熔断器健康状态
-- 检索历史请求日志，按会话 Session ID 追踪 Token 消耗与成本明细
+## 💡 工具运行机制说明
+- **工具不需要同步下载！**
+- 本技能中声明的 ` + "`run_command` / `git` / `view_file`" + ` 是宿主 Agent（Claude Code / OpenCode / Codex）自带的原生执行能力，智能体直接在当前终端沙箱中调用本机的 git CLI，零下载依赖、零网络等待。
 
-## 工具清单
-- nano_list_models(modality?: string): 查询统一模型路由拓扑
-- nano_check_status(): 获取上游渠道健康状态与熔断指标
-- nano_query_logs(session_id?: string, limit?: number): 查询会话调用明细
+## 客户端接入指引 (Client Integration)
+
+### 1. Claude Code 接入
+` + "```bash" + `
+# 在项目根目录创建技能目录并保存
+mkdir -p .claude/skills/git-workflow
+# 保存本文件至 .claude/skills/git-workflow/SKILL.md
+` + "```" + `
+在终端交互时直接体验：
+` + "`> 请检查当前 git status 并按照 Conventional Commits 格式整理一次提交`" + `
+
+### 2. OpenCode 接入
+将本文件保存至项目的 ` + "`.opencode/skills/git-workflow/SKILL.md`" + `。OpenCode 会在启动时自动索引元数据，任务匹配时按需激活。
+
+### 3. Codex / Python SDK 接入
+在创建 OpenAI Assistant 或 System Prompt 时载入本 SOP：
+` + "```python" + `
+system_prompt = f"Follow the git-workflow SOP: \n{skill_manifest}"
+` + "```" + `
+
+## SOP 执行工作流
+1. **状态探查**：执行 ` + "`git status`" + ` 和 ` + "`git diff --stat`" + ` 确认工作区变更。
+2. **规范提交**：遵循 Angular / Conventional Commits 规范：
+   - ` + "`feat:`" + ` 新功能
+   - ` + "`fix:`" + ` 修复缺陷
+   - ` + "`refactor:`" + ` 重构
+   - ` + "`test:`" + ` 增加测试用例
+3. **安全检查**：提交前确保未将 ` + "`.env`" + `、密钥或编译产物加入暂存区。
+4. **分支与 PR**：基于主干分支创建特性分支，生成结构化 PR 描述。
 `,
 		},
 		{
-			ID:          "model_router",
-			Name:        "多模型协作与智能对话代理",
-			Description: "跨渠道分发会话请求，支持自动会话粘连和前缀缓存亲和性",
-			Category:    "agent",
-			Tools:       []string{"nano_chat"},
-			LoadingMode: "eager",
-			Author:      "Nano Official",
+			ID:          "test-driven-development",
+			Name:        "TDD 测试驱动开发与缺陷排查",
+			Description: "红-绿-重构闭环（Red-Green-Refactor）、单元测试用例构造、边界条件防御与防回归验证",
+			Category:    "test",
+			Tools:       []string{"run_command", "view_file", "replace_file_content"},
+			LoadingMode: "lazy",
+			Author:      "Kent Beck / Community",
 			Version:     "1.0.0",
 			Enabled:     true,
 			Manifest: `---
-name: model_router
-description: 多模型协作与智能对话代理
-category: agent
-author: Nano Official
+name: test-driven-development
+description: 严谨的测试驱动开发（TDD）与质量保障规范。通过“先写失败测试、最小实现、安全重构”确保代码正确性与可维护性。当用户要求实现新功能、修复 Bug 或增加单元测试时激活。
+category: test
+author: Kent Beck / Community
 version: 1.0.0
-loading_mode: eager
-tools:
-  - nano_chat
+loading_mode: lazy
+allowed-tools:
+  - run_command
+  - view_file
+  - replace_file_content
+tool-runtime: native_agent_cli
+compatibility: claude-code, opencode, codex, cursor
 ---
 
-# 多模型协作与智能对话代理 (model_router)
+# TDD 测试驱动开发与缺陷排查 (test-driven-development)
 
-支持将任务委派给指定模型执行对话补全，享受网关内置的零配置会话保持与前缀缓存亲和性。
+防止大模型“盲目写代码”和“引发未知回归”的黄金标准工程实践。
 
-## 触发场景
-- Agent 需要借助另一个模型协助完成子任务时（如深思链、代码生成、摘要提炼）
+## 💡 工具运行机制说明
+- **工具不需要同步下载！**
+- 本技能依赖宿主智能体的代码读写工具（` + "`view_file` / `replace_file_content`" + `）以及命令执行器（` + "`run_command`" + `）。智能体调用当前项目的测试运行器（如 ` + "`npm test`" + `、` + "`go test`" + `、` + "`pytest`" + `），全流程在本地执行。
 
-## 工具清单
-- nano_chat(model: string, message: string, session_id?: string): 向指定模型发起对话
+## 客户端接入指引 (Client Integration)
+
+### 1. Claude Code 接入
+` + "```bash" + `
+mkdir -p .claude/skills/test-driven-development
+# 保存为 .claude/skills/test-driven-development/SKILL.md
+` + "```" + `
+
+### 2. OpenCode 接入
+保存至 ` + "`.opencode/skills/test-driven-development/SKILL.md`" + `。
+
+### 3. Codex / Cursor 接入
+在 ` + "`.cursorrules`" + ` 或 Agent 指令中配置：
+` + "`遵守 TDD 流程：在新写代码前必须先运行测试验证其失败，代码完成后再验证其通过。`" + `
+
+## SOP 执行工作流
+1. **Red（红）**：分析需求边界，先编写一个必然失败的最小测试用例，运行测试确保其因缺少实现而失败。
+2. **Green（绿）**：编写最简实现代码，运行测试直到 100% 绿色通过。
+3. **Refactor（重构）**：在测试保护下优化代码结构、消除重复、提高可读性，确保测试持续通过。
+4. **回归防护**：每次重大修改后自动执行全量测试套件。
 `,
 		},
 		{
-			ID:          "web_search",
-			Name:        "实时联网检索与知识增强",
-			Description: "为接入的 AI Agent 提供全局联网搜索能力，返回实时权威网页结果与摘要",
-			Category:    "search",
-			Tools:       []string{"nano_web_search"},
+			ID:          "browser-automation",
+			Name:        "Playwright 浏览器自动化与 UI 验收",
+			Description: "基于 Playwright / Puppeteer 的无头浏览器页面交互、端到端测试、状态抓取与视觉全景截图",
+			Category:    "automation",
+			Tools:       []string{"puppeteer_navigate", "puppeteer_screenshot", "puppeteer_click"},
 			LoadingMode: "lazy",
-			Author:      "Nano Official",
-			Version:     "1.0.0",
+			Author:      "Microsoft Playwright Team",
+			Version:     "1.1.0",
 			Enabled:     true,
 			Manifest: `---
-name: web_search
-description: 实时联网检索与知识增强
-category: search
-author: Nano Official
-version: 1.0.0
+name: browser-automation
+description: 基于无头浏览器的网页自动化导航、元素定位、端到端 UI 测试与全景截图。当用户需要测试网页交互、抓取动态单页应用（SPA）、验证响应式排版时激活。
+category: automation
+author: Microsoft Playwright Team
+version: 1.1.0
 loading_mode: lazy
-tools:
-  - nano_web_search
+allowed-tools:
+  - puppeteer_navigate
+  - puppeteer_screenshot
+  - puppeteer_click
+tool-runtime: mcp_protocol_server
+compatibility: claude-code, opencode, codex, cursor
 ---
 
-# 实时联网检索与知识增强 (web_search)
+# Playwright 浏览器自动化与 UI 验收 (browser-automation)
 
-提供高质量公网信息检索能力，返回权威网页摘要与参考引用链接。
+赋予智能体真正的“眼睛”与操作界面的能力，实现无头浏览器端到端交互。
 
-## 触发场景
-- 用户问题涉及最新时事、最新发布的框架/库版本、实时股票/天气或外部实时资料
-- 知识库截断日期之后的问题解答
+## 💡 工具运行机制说明
+- **工具通过 MCP 协议免安装挂载！**
+- 本技能中声明的 ` + "`puppeteer_*`" + ` 工具，由 **MCP 广场**中的 Puppeteer / Playwright MCP Server 提供。
+- 客户端只需在 MCP 配置中启用 Puppeteer 服务，智能体即可通过标准 JSON-RPC 2.0 协议连接无头浏览器，无需在技能包内打包 Chrome 二进制。
 
-## 工具清单
-- nano_web_search(query: string): 执行公网搜索并获取摘要和引用
+## 客户端接入指引 (Client Integration)
+
+### 1. Claude Code 接入
+在项目中使用内置 MCP 或运行：
+` + "```bash" + `
+claude mcp add puppeteer npx -y @modelcontextprotocol/server-puppeteer
+` + "```" + `
+在 ` + "`.claude/skills/browser-automation/SKILL.md`" + ` 注入本规范。
+
+### 2. OpenCode / Cline 接入
+在 ` + "`.cline/mcp_settings.json`" + ` 中配置：
+` + "```json" + `
+{
+  "mcpServers": {
+    "puppeteer": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-puppeteer"]
+    }
+  }
+}
+` + "```" + `
+
+### 3. Codex / Python SDK 接入
+通过 ` + "`mcp`" + ` 官方 Python SDK 连接 Puppeteer stdio 进程调用工具。
+
+## SOP 执行工作流
+1. **页面导航**：调用 ` + "`puppeteer_navigate`" + ` 加载目标 URL 并等待网络空闲。
+2. **状态感知**：调用 ` + "`puppeteer_screenshot`" + ` 截取当前视口确认渲染是否正确。
+3. **元素交互**：通过选择器或文本定位元素，调用 ` + "`puppeteer_click`" + ` 或输入文本。
+4. **断言验证**：检查控制台错误日志与关键 DOM 状态。
 `,
 		},
 		{
-			ID:          "datetime_clock",
-			Name:        "高精度时区与闲时感知",
-			Description: "精确获取服务器当前时间、时区、星期以及实时闲时半价时段判定",
-			Category:    "utility",
-			Tools:       []string{"nano_get_current_time"},
+			ID:          "security-audit",
+			Name:        "生产级代码安全审计与凭据防护",
+			Description: "静态代码扫描、OWASP Top 10 漏洞自检、硬编码 API Key/Token 扫描、SQL 注入与 XSS 防护",
+			Category:    "security",
+			Tools:       []string{"view_file", "grep", "run_command"},
 			LoadingMode: "lazy",
-			Author:      "Nano Official",
+			Author:      "OWASP Community",
 			Version:     "1.0.0",
 			Enabled:     true,
 			Manifest: `---
-name: datetime_clock
-description: 高精度时区与闲时感知
-category: utility
-author: Nano Official
+name: security-audit
+description: 全面的软件安全合规与静态分析。覆盖 OWASP Top 10、敏感凭据泄露扫描、反注入防护与依赖漏洞识别。当需要进行发布前安全评估、排查潜在漏洞时激活。
+category: security
+author: OWASP Community
 version: 1.0.0
 loading_mode: lazy
-tools:
-  - nano_get_current_time
+allowed-tools:
+  - view_file
+  - grep
+  - run_command
+tool-runtime: native_agent_cli
+compatibility: claude-code, opencode, codex, cursor
 ---
 
-# 高精度时区与闲时感知 (datetime_clock)
+# 生产级代码安全审计与凭据防护 (security-audit)
 
-精确获取服务器当前时间、时区、星期，并自动计算当前是否处于 DeepSeek 等模型官方闲时优惠窗口。
+企业级代码质量与安全第一道防线。在代码合入生产前自动识别漏洞风险。
 
-## 触发场景
-- 用户询问当前时间、日期、星期几或调度任务规划时
-- 需要根据当前时间判断模型计费是否享受闲时折扣时
+## 💡 工具运行机制说明
+- **工具不需要同步下载！**
+- 使用 Agent 本地环境提供的代码查看与检索工具（` + "`view_file` / `grep` / `run_command`" + `），结合规则库对仓库进行静态代码审计。
 
-## 工具清单
-- nano_get_current_time(): 获取当前标准时间、时区及闲时半价命中状态
-`,
-		},
-		{
-			ID:          "code_runner",
-			Name:        "轻量代码执行与数学表达式计算",
-			Description: "提供安全的四则运算、高精度数学计算、单位换算与逻辑求值",
-			Category:    "utility",
-			Tools:       []string{"nano_calc_eval"},
-			LoadingMode: "lazy",
-			Author:      "Nano Official",
-			Version:     "1.0.0",
-			Enabled:     true,
-			Manifest: `---
-name: code_runner
-description: 轻量代码执行与数学表达式计算
-category: utility
-author: Nano Official
-version: 1.0.0
-loading_mode: lazy
-tools:
-  - nano_calc_eval
----
+## 客户端接入指引 (Client Integration)
 
-# 轻量代码执行与数学表达式计算 (code_runner)
+### 1. Claude Code 接入
+` + "```bash" + `
+mkdir -p .claude/skills/security-audit
+# 保存为 .claude/skills/security-audit/SKILL.md
+` + "```" + `
+在 Claude Code 提示：` + "`> 对项目中的 auth 模块进行一次安全审计，检查凭据泄露和 SQL 注入风险`" + `
 
-提供高精度的四则运算、指数对数、复合数学公式求值，消除大语言模型的计算幻觉。
+### 2. OpenCode 接入
+保存至 ` + "`.opencode/skills/security-audit/SKILL.md`" + `。
 
-## 触发场景
-- 用户输入复杂的代数运算、汇率或比例换算、大数相乘
-- 需要准确数值计算而非估算的场景
+### 3. Codex / Cursor 接入
+在项目 ` + "`.cursorrules`" + ` 中追加安全审查 SOP 要求。
 
-## 工具清单
-- nano_calc_eval(expression: string): 评估并计算数学表达式（如 "(128 * 1024) / 0.85"）
+## SOP 执行工作流
+1. **秘钥泄漏扫描**：扫描是否存在未加入 .gitignore 的 API 密钥（如 ` + "`sk-`" + `）、私钥与明文密码。
+2. **输入验证与防注入**：检查外部参数进入数据库或执行 Shell 时是否采用参数化绑定（Parameterized Queries）。
+3. **鉴权与越权检查**：核查 API 端点的角色与 Token 校验逻辑是否健全。
+4. **输出审计报告**：罗列漏洞位置、严重程度等级（高/中/低）及修复 Diff 代码。
 `,
 		},
 	}
@@ -1931,6 +2005,47 @@ func (r *Repository) SetSkillEnabled(id string, enabled bool) error {
 	return err
 }
 
+// SaveSkill creates or updates an Agent Skill.
+func (r *Repository) SaveSkill(s *SkillRecord) error {
+	toolsJSON, _ := json.Marshal(s.Tools)
+	enabledInt := 0
+	if s.Enabled {
+		enabledInt = 1
+	}
+	if s.LoadingMode == "" {
+		s.LoadingMode = "lazy"
+	}
+	if s.Author == "" {
+		s.Author = "Custom"
+	}
+	if s.Version == "" {
+		s.Version = "1.0.0"
+	}
+
+	_, err := r.db.Exec(`
+		INSERT INTO system_skills (id, name, description, category, tools, loading_mode, manifest, author, version, enabled, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		ON CONFLICT(id) DO UPDATE SET
+			name = excluded.name,
+			description = excluded.description,
+			category = excluded.category,
+			tools = excluded.tools,
+			loading_mode = excluded.loading_mode,
+			manifest = excluded.manifest,
+			author = excluded.author,
+			version = excluded.version,
+			enabled = excluded.enabled,
+			updated_at = CURRENT_TIMESTAMP
+	`, s.ID, s.Name, s.Description, s.Category, string(toolsJSON), s.LoadingMode, s.Manifest, s.Author, s.Version, enabledInt)
+	return err
+}
+
+// DeleteSkill deletes an Agent Skill.
+func (r *Repository) DeleteSkill(id string) error {
+	_, err := r.db.Exec(`DELETE FROM system_skills WHERE id = ?`, id)
+	return err
+}
+
 // IsSkillEnabled checks if a skill is active.
 func (r *Repository) IsSkillEnabled(id string) bool {
 	_ = r.SeedDefaultSkills()
@@ -1944,7 +2059,11 @@ func (r *Repository) IsSkillEnabled(id string) bool {
 
 // IsToolEnabled checks if any enabled skill contains this tool.
 func (r *Repository) IsToolEnabled(toolName string) bool {
-	if toolName == "nano_search_skills" || toolName == "nano_discover_skills" || toolName == "nano_inspect_skill" || toolName == "nano_get_skill_manifest" {
+	if strings.HasPrefix(toolName, "airoute_search_skills") ||
+		strings.HasPrefix(toolName, "airoute_discover_skills") ||
+		strings.HasPrefix(toolName, "airoute_inspect_skill") ||
+		strings.HasPrefix(toolName, "airoute_get_skill_manifest") ||
+		strings.HasPrefix(toolName, "nano_") {
 		return true
 	}
 	skills, err := r.ListSkills()
@@ -1959,6 +2078,302 @@ func (r *Repository) IsToolEnabled(toolName string) bool {
 		}
 	}
 	return true
+}
+
+// MCPServerRecord represents an MCP server registered in the gateway plaza.
+type MCPServerRecord struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Category    string   `json:"category"`  // ops, dev, search, db, productivity, storage
+	Transport   string   `json:"transport"` // sse, stdio, http
+	Endpoint    string   `json:"endpoint"`
+	Status      string   `json:"status"`    // online, active, standby
+	Author      string   `json:"author"`
+	Version     string   `json:"version"`
+	Tools       []string `json:"tools"`
+	Prompts     []string `json:"prompts"`
+	Resources   []string `json:"resources"`
+	EnvVars     string   `json:"env_vars,omitempty"`
+	Enabled     bool     `json:"enabled"`
+	CreatedAt   string   `json:"created_at,omitempty"`
+	UpdatedAt   string   `json:"updated_at,omitempty"`
+}
+
+// SeedDefaultMCPServers ensures default curated ModelScope-style MCP servers exist.
+func (r *Repository) SeedDefaultMCPServers() error {
+	defaults := []MCPServerRecord{
+		{
+			ID:          "airoute-gateway",
+			Name:        "Airoute 网关原生核心服务",
+			Description: "企业级 AI 网关核心管控与路由服务，暴露集群熔断、模型拓扑、数据脱敏与智能仲裁",
+			Category:    "ops",
+			Transport:   "sse",
+			Endpoint:    "http://localhost:8080/mcp/sse",
+			Status:      "online",
+			Author:      "Airoute Official",
+			Version:     "1.2.0",
+			Tools:       []string{"airoute_cluster_status", "airoute_model_topology", "airoute_data_redact", "airoute_recommend_model", "airoute_query_logs"},
+			Prompts:     []string{"cluster_health_report", "route_optimization_guide"},
+			Resources:   []string{"airoute://topology/matrix", "airoute://metrics/sli"},
+			Enabled:     true,
+		},
+		{
+			ID:          "modelscope-search",
+			Name:        "ModelScope 联网检索与正文提取",
+			Description: "魔搭社区与开源生态精选多源 Web 检索、动态抓取与结构化 Markdown 提炼",
+			Category:    "search",
+			Transport:   "sse",
+			Endpoint:    "https://mcp.modelscope.cn/servers/search/sse",
+			Status:      "online",
+			Author:      "ModelScope",
+			Version:     "2.1.0",
+			Tools:       []string{"airoute_deep_search", "web_fetch_markdown", "academic_paper_search"},
+			Prompts:     []string{"deep_research_brief"},
+			Resources:   []string{"search://history"},
+			Enabled:     true,
+		},
+		{
+			ID:          "github-mcp",
+			Name:        "GitHub 研发协作协议服务",
+			Description: "仓库代码探查、Pull Request 代码审查、Issue 追踪与 GitHub Actions 工作流联动",
+			Category:    "dev",
+			Transport:   "stdio",
+			Endpoint:    "npx -y @modelcontextprotocol/server-github",
+			Status:      "active",
+			Author:      "GitHub / Anthropic",
+			Version:     "1.0.4",
+			Tools:       []string{"search_repositories", "create_issue", "get_file_contents", "create_pull_request"},
+			Prompts:     []string{"pull_request_review_summary"},
+			Resources:   []string{"github://repos/recent"},
+			Enabled:     true,
+		},
+		{
+			ID:          "postgres-mcp",
+			Name:        "PostgreSQL 企业数据安全审计服务",
+			Description: "企业级关系型数据库 Schema 自动探测、只读隔离查询与慢 SQL 诊断",
+			Category:    "db",
+			Transport:   "stdio",
+			Endpoint:    "npx -y @modelcontextprotocol/server-postgres postgresql://localhost/db",
+			Status:      "active",
+			Author:      "ModelContextProtocol",
+			Version:     "0.9.2",
+			Tools:       []string{"read_query", "list_tables", "describe_table", "airoute_sql_security_check"},
+			Prompts:     []string{"explain_slow_query"},
+			Resources:   []string{"db://schema/public"},
+			Enabled:     true,
+		},
+		{
+			ID:          "browser-fetch-mcp",
+			Name:        "Puppeteer 无头浏览器渲染服务",
+			Description: "动态 JS 页面无头渲染、网页全景截图与 SPA 应用深度爬取",
+			Category:    "search",
+			Transport:   "stdio",
+			Endpoint:    "npx -y @modelcontextprotocol/server-puppeteer",
+			Status:      "active",
+			Author:      "Puppeteer Community",
+			Version:     "1.3.1",
+			Tools:       []string{"puppeteer_navigate", "puppeteer_screenshot", "puppeteer_click", "puppeteer_evaluate"},
+			Prompts:     []string{"web_page_inspect"},
+			Resources:   []string{"browser://active_pages"},
+			Enabled:     true,
+		},
+		{
+			ID:          "sequential-thinking",
+			Name:        "Sequential Thinking 动态思维链推理",
+			Description: "Anthropic 官方深度反思与长思维链问题解决服务，提供动态假设验证与复杂逻辑分步演进",
+			Category:    "ai",
+			Transport:   "stdio",
+			Endpoint:    "npx -y @modelcontextprotocol/server-sequential-thinking",
+			Status:      "active",
+			Author:      "Anthropic Official",
+			Version:     "0.6.2",
+			Tools:       []string{"sequentialthinking"},
+			Prompts:     []string{"deep_reasoning_prompt"},
+			Resources:   []string{"thinking://history"},
+			Enabled:     true,
+		},
+		{
+			ID:          "brave-search",
+			Name:        "Brave Search 全球实时网络检索",
+			Description: "官方无追踪隐私搜索协议服务，提供实时新闻、技术文章与结构化网页正文索引",
+			Category:    "search",
+			Transport:   "stdio",
+			Endpoint:    "npx -y @modelcontextprotocol/server-brave-search",
+			Status:      "active",
+			Author:      "Brave Software",
+			Version:     "1.0.2",
+			Tools:       []string{"brave_web_search", "brave_local_search"},
+			Prompts:     []string{"search_enrichment"},
+			Resources:   []string{"search://trending"},
+			Enabled:     true,
+		},
+		{
+			ID:          "feishu-lark-mcp",
+			Name:        "飞书 / Lark 办公智能体协议服务",
+			Description: "飞书多维表格读写、知识库文档交互、群消息卡片推达与审批流联动",
+			Category:    "productivity",
+			Transport:   "sse",
+			Endpoint:    "https://open.feishu.cn/mcp/v1/sse",
+			Status:      "standby",
+			Author:      "Feishu Open Platform",
+			Version:     "2.0.0",
+			Tools:       []string{"feishu_send_card", "feishu_read_wiki", "feishu_bitable_query"},
+			Prompts:     []string{"format_weekly_digest"},
+			Resources:   []string{"feishu://wiki/root"},
+			Enabled:     false,
+		},
+		{
+			ID:          "docker-k8s-mcp",
+			Name:        "Docker / K8s 容器与集群探针",
+			Description: "容器生命周期管理、Pod 运行状态监控与分布式日志排查",
+			Category:    "ops",
+			Transport:   "stdio",
+			Endpoint:    "npx -y @modelcontextprotocol/server-docker",
+			Status:      "active",
+			Author:      "DevOps Community",
+			Version:     "1.1.0",
+			Tools:       []string{"docker_ps", "docker_logs", "docker_restart_container"},
+			Prompts:     []string{"troubleshoot_container"},
+			Resources:   []string{"docker://containers/list"},
+			Enabled:     true,
+		},
+	}
+
+	for _, s := range defaults {
+		toolsJSON, _ := json.Marshal(s.Tools)
+		promptsJSON, _ := json.Marshal(s.Prompts)
+		resourcesJSON, _ := json.Marshal(s.Resources)
+		enabledInt := 0
+		if s.Enabled {
+			enabledInt = 1
+		}
+		_, _ = r.db.Exec(`
+			INSERT INTO system_mcp_servers (id, name, description, category, transport, endpoint, status, author, version, tools, prompts, resources, env_vars, enabled, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+			ON CONFLICT(id) DO UPDATE SET
+				name = excluded.name,
+				description = excluded.description,
+				category = excluded.category,
+				transport = excluded.transport,
+				endpoint = excluded.endpoint,
+				status = excluded.status,
+				author = excluded.author,
+				version = excluded.version,
+				tools = excluded.tools,
+				prompts = excluded.prompts,
+				resources = excluded.resources
+		`, s.ID, s.Name, s.Description, s.Category, s.Transport, s.Endpoint, s.Status, s.Author, s.Version, string(toolsJSON), string(promptsJSON), string(resourcesJSON), s.EnvVars, enabledInt)
+	}
+	return nil
+}
+
+// ListMCPServers returns all registered MCP Servers.
+func (r *Repository) ListMCPServers() ([]*MCPServerRecord, error) {
+	_ = r.SeedDefaultMCPServers()
+
+	rows, err := r.db.Query(`SELECT id, name, description, category, transport, endpoint, status, author, version, tools, prompts, resources, env_vars, enabled, updated_at FROM system_mcp_servers ORDER BY id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*MCPServerRecord
+	for rows.Next() {
+		var s MCPServerRecord
+		var toolsStr, promptsStr, resourcesStr string
+		var enabledInt int
+		var updatedAt time.Time
+		if err := rows.Scan(&s.ID, &s.Name, &s.Description, &s.Category, &s.Transport, &s.Endpoint, &s.Status, &s.Author, &s.Version, &toolsStr, &promptsStr, &resourcesStr, &s.EnvVars, &enabledInt, &updatedAt); err != nil {
+			return nil, err
+		}
+		s.Enabled = enabledInt == 1
+		s.UpdatedAt = updatedAt.Format("2006-01-02 15:04:05")
+		_ = json.Unmarshal([]byte(toolsStr), &s.Tools)
+		_ = json.Unmarshal([]byte(promptsStr), &s.Prompts)
+		_ = json.Unmarshal([]byte(resourcesStr), &s.Resources)
+		list = append(list, &s)
+	}
+	return list, nil
+}
+
+// GetMCPServer retrieves an MCP server by ID.
+func (r *Repository) GetMCPServer(id string) (*MCPServerRecord, error) {
+	_ = r.SeedDefaultMCPServers()
+
+	var s MCPServerRecord
+	var toolsStr, promptsStr, resourcesStr string
+	var enabledInt int
+	var updatedAt time.Time
+	err := r.db.QueryRow(`SELECT id, name, description, category, transport, endpoint, status, author, version, tools, prompts, resources, env_vars, enabled, updated_at FROM system_mcp_servers WHERE id = ?`, id).
+		Scan(&s.ID, &s.Name, &s.Description, &s.Category, &s.Transport, &s.Endpoint, &s.Status, &s.Author, &s.Version, &toolsStr, &promptsStr, &resourcesStr, &s.EnvVars, &enabledInt, &updatedAt)
+	if err != nil {
+		return nil, err
+	}
+	s.Enabled = enabledInt == 1
+	s.UpdatedAt = updatedAt.Format("2006-01-02 15:04:05")
+	_ = json.Unmarshal([]byte(toolsStr), &s.Tools)
+	_ = json.Unmarshal([]byte(promptsStr), &s.Prompts)
+	_ = json.Unmarshal([]byte(resourcesStr), &s.Resources)
+	return &s, nil
+}
+
+// SaveMCPServer saves or updates an MCP Server.
+func (r *Repository) SaveMCPServer(s *MCPServerRecord) error {
+	toolsJSON, _ := json.Marshal(s.Tools)
+	promptsJSON, _ := json.Marshal(s.Prompts)
+	resourcesJSON, _ := json.Marshal(s.Resources)
+	enabledInt := 0
+	if s.Enabled {
+		enabledInt = 1
+	}
+	if s.Status == "" {
+		s.Status = "online"
+	}
+	if s.Version == "" {
+		s.Version = "1.0.0"
+	}
+	if s.Author == "" {
+		s.Author = "Custom"
+	}
+
+	_, err := r.db.Exec(`
+		INSERT INTO system_mcp_servers (id, name, description, category, transport, endpoint, status, author, version, tools, prompts, resources, env_vars, enabled, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		ON CONFLICT(id) DO UPDATE SET
+			name = excluded.name,
+			description = excluded.description,
+			category = excluded.category,
+			transport = excluded.transport,
+			endpoint = excluded.endpoint,
+			status = excluded.status,
+			author = excluded.author,
+			version = excluded.version,
+			tools = excluded.tools,
+			prompts = excluded.prompts,
+			resources = excluded.resources,
+			env_vars = excluded.env_vars,
+			enabled = excluded.enabled,
+			updated_at = CURRENT_TIMESTAMP
+	`, s.ID, s.Name, s.Description, s.Category, s.Transport, s.Endpoint, s.Status, s.Author, s.Version, string(toolsJSON), string(promptsJSON), string(resourcesJSON), s.EnvVars, enabledInt)
+	return err
+}
+
+// SetMCPServerEnabled toggles an MCP server's enabled state.
+func (r *Repository) SetMCPServerEnabled(id string, enabled bool) error {
+	_ = r.SeedDefaultMCPServers()
+	enabledInt := 0
+	if enabled {
+		enabledInt = 1
+	}
+	_, err := r.db.Exec(`UPDATE system_mcp_servers SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, enabledInt, id)
+	return err
+}
+
+// DeleteMCPServer removes an MCP server.
+func (r *Repository) DeleteMCPServer(id string) error {
+	_, err := r.db.Exec(`DELETE FROM system_mcp_servers WHERE id = ?`, id)
+	return err
 }
 
 // GetSetting retrieves a system configuration value.

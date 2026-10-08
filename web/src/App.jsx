@@ -68,6 +68,7 @@ import AccountManageModal from './components/AccountManageModal';
 import ModelRoutesManager from './components/ModelRoutesManager';
 import ServiceStatus from './components/ServiceStatus';
 import PricingManager from './components/PricingManager';
+import SkillHubView from './components/SkillHubView';
 import McpIntegrationView from './components/McpIntegrationView';
 import UserManagementView from './components/UserManagementView';
 import WalletManagementView from './components/WalletManagementView';
@@ -112,7 +113,7 @@ export default function App() {
 
   const ALL_CONSOLE_TABS = [
     'dashboard', 'models', 'pricing', 'channels',
-    'keys', 'wallet', 'logs', 'mcp', 'users', 'playground', 'docs'
+    'keys', 'wallet', 'logs', 'skills', 'mcp', 'users', 'playground', 'docs'
   ];
 
   const getStoredToken = () => {
@@ -183,7 +184,7 @@ export default function App() {
 
     if (ALL_CONSOLE_TABS.includes(route)) {
       if (token) {
-        const adminOnlyTabs = ['channels', 'users', 'mcp', 'dashboard'];
+        const adminOnlyTabs = ['channels', 'users', 'skills', 'mcp', 'dashboard'];
         if (role !== 'admin' && adminOnlyTabs.includes(route)) {
           return { viewMode: 'console', tab: 'wallet', authTab: 'login' };
         }
@@ -2306,6 +2307,20 @@ ${playStream ? 'for chunk in response:\n    if chunk.choices[0].delta.content:\n
                   </button>
 
                   <button
+                    onClick={() => setCurrentTab('skills')}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                      currentTab === 'skills'
+                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
+                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      <span>{t.navSkills || 'Skill Hub'}</span>
+                    </div>
+                  </button>
+
+                  <button
                     onClick={() => setCurrentTab('mcp')}
                     className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
                       currentTab === 'mcp'
@@ -2314,8 +2329,8 @@ ${playStream ? 'for chunk in response:\n    if chunk.choices[0].delta.content:\n
                     }`}
                   >
                     <div className="flex items-center space-x-2.5">
-                      <Bot className="w-4 h-4 text-violet-500" />
-                      <span>{t.navMcp}</span>
+                      <Cpu className="w-4 h-4 text-indigo-500" />
+                      <span>{t.navMcp || 'MCP 广场'}</span>
                     </div>
                   </button>
                 </div>
@@ -2473,7 +2488,8 @@ ${playStream ? 'for chunk in response:\n    if chunk.choices[0].delta.content:\n
               {currentTab === 'keys' && t.navKeys}
               {currentTab === 'wallet' && (adminUser?.role === 'admin' ? '卡密与充值管理' : (t.navWallet || '我的钱包'))}
               {currentTab === 'logs' && t.navLogs}
-              {currentTab === 'mcp' && (t.navMcp || '扩展广场')}
+              {currentTab === 'skills' && (t.navSkills || 'Skill Hub')}
+              {currentTab === 'mcp' && (t.navMcp || 'MCP 广场')}
               {currentTab === 'users' && (t.navUsers || '用户管理')}
               {currentTab === 'playground' && t.navPlayground}
               {currentTab === 'docs' && t.navDocs}
@@ -3046,7 +3062,19 @@ ${playStream ? 'for chunk in response:\n    if chunk.choices[0].delta.content:\n
             />
           )}
 
-          {/* 5. MCP AGENT TAB */}
+          {/* 5. SKILL HUB TAB */}
+          {currentTab === 'skills' && (
+            <SkillHubView
+              adminFetch={adminFetch}
+              onCopy={(txt) => {
+                navigator.clipboard.writeText(txt);
+                showToast('已复制到剪贴板！', 'success');
+              }}
+              showToast={showToast}
+            />
+          )}
+
+          {/* 6. MCP HUB TAB */}
           {currentTab === 'mcp' && (
             <McpIntegrationView
               adminFetch={adminFetch}

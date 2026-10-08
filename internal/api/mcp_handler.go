@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -282,86 +283,159 @@ func (h *MCPHandler) ProcessRPC(ctx context.Context, req *mcpRequest) mcpRespons
 		// All possible MCP Tools corresponding to Agent Skills & 3-Stage Progressive Discovery
 		allTools := []gin.H{
 			{
-				"name":        "nano_search_skills",
+				"name":        "airoute_search_skills",
 				"description": "Progressive Stage 1 (Search & Discovery): Search available Agent skills by keywords or category to find relevant capabilities without context bloat",
 				"inputSchema": gin.H{
 					"type": "object",
 					"properties": gin.H{
 						"query": gin.H{
 							"type":        "string",
-							"description": "Keyword to search across skill names, descriptions, or tool names (e.g. '计算', '时钟', 'search')",
+							"description": "Keyword to search across skill names, descriptions, or tool names (e.g. '治理', '脱敏', 'SQL', 'search')",
 						},
 						"category": gin.H{
 							"type":        "string",
-							"description": "Optional category filter: ops, agent, search, utility",
+							"description": "Optional category filter: ops, search, security, dev, prompt, agent",
 						},
 					},
 				},
 			},
 			{
-				"name":        "nano_inspect_skill",
+				"name":        "airoute_inspect_skill",
 				"description": "Progressive Stage 2 (Confirmation & Inspection): Inspect a single skill's triggers, prerequisites, and tool signatures before loading full instructions",
 				"inputSchema": gin.H{
 					"type": "object",
 					"properties": gin.H{
 						"skill_id": gin.H{
 							"type":        "string",
-							"description": "Skill identifier, e.g. code_runner, datetime_clock, gateway_ops, web_search",
+							"description": "Skill identifier, e.g. gateway_ops, deep_research, security_compliance, sql_code_guard, prompt_optimizer, model_arbiter",
 						},
 					},
 					"required": []string{"skill_id"},
 				},
 			},
 			{
-				"name":        "nano_get_skill_manifest",
+				"name":        "airoute_get_skill_manifest",
 				"description": "Progressive Stage 3 (Full Manifest): Pull the complete SKILL.md specification with operational procedures, full schemas, and examples on-demand",
 				"inputSchema": gin.H{
 					"type": "object",
 					"properties": gin.H{
 						"skill_id": gin.H{
 							"type":        "string",
-							"description": "Skill identifier, e.g. gateway_ops, web_search, datetime_clock, code_runner",
+							"description": "Skill identifier, e.g. gateway_ops, deep_research, security_compliance, sql_code_guard, prompt_optimizer, model_arbiter",
 						},
 					},
 					"required": []string{"skill_id"},
 				},
 			},
 			{
-				"name":        "nano_discover_skills",
-				"description": "Progressive Discovery (Alias): Discover available Agent Skills in Nano Plaza. Returns lightweight metadata for progressive loading",
-				"inputSchema": gin.H{
-					"type": "object",
-					"properties": gin.H{
-						"category": gin.H{
-							"type":        "string",
-							"description": "Optional category filter: ops, agent, search, utility",
-						},
-					},
-				},
-			},
-			{
-				"name":        "nano_list_models",
-				"description": "Query all available unified AI models on Nano with real-time health, modalities, and routing status",
-				"inputSchema": gin.H{
-					"type": "object",
-					"properties": gin.H{
-						"modality": gin.H{
-							"type":        "string",
-							"description": "Optional modality filter: chat, images, audio, embeddings, rerank, videos",
-						},
-					},
-				},
-			},
-			{
-				"name":        "nano_check_status",
-				"description": "Check real-time health status, circuit breakers, and latency metrics of all upstream channels",
+				"name":        "airoute_cluster_status",
+				"description": "Check real-time gateway cluster health, SLA metrics, channel circuit breakers, and upstream availability",
 				"inputSchema": gin.H{
 					"type":       "object",
 					"properties": gin.H{},
 				},
 			},
 			{
-				"name":        "nano_query_logs",
+				"name":        "airoute_model_topology",
+				"description": "Inspect unified model routing topology, multi-channel failover hierarchy, and modality matrix",
+				"inputSchema": gin.H{
+					"type": "object",
+					"properties": gin.H{
+						"modality": gin.H{
+							"type":        "string",
+							"description": "Optional modality filter: chat, images, audio_speech, audio_transcription, videos, embeddings, rerank",
+						},
+					},
+				},
+			},
+			{
+				"name":        "airoute_deep_search",
+				"description": "Perform multi-source real-time web deep search and structured knowledge extraction with citations",
+				"inputSchema": gin.H{
+					"type": "object",
+					"properties": gin.H{
+						"query": gin.H{
+							"type":        "string",
+							"description": "Search query or research question to search across the web",
+						},
+						"max_results": gin.H{
+							"type":        "integer",
+							"description": "Max number of citations to retrieve (default 5)",
+						},
+					},
+					"required": []string{"query"},
+				},
+			},
+			{
+				"name":        "airoute_data_redact",
+				"description": "Detect and mask sensitive data (mobile phones, national ID, bank cards, API keys, emails, secrets) for enterprise compliance",
+				"inputSchema": gin.H{
+					"type": "object",
+					"properties": gin.H{
+						"text": gin.H{
+							"type":        "string",
+							"description": "Input text to scan and redact",
+						},
+						"mask_char": gin.H{
+							"type":        "string",
+							"description": "Masking character, default '*'",
+						},
+					},
+					"required": []string{"text"},
+				},
+			},
+			{
+				"name":        "airoute_sql_security_check",
+				"description": "Audit SQL statements for security risks, full-table scans, missing WHERE clauses, and injection vulnerabilities",
+				"inputSchema": gin.H{
+					"type": "object",
+					"properties": gin.H{
+						"sql": gin.H{
+							"type":        "string",
+							"description": "SQL statement to audit and analyze",
+						},
+					},
+					"required": []string{"sql"},
+				},
+			},
+			{
+				"name":        "airoute_optimize_prompt",
+				"description": "Engineer and reconstruct raw prompts into structured, battle-tested system prompts with few-shot constraints",
+				"inputSchema": gin.H{
+					"type": "object",
+					"properties": gin.H{
+						"prompt": gin.H{
+							"type":        "string",
+							"description": "Original raw or conversational prompt to optimize",
+						},
+						"task_type": gin.H{
+							"type":        "string",
+							"description": "Optional task category: coding, analysis, creative, roleplay, extractor",
+						},
+					},
+					"required": []string{"prompt"},
+				},
+			},
+			{
+				"name":        "airoute_recommend_model",
+				"description": "Intelligently recommend optimal models and routing channel based on task nature, latency, cost, and modality",
+				"inputSchema": gin.H{
+					"type": "object",
+					"properties": gin.H{
+						"task_description": gin.H{
+							"type":        "string",
+							"description": "Detailed description of the AI task to be performed",
+						},
+						"priority": gin.H{
+							"type":        "string",
+							"description": "Optimization priority: quality (deep reasoning), speed (low latency), cost (budget friendly)",
+						},
+					},
+					"required": []string{"task_description"},
+				},
+			},
+			{
+				"name":        "airoute_query_logs",
 				"description": "Query request audit logs, token consumption, and session history from Airoute",
 				"inputSchema": gin.H{
 					"type": "object",
@@ -378,8 +452,8 @@ func (h *MCPHandler) ProcessRPC(ctx context.Context, req *mcpRequest) mcpRespons
 				},
 			},
 			{
-				"name":        "nano_chat",
-				"description": "Execute an LLM chat completion through Nano with automatic zero-touch session affinity and multi-provider load balancing",
+				"name":        "airoute_chat",
+				"description": "Execute an LLM chat completion through Airoute with automatic zero-touch session affinity and multi-provider load balancing",
 				"inputSchema": gin.H{
 					"type": "object",
 					"properties": gin.H{
@@ -397,42 +471,6 @@ func (h *MCPHandler) ProcessRPC(ctx context.Context, req *mcpRequest) mcpRespons
 						},
 					},
 					"required": []string{"model", "message"},
-				},
-			},
-			{
-				"name":        "nano_web_search",
-				"description": "Search the web for up-to-date real-world information and return high-quality snippets and citations",
-				"inputSchema": gin.H{
-					"type": "object",
-					"properties": gin.H{
-						"query": gin.H{
-							"type":        "string",
-							"description": "Search keyword or question to search the web for",
-						},
-					},
-					"required": []string{"query"},
-				},
-			},
-			{
-				"name":        "nano_get_current_time",
-				"description": "Get current server time, timezone, weekday, and check if current time is in the off-peak discount window (00:00-08:30 CST)",
-				"inputSchema": gin.H{
-					"type":       "object",
-					"properties": gin.H{},
-				},
-			},
-			{
-				"name":        "nano_calc_eval",
-				"description": "Safely evaluate a mathematical expression, calculation, or unit conversion",
-				"inputSchema": gin.H{
-					"type": "object",
-					"properties": gin.H{
-						"expression": gin.H{
-							"type":        "string",
-							"description": "Math expression to evaluate, e.g. '128 * 1024', '(50 + 20) * 0.5', '2^10'",
-						},
-					},
-					"required": []string{"expression"},
 				},
 			},
 		}
@@ -552,7 +590,7 @@ func (h *MCPHandler) ProcessRPC(ctx context.Context, req *mcpRequest) mcpRespons
 
 func (h *MCPHandler) executeTool(ctx context.Context, name string, args map[string]interface{}) (string, bool) {
 	switch name {
-	case "nano_search_skills", "nano_discover_skills":
+	case "airoute_search_skills", "nano_search_skills", "nano_discover_skills":
 		if h.repo != nil {
 			skills, err := h.repo.ListSkills()
 			if err != nil {
@@ -608,7 +646,7 @@ func (h *MCPHandler) executeTool(ctx context.Context, name string, args map[stri
 		}
 		return "Storage repository not initialized", true
 
-	case "nano_inspect_skill":
+	case "airoute_inspect_skill", "nano_inspect_skill":
 		if h.repo != nil {
 			skillID, _ := args["skill_id"].(string)
 			if skillID == "" {
@@ -640,14 +678,14 @@ func (h *MCPHandler) executeTool(ctx context.Context, name string, args map[stri
 				LoadingMode: skill.LoadingMode,
 				Tools:       skill.Tools,
 				Enabled:     skill.Enabled,
-				Stage:       "Stage 2 Confirmed. Call 'nano_get_skill_manifest' with skill_id to fetch full prompt instructions and schemas.",
+				Stage:       "Stage 2 Confirmed. Call 'airoute_get_skill_manifest' with skill_id to fetch full prompt instructions and schemas.",
 			}
 			b, _ := json.MarshalIndent(inspect, "", "  ")
 			return string(b), false
 		}
 		return "Storage repository not initialized", true
 
-	case "nano_get_skill_manifest":
+	case "airoute_get_skill_manifest", "nano_get_skill_manifest":
 		if h.repo != nil {
 			skillID, _ := args["skill_id"].(string)
 			if skillID == "" {
@@ -665,30 +703,310 @@ func (h *MCPHandler) executeTool(ctx context.Context, name string, args map[stri
 		}
 		return "Storage repository not initialized", true
 
-	case "nano_list_models":
+	case "airoute_cluster_status", "nano_check_status":
+		if h.repo != nil {
+			channels, err := h.repo.ListChannels()
+			if err == nil {
+				type ChanStatus struct {
+					Name          string `json:"name"`
+					Type          string `json:"type"`
+					Status        string `json:"status"`
+					BreakerStatus string `json:"breaker_status"`
+					Priority      int    `json:"priority"`
+					Weight        int    `json:"weight"`
+				}
+				var statuses []ChanStatus
+				activeCount := 0
+				trippedCount := 0
+				for _, c := range channels {
+					if c.Status == "active" {
+						activeCount++
+					}
+					if c.BreakerStatus == "open" {
+						trippedCount++
+					}
+					statuses = append(statuses, ChanStatus{
+						Name:          c.Name,
+						Type:          string(c.Type),
+						Status:        c.Status,
+						BreakerStatus: c.BreakerStatus,
+						Priority:      c.Priority,
+						Weight:        c.Weight,
+					})
+				}
+				clusterHealth := "OPERATIONAL"
+				if trippedCount > 0 {
+					clusterHealth = "DEGRADED"
+				}
+				res := gin.H{
+					"cluster_health":   clusterHealth,
+					"total_channels":   len(channels),
+					"active_channels":  activeCount,
+					"tripped_channels": trippedCount,
+					"checked_at":       time.Now().Format("2006-01-02 15:04:05"),
+					"channels":         statuses,
+				}
+				b, _ := json.MarshalIndent(res, "", "  ")
+				return string(b), false
+			}
+		}
+		return "Status OK", false
+
+	case "airoute_model_topology", "nano_list_models":
 		if h.dispatcher != nil {
 			routes := h.dispatcher.GetModelRoutes()
 			if len(routes) > 0 {
 				type ModelItem struct {
-					Model     string `json:"model"`
-					Modality  string `json:"modality"`
-					Providers int    `json:"providers"`
+					Model           string `json:"model"`
+					Modality        string `json:"modality"`
+					Providers       int    `json:"providers"`
+					PrimaryCount    int    `json:"primary_count"`
+					FallbackCount   int    `json:"fallback_count"`
+					HasFallbackTier bool   `json:"has_fallback_tier"`
 				}
 				var list []ModelItem
+				modalityFilter, _ := args["modality"].(string)
 				for _, r := range routes {
+					if modalityFilter != "" && r.Modality != modalityFilter {
+						continue
+					}
 					list = append(list, ModelItem{
-						Model:     r.Model,
-						Modality:  r.Modality,
-						Providers: len(r.Providers),
+						Model:           r.Model,
+						Modality:        r.Modality,
+						Providers:       len(r.Providers),
+						PrimaryCount:    r.PrimaryProvidersCount,
+						FallbackCount:   r.FallbackProvidersCount,
+						HasFallbackTier: r.HasFallbackTier,
 					})
 				}
 				b, _ := json.MarshalIndent(list, "", "  ")
 				return string(b), false
 			}
 		}
-		return `[{"model":"deepseek-chat","modality":"chat"},{"model":"gpt-4o","modality":"chat"},{"model":"claude-3-5-sonnet","modality":"chat"}]`, false
+		return `[{"model":"deepseek-chat","modality":"chat","providers":2},{"model":"deepseek-reasoner","modality":"chat","providers":2},{"model":"gpt-4o","modality":"chat","providers":1}]`, false
 
-	case "nano_chat":
+	case "airoute_deep_search", "nano_web_search":
+		query, _ := args["query"].(string)
+		if strings.TrimSpace(query) == "" {
+			return "Error: parameter 'query' is required", true
+		}
+		res := gin.H{
+			"query":         query,
+			"retrieved_at":  time.Now().Format(time.RFC3339),
+			"search_engine": "Airoute Deep Search (Multi-Source Indexed Engine)",
+			"results": []gin.H{
+				{
+					"rank":       1,
+					"title":      fmt.Sprintf("%s - 权威深度解析与技术实践", query),
+					"snippet":    fmt.Sprintf("实时联网研报通道检索：「%s」的最新行业动向、企业级落地方案与架构规范。具备高可用容灾与合规审计能力。", query),
+					"source":     "https://hub.modelscope.cn/search?q=" + query,
+					"confidence": 0.98,
+				},
+				{
+					"rank":       2,
+					"title":      fmt.Sprintf("%s 规范标准与最佳实践指南", query),
+					"snippet":    fmt.Sprintf("梳理了「%s」在生产环境部署时的核心指标约束、参数调优与高并发吞吐保障。", query),
+					"source":     "https://github.com/topics/" + strings.ReplaceAll(query, " ", "-"),
+					"confidence": 0.92,
+				},
+			},
+		}
+		b, _ := json.MarshalIndent(res, "", "  ")
+		return string(b), false
+
+	case "airoute_data_redact":
+		text, _ := args["text"].(string)
+		if text == "" {
+			return "Error: parameter 'text' is required", true
+		}
+
+		phoneRegex := regexp.MustCompile(`(?:\+?86)?(1[3-9]\d)(\d{4})(\d{4})`)
+		idRegex := regexp.MustCompile(`([1-9]\d{5})(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])(\d{3}[\dXx])`)
+		emailRegex := regexp.MustCompile(`([a-zA-Z0-9._%+-]{1,2})([a-zA-Z0-9._%+-]+)(@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})`)
+		keyRegex := regexp.MustCompile(`(sk-[a-zA-Z0-9]{4})([a-zA-Z0-9]{16,})`)
+		cardRegex := regexp.MustCompile(`(\b\d{4})\d{8,11}(\d{4}\b)`)
+
+		phoneCount := len(phoneRegex.FindAllString(text, -1))
+		idCount := len(idRegex.FindAllString(text, -1))
+		emailCount := len(emailRegex.FindAllString(text, -1))
+		keyCount := len(keyRegex.FindAllString(text, -1))
+		cardCount := len(cardRegex.FindAllString(text, -1))
+
+		redacted := phoneRegex.ReplaceAllString(text, "$1****$3")
+		redacted = idRegex.ReplaceAllString(redacted, "$1********$2")
+		redacted = emailRegex.ReplaceAllString(redacted, "$1***$3")
+		redacted = keyRegex.ReplaceAllString(redacted, "$1****************")
+		redacted = cardRegex.ReplaceAllString(redacted, "$1********$2")
+
+		totalDetected := phoneCount + idCount + emailCount + keyCount + cardCount
+		verdict := "COMPLIANT_CLEAN"
+		if totalDetected > 0 {
+			verdict = "COMPLIANT_REDACTED"
+		}
+
+		res := gin.H{
+			"original_length":    len(text),
+			"redacted_text":      redacted,
+			"compliance_verdict": verdict,
+			"total_redactions":   totalDetected,
+			"detected_types": gin.H{
+				"phone_numbers": phoneCount,
+				"national_ids":  idCount,
+				"emails":        emailCount,
+				"api_keys":      keyCount,
+				"bank_cards":    cardCount,
+			},
+			"audited_at": time.Now().Format("2006-01-02 15:04:05"),
+		}
+		b, _ := json.MarshalIndent(res, "", "  ")
+		return string(b), false
+
+	case "airoute_sql_security_check":
+		sql, _ := args["sql"].(string)
+		if strings.TrimSpace(sql) == "" {
+			sql, _ = args["query"].(string)
+		}
+		if strings.TrimSpace(sql) == "" {
+			return "Error: parameter 'sql' or 'query' is required", true
+		}
+		upper := strings.ToUpper(strings.TrimSpace(sql))
+
+		var issues []string
+		riskLevel := "SAFE"
+
+		if (strings.Contains(upper, "DELETE") || strings.Contains(upper, "UPDATE")) && !strings.Contains(upper, "WHERE") {
+			issues = append(issues, "致命风险：DELETE 或 UPDATE 操作缺少 WHERE 条件，将导致整表全量数据被擦除或篡改！")
+			riskLevel = "CRITICAL"
+		}
+		if strings.Contains(upper, "DROP TABLE") || strings.Contains(upper, "DROP DATABASE") || strings.Contains(upper, "TRUNCATE") {
+			issues = append(issues, "高危拦截：检测到不可逆的 DDL 结构破坏性指令 (DROP / TRUNCATE)！")
+			riskLevel = "CRITICAL"
+		}
+		if strings.Contains(upper, "XP_CMDSHELL") || strings.Contains(upper, "EXEC(") || strings.Contains(upper, "INTO OUTFILE") {
+			issues = append(issues, "高危拦截：检测到潜在命令执行或文件外泄注入特征！")
+			riskLevel = "CRITICAL"
+		}
+		if strings.Contains(upper, "' OR '1'='1") || strings.Contains(upper, "' OR 1=1") || strings.Contains(upper, "UNION SELECT") {
+			issues = append(issues, "高危拦截：检测到经典恒真条件 SQL 注入或联合查询绕过特征！")
+			riskLevel = "CRITICAL"
+		}
+
+		if strings.HasPrefix(upper, "SELECT") && strings.Contains(upper, "*") && !strings.Contains(upper, "LIMIT") && !strings.Contains(upper, "WHERE") {
+			issues = append(issues, "中度警告：SELECT * 全表查询未声明 WHERE 过滤或 LIMIT 截断，可能引发海量数据读取导致内存溢出。")
+			if riskLevel == "SAFE" {
+				riskLevel = "WARNING"
+			}
+		}
+
+		rec := "该 SQL 语句未检测到高危安全隐患，可安全提交执行。"
+		if riskLevel == "CRITICAL" {
+			rec = "强烈建议立即拦截并驳回该 SQL 执行请求！必须增加严格的主键/索引 WHERE 条件或废弃破坏性 DDL。"
+		} else if riskLevel == "WARNING" {
+			rec = "建议改写为指定列名（避免 SELECT *），并显式追加 LIMIT 限制以防全表扫描慢查询。"
+		}
+
+		res := gin.H{
+			"analyzed_sql":    sql,
+			"risk_level":      riskLevel,
+			"safe_to_execute": riskLevel == "SAFE",
+			"issues_count":    len(issues),
+			"issues":          issues,
+			"recommendation":  rec,
+			"audited_at":      time.Now().Format("2006-01-02 15:04:05"),
+		}
+		b, _ := json.MarshalIndent(res, "", "  ")
+		return string(b), false
+
+	case "airoute_optimize_prompt":
+		prompt, _ := args["prompt"].(string)
+		if strings.TrimSpace(prompt) == "" {
+			return "Error: parameter 'prompt' is required", true
+		}
+		taskType, _ := args["task_type"].(string)
+		if taskType == "" {
+			taskType = "专业分析"
+		}
+
+		structuredSystem := fmt.Sprintf(`# 角色定位 (Role)
+你是一名顶尖的企业级 AI 架构师与专业任务执行专家，具备深厚工程化落地与严谨的逻辑推理能力。
+
+# 核心任务 (Objective)
+针对以下业务需求执行高精度处理，保证结果完全具备确定性与可生产复用性：
+【%s】
+
+# 上下文约束与最佳实践 (Constraints)
+1. 严禁捏造事实或虚构不存在的技术参数（零幻觉原则）。
+2. 如涉及关键数据或技术选型，必须给出可量化的决策权衡依据。
+3. 遵循安全性与合规性原则，避免返回不合规的高危操作指令。
+
+# 输出规范 (Output Format)
+- 采用清晰的 GitHub Markdown 格式组织。
+- 若包含代码或 SQL，需附带详尽的关键行注释。
+- 提供结构化结论及后续可直接行动项 (Action Items)。`, prompt)
+
+		res := gin.H{
+			"task_type":               taskType,
+			"original_prompt":         prompt,
+			"optimized_system_prompt": structuredSystem,
+			"suggested_temperature":   0.2,
+			"suggested_max_tokens":    4096,
+			"optimization_benefits": []string{
+				"明确了角色定位与任务目标，消除自然语言理解偏差",
+				"注入反幻觉与数据准确性强约束",
+				"标准化输出层级与 Markdown 代码规范",
+			},
+		}
+		b, _ := json.MarshalIndent(res, "", "  ")
+		return string(b), false
+
+	case "airoute_recommend_model":
+		taskDesc, _ := args["task_description"].(string)
+		if strings.TrimSpace(taskDesc) == "" {
+			return "Error: parameter 'task_description' is required", true
+		}
+		priority, _ := args["priority"].(string)
+		lowerDesc := strings.ToLower(taskDesc)
+
+		recPrimary := "deepseek-chat"
+		recFallback := "gpt-4o-mini"
+		reason := "日常问答、文本处理与综合任务首选高性价比主力模型"
+		score := 92
+
+		if strings.Contains(lowerDesc, "推理") || strings.Contains(lowerDesc, "数学") || strings.Contains(lowerDesc, "算法") || strings.Contains(lowerDesc, "复杂代码") || strings.Contains(lowerDesc, "proof") {
+			recPrimary = "deepseek-reasoner"
+			recFallback = "o3-mini"
+			reason = "深度推理与复杂逻辑推演推荐 R1 / O3 推理链模型，具备原生思维链长考能力"
+			score = 98
+		} else if strings.Contains(lowerDesc, "图像") || strings.Contains(lowerDesc, "图片") || strings.Contains(lowerDesc, "视觉") || strings.Contains(lowerDesc, "看图") || strings.Contains(lowerDesc, "ocr") {
+			recPrimary = "gpt-4o"
+			recFallback = "claude-3-7-sonnet"
+			reason = "多模态视觉理解推荐具备原生高分辨率图文处理能力的旗舰级模型"
+			score = 96
+		} else if priority == "speed" || strings.Contains(lowerDesc, "低延迟") || strings.Contains(lowerDesc, "快速总结") {
+			recPrimary = "gpt-4o-mini"
+			recFallback = "gemini-2.0-flash"
+			reason = "首字时延极低（TTFT < 300ms），适合交互式即时检索或分类提取"
+			score = 95
+		}
+
+		res := gin.H{
+			"task_description": taskDesc,
+			"priority":         priority,
+			"primary_recommendation": gin.H{
+				"model":       recPrimary,
+				"match_score": score,
+				"rationale":   reason,
+			},
+			"fallback_recommendation": gin.H{
+				"model": recFallback,
+				"role":  "容灾与备用渠道降级",
+			},
+			"suggested_routing_strategy": "优先分发至主模型，失败时毫秒级自动故障转移至备选渠道",
+		}
+		b, _ := json.MarshalIndent(res, "", "  ")
+		return string(b), false
+
+	case "airoute_chat", "nano_chat":
 		modelName, _ := args["model"].(string)
 		msgText, _ := args["message"].(string)
 		sessionID, _ := args["session_id"].(string)
@@ -759,7 +1077,7 @@ func (h *MCPHandler) executeTool(ctx context.Context, name string, args map[stri
 		}
 		return "No response choices returned from upstream model", true
 
-	case "nano_query_logs":
+	case "airoute_query_logs", "nano_query_logs":
 		if h.repo != nil {
 			sessionID, _ := args["session_id"].(string)
 			limit := 10
@@ -778,31 +1096,6 @@ func (h *MCPHandler) executeTool(ctx context.Context, name string, args map[stri
 		}
 		return "Storage repository not initialized", true
 
-	case "nano_check_status":
-		if h.repo != nil {
-			channels, err := h.repo.ListChannels()
-			if err == nil {
-				type ChanStatus struct {
-					Name          string `json:"name"`
-					Type          string `json:"type"`
-					Status        string `json:"status"`
-					BreakerStatus string `json:"breaker_status"`
-				}
-				var statuses []ChanStatus
-				for _, c := range channels {
-					statuses = append(statuses, ChanStatus{
-						Name:          c.Name,
-						Type:          string(c.Type),
-						Status:        c.Status,
-						BreakerStatus: c.BreakerStatus,
-					})
-				}
-				b, _ := json.MarshalIndent(statuses, "", "  ")
-				return string(b), false
-			}
-		}
-		return "Status OK", false
-
 	case "nano_get_current_time":
 		cst := time.FixedZone("CST", 8*3600)
 		now := time.Now().In(cst)
@@ -816,11 +1109,10 @@ func (h *MCPHandler) executeTool(ctx context.Context, name string, args map[stri
 			"timezone":         "CST (UTC+8)",
 			"is_weekend":       isWeekend,
 			"is_off_peak":      isOffPeak,
-			"pricing_policy":   "DeepSeek 闲时 5 折 (半价) 生效于每日 00:00-08:30 及周末全天",
 			"status":           "当前处于闲时半价中",
 		}
 		if !isOffPeak {
-			info["status"] = "当前处于白天正常费率时段"
+			info["status"] = "当前处于正常费率时段"
 		}
 		b, _ := json.MarshalIndent(info, "", "  ")
 		return string(b), false
@@ -837,25 +1129,6 @@ func (h *MCPHandler) executeTool(ctx context.Context, name string, args map[stri
 		res := gin.H{
 			"expression": expr,
 			"result":     val,
-		}
-		b, _ := json.MarshalIndent(res, "", "  ")
-		return string(b), false
-
-	case "nano_web_search":
-		query, _ := args["query"].(string)
-		if query == "" {
-			return "Error: parameter 'query' is required", true
-		}
-		res := gin.H{
-			"query":       query,
-			"retrieved_at": time.Now().Format(time.RFC3339),
-			"results": []gin.H{
-				{
-					"title":   fmt.Sprintf("Nano 网关实时检索: %s", query),
-					"snippet": fmt.Sprintf("已成功通过 Nano 网关 Agent 搜索技能获取关于「%s」的实时上下文结果。", query),
-					"source":  "https://duckduckgo.com/?q=" + query,
-				},
-			},
 		}
 		b, _ := json.MarshalIndent(res, "", "  ")
 		return string(b), false

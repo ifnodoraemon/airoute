@@ -1,57 +1,96 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Terminal,
-  Check,
-  Copy,
-  Bot,
-  Play,
-  RefreshCw,
+  Cpu,
   Server,
   Globe,
-  Clock,
-  Calculator,
+  Terminal,
+  Play,
+  Check,
+  Copy,
+  Plus,
+  Trash2,
   Search,
-  FileText,
   X,
+  Activity,
+  RefreshCw,
   Layers,
-  ArrowRight,
+  ExternalLink,
   ShieldCheck,
-  CheckCircle2
+  Database,
+  Code2,
+  Sparkles,
+  Send,
+  Radio,
+  Wrench,
+  ArrowRight,
+  BookOpen,
+  AlertCircle,
+  FileCode,
+  Zap,
+  CheckCircle2,
+  Lock,
+  Boxes
 } from 'lucide-react';
 
 export default function McpIntegrationView({ adminFetch, onCopy, showToast }) {
-  const [activeConfigTab, setActiveConfigTab] = useState('cli');
-  const [copiedKey, setCopiedKey] = useState('');
-  const [testLoading, setTestLoading] = useState(false);
-  const [testOutput, setTestOutput] = useState(null);
-
-  // Plaza Filter & Search
+  const [servers, setServers] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [togglingServer, setTogglingServer] = useState({});
+  const [copiedKey, setCopiedKey] = useState('');
 
-  // Manifest Modal
-  const [manifestSkill, setManifestSkill] = useState(null);
-
-  // MCP Master Switch & Skills State
+  // MCP Master Switch & Stats
   const [mcpSettings, setMcpSettings] = useState({
     mcp_enabled: true,
-    enabled_skills_count: 5,
-    active_tools_count: 11
+    enabled_skills_count: 6,
+    active_tools_count: 9,
+    servers_total: 8,
+    servers_enabled: 7
   });
-  const [skills, setSkills] = useState([]);
-  const [loadingSkills, setLoadingSkills] = useState(false);
-  const [togglingSkill, setTogglingSkill] = useState({});
-  const [togglingMcp, setTogglingMcp] = useState(false);
+  const [togglingGlobal, setTogglingGlobal] = useState(false);
 
-  const origin = window.location.origin || 'http://localhost:8080';
+  // Modals
+  const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [activeConfigClient, setActiveConfigClient] = useState('cursor');
+  const [selectedServerForConfig, setSelectedServerForConfig] = useState(null);
+
+  const [addServerModalOpen, setAddServerModalOpen] = useState(false);
+  const [newServer, setNewServer] = useState({
+    id: '',
+    name: '',
+    description: '',
+    category: 'dev',
+    transport: 'stdio',
+    endpoint: '',
+    author: 'Community',
+    version: '1.0.0',
+    tools: '',
+    prompts: '',
+    resources: '',
+    env_vars: '',
+    enabled: true
+  });
+
+  // Probe Modal
+  const [probeModalOpen, setProbeModalOpen] = useState(false);
+  const [probeServer, setProbeServer] = useState(null);
+  const [probeMethod, setProbeMethod] = useState('server/discover');
+  const [probeToolName, setProbeToolName] = useState('airoute_data_redact');
+  const [probeToolArgs, setProbeToolArgs] = useState('{\n  "text": "客户张三 手机13812345678 身份证110101199003072345 密钥sk-abc123xyz789"\n}');
+  const [probeRunning, setProbeRunning] = useState(false);
+  const [probeResult, setProbeResult] = useState(null);
+  const [probeLatency, setProbeLatency] = useState(null);
+
+  const origin = typeof window !== 'undefined' && window.location ? window.location.origin : 'http://localhost:8080';
   const sseUrl = `${origin}/mcp/sse`;
   const messagesUrl = `${origin}/mcp/messages`;
 
-  const fetchSkillsAndSettings = async () => {
+  const fetchServersAndSettings = async () => {
     if (!adminFetch) return;
-    setLoadingSkills(true);
+    setLoading(true);
     try {
-      // 1. Fetch MCP Settings
+      // 1. MCP Settings
       const setRes = await adminFetch('/api/v1/admin/mcp/settings');
       if (setRes.ok) {
         const setData = await setRes.json();
@@ -60,55 +99,31 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast }) {
         }
       }
 
-      // 2. Fetch Skills list
-      const skRes = await adminFetch('/api/v1/admin/skills');
-      if (skRes.ok) {
-        const skData = await skRes.json();
-        if (skData.code === 0 && skData.data) {
-          setSkills(skData.data);
+      // 2. MCP Servers list
+      const srvRes = await adminFetch('/api/v1/admin/mcp/servers');
+      if (srvRes.ok) {
+        const srvData = await srvRes.json();
+        if (srvData.code === 0 && srvData.data) {
+          setServers(srvData.data);
         }
       }
     } catch (e) {
-      console.warn('Failed to load skills:', e);
+      console.warn('Failed to load MCP servers:', e);
     } finally {
-      setLoadingSkills(false);
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchSkillsAndSettings();
+    fetchServersAndSettings();
   }, []);
 
-  const handleToggleSkill = async (skillId, currentEnabled) => {
-    if (!adminFetch) return;
-    setTogglingSkill(prev => ({ ...prev, [skillId]: true }));
-    try {
-      const res = await adminFetch(`/api/v1/admin/skills/${skillId}/toggle`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: !currentEnabled })
-      });
-      const data = await res.json();
-      if (res.ok && data.code === 0) {
-        setSkills(prev => prev.map(s => s.id === skillId ? { ...s, enabled: !currentEnabled } : s));
-        if (showToast) showToast(`技能 [${skillId}] 已${!currentEnabled ? '开启' : '关闭'}`, 'success');
-        fetchSkillsAndSettings();
-      } else {
-        if (showToast) showToast(data.error || '切换技能失败', 'error');
-      }
-    } catch (err) {
-      if (showToast) showToast('请求异常: ' + err.message, 'error');
-    } finally {
-      setTogglingSkill(prev => ({ ...prev, [skillId]: false }));
-    }
-  };
-
-  const handleToggleMcpMaster = async () => {
-    if (!adminFetch) return;
+  const handleToggleGlobalMcp = async () => {
+    if (!adminFetch || togglingGlobal) return;
+    setTogglingGlobal(true);
     const nextState = !mcpSettings.mcp_enabled;
-    setTogglingMcp(true);
     try {
-      const res = await adminFetch('/api/v1/admin/mcp/settings', {
+      const res = await adminFetch('/api/v1/admin/mcp/toggle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mcp_enabled: nextState })
@@ -116,625 +131,1006 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast }) {
       const data = await res.json();
       if (res.ok && data.code === 0) {
         setMcpSettings(prev => ({ ...prev, mcp_enabled: nextState }));
-        if (showToast) showToast(`MCP 服务已${nextState ? '开启' : '停用'}`, 'success');
+        if (showToast) showToast(`MCP 协议网关服务已${nextState ? '启用' : '关闭'}`, 'success');
       } else {
-        if (showToast) showToast(data.error || '更新失败', 'error');
+        if (showToast) showToast(data.error || '切换失败', 'error');
       }
     } catch (err) {
       if (showToast) showToast('请求异常: ' + err.message, 'error');
     } finally {
-      setTogglingMcp(false);
+      setTogglingGlobal(false);
     }
   };
 
-  const handleCopy = (text, key) => {
+  const handleToggleServer = async (serverId, currentEnabled) => {
+    if (!adminFetch) return;
+    setTogglingServer(prev => ({ ...prev, [serverId]: true }));
+    try {
+      const res = await adminFetch(`/api/v1/admin/mcp/servers/${serverId}/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: !currentEnabled })
+      });
+      const data = await res.json();
+      if (res.ok && data.code === 0) {
+        setServers(prev => prev.map(s => s.id === serverId ? { ...s, enabled: !currentEnabled } : s));
+        if (showToast) showToast(`MCP 服务 [${serverId}] 已${!currentEnabled ? '开启' : '关闭'}`, 'success');
+        fetchServersAndSettings();
+      } else {
+        if (showToast) showToast(data.error || '切换服务状态失败', 'error');
+      }
+    } catch (err) {
+      if (showToast) showToast('请求异常: ' + err.message, 'error');
+    } finally {
+      setTogglingServer(prev => ({ ...prev, [serverId]: false }));
+    }
+  };
+
+  const handleDeleteServer = async (serverId) => {
+    if (!adminFetch) return;
+    if (!window.confirm(`确定要移除自定义 MCP 服务 [${serverId}] 吗？`)) return;
+    try {
+      const res = await adminFetch(`/api/v1/admin/mcp/servers/${serverId}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (res.ok && data.code === 0) {
+        setServers(prev => prev.filter(s => s.id !== serverId));
+        if (showToast) showToast(`MCP 服务 [${serverId}] 已成功移除`, 'success');
+        fetchServersAndSettings();
+      } else {
+        if (showToast) showToast(data.error || '删除失败', 'error');
+      }
+    } catch (err) {
+      if (showToast) showToast('请求异常: ' + err.message, 'error');
+    }
+  };
+
+  const handleCreateServer = async (e) => {
+    e.preventDefault();
+    if (!adminFetch) return;
+    if (!newServer.name || !newServer.endpoint) {
+      if (showToast) showToast('请填写服务名称与 Endpoint', 'error');
+      return;
+    }
+
+    const payload = {
+      ...newServer,
+      tools: newServer.tools ? newServer.tools.split(/[,，\n]/).map(t => t.trim()).filter(Boolean) : [],
+      prompts: newServer.prompts ? newServer.prompts.split(/[,，\n]/).map(p => p.trim()).filter(Boolean) : [],
+      resources: newServer.resources ? newServer.resources.split(/[,，\n]/).map(r => r.trim()).filter(Boolean) : []
+    };
+
+    try {
+      const res = await adminFetch('/api/v1/admin/mcp/servers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (res.ok && data.code === 0) {
+        if (showToast) showToast('新 MCP 服务已成功注册到广场', 'success');
+        setAddServerModalOpen(false);
+        setNewServer({
+          id: '',
+          name: '',
+          description: '',
+          category: 'dev',
+          transport: 'stdio',
+          endpoint: '',
+          author: 'Community',
+          version: '1.0.0',
+          tools: '',
+          prompts: '',
+          resources: '',
+          env_vars: '',
+          enabled: true
+        });
+        fetchServersAndSettings();
+      } else {
+        if (showToast) showToast(data.error || '创建 MCP 服务失败', 'error');
+      }
+    } catch (err) {
+      if (showToast) showToast('请求异常: ' + err.message, 'error');
+    }
+  };
+
+  const handleOpenProbe = (server) => {
+    setProbeServer(server);
+    setProbeResult(null);
+    setProbeLatency(null);
+    if (server && server.tools && server.tools.length > 0) {
+      setProbeToolName(server.tools[0]);
+    } else {
+      setProbeToolName('airoute_cluster_status');
+    }
+    setProbeModalOpen(true);
+  };
+
+  const handleRunProbe = async () => {
+    setProbeRunning(true);
+    setProbeResult(null);
+    const start = performance.now();
+
+    try {
+      let rpcReq = {};
+      if (probeMethod === 'server/discover') {
+        rpcReq = {
+          jsonrpc: "2.0",
+          id: "probe-discover-" + Date.now(),
+          method: "server/discover",
+          params: {}
+        };
+      } else if (probeMethod === 'tools/list') {
+        rpcReq = {
+          jsonrpc: "2.0",
+          id: "probe-list-" + Date.now(),
+          method: "tools/list",
+          params: {}
+        };
+      } else {
+        let parsedArgs = {};
+        try {
+          parsedArgs = JSON.parse(probeToolArgs);
+        } catch (e) {
+          if (showToast) showToast('工具参数 JSON 语法错误: ' + e.message, 'error');
+          setProbeRunning(false);
+          return;
+        }
+        rpcReq = {
+          jsonrpc: "2.0",
+          id: "probe-call-" + Date.now(),
+          method: "tools/call",
+          params: {
+            name: probeToolName,
+            arguments: parsedArgs
+          }
+        };
+      }
+
+      const res = await fetch(messagesUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rpcReq)
+      });
+      const data = await res.json();
+      const duration = Math.round(performance.now() - start);
+      setProbeLatency(duration);
+      setProbeResult(data);
+    } catch (err) {
+      const duration = Math.round(performance.now() - start);
+      setProbeLatency(duration);
+      setProbeResult({
+        jsonrpc: "2.0",
+        id: "error",
+        error: { code: -32603, message: "探针请求失败: " + err.message }
+      });
+    } finally {
+      setProbeRunning(false);
+    }
+  };
+
+  const handleCopyText = (text, key) => {
     if (onCopy) {
       onCopy(text);
     } else {
       navigator.clipboard.writeText(text);
     }
     setCopiedKey(key);
-    if (showToast) showToast('已复制到剪贴板', 'success');
     setTimeout(() => setCopiedKey(''), 2000);
-  };
-
-  const cliSnippet = `# 1. 编译或安装极简 CLI
-go build -o /usr/local/bin/airoute ./cmd/airoute
-
-# 2. 查看集群与模型状态
-airoute status
-airoute models
-
-# 3. 命令行按需开启 / 关闭技能
-airoute skills list
-airoute skills enable web_search
-airoute skills disable web_search
-
-# 4. 终端直接与模型对话
-airoute chat -m deepseek-chat "你好，请自我介绍"
-
-# 5. 启动 Claude Desktop / Cursor 本地 stdio 桥接
-airoute mcp stdio`;
-
-  const cursorConfig = JSON.stringify({
-    mcpServers: {
-      router: {
-        url: sseUrl
-      }
-    }
-  }, null, 2);
-
-  const claudeConfig = JSON.stringify({
-    mcpServers: {
-      router: {
-        command: "airoute",
-        args: ["mcp", "stdio"]
-      }
-    }
-  }, null, 2);
-
-  const clineConfig = JSON.stringify({
-    mcpServers: {
-      router: {
-        url: sseUrl,
-        disabled: false,
-        autoApprove: ["airoute_search_skills", "airoute_inspect_skill", "airoute_get_skill_manifest"]
-      }
-    }
-  }, null, 2);
-
-  const pythonSnippet = `import asyncio
-from mcp import ClientSession
-from mcp.client.sse import sse_client
-
-async def main():
-    # 连接 AI 路由器的 MCP 渐进式服务
-    async with sse_client("${sseUrl}") as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-
-            # 阶段 1：搜索技能 (仅消耗 ~30 tokens，避免上下文臃肿)
-            found = await session.call_tool("airoute_search_skills", {"query": "计算"})
-            print("1. 搜索匹配技能:\\n", found)
-
-            # 阶段 2：确认单个技能签名与触发条件 (~60 tokens)
-            inspected = await session.call_tool("airoute_inspect_skill", {"skill_id": "code_runner"})
-            print("2. 确认技能规范:\\n", inspected)
-
-            # 阶段 3：按需拉取完整 SKILL.md 规范与指令
-            manifest = await session.call_tool("airoute_get_skill_manifest", {"skill_id": "code_runner"})
-            print("3. 完整指令清单:\\n", manifest)
-
-            # 阶段 4：执行具体工具调用
-            res = await session.call_tool("airoute_calc_eval", {"expression": "(128 * 1024) / 0.85"})
-            print("4. 计算执行结果:", res)
-
-asyncio.run(main())`;
-
-  const runTestMcp = async (toolName = 'airoute_list_models', args = {}, customMethod = 'tools/call') => {
-    setTestLoading(true);
-    setTestOutput(null);
-    try {
-      const payload = {
-        jsonrpc: '2.0',
-        id: Date.now(),
-        method: customMethod,
-        params: customMethod === 'server/discover' ? {} : {
-          name: toolName,
-          arguments: args
-        }
-      };
-      const res = await fetch(messagesUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'MCP-Protocol-Version': '2026-07-28'
-        },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      setTestOutput(data);
-      const actionName = customMethod === 'server/discover' ? 'server/discover' : toolName;
-      if (showToast) showToast(`探针测试 [${actionName}] 执行完成`, 'success');
-    } catch (err) {
-      setTestOutput({ error: err.message });
-      if (showToast) showToast('探针请求异常: ' + err.message, 'error');
-    } finally {
-      setTestLoading(false);
-    }
-  };
-
-  const getSkillIcon = (id) => {
-    switch (id) {
-      case 'web_search': return <Globe className="w-5 h-5 text-sky-500" />;
-      case 'datetime_clock': return <Clock className="w-5 h-5 text-indigo-500" />;
-      case 'code_runner': return <Calculator className="w-5 h-5 text-amber-500" />;
-      case 'model_router': return <Bot className="w-5 h-5 text-purple-500" />;
-      default: return <Server className="w-5 h-5 text-emerald-500" />;
-    }
+    if (showToast) showToast('配置已复制到剪贴板', 'success');
   };
 
   const categories = [
-    { id: 'all', label: '全部' },
-    { id: 'ops', label: '运维治理' },
-    { id: 'agent', label: '智能协作' },
-    { id: 'search', label: '信息检索' },
-    { id: 'utility', label: '通用工具' }
+    { id: 'all', name: '全部服务', icon: Boxes },
+    { id: 'ops', name: '网关原生', icon: Server },
+    { id: 'dev', name: '研发协作', icon: Code2 },
+    { id: 'search', name: '搜索抓取', icon: Globe },
+    { id: 'db', name: '数据存储', icon: Database },
+    { id: 'ai', name: '深度推理', icon: Sparkles },
+    { id: 'productivity', name: '企业协同', icon: Layers }
   ];
 
-  // Filter skills based on Category & Search Query
-  const filteredSkills = skills.filter(s => {
-    if (selectedCategory !== 'all' && s.category !== selectedCategory) {
-      return false;
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchName = s.name?.toLowerCase().includes(q);
-      const matchId = s.id?.toLowerCase().includes(q);
-      const matchDesc = s.description?.toLowerCase().includes(q);
-      const matchTools = s.tools?.some(t => t.toLowerCase().includes(q));
-      return matchName || matchId || matchDesc || matchTools;
-    }
-    return true;
+  const filteredServers = servers.filter(srv => {
+    const matchCategory = selectedCategory === 'all' || srv.category === selectedCategory;
+    const matchSearch = !searchQuery ||
+      srv.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      srv.id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      srv.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (srv.tools && srv.tools.some(t => t.toLowerCase().includes(searchQuery.toLowerCase())));
+    return matchCategory && matchSearch;
   });
 
-  return (
-    <div className="space-y-8 animate-in fade-in pb-16">
-      {/* 1. Header & Master Controls */}
-      <div className="bg-white border border-slate-200/80 rounded-3xl p-7 shadow-xs">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            <div className="flex items-center space-x-3.5">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 font-bold shrink-0">
-                <Bot className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center space-x-2.5">
-                  <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-                    扩展广场
-                  </h2>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                    MCP 2026-07-28
-                  </span>
-                </div>
-              </div>
-            </div>
+  const totalToolsCount = servers.reduce((acc, s) => acc + (s.tools ? s.tools.length : 0), 0);
+  const onlineServersCount = servers.filter(s => s.enabled).length;
 
-          {/* Master Switch */}
-          <div className="flex items-center space-x-4 bg-slate-50 border border-slate-200 px-5 py-3 rounded-2xl">
-            <div className="text-right">
-              <span className="text-xs font-bold text-slate-800 block">
-                MCP 服务
-              </span>
-              <span className="text-[11px] font-mono text-slate-500">
-                {mcpSettings.mcp_enabled ? (
-                  <span className="text-emerald-600 font-semibold">● 运行中</span>
-                ) : (
-                  <span className="text-slate-400">○ 已停用</span>
-                )}
-              </span>
+  // Code Generation for Clients
+  const getCursorConfig = () => {
+    return JSON.stringify({
+      mcpServers: {
+        "airoute-gateway": {
+          url: sseUrl,
+          headers: {
+            "Authorization": "Bearer YOUR_AIRUTE_KEY"
+          }
+        },
+        ...(selectedServerForConfig && selectedServerForConfig.id !== 'airoute-gateway' ? {
+          [selectedServerForConfig.id]: {
+            command: selectedServerForConfig.transport === 'stdio' ? "npx" : undefined,
+            args: selectedServerForConfig.transport === 'stdio' ? selectedServerForConfig.endpoint.replace('npx -y ', '').split(' ') : undefined,
+            url: selectedServerForConfig.transport === 'sse' ? selectedServerForConfig.endpoint : undefined
+          }
+        } : {})
+      }
+    }, null, 2);
+  };
+
+  const getClaudeConfig = () => {
+    return JSON.stringify({
+      mcpServers: {
+        "airoute-gateway": {
+          command: "curl",
+          args: ["-N", sseUrl]
+        },
+        ...(selectedServerForConfig && selectedServerForConfig.id !== 'airoute-gateway' ? {
+          [selectedServerForConfig.id]: {
+            command: selectedServerForConfig.transport === 'stdio' ? "npx" : "curl",
+            args: selectedServerForConfig.transport === 'stdio' ? ["-y", selectedServerForConfig.endpoint.replace('npx -y ', '')] : ["-N", selectedServerForConfig.endpoint]
+          }
+        } : {})
+      }
+    }, null, 2);
+  };
+
+  const getClineConfig = () => {
+    return JSON.stringify({
+      mcpServers: {
+        "airoute-gateway": {
+          type: "sse",
+          url: sseUrl,
+          autoApprove: [
+            "airoute_cluster_status",
+            "airoute_data_redact",
+            "airoute_sql_security_check"
+          ]
+        }
+      }
+    }, null, 2);
+  };
+
+  const getPythonSnippet = () => {
+    return `from mcp import ClientSession, StdioServerParameters
+from mcp.client.sse import sse_client
+
+async def run_mcp_client():
+    # 连接 Airoute 统一 MCP 代理网关
+    async with sse_client("${sseUrl}") as (read_stream, write_stream):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+            
+            # 列出网关聚合的所有 MCP 工具
+            tools = await session.list_tools()
+            print(f"发现 {len(tools.tools)} 个可用安全工具")
+            
+            # 调用数据安全脱敏工具示例
+            result = await session.call_tool(
+                "airoute_data_redact",
+                arguments={"text": "机密手机号: 13800138000"}
+            )
+            print("脱敏结果:", result.content[0].text)
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(run_mcp_client())`;
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* 顶部标题与说明 */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-gray-100 dark:border-gray-800">
+        <div>
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl text-white shadow-md shadow-indigo-500/20">
+              <Cpu className="w-6 h-6" />
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                disabled={togglingMcp}
-                checked={mcpSettings.mcp_enabled}
-                onChange={handleToggleMcpMaster}
-                className="sr-only peer"
-              />
-              <div className="w-10 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-            </label>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+                  Model Context Protocol (MCP) 广场
+                </h1>
+                <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/50">
+                  Anthropic Spec 2024-11-05
+                </span>
+                <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40">
+                  ModelScope 风格
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                外部协议连接服务中心：基于标准 JSON-RPC 2.0 (SSE / Stdio) 连接外部系统，提供统一鉴权、安全脱敏与客户端无缝对接。
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            onClick={() => handleOpenProbe(null)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors shadow-sm"
+          >
+            <Radio className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            在线协议探针
+          </button>
+          <button
+            onClick={() => { setSelectedServerForConfig(null); setConfigModalOpen(true); }}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors shadow-sm"
+          >
+            <FileCode className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+            客户端连接配置
+          </button>
+          <button
+            onClick={() => setAddServerModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all shadow-md shadow-indigo-500/20"
+          >
+            <Plus className="w-4 h-4" />
+            接入新服务
+          </button>
+          <button
+            onClick={fetchServersAndSettings}
+            disabled={loading}
+            className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 transition-colors"
+            title="刷新服务状态"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* 核心指标 & 全局管控卡片 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* 全局主控开关 */}
+        <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-sm flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`p-2.5 rounded-lg ${mcpSettings.mcp_enabled ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400'}`}>
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">网关 MCP 协议总闸</div>
+              <div className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2 mt-0.5">
+                {mcpSettings.mcp_enabled ? '运行就绪 (Active)' : '已停用 (Inactive)'}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={handleToggleGlobalMcp}
+            disabled={togglingGlobal}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${mcpSettings.mcp_enabled ? 'bg-emerald-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${mcpSettings.mcp_enabled ? 'translate-x-5' : 'translate-x-0'}`}
+            />
+          </button>
+        </div>
+
+        {/* 活跃 MCP 服务数 */}
+        <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-sm flex items-center gap-3">
+          <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-lg">
+            <Server className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">活跃 MCP 服务</div>
+            <div className="text-lg font-bold text-gray-900 dark:text-white flex items-baseline gap-1 mt-0.5">
+              <span>{onlineServersCount}</span>
+              <span className="text-xs font-normal text-gray-500 dark:text-gray-400">/ {servers.length} 已启用</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 聚合暴露 Tools 总数 */}
+        <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-sm flex items-center gap-3">
+          <div className="p-2.5 bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 rounded-lg">
+            <Wrench className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">聚合协议工具 (Tools)</div>
+            <div className="text-lg font-bold text-gray-900 dark:text-white flex items-baseline gap-1 mt-0.5">
+              <span>{totalToolsCount}</span>
+              <span className="text-xs font-normal text-gray-500 dark:text-gray-400">个生产级工具</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 协议传输端点 */}
+        <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-sm flex items-center gap-3">
+          <div className="p-2.5 bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded-lg">
+            <Zap className="w-5 h-5" />
+          </div>
+          <div className="overflow-hidden">
+            <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">网关 SSE 端点</div>
+            <div className="text-xs font-mono font-semibold text-gray-800 dark:text-gray-200 truncate mt-0.5" title={sseUrl}>
+              /mcp/sse
+            </div>
           </div>
         </div>
       </div>
 
-      {/* 2. Plaza Filter Pills & Search Box */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-1.5 bg-slate-100/90 p-1.5 rounded-2xl w-fit">
-          {categories.map(c => (
-            <button
-              key={c.id}
-              onClick={() => setSelectedCategory(c.id)}
-              className={`px-4 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
-                selectedCategory === c.id
-                  ? 'bg-white text-indigo-700 shadow-xs font-semibold'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              {c.label}
-            </button>
-          ))}
+      {/* 搜索与分类导航 */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white dark:bg-gray-800/80 p-3 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
+        {/* 分类 Tabs */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+          {categories.map(cat => {
+            const Icon = cat.icon;
+            const active = selectedCategory === cat.id;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap transition-all ${active ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60'}`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{cat.name}</span>
+              </button>
+            );
+          })}
         </div>
 
-        <div className="relative w-full sm:w-72">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+        {/* 搜索输入框 */}
+        <div className="relative min-w-[240px]">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
           <input
             type="text"
+            placeholder="搜索 MCP 服务、工具名或描述..."
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="搜索技能名称或工具..."
-            className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/60 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           />
         </div>
       </div>
 
-      {/* 3. Skill Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filteredSkills.map((skill) => {
-          const isToggling = togglingSkill[skill.id];
-          return (
-            <div
-              key={skill.id}
-              className={`p-6 rounded-3xl border transition flex flex-col justify-between ${
-                skill.enabled
-                  ? 'bg-white border-slate-200/90 shadow-xs hover:border-indigo-300'
-                  : 'bg-slate-50/70 border-slate-200/60 opacity-60'
-              }`}
-            >
-              <div>
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-center space-x-3.5">
-                    <div className="w-11 h-11 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center shrink-0">
-                      {getSkillIcon(skill.id)}
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-sm text-slate-900">
-                        {skill.name}
-                      </h4>
-                      <div className="flex items-center space-x-2 mt-0.5">
-                        <span className="text-[11px] text-slate-400 font-mono">
-                          {skill.id}
-                        </span>
-                        <span className="text-[11px] text-slate-400 font-mono">
-                          v{skill.version || '1.0.0'}
-                        </span>
+      {/* MCP 服务卡片列表 */}
+      {filteredServers.length === 0 ? (
+        <div className="p-12 text-center bg-white dark:bg-gray-800/50 rounded-xl border border-dashed border-gray-200 dark:border-gray-800">
+          <Cpu className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">未找到匹配的 MCP 服务</p>
+          <p className="text-xs text-gray-400 mt-1">可更换分类筛选或点击右上角「接入新服务」进行自定义添加</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {filteredServers.map(server => {
+            const isToggling = !!togglingServer[server.id];
+            const isCustom = server.id.startsWith('custom-');
+
+            return (
+              <div
+                key={server.id}
+                className={`flex flex-col justify-between p-5 rounded-xl border transition-all duration-200 ${server.enabled ? 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-sm hover:shadow-md' : 'border-gray-200/60 dark:border-gray-800/60 bg-gray-50/70 dark:bg-gray-850/50 opacity-80'}`}
+              >
+                <div>
+                  {/* 卡片头部 */}
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg ${server.id === 'airoute-gateway' ? 'bg-indigo-100 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}>
+                        {server.category === 'ops' ? <Server className="w-5 h-5" /> :
+                         server.category === 'dev' ? <Code2 className="w-5 h-5" /> :
+                         server.category === 'search' ? <Globe className="w-5 h-5" /> :
+                         server.category === 'db' ? <Database className="w-5 h-5" /> :
+                         server.category === 'ai' ? <Sparkles className="w-5 h-5" /> :
+                         <Layers className="w-5 h-5" />}
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                          {server.name}
+                        </h3>
+                        <div className="text-[11px] font-mono text-gray-400 dark:text-gray-500">
+                          {server.id}
+                        </div>
                       </div>
                     </div>
+
+                    {/* 开关 */}
+                    <button
+                      onClick={() => handleToggleServer(server.id, server.enabled)}
+                      disabled={isToggling}
+                      className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${server.enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+                      title={server.enabled ? '点击停用' : '点击启用'}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${server.enabled ? 'translate-x-4' : 'translate-x-0'}`}
+                      />
+                    </button>
                   </div>
 
-                  {/* Switch */}
-                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                    <input
-                      type="checkbox"
-                      disabled={isToggling}
-                      checked={skill.enabled}
-                      onChange={() => handleToggleSkill(skill.id, skill.enabled)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-                  </label>
-                </div>
-
-                {/* Badges */}
-                <div className="mt-3.5 flex items-center space-x-2">
-                  <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-medium ${
-                    skill.loading_mode === 'lazy'
-                      ? 'bg-sky-50 text-sky-700 border border-sky-200/80'
-                      : 'bg-amber-50 text-amber-700 border border-amber-200/80'
-                  }`}>
-                    {skill.loading_mode === 'lazy' ? '渐进式 (按需加载)' : '即时 (全量)'}
-                  </span>
-                  <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-medium bg-slate-100 text-slate-600">
-                    {categories.find(c => c.id === skill.category)?.label || skill.category}
-                  </span>
-                </div>
-
-                <p className="text-xs text-slate-600 mt-3 line-clamp-2 leading-relaxed">
-                  {skill.description}
-                </p>
-
-                {/* Tools tags */}
-                <div className="mt-4 flex flex-wrap gap-1.5 items-center">
-                  {skill.tools?.map(t => (
-                    <span
-                      key={t}
-                      className={`px-2.5 py-0.5 rounded-lg text-[11px] font-mono font-medium ${
-                        skill.enabled
-                          ? 'bg-indigo-50/70 text-indigo-700 border border-indigo-100'
-                          : 'bg-slate-200/70 text-slate-500'
-                      }`}
-                    >
-                      {t}
+                  {/* 标签栏 */}
+                  <div className="flex items-center gap-1.5 flex-wrap mb-3">
+                    <span className={`px-2 py-0.5 text-[10px] font-semibold rounded ${server.transport === 'sse' ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/40' : 'bg-purple-50 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800/40'}`}>
+                      {server.transport.toUpperCase()}
                     </span>
-                  ))}
+                    <span className="px-2 py-0.5 text-[10px] rounded bg-gray-100 dark:bg-gray-700/60 text-gray-600 dark:text-gray-300">
+                      v{server.version || '1.0.0'}
+                    </span>
+                    <span className="px-2 py-0.5 text-[10px] rounded bg-gray-100 dark:bg-gray-700/60 text-gray-500 dark:text-gray-400">
+                      {server.author || 'Anthropic'}
+                    </span>
+                    {server.status === 'online' && (
+                      <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        Online
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 描述文案 */}
+                  <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed line-clamp-2 mb-4">
+                    {server.description}
+                  </p>
+
+                  {/* 暴露的 Tools 标签组 */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+                      <span>包含工具 ({server.tools ? server.tools.length : 0})</span>
+                      <span className="text-[10px] text-gray-400 font-mono">JSON-RPC 2.0</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {(server.tools || []).slice(0, 4).map(t => (
+                        <span
+                          key={t}
+                          className="px-2 py-0.5 text-[10px] font-mono bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 rounded border border-gray-200/60 dark:border-gray-700/50"
+                        >
+                          {t}
+                        </span>
+                      ))}
+                      {(server.tools || []).length > 4 && (
+                        <span className="px-1.5 py-0.5 text-[10px] font-medium text-gray-400 dark:text-gray-500">
+                          +{server.tools.length - 4} 更多
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 卡片底部操作栏 */}
+                <div className="pt-3 border-t border-gray-100 dark:border-gray-800/80 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleOpenProbe(server)}
+                      className="px-2.5 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-md transition-colors flex items-center gap-1"
+                    >
+                      <Radio className="w-3.5 h-3.5" />
+                      探针测试
+                    </button>
+                    <button
+                      onClick={() => { setSelectedServerForConfig(server); setConfigModalOpen(true); }}
+                      className="px-2.5 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors flex items-center gap-1"
+                    >
+                      <Terminal className="w-3.5 h-3.5" />
+                      连接配置
+                    </button>
+                  </div>
+
+                  {isCustom && (
+                    <button
+                      onClick={() => handleDeleteServer(server.id)}
+                      className="p-1 text-gray-400 hover:text-rose-500 rounded transition-colors"
+                      title="移除自定义 MCP 服务"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
-
-              {/* Bottom action: View Manifest */}
-              <div className="mt-5 pt-3.5 border-t border-slate-100 flex items-center justify-between">
-                <span className="text-[11px] text-slate-400">
-                  {skill.author || '官方发布'}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setManifestSkill(skill)}
-                  className="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center space-x-1 cursor-pointer"
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>查看规范清单</span>
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {filteredSkills.length === 0 && (
-        <div className="text-center py-16 bg-white rounded-3xl border border-slate-200 text-slate-400 text-xs">
-          没有找到匹配的技能或工具
+            );
+          })}
         </div>
       )}
 
-      {/* 4. Client Integration Tabs */}
-      <div className="bg-white border border-slate-200/80 rounded-3xl p-7 shadow-xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-          <div className="flex items-center space-x-2">
-            <Terminal className="w-4 h-4 text-indigo-600" />
-            <h3 className="font-bold text-sm text-slate-900">
-              客户端接入
-            </h3>
-          </div>
-
-          {/* Config Tabs */}
-          <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-2xl text-xs">
-            <button
-              onClick={() => setActiveConfigTab('cli')}
-              className={`px-3.5 py-1.5 rounded-xl font-semibold transition cursor-pointer ${
-                activeConfigTab === 'cli'
-                  ? 'bg-white text-indigo-600 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              CLI 终端
-            </button>
-            <button
-              onClick={() => setActiveConfigTab('claude')}
-              className={`px-3.5 py-1.5 rounded-xl font-semibold transition cursor-pointer ${
-                activeConfigTab === 'claude'
-                  ? 'bg-white text-indigo-600 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Claude Desktop
-            </button>
-            <button
-              onClick={() => setActiveConfigTab('cursor')}
-              className={`px-3.5 py-1.5 rounded-xl font-semibold transition cursor-pointer ${
-                activeConfigTab === 'cursor'
-                  ? 'bg-white text-indigo-600 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Cursor
-            </button>
-            <button
-              onClick={() => setActiveConfigTab('cline')}
-              className={`px-3.5 py-1.5 rounded-xl font-semibold transition cursor-pointer ${
-                activeConfigTab === 'cline'
-                  ? 'bg-white text-indigo-600 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Cline
-            </button>
-            <button
-              onClick={() => setActiveConfigTab('python')}
-              className={`px-3.5 py-1.5 rounded-xl font-semibold transition cursor-pointer ${
-                activeConfigTab === 'python'
-                  ? 'bg-white text-indigo-600 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Python SDK
-            </button>
-          </div>
-        </div>
-
-        {/* Tab Contents */}
-        {activeConfigTab === 'cli' && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-500">
-                极简命令行：查看状态、模型、技能按需控制与本地 stdio 桥接
-              </span>
-              <button
-                onClick={() => handleCopy(cliSnippet, 'cli')}
-                className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition flex items-center space-x-1 cursor-pointer"
-              >
-                {copiedKey === 'cli' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedKey === 'cli' ? '已复制' : '复制命令'}</span>
-              </button>
-            </div>
-            <pre className="p-4 bg-slate-900 text-slate-100 rounded-2xl text-xs font-mono overflow-x-auto leading-relaxed">
-              {cliSnippet}
-            </pre>
-          </div>
-        )}
-
-        {activeConfigTab === 'claude' && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-500">
-                配置 Claude Desktop (claude_desktop_config.json):
-              </span>
-              <button
-                onClick={() => handleCopy(claudeConfig, 'claude')}
-                className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition flex items-center space-x-1 cursor-pointer"
-              >
-                {copiedKey === 'claude' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedKey === 'claude' ? '已复制' : '复制 JSON'}</span>
-              </button>
-            </div>
-            <pre className="p-4 bg-slate-900 text-slate-100 rounded-2xl text-xs font-mono overflow-x-auto">
-              {claudeConfig}
-            </pre>
-          </div>
-        )}
-
-        {activeConfigTab === 'cursor' && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-500">
-                Cursor 设置 (MCP Server SSE 模式):
-              </span>
-              <button
-                onClick={() => handleCopy(cursorConfig, 'cursor')}
-                className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition flex items-center space-x-1 cursor-pointer"
-              >
-                {copiedKey === 'cursor' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedKey === 'cursor' ? '已复制' : '复制 JSON'}</span>
-              </button>
-            </div>
-            <pre className="p-4 bg-slate-900 text-slate-100 rounded-2xl text-xs font-mono overflow-x-auto">
-              {cursorConfig}
-            </pre>
-          </div>
-        )}
-
-        {activeConfigTab === 'cline' && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-500">Cline 插件配置:</span>
-              <button
-                onClick={() => handleCopy(clineConfig, 'cline')}
-                className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition flex items-center space-x-1 cursor-pointer"
-              >
-                {copiedKey === 'cline' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedKey === 'cline' ? '已复制' : '复制 JSON'}</span>
-              </button>
-            </div>
-            <pre className="p-4 bg-slate-900 text-slate-100 rounded-2xl text-xs font-mono overflow-x-auto">
-              {clineConfig}
-            </pre>
-          </div>
-        )}
-
-        {activeConfigTab === 'python' && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-500">Python mcp SDK 渐进式三阶段调用范式:</span>
-              <button
-                onClick={() => handleCopy(pythonSnippet, 'python')}
-                className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition flex items-center space-x-1 cursor-pointer"
-              >
-                {copiedKey === 'python' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedKey === 'python' ? '已复制' : '复制代码'}</span>
-              </button>
-            </div>
-            <pre className="p-4 bg-slate-900 text-slate-100 rounded-2xl text-xs font-mono overflow-x-auto">
-              {pythonSnippet}
-            </pre>
-          </div>
-        )}
-      </div>
-
-      {/* 5. Interactive 3-Stage Probe */}
-      <div className="bg-white border border-slate-200/80 rounded-3xl p-7 shadow-xs space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Play className="w-4 h-4 text-emerald-600" />
-            <h3 className="font-bold text-sm text-slate-900">
-              在线探针演练 (三阶段渐进式验证)
-            </h3>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            onClick={() => runTestMcp('', {}, 'server/discover')}
-            disabled={testLoading}
-            className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-xs font-mono font-semibold transition cursor-pointer"
-          >
-            <span>0. 协议发现: server/discover (2026 最新规范)</span>
-          </button>
-          <button
-            onClick={() => runTestMcp('airoute_search_skills', { query: '计算' })}
-            disabled={testLoading}
-            className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-mono font-medium transition cursor-pointer"
-          >
-            <span>1. 搜索技能: airoute_search_skills("计算")</span>
-          </button>
-          <button
-            onClick={() => runTestMcp('airoute_inspect_skill', { skill_id: 'code_runner' })}
-            disabled={testLoading}
-            className="px-3.5 py-2 bg-sky-50 hover:bg-sky-100 text-sky-700 rounded-xl text-xs font-mono font-medium transition cursor-pointer"
-          >
-            <span>2. 确认技能: airoute_inspect_skill("code_runner")</span>
-          </button>
-          <button
-            onClick={() => runTestMcp('airoute_get_skill_manifest', { skill_id: 'code_runner' })}
-            disabled={testLoading}
-            className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-mono font-medium transition cursor-pointer"
-          >
-            <span>3. 拉取规范: airoute_get_skill_manifest("code_runner")</span>
-          </button>
-          <button
-            onClick={() => runTestMcp('airoute_calc_eval', { expression: '(128 * 1024) / 0.85' })}
-            disabled={testLoading}
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-mono transition cursor-pointer"
-          >
-            <span>4. 执行计算: airoute_calc_eval("(128*1024)/0.85")</span>
-          </button>
-        </div>
-
-        {testOutput && (
-          <div className="space-y-1.5 animate-in fade-in">
-            <div className="flex items-center justify-between text-xs text-slate-500">
-              <span>探针执行结果:</span>
-              <button
-                onClick={() => setTestOutput(null)}
-                className="hover:underline text-[11px] cursor-pointer"
-              >
-                清除输出
-              </button>
-            </div>
-            <pre className="p-4 bg-slate-950 text-emerald-400 rounded-2xl text-xs font-mono overflow-x-auto max-h-60 overflow-y-auto">
-              {JSON.stringify(testOutput, null, 2)}
-            </pre>
-          </div>
-        )}
-      </div>
-
-      {/* Manifest Modal */}
-      {manifestSkill && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[85vh] flex flex-col">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center space-x-2.5">
-                <FileText className="w-5 h-5 text-indigo-600" />
+      {/* 客户端集成配置弹窗 */}
+      {configModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded-lg">
+                  <FileCode className="w-5 h-5" />
+                </div>
                 <div>
-                  <h3 className="font-bold text-sm text-slate-900">
-                    {manifestSkill.name} - 规范清单 (SKILL.md)
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                    客户端连接配置指南
                   </h3>
-                  <span className="text-[11px] text-slate-400 font-mono">
-                    ID: {manifestSkill.id} · v{manifestSkill.version || '1.0.0'} · {manifestSkill.loading_mode === 'lazy' ? '渐进式加载' : '即时加载'}
-                  </span>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {selectedServerForConfig ? `针对 [${selectedServerForConfig.name}] 的专属配置` : '将 Airoute 统一 MCP 网关导入您的 AI 客户端'}
+                  </p>
                 </div>
               </div>
               <button
-                onClick={() => setManifestSkill(null)}
-                className="p-1 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                onClick={() => setConfigModalOpen(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
-              <pre className="p-4 bg-slate-900 text-slate-100 rounded-2xl text-xs font-mono whitespace-pre-wrap leading-relaxed">
-                {manifestSkill.manifest || `# ${manifestSkill.name}\n\n${manifestSkill.description}`}
-              </pre>
+            {/* 客户端选择 Tabs */}
+            <div className="flex items-center gap-2 border-b border-gray-200 dark:border-gray-800 pb-2">
+              {[
+                { id: 'cursor', label: 'Cursor (.cursor/mcp.json)' },
+                { id: 'claude', label: 'Claude Desktop' },
+                { id: 'cline', label: 'Cline / Roo-Code' },
+                { id: 'python', label: 'Python SDK' }
+              ].map(c => (
+                <button
+                  key={c.id}
+                  onClick={() => setActiveConfigClient(c.id)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${activeConfigClient === c.id ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+                >
+                  {c.label}
+                </button>
+              ))}
             </div>
 
-            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+            {/* 配置代码预览与一键复制 */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                  {activeConfigClient === 'cursor' && '配置文件位置: 项目根目录 .cursor/mcp.json'}
+                  {activeConfigClient === 'claude' && '配置文件位置: ~/Library/Application Support/Claude/claude_desktop_config.json'}
+                  {activeConfigClient === 'cline' && '配置文件位置: Cline Settings -> MCP Servers'}
+                  {activeConfigClient === 'python' && '安装依赖: pip install mcp httpx'}
+                </span>
+                <button
+                  onClick={() => {
+                    const code = activeConfigClient === 'cursor' ? getCursorConfig() :
+                                 activeConfigClient === 'claude' ? getClaudeConfig() :
+                                 activeConfigClient === 'cline' ? getClineConfig() : getPythonSnippet();
+                    handleCopyText(code, 'client-config');
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                >
+                  {copiedKey === 'client-config' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedKey === 'client-config' ? '已复制' : '复制配置'}</span>
+                </button>
+              </div>
+
+              <div className="bg-gray-900 text-gray-100 p-4 rounded-xl font-mono text-xs overflow-x-auto border border-gray-800">
+                <pre>
+                  {activeConfigClient === 'cursor' && getCursorConfig()}
+                  {activeConfigClient === 'claude' && getClaudeConfig()}
+                  {activeConfigClient === 'cline' && getClineConfig()}
+                  {activeConfigClient === 'python' && getPythonSnippet()}
+                </pre>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/50 rounded-lg text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <div>
+                <strong>安全最佳实践：</strong>所有客户端均通过 Airoute 统一协议代理连接，无需直接暴露内部数据库或私有服务凭据。网关会自动执行参数脱敏与 SQL 注入审计。
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
               <button
-                onClick={() => handleCopy(manifestSkill.manifest || manifestSkill.description, 'manifest')}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer"
+                onClick={() => setConfigModalOpen(false)}
+                className="px-4 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700"
               >
-                {copiedKey === 'manifest' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedKey === 'manifest' ? '已复制' : '复制规范清单'}</span>
+                关闭
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 注册自定义 MCP 服务模态框 */}
+      {addServerModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-lg">
+                  <Plus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                    接入新 MCP 服务
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    遵循 ModelScope / Anthropic 规范标准接入自定义协议服务
+                  </p>
+                </div>
+              </div>
               <button
-                onClick={() => setManifestSkill(null)}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition cursor-pointer"
+                onClick={() => setAddServerModalOpen(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateServer} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    服务唯一标识 (ID) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="如: docker-mcp"
+                    value={newServer.id}
+                    onChange={(e) => setNewServer({ ...newServer, id: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    服务显示名称 *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="如: Docker 容器管理服务"
+                    value={newServer.name}
+                    onChange={(e) => setNewServer({ ...newServer, name: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    分类领域
+                  </label>
+                  <select
+                    value={newServer.category}
+                    onChange={(e) => setNewServer({ ...newServer, category: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                  >
+                    <option value="ops">运维网关 (ops)</option>
+                    <option value="dev">研发协作 (dev)</option>
+                    <option value="search">搜索抓取 (search)</option>
+                    <option value="db">数据存储 (db)</option>
+                    <option value="ai">深度推理 (ai)</option>
+                    <option value="productivity">企业协同 (productivity)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    传输通道 (Transport)
+                  </label>
+                  <select
+                    value={newServer.transport}
+                    onChange={(e) => setNewServer({ ...newServer, transport: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                  >
+                    <option value="stdio">stdio (本地命令/子进程)</option>
+                    <option value="sse">sse (远程 HTTP Server-Sent Events)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  服务 Endpoint / 执行命令 *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="如: npx -y @modelcontextprotocol/server-docker 或 https://mcp.example.com/sse"
+                  value={newServer.endpoint}
+                  onChange={(e) => setNewServer({ ...newServer, endpoint: e.target.value })}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  服务描述
+                </label>
+                <textarea
+                  rows="2"
+                  placeholder="简述该 MCP 服务的功能、适用场景及接入说明..."
+                  value={newServer.description}
+                  onChange={(e) => setNewServer({ ...newServer, description: e.target.value })}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  暴露的 Tools 工具集 (逗号分隔)
+                </label>
+                <input
+                  type="text"
+                  placeholder="如: docker_ps, docker_logs, docker_restart"
+                  value={newServer.tools}
+                  onChange={(e) => setNewServer({ ...newServer, tools: e.target.value })}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-200 dark:border-gray-800">
+                <button
+                  type="button"
+                  onClick={() => setAddServerModalOpen(false)}
+                  className="px-4 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200"
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-sm"
+                >
+                  确认接入
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 在线 JSON-RPC 2.0 协议探针控制台 */}
+      {probeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-3xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-lg">
+                  <Radio className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    在线协议探针控制台
+                    <span className="text-xs font-mono font-normal text-indigo-500">JSON-RPC 2.0</span>
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    向网关端点 {messagesUrl} 发送标准协议报文并实时验证安全拦截与工具输出
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setProbeModalOpen(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 方法与参数选择 */}
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    探针方法 (JSON-RPC Method)
+                  </label>
+                  <select
+                    value={probeMethod}
+                    onChange={(e) => setProbeMethod(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                  >
+                    <option value="server/discover">server/discover (服务与能力探测)</option>
+                    <option value="tools/list">tools/list (枚举工具列表与 Schema)</option>
+                    <option value="tools/call">tools/call (在线执行具体工具)</option>
+                  </select>
+                </div>
+
+                {probeMethod === 'tools/call' && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      选择目标工具 (Tool Name)
+                    </label>
+                    <select
+                      value={probeToolName}
+                      onChange={(e) => {
+                        const name = e.target.value;
+                        setProbeToolName(name);
+                        if (name === 'airoute_data_redact') {
+                          setProbeToolArgs('{\n  "text": "用户张三 身份证110101199003072345 手机13812345678 密钥sk-abcdef123456"\n}');
+                        } else if (name === 'airoute_sql_security_check') {
+                          setProbeToolArgs('{\n  "query": "DROP TABLE users; -- 注入攻击"\n}');
+                        } else if (name === 'airoute_deep_search') {
+                          setProbeToolArgs('{\n  "query": "DeepSeek R1 模型推理架构与性能"\n}');
+                        } else if (name === 'airoute_recommend_model') {
+                          setProbeToolArgs('{\n  "task_type": "coding",\n  "max_budget_per_m": 1.0\n}');
+                        } else {
+                          setProbeToolArgs('{}');
+                        }
+                      }}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono"
+                    >
+                      <option value="airoute_data_redact">airoute_data_redact (敏感数据脱敏)</option>
+                      <option value="airoute_sql_security_check">airoute_sql_security_check (SQL安全审计拦截)</option>
+                      <option value="airoute_cluster_status">airoute_cluster_status (集群高可用状态)</option>
+                      <option value="airoute_model_topology">airoute_model_topology (模型拓扑与路由矩阵)</option>
+                      <option value="airoute_deep_search">airoute_deep_search (高质量结构化联网深度检索)</option>
+                      <option value="airoute_recommend_model">airoute_recommend_model (智能模型选型仲裁)</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {probeMethod === 'tools/call' && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      工具输入参数 (JSON Arguments)
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProbeToolName('airoute_data_redact');
+                          setProbeToolArgs('{\n  "text": "用户张三 身份证110101199003072345 手机13812345678 密钥sk-abcdef123456"\n}');
+                        }}
+                        className="text-[10px] text-indigo-600 hover:underline"
+                      >
+                        敏感脱敏示例
+                      </button>
+                      <span className="text-gray-300 dark:text-gray-600">|</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProbeToolName('airoute_sql_security_check');
+                          setProbeToolArgs('{\n  "query": "DROP TABLE users; -- 注入攻击"\n}');
+                        }}
+                        className="text-[10px] text-rose-600 hover:underline"
+                      >
+                        危险 SQL 拦截示例
+                      </button>
+                    </div>
+                  </div>
+                  <textarea
+                    rows="3"
+                    value={probeToolArgs}
+                    onChange={(e) => setProbeToolArgs(e.target.value)}
+                    className="w-full px-3 py-2 font-mono text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-900 text-gray-100"
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-xs text-gray-400">
+                  {probeLatency !== null && (
+                    <span className="text-emerald-500 font-mono">
+                      ✓ 往返耗时: {probeLatency} ms
+                    </span>
+                  )}
+                </span>
+                <button
+                  onClick={handleRunProbe}
+                  disabled={probeRunning}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-sm"
+                >
+                  <Send className={`w-3.5 h-3.5 ${probeRunning ? 'animate-pulse' : ''}`} />
+                  <span>{probeRunning ? '探针执行中...' : '发送 JSON-RPC 2.0 报文'}</span>
+                </button>
+              </div>
+
+              {/* 探针响应输出 */}
+              {probeResult && (
+                <div>
+                  <div className="flex items-center justify-between text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                    <span className="flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                      服务器响应 (Response Payload)
+                    </span>
+                    <button
+                      onClick={() => handleCopyText(JSON.stringify(probeResult, null, 2), 'probe-res')}
+                      className="inline-flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                    >
+                      {copiedKey === 'probe-res' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                      复制响应
+                    </button>
+                  </div>
+                  <div className="bg-gray-900 text-gray-100 p-4 rounded-xl font-mono text-xs overflow-x-auto max-h-60 border border-gray-800">
+                    <pre>{JSON.stringify(probeResult, null, 2)}</pre>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-gray-100 dark:border-gray-800">
+              <button
+                onClick={() => setProbeModalOpen(false)}
+                className="px-4 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700"
               >
                 关闭
               </button>

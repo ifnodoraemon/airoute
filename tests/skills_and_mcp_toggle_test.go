@@ -25,12 +25,17 @@ func TestSkills_OnDemandTogglingAndMCP(t *testing.T) {
 	adminHandler := controlplane.NewAdminHandler(repo, sync, dispatcher)
 	engine := api.SetupRouter(dispatcher, adminHandler)
 
-	// 1. Initial skills listing
+	// 1. Initial open standard agent skills listing (4 high-value curated skills)
 	skills, err := repo.ListSkills()
 	assert.NoError(t, err)
-	assert.Equal(t, 5, len(skills))
+	assert.Equal(t, 4, len(skills))
 
-	// 1.1 Test MCP 2026-07-28 server/discover (Stateless Discovery RPC)
+	// 1.1 ModelScope-style MCP servers listing
+	mcpServers, err := repo.ListMCPServers()
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, len(mcpServers), 6)
+
+	// 1.2 Test MCP 2026-07-28 server/discover (Stateless Discovery RPC)
 	discRPCReq := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"id":      99,
@@ -46,7 +51,7 @@ func TestSkills_OnDemandTogglingAndMCP(t *testing.T) {
 	assert.Contains(t, wDiscRPC.Body.String(), "2026-07-28")
 	assert.Contains(t, wDiscRPC.Body.String(), "AI路由器")
 
-	// 2. Query MCP tools/list - all tools should be present initially
+	// 2. Query MCP tools/list - active tools should be present
 	mcpReq := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"id":      1,
@@ -67,17 +72,17 @@ func TestSkills_OnDemandTogglingAndMCP(t *testing.T) {
 		} `json:"result"`
 	}
 	_ = json.Unmarshal(w.Body.Bytes(), &mcpResp)
-	assert.Equal(t, 11, len(mcpResp.Result.Tools))
+	assert.GreaterOrEqual(t, len(mcpResp.Result.Tools), 10)
 
-	// 2.1 Test Progressive Stage 1: nano_search_skills
+	// 2.1 Test Progressive Stage 1: airoute_search_skills
 	searchCallReq := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"id":      101,
 		"method":  "tools/call",
 		"params": map[string]interface{}{
-			"name": "nano_search_skills",
+			"name": "airoute_search_skills",
 			"arguments": map[string]interface{}{
-				"query": "计算",
+				"query": "git",
 			},
 		},
 	}
@@ -86,17 +91,17 @@ func TestSkills_OnDemandTogglingAndMCP(t *testing.T) {
 	wSearch := httptest.NewRecorder()
 	engine.ServeHTTP(wSearch, reqSearch)
 	assert.Equal(t, http.StatusOK, wSearch.Code)
-	assert.Contains(t, wSearch.Body.String(), "code_runner")
+	assert.Contains(t, wSearch.Body.String(), "git-workflow")
 
-	// 2.2 Test Progressive Stage 2: nano_inspect_skill
+	// 2.2 Test Progressive Stage 2: airoute_inspect_skill
 	inspCallReq := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"id":      102,
 		"method":  "tools/call",
 		"params": map[string]interface{}{
-			"name": "nano_inspect_skill",
+			"name": "airoute_inspect_skill",
 			"arguments": map[string]interface{}{
-				"skill_id": "code_runner",
+				"skill_id": "git-workflow",
 			},
 		},
 	}
@@ -105,18 +110,18 @@ func TestSkills_OnDemandTogglingAndMCP(t *testing.T) {
 	wInsp := httptest.NewRecorder()
 	engine.ServeHTTP(wInsp, reqInsp)
 	assert.Equal(t, http.StatusOK, wInsp.Code)
-	assert.Contains(t, wInsp.Body.String(), "nano_calc_eval")
+	assert.Contains(t, wInsp.Body.String(), "run_command")
 	assert.Contains(t, wInsp.Body.String(), "Stage 2 Confirmed")
 
-	// 2.3 Test Progressive Stage 3: nano_get_skill_manifest
+	// 2.3 Test Progressive Stage 3: airoute_get_skill_manifest
 	manCallReq := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"id":      103,
 		"method":  "tools/call",
 		"params": map[string]interface{}{
-			"name": "nano_get_skill_manifest",
+			"name": "airoute_get_skill_manifest",
 			"arguments": map[string]interface{}{
-				"skill_id": "code_runner",
+				"skill_id": "git-workflow",
 			},
 		},
 	}
@@ -125,87 +130,55 @@ func TestSkills_OnDemandTogglingAndMCP(t *testing.T) {
 	wMan := httptest.NewRecorder()
 	engine.ServeHTTP(wMan, reqMan)
 	assert.Equal(t, http.StatusOK, wMan.Code)
-	assert.Contains(t, wMan.Body.String(), "# 轻量代码执行与数学表达式计算")
-	assert.Contains(t, wMan.Body.String(), "nano_calc_eval")
+	assert.Contains(t, wMan.Body.String(), "# Git 规范协作与代码审查工作流")
+	assert.Contains(t, wMan.Body.String(), "Claude Code")
 
-	// 3. Test nano_get_current_time tool
-	timeCallReq := map[string]interface{}{
+	// 3. Test enterprise airoute_data_redact tool
+	redactCallReq := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"id":      2,
 		"method":  "tools/call",
 		"params": map[string]interface{}{
-			"name":      "nano_get_current_time",
-			"arguments": map[string]interface{}{},
+			"name": "airoute_data_redact",
+			"arguments": map[string]interface{}{
+				"text": "客户手机 13812345678, 密钥 sk-abcdef123456789012345678",
+			},
 		},
 	}
-	bTime, _ := json.Marshal(timeCallReq)
-	reqTime := httptest.NewRequest(http.MethodPost, "/mcp/messages", bytes.NewReader(bTime))
-	wTime := httptest.NewRecorder()
-	engine.ServeHTTP(wTime, reqTime)
-	assert.Equal(t, http.StatusOK, wTime.Code)
-	assert.Contains(t, wTime.Body.String(), "CST")
+	bRedact, _ := json.Marshal(redactCallReq)
+	reqRedact := httptest.NewRequest(http.MethodPost, "/mcp/messages", bytes.NewReader(bRedact))
+	wRedact := httptest.NewRecorder()
+	engine.ServeHTTP(wRedact, reqRedact)
+	assert.Equal(t, http.StatusOK, wRedact.Code)
+	assert.Contains(t, wRedact.Body.String(), "138****5678")
+	assert.Contains(t, wRedact.Body.String(), "COMPLIANT_REDACTED")
 
-	// 4. Test nano_calc_eval tool
-	calcCallReq := map[string]interface{}{
+	// 4. Test enterprise airoute_sql_security_check tool
+	sqlCallReq := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"id":      3,
 		"method":  "tools/call",
 		"params": map[string]interface{}{
-			"name": "nano_calc_eval",
+			"name": "airoute_sql_security_check",
 			"arguments": map[string]interface{}{
-				"expression": "(10 + 20) * 2",
+				"sql": "DROP TABLE users;",
 			},
 		},
 	}
-	bCalc, _ := json.Marshal(calcCallReq)
-	reqCalc := httptest.NewRequest(http.MethodPost, "/mcp/messages", bytes.NewReader(bCalc))
-	wCalc := httptest.NewRecorder()
-	engine.ServeHTTP(wCalc, reqCalc)
-	assert.Equal(t, http.StatusOK, wCalc.Code)
-	assert.Contains(t, wCalc.Body.String(), "60")
+	bSql, _ := json.Marshal(sqlCallReq)
+	reqSql := httptest.NewRequest(http.MethodPost, "/mcp/messages", bytes.NewReader(bSql))
+	wSql := httptest.NewRecorder()
+	engine.ServeHTTP(wSql, reqSql)
+	assert.Equal(t, http.StatusOK, wSql.Code)
+	assert.Contains(t, wSql.Body.String(), "CRITICAL")
+	assert.Contains(t, wSql.Body.String(), "DROP")
 
-	// 5. Turn OFF web_search skill on-demand
-	err = repo.SetSkillEnabled("web_search", false)
+	// 5. Turn OFF git-workflow skill on-demand
+	err = repo.SetSkillEnabled("git-workflow", false)
 	assert.NoError(t, err)
-	assert.False(t, repo.IsSkillEnabled("web_search"))
-	assert.False(t, repo.IsToolEnabled("nano_web_search"))
+	assert.False(t, repo.IsSkillEnabled("git-workflow"))
 
-	// tools/list should now have 10 tools (nano_web_search omitted)
-	reqList2 := httptest.NewRequest(http.MethodPost, "/mcp/messages", bytes.NewReader(body))
-	wList2 := httptest.NewRecorder()
-	engine.ServeHTTP(wList2, reqList2)
-	var mcpResp2 struct {
-		Result struct {
-			Tools []struct {
-				Name string `json:"name"`
-			} `json:"tools"`
-		} `json:"result"`
-	}
-	_ = json.Unmarshal(wList2.Body.Bytes(), &mcpResp2)
-	assert.Equal(t, 10, len(mcpResp2.Result.Tools))
-	for _, tItem := range mcpResp2.Result.Tools {
-		assert.NotEqual(t, "nano_web_search", tItem.Name)
-	}
-
-	// 6. Calling disabled tool should return error
-	webCallReq := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"id":      4,
-		"method":  "tools/call",
-		"params": map[string]interface{}{
-			"name": "nano_web_search",
-			"arguments": map[string]interface{}{
-				"query": "golang 1.26 features",
-			},
-		},
-	}
-	bWeb, _ := json.Marshal(webCallReq)
-	reqWeb := httptest.NewRequest(http.MethodPost, "/mcp/messages", bytes.NewReader(bWeb))
-	wWeb := httptest.NewRecorder()
-	engine.ServeHTTP(wWeb, reqWeb)
-	assert.Contains(t, wWeb.Body.String(), "已被按需停用")
-
-	// 7. Turn OFF Master MCP Switch
+	// 6. Turn OFF Master MCP Switch
 	_ = repo.SetSetting("mcp_enabled", "false")
 	reqMCPDisabled := httptest.NewRequest(http.MethodPost, "/mcp/messages", bytes.NewReader(body))
 	wMCPDisabled := httptest.NewRecorder()

@@ -114,6 +114,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 				protected.GET("/pricing", adminHandler.GetPricingRates)
 				protected.GET("/skills", adminHandler.ListSkills)
 				protected.GET("/mcp/settings", adminHandler.GetMCPSettings)
+				protected.GET("/mcp/servers", adminHandler.ListMCPServers)
 				protected.GET("/logs", adminHandler.ListLogs)
 
 				// Protected super-admin operations
@@ -151,8 +152,14 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 					adminOnly.DELETE("/pricing/:model", adminHandler.DeletePricingRate)
 					adminOnly.POST("/pricing/batch-delete", adminHandler.BatchDeletePricingRates)
 
+					adminOnly.POST("/skills", adminHandler.SaveSkill)
+					adminOnly.DELETE("/skills/:id", adminHandler.DeleteSkill)
 					adminOnly.POST("/skills/:id/toggle", adminHandler.ToggleSkill)
 					adminOnly.POST("/mcp/settings", adminHandler.UpdateMCPSettings)
+					adminOnly.POST("/mcp/servers", adminHandler.SaveMCPServer)
+					adminOnly.POST("/mcp/servers/:id/toggle", adminHandler.ToggleMCPServer)
+					adminOnly.DELETE("/mcp/servers/:id", adminHandler.DeleteMCPServer)
+					adminOnly.POST("/mcp/servers/:id/probe", adminHandler.ProbeMCPServer)
 
 					adminOnly.DELETE("/logs/:id", adminHandler.DeleteLog)
 					adminOnly.POST("/logs/batch-delete", adminHandler.BatchDeleteLogs)
