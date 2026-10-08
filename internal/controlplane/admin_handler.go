@@ -1,10 +1,14 @@
 package controlplane
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -14,6 +18,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/billing"
+	"github.com/ifnodoraemon/airoute/internal/config"
 	"github.com/ifnodoraemon/airoute/internal/distributed"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/provider"
@@ -28,16 +33,35 @@ type AdminHandler struct {
 	sync       *Synchronizer
 	dispatcher *router.Dispatcher
 	prober     *DownstreamProber
+	storage    storage.ArtifactStorage
 }
 
 // NewAdminHandler creates an AdminHandler.
 func NewAdminHandler(repo *storage.Repository, sync *Synchronizer, dispatcher *router.Dispatcher) *AdminHandler {
+	ls, _ := storage.NewLocalStorage("data/storage")
 	return &AdminHandler{
 		repo:       repo,
 		sync:       sync,
 		dispatcher: dispatcher,
 		prober:     NewDownstreamProber(nil),
+		storage:    ls,
 	}
+}
+
+// SetArtifactStorage configures the pluggable artifact storage driver (Local or RustFS/S3).
+func (h *AdminHandler) SetArtifactStorage(s storage.ArtifactStorage) {
+	if s != nil {
+		h.storage = s
+	}
+}
+
+func (h *AdminHandler) getStorage() storage.ArtifactStorage {
+	if h.storage != nil {
+		return h.storage
+	}
+	ls, _ := storage.NewLocalStorage("data/storage")
+	h.storage = ls
+	return ls
 }
 
 // syncDataPlane synchronizes updated channels, API keys, and routing rules into memory and cluster replicas.
@@ -1246,6 +1270,7 @@ func (h *AdminHandler) SaveSkill(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "保存技能失败: " + err.Error()})
 		return
 	}
+	_ = h.getStorage().Delete(c.Request.Context(), storage.FormatSkillKey(record.ID))
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "技能已保存", "data": record})
 }
 
@@ -1260,7 +1285,106 @@ func (h *AdminHandler) DeleteSkill(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "删除技能失败: " + err.Error()})
 		return
 	}
+	_ = h.getStorage().Delete(c.Request.Context(), storage.FormatSkillKey(id))
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "技能已删除"})
+}
+
+// DownloadSkillZip streams a standard .zip archive containing the skill bundle directory:
+// <skill-id>/
+// ├── SKILL.md
+// ├── scripts/
+// │   └── run.sh
+// └── references/
+//     └── metadata.json
+// Supports caching to Local/RustFS/S3 and presigned URL redirection.
+func (h *AdminHandler) DownloadSkillZip(c *gin.Context) {
+	id := c.Param("id")
+	skill, err := h.repo.GetSkill(id)
+	if err != nil || skill == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Skill not found"})
+		return
+	}
+
+	stor := h.getStorage()
+	key := storage.FormatSkillKey(skill.ID)
+
+	// If remote storage provides a presigned download URL (e.g. S3 / RustFS),
+	// redirect directly with HTTP 302 to offload gateway outbound bandwidth!
+	if presignedURL, err := stor.GetDownloadURL(c.Request.Context(), key, 30*time.Minute); err == nil && presignedURL != "" {
+		c.Redirect(http.StatusFound, presignedURL)
+		return
+	}
+
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.zip\"", skill.ID))
+
+	// Check if already cached in storage
+	if exists, _ := stor.Exists(c.Request.Context(), key); exists {
+		rc, size, err := stor.Get(c.Request.Context(), key)
+		if err == nil {
+			defer rc.Close()
+			if size > 0 {
+				c.Header("Content-Length", strconv.FormatInt(size, 10))
+			}
+			_, _ = io.Copy(c.Writer, rc)
+			return
+		}
+	}
+
+	// Pack dynamically in memory
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+
+	// 1. Root SKILL.md
+	if wSkill, err := zw.Create(fmt.Sprintf("%s/SKILL.md", skill.ID)); err == nil {
+		_, _ = wSkill.Write([]byte(skill.Manifest))
+	}
+
+	// 2. scripts/run.sh helper
+	if wScript, err := zw.Create(fmt.Sprintf("%s/scripts/run.sh", skill.ID)); err == nil {
+		runScript := fmt.Sprintf("#!/usr/bin/env bash\n# Executable helper script for %s\n# agentskills.io open standard\necho \"[Skill %s] Executing task with tools: %s\"\n", skill.ID, skill.ID, strings.Join(skill.Tools, ", "))
+		_, _ = wScript.Write([]byte(runScript))
+	}
+
+	// 3. references/metadata.json
+	if wRef, err := zw.Create(fmt.Sprintf("%s/references/metadata.json", skill.ID)); err == nil {
+		metaBytes, _ := json.MarshalIndent(skill, "", "  ")
+		_, _ = wRef.Write(metaBytes)
+	}
+
+	_ = zw.Close()
+
+	zipBytes := buf.Bytes()
+
+	// Persist to storage for subsequent requests
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = stor.Put(ctx, key, bytes.NewReader(zipBytes), int64(len(zipBytes)), "application/zip")
+	}()
+
+	c.Header("Content-Length", strconv.Itoa(len(zipBytes)))
+	_, _ = c.Writer.Write(zipBytes)
+}
+
+// GetStorageStatus returns current artifact storage configuration and health.
+func (h *AdminHandler) GetStorageStatus(c *gin.Context) {
+	stor := h.getStorage()
+	cfg := config.GetGlobalConfig().GetStorageConfig()
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"data": gin.H{
+			"driver":            stor.Driver(),
+			"local_path":        cfg.LocalPath,
+			"s3_endpoint":       cfg.S3.Endpoint,
+			"s3_bucket":         cfg.S3.Bucket,
+			"s3_region":         cfg.S3.Region,
+			"s3_use_ssl":        cfg.S3.UseSSL,
+			"s3_path_style":     cfg.S3.PathStyle,
+			"public_url_prefix": cfg.S3.PublicURLPrefix,
+		},
+	})
 }
 
 // GetMCPSettings returns the master MCP enable/disable switch and config.

@@ -1704,47 +1704,27 @@ allowed-tools:
   - run_command
   - git
   - view_file
-tool-runtime: native_agent_cli
-compatibility: claude-code, opencode, codex, cursor
 ---
 
-# Git 规范协作与代码审查工作流 (git-workflow)
+# Git 协作与代码审查标准作业程序 (git-workflow)
 
-遵循开源与企业级最佳实践的 Git 工作流规范。指导 Agent 在协助开发时保持清洁的 Git 历史与严谨的协作标准。
+规范智能体在工程协同中的 Git 操作流程，杜绝杂乱提交与破坏性操作。
 
-## 💡 工具运行机制说明
-- **工具不需要同步下载！**
-- 本技能中声明的 ` + "`run_command` / `git` / `view_file`" + ` 是宿主 Agent（Claude Code / OpenCode / Codex）自带的原生执行能力，智能体直接在当前终端沙箱中调用本机的 git CLI，零下载依赖、零网络等待。
-
-## 客户端接入指引 (Client Integration)
-
-### 1. Claude Code 接入
-` + "```bash" + `
-# 在项目根目录创建技能目录并保存
-mkdir -p .claude/skills/git-workflow
-# 保存本文件至 .claude/skills/git-workflow/SKILL.md
-` + "```" + `
-在终端交互时直接体验：
-` + "`> 请检查当前 git status 并按照 Conventional Commits 格式整理一次提交`" + `
-
-### 2. OpenCode 接入
-将本文件保存至项目的 ` + "`.opencode/skills/git-workflow/SKILL.md`" + `。OpenCode 会在启动时自动索引元数据，任务匹配时按需激活。
-
-### 3. Codex / Python SDK 接入
-在创建 OpenAI Assistant 或 System Prompt 时载入本 SOP：
-` + "```python" + `
-system_prompt = f"Follow the git-workflow SOP: \n{skill_manifest}"
-` + "```" + `
+## 适用场景
+- 用户要求提交代码变更、整理 commit 历史
+- 分支合并、rebase 与代码冲突排障
+- 发起或自动化审查 Pull Request
 
 ## SOP 执行工作流
-1. **状态探查**：执行 ` + "`git status`" + ` 和 ` + "`git diff --stat`" + ` 确认工作区变更。
-2. **规范提交**：遵循 Angular / Conventional Commits 规范：
-   - ` + "`feat:`" + ` 新功能
-   - ` + "`fix:`" + ` 修复缺陷
-   - ` + "`refactor:`" + ` 重构
-   - ` + "`test:`" + ` 增加测试用例
-3. **安全检查**：提交前确保未将 ` + "`.env`" + `、密钥或编译产物加入暂存区。
-4. **分支与 PR**：基于主干分支创建特性分支，生成结构化 PR 描述。
+1. **工作区状态探查**：执行 run_command("git status") 与 run_command("git diff --stat")，确认所有待提交文件，严格禁止将 .env、临时文件或编译产物加入暂存区。
+2. **规范化提交信息**：遵循 Conventional Commits 规范：
+   - feat: 新增功能
+   - fix: 缺陷修复
+   - refactor: 代码重构（不改变外部行为）
+   - test: 单元测试与用例补充
+   - chore: 依赖更新与配置维护
+3. **冲突解决策略**：先拉取远程最新主干，使用 rebase 模式合并，逐个文件对比解决冲突后执行测试验证。
+4. **代码审查清单**：审查 PR 时核验改动行数、边界保护、向下兼容性与测试覆盖。
 `,
 		},
 		{
@@ -1768,38 +1748,22 @@ allowed-tools:
   - run_command
   - view_file
   - replace_file_content
-tool-runtime: native_agent_cli
-compatibility: claude-code, opencode, codex, cursor
 ---
 
-# TDD 测试驱动开发与缺陷排查 (test-driven-development)
+# TDD 测试驱动开发标准作业程序 (test-driven-development)
 
-防止大模型“盲目写代码”和“引发未知回归”的黄金标准工程实践。
+确保代码正确性、防止 AI 盲目修改与消除回归缺陷的黄金法则。
 
-## 💡 工具运行机制说明
-- **工具不需要同步下载！**
-- 本技能依赖宿主智能体的代码读写工具（` + "`view_file` / `replace_file_content`" + `）以及命令执行器（` + "`run_command`" + `）。智能体调用当前项目的测试运行器（如 ` + "`npm test`" + `、` + "`go test`" + `、` + "`pytest`" + `），全流程在本地执行。
-
-## 客户端接入指引 (Client Integration)
-
-### 1. Claude Code 接入
-` + "```bash" + `
-mkdir -p .claude/skills/test-driven-development
-# 保存为 .claude/skills/test-driven-development/SKILL.md
-` + "```" + `
-
-### 2. OpenCode 接入
-保存至 ` + "`.opencode/skills/test-driven-development/SKILL.md`" + `。
-
-### 3. Codex / Cursor 接入
-在 ` + "`.cursorrules`" + ` 或 Agent 指令中配置：
-` + "`遵守 TDD 流程：在新写代码前必须先运行测试验证其失败，代码完成后再验证其通过。`" + `
+## 适用场景
+- 实现全新业务功能或算法模块
+- 复现并修复线上 Bug
+- 重构现有复杂模块
 
 ## SOP 执行工作流
-1. **Red（红）**：分析需求边界，先编写一个必然失败的最小测试用例，运行测试确保其因缺少实现而失败。
-2. **Green（绿）**：编写最简实现代码，运行测试直到 100% 绿色通过。
-3. **Refactor（重构）**：在测试保护下优化代码结构、消除重复、提高可读性，确保测试持续通过。
-4. **回归防护**：每次重大修改后自动执行全量测试套件。
+1. **Red（编写失败用例）**：在编写任何实现代码前，先构造一个针对新需求或 Bug 的最小失败测试，执行测试确认其失败。
+2. **Green（最小化通过）**：编写最简实现代码，禁止过度设计，直到测试 100% 绿色通过。
+3. **Refactor（安全重构）**：在已有测试套件全量覆盖保护下，优化命名与架构结构，消除坏味道。
+4. **回归全量验证**：执行全量测试套件，确保没有破坏现有功能。
 `,
 		},
 		{
@@ -1823,49 +1787,22 @@ allowed-tools:
   - puppeteer_navigate
   - puppeteer_screenshot
   - puppeteer_click
-tool-runtime: mcp_protocol_server
-compatibility: claude-code, opencode, codex, cursor
 ---
 
-# Playwright 浏览器自动化与 UI 验收 (browser-automation)
+# 网页端到端自动化与视觉验收 (browser-automation)
 
-赋予智能体真正的“眼睛”与操作界面的能力，实现无头浏览器端到端交互。
+赋予智能体操作与感知真实网页界面的能力，实现无头浏览器交互闭环。
 
-## 💡 工具运行机制说明
-- **工具通过 MCP 协议免安装挂载！**
-- 本技能中声明的 ` + "`puppeteer_*`" + ` 工具，由 **MCP 广场**中的 Puppeteer / Playwright MCP Server 提供。
-- 客户端只需在 MCP 配置中启用 Puppeteer 服务，智能体即可通过标准 JSON-RPC 2.0 协议连接无头浏览器，无需在技能包内打包 Chrome 二进制。
-
-## 客户端接入指引 (Client Integration)
-
-### 1. Claude Code 接入
-在项目中使用内置 MCP 或运行：
-` + "```bash" + `
-claude mcp add puppeteer npx -y @modelcontextprotocol/server-puppeteer
-` + "```" + `
-在 ` + "`.claude/skills/browser-automation/SKILL.md`" + ` 注入本规范。
-
-### 2. OpenCode / Cline 接入
-在 ` + "`.cline/mcp_settings.json`" + ` 中配置：
-` + "```json" + `
-{
-  "mcpServers": {
-    "puppeteer": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-puppeteer"]
-    }
-  }
-}
-` + "```" + `
-
-### 3. Codex / Python SDK 接入
-通过 ` + "`mcp`" + ` 官方 Python SDK 连接 Puppeteer stdio 进程调用工具。
+## 适用场景
+- 网页 UI 视觉排版自检与全景截图
+- SPA 单页应用的动态数据加载验证
+- 端到端表单提交与用户交互链路验收
 
 ## SOP 执行工作流
-1. **页面导航**：调用 ` + "`puppeteer_navigate`" + ` 加载目标 URL 并等待网络空闲。
-2. **状态感知**：调用 ` + "`puppeteer_screenshot`" + ` 截取当前视口确认渲染是否正确。
-3. **元素交互**：通过选择器或文本定位元素，调用 ` + "`puppeteer_click`" + ` 或输入文本。
-4. **断言验证**：检查控制台错误日志与关键 DOM 状态。
+1. **导航与页面加载**：调用 puppeteer_navigate 打开目标页面，等待 networkidle 网络空闲。
+2. **视图与状态捕获**：调用 puppeteer_screenshot 捕获页面视口或全景，比对关键排版元素。
+3. **模拟交互与触发**：精确定位选择器，调用 puppeteer_click 执行点击或输入。
+4. **控制台与网络审计**：捕获页面所有 Console 报错及未处理的 Promise Rejection。
 `,
 		},
 		{
@@ -1889,38 +1826,22 @@ allowed-tools:
   - view_file
   - grep
   - run_command
-tool-runtime: native_agent_cli
-compatibility: claude-code, opencode, codex, cursor
 ---
 
-# 生产级代码安全审计与凭据防护 (security-audit)
+# 生产级代码安全审计标准作业程序 (security-audit)
 
-企业级代码质量与安全第一道防线。在代码合入生产前自动识别漏洞风险。
+代码合入生产前的静态安全合规防线。
 
-## 💡 工具运行机制说明
-- **工具不需要同步下载！**
-- 使用 Agent 本地环境提供的代码查看与检索工具（` + "`view_file` / `grep` / `run_command`" + `），结合规则库对仓库进行静态代码审计。
-
-## 客户端接入指引 (Client Integration)
-
-### 1. Claude Code 接入
-` + "```bash" + `
-mkdir -p .claude/skills/security-audit
-# 保存为 .claude/skills/security-audit/SKILL.md
-` + "```" + `
-在 Claude Code 提示：` + "`> 对项目中的 auth 模块进行一次安全审计，检查凭据泄露和 SQL 注入风险`" + `
-
-### 2. OpenCode 接入
-保存至 ` + "`.opencode/skills/security-audit/SKILL.md`" + `。
-
-### 3. Codex / Cursor 接入
-在项目 ` + "`.cursorrules`" + ` 中追加安全审查 SOP 要求。
+## 适用场景
+- 发布前代码审计与合规评估
+- 检索历史代码中的硬编码凭据与敏感信息
+- 排查潜在的 SQL 注入、XSS 与越权访问漏洞
 
 ## SOP 执行工作流
-1. **秘钥泄漏扫描**：扫描是否存在未加入 .gitignore 的 API 密钥（如 ` + "`sk-`" + `）、私钥与明文密码。
-2. **输入验证与防注入**：检查外部参数进入数据库或执行 Shell 时是否采用参数化绑定（Parameterized Queries）。
-3. **鉴权与越权检查**：核查 API 端点的角色与 Token 校验逻辑是否健全。
-4. **输出审计报告**：罗列漏洞位置、严重程度等级（高/中/低）及修复 Diff 代码。
+1. **凭据与秘钥扫描**：使用静态规则扫描全库，检测是否存在以 sk-、Bearer、私钥等特征命名的明文硬编码。
+2. **SQL 与命令注入审计**：检查数据库操作是否全部采用预编译参数化绑定（Parameterized Queries），禁止拼接未经消毒的用户输入。
+3. **越权与鉴权边界校验**：检查接口层是否具备完整的 Session/Token 与角色鉴权守卫。
+4. **生成审计整改清单**：输出结构化风险评估报告，明确危险等级与修复代码片段。
 `,
 		},
 	}

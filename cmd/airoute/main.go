@@ -240,8 +240,18 @@ func runServer(args []string) {
 	defer close(stopSync)
 	synchronizer.StartPeriodicSync(10*time.Second, stopSync)
 
+	// Initialize Pluggable Artifact Storage (Local or Distributed RustFS / S3)
+	storageCfg := cfg.GetStorageConfig()
+	artifactStorage, err := storage.NewArtifactStorage(storageCfg)
+	if err != nil {
+		telemetry.Logger.Warn("failed to initialize configured artifact storage, falling back to local storage", "error", err.Error())
+		artifactStorage, _ = storage.NewLocalStorage(storageCfg.LocalPath)
+	}
+	telemetry.Logger.Info("artifact storage initialized", "driver", artifactStorage.Driver())
+
 	// Initialize Admin Handler
 	adminHandler := controlplane.NewAdminHandler(repo, synchronizer, dispatcher)
+	adminHandler.SetArtifactStorage(artifactStorage)
 
 	// Setup HTTP Engine (Data Plane + Control Plane Admin API + Embedded Web UI)
 	engine := api.SetupRouter(dispatcher, adminHandler)

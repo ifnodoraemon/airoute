@@ -130,8 +130,17 @@ func TestSkills_OnDemandTogglingAndMCP(t *testing.T) {
 	wMan := httptest.NewRecorder()
 	engine.ServeHTTP(wMan, reqMan)
 	assert.Equal(t, http.StatusOK, wMan.Code)
-	assert.Contains(t, wMan.Body.String(), "# Git 规范协作与代码审查工作流")
-	assert.Contains(t, wMan.Body.String(), "Claude Code")
+	assert.Contains(t, wMan.Body.String(), "git-workflow")
+	assert.Contains(t, wMan.Body.String(), "SOP 执行工作流")
+
+	// 2.1 Test Skill ZIP Download
+	reqZip := httptest.NewRequest(http.MethodGet, "/api/v1/skills/git-workflow/download", nil)
+	wZip := httptest.NewRecorder()
+	engine.ServeHTTP(wZip, reqZip)
+	assert.Equal(t, http.StatusOK, wZip.Code)
+	assert.Equal(t, "application/zip", wZip.Header().Get("Content-Type"))
+	assert.Contains(t, wZip.Header().Get("Content-Disposition"), "git-workflow.zip")
+	assert.True(t, wZip.Body.Len() > 0)
 
 	// 3. Test enterprise airoute_data_redact tool
 	redactCallReq := map[string]interface{}{

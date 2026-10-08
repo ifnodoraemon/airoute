@@ -51,4 +51,20 @@ model_validation:
       level: "strict"
       disallow_temperature: true
 
+# 对象存储驱动配置 (Artifact Object Storage)
+# 支持模式: "local" (本地磁盘目录，默认开箱即用) | "s3" / "rustfs" (企业级分布式对象存储)
+# 支持环境变量覆盖: STORAGE_DRIVER, STORAGE_S3_ENDPOINT, STORAGE_S3_BUCKET, STORAGE_S3_ACCESS_KEY, STORAGE_S3_SECRET_KEY
+storage:
+  driver: "${STORAGE_DRIVER:-local}"
+  local_path: "${STORAGE_LOCAL_PATH:-data/storage}"
+  s3:
+    endpoint: "${STORAGE_S3_ENDPOINT:-http://localhost:9000}"   # RustFS / MinIO / S3 服务端点
+    bucket: "${STORAGE_S3_BUCKET:-airoute-skills}"               # 技能包存储桶
+    access_key: "${STORAGE_S3_ACCESS_KEY:-rustfsadmin}"         # S3 Access Key ID
+    secret_key: "${STORAGE_S3_SECRET_KEY:-rustfssecret}"         # S3 Secret Access Key
+    region: "${STORAGE_S3_REGION:-us-east-1}"
+    use_ssl: false
+    path_style: true
+    public_url_prefix: "${STORAGE_S3_PUBLIC_URL_PREFIX:-}"       # 可选的外部 CDN/直链域名
+
 

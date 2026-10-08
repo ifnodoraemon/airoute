@@ -76,6 +76,9 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 		// Public Payment Webhooks
 		r.POST("/api/v1/public/stripe/webhook", adminHandler.StripeWebhook)
 
+		// Public Skill Bundle Download (agentskills.io ZIP format)
+		r.GET("/api/v1/skills/:id/download", adminHandler.DownloadSkillZip)
+
 		// Regular User Self-Service APIs
 		userGroup := r.Group("/api/v1/user")
 		userGroup.Use(adminHandler.AdminAuthMiddleware())
@@ -113,6 +116,8 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 				protected.GET("/models/routes", adminHandler.GetModelRoutes)
 				protected.GET("/pricing", adminHandler.GetPricingRates)
 				protected.GET("/skills", adminHandler.ListSkills)
+				protected.GET("/skills/:id/download", adminHandler.DownloadSkillZip)
+				protected.GET("/storage/status", adminHandler.GetStorageStatus)
 				protected.GET("/mcp/settings", adminHandler.GetMCPSettings)
 				protected.GET("/mcp/servers", adminHandler.ListMCPServers)
 				protected.GET("/logs", adminHandler.ListLogs)
