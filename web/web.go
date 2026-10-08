@@ -36,6 +36,18 @@ func RegisterStaticRoutes(r *gin.Engine) {
 			c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
 		})
 
+		// Serve favicons directly from root /favicon.ico and /favicon.svg
+		if favIco, err := fs.ReadFile(distFS, "dist/favicon.ico"); err == nil {
+			r.GET("/favicon.ico", func(c *gin.Context) {
+				c.Data(http.StatusOK, "image/x-icon", favIco)
+			})
+		}
+		if favSvg, err := fs.ReadFile(distFS, "dist/favicon.svg"); err == nil {
+			r.GET("/favicon.svg", func(c *gin.Context) {
+				c.Data(http.StatusOK, "image/svg+xml", favSvg)
+			})
+		}
+
 		// SPA HTML5 History API fallback: return index.html for client-side routing under /app on page refresh
 		r.NoRoute(func(c *gin.Context) {
 			path := c.Request.URL.Path

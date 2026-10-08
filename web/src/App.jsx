@@ -2161,9 +2161,9 @@ ${playStream ? 'for chunk in response:\n    if chunk.choices[0].delta.content:\n
                       <History className="w-4 h-4 text-sky-500" />
                       <span>{t.navLogs}</span>
                     </div>
-                    {logsLength > 0 && (
+                    {logs.length > 0 && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded-md font-mono bg-slate-100 text-slate-500">
-                        {logsLength}
+                        {logs.length}
                       </span>
                     )}
                   </button>
