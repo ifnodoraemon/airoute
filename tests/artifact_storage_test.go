@@ -144,8 +144,8 @@ func TestS3Storage_WithMockRustFS(t *testing.T) {
 	s3Cfg := config.S3Config{
 		Endpoint:  s3Server.URL,
 		Bucket:    "airoute-skills",
-		AccessKey: "rustfsadmin",
-		SecretKey: "rustfssecret",
+		AccessKey: "airoute",
+		SecretKey: "airoute_cluster_secret_pass_2026",
 		Region:    "us-east-1",
 		UseSSL:    false,
 		PathStyle: true,
@@ -156,8 +156,8 @@ func TestS3Storage_WithMockRustFS(t *testing.T) {
 	assert.Equal(t, "s3", s3Stor.Driver())
 
 	ctx := context.Background()
-	key := "skills/rustfs-demo/rustfs-demo.zip"
-	mockData := []byte("PK\x03\x04RUSTFS_MOCK_BUNDLE")
+	key := "skills/airoute-bundle/airoute-bundle.zip"
+	mockData := []byte("PK\x03\x04AIROUTE_MOCK_BUNDLE")
 
 	// 1. Put object
 	err = s3Stor.Put(ctx, key, bytes.NewReader(mockData), int64(len(mockData)), "application/zip")
@@ -183,7 +183,7 @@ func TestS3Storage_WithMockRustFS(t *testing.T) {
 	assert.Contains(t, dlURL, "X-Amz-Algorithm=AWS4-HMAC-SHA256")
 	assert.Contains(t, dlURL, "X-Amz-Signature=")
 	assert.Contains(t, dlURL, "X-Amz-Expires=900")
-	assert.Contains(t, dlURL, "rustfsadmin")
+	assert.Contains(t, dlURL, "airoute")
 
 	// 5. Delete
 	err = s3Stor.Delete(ctx, key)

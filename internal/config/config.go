@@ -213,8 +213,8 @@ func DefaultConfig() *Config {
 			S3: S3Config{
 				Endpoint:  "http://localhost:9000",
 				Bucket:    "airoute-skills",
-				AccessKey: "rustfsadmin",
-				SecretKey: "rustfssecret",
+				AccessKey: "airoute",
+				SecretKey: "airoute_cluster_secret_pass_2026",
 				Region:    "us-east-1",
 				UseSSL:    false,
 				PathStyle: true,
@@ -314,8 +314,8 @@ func (c *Config) GetStorageConfig() StorageConfig {
 		S3: S3Config{
 			Endpoint:  "http://localhost:9000",
 			Bucket:    "airoute-skills",
-			AccessKey: "rustfsadmin",
-			SecretKey: "rustfssecret",
+			AccessKey: "airoute",
+			SecretKey: "airoute_cluster_secret_pass_2026",
 			Region:    "us-east-1",
 			UseSSL:    false,
 			PathStyle: true,
