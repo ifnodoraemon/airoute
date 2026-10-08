@@ -347,10 +347,19 @@ func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 		defer close(eventChan)
 
 		reader := bufio.NewReader(resp.Body)
+		sendEvent := func(ev *model.StreamEvent) bool {
+			select {
+			case eventChan <- ev:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
+
 		for {
 			select {
 			case <-ctx.Done():
-				eventChan <- &model.StreamEvent{Err: ctx.Err()}
+				sendEvent(&model.StreamEvent{Err: ctx.Err()})
 				return
 			default:
 			}
@@ -358,7 +367,7 @@ func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 			line, err := reader.ReadBytes('\n')
 			if err != nil {
 				if err != io.EOF {
-					eventChan <- &model.StreamEvent{Err: err}
+					sendEvent(&model.StreamEvent{Err: err})
 				}
 				return
 			}
@@ -374,21 +383,25 @@ func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 
 			dataContent := strings.TrimSpace(strings.TrimPrefix(lineStr, "data:"))
 			if dataContent == "[DONE]" {
-				eventChan <- &model.StreamEvent{IsDone: true}
+				sendEvent(&model.StreamEvent{IsDone: true})
 				return
 			}
 
 			var chunk model.ChatCompletionChunk
 			if err := json.Unmarshal([]byte(dataContent), &chunk); err != nil {
 				// send raw event if parsing fails
-				eventChan <- &model.StreamEvent{Raw: line}
+				if !sendEvent(&model.StreamEvent{Raw: line}) {
+					return
+				}
 				continue
 			}
 			chunk.Model = req.Model
 
-			eventChan <- &model.StreamEvent{
+			if !sendEvent(&model.StreamEvent{
 				Chunk: &chunk,
 				Raw:   line,
+			}) {
+				return
 			}
 		}
 	}()

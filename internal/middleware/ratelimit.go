@@ -40,6 +40,25 @@ func (tb *tokenBucket) allow() bool {
 	return false
 }
 
+// Allow reports whether a token is available and consumes it.
+func (tb *tokenBucket) Allow() bool {
+	return tb.allow()
+}
+
+// Capacity returns current bucket capacity.
+func (tb *tokenBucket) Capacity() float64 {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	return tb.capacity
+}
+
+// Rate returns current refill rate.
+func (tb *tokenBucket) Rate() float64 {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	return tb.rate
+}
+
 // RateLimiter manages buckets for all API keys.
 type RateLimiter struct {
 	mu      sync.RWMutex
@@ -50,25 +69,45 @@ var GlobalRateLimiter = &RateLimiter{
 	buckets: make(map[string]*tokenBucket),
 }
 
+// GetBucket returns or updates token bucket for key.
+func (rl *RateLimiter) GetBucket(key string, rpm int) *tokenBucket {
+	return rl.getBucket(key, rpm)
+}
+
 func (rl *RateLimiter) getBucket(key string, rpm int) *tokenBucket {
+	expectedCapacity := float64(rpm)
+	expectedRate := float64(rpm) / 60.0
+
+	updateBucket := func(b *tokenBucket) *tokenBucket {
+		b.mu.Lock()
+		if b.capacity != expectedCapacity || b.rate != expectedRate {
+			b.capacity = expectedCapacity
+			b.rate = expectedRate
+			if b.tokens > expectedCapacity {
+				b.tokens = expectedCapacity
+			}
+		}
+		b.mu.Unlock()
+		return b
+	}
+
 	rl.mu.RLock()
 	b, exists := rl.buckets[key]
 	rl.mu.RUnlock()
 	if exists {
-		return b
+		return updateBucket(b)
 	}
 
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 	if b, exists = rl.buckets[key]; exists {
-		return b
+		return updateBucket(b)
 	}
 
-	rate := float64(rpm) / 60.0
 	b = &tokenBucket{
-		tokens:     float64(rpm),
-		capacity:   float64(rpm),
-		rate:       rate,
+		tokens:     expectedCapacity,
+		capacity:   expectedCapacity,
+		rate:       expectedRate,
 		lastUpdate: time.Now(),
 	}
 	rl.buckets[key] = b

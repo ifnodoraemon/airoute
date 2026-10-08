@@ -461,8 +461,10 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			"attempt", i+1,
 		)
 
-		streamChan, err := prov.ChatCompleteStream(ctx, req, ch)
+		attemptCtx, attemptCancel := context.WithCancel(ctx)
+		streamChan, err := prov.ChatCompleteStream(attemptCtx, req, ch)
 		if err != nil {
+			attemptCancel()
 			d.circuitBreaker.RecordFailure(ch.Name)
 			lastErr = err
 			attempted = append(attempted, ch.Name)
@@ -478,6 +480,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		select {
 		case firstEvent, ok := <-streamChan:
 			if !ok {
+				attemptCancel()
 				d.circuitBreaker.RecordFailure(ch.Name)
 				lastErr = fmt.Errorf("channel %s closed stream without events", ch.Name)
 				attempted = append(attempted, ch.Name)
@@ -486,6 +489,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			}
 
 			if firstEvent.Err != nil {
+				attemptCancel()
 				d.circuitBreaker.RecordFailure(ch.Name)
 				lastErr = firstEvent.Err
 				attempted = append(attempted, ch.Name)
@@ -500,15 +504,13 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			// First token healthy! Mark healthy in circuit breaker
 			d.circuitBreaker.RecordSuccess(ch.Name)
 			// Expose the full routing chain (e.g. "A→B") for audit logging.
-			// Every forwarded event is stamped: consumers short-circuit on
-			// IsDone/Err before reading Channel, so a stream that ends on its
-			// first event would otherwise lose the audit stamp entirely.
 			trail := formatChannelTrail(ctx, attempted, ch.Name)
 			firstEvent.Channel = trail
 
 			// Wrap and return combined stream with leak-proof cancellation context
 			outChan := make(chan *model.StreamEvent, 64)
-			go func(first *model.StreamEvent, in <-chan *model.StreamEvent) {
+			go func(first *model.StreamEvent, in <-chan *model.StreamEvent, cancel context.CancelFunc) {
+				defer cancel()
 				defer close(outChan)
 				select {
 				case outChan <- first:
@@ -531,11 +533,17 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 						}
 					}
 				}
-			}(firstEvent, streamChan)
+			}(firstEvent, streamChan, attemptCancel)
 
 			return outChan, nil
 
 		case <-time.After(firstTokenTimeout):
+			attemptCancel()
+			// Drain remaining events in background so upstream sender unblocks
+			go func(c <-chan *model.StreamEvent) {
+				for range c {
+				}
+			}(streamChan)
 			d.circuitBreaker.RecordFailure(ch.Name)
 			lastErr = fmt.Errorf("channel %s timed out waiting for first token (%v)", ch.Name, firstTokenTimeout)
 			attempted = append(attempted, ch.Name)
@@ -544,6 +552,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			continue
 
 		case <-ctx.Done():
+			attemptCancel()
 			return nil, ctx.Err()
 		}
 	}

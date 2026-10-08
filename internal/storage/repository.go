@@ -196,12 +196,12 @@ func (r *Repository) CreateChannel(rec *ChannelRecord) error {
 		rec.TimeoutSeconds = 60
 	}
 
-	res, err := r.db.Exec(`INSERT INTO channels (name, type, base_url, api_key, models, model_mapping, protocols, priority, weight, timeout_seconds, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+	id, err := r.db.InsertGetID(`INSERT INTO channels (name, type, base_url, api_key, models, model_mapping, protocols, priority, weight, timeout_seconds, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 		rec.Name, rec.Type, rec.BaseURL, rec.APIKey, string(modelsBytes), string(mappingBytes), string(protocolsBytes), rec.Priority, rec.Weight, rec.TimeoutSeconds, rec.Status)
 	if err != nil {
 		return err
 	}
-	rec.ID, _ = res.LastInsertId()
+	rec.ID = id
 	return nil
 }
 
@@ -328,12 +328,12 @@ func (r *Repository) CreateAPIKey(rec *APIKeyRecord) error {
 		}
 	}
 
-	res, err := r.db.Exec(`INSERT INTO api_keys (key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, used_cost, group_name, user_id, status, format_validation, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+	id, err := r.db.InsertGetID(`INSERT INTO api_keys (key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, used_cost, group_name, user_id, status, format_validation, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 		rec.Key, rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, rec.UsedTokens, rec.UsedCost, rec.GroupName, rec.UserID, rec.Status, rec.FormatValidation)
 	if err != nil {
 		return err
 	}
-	rec.ID, _ = res.LastInsertId()
+	rec.ID = id
 	return nil
 }
 
@@ -908,6 +908,16 @@ func (r *Repository) GetStatsOverview() (*StatsOverview, error) {
 	return stats, nil
 }
 
+// CountActiveKeys returns the count of active API keys in the database.
+func (r *Repository) CountActiveKeys() int {
+	if r == nil || r.db == nil {
+		return 0
+	}
+	var count int
+	_ = r.db.QueryRow(`SELECT COUNT(*) FROM api_keys WHERE status='active'`).Scan(&count)
+	return count
+}
+
 // ToModelChannels converts database ChannelRecords to Data Plane model.ChannelConfigs.
 func (r *Repository) ToModelChannels() ([]model.ChannelConfig, error) {
 	records, err := r.ListChannels()
@@ -1021,15 +1031,12 @@ func (r *Repository) CreateUser(u *UserRecord) error {
 	if u.GroupName == "" {
 		u.GroupName = "default"
 	}
-	res, err := r.db.Exec(`INSERT INTO users (username, email, password_hash, role, status, balance, group_name, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+	id, err := r.db.InsertGetID(`INSERT INTO users (username, email, password_hash, role, status, balance, group_name, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 		u.Username, u.Email, u.PasswordHash, u.Role, u.Status, u.Balance, u.GroupName)
 	if err != nil {
 		return err
 	}
-	id, err := res.LastInsertId()
-	if err == nil {
-		u.ID = id
-	}
+	u.ID = id
 	return nil
 }
 
@@ -1156,20 +1163,17 @@ func (r *Repository) CreateRedemptionCode(rec *RedemptionCodeRecord) error {
 	if rec.Status == "" {
 		rec.Status = "active"
 	}
-	res, err := r.db.Exec(`INSERT INTO redemption_codes (code, name, amount, status, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+	id, err := r.db.InsertGetID(`INSERT INTO redemption_codes (code, name, amount, status, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 		rec.Code, rec.Name, rec.Amount, rec.Status)
 	if err != nil {
-		// SQLite table doesn't have updated_at, handle gracefully
-		res, err = r.db.Exec(`INSERT INTO redemption_codes (code, name, amount, status) VALUES (?, ?, ?, ?)`,
+		// Table doesn't have updated_at, handle gracefully
+		id, err = r.db.InsertGetID(`INSERT INTO redemption_codes (code, name, amount, status) VALUES (?, ?, ?, ?)`,
 			rec.Code, rec.Name, rec.Amount, rec.Status)
 		if err != nil {
 			return err
 		}
 	}
-	id, err := res.LastInsertId()
-	if err == nil {
-		rec.ID = id
-	}
+	rec.ID = id
 	return nil
 }
 
@@ -1281,15 +1285,12 @@ func (r *Repository) CreateRechargeOrder(rec *RechargeOrderRecord) error {
 	if rec.Status == "" {
 		rec.Status = "pending"
 	}
-	res, err := r.db.Exec(`INSERT INTO recharge_orders (order_no, username, amount, currency, channel, stripe_session_id, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+	id, err := r.db.InsertGetID(`INSERT INTO recharge_orders (order_no, username, amount, currency, channel, stripe_session_id, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 		rec.OrderNo, rec.Username, rec.Amount, rec.Currency, rec.Channel, rec.StripeSessionID, rec.Status)
 	if err != nil {
 		return err
 	}
-	id, err := res.LastInsertId()
-	if err == nil {
-		rec.ID = id
-	}
+	rec.ID = id
 	return nil
 }
 

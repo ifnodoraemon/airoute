@@ -25,7 +25,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key, X-API-Key, anthropic-version, X-Session-ID, X-Request-ID, X-Airoute-Trace-Id")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key, X-API-Key, anthropic-version, x-goog-api-key, x-admin-token, X-Session-ID, X-Request-ID, X-Airoute-Trace-Id, MCP-Protocol-Version, Stripe-Signature")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
@@ -88,6 +88,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 			userGroup.POST("/wallet/redeem", adminHandler.RedeemWalletCode)
 			userGroup.POST("/wallet/recharge/stripe/session", adminHandler.CreateStripeRechargeSession)
 			userGroup.POST("/wallet/recharge/sandbox", adminHandler.SandboxRecharge)
+			userGroup.GET("/wallet/recharge/sandbox", adminHandler.SandboxRecharge)
 			userGroup.GET("/wallet/orders", adminHandler.ListUserRechargeOrders)
 			userGroup.GET("/keys", adminHandler.ListUserKeys)
 			userGroup.POST("/keys", adminHandler.CreateUserKey)

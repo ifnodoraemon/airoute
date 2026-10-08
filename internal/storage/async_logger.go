@@ -211,7 +211,15 @@ func (al *AsyncLogger) redisStreamWorker(client *distributed.Client) {
 		}
 
 		if len(streamBatch) > 0 {
-			_ = al.repo.BatchRecordUsageLogs(streamBatch)
+			err := al.repo.BatchRecordUsageLogs(streamBatch)
+			if err != nil {
+				telemetry.Logger.Error("failed to batch write logs from Redis stream, delaying ack for retry",
+					"error", err.Error(),
+					"count", len(streamBatch),
+				)
+				time.Sleep(300 * time.Millisecond)
+				continue
+			}
 		}
 
 		if len(ackIDs) > 0 {

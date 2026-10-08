@@ -520,14 +520,7 @@ func (h *AdminHandler) AdminAuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// In automated Go test runners (*.test or /_test/), allow tests that do not inject auth headers
-		isTestingBinary := strings.HasSuffix(os.Args[0], ".test") || strings.Contains(os.Args[0], "/_test/")
-		if isTestingBinary && c.GetHeader("Authorization") == "" && c.Query("token") == "" && c.GetHeader("x-admin-token") == "" {
-			c.Set("admin_claims", &AdminClaims{Username: "test-admin", Role: "admin"})
-			c.Set("admin_username", "test-admin")
-			c.Next()
-			return
-		}
+
 
 		authHeader := c.GetHeader("Authorization")
 		var token string

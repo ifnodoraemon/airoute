@@ -77,7 +77,9 @@ func TestAPIKey_ActiveVsDisabled(t *testing.T) {
 	bodyBytes, _ := json.Marshal(map[string]any{
 		"status": disabledStatus,
 	})
+	adminToken, _ := controlplane.GenerateAdminToken("admin", "admin", time.Hour)
 	updateReq := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/admin/keys/%d", keyRec.ID), bytes.NewReader(bodyBytes))
+	updateReq.Header.Set("Authorization", "Bearer "+adminToken)
 	updateReq.Header.Set("Content-Type", "application/json")
 	updateW := httptest.NewRecorder()
 	engine.ServeHTTP(updateW, updateReq)
@@ -106,6 +108,7 @@ func TestAPIKey_ActiveVsDisabled(t *testing.T) {
 		"status": activeStatus,
 	})
 	reEnableReq := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/admin/keys/%d", keyRec.ID), bytes.NewReader(bodyActiveBytes))
+	reEnableReq.Header.Set("Authorization", "Bearer "+adminToken)
 	reEnableReq.Header.Set("Content-Type", "application/json")
 	reEnableW := httptest.NewRecorder()
 	engine.ServeHTTP(reEnableW, reEnableReq)

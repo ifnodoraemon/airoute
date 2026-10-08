@@ -27,6 +27,7 @@ import (
 type mcpSession struct {
 	mu     sync.Mutex
 	ch     chan []byte
+	apiKey string
 	closed bool
 }
 
@@ -99,6 +100,33 @@ type mcpToolResult struct {
 	IsError bool             `json:"isError,omitempty"`
 }
 
+type mcpContextKey string
+
+const contextKeyCallerKey mcpContextKey = "mcp_caller_key"
+
+func extractMCPKey(c *gin.Context) string {
+	authH := c.GetHeader("Authorization")
+	if strings.HasPrefix(authH, "Bearer ") {
+		return strings.TrimPrefix(authH, "Bearer ")
+	}
+	if k := c.GetHeader("X-API-Key"); k != "" {
+		return k
+	}
+	if k := c.GetHeader("x-api-key"); k != "" {
+		return k
+	}
+	if k := c.Query("apiKey"); k != "" {
+		return k
+	}
+	if k := c.Query("token"); k != "" {
+		return k
+	}
+	if k := c.Query("key"); k != "" {
+		return k
+	}
+	return ""
+}
+
 func genSessionID() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
@@ -126,8 +154,9 @@ func (h *MCPHandler) HandleMCPSSE(c *gin.Context) {
 		return
 	}
 
+	callerKey := extractMCPKey(c)
 	sessionID := genSessionID()
-	sess := &mcpSession{ch: make(chan []byte, 32)}
+	sess := &mcpSession{ch: make(chan []byte, 32), apiKey: callerKey}
 	h.sessions.Store(sessionID, sess)
 	defer func() {
 		h.sessions.Delete(sessionID)
@@ -176,10 +205,24 @@ func (h *MCPHandler) HandleMCPMessages(c *gin.Context) {
 		return
 	}
 
-	res := h.ProcessRPC(c.Request.Context(), &req)
+	callerKey := extractMCPKey(c)
+	sessionID := c.Query("sessionId")
+	if sessionID != "" {
+		if sVal, ok := h.sessions.Load(sessionID); ok {
+			if sess, ok := sVal.(*mcpSession); ok && callerKey == "" {
+				callerKey = sess.apiKey
+			}
+		}
+	}
+
+	reqCtx := c.Request.Context()
+	if callerKey != "" {
+		reqCtx = context.WithValue(reqCtx, contextKeyCallerKey, callerKey)
+	}
+
+	res := h.ProcessRPC(reqCtx, &req)
 
 	// If this request came via an SSE session, push to SSE channel too
-	sessionID := c.Query("sessionId")
 	if sessionID != "" {
 		if sVal, ok := h.sessions.Load(sessionID); ok {
 			if sess, ok := sVal.(*mcpSession); ok {
@@ -1015,6 +1058,26 @@ func (h *MCPHandler) executeTool(ctx context.Context, name string, args map[stri
 			return "Error: 'model' and 'message' are required arguments", true
 		}
 
+		apiKey, _ := ctx.Value(contextKeyCallerKey).(string)
+		if apiKey == "" {
+			if k, ok := args["api_key"].(string); ok && k != "" {
+				apiKey = k
+			}
+		}
+
+		var callerKeyRec *storage.APIKeyRecord
+		if h.repo != nil {
+			if apiKey != "" {
+				kRec, err := h.repo.GetAPIKeyByKey(apiKey)
+				if err != nil || kRec == nil || kRec.Status != "active" {
+					return "Error: Invalid or disabled API key provided", true
+				}
+				callerKeyRec = kRec
+			} else if h.repo.CountActiveKeys() > 0 {
+				return "Error: Authentication required for airoute_chat. Please provide a valid API key via Authorization header, ?apiKey= query param, or 'api_key' argument.", true
+			}
+		}
+
 		chatReq := &model.ChatCompletionRequest{
 			Model: modelName,
 			Messages: []model.ChatMessage{
@@ -1043,11 +1106,26 @@ func (h *MCPHandler) executeTool(ctx context.Context, name string, args map[stri
 				cachedTokens = resp.Usage.GetCachedTokens()
 			}
 
+			callerGroup := "default"
+			callerAPIKey := "mcp-session"
+			callerTenantID := "mcp"
+			if callerKeyRec != nil {
+				if callerKeyRec.GroupName != "" {
+					callerGroup = callerKeyRec.GroupName
+				}
+				callerAPIKey = callerKeyRec.Key
+				callerTenantID = callerKeyRec.TenantID
+			}
+
 			var cost float64
 			var isOffPeak bool
 			var offPeakDiscount float64 = 1.0
 			if billing.GlobalEngine != nil {
-				cost, _, _, isOffPeak, offPeakDiscount = billing.GlobalEngine.CalculateCostDetailedWithGroup(chatReq.Model, "default", pTokens, cTokens, cachedTokens, time.Now())
+				cost, _, _, isOffPeak, offPeakDiscount = billing.GlobalEngine.CalculateCostDetailedWithGroup(chatReq.Model, callerGroup, pTokens, cTokens, cachedTokens, time.Now())
+			}
+
+			if callerKeyRec != nil && callerKeyRec.UserID > 0 && cost > 0 {
+				_ = h.repo.DeductUserBalance(callerKeyRec.UserID, cost)
 			}
 
 			telemetry.GlobalMetrics.RecordRequest(true, dur, pTokens, cTokens)
@@ -1057,7 +1135,8 @@ func (h *MCPHandler) executeTool(ctx context.Context, name string, args map[stri
 					ChatID:           resp.ID,
 					Channel:          resp.Channel,
 					SessionID:        sessionID,
-					APIKey:           "mcp-session",
+					APIKey:           callerAPIKey,
+					TenantID:         callerTenantID,
 					Model:            chatReq.Model,
 					PromptTokens:     pTokens,
 					CompletionTokens: cTokens,
@@ -1079,15 +1158,44 @@ func (h *MCPHandler) executeTool(ctx context.Context, name string, args map[stri
 
 	case "airoute_query_logs", "nano_query_logs":
 		if h.repo != nil {
+			apiKey, _ := ctx.Value(contextKeyCallerKey).(string)
+			if apiKey == "" {
+				if k, ok := args["api_key"].(string); ok && k != "" {
+					apiKey = k
+				}
+			}
+
+			var callerKeyRec *storage.APIKeyRecord
+			if apiKey != "" {
+				kRec, err := h.repo.GetAPIKeyByKey(apiKey)
+				if err == nil && kRec != nil {
+					callerKeyRec = kRec
+				}
+			}
+
 			sessionID, _ := args["session_id"].(string)
+
+			// Tenant isolation & access control:
+			// If not authenticated, require explicit session_id so callers cannot dump the entire database
+			if callerKeyRec == nil && sessionID == "" && h.repo.CountActiveKeys() > 0 {
+				return "Error: Authentication required to query global logs. Unauthenticated queries must specify a 'session_id'.", true
+			}
+
 			limit := 10
 			if lVal, ok := args["limit"].(float64); ok && lVal > 0 {
 				limit = int(lVal)
 			}
-			logs, err := h.repo.ListUsageLogsWithFilter(storage.LogFilter{
+			filter := storage.LogFilter{
 				Limit:     limit,
 				SessionID: sessionID,
-			})
+			}
+			if callerKeyRec != nil {
+				filter.APIKeys = []string{callerKeyRec.Key}
+				filter.ScopeByAPIKeys = true
+				filter.TenantID = callerKeyRec.TenantID
+			}
+
+			logs, err := h.repo.ListUsageLogsWithFilter(filter)
 			if err != nil {
 				return fmt.Sprintf("Query logs error: %v", err), true
 			}

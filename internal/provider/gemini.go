@@ -463,10 +463,19 @@ func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 		msgID := fmt.Sprintf("chatcmpl-gemini-%d", time.Now().UnixNano())
 		created := time.Now().Unix()
 
+		sendEvent := func(ev *model.StreamEvent) bool {
+			select {
+			case eventChan <- ev:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
+
 		for {
 			select {
 			case <-ctx.Done():
-				eventChan <- &model.StreamEvent{Err: ctx.Err()}
+				sendEvent(&model.StreamEvent{Err: ctx.Err()})
 				return
 			default:
 			}
@@ -474,7 +483,7 @@ func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 			line, err := reader.ReadBytes('\n')
 			if err != nil {
 				if err != io.EOF {
-					eventChan <- &model.StreamEvent{Err: err}
+					sendEvent(&model.StreamEvent{Err: err})
 				}
 				return
 			}
@@ -490,7 +499,7 @@ func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 
 			dataContent := strings.TrimSpace(strings.TrimPrefix(lineStr, "data:"))
 			if dataContent == "[DONE]" {
-				eventChan <- &model.StreamEvent{IsDone: true}
+				sendEvent(&model.StreamEvent{IsDone: true})
 				return
 			}
 
@@ -561,7 +570,9 @@ func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 				Usage: usage,
 			}
 
-			eventChan <- &model.StreamEvent{Chunk: chunk}
+			if !sendEvent(&model.StreamEvent{Chunk: chunk}) {
+				return
+			}
 		}
 	}()
 

@@ -371,10 +371,19 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 		inputTokens := 0
 		outputTokens := 0
 
+		sendEvent := func(ev *model.StreamEvent) bool {
+			select {
+			case eventChan <- ev:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
+
 		for {
 			select {
 			case <-ctx.Done():
-				eventChan <- &model.StreamEvent{Err: ctx.Err()}
+				sendEvent(&model.StreamEvent{Err: ctx.Err()})
 				return
 			default:
 			}
@@ -382,7 +391,7 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 			line, err := reader.ReadBytes('\n')
 			if err != nil {
 				if err != io.EOF {
-					eventChan <- &model.StreamEvent{Err: err}
+					sendEvent(&model.StreamEvent{Err: err})
 				}
 				return
 			}
@@ -431,7 +440,9 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 							},
 						},
 					}
-					eventChan <- &model.StreamEvent{Chunk: chunk}
+					if !sendEvent(&model.StreamEvent{Chunk: chunk}) {
+						return
+					}
 
 				case "content_block_start":
 					blockIdx := 0
@@ -465,7 +476,9 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 									},
 								},
 							}
-							eventChan <- &model.StreamEvent{Chunk: chunk}
+							if !sendEvent(&model.StreamEvent{Chunk: chunk}) {
+								return
+							}
 						}
 					}
 
@@ -490,7 +503,9 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 									},
 								},
 							}
-							eventChan <- &model.StreamEvent{Chunk: chunk}
+							if !sendEvent(&model.StreamEvent{Chunk: chunk}) {
+								return
+							}
 						} else if partial, ok := delta["partial_json"].(string); ok {
 							chunk := &model.ChatCompletionChunk{
 								ID:      messageID,
@@ -514,7 +529,9 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 									},
 								},
 							}
-							eventChan <- &model.StreamEvent{Chunk: chunk}
+							if !sendEvent(&model.StreamEvent{Chunk: chunk}) {
+								return
+							}
 						}
 					}
 
@@ -553,10 +570,12 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 							TotalTokens:      inputTokens + outputTokens,
 						},
 					}
-					eventChan <- &model.StreamEvent{Chunk: chunk}
+					if !sendEvent(&model.StreamEvent{Chunk: chunk}) {
+						return
+					}
 
 				case "message_stop":
-					eventChan <- &model.StreamEvent{IsDone: true}
+					sendEvent(&model.StreamEvent{IsDone: true})
 					return
 				}
 			}

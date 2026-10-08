@@ -127,6 +127,28 @@ func (s *CustomOffPeakStrategy) Evaluate(p *storage.ModelPriceRecord, ctx *OffPe
 		}
 	}
 
+	// 4. If no custom multi-slots configured, evaluate default start/end window
+	if len(slots) == 0 && (p.OffPeakStart != "" || p.OffPeakEnd != "") {
+		startM := parseTimeToMinutes(p.OffPeakStart)
+		endM := parseTimeToMinutes(p.OffPeakEnd)
+		if startM == 0 && endM == 0 {
+			startM = 0
+			endM = 510 // 08:30
+		}
+		var inWindow bool
+		if startM <= endM {
+			inWindow = ctx.CurrentM >= startM && ctx.CurrentM < endM
+		} else {
+			inWindow = ctx.CurrentM >= startM || ctx.CurrentM < endM
+		}
+		if inWindow {
+			matched = true
+			if ctx.Discount < bestDiscount {
+				bestDiscount = ctx.Discount
+			}
+		}
+	}
+
 	if matched {
 		return true, bestDiscount
 	}

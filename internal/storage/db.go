@@ -103,6 +103,37 @@ func (tx *Tx) QueryRow(query string, args ...any) *sql.Row {
 	return tx.Tx.QueryRow(tx.db.Rebind(query), args...)
 }
 
+// InsertGetID executes an INSERT query and returns the newly generated auto-increment ID
+// in a dialect-agnostic way (RETURNING id on Postgres, LastInsertId on SQLite).
+func (db *DB) InsertGetID(query string, args ...any) (int64, error) {
+	if db.Dialect() == "postgres" {
+		queryWithReturning := query + " RETURNING id"
+		var id int64
+		err := db.QueryRow(queryWithReturning, args...).Scan(&id)
+		return id, err
+	}
+	res, err := db.Exec(query, args...)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// InsertGetID executes an INSERT query within a transaction and returns the newly generated auto-increment ID.
+func (tx *Tx) InsertGetID(query string, args ...any) (int64, error) {
+	if tx.db != nil && tx.db.Dialect() == "postgres" {
+		queryWithReturning := query + " RETURNING id"
+		var id int64
+		err := tx.QueryRow(queryWithReturning, args...).Scan(&id)
+		return id, err
+	}
+	res, err := tx.Exec(query, args...)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
 // Begin begins a new transaction wrapped with dialect rebind support.
 func (db *DB) Begin() (*Tx, error) {
 	tx, err := db.DB.Begin()

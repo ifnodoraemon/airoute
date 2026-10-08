@@ -298,19 +298,33 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	}
 
 	var recordOnce sync.Once
+	var streamError error
 	recordStreamEnd := func() {
 		dur := time.Since(start)
-		// Fallback token estimation if upstream provider did not report usage
-		if totalPromptTokens == 0 && approxPromptChars > 0 {
-			totalPromptTokens = approxPromptChars / 3
-			if totalPromptTokens < 1 {
-				totalPromptTokens = 1
+		statusCode := http.StatusOK
+		success := true
+		if streamError != nil || (c.Request.Context().Err() != nil && totalCompTokens == 0 && accumulatedCompChars == 0) {
+			success = false
+			statusCode = http.StatusBadGateway
+			if c.Request.Context().Err() != nil {
+				statusCode = 499
 			}
-		}
-		if totalCompTokens == 0 && accumulatedCompChars > 0 {
-			totalCompTokens = accumulatedCompChars / 3
-			if totalCompTokens < 1 {
-				totalCompTokens = 1
+			if totalCompTokens == 0 && accumulatedCompChars == 0 {
+				totalPromptTokens = 0
+			}
+		} else {
+			// Fallback token estimation if upstream provider did not report usage on successful completion
+			if totalPromptTokens == 0 && approxPromptChars > 0 {
+				totalPromptTokens = approxPromptChars / 3
+				if totalPromptTokens < 1 {
+					totalPromptTokens = 1
+				}
+			}
+			if totalCompTokens == 0 && accumulatedCompChars > 0 {
+				totalCompTokens = accumulatedCompChars / 3
+				if totalCompTokens < 1 {
+					totalCompTokens = 1
+				}
 			}
 		}
 
@@ -318,11 +332,11 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 		var isOffPeak bool
 		var offPeakDiscount float64 = 1.0
 		keyGroup := getKeyGroup(c)
-		if billing.GlobalEngine != nil {
+		if success && billing.GlobalEngine != nil {
 			cost, savedCost, _, isOffPeak, offPeakDiscount = billing.GlobalEngine.CalculateCostDetailedWithGroup(req.Model, keyGroup, totalPromptTokens, totalCompTokens, totalCachedTokens, time.Now())
 		}
 		_ = savedCost
-		telemetry.GlobalMetrics.RecordRequestWithModel(req.Model, true, dur, totalPromptTokens, totalCompTokens)
+		telemetry.GlobalMetrics.RecordRequestWithModel(req.Model, success, dur, totalPromptTokens, totalCompTokens)
 		if storage.GlobalAsyncLogger != nil {
 			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 				TraceID:          middleware.GetTraceID(c),
@@ -341,7 +355,7 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 				OffPeakDiscount:  offPeakDiscount,
 				DurationMs:       dur.Milliseconds(),
 				TTFTMs:           ttftDuration.Milliseconds(),
-				StatusCode:       http.StatusOK,
+				StatusCode:       statusCode,
 			})
 		}
 	}
@@ -369,6 +383,7 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 			}
 
 			if event.Err != nil {
+				streamError = event.Err
 				telemetry.Logger.Error("stream error received mid-flight", "error", event.Err.Error())
 				errJSON, _ := json.Marshal(gin.H{
 					"error": gin.H{

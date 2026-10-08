@@ -112,7 +112,9 @@ func TestAPI_AdminCRUDAndHotReload(t *testing.T) {
 	}
 	payload, _ := json.Marshal(newCh)
 
+	token, _ := controlplane.GenerateAdminToken("admin", "admin", time.Hour)
 	reqCreate := httptest.NewRequest(http.MethodPost, "/api/v1/admin/channels", bytes.NewReader(payload))
+	reqCreate.Header.Set("Authorization", "Bearer "+token)
 	reqCreate.Header.Set("Content-Type", "application/json")
 	wCreate := httptest.NewRecorder()
 	engine.ServeHTTP(wCreate, reqCreate)
@@ -143,6 +145,7 @@ func TestAPI_AdminCRUDAndHotReload(t *testing.T) {
 	// 4. Create an API key via Admin API
 	keyPayload := []byte(`{"tenant_id": "test-team", "key": "sk-gw-admin-test", "rpm": 120}`)
 	reqKey := httptest.NewRequest(http.MethodPost, "/api/v1/admin/keys", bytes.NewReader(keyPayload))
+	reqKey.Header.Set("Authorization", "Bearer "+token)
 	reqKey.Header.Set("Content-Type", "application/json")
 	wKey := httptest.NewRecorder()
 	engine.ServeHTTP(wKey, reqKey)
@@ -171,6 +174,7 @@ func TestAPI_AdminCRUDAndHotReload(t *testing.T) {
 		StatusCode: 200,
 	})
 	reqLogs := httptest.NewRequest(http.MethodGet, "/api/v1/admin/logs?limit=10", nil)
+	reqLogs.Header.Set("Authorization", "Bearer "+token)
 	wLogs := httptest.NewRecorder()
 	engine.ServeHTTP(wLogs, reqLogs)
 	if wLogs.Code != http.StatusOK {

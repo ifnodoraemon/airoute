@@ -138,8 +138,10 @@ func TestUserWallet_RedemptionAndRecharge(t *testing.T) {
 		"amount": 25.5,
 		"name":   "测试VIP充值卡",
 	})
+	adminToken, _ := controlplane.GenerateAdminToken("admin", "admin", time.Hour)
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/v1/admin/redemptions/generate", bytes.NewReader(genBody))
+	req.Header.Set("Authorization", "Bearer "+adminToken)
 	req.Header.Set("Content-Type", "application/json")
 	engine.ServeHTTP(w, req)
 
