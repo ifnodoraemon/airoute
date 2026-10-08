@@ -63,6 +63,7 @@ import CapabilitiesSelector from './components/CapabilitiesSelector';
 import LandingPage from './components/LandingPage';
 import AuthPage from './components/AuthPage';
 import LoginModal from './components/LoginModal';
+import CommandPalette from './components/CommandPalette';
 import AccountManageModal from './components/AccountManageModal';
 import ModelRoutesManager from './components/ModelRoutesManager';
 import ServiceStatus from './components/ServiceStatus';
@@ -208,7 +209,22 @@ export default function App() {
   const [adminUser, setAdminUser] = useState(() => getStoredUser());
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [authTab, setAuthTab] = useState(() => initialRoute.authTab);
+
+  // Global Command Palette shortcut (Cmd+K / Ctrl+K)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setShowCommandPalette(prev => !prev);
+      } else if (e.key === 'Escape') {
+        setShowCommandPalette(false);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
 
   // Validate token on startup to prevent stale token UI issues
   useEffect(() => {
@@ -1518,6 +1534,58 @@ export default function App() {
     }
   };
 
+  const copyPlaygroundCurl = () => {
+    const targetKey = getEffectivePlayApiKey();
+    const targetModel = playModel || 'deepseek-v4-flash';
+    const authHeader = targetKey ? `  -H "Authorization: Bearer ${targetKey}" \\\n` : '';
+    const curl = `curl http://localhost:8080/v1/chat/completions \\\n  -H "Content-Type: application/json" \\\n${authHeader}  -d '{\n    "model": "${targetModel}",\n    "messages": [{"role": "user", "content": ${JSON.stringify(playPrompt || 'Hello Airoute!')}}],\n    "stream": ${playStream}\n  }'`;
+    navigator.clipboard.writeText(curl);
+    showToast('cURL 请求命令已复制到剪贴板', 'success');
+  };
+
+  const copyPlaygroundPython = () => {
+    const targetKey = getEffectivePlayApiKey();
+    const targetModel = playModel || 'deepseek-v4-flash';
+    const py = `from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:8080/v1",
+    api_key="${targetKey || 'sk-airoute-xxxx'}"
+)
+
+response = client.chat.completions.create(
+    model="${targetModel}",
+    messages=[{"role": "user", "content": ${JSON.stringify(playPrompt || 'Hello Airoute!')}}],
+    stream=${playStream ? 'True' : 'False'}
+)
+
+${playStream ? 'for chunk in response:\n    if chunk.choices[0].delta.content:\n        print(chunk.choices[0].delta.content, end="", flush=True)' : 'print(response.choices[0].message.content)'}`;
+    navigator.clipboard.writeText(py);
+    showToast('Python 接入代码已复制到剪贴板', 'success');
+  };
+
+  const clearPlaygroundOutput = () => {
+    setPlayOutput('');
+    setPlayReasoningOutput('');
+    setImgResult(null);
+    setTtsAudioUrl('');
+    setSttResult('');
+    setVideoResultUrl('');
+    setVideoTaskStatus('');
+    setEmbedResult(null);
+    setRerankResult(null);
+    setPlayTTFTMs(0);
+    setPlayDurationMs(0);
+  };
+
+  const playTokensPerSec = (() => {
+    if (!playOutput || !playDurationMs || playDurationMs <= (playTTFTMs || 0)) return null;
+    const estTokens = Math.max(1, Math.round(playOutput.length / 2.5));
+    const activeSec = (playDurationMs - (playTTFTMs || 0)) / 1000;
+    if (activeSec <= 0.05) return null;
+    return (estTokens / activeSec).toFixed(1);
+  })();
+
   // 2. Image Generation Execution
   const handleGenerateImage = async () => {
     if (!imgPrompt.trim()) return;
@@ -2040,193 +2108,311 @@ export default function App() {
           </div>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto">
+        {/* Command Palette Trigger */}
+        <div className="px-4 py-2.5 border-b border-slate-100">
+          <button
+            onClick={() => setShowCommandPalette(true)}
+            className="w-full flex items-center justify-between px-3 py-2 bg-slate-100/80 hover:bg-slate-200/70 border border-slate-200/80 rounded-xl text-xs text-slate-500 hover:text-slate-800 transition cursor-pointer"
+            title="快捷搜索 / 指令面板 (⌘K)"
+          >
+            <div className="flex items-center space-x-2">
+              <Search className="w-3.5 h-3.5 text-slate-400" />
+              <span>快速检索 / 指令</span>
+            </div>
+            <kbd className="text-[10px] bg-white border border-slate-200 rounded px-1.5 py-0.5 font-mono font-semibold text-slate-400">
+              ⌘K
+            </kbd>
+          </button>
+        </div>
+
+        <nav className="flex-1 p-3 space-y-4 overflow-y-auto">
           {adminUser?.role === 'admin' ? (
-            /* Admin Full Navigation */
-            <>
-              <button
-                onClick={() => setCurrentTab('dashboard')}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-                  currentTab === 'dashboard'
-                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-                }`}
-              >
-                <BarChart3 className="w-4 h-4 text-indigo-500" />
-                <span>{t.navDashboard}</span>
-              </button>
+            /* Admin Grouped Enterprise Navigation */
+            <div className="space-y-4">
+              {/* Group 1: 监控与分析 */}
+              <div>
+                <span className="px-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase block mb-1">
+                  监控与分析
+                </span>
+                <div className="space-y-1">
+                  <button
+                    onClick={() => setCurrentTab('dashboard')}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                      currentTab === 'dashboard'
+                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
+                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <BarChart3 className="w-4 h-4 text-indigo-500" />
+                      <span>{t.navDashboard}</span>
+                    </div>
+                  </button>
 
-              <button
-                onClick={() => setCurrentTab('models')}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-                  currentTab === 'models'
-                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-                }`}
-              >
-                <Cpu className="w-4 h-4 text-pink-500" />
-                <span>{t.navModels}</span>
-              </button>
+                  <button
+                    onClick={() => setCurrentTab('logs')}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                      currentTab === 'logs'
+                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
+                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <History className="w-4 h-4 text-sky-500" />
+                      <span>{t.navLogs}</span>
+                    </div>
+                    {logsLength > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-md font-mono bg-slate-100 text-slate-500">
+                        {logsLength}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              </div>
 
-              <button
-                onClick={() => setCurrentTab('pricing')}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-                  currentTab === 'pricing'
-                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-                }`}
-              >
-                <DollarSign className="w-4 h-4 text-emerald-500" />
-                <span>{t.navPricing}</span>
-              </button>
+              {/* Group 2: 模型网关与调度 */}
+              <div>
+                <span className="px-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase block mb-1">
+                  模型网关与调度
+                </span>
+                <div className="space-y-1">
+                  <button
+                    onClick={() => setCurrentTab('models')}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                      currentTab === 'models'
+                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
+                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <Cpu className="w-4 h-4 text-pink-500" />
+                      <span>{t.navModels}</span>
+                    </div>
+                    {models.length > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-md font-mono bg-slate-100 text-slate-500">
+                        {models.length}
+                      </span>
+                    )}
+                  </button>
 
-              <button
-                onClick={() => setCurrentTab('channels')}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-                  currentTab === 'channels'
-                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-                }`}
-              >
-                <Server className="w-4 h-4 text-emerald-500" />
-                <span>{t.navChannels}</span>
-              </button>
+                  <button
+                    onClick={() => setCurrentTab('channels')}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                      currentTab === 'channels'
+                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
+                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <Server className="w-4 h-4 text-emerald-500" />
+                      <span>{t.navChannels}</span>
+                    </div>
+                    {channels.length > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-md font-mono bg-slate-100 text-slate-500">
+                        {channels.length}
+                      </span>
+                    )}
+                  </button>
 
-              <button
-                onClick={() => setCurrentTab('keys')}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-                  currentTab === 'keys'
-                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-                }`}
-              >
-                <Key className="w-4 h-4 text-amber-500" />
-                <span>{t.navKeys}</span>
-              </button>
+                  <button
+                    onClick={() => setCurrentTab('pricing')}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                      currentTab === 'pricing'
+                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
+                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <DollarSign className="w-4 h-4 text-emerald-600" />
+                      <span>{t.navPricing}</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
 
-              <button
-                onClick={() => setCurrentTab('wallet')}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-                  currentTab === 'wallet'
-                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-                }`}
-              >
-                <Wallet className="w-4 h-4 text-teal-600" />
-                <span>卡密与充值</span>
-              </button>
+              {/* Group 3: 访问控制与资产 */}
+              <div>
+                <span className="px-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase block mb-1">
+                  安全与身份资产
+                </span>
+                <div className="space-y-1">
+                  <button
+                    onClick={() => setCurrentTab('keys')}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                      currentTab === 'keys'
+                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
+                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <Key className="w-4 h-4 text-amber-500" />
+                      <span>{t.navKeys}</span>
+                    </div>
+                    {keys.length > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-md font-mono bg-slate-100 text-slate-500">
+                        {keys.length}
+                      </span>
+                    )}
+                  </button>
 
-              <button
-                onClick={() => setCurrentTab('logs')}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-                  currentTab === 'logs'
-                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-                }`}
-              >
-                <History className="w-4 h-4 text-sky-500" />
-                <span>{t.navLogs}</span>
-              </button>
+                  <button
+                    onClick={() => setCurrentTab('users')}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                      currentTab === 'users'
+                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
+                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                      <span>{t.navUsers}</span>
+                    </div>
+                  </button>
 
-              <button
-                onClick={() => setCurrentTab('mcp')}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-                  currentTab === 'mcp'
-                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-                }`}
-              >
-                <Bot className="w-4 h-4 text-violet-500" />
-                <span>{t.navMcp}</span>
-              </button>
+                  <button
+                    onClick={() => setCurrentTab('wallet')}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                      currentTab === 'wallet'
+                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
+                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <Wallet className="w-4 h-4 text-teal-600" />
+                      <span>卡密与充值</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
 
-              <button
-                onClick={() => setCurrentTab('users')}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-                  currentTab === 'users'
-                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-                }`}
-              >
-                <ShieldCheck className="w-4 h-4 text-indigo-600" />
-                <span>{t.navUsers}</span>
-              </button>
+              {/* Group 4: 演练与扩展 */}
+              <div>
+                <span className="px-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase block mb-1">
+                  演练与协议生态
+                </span>
+                <div className="space-y-1">
+                  <button
+                    onClick={() => setCurrentTab('playground')}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                      currentTab === 'playground'
+                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
+                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <Terminal className="w-4 h-4 text-purple-500" />
+                      <span>{t.navPlayground}</span>
+                    </div>
+                  </button>
 
-              <button
-                onClick={() => setCurrentTab('playground')}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-                  currentTab === 'playground'
-                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-                }`}
-              >
-                <Terminal className="w-4 h-4 text-purple-500" />
-                <span>{t.navPlayground}</span>
-              </button>
-            </>
+                  <button
+                    onClick={() => setCurrentTab('mcp')}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                      currentTab === 'mcp'
+                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
+                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <Bot className="w-4 h-4 text-violet-500" />
+                      <span>{t.navMcp}</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
           ) : (
             /* Regular User Navigation */
-            <>
-              <button
-                onClick={() => setCurrentTab('wallet')}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-                  currentTab === 'wallet'
-                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-                }`}
-              >
-                <Wallet className="w-4 h-4 text-emerald-600" />
-                <span>{t.navWallet || '我的钱包'}</span>
-              </button>
+            <div className="space-y-4">
+              <div>
+                <span className="px-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase block mb-1">
+                  资产与凭据
+                </span>
+                <div className="space-y-1">
+                  <button
+                    onClick={() => setCurrentTab('wallet')}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                      currentTab === 'wallet'
+                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
+                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <Wallet className="w-4 h-4 text-emerald-600" />
+                      <span>{t.navWallet || '我的钱包'}</span>
+                    </div>
+                  </button>
 
-              <button
-                onClick={() => setCurrentTab('keys')}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-                  currentTab === 'keys'
-                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-                }`}
-              >
-                <Key className="w-4 h-4 text-amber-500" />
-                <span>{t.navKeys}</span>
-              </button>
+                  <button
+                    onClick={() => setCurrentTab('keys')}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                      currentTab === 'keys'
+                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
+                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <Key className="w-4 h-4 text-amber-500" />
+                      <span>{t.navKeys}</span>
+                    </div>
+                    {keys.length > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-md font-mono bg-slate-100 text-slate-500">
+                        {keys.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              </div>
 
-              <button
-                onClick={() => setCurrentTab('playground')}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-                  currentTab === 'playground'
-                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-                }`}
-              >
-                <Terminal className="w-4 h-4 text-purple-500" />
-                <span>{t.navPlayground}</span>
-              </button>
+              <div>
+                <span className="px-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase block mb-1">
+                  演练与使用
+                </span>
+                <div className="space-y-1">
+                  <button
+                    onClick={() => setCurrentTab('playground')}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                      currentTab === 'playground'
+                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
+                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <Terminal className="w-4 h-4 text-purple-500" />
+                      <span>{t.navPlayground}</span>
+                    </div>
+                  </button>
 
-              <button
-                onClick={() => setCurrentTab('pricing')}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-                  currentTab === 'pricing'
-                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-                }`}
-              >
-                <DollarSign className="w-4 h-4 text-emerald-500" />
-                <span>{t.navPricing}</span>
-              </button>
+                  <button
+                    onClick={() => setCurrentTab('pricing')}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                      currentTab === 'pricing'
+                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
+                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <DollarSign className="w-4 h-4 text-emerald-500" />
+                      <span>{t.navPricing}</span>
+                    </div>
+                  </button>
 
-              <button
-                onClick={() => setCurrentTab('logs')}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all cursor-pointer ${
-                  currentTab === 'logs'
-                    ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-semibold'
-                    : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
-                }`}
-              >
-                <History className="w-4 h-4 text-sky-500" />
-                <span>{t.navLogs}</span>
-              </button>
-            </>
+                  <button
+                    onClick={() => setCurrentTab('logs')}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                      currentTab === 'logs'
+                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
+                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <History className="w-4 h-4 text-sky-500" />
+                      <span>{t.navLogs}</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
 
           <div className="pt-3 mt-2 border-t border-slate-100">
@@ -2292,6 +2478,18 @@ export default function App() {
               {currentTab === 'playground' && t.navPlayground}
               {currentTab === 'docs' && t.navDocs}
             </h2>
+
+            <button
+              onClick={() => setShowCommandPalette(true)}
+              className="hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200 text-xs text-slate-500 hover:text-slate-800 transition cursor-pointer shadow-2xs ml-3"
+              title="全局快捷检索与指令面板 (⌘K)"
+            >
+              <Search className="w-3.5 h-3.5 text-slate-400" />
+              <span>快速搜索指令或模型...</span>
+              <kbd className="text-[10px] bg-white border border-slate-200 rounded px-1.5 py-0.5 font-mono font-semibold text-slate-400">
+                ⌘K
+              </kbd>
+            </button>
           </div>
 
           <div className="flex items-center space-x-2.5">
@@ -3371,6 +3569,46 @@ export default function App() {
 
                 {/* Right: Interactive Result & Output View */}
                 <div className="lg:col-span-2 bg-white border border-slate-200/80 rounded-2xl p-6 flex flex-col h-[650px] shadow-xs">
+                  {/* Action & Snippet Bar */}
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3 text-xs">
+                    <span className="font-bold text-slate-700 flex items-center space-x-1.5">
+                      <Terminal className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>调用结果输出</span>
+                      {playTokensPerSec && (
+                        <span className="ml-2 font-mono text-[11px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          ⚡ {playTokensPerSec} tokens/s
+                        </span>
+                      )}
+                    </span>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={copyPlaygroundCurl}
+                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition flex items-center space-x-1 cursor-pointer"
+                        title="复制等效 cURL 请求命令"
+                      >
+                        <Code className="w-3 h-3 text-indigo-600" />
+                        <span>复制 cURL</span>
+                      </button>
+                      <button
+                        onClick={copyPlaygroundPython}
+                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition flex items-center space-x-1 cursor-pointer"
+                        title="复制 Python OpenAI SDK 接入代码"
+                      >
+                        <Code className="w-3 h-3 text-amber-600" />
+                        <span>复制 Python</span>
+                      </button>
+                      {(playOutput || playReasoningOutput || imgResult || ttsAudioUrl || sttResult || videoResultUrl || embedResult || rerankResult) && (
+                        <button
+                          onClick={clearPlaygroundOutput}
+                          className="px-2 py-1 text-slate-400 hover:text-rose-600 rounded-lg transition text-[11px] cursor-pointer"
+                          title="清空当前调试输出"
+                        >
+                          清空
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Result Body */}
                   <div className="flex-1 overflow-y-auto space-y-4 p-4 rounded-xl border border-slate-200 leading-relaxed bg-slate-50/60">
                     {/* Chat Result */}
@@ -4858,6 +5096,41 @@ helm install airoute ./helm/airoute -n gateway --create-namespace
           fetchData(token);
           fetchLogs({}, token);
         }}
+      />
+
+      {/* Global Command Palette (Cmd+K) */}
+      <CommandPalette
+        isOpen={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+        currentTab={currentTab}
+        setCurrentTab={setCurrentTab}
+        setViewMode={setViewMode}
+        models={models}
+        channels={channels}
+        keys={keys}
+        adminUser={adminUser}
+        onOpenNewKey={() => setShowKeyModal(true)}
+        onOpenNewChannel={() => {
+          setEditingChannelId(null);
+          setNewChannel({
+            name: '',
+            type: 'gpustack',
+            base_url: 'http://10.232.16.83/v1-openai',
+            api_key: '',
+            priority: 1,
+            weight: 10,
+            timeout_seconds: 60,
+            models_str: '',
+            mapping_str: '',
+            protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings', 'rerank', 'images'],
+          });
+          setProbeAlert(null);
+          setShowChannelModal(true);
+        }}
+        toggleLang={toggleLang}
+        lang={lang}
+        onLogout={handleLogout}
+        showToast={showToast}
       />
     </div>
   );
