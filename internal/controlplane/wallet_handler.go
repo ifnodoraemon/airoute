@@ -8,6 +8,7 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"net/smtp"
 	"net/url"
 	"os"
 	"strconv"
@@ -16,8 +17,67 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// isEmailVerificationRequired checks if email verification is mandatory in this deployment.
+func isEmailVerificationRequired() bool {
+	if v := os.Getenv("REQUIRE_EMAIL_VERIFICATION"); v != "" {
+		return strings.EqualFold(v, "true") || v == "1"
+	}
+	// By default, required if SMTP_HOST is explicitly configured
+	return strings.TrimSpace(os.Getenv("SMTP_HOST")) != ""
+}
+
+// sendVerificationEmail sends a 6-digit verification code via SMTP if configured.
+func sendVerificationEmail(targetEmail, code, purpose string) error {
+	smtpHost := strings.TrimSpace(os.Getenv("SMTP_HOST"))
+	if smtpHost == "" {
+		telemetry.Logger.Info("email verification code generated (SMTP not configured, logged for audit)",
+			"email", targetEmail, "purpose", purpose, "code", code)
+		return nil
+	}
+
+	smtpPort := strings.TrimSpace(os.Getenv("SMTP_PORT"))
+	if smtpPort == "" {
+		smtpPort = "587"
+	}
+	smtpUser := strings.TrimSpace(os.Getenv("SMTP_USER"))
+	smtpPass := os.Getenv("SMTP_PASS")
+	smtpFrom := strings.TrimSpace(os.Getenv("SMTP_FROM"))
+	if smtpFrom == "" {
+		if smtpUser != "" {
+			smtpFrom = smtpUser
+		} else {
+			smtpFrom = "noreply@" + smtpHost
+		}
+	}
+
+	subject := "Airoute 验证码"
+	actionName := "注册新账号"
+	if purpose == "reset" {
+		subject = "Airoute 密码重置验证码"
+		actionName = "重置登录密码"
+	}
+
+	body := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n"+
+		"<!DOCTYPE html><html><body style=\"font-family:sans-serif;line-height:1.6;color:#333;\">"+
+		"<div style=\"max-width:540px;margin:20px auto;padding:24px;border:1px solid #e2e8f0;border-radius:16px;\">"+
+		"<h2 style=\"color:#4f46e5;margin-top:0;\">Airoute 智能网关安全验证</h2>"+
+		"<p>您正在进行 <strong>%s</strong> 操作，本次安全验证码为：</p>"+
+		"<div style=\"font-size:32px;font-weight:bold;letter-spacing:6px;color:#1e293b;background:#f1f5f9;padding:16px;text-align:center;border-radius:12px;margin:20px 0;\">%s</div>"+
+		"<p style=\"color:#64748b;font-size:13px;\">验证码在 10 分钟内有效。如非本人操作，请忽略此邮件。</p>"+
+		"</div></body></html>", smtpFrom, targetEmail, subject, actionName, code)
+
+	addr := fmt.Sprintf("%s:%s", smtpHost, smtpPort)
+	var auth smtp.Auth
+	if smtpUser != "" && smtpPass != "" {
+		auth = smtp.PlainAuth("", smtpUser, smtpPass, smtpHost)
+	}
+
+	return smtp.SendMail(addr, auth, smtpFrom, []string{targetEmail}, []byte(body))
+}
 
 // SendVerificationCodeRequest defines request to send email verification code.
 type SendVerificationCodeRequest struct {
@@ -59,6 +119,13 @@ func (h *AdminHandler) SendVerificationCode(c *gin.Context) {
 		return
 	}
 
+	// Dispatch email via SMTP if configured
+	if err := sendVerificationEmail(email, code, purpose); err != nil {
+		telemetry.Logger.Error("failed to dispatch verification email via SMTP", "email", email, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "发送邮件失败: " + err.Error()})
+		return
+	}
+
 	// In automated test or development mode, return dev_code for testing convenience
 	isDevOrTest := strings.HasSuffix(os.Args[0], ".test") || strings.Contains(os.Args[0], "/_test/") || os.Getenv("ENV") == "development"
 	resp := gin.H{
@@ -76,14 +143,14 @@ type RegisterRequest struct {
 	Username string `json:"username" binding:"required"`
 	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
-	Code     string `json:"code" binding:"required"`
+	Code     string `json:"code"`
 }
 
 // Register registers a new regular user account with email verification and creates initial trial balance.
 func (h *AdminHandler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "所有注册信息均为必填项"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "用户名、邮箱与密码为必填项"})
 		return
 	}
 
@@ -100,10 +167,14 @@ func (h *AdminHandler) Register(c *gin.Context) {
 		return
 	}
 
-	// Verify verification code
-	if !h.repo.VerifyCode(email, code, "register") {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "验证码无效或已过期，请重新获取"})
-		return
+	// Verify verification code if required
+	if isEmailVerificationRequired() {
+		if code == "" || !h.repo.VerifyCode(email, code, "register") {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "验证码无效或已过期，请重新获取"})
+			return
+		}
+	} else if code != "" {
+		_ = h.repo.VerifyCode(email, code, "register")
 	}
 
 	// Check if username or email already exists
@@ -124,8 +195,13 @@ func (h *AdminHandler) Register(c *gin.Context) {
 		return
 	}
 
-	// Default trial quota: 5.0 CNY
+	// Default trial quota: 5.0 CNY or configured via DEFAULT_TRIAL_BALANCE
 	trialBalance := 5.0
+	if envBal := os.Getenv("DEFAULT_TRIAL_BALANCE"); envBal != "" {
+		if parsed, err := strconv.ParseFloat(envBal, 64); err == nil && parsed >= 0 {
+			trialBalance = parsed
+		}
+	}
 	user := &storage.UserRecord{
 		Username:     username,
 		Email:        email,
@@ -191,14 +267,16 @@ func (h *AdminHandler) OAuthInitiate(c *gin.Context) {
 
 	clientID := os.Getenv(fmt.Sprintf("%s_CLIENT_ID", strings.ToUpper(provider)))
 	redirectURI := os.Getenv(fmt.Sprintf("%s_REDIRECT_URI", strings.ToUpper(provider)))
+	if redirectURI == "" {
+		redirectURI = fmt.Sprintf("http://%s/api/v1/auth/oauth/%s/callback", c.Request.Host, provider)
+	}
 
 	if clientID == "" {
-		// Return sandbox OAuth config info so frontend can offer 1-click simulated authorization
-		c.JSON(http.StatusOK, gin.H{
-			"code":      0,
-			"provider":  provider,
+		c.JSON(http.StatusNotFound, gin.H{
+			"code":       404,
+			"provider":   provider,
 			"configured": false,
-			"message":   fmt.Sprintf("暂未配置 %s 生产应用密钥，可使用演示快速登录", provider),
+			"error":      fmt.Sprintf("系统尚未配置 %s 生产应用密钥 (缺少 %s_CLIENT_ID 环境变量)", strings.ToUpper(provider), strings.ToUpper(provider)),
 		})
 		return
 	}
@@ -216,6 +294,124 @@ func (h *AdminHandler) OAuthInitiate(c *gin.Context) {
 		"configured": true,
 		"auth_url":   authURL,
 	})
+}
+
+func exchangeGitHubOAuth(code, clientID, clientSecret string) (string, string, error) {
+	data := url.Values{}
+	data.Set("client_id", clientID)
+	data.Set("client_secret", clientSecret)
+	data.Set("code", code)
+
+	req, err := http.NewRequest("POST", "https://github.com/login/oauth/access_token", strings.NewReader(data.Encode()))
+	if err != nil {
+		return "", "", err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+
+	var tokenResp struct {
+		AccessToken string `json:"access_token"`
+		Error       string `json:"error"`
+		ErrorDesc   string `json:"error_description"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return "", "", err
+	}
+	if tokenResp.Error != "" {
+		return "", "", fmt.Errorf("%s: %s", tokenResp.Error, tokenResp.ErrorDesc)
+	}
+	if tokenResp.AccessToken == "" {
+		return "", "", fmt.Errorf("empty access token returned")
+	}
+
+	userReq, _ := http.NewRequest("GET", "https://api.github.com/user", nil)
+	userReq.Header.Set("Authorization", "Bearer "+tokenResp.AccessToken)
+	userReq.Header.Set("User-Agent", "Airoute-Gateway")
+
+	userResp, err := client.Do(userReq)
+	if err != nil {
+		return "", "", err
+	}
+	defer userResp.Body.Close()
+
+	var ghUser struct {
+		Login string `json:"login"`
+		Email string `json:"email"`
+		ID    int64  `json:"id"`
+	}
+	if err := json.NewDecoder(userResp.Body).Decode(&ghUser); err != nil {
+		return "", "", err
+	}
+
+	username := ghUser.Login
+	if username == "" {
+		username = fmt.Sprintf("gh_%d", ghUser.ID)
+	}
+	email := ghUser.Email
+	if email == "" {
+		email = fmt.Sprintf("%s@github.oauth.local", username)
+	}
+
+	return username, email, nil
+}
+
+func exchangeGoogleOAuth(code, clientID, clientSecret, redirectURI string) (string, string, error) {
+	data := url.Values{}
+	data.Set("client_id", clientID)
+	data.Set("client_secret", clientSecret)
+	data.Set("code", code)
+	data.Set("grant_type", "authorization_code")
+	data.Set("redirect_uri", redirectURI)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.PostForm("https://oauth2.googleapis.com/token", data)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+
+	var tokenResp struct {
+		AccessToken string `json:"access_token"`
+		Error       string `json:"error"`
+		ErrorDesc   string `json:"error_description"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return "", "", err
+	}
+	if tokenResp.AccessToken == "" {
+		return "", "", fmt.Errorf("empty access token returned: %s", tokenResp.ErrorDesc)
+	}
+
+	userReq, _ := http.NewRequest("GET", "https://www.googleapis.com/oauth2/v2/userinfo", nil)
+	userReq.Header.Set("Authorization", "Bearer "+tokenResp.AccessToken)
+
+	userResp, err := client.Do(userReq)
+	if err != nil {
+		return "", "", err
+	}
+	defer userResp.Body.Close()
+
+	var ggUser struct {
+		ID    string `json:"id"`
+		Email string `json:"email"`
+		Name  string `json:"name"`
+	}
+	if err := json.NewDecoder(userResp.Body).Decode(&ggUser); err != nil {
+		return "", "", err
+	}
+
+	username := ggUser.Name
+	if username == "" {
+		username = "google_user_" + ggUser.ID
+	}
+	return username, ggUser.Email, nil
 }
 
 // OAuthCallbackRequest defines OAuth callback body.
@@ -237,9 +433,41 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 		req.Code = c.Query("code")
 	}
 
+	clientID := os.Getenv(fmt.Sprintf("%s_CLIENT_ID", strings.ToUpper(provider)))
+	clientSecret := os.Getenv(fmt.Sprintf("%s_CLIENT_SECRET", strings.ToUpper(provider)))
+	redirectURI := os.Getenv(fmt.Sprintf("%s_REDIRECT_URI", strings.ToUpper(provider)))
+	if redirectURI == "" {
+		redirectURI = fmt.Sprintf("http://%s/api/v1/auth/oauth/%s/callback", c.Request.Host, provider)
+	}
+
+	isTestOrDev := strings.HasSuffix(os.Args[0], ".test") || strings.Contains(os.Args[0], "/_test/") || strings.EqualFold(os.Getenv("ENABLE_SIMULATED_OAUTH"), "true")
+
 	var email, username string
-	if req.Simulated || req.Code == "demo" || req.Code == "" {
-		// Sandbox/Demo 1-click authentication
+
+	if clientID != "" && clientSecret != "" && req.Code != "" && req.Code != "demo" && !req.Simulated {
+		// Real production token exchange
+		if provider == "github" {
+			realUser, realEmail, err := exchangeGitHubOAuth(req.Code, clientID, clientSecret)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "GitHub 授权失败: " + err.Error()})
+				return
+			}
+			username = "gh_" + realUser
+			email = realEmail
+		} else if provider == "google" {
+			realUser, realEmail, err := exchangeGoogleOAuth(req.Code, clientID, clientSecret, redirectURI)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "Google 授权失败: " + err.Error()})
+				return
+			}
+			username = "gg_" + realUser
+			email = realEmail
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "不支持的 OAuth 提供商"})
+			return
+		}
+	} else if isTestOrDev {
+		// Test/dev simulated authentication
 		if req.Username != "" {
 			username = req.Username
 		} else {
@@ -251,9 +479,11 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 			email = fmt.Sprintf("%s@%s.oauth.local", username, provider)
 		}
 	} else {
-		// Production OAuth Token exchange
-		username = fmt.Sprintf("%s_%s", provider, req.Code[:min(len(req.Code), 8)])
-		email = fmt.Sprintf("%s@%s.oauth.local", username, provider)
+		c.JSON(http.StatusForbidden, gin.H{
+			"code":  403,
+			"error": fmt.Sprintf("系统未配置 %s 生产应用密钥，禁止使用模拟快捷登录", strings.ToUpper(provider)),
+		})
+		return
 	}
 
 	// Find or create user
@@ -794,7 +1024,19 @@ func (h *AdminHandler) CreateStripeRechargeSession(c *gin.Context) {
 		}
 	}
 
-	// Simulated / Sandbox Stripe Mode
+	isTestOrDev := strings.HasSuffix(os.Args[0], ".test") || strings.Contains(os.Args[0], "/_test/") || strings.EqualFold(os.Getenv("ENABLE_SANDBOX_RECHARGE"), "true")
+
+	if stripeKey == "" {
+		if !strings.EqualFold(claims.Role, "admin") && !isTestOrDev {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"code":  503,
+				"error": "系统尚未配置 Stripe 线上收款通道 (缺少 STRIPE_API_KEY)。请联系管理员使用卡密兑换或对公结算。",
+			})
+			return
+		}
+	}
+
+	// Simulated / Sandbox Stripe Mode (accessible to admins or in dev/test mode)
 	order.StripeSessionID = "cs_simulated_" + orderNo
 	_ = h.repo.CreateRechargeOrder(order)
 
@@ -806,11 +1048,11 @@ func (h *AdminHandler) CreateStripeRechargeSession(c *gin.Context) {
 		"checkout_url": simulatedCheckoutURL,
 		"session_id":   order.StripeSessionID,
 		"mode":         "sandbox_simulation",
-		"message":      "已启用在线快捷充值通道",
+		"message":      "已启用测试快捷充值通道",
 	})
 }
 
-// SandboxRecharge allows instant wallet recharge for direct/fast checkout.
+// SandboxRecharge allows instant wallet recharge for direct/fast checkout (Admin/Dev/Test only).
 func (h *AdminHandler) SandboxRecharge(c *gin.Context) {
 	claimsVal, exists := c.Get("admin_claims")
 	if !exists {
@@ -822,6 +1064,16 @@ func (h *AdminHandler) SandboxRecharge(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "无效的认证凭证"})
 		return
 	}
+
+	isTestOrDev := strings.HasSuffix(os.Args[0], ".test") || strings.Contains(os.Args[0], "/_test/") || strings.EqualFold(os.Getenv("ENABLE_SANDBOX_RECHARGE"), "true")
+	if !strings.EqualFold(claims.Role, "admin") && !isTestOrDev {
+		c.JSON(http.StatusForbidden, gin.H{
+			"code":  403,
+			"error": "生产安全模式下已禁用沙箱充值。请使用企业兑换码或正规结算通道。",
+		})
+		return
+	}
+
 	username := claims.Username
 
 	var req struct {

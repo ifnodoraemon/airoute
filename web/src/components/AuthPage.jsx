@@ -31,10 +31,32 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
   const [sendingCode, setSendingCode] = useState(false);
   const [codeCountdown, setCodeCountdown] = useState(0);
 
+  // System security and capabilities config
+  const [sysConfig, setSysConfig] = useState({
+    require_email_verification: false,
+    oauth_github_enabled: false,
+    oauth_google_enabled: false
+  });
+
   // Feedback state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  useEffect(() => {
+    fetch('/api/v1/public/status')
+      .then(res => res.json())
+      .then(data => {
+        if (data.code === 0 && data.data) {
+          setSysConfig({
+            require_email_verification: !!data.data.require_email_verification,
+            oauth_github_enabled: !!data.data.oauth_github_enabled,
+            oauth_google_enabled: !!data.data.oauth_google_enabled
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     setError('');
@@ -121,15 +143,19 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
     setLoading(true);
 
     try {
+      const payload = {
+        username: regUsername.trim(),
+        email: regEmail.trim(),
+        password: regPassword
+      };
+      if (sysConfig.require_email_verification || regCode.trim()) {
+        payload.code = regCode.trim();
+      }
+
       const res = await fetch('/api/v1/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: regUsername.trim(),
-          email: regEmail.trim(),
-          password: regPassword,
-          code: regCode.trim()
-        })
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
 
@@ -147,37 +173,16 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
     }
   };
 
-  // Quick fill demo admin
-  const handleQuickFillAdmin = () => {
-    setUsername('admin');
-    setPassword('admin123');
-    setError('');
-  };
-
-  // 1-Click OAuth Login (GitHub / Google)
+  // OAuth Login (GitHub / Google)
   const handleOAuthLogin = async (provider) => {
     setError('');
     try {
       const res = await fetch(`/api/v1/auth/oauth/${provider}`);
       const data = await res.json();
       if (res.ok && data.auth_url) {
-        if (data.mode === 'sandbox_simulation') {
-          const simRes = await fetch(`/api/v1/auth/oauth/${provider}/callback`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code: 'simulated_oauth_code' })
-          });
-          const simData = await simRes.json();
-          if (simRes.ok && simData.code === 0 && simData.data?.token) {
-            localStorage.setItem('airoute_token', simData.data.token);
-            localStorage.setItem('airoute_user', JSON.stringify(simData.data.user));
-            onLoginSuccess(simData.data.token, simData.data.user);
-            return;
-          }
-        }
         window.location.href = data.auth_url;
       } else {
-        setError(data.error || `${provider} 登录初始化失败`);
+        setError(data.error || `企业未配置 ${provider.toUpperCase()} 登录通道`);
       }
     } catch (err) {
       setError('OAuth 异常: ' + err.message);
@@ -277,17 +282,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold text-slate-700">登录密码</label>
-                  <button
-                    type="button"
-                    onClick={handleQuickFillAdmin}
-                    className="text-[11px] text-indigo-600 hover:underline flex items-center space-x-1"
-                  >
-                    <Sparkles className="w-3 h-3" />
-                    <span>填入体验管理员</span>
-                  </button>
-                </div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">登录密码</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                     <Lock className="w-4 h-4" />
@@ -368,36 +363,38 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  邮箱验证码 *
-                </label>
-                <div className="flex space-x-2">
-                  <input
-                    type="text"
-                    required
-                    maxLength={6}
-                    value={regCode}
-                    onChange={(e) => setRegCode(e.target.value)}
-                    placeholder="6 位数字验证码"
-                    className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-xs font-mono text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white transition tracking-widest text-center"
-                  />
-                  <button
-                    type="button"
-                    disabled={sendingCode || codeCountdown > 0}
-                    onClick={handleSendCode}
-                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-2xl text-xs font-semibold transition shrink-0 disabled:opacity-50 cursor-pointer"
-                  >
-                    {sendingCode ? (
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    ) : codeCountdown > 0 ? (
-                      `${codeCountdown}s 后重发`
-                    ) : (
-                      '获取验证码'
-                    )}
-                  </button>
+              {sysConfig.require_email_verification && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    邮箱验证码 *
+                  </label>
+                  <div className="flex space-x-2">
+                    <input
+                      type="text"
+                      required
+                      maxLength={6}
+                      value={regCode}
+                      onChange={(e) => setRegCode(e.target.value)}
+                      placeholder="6 位数字验证码"
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-xs font-mono text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white transition tracking-widest text-center"
+                    />
+                    <button
+                      type="button"
+                      disabled={sendingCode || codeCountdown > 0}
+                      onClick={handleSendCode}
+                      className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-2xl text-xs font-semibold transition shrink-0 disabled:opacity-50 cursor-pointer"
+                    >
+                      {sendingCode ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : codeCountdown > 0 ? (
+                        `${codeCountdown}s 后重发`
+                      ) : (
+                        '获取验证码'
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -442,41 +439,47 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
             </form>
           )}
 
-          {/* OAuth 1-Click Fast Login */}
-          <div className="pt-2">
-            <div className="relative flex py-2 items-center">
-              <div className="flex-grow border-t border-slate-200"></div>
-              <span className="flex-shrink mx-3 text-[11px] text-slate-400 font-medium">第三方快捷接入</span>
-              <div className="flex-grow border-t border-slate-200"></div>
-            </div>
+          {/* OAuth Fast Login */}
+          {(sysConfig.oauth_github_enabled || sysConfig.oauth_google_enabled) && (
+            <div className="pt-2">
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-slate-200"></div>
+                <span className="flex-shrink mx-3 text-[11px] text-slate-400 font-medium">企业第三方单点登录</span>
+                <div className="flex-grow border-t border-slate-200"></div>
+              </div>
 
-            <div className="grid grid-cols-2 gap-3 mt-3">
-              <button
-                type="button"
-                onClick={() => handleOAuthLogin('github')}
-                className="flex items-center justify-center space-x-2 py-2.5 px-3 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-2xl text-xs font-semibold transition cursor-pointer"
-              >
-                <svg className="w-4 h-4 text-slate-800" fill="currentColor" viewBox="0 0 24 24">
-                  <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
-                </svg>
-                <span>GitHub 登录</span>
-              </button>
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                {sysConfig.oauth_github_enabled && (
+                  <button
+                    type="button"
+                    onClick={() => handleOAuthLogin('github')}
+                    className="flex items-center justify-center space-x-2 py-2.5 px-3 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-2xl text-xs font-semibold transition cursor-pointer"
+                  >
+                    <svg className="w-4 h-4 text-slate-800" fill="currentColor" viewBox="0 0 24 24">
+                      <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+                    </svg>
+                    <span>GitHub 登录</span>
+                  </button>
+                )}
 
-              <button
-                type="button"
-                onClick={() => handleOAuthLogin('google')}
-                className="flex items-center justify-center space-x-2 py-2.5 px-3 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-2xl text-xs font-semibold transition cursor-pointer"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                </svg>
-                <span>Google 登录</span>
-              </button>
+                {sysConfig.oauth_google_enabled && (
+                  <button
+                    type="button"
+                    onClick={() => handleOAuthLogin('google')}
+                    className="flex items-center justify-center space-x-2 py-2.5 px-3 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-2xl text-xs font-semibold transition cursor-pointer"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                    </svg>
+                    <span>Google 登录</span>
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 

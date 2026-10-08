@@ -34,7 +34,7 @@ for chunk in response:
 
 # 2. 官方新代智能体 Responses API (/v1/responses)
 # resp = client.responses.create(
-#     model="gpt-4o",
+#     model="gpt-6",
 #     input="分析微服务与单体架构的选型考量",
 #     instructions="You are an enterprise system architect."
 # )
@@ -96,7 +96,7 @@ export ANTHROPIC_API_KEY="${keyStr}"
 # 如果在 Cursor / Cline 中使用 OpenAI 兼容模式：
 # Base URL: ${baseUrl}
 # API Key: ${keyStr}
-# Model: deepseek-chat 或 claude-3-5-sonnet-20241022
+# Model: deepseek-v4.1-flash 或 claude-opus-5.5
 `;
 
   const desktopClientGuide = `# 常用第三方客户端配置指南 (NextChat / Chatbox / LobeChat / Cherry Studio)
@@ -108,7 +108,7 @@ export ANTHROPIC_API_KEY="${keyStr}"
 #    ${keyStr}
 # 
 # 3. 自定义模型列表:
-#    在客户端模型设置中填入当前网关已启用的模型名称 (例如 deepseek-chat 或部署的本地模型)
+#    在客户端模型设置中填入当前网关已启用的模型名称 (例如 deepseek-v4.1-flash, gpt-6 或部署的本地模型)
 # 
 # 4. 特色体验:
 #    网关原生支持 DeepSeek-R1 思维链流式展开与全双工协议转换。

@@ -65,7 +65,7 @@ curl -X POST http://localhost:8080/v1/messages \
   -H "anthropic-version: 2023-06-01" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "claude-3-5-sonnet",
+    "model": "claude-opus-5.5",
     "max_tokens": 1024,
     "messages": [
       {"role": "user", "content": "Explain quantum computing briefly."}
@@ -85,7 +85,7 @@ curl -X POST http://localhost:8080/v1/messages/count_tokens \
   -H "anthropic-version: 2023-06-01" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "claude-3-5-sonnet",
+    "model": "claude-opus-5.5",
     "messages": [
       {"role": "user", "content": "Estimate token usage for this payload."}
     ]
@@ -99,7 +99,34 @@ curl -X POST http://localhost:8080/v1/messages/count_tokens \
 }
 ```
 
-### 2.5 DeepSeek-R1 / Reasoning Models Transparency
+### 2.5 Google Gemini Native API
+- **Endpoints**:
+  - `POST /v1beta/models/:model:generateContent`
+  - `POST /v1beta/models/:model:streamGenerateContent`
+  - `POST /v1beta/models/:model:countTokens`
+  - `GET /v1beta/models`
+  - `GET /v1beta/models/:model`
+- **Supported Clients**: Google GenAI SDK (`@google/genai`, `google-generativeai`), Gemini CLI, Vertex AI compatible tooling.
+- **Protocol Adaptation**: Full-duplex protocol conversion translating Gemini SDK calls into upstream format (Gemini upstream zero-copy, or adapted to OpenAI/DeepSeek/Claude models).
+
+#### Request Example (countTokens):
+```bash
+curl -X POST http://localhost:8080/v1beta/models/gemini-4-argon:countTokens \
+  -H "Authorization: Bearer sk-nano-xxxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{"role": "user", "parts": [{"text": "Hello world!"}]}]
+  }'
+```
+
+#### Response Example:
+```json
+{
+  "totalTokens": 3
+}
+```
+
+### 2.6 DeepSeek-R1 / Reasoning Models Transparency
 - **Transparent Field**: `reasoning_content` in Chat Completions chunk and message objects.
 - **Stream Transparency**: Streaming chunks carrying reasoning tokens (such as DeepSeek-R1 thinking traces or OpenAI o1/o3 reasoning chunks) are forwarded transparently with zero-copy overhead without stripping thinking blocks.
 
@@ -117,7 +144,7 @@ curl -X POST http://localhost:8080/v1/images/generations \
   -H "Authorization: Bearer sk-nano-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "dall-e-3",
+    "model": "flux-1.1-pro",
     "prompt": "A modern datacenter server room with green neon lighting, 8k digital art",
     "size": "1024x1024",
     "quality": "standard",
@@ -151,7 +178,7 @@ curl -X POST http://localhost:8080/v1/audio/speech \
 curl -X POST http://localhost:8080/v1/audio/transcriptions \
   -H "Authorization: Bearer sk-nano-xxxx" \
   -F "file=@/path/to/audio.mp3" \
-  -F "model=whisper-1"
+  -F "model=whisper-large-v3-turbo"
 ```
 
 ### 3.4 Audio Translation
@@ -164,7 +191,7 @@ curl -X POST http://localhost:8080/v1/audio/transcriptions \
 curl -X POST http://localhost:8080/v1/audio/translations \
   -H "Authorization: Bearer sk-nano-xxxx" \
   -F "file=@/path/to/french_speech.mp3" \
-  -F "model=whisper-1"
+  -F "model=whisper-large-v3-turbo"
 ```
 
 ### 3.5 Video Generation & Task Polling
@@ -178,7 +205,7 @@ curl -X POST http://localhost:8080/v1/videos/generations \
   -H "Authorization: Bearer sk-nano-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "sora",
+    "model": "cogvideox-5b",
     "prompt": "A drone shot flying over a futuristic city at sunset",
     "aspect_ratio": "16:9"
   }'

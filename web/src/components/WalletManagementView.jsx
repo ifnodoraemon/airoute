@@ -35,7 +35,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
   // Recharge State
   const [rechargeAmount, setRechargeAmount] = useState(50);
   const [customAmount, setCustomAmount] = useState('');
-  const [rechargeMethod, setRechargeMethod] = useState('sandbox'); // 'stripe' or 'sandbox'
+  const [rechargeMethod, setRechargeMethod] = useState('stripe'); // 'stripe' (primary) or 'sandbox' (admin only)
   const [recharging, setRecharging] = useState(false);
 
   // Redeem State
@@ -165,17 +165,20 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
         const data = await res.json();
         if (res.ok && data.code === 0 && data.checkout_url) {
           if (data.mode === 'sandbox_simulation') {
-            // Direct recharge fallback
-            showToast('Stripe 密钥未配置，已转入快捷充值通道', 'info');
-            const simRes = await adminFetch('/api/v1/user/wallet/recharge/sandbox', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ order_no: data.order_no, amount: finalAmount })
-            });
-            const simData = await simRes.json();
-            if (simRes.ok && simData.code === 0) {
-              showToast(`充值成功！已入账 ¥${finalAmount.toFixed(2)}`, 'success');
-              fetchWallet();
+            if (isAdmin || walletData?.is_admin) {
+              showToast('Stripe 生产密钥未配置，已转入管理员沙箱测试通道', 'info');
+              const simRes = await adminFetch('/api/v1/user/wallet/recharge/sandbox', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order_no: data.order_no, amount: finalAmount })
+              });
+              const simData = await simRes.json();
+              if (simRes.ok && simData.code === 0) {
+                showToast(`[测试沙箱] 模拟充值成功！已入账 ¥${finalAmount.toFixed(2)}`, 'success');
+                fetchWallet();
+              }
+            } else {
+              showToast('企业未配置在线支付通道，请使用兑换码充值或联系管理员', 'warning');
             }
           } else {
             window.location.href = data.checkout_url;
@@ -445,26 +448,6 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <button
                   type="button"
-                  onClick={() => setRechargeMethod('sandbox')}
-                  className={`p-4 rounded-2xl border text-left transition cursor-pointer flex items-start space-x-3 ${
-                    rechargeMethod === 'sandbox'
-                      ? 'bg-indigo-50/70 border-indigo-500 shadow-sm'
-                      : 'bg-slate-50/60 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                    <Zap className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="font-bold text-xs text-slate-900 flex items-center space-x-2">
-                      <span>在线快捷充值</span>
-                      <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-semibold">即时到账</span>
-                    </div>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
                   onClick={() => setRechargeMethod('stripe')}
                   className={`p-4 rounded-2xl border text-left transition cursor-pointer flex items-start space-x-3 ${
                     rechargeMethod === 'stripe'
@@ -477,11 +460,35 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                   </div>
                   <div>
                     <div className="font-bold text-xs text-slate-900 flex items-center space-x-2">
-                      <span>Stripe 国际信用卡</span>
-                      <span className="text-[10px] px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded-full font-semibold">生产支付</span>
+                      <span>Stripe 国际信用卡 / 企业网银</span>
+                      <span className="text-[10px] px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded-full font-semibold">官方渠道</span>
                     </div>
+                    <div className="text-[11px] text-slate-500 mt-1">支持 Visa, MasterCard, 微信/支付宝跨境结算</div>
                   </div>
                 </button>
+
+                {(isAdmin || walletData?.is_admin) && (
+                  <button
+                    type="button"
+                    onClick={() => setRechargeMethod('sandbox')}
+                    className={`p-4 rounded-2xl border text-left transition cursor-pointer flex items-start space-x-3 ${
+                      rechargeMethod === 'sandbox'
+                        ? 'bg-amber-50/70 border-amber-500 shadow-sm'
+                        : 'bg-slate-50/60 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                      <Zap className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-xs text-slate-900 flex items-center space-x-2">
+                        <span>管理员沙箱测试通道</span>
+                        <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full font-semibold">仅开发/管理</span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-1">仅超级管理员可在测试环境中用于快速联调额度</div>
+                    </div>
+                  </button>
+                )}
               </div>
             </div>
 

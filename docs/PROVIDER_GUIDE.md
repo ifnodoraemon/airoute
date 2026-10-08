@@ -12,7 +12,7 @@ Airoute supports native multi-protocol downstream engines with zero special-casi
 - **Key Behavior**:
   - Automatically translates OpenAI canonical format to Google's specialized `/v1beta/models/{model}:generateContent` and `:streamGenerateContent`.
   - Supports system instructions, temperature, topP, and tools.
-- **Recommended Models**: `gemini-2.0-flash`, `gemini-1.5-pro`, `gemini-1.5-flash`
+- **Recommended Models**: `gemini-4-argon`, `gemini-3.8-flash`, `gemini-3.5-flash-lite`, `gemini-2.0-flash`
 
 ---
 
@@ -24,7 +24,7 @@ Airoute supports native multi-protocol downstream engines with zero special-casi
 - **Key Behavior**:
   - Transforms OpenAI Chat Completions requests into native Anthropic Claude Messages payloads.
   - Transforms Anthropic SSE streams back to standard OpenAI chunk deltas or vice versa.
-- **Recommended Models**: `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022`, `claude-3-opus-20240229`
+- **Recommended Models**: `claude-opus-5.5`, `claude-sonnet-5.5`, `claude-haiku-5.5`, `claude-3-7-sonnet`
 
 ---
 

@@ -46,7 +46,7 @@ client = OpenAI(
 )
 
 response = client.chat.completions.create(
-    model="gpt-6-astra",  # 支持 claude-opus-5.5 / deepseek-v4.1-flash / gemini-3.8-flash 等
+    model="gpt-6",  # 原生支持 GPT-6 / Claude Opus 5.5 / Gemini 4 Argon / DeepSeek V4.1
     messages=[{"role": "user", "content": "请介绍系统的核心接入优势"}],
     stream=True,
 )
@@ -62,7 +62,7 @@ client = anthropic.Anthropic(
 )
 
 message = client.messages.create(
-    model="claude-opus-5.5",
+    model="claude-opus-5.5",  # 支持 Claude 5.5 (Opus / Sonnet / Haiku / Fable) 全系模型
     max_tokens=2048,
     messages=[{"role": "user", "content": "介绍极简统一网关的高可用与流式转译"}]
 )
@@ -74,28 +74,28 @@ curl -X POST "${origin}/v1/chat/completions" \\
   -H "X-Session-ID: session_user_001" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "gpt-6-astra",
+    "model": "gpt-6",
     "messages": [{"role": "user", "content": "你好，请介绍系统优势"}],
     "stream": true
   }'`;
 
-  const multimodalSnippet = `# 1. 图像生成 (FLUX.1-Pro)
+  const multimodalSnippet = `# 1. 图像生成 (FLUX.1-Pro - 原生 2K/4K 与精确微调)
 curl -X POST "${origin}/v1/images/generations" \\
   -H "Authorization: Bearer sk-airoute-your-api-key" \\
   -H "Content-Type: application/json" \\
   -d '{"model": "flux-1.1-pro", "prompt": "极简科技风云原生 AI 路由器", "size": "1024x1024"}'
 
-# 2. 语音转写 (Whisper-Large-V3-Turbo，支持 16kHz mono Opus 压缩格式)
+# 2. 实时流式语音转写 (GPT Live Transcribe，支持 16kHz mono Opus 压缩格式)
 curl -X POST "${origin}/v1/audio/transcriptions" \\
   -H "Authorization: Bearer sk-airoute-your-api-key" \\
   -F file="@speech.opus" \\
-  -F model="whisper-large-v3-turbo"
+  -F model="gpt-live-transcribe"
 
-# 3. 影视级视频生成与状态轮询 (Sora 2)
+# 3. 影视级视频生成与状态轮询 (CogVideoX-5B / Kling 4.0)
 curl -X POST "${origin}/v1/videos/generations" \\
   -H "Authorization: Bearer sk-airoute-your-api-key" \\
   -H "Content-Type: application/json" \\
-  -d '{"model": "sora-2", "prompt": "未来赛博朋克城市雨夜飞车", "aspect_ratio": "16:9"}'
+  -d '{"model": "cogvideox-5b", "prompt": "未来赛博朋克城市雨夜飞车", "aspect_ratio": "16:9"}'
 
 curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
   -H "Authorization: Bearer sk-airoute-your-api-key"`;
@@ -442,7 +442,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/80 text-slate-400 uppercase tracking-wider text-[11px]">
-                  <th className="py-3 px-5 font-semibold">模型标识 (Model)</th>
+                  <th className="py-3 px-5 font-semibold">模型系列 (Series)</th>
                   <th className="py-3 px-4 font-semibold">基准输入 (/1M)</th>
                   <th className="py-3 px-4 font-semibold">基准输出 (/1M)</th>
                   <th className="py-3 px-4 font-semibold">闲时优惠折率</th>
@@ -451,160 +451,121 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700 font-mono">
-                {/* 1. claude-opus-5.5 */}
+                {/* 1. OpenAI GPT-6 系列 */}
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-purple-600"></span>
-                    <span>claude-opus-5.5</span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
+                    <span>GPT-6 / GPT-6 Luna (OpenAI 系列)</span>
                   </td>
-                  <td className="py-3.5 px-4">¥35.00</td>
-                  <td className="py-3.5 px-4">¥175.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥17.50 / ¥87.50</td>
-                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥3.50</td>
+                  <td className="py-3.5 px-4">¥12.00 ~ ¥25.00</td>
+                  <td className="py-3.5 px-4">¥48.00 ~ ¥100.00</td>
+                  <td className="py-3.5 px-4 font-semibold text-slate-400">标准计费</td>
+                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥6.00 ~ ¥12.50</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                 </tr>
 
-                {/* 2. gpt-6-astra */}
+                {/* 2. Anthropic Claude 5.5 系列 */}
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-sky-600"></span>
-                    <span>gpt-6-astra</span>
+                    <span className="w-2 h-2 rounded-full bg-amber-600"></span>
+                    <span>Claude Opus 5.5 / Sonnet 5.5 (Claude 系列)</span>
                   </td>
-                  <td className="py-3.5 px-4">¥30.00</td>
-                  <td className="py-3.5 px-4">¥120.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥15.00 / ¥60.00</td>
-                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥3.00</td>
+                  <td className="py-3.5 px-4">¥15.00 ~ ¥30.00</td>
+                  <td className="py-3.5 px-4">¥75.00 ~ ¥150.00</td>
+                  <td className="py-3.5 px-4 font-semibold text-slate-400">标准计费</td>
+                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥1.50 ~ ¥3.00</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                 </tr>
 
-                {/* 3. claude-fable-5.1 */}
-                <tr className="hover:bg-slate-50/60 transition">
-                  <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-purple-500"></span>
-                    <span>claude-fable-5.1</span>
-                  </td>
-                  <td className="py-3.5 px-4">¥18.00</td>
-                  <td className="py-3.5 px-4">¥90.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥9.00 / ¥45.00</td>
-                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥1.80</td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
-                </tr>
-
-                {/* 4. gemini-3.8-flash */}
-                <tr className="hover:bg-slate-50/60 transition">
-                  <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                    <span>gemini-3.8-flash</span>
-                  </td>
-                  <td className="py-3.5 px-4">¥1.50</td>
-                  <td className="py-3.5 px-4">¥6.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥0.75 / ¥3.00</td>
-                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥0.15</td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
-                </tr>
-
-                {/* 5. gemini-3.8-live */}
+                {/* 3. Google Gemini 系列 */}
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-blue-600"></span>
-                    <span>gemini-3.8-live</span>
+                    <span>Gemini 4 Argon / 3.8 Flash (Gemini 系列)</span>
                   </td>
-                  <td className="py-3.5 px-4">¥5.00</td>
-                  <td className="py-3.5 px-4">¥20.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥2.50 / ¥10.00</td>
-                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥0.50</td>
+                  <td className="py-3.5 px-4">¥1.00 ~ ¥18.00</td>
+                  <td className="py-3.5 px-4">¥4.00 ~ ¥72.00</td>
+                  <td className="py-3.5 px-4 font-semibold text-slate-400">标准计费</td>
+                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥0.25 ~ ¥4.50</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                 </tr>
 
-                {/* 6. deepseek-v4.1-flash */}
-                <tr className="hover:bg-slate-50/60 transition">
-                  <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-                    <span>deepseek-v4.1-flash</span>
-                  </td>
-                  <td className="py-3.5 px-4">¥1.00</td>
-                  <td className="py-3.5 px-4">¥4.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥0.50 / ¥2.00</td>
-                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥0.10</td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
-                </tr>
-
-                {/* 7. deepseek-r1 */}
+                {/* 4. DeepSeek 系列 */}
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
-                    <span>deepseek-r1</span>
+                    <span>DeepSeek V4.1-Flash / R1 (DeepSeek 系列)</span>
                   </td>
-                  <td className="py-3.5 px-4">¥4.00</td>
-                  <td className="py-3.5 px-4">¥16.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥2.00 / ¥8.00</td>
-                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥0.40</td>
+                  <td className="py-3.5 px-4">¥1.50 ~ ¥4.00</td>
+                  <td className="py-3.5 px-4">¥6.00 ~ ¥16.00</td>
+                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥0.75 / ¥2.00 (半价)</td>
+                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥0.35 ~ ¥1.00</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                 </tr>
 
-                {/* 8. qwen-3.8-max */}
+                {/* 5. 阿里通义千问 Qwen 系列 */}
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-teal-500"></span>
-                    <span>qwen-3.8-max</span>
+                    <span className="w-2 h-2 rounded-full bg-teal-600"></span>
+                    <span>通义千问 Qwen-3.8 / Qwen-Coder</span>
+                  </td>
+                  <td className="py-3.5 px-4">¥3.50 ~ ¥5.00</td>
+                  <td className="py-3.5 px-4">¥14.00 ~ ¥20.00</td>
+                  <td className="py-3.5 px-4 font-semibold text-slate-400">标准计费</td>
+                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥0.85 ~ ¥1.25</td>
+                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                </tr>
+
+                {/* 6. 智谱 GLM 系列 */}
+                <tr className="hover:bg-slate-50/60 transition">
+                  <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
+                    <span className="w-2 h-2 rounded-full bg-sky-600"></span>
+                    <span>智谱 GLM-5.3 Agent 系列</span>
                   </td>
                   <td className="py-3.5 px-4">¥6.00</td>
                   <td className="py-3.5 px-4">¥24.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥3.00 / ¥12.00</td>
-                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥1.20</td>
+                  <td className="py-3.5 px-4 font-semibold text-slate-400">标准计费</td>
+                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥1.50</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                 </tr>
 
-                {/* 9. gpt-6-sol */}
+                {/* 7. FLUX 图像生成系列 */}
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-sky-500"></span>
-                    <span>gpt-6-sol</span>
-                  </td>
-                  <td className="py-3.5 px-4">¥12.00</td>
-                  <td className="py-3.5 px-4">¥48.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥6.00 / ¥24.00</td>
-                  <td className="py-3.5 px-4 text-emerald-600 font-bold">¥1.20</td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
-                </tr>
-
-                {/* 10. flux-1.1-pro */}
-                <tr className="hover:bg-slate-50/60 transition">
-                  <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                    <span>flux-1.1-pro</span>
+                    <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                    <span>FLUX.1-Pro / FLUX.1-Schnell (图像系列)</span>
                   </td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                   <td className="py-3.5 px-4 font-semibold text-indigo-600">¥0.10 / 张</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-4 font-bold text-slate-900">¥0.20 / 张</td>
+                  <td className="py-3.5 px-4 font-bold text-slate-900">¥0.05 ~ ¥0.15 / 张</td>
                 </tr>
 
-                {/* 11. sora-2 */}
+                {/* 8. 视频生成系列 */}
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-                    <span>sora-2</span>
+                    <span className="w-2 h-2 rounded-full bg-purple-600"></span>
+                    <span>CogVideoX-5B / Kling 4.0 (视频系列)</span>
                   </td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥0.75 / 次</td>
+                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥0.50 / 次</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-4 font-bold text-slate-900">¥1.50 / 次</td>
+                  <td className="py-3.5 px-4 font-bold text-slate-900">¥0.80 / 次</td>
                 </tr>
 
-                {/* 12. whisper-large-v3-turbo */}
+                {/* 9. 实时语音与 Whisper 系列 */}
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-teal-600"></span>
-                    <span>whisper-large-v3-turbo</span>
+                    <span className="w-2 h-2 rounded-full bg-cyan-600"></span>
+                    <span>GPT Live Transcribe / Whisper-Large-V3</span>
                   </td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥0.02 / 分钟</td>
+                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥0.015 / 分钟</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-4 font-bold text-slate-900">¥0.04 / 分钟</td>
+                  <td className="py-3.5 px-4 font-bold text-slate-900">¥0.02 ~ ¥0.03 / 分钟</td>
                 </tr>
               </tbody>
             </table>

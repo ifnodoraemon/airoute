@@ -787,7 +787,7 @@ export default function App() {
           priority: 1,
           weight: 10,
           timeout_seconds: 60,
-          models_str: 'deepseek-chat, deepseek-reasoner',
+          models_str: 'deepseek-v4.1-flash, deepseek-v4-pro, deepseek-r1, deepseek-chat, deepseek-reasoner',
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'openai_text'],
         }));
@@ -803,9 +803,9 @@ export default function App() {
           priority: 1,
           weight: 10,
           timeout_seconds: 60,
-          models_str: 'glm-4-plus, glm-4-air, glm-4-flash, cogview-3-plus',
+          models_str: 'glm-5.3, glm-5.3-flash, glm-4-plus, cogvideox-5b, cogview-3-plus',
           mapping_str: '',
-          protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings', 'images'],
+          protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings', 'images', 'videos'],
         }));
         showToast('已载入 智谱 GLM 官方模板及模型列表', 'info');
         break;
@@ -819,7 +819,7 @@ export default function App() {
           priority: 1,
           weight: 10,
           timeout_seconds: 60,
-          models_str: 'doubao-seedance-2.0, doubao-pro-32k, doubao-lite-32k',
+          models_str: 'doubao-seed-2.1-pro, doubao-seed-2.1-turbo, doubao-1.5-pro, seedance-2.5',
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings', 'images', 'audio_speech', 'videos'],
         }));
@@ -835,7 +835,7 @@ export default function App() {
           priority: 1,
           weight: 10,
           timeout_seconds: 60,
-          models_str: 'moonshot-v1-8k, moonshot-v1-32k, moonshot-v1-128k',
+          models_str: 'kimi-k3, kimi-k3.1, kimi-latest, moonshot-v1-auto',
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'openai_text'],
         }));
@@ -851,7 +851,7 @@ export default function App() {
           priority: 1,
           weight: 10,
           timeout_seconds: 60,
-          models_str: 'gpt-4o, gpt-4o-mini, text-embedding-3-small, dall-e-3, tts-1, whisper-1',
+          models_str: 'gpt-6, gpt-6-luna, gpt-6.1-sol, gpt-5.5-instant, gpt-image-2.5, gpt-live-transcribe, text-embedding-3-small, whisper-large-v3-turbo',
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'openai_text', 'anthropic_messages', 'embeddings', 'rerank', 'images', 'audio_speech', 'audio_transcription', 'videos'],
         }));
@@ -867,7 +867,7 @@ export default function App() {
           priority: 1,
           weight: 10,
           timeout_seconds: 60,
-          models_str: 'claude-3-5-sonnet-20241022, claude-3-5-haiku-20241022',
+          models_str: 'claude-opus-5.5, claude-sonnet-5.5, claude-haiku-5.5, claude-3-7-sonnet',
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'anthropic_messages'],
         }));
@@ -883,7 +883,7 @@ export default function App() {
           priority: 1,
           weight: 10,
           timeout_seconds: 60,
-          models_str: 'gemini-1.5-pro, gemini-1.5-flash',
+          models_str: 'gemini-4-argon, gemini-3.8-flash, gemini-3.5-flash-lite, gemini-2.0-flash, embeddinggemma-2',
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'anthropic_messages', 'embeddings'],
         }));
@@ -899,7 +899,7 @@ export default function App() {
           priority: 1,
           weight: 10,
           timeout_seconds: 60,
-          models_str: 'llama3.1, qwen2.5:7b, deepseek-r1:8b',
+          models_str: 'llama3.3, qwen3.8:27b, deepseek-r1:8b',
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings'],
         }));
@@ -915,7 +915,7 @@ export default function App() {
           priority: 1,
           weight: 10,
           timeout_seconds: 60,
-          models_str: 'Qwen/Qwen2.5-72B-Instruct',
+          models_str: 'Qwen/Qwen3.8-27B-Instruct, deepseek-ai/DeepSeek-V4.1-Flash',
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings'],
         }));
@@ -4198,7 +4198,7 @@ print(message.content[0].text)`}
   -H "x-api-key: sk-airoute-xxxx" \\
   -H "anthropic-version: 2023-06-01" \\
   -H "Content-Type: application/json" \\
-  -d '{"model": "claude-3-5-sonnet", "messages": [{"role": "user", "content": "Hello world"}]}'
+  -d '{"model": "claude-3-7-sonnet", "messages": [{"role": "user", "content": "Hello world"}]}'
 
 # 响应示例:
 # {"input_tokens": 12}`}
@@ -4220,7 +4220,7 @@ print(message.content[0].text)`}
                         <span className="font-bold text-pink-700">🎨 1. AI 图像生成 (/v1/images/generations)</span>
                         <pre className="mt-1 font-mono text-slate-700">
 {`POST /v1/images/generations
-{"model": "dall-e-3", "prompt": "cyberpunk city, 8k", "size": "1024x1024"}`}
+{"model": "flux-1-schnell", "prompt": "cyberpunk city, 8k", "size": "1024x1024"}`}
                         </pre>
                       </div>
 
@@ -4237,7 +4237,7 @@ print(message.content[0].text)`}
                         <span className="font-bold text-teal-700">🎙️ 3. Whisper 语音转录 (/v1/audio/transcriptions)</span>
                         <pre className="mt-1 font-mono text-slate-700">
 {`POST /v1/audio/transcriptions (multipart/form-data)
-file=@recording.mp3; model=whisper-1`}
+file=@recording.mp3; model=whisper-large-v3-turbo`}
                         </pre>
                       </div>
 
@@ -4245,7 +4245,7 @@ file=@recording.mp3; model=whisper-1`}
                         <span className="font-bold text-teal-700">🌐 4. Whisper 语音翻译 (/v1/audio/translations)</span>
                         <pre className="mt-1 font-mono text-slate-700">
 {`POST /v1/audio/translations (multipart/form-data)
-file=@foreign_speech.mp3; model=whisper-1
+file=@foreign_speech.mp3; model=whisper-large-v3-turbo
 (将源语言音频直接翻译并转录为英文文本)`}
                         </pre>
                       </div>
@@ -4286,11 +4286,11 @@ GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
                         </li>
                         <li>
                           <strong>前缀通配映射:</strong> <code>org/dept/*:*</code> <br />
-                          客户端请求 <code>org/dept/v1/deepseek-ai/DeepSeek-V3</code>，自动剥离前缀发往目标集群。
+                          客户端请求 <code>org/dept/v1/deepseek-ai/DeepSeek-V4-Pro</code>，自动剥离前缀发往目标集群。
                         </li>
                         <li>
                           <strong>服务商自动前缀:</strong> <code>&lt;ProviderName&gt;/&lt;Model&gt;</code> <br />
-                          当存在多个提供商均提供 <code>gpt-4o</code> 时，客户端可直接指定 <code>openai-us/gpt-4o</code> 精准定向路由！
+                          当存在多个提供商均提供 <code>gpt-6</code> 时，客户端可直接指定 <code>openai-us/gpt-6</code> 精准定向路由！
                         </li>
                       </ul>
                     </div>

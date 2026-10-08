@@ -4,6 +4,7 @@ import { Layers, MessageSquare, Zap, Terminal, Sparkles, Image, Volume2, Mic, Cp
 const CAPABILITIES = [
   { id: 'openai_chat', name: 'Chat', path: '/v1/chat/completions', icon: MessageSquare, color: 'text-indigo-500' },
   { id: 'openai_response', name: 'Responses', path: '/v1/responses', icon: Zap, color: 'text-emerald-500' },
+  { id: 'openai_text', name: 'Text 补全', path: '/v1/completions', icon: Terminal, color: 'text-sky-500' },
   { id: 'anthropic_messages', name: 'Claude Messages', path: '/v1/messages', icon: Sparkles, color: 'text-amber-500' },
   { id: 'images', name: 'Images', path: '/v1/images/generations', icon: Image, color: 'text-pink-500' },
   { id: 'audio_speech', name: 'TTS', path: '/v1/audio/speech', icon: Volume2, color: 'text-cyan-500' },
@@ -19,7 +20,7 @@ export default function CapabilitiesSelector({ protocols = [], onToggle, onSetPr
   };
 
   const handleSelectChatOnly = () => {
-    onSetProtocols(['openai_chat', 'openai_response', 'anthropic_messages']);
+    onSetProtocols(['openai_chat', 'openai_response', 'openai_text', 'anthropic_messages']);
   };
 
   const handleClear = () => {

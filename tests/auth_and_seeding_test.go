@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -82,8 +83,7 @@ func TestAuthMiddleware_APIKeyContextAndLogging(t *testing.T) {
 }
 
 func TestStorageSeeding_ProtocolsPersistence(t *testing.T) {
-	tempDB := "test_seeding_" + t.Name() + ".db"
-	defer os.Remove(tempDB)
+	tempDB := filepath.Join(t.TempDir(), "test_seeding_"+t.Name()+".db")
 
 	db, err := storage.OpenDB(tempDB)
 	if err != nil {
@@ -181,7 +181,7 @@ func TestConfig_EnvironmentVariableExpansion(t *testing.T) {
 	os.Setenv("TEST_GATEWAY_SECRET", "super-secret-token-12345")
 	defer os.Unsetenv("TEST_GATEWAY_SECRET")
 
-	tempYAML := "test_config_expand_" + t.Name() + ".yaml"
+	tempYAML := filepath.Join(t.TempDir(), "test_config_expand_"+t.Name()+".yaml")
 	yamlContent := `
 server:
   host: "127.0.0.1"
@@ -195,7 +195,6 @@ channels:
 	if err := os.WriteFile(tempYAML, []byte(yamlContent), 0644); err != nil {
 		t.Fatalf("failed to write test yaml: %v", err)
 	}
-	defer os.Remove(tempYAML)
 
 	cfg, err := config.LoadConfig(tempYAML)
 	if err != nil {

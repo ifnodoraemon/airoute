@@ -82,13 +82,21 @@ func (c *ChannelConfig) SupportsProtocol(proto string) bool {
 	return false
 }
 
-// OnlySupportsProtocol checks if the channel only supports a single protocol.
+// OnlySupportsProtocol checks if the channel only supports a single protocol (accounting for standard aliases).
 func (c *ChannelConfig) OnlySupportsProtocol(proto string) bool {
 	if len(c.Protocols) == 0 {
 		return false
 	}
 	for _, p := range c.Protocols {
-		if p != proto {
+		match := false
+		if p == proto {
+			match = true
+		} else if (p == "openai_text" || p == "completion") && (proto == "openai_text" || proto == "completion") {
+			match = true
+		} else if (p == "openai_chat" || p == "chat") && (proto == "openai_chat" || proto == "chat") {
+			match = true
+		}
+		if !match {
 			return false
 		}
 	}

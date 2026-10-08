@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -30,8 +30,7 @@ func TestAPIKey_ActiveVsDisabled(t *testing.T) {
 		config.SetGlobalConfig(&savedCfg)
 	}()
 
-	tempDB := fmt.Sprintf("test_key_gov_%d.db", time.Now().UnixNano())
-	defer os.Remove(tempDB)
+	tempDB := filepath.Join(t.TempDir(), fmt.Sprintf("test_key_gov_%d.db", time.Now().UnixNano()))
 
 	db, err := storage.OpenDB(tempDB)
 	if err != nil {

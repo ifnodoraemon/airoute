@@ -105,22 +105,32 @@ export default function ServiceStatus({
     const lower = modelName.toLowerCase();
     if (lower.includes('rerank') || lower.includes('bge-reranker')) return 'rerank';
     if (lower.includes('embed') || lower.includes('bge-large') || lower.includes('bge-m3')) return 'embeddings';
-    if (lower.includes('sora') || lower.includes('video') || lower.includes('seedance') || lower.includes('gen-3') || lower.includes('kling')) return 'videos';
-    if (lower.includes('tts') || lower.includes('whisper') || lower.includes('audio') || lower.includes('speech')) return 'audio';
-    if (lower.includes('image') || lower.includes('dall-e') || lower.includes('flux') || lower.includes('midjourney') || lower.includes('sdxl')) return 'images';
+    if (lower.includes('sora') || lower.includes('video') || lower.includes('seedance') || lower.includes('gen-3') || lower.includes('kling') || lower.includes('cogvideo') || lower.includes('视频')) return 'videos';
+    if (lower.includes('tts') || lower.includes('whisper') || lower.includes('audio') || lower.includes('speech') || lower.includes('voice') || lower.includes('语音')) return 'audio';
+    if (lower.includes('image') || lower.includes('dall-e') || lower.includes('flux') || lower.includes('midjourney') || lower.includes('sdxl') || lower.includes('图像')) return 'images';
     if (lower.includes('vision') || lower.includes('omni') || lower.includes('vl') || lower.includes('4o')) return 'vision';
     return 'chat';
   };
 
   const DEFAULT_PUBLIC_MODELS = [
+    { model: 'gpt-6', modality: 'chat', status: 'operational' },
+    { model: 'gpt-6-luna', modality: 'chat', status: 'operational' },
     { model: 'claude-opus-5.5', modality: 'chat', status: 'operational' },
-    { model: 'gpt-6-astra', modality: 'chat', status: 'operational' },
-    { model: 'deepseek-r1', modality: 'chat', status: 'operational' },
-    { model: 'deepseek-v4.1-flash', modality: 'chat', status: 'operational' },
+    { model: 'claude-sonnet-5.5', modality: 'chat', status: 'operational' },
+    { model: 'gemini-4-argon', modality: 'chat', status: 'operational' },
     { model: 'gemini-3.8-flash', modality: 'chat', status: 'operational' },
+    { model: 'deepseek-v4.1-flash', modality: 'chat', status: 'operational' },
+    { model: 'deepseek-v4-pro', modality: 'chat', status: 'operational' },
+    { model: 'deepseek-r1', modality: 'chat', status: 'operational' },
+    { model: 'qwen-3.8', modality: 'chat', status: 'operational' },
+    { model: 'glm-5.3', modality: 'chat', status: 'operational' },
+    { model: 'doubao-seed-2.1-pro', modality: 'chat', status: 'operational' },
+    { model: 'kimi-k3', modality: 'chat', status: 'operational' },
     { model: 'flux-1.1-pro', modality: 'images', status: 'operational' },
-    { model: 'whisper-large-v3-turbo', modality: 'audio', status: 'operational' },
-    { model: 'sora-2', modality: 'videos', status: 'operational' }
+    { model: 'kling-4.0', modality: 'videos', status: 'operational' },
+    { model: 'cogvideox-5b', modality: 'videos', status: 'operational' },
+    { model: 'gpt-live-transcribe', modality: 'audio', status: 'operational' },
+    { model: 'embeddinggemma-2', modality: 'embeddings', status: 'operational' }
   ];
 
   // Determine display models: prefer modelRoutes if available, otherwise public models from /api/v1/public/status

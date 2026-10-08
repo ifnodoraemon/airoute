@@ -119,6 +119,28 @@ func (h *Handler) HandleGeminiAction(c *gin.Context) {
 		c.Header("X-Airoute-Warning", strings.Join(valRes.Warnings, "; "))
 	}
 
+	if action == "countTokens" {
+		totalChars := 0
+		if geminiReq.SystemInstruction != nil {
+			for _, p := range geminiReq.SystemInstruction.Parts {
+				totalChars += len(p.Text)
+			}
+		}
+		for _, cnt := range geminiReq.Contents {
+			for _, p := range cnt.Parts {
+				totalChars += len(p.Text)
+			}
+		}
+		totalTokens := totalChars / 4
+		if totalTokens == 0 {
+			totalTokens = 1
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"totalTokens": totalTokens,
+		})
+		return
+	}
+
 	canonicalReq := convertInboundGeminiToCanonical(modelName, &geminiReq, isStream)
 
 	sessionID := resolveSessionID(c, canonicalReq.Model, canonicalReq.Messages, "")

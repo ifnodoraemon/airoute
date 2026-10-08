@@ -67,6 +67,9 @@ type ChatCompletionRequest struct {
 	User             string         `json:"user,omitempty"`
 	Tools            []Tool         `json:"tools,omitempty"`
 	ToolChoice       any            `json:"tool_choice,omitempty"`
+
+	// Protocol specifies the desired routing protocol (e.g. "openai_text", "openai_chat"). Internal metadata; never serialized.
+	Protocol string `json:"-"`
 }
 
 // PromptTokensDetails provides token breakdown details including cache hits.

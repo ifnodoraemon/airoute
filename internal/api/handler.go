@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -426,6 +427,268 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	}
 }
 
+// LegacyCompletionRequest represents the standard OpenAI text completion payload (POST /v1/completions).
+type LegacyCompletionRequest struct {
+	Model       string   `json:"model"`
+	Prompt      any      `json:"prompt"` // string or []string or []any
+	MaxTokens   *int     `json:"max_tokens,omitempty"`
+	Temperature *float64 `json:"temperature,omitempty"`
+	TopP        *float64 `json:"top_p,omitempty"`
+	N           *int     `json:"n,omitempty"`
+	Stream      bool     `json:"stream,omitempty"`
+	User        string   `json:"user,omitempty"`
+}
+
+// TextCompletionChoice represents a choice in an OpenAI text completion response.
+type TextCompletionChoice struct {
+	Text         string `json:"text"`
+	Index        int    `json:"index"`
+	Logprobs     any     `json:"logprobs"`
+	FinishReason *string `json:"finish_reason"`
+}
+
+// TextCompletionResponse represents the response for POST /v1/completions.
+type TextCompletionResponse struct {
+	ID      string                 `json:"id"`
+	Object  string                 `json:"object"`
+	Created int64                  `json:"created"`
+	Model   string                 `json:"model"`
+	Choices []TextCompletionChoice `json:"choices"`
+	Usage   *model.Usage           `json:"usage,omitempty"`
+}
+
+// HandleCompletions handles legacy text completions POST /v1/completions.
+func (h *Handler) HandleCompletions(c *gin.Context) {
+	var req LegacyCompletionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"message": fmt.Sprintf("Invalid JSON request body: %v", err),
+				"type":    "invalid_request_error",
+				"code":    "invalid_payload",
+			},
+		})
+		return
+	}
+
+	if req.Model == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"message": "Missing 'model' field in request body",
+				"type":    "invalid_request_error",
+				"code":    "missing_model",
+			},
+		})
+		return
+	}
+
+	if !middleware.ValidateModelAllowed(c, req.Model) {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": gin.H{
+				"message": fmt.Sprintf("Your API key is not permitted to access model '%s'", req.Model),
+				"type":    "forbidden",
+				"code":    "model_not_allowed",
+			},
+		})
+		return
+	}
+
+	var promptText string
+	switch v := req.Prompt.(type) {
+	case string:
+		promptText = v
+	case []any:
+		var parts []string
+		for _, item := range v {
+			parts = append(parts, fmt.Sprint(item))
+		}
+		promptText = strings.Join(parts, "\n")
+	case []string:
+		promptText = strings.Join(v, "\n")
+	}
+
+	chatReq := model.ChatCompletionRequest{
+		Model:       req.Model,
+		Messages:    []model.ChatMessage{{Role: "user", Content: promptText}},
+		Temperature: req.Temperature,
+		TopP:        req.TopP,
+		N:           req.N,
+		Stream:      req.Stream,
+		User:        req.User,
+		Protocol:    "openai_text",
+	}
+	if req.MaxTokens != nil {
+		chatReq.MaxTokens = req.MaxTokens
+	}
+
+	telemetry.GlobalMetrics.IncActiveConns()
+	defer telemetry.GlobalMetrics.DecActiveConns()
+
+	sessionID := resolveSessionID(c, req.Model, chatReq.Messages, req.User)
+	reqCtx := c.Request.Context()
+	if sessionID != "" {
+		reqCtx = context.WithValue(reqCtx, router.ContextKeySessionID, sessionID)
+	}
+
+	start := time.Now()
+
+	if !req.Stream {
+		resp, err := h.dispatcher.Dispatch(reqCtx, &chatReq)
+		if err != nil {
+			failedStatus := http.StatusBadGateway
+			if strings.Contains(err.Error(), "no upstream provider available") {
+				failedStatus = http.StatusNotFound
+			}
+			recordFailedRequest(c, sessionID, req.Model, time.Since(start), failedStatus)
+			c.JSON(failedStatus, gin.H{
+				"error": gin.H{
+					"message": err.Error(),
+					"type":    "gateway_error",
+					"code":    "upstream_failure",
+				},
+			})
+			return
+		}
+
+		dur := time.Since(start)
+		pTokens := 0
+		cTokens := 0
+		cachedTokens := 0
+		if resp.Usage != nil {
+			pTokens = resp.Usage.PromptTokens
+			cTokens = resp.Usage.CompletionTokens
+			cachedTokens = resp.Usage.GetCachedTokens()
+		}
+
+		var cost float64
+		var isOffPeak bool
+		var offPeakDiscount float64 = 1.0
+		keyGroup := getKeyGroup(c)
+		if billing.GlobalEngine != nil {
+			cost, _, _, isOffPeak, offPeakDiscount = billing.GlobalEngine.CalculateCostDetailedWithGroup(req.Model, keyGroup, pTokens, cTokens, cachedTokens, time.Now())
+		}
+		telemetry.GlobalMetrics.RecordRequestWithModel(req.Model, true, dur, pTokens, cTokens)
+		if storage.GlobalAsyncLogger != nil {
+			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
+				TraceID:          middleware.GetTraceID(c),
+				ChatID:           resp.ID,
+				Channel:          resp.Channel,
+				SessionID:        sessionID,
+				APIKey:           getRequestAPIKey(c),
+				TenantID:         c.GetString("tenant_id"),
+				Model:            req.Model,
+				PromptTokens:     pTokens,
+				CompletionTokens: cTokens,
+				CachedTokens:     cachedTokens,
+				TotalTokens:      pTokens + cTokens,
+				Cost:             cost,
+				IsOffPeak:        isOffPeak,
+				OffPeakDiscount:  offPeakDiscount,
+				DurationMs:       dur.Milliseconds(),
+				StatusCode:       http.StatusOK,
+			})
+		}
+
+		textResp := TextCompletionResponse{
+			ID:      resp.ID,
+			Object:  "text_completion",
+			Created: resp.Created,
+			Model:   resp.Model,
+			Usage:   resp.Usage,
+		}
+		for i, ch := range resp.Choices {
+			textResp.Choices = append(textResp.Choices, TextCompletionChoice{
+				Text:         ch.Message.GetContentString(),
+				Index:        i,
+				Logprobs:     nil,
+				FinishReason: ch.FinishReason,
+			})
+		}
+		c.JSON(http.StatusOK, textResp)
+		return
+	}
+
+	// Stream mode for POST /v1/completions
+	streamChan, err := h.dispatcher.DispatchStream(reqCtx, &chatReq)
+	if err != nil {
+		recordFailedRequest(c, sessionID, req.Model, time.Since(start), http.StatusBadGateway)
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{
+				"message": err.Error(),
+				"type":    "gateway_error",
+				"code":    "upstream_failure",
+			},
+		})
+		return
+	}
+
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+	c.Status(http.StatusOK)
+
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Streaming unsupported"})
+		return
+	}
+	flusher.Flush()
+
+	w := c.Writer
+	respID := fmt.Sprintf("cmpl_%d", time.Now().UnixNano())
+	nowCreated := time.Now().Unix()
+
+	for event := range streamChan {
+		if event.Err != nil {
+			errBytes, _ := json.Marshal(gin.H{
+				"error": gin.H{
+					"message": event.Err.Error(),
+					"type":    "stream_error",
+				},
+			})
+			fmt.Fprintf(w, "data: %s\n\n", errBytes)
+			flusher.Flush()
+			break
+		}
+
+		if event.IsDone {
+			fmt.Fprintf(w, "data: [DONE]\n\n")
+			flusher.Flush()
+			break
+		}
+
+		if event.Chunk != nil {
+			deltaText := ""
+			var finishReason *string
+			if len(event.Chunk.Choices) > 0 {
+				deltaText = event.Chunk.Choices[0].Delta.Content
+				finishReason = event.Chunk.Choices[0].FinishReason
+			}
+
+			chunkPayload := gin.H{
+				"id":      respID,
+				"object":  "text_completion",
+				"created": nowCreated,
+				"model":   req.Model,
+				"choices": []gin.H{
+					{
+						"text":          deltaText,
+						"index":         0,
+						"logprobs":      nil,
+						"finish_reason": finishReason,
+					},
+				},
+			}
+			chunkBytes, err := json.Marshal(chunkPayload)
+			if err == nil {
+				fmt.Fprintf(w, "data: %s\n\n", chunkBytes)
+				flusher.Flush()
+			}
+		}
+	}
+}
+
 // HandleModels handles GET /v1/models.
 func (h *Handler) HandleModels(c *gin.Context) {
 	models := h.dispatcher.GetAllSupportedModels()
@@ -627,12 +890,6 @@ func (h *Handler) HandleMetrics(c *gin.Context) {
 // HandlePublicStatus handles GET /api/v1/public/status for public status page.
 func (h *Handler) HandlePublicStatus(c *gin.Context) {
 	models := h.dispatcher.GetAllSupportedModels()
-	if len(models) == 0 {
-		models = []string{
-			"claude-opus-5.5", "gpt-6-astra", "deepseek-r1", "deepseek-v4.1-flash",
-			"gemini-3.8-flash", "flux-1.1-pro", "whisper-large-v3-turbo", "sora-2",
-		}
-	}
 	type publicModelStatus struct {
 		Model     string `json:"model"`
 		Modality  string `json:"modality"`
@@ -664,22 +921,29 @@ func (h *Handler) HandlePublicStatus(c *gin.Context) {
 			Model:     m,
 			Modality:  modality,
 			Status:    st,
-			LatencyMs: 35,
+			LatencyMs: 0,
 		})
 	}
 
 	overallStatus := "operational"
-	if !allHealthy {
+	if !allHealthy && len(models) > 0 {
 		overallStatus = "degraded"
 	}
+
+	requireVerify := os.Getenv("REQUIRE_EMAIL_VERIFICATION") == "true" || (strings.TrimSpace(os.Getenv("SMTP_HOST")) != "" && os.Getenv("REQUIRE_EMAIL_VERIFICATION") != "false")
 
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
 		"data": gin.H{
-			"status":       overallStatus,
-			"uptime_pct":   99.99,
-			"models":       modelStatuses,
-			"models_count": len(models),
+			"status":                     overallStatus,
+			"uptime_pct":                 99.99,
+			"models":                     modelStatuses,
+			"models_count":               len(models),
+			"require_email_verification": requireVerify,
+			"oauth_github_enabled":       os.Getenv("GITHUB_CLIENT_ID") != "",
+			"oauth_google_enabled":       os.Getenv("GOOGLE_CLIENT_ID") != "",
+			"stripe_enabled":             os.Getenv("STRIPE_API_KEY") != "",
+			"sandbox_recharge_enabled":   os.Getenv("ENABLE_SANDBOX_RECHARGE") == "true",
 		},
 	})
 }

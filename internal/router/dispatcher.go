@@ -8,7 +8,9 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -303,7 +305,11 @@ func formatChannelTrail(ctx context.Context, attempted []string, final string) s
 
 // Dispatch executes non-streaming chat with automatic fallback.
 func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequest) (*model.ChatCompletionResponse, error) {
-	channels := d.GetChannelsForModelAndProtocolWithContext(ctx, req.Model, "chat")
+	proto := "chat"
+	if req.Protocol != "" {
+		proto = req.Protocol
+	}
+	channels := d.GetChannelsForModelAndProtocolWithContext(ctx, req.Model, proto)
 	if len(channels) == 0 {
 		channels = d.GetChannelsForModelAndProtocolWithContext(ctx, req.Model, "")
 	}
@@ -405,7 +411,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 
 // DispatchStream executes streaming chat with Safe Fallback Window before the first token.
 func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompletionRequest) (<-chan *model.StreamEvent, error) {
-	channels := d.GetChannelsForModelAndProtocolWithContext(ctx, req.Model, "chat")
+	proto := "chat"
+	if req.Protocol != "" {
+		proto = req.Protocol
+	}
+	channels := d.GetChannelsForModelAndProtocolWithContext(ctx, req.Model, proto)
 	if len(channels) == 0 {
 		channels = d.GetChannelsForModelAndProtocolWithContext(ctx, req.Model, "")
 	}
@@ -464,7 +474,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			continue
 		}
 
-		// Safe Fallback Window: wait for the first event to confirm healthy stream
+		firstTokenTimeout := d.GetFirstTokenTimeout(ch, req.Model)
 		select {
 		case firstEvent, ok := <-streamChan:
 			if !ok {
@@ -525,12 +535,12 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 
 			return outChan, nil
 
-		case <-time.After(15 * time.Second):
+		case <-time.After(firstTokenTimeout):
 			d.circuitBreaker.RecordFailure(ch.Name)
-			lastErr = fmt.Errorf("channel %s timed out waiting for first token", ch.Name)
+			lastErr = fmt.Errorf("channel %s timed out waiting for first token (%v)", ch.Name, firstTokenTimeout)
 			attempted = append(attempted, ch.Name)
 			telemetry.GlobalMetrics.RecordFallback()
-			telemetry.Logger.Warn("first token timeout, falling back", "channel", ch.Name)
+			telemetry.Logger.Warn("first token timeout, falling back", "channel", ch.Name, "timeout", firstTokenTimeout)
 			continue
 
 		case <-ctx.Done():
@@ -555,6 +565,29 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 	}
 
 	return nil, fmt.Errorf("all channels failed for stream request on model %s. Last error: %w", req.Model, lastErr)
+}
+
+// GetFirstTokenTimeout determines the safe fallback window timeout for a channel and model.
+// Deep thinking / reasoning models (e.g. o1, o3, DeepSeek-R1) are given an extended window (up to 60s),
+// and the environment variable GATEWAY_FIRST_TOKEN_TIMEOUT can explicitly override the default 30s.
+func (d *Dispatcher) GetFirstTokenTimeout(ch *model.ChannelConfig, modelName string) time.Duration {
+	timeout := 30 * time.Second
+	lowerModel := strings.ToLower(modelName)
+	if strings.Contains(lowerModel, "r1") || strings.Contains(lowerModel, "o1") || strings.Contains(lowerModel, "o3") || strings.Contains(lowerModel, "reasoning") || strings.Contains(lowerModel, "thinking") {
+		timeout = 60 * time.Second
+	}
+	if env := os.Getenv("GATEWAY_FIRST_TOKEN_TIMEOUT"); env != "" {
+		if s, err := strconv.Atoi(env); err == nil && s > 0 {
+			timeout = time.Duration(s) * time.Second
+		}
+	}
+	if ch != nil && ch.TimeoutSeconds > 0 {
+		chTimeout := time.Duration(ch.TimeoutSeconds) * time.Second
+		if timeout > chTimeout {
+			timeout = chTimeout
+		}
+	}
+	return timeout
 }
 
 // GetBreakerStatus returns the circuit breaker status of a channel.

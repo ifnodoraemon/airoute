@@ -151,8 +151,9 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 	v1.Use(middleware.AuthMiddleware())
 	v1.Use(middleware.RateLimitMiddleware())
 	{
-		// OpenAI ingress (Chat completions + Responses + Models + Embeddings + Rerank + Moderations)
+		// OpenAI ingress (Chat completions + Text completions + Responses + Models + Embeddings + Rerank + Moderations)
 		v1.POST("/chat/completions", handler.HandleChatCompletions)
+		v1.POST("/completions", handler.HandleCompletions)
 		v1.POST("/responses", handler.HandleResponses)
 		v1.GET("/models", handler.HandleModels)
 		v1.GET("/models/:model", handler.HandleModelDetail)
