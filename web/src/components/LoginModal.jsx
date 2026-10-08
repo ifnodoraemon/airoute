@@ -38,6 +38,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
 
   // Enterprise public capability configuration
   const [sysConfig, setSysConfig] = useState({
+    allow_registration: true,
     require_email_verification: false,
     oauth_github_enabled: false,
     oauth_google_enabled: false
@@ -49,6 +50,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
       .then(data => {
         if (data.code === 0 && data.data) {
           setSysConfig({
+            allow_registration: data.data.allow_registration !== false,
             require_email_verification: !!data.data.require_email_verification,
             oauth_github_enabled: !!data.data.oauth_github_enabled,
             oauth_google_enabled: !!data.data.oauth_google_enabled
@@ -204,45 +206,40 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
         </div>
 
         {/* Tab Switcher */}
-        <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-2xl text-xs font-bold">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('login');
-              setError('');
-              setSuccessMsg('');
-            }}
-            className={`py-2 rounded-xl transition cursor-pointer ${
-              activeTab === 'login'
-                ? 'bg-white text-indigo-600 shadow-xs'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            账号登录
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('register');
-              setError('');
-              setSuccessMsg('');
-            }}
-            className={`py-2 rounded-xl transition cursor-pointer flex items-center justify-center space-x-1 ${
-              activeTab === 'register'
-                ? 'bg-white text-indigo-600 shadow-xs'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <span>注册新用户</span>
-            <span className="text-[10px] px-1.5 py-0.2 bg-indigo-50 text-indigo-600 rounded-full font-normal">免费开通</span>
-          </button>
-        </div>
-
-        <div className="text-[11px] text-slate-500 text-center px-1">
-          {activeTab === 'login'
-            ? '统一身份登录：系统将根据账号角色（超级管理员 / 普通用户）呈现专属工作台'
-            : '注册成功即为普通用户角色，享有独立钱包、专属 API Key 及独立审计流水'}
-        </div>
+        {sysConfig.allow_registration ? (
+          <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-2xl text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('login');
+                setError('');
+                setSuccessMsg('');
+              }}
+              className={`py-2 rounded-xl transition cursor-pointer ${
+                activeTab === 'login'
+                  ? 'bg-white text-indigo-600 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              账号登录
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('register');
+                setError('');
+                setSuccessMsg('');
+              }}
+              className={`py-2 rounded-xl transition cursor-pointer flex items-center justify-center ${
+                activeTab === 'register'
+                  ? 'bg-white text-indigo-600 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <span>注册账号</span>
+            </button>
+          </div>
+        ) : null}
 
         {error && (
           <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center space-x-2">
@@ -403,7 +400,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
               </div>
             </div>
 
-            {sysConfig.require_email_verification ? (
+            {sysConfig.require_email_verification && (
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   邮箱验证码
@@ -434,10 +431,6 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
                   </button>
                 </div>
               </div>
-            ) : (
-              <div className="text-[11px] text-slate-400 bg-slate-50 border border-slate-200/60 rounded-xl p-2.5">
-                🏢 私有化环境：无需邮箱验证码，完成表单即可直接注册登录。
-              </div>
             )}
 
             <div>
@@ -462,11 +455,6 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-            </div>
-
-            <div className="p-2.5 bg-indigo-50/70 border border-indigo-200/80 rounded-xl text-[11px] text-indigo-700 flex items-center space-x-2">
-              <Sparkles className="w-4 h-4 shrink-0 text-indigo-600" />
-              <span>注册即可获得初始额度并自动生成网关专属 API Key！</span>
             </div>
 
             <div className="pt-2">

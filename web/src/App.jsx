@@ -2382,7 +2382,7 @@ export default function App() {
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-rose-900">
-                    安全风险预警：当前管理员使用默认初始密码 (admin123)
+                    安全风险预警：当前管理员账号使用默认初始密码
                   </h4>
                   <p className="text-xs text-rose-700 mt-0.5">
                     为保障网关控制台与算力资产安全，强烈建议您立即修改初始密码，避免未授权访问风险。

@@ -166,7 +166,7 @@ func runServer(args []string) {
 	repo := storage.NewRepository(db)
 
 	// Ensure default admin user account exists
-	controlplane.InitDefaultAdmin(repo)
+	controlplane.InitDefaultAdmin(repo, cfg)
 
 	// Seed DB from YAML config if DB is currently empty
 	existingChannels, _ := repo.ListChannels()
@@ -836,10 +836,14 @@ func ensureAdminToken(endpoint, token string) string {
 	if token != "" {
 		return token
 	}
-	// Attempt auto-login with default admin credentials if no token provided
+	cfg := config.GetGlobalConfig()
+	adminUser := cfg.GetAdminUsername()
+	adminPass := cfg.GetAdminPassword()
+
+	// Attempt auto-login with configured admin credentials if no token provided
 	loginPayload, _ := json.Marshal(map[string]string{
-		"username": "admin",
-		"password": "admin123",
+		"username": adminUser,
+		"password": adminPass,
 	})
 	resp, err := http.Post(endpoint+"/api/v1/auth/login", "application/json", bytes.NewReader(loginPayload))
 	if err == nil {

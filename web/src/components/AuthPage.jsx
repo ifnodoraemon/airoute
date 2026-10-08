@@ -33,6 +33,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
 
   // System security and capabilities config
   const [sysConfig, setSysConfig] = useState({
+    allow_registration: true,
     require_email_verification: false,
     oauth_github_enabled: false,
     oauth_google_enabled: false
@@ -49,6 +50,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
       .then(data => {
         if (data.code === 0 && data.data) {
           setSysConfig({
+            allow_registration: data.data.allow_registration !== false,
             require_email_verification: !!data.data.require_email_verification,
             oauth_github_enabled: !!data.data.oauth_github_enabled,
             oauth_google_enabled: !!data.data.oauth_google_enabled
@@ -62,6 +64,12 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
     setError('');
     setSuccessMsg('');
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!sysConfig.allow_registration && activeTab === 'register') {
+      setActiveTab('login');
+    }
+  }, [sysConfig.allow_registration, activeTab]);
 
   // Handle Login Submit
   const handleLoginSubmit = async (e) => {
@@ -220,30 +228,32 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
           </div>
 
           {/* Tab Switcher */}
-          <div className="flex p-1 bg-slate-100/90 rounded-2xl">
-            <button
-              type="button"
-              onClick={() => setActiveTab('login')}
-              className={`flex-1 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${
-                activeTab === 'login'
-                  ? 'bg-white text-indigo-700 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              账号登录
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('register')}
-              className={`flex-1 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${
-                activeTab === 'register'
-                  ? 'bg-white text-indigo-700 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              新用户注册
-            </button>
-          </div>
+          {sysConfig.allow_registration && (
+            <div className="flex p-1 bg-slate-100/90 rounded-2xl">
+              <button
+                type="button"
+                onClick={() => setActiveTab('login')}
+                className={`flex-1 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${
+                  activeTab === 'login'
+                    ? 'bg-white text-indigo-700 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                账号登录
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('register')}
+                className={`flex-1 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${
+                  activeTab === 'register'
+                    ? 'bg-white text-indigo-700 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                新用户注册
+              </button>
+            </div>
+          )}
 
           {/* Feedback Messages */}
           {error && (

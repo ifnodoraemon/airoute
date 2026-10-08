@@ -9,6 +9,20 @@ enable_fallback: true
 max_retries: 3
 default_timeout_seconds: 60
 
+# 管理员凭证配置 (Administrator Credentials)
+# 支持环境变量 GATEWAY_ADMIN_USER / GATEWAY_ADMIN_PASSWORD 覆盖
+admin:
+  username: "${GATEWAY_ADMIN_USER:-admin}"
+  password: "${GATEWAY_ADMIN_PASSWORD:-admin123}"
+
+# 认证与用户策略配置 (Authentication & Governance)
+# 支持环境变量 ALLOW_REGISTRATION / REQUIRE_EMAIL_VERIFICATION / INITIAL_USER_BALANCE 覆盖
+auth:
+  allow_registration: true
+  require_email_verification: false
+  initial_user_balance: 5.0
+  token_expiry_hours: 168
+
 # Configured upstream channels (empty by default, create via Web UI or Admin API)
 channels: []
 

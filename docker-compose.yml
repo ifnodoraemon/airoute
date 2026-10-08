@@ -55,6 +55,9 @@ services:
       - DATABASE_URL=postgres://airoute:airoute_cluster_secret_pass_2026@postgres:5432/airoute?sslmode=disable
       - REDIS_URL=redis://redis:6379/0
       - GATEWAY_ADMIN_SECRET=airoute-cluster-admin-shared-secret-key-32b
+      - GATEWAY_ADMIN_USER=${GATEWAY_ADMIN_USER:-admin}
+      - GATEWAY_ADMIN_PASSWORD=${GATEWAY_ADMIN_PASSWORD:-admin123}
+      - ALLOW_REGISTRATION=${ALLOW_REGISTRATION:-true}
     volumes:
       - gateway-data:/app/data
       - ./configs/config.yaml:/app/configs/config.yaml:ro
@@ -86,6 +89,9 @@ services:
       - DATABASE_URL=postgres://airoute:airoute_cluster_secret_pass_2026@postgres:5432/airoute?sslmode=disable
       - REDIS_URL=redis://redis:6379/0
       - GATEWAY_ADMIN_SECRET=airoute-cluster-admin-shared-secret-key-32b
+      - GATEWAY_ADMIN_USER=${GATEWAY_ADMIN_USER:-admin}
+      - GATEWAY_ADMIN_PASSWORD=${GATEWAY_ADMIN_PASSWORD:-admin123}
+      - ALLOW_REGISTRATION=${ALLOW_REGISTRATION:-true}
     volumes:
       - gateway-data:/app/data
       - ./configs/config.yaml:/app/configs/config.yaml:ro

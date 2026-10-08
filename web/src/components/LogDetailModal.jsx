@@ -216,7 +216,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
                     <span> = ¥{(log.cost || 0).toFixed(4)}</span>
                   </>
                 ) : (
-                  <span className="text-emerald-600 font-medium">免费模型或管理员免计费</span>
+                  <span className="text-emerald-600 font-medium">零费率模型或管理员豁免计费</span>
                 )}
               </span>
             </div>

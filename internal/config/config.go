@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -18,6 +19,20 @@ type ServerConfig struct {
 	WriteTimeoutSec int    `yaml:"write_timeout_sec"`
 	LogLevel        string `yaml:"log_level"`
 	RedisURL        string `yaml:"redis_url"`
+}
+
+// AdminConfig defines initial administrator credentials.
+type AdminConfig struct {
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+}
+
+// AuthConfig defines user authentication and governance policies.
+type AuthConfig struct {
+	AllowRegistration        *bool   `yaml:"allow_registration"`
+	RequireEmailVerification *bool   `yaml:"require_email_verification"`
+	InitialUserBalance       float64 `yaml:"initial_user_balance"`
+	TokenExpiryHours         int     `yaml:"token_expiry_hours"`
 }
 
 // ModelValidationRule defines per-model format validation rules.
@@ -37,6 +52,8 @@ type ModelValidationConfig struct {
 // Config represents the complete gateway configuration.
 type Config struct {
 	Server                 ServerConfig              `yaml:"server"`
+	Admin                  AdminConfig               `yaml:"admin"`
+	Auth                   AuthConfig                `yaml:"auth"`
 	Channels               []model.ChannelConfig     `yaml:"channels"`
 	APIKeys                []model.APIKeyConfig      `yaml:"api_keys"`
 	ModelValidation        ModelValidationConfig     `yaml:"model_validation"`
@@ -141,6 +158,10 @@ var (
 	configMutex  sync.RWMutex
 )
 
+func boolPtr(b bool) *bool {
+	return &b
+}
+
 // DefaultConfig provides sensible defaults.
 func DefaultConfig() *Config {
 	redisURL := os.Getenv("REDIS_URL")
@@ -153,6 +174,16 @@ func DefaultConfig() *Config {
 			LogLevel:        "info",
 			RedisURL:        redisURL,
 		},
+		Admin: AdminConfig{
+			Username: "admin",
+			Password: "admin123",
+		},
+		Auth: AuthConfig{
+			AllowRegistration:        boolPtr(true),
+			RequireEmailVerification: boolPtr(false),
+			InitialUserBalance:       5.0,
+			TokenExpiryHours:         168,
+		},
 		EnableFallback:        true,
 		MaxRetries:            3,
 		DefaultTimeoutSeconds: 60,
@@ -164,6 +195,84 @@ func DefaultConfig() *Config {
 		},
 		apiKeysMap: make(map[string]*model.APIKeyConfig),
 	}
+}
+
+// GetAdminUsername returns configured admin username, prioritizing env over config.
+func (c *Config) GetAdminUsername() string {
+	if u := os.Getenv("GATEWAY_ADMIN_USER"); u != "" {
+		return strings.TrimSpace(u)
+	}
+	if u := os.Getenv("GATEWAY_ADMIN_USERNAME"); u != "" {
+		return strings.TrimSpace(u)
+	}
+	if c != nil && c.Admin.Username != "" {
+		return strings.TrimSpace(c.Admin.Username)
+	}
+	return "admin"
+}
+
+// GetAdminPassword returns configured admin password, prioritizing env over config.
+func (c *Config) GetAdminPassword() string {
+	if p := os.Getenv("GATEWAY_ADMIN_PASSWORD"); p != "" {
+		return p
+	}
+	if c != nil && c.Admin.Password != "" {
+		return c.Admin.Password
+	}
+	return "admin123"
+}
+
+// IsRegistrationAllowed checks if public self-registration is enabled.
+func (c *Config) IsRegistrationAllowed() bool {
+	if v := os.Getenv("ALLOW_REGISTRATION"); v != "" {
+		return strings.EqualFold(v, "true") || v == "1"
+	}
+	if c != nil && c.Auth.AllowRegistration != nil {
+		return *c.Auth.AllowRegistration
+	}
+	return true
+}
+
+// IsEmailVerificationRequired checks if email verification code is required during registration.
+func (c *Config) IsEmailVerificationRequired() bool {
+	if v := os.Getenv("REQUIRE_EMAIL_VERIFICATION"); v != "" {
+		return strings.EqualFold(v, "true") || v == "1"
+	}
+	if c != nil && c.Auth.RequireEmailVerification != nil {
+		return *c.Auth.RequireEmailVerification
+	}
+	return strings.TrimSpace(os.Getenv("SMTP_HOST")) != ""
+}
+
+// GetInitialUserBalance returns the initial balance for newly registered users.
+func (c *Config) GetInitialUserBalance() float64 {
+	if v := os.Getenv("INITIAL_USER_BALANCE"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 {
+			return f
+		}
+	}
+	if v := os.Getenv("DEFAULT_TRIAL_BALANCE"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 {
+			return f
+		}
+	}
+	if c != nil && c.Auth.InitialUserBalance >= 0 {
+		return c.Auth.InitialUserBalance
+	}
+	return 5.0
+}
+
+// GetTokenExpiryHours returns JWT token expiration duration in hours.
+func (c *Config) GetTokenExpiryHours() int {
+	if v := os.Getenv("TOKEN_EXPIRY_HOURS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	if c != nil && c.Auth.TokenExpiryHours > 0 {
+		return c.Auth.TokenExpiryHours
+	}
+	return 168
 }
 
 // LoadConfig loads the configuration from a YAML file.

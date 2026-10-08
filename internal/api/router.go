@@ -21,6 +21,18 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 	r.Use(middleware.TraceMiddleware())
 	r.Use(middleware.AccessLogMiddleware())
 
+	// Enterprise CORS Headers
+	r.Use(func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key, X-API-Key, anthropic-version, X-Session-ID, X-Request-ID, X-Airoute-Trace-Id")
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+		c.Next()
+	})
+
 	// Mount embedded Web UI
 	web.RegisterStaticRoutes(r)
 
@@ -28,6 +40,10 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 
 	// Public health and observability endpoints
 	r.GET("/health", handler.HandleHealth)
+	r.HEAD("/health", handler.HandleHealth)
+	r.HEAD("/", func(c *gin.Context) {
+		c.Status(200)
+	})
 	r.GET("/api/v1/public/status", handler.HandlePublicStatus)
 
 	// Model Context Protocol (MCP) server endpoints for AI Agents (Cursor, Claude Desktop, Cline, etc.)

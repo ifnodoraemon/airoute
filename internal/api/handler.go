@@ -15,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/billing"
+	"github.com/ifnodoraemon/airoute/internal/config"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/router"
@@ -930,7 +931,9 @@ func (h *Handler) HandlePublicStatus(c *gin.Context) {
 		overallStatus = "degraded"
 	}
 
-	requireVerify := os.Getenv("REQUIRE_EMAIL_VERIFICATION") == "true" || (strings.TrimSpace(os.Getenv("SMTP_HOST")) != "" && os.Getenv("REQUIRE_EMAIL_VERIFICATION") != "false")
+	cfg := config.GetGlobalConfig()
+	requireVerify := cfg.IsEmailVerificationRequired()
+	allowReg := cfg.IsRegistrationAllowed()
 
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
@@ -939,6 +942,7 @@ func (h *Handler) HandlePublicStatus(c *gin.Context) {
 			"uptime_pct":                 99.99,
 			"models":                     modelStatuses,
 			"models_count":               len(models),
+			"allow_registration":         allowReg,
 			"require_email_verification": requireVerify,
 			"oauth_github_enabled":       os.Getenv("GITHUB_CLIENT_ID") != "",
 			"oauth_google_enabled":       os.Getenv("GOOGLE_CLIENT_ID") != "",

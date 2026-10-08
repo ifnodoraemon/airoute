@@ -202,7 +202,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                 className="w-full sm:w-auto px-7 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-sm font-bold shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2 cursor-pointer"
               >
                 <Key className="w-4 h-4" />
-                <span>立即登录 / 免费注册</span>
+                <span>进入企业控制台</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             )}

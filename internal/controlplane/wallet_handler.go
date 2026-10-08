@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/config"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 	"golang.org/x/crypto/bcrypt"
@@ -23,11 +24,7 @@ import (
 
 // isEmailVerificationRequired checks if email verification is mandatory in this deployment.
 func isEmailVerificationRequired() bool {
-	if v := os.Getenv("REQUIRE_EMAIL_VERIFICATION"); v != "" {
-		return strings.EqualFold(v, "true") || v == "1"
-	}
-	// By default, required if SMTP_HOST is explicitly configured
-	return strings.TrimSpace(os.Getenv("SMTP_HOST")) != ""
+	return config.GetGlobalConfig().IsEmailVerificationRequired()
 }
 
 // sendVerificationEmail sends a 6-digit verification code via SMTP if configured.
@@ -146,8 +143,13 @@ type RegisterRequest struct {
 	Code     string `json:"code"`
 }
 
-// Register registers a new regular user account with email verification and creates initial trial balance.
+// Register registers a new regular user account with email verification and creates initial balance.
 func (h *AdminHandler) Register(c *gin.Context) {
+	if !config.GetGlobalConfig().IsRegistrationAllowed() {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "企业已关闭自主注册通道，请联系管理员分配账号"})
+		return
+	}
+
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "用户名、邮箱与密码为必填项"})
@@ -195,13 +197,7 @@ func (h *AdminHandler) Register(c *gin.Context) {
 		return
 	}
 
-	// Default trial quota: 5.0 CNY or configured via DEFAULT_TRIAL_BALANCE
-	trialBalance := 5.0
-	if envBal := os.Getenv("DEFAULT_TRIAL_BALANCE"); envBal != "" {
-		if parsed, err := strconv.ParseFloat(envBal, 64); err == nil && parsed >= 0 {
-			trialBalance = parsed
-		}
-	}
+	trialBalance := config.GetGlobalConfig().GetInitialUserBalance()
 	user := &storage.UserRecord{
 		Username:     username,
 		Email:        email,
@@ -575,8 +571,9 @@ func (h *AdminHandler) UpdateUserStatus(c *gin.Context) {
 	}
 
 	targetUsername := c.Param("username")
-	if targetUsername == "admin" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "系统主管理员账号 (admin) 不允许被锁定"})
+	rootAdmin := config.GetGlobalConfig().GetAdminUsername()
+	if targetUsername == "admin" || targetUsername == rootAdmin {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "系统初始管理员账号不允许被锁定"})
 		return
 	}
 
@@ -714,7 +711,8 @@ func (h *AdminHandler) UpdateUserRole(c *gin.Context) {
 	}
 
 	targetUsername := c.Param("username")
-	if targetUsername == "admin" && claims.Username != "admin" {
+	rootAdmin := config.GetGlobalConfig().GetAdminUsername()
+	if (targetUsername == "admin" || targetUsername == rootAdmin) && claims.Username != targetUsername {
 		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "禁止修改内置超级管理员的角色"})
 		return
 	}

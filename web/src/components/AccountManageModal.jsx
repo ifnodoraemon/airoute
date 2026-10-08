@@ -176,12 +176,12 @@ export default function AccountManageModal({
                 <Shield className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
                   <span className="font-bold text-slate-800 block text-xs">
-                    {isAdmin ? '超级管理员权限 (Super Admin)' : '普通用户权限 (Developer / User)'}
+                    {isAdmin ? '系统管理员权限 (System Administrator)' : '研发成员权限 (Developer / Member)'}
                   </span>
                   <p className="text-[11px] text-slate-500 leading-relaxed">
                     {isAdmin
-                      ? '具备全局管控权限：管理上游渠道与秘钥、模型路由拓扑、费率设定、用户与卡密管理，享有无限免扣费调用。'
-                      : '具备安全自服务权限：拥有独立钱包、专属 API 密钥创建与限额管控、私有调用流水审计与在线调试。'}
+                      ? '具备全局管控权限：管理上游渠道与秘钥、模型路由拓扑、费率设定、组织成员与安全策略。'
+                      : '具备安全自服务权限：专属 API 密钥创建与限额管控、调用审计流水与在线调试。'}
                   </p>
                 </div>
               </div>
@@ -193,7 +193,7 @@ export default function AccountManageModal({
                     <Wallet className="w-5 h-5" />
                   </div>
                   <div>
-                    <span className="text-xs text-slate-400 block">当前钱包余额</span>
+                    <span className="text-xs text-slate-400 block">账户可用额度</span>
                     <span className="text-lg font-black tracking-tight text-white font-mono">
                       {isAdmin ? '无限额度' : `¥ ${Number(adminUser?.balance || 0).toFixed(2)}`}
                     </span>
@@ -201,7 +201,7 @@ export default function AccountManageModal({
                 </div>
                 {isAdmin && (
                   <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-500/30 text-indigo-300 font-medium">
-                    管理员免扣费
+                    管理员豁免计费
                   </span>
                 )}
               </div>

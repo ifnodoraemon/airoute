@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/config"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 	"golang.org/x/crypto/bcrypt"
@@ -128,7 +129,8 @@ func (h *AdminHandler) Login(c *gin.Context) {
 		return
 	}
 
-	token, err := GenerateAdminToken(user.Username, user.Role, 7*24*time.Hour)
+	expiryHours := config.GetGlobalConfig().GetTokenExpiryHours()
+	token, err := GenerateAdminToken(user.Username, user.Role, time.Duration(expiryHours)*time.Hour)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "生成鉴权 Token 失败"})
 		return
@@ -445,8 +447,9 @@ func (h *AdminHandler) DeleteUser(c *gin.Context) {
 		return
 	}
 
-	if targetUsername == "admin" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "系统默认主管理员账号 (admin) 不允许删除"})
+	adminRoot := config.GetGlobalConfig().GetAdminUsername()
+	if targetUsername == "admin" || targetUsername == adminRoot {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "系统初始管理员账号不允许删除"})
 		return
 	}
 
@@ -578,25 +581,37 @@ func (h *AdminHandler) RequireAdminRole() gin.HandlerFunc {
 	}
 }
 
-// InitDefaultAdmin ensures an admin account is ready.
-func InitDefaultAdmin(repo *storage.Repository) {
-	adminUser := os.Getenv("GATEWAY_ADMIN_USER")
-	if adminUser == "" {
-		adminUser = "admin"
+// InitDefaultAdmin ensures an admin account is ready based on config or env.
+func InitDefaultAdmin(repo *storage.Repository, cfgs ...*config.Config) {
+	var cfg *config.Config
+	if len(cfgs) > 0 && cfgs[0] != nil {
+		cfg = cfgs[0]
+	} else {
+		cfg = config.GetGlobalConfig()
 	}
-	adminPass := os.Getenv("GATEWAY_ADMIN_PASSWORD")
-	if adminPass == "" {
-		adminPass = "admin123"
-	}
+
+	adminUser := cfg.GetAdminUsername()
+	adminPass := cfg.GetAdminPassword()
 	forceReset := os.Getenv("GATEWAY_ADMIN_RESET") == "true" || os.Getenv("GATEWAY_ADMIN_RESET") == "1"
 
 	existing, _ := repo.GetUserByUsername(adminUser)
 	if existing == nil {
 		_ = repo.EnsureDefaultAdmin(adminUser, adminPass)
+		telemetry.Logger.Info("initialized administrator account", "username", adminUser)
 	} else if forceReset {
 		hash, err := bcrypt.GenerateFromPassword([]byte(adminPass), bcrypt.DefaultCost)
 		if err == nil {
 			_ = repo.UpdateUserPassword(adminUser, string(hash))
+			telemetry.Logger.Info("force-reset administrator password from configuration", "username", adminUser)
+		}
+	} else if adminPass != "admin123" {
+		// If custom admin password is provided and current user is still using default "admin123", synchronize it
+		if err := bcrypt.CompareHashAndPassword([]byte(existing.PasswordHash), []byte("admin123")); err == nil {
+			hash, err := bcrypt.GenerateFromPassword([]byte(adminPass), bcrypt.DefaultCost)
+			if err == nil {
+				_ = repo.UpdateUserPassword(adminUser, string(hash))
+				telemetry.Logger.Info("synchronized administrator password with configured credentials", "username", adminUser)
+			}
 		}
 	}
 
