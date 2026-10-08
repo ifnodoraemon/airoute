@@ -577,6 +577,48 @@ func (db *DB) migrate() error {
 				return nil
 			},
 		},
+		{
+			Version: 8,
+			Name:    "create_system_skills_and_mcp_servers",
+			Up: func(db *DB) error {
+				_, err := db.DB.Exec(`
+				CREATE TABLE IF NOT EXISTS system_skills (
+					id TEXT PRIMARY KEY,
+					name TEXT NOT NULL,
+					description TEXT NOT NULL,
+					category TEXT NOT NULL,
+					tools TEXT NOT NULL,
+					loading_mode TEXT DEFAULT 'lazy',
+					manifest TEXT DEFAULT '',
+					author TEXT DEFAULT 'Airoute Official',
+					version TEXT DEFAULT '1.0.0',
+					enabled INTEGER DEFAULT 1,
+					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+					updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+				);
+
+				CREATE TABLE IF NOT EXISTS system_mcp_servers (
+					id TEXT PRIMARY KEY,
+					name TEXT NOT NULL,
+					description TEXT NOT NULL,
+					category TEXT NOT NULL,
+					transport TEXT NOT NULL,
+					endpoint TEXT NOT NULL,
+					status TEXT DEFAULT 'online',
+					author TEXT DEFAULT 'Airoute Official',
+					version TEXT DEFAULT '1.0.0',
+					tools TEXT NOT NULL,
+					prompts TEXT DEFAULT '[]',
+					resources TEXT DEFAULT '[]',
+					env_vars TEXT DEFAULT '{}',
+					enabled INTEGER DEFAULT 1,
+					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+					updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+				);
+				`)
+				return err
+			},
+		},
 	}
 	return db.runMigrations(migrations)
 }
@@ -854,6 +896,48 @@ func (db *DB) migratePostgres() error {
 					return err
 				}
 				_, err := db.DB.Exec(`CREATE INDEX IF NOT EXISTS idx_usage_chat ON usage_logs(chat_id);`)
+				return err
+			},
+		},
+		{
+			Version: 8,
+			Name:    "create_system_skills_and_mcp_servers",
+			Up: func(db *DB) error {
+				_, err := db.DB.Exec(`
+				CREATE TABLE IF NOT EXISTS system_skills (
+					id VARCHAR(128) PRIMARY KEY,
+					name VARCHAR(255) NOT NULL,
+					description TEXT NOT NULL,
+					category VARCHAR(64) NOT NULL,
+					tools TEXT NOT NULL,
+					loading_mode VARCHAR(32) DEFAULT 'lazy',
+					manifest TEXT DEFAULT '',
+					author VARCHAR(128) DEFAULT 'Airoute Official',
+					version VARCHAR(32) DEFAULT '1.0.0',
+					enabled INT DEFAULT 1,
+					created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+					updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+				);
+
+				CREATE TABLE IF NOT EXISTS system_mcp_servers (
+					id VARCHAR(128) PRIMARY KEY,
+					name VARCHAR(255) NOT NULL,
+					description TEXT NOT NULL,
+					category VARCHAR(64) NOT NULL,
+					transport VARCHAR(32) NOT NULL,
+					endpoint TEXT NOT NULL,
+					status VARCHAR(32) DEFAULT 'online',
+					author VARCHAR(128) DEFAULT 'Airoute Official',
+					version VARCHAR(32) DEFAULT '1.0.0',
+					tools TEXT NOT NULL,
+					prompts TEXT DEFAULT '[]',
+					resources TEXT DEFAULT '[]',
+					env_vars TEXT DEFAULT '{}',
+					enabled INT DEFAULT 1,
+					created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+					updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+				);
+				`)
 				return err
 			},
 		},

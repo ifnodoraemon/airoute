@@ -1,6 +1,6 @@
 export PATH := /usr/local/go/bin:$(PATH)
 
-.PHONY: all build run test tidy clean
+.PHONY: all build run test test-e2e test-e2e-go tidy clean
 
 APP_NAME = airoute
 BIN_DIR = bin
@@ -25,6 +25,14 @@ run:
 test:
 	@echo "==> Running tests..."
 	go test -v -race ./...
+
+test-e2e:
+	@echo "==> Running End-to-End (E2E) integration tests..."
+	@bash scripts/test-e2e.sh
+
+test-e2e-go:
+	@echo "==> Running Go E2E test suite..."
+	go test -v -tags=e2e ./tests/e2e/...
 
 tidy:
 	@echo "==> Tidying dependencies..."

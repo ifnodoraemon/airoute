@@ -147,7 +147,8 @@ helm install airoute ./helm/airoute -n gateway --create-namespace
 
 ## 🧪 自动化测试体系
 
-全部 96 个测试函数均在并发竞态检测 (`-race`) 模式下运行：
+### 1. 单元与组件集成测试 (Unit & Component Tests)
+无需外部依赖，全部核心逻辑均在并发竞态检测 (`-race`) 模式下运行：
 ```bash
 make test
 ```
@@ -160,6 +161,31 @@ make test
 - Google Gemini 协议与 Anthropic Claude 双向流式转换
 - 多模态生图、TTS、Whisper STT 与视频生成管道
 - 纯文本补全下游全双工协议转译与智能探测 (`TestAutoProbe_OpenAIAndGPUStack`)
+
+### 2. 服务启动后的集群端到端测试 (Cluster End-to-End Tests)
+在服务或 Docker Compose 集群启动后，一键对真实运行环境进行全链路验收：
+```bash
+# 启动集群
+docker compose up -d
+
+# 方式 A: 零依赖 Shell 脚本自动化套件（支持 CI/CD 与容器环境，带色彩诊断报告）
+make test-e2e
+# 或指定目标地址：AIROUTE_URL=http://localhost:8080 ./scripts/test-e2e.sh
+
+# 方式 B: Go 原生 E2E 驱动套件
+make test-e2e-go
+# 或：go test -v -tags=e2e ./tests/e2e/...
+```
+
+E2E 套件覆盖的 8 大核心验收维度（共 25 项自动化测试）：
+1. **集群健康 & Web 入口**：负载均衡器 `/health` (healthy)、状态探针 `/api/v1/public/status`、SPA HTML 渲染
+2. **安全边界 & 鉴权校验**：非鉴权拦截 (401)、错误口令拒绝、Admin JWT 签发与 `/api/v1/auth/me` 身份自省
+3. **MCP 生态集成**：内置 15 款核心 MCP 服务器（Dev / Search / Data / AI / Ops / Enterprise）元数据核验与动态启停
+4. **Skills Hub & 边缘缓存**：Skill ZIP 包网关权威流式下载（PK 结构校验）与 Nginx 边缘缓存 (`X-Cache-Status: HIT`)
+5. **模型拓扑与计费引擎**：路由矩阵、上游渠道、分级计费规则与实时运行遥测
+6. **密钥治理与节点热同步**：虚拟密钥动态签发、配额设置与 Redis Pub/Sub 多节点毫秒级同步
+7. **数据面代理与分布式追踪**：`/v1/models`、`/v1/chat/completions` 与全链路 `X-Airoute-Trace-Id` 注入校验
+8. **高可用并发稳定性**：高并发批量探针零丢包、负载均衡无损转发验证
 
 ---
 
