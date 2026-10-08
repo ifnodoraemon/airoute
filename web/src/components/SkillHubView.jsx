@@ -270,109 +270,49 @@ export default function SkillHubView({ adminFetch, onCopy, showToast }) {
     return true;
   });
 
-  const getToolTypeBadge = (skill) => {
-    if (skill.id === 'browser-automation') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-          <Globe className="w-3 h-3" />
-          MCP 协议扩展工具 (无需下载，MCP挂载)
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-        <Terminal className="w-3 h-3" />
-        宿主原生执行工具 (无需下载，调用本机CLI)
-      </span>
-    );
-  };
-
   return (
-    <div className="space-y-6">
-      {/* 顶部标题与说明 */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-gray-100 dark:border-gray-800">
+    <div className="space-y-5">
+      {/* 顶部标题与轻量操作栏 */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-gray-100 dark:border-gray-800">
         <div>
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl text-white shadow-md shadow-amber-500/20">
-              <Sparkles className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Agent Skill Hub (智能体技能中心)
-                </h1>
-                <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-amber-50 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50">
-                  agentskills.io 开放标准
-                </span>
-                <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800/40">
-                  零下载 · 三级渐进披露
-                </span>
-                {storageStatus && (
-                  <span className={`px-2 py-0.5 text-[11px] font-medium rounded-full border flex items-center gap-1 ${
-                    storageStatus.driver === 's3'
-                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60'
-                      : 'bg-slate-100 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-                  }`}>
-                    {storageStatus.driver === 's3' ? <Server className="w-3 h-3 text-emerald-600" /> : <HardDrive className="w-3 h-3 text-slate-500" />}
-                    <span>存储后端: {storageStatus.driver === 's3' ? `RustFS / S3 (${storageStatus.s3_bucket || 'skills'})` : '本地磁盘 (Local)'}</span>
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                专业智能体 SOP 标准作业流程：包含 Git 规范、TDD 测试驱动、Playwright 自动化与代码审计，支持一键接入 Claude Code、OpenCode、Codex 与 Cursor。
-              </p>
-            </div>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-lg font-bold text-gray-900 dark:text-white">
+              Agent 技能中心 (Skills)
+            </h1>
+            <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+              agentskills.io 标准
+            </span>
+            {storageStatus && (
+              <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+                {storageStatus.driver === 's3' ? 'S3 存储就绪' : '本地存储'}
+              </span>
+            )}
           </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            标准化智能体 SOP 作业包，支持在线审阅、直连高速下载与一键接入 Claude Code 等客户端。
+          </p>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-2">
           <button
             onClick={() => { setSelectedSkillForGuide(null); setClientGuideModalOpen(true); }}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-750 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-2xs"
           >
-            <BookOpen className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-            接入 Claude Code / OpenCode / Codex
+            <BookOpen className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+            客户端接入指南
           </button>
           <button
             onClick={() => setCreateModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-white bg-gradient-to-r from-amber-600 to-orange-600 rounded-lg hover:from-amber-700 hover:to-orange-700 transition-all shadow-md shadow-amber-500/20"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors shadow-2xs"
           >
-            <Plus className="w-4 h-4" />
-            新建自定义技能
+            <Plus className="w-3.5 h-3.5" />
+            新建技能
           </button>
-        </div>
-      </div>
-
-      {/* 核心原理解析横幅：解决用户关于“工具是否同步下载”的疑问 */}
-      <div className="p-4 rounded-xl border border-blue-200/80 dark:border-blue-900/50 bg-gradient-to-r from-blue-50/70 via-indigo-50/50 to-white dark:from-blue-950/30 dark:via-gray-800 dark:to-gray-800 shadow-sm">
-        <div className="flex items-start gap-3.5">
-          <div className="p-2 bg-blue-500 text-white rounded-lg shadow-sm mt-0.5">
-            <HelpCircle className="w-5 h-5" />
-          </div>
-          <div className="space-y-1.5 text-xs">
-            <div className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <span>Skill 与 Tool 的核心运行机制揭秘：工具需要同步下载吗？</span>
-              <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300 rounded font-normal text-[10px]">
-                完全不需要下载
-              </span>
-            </div>
-            <div className="text-gray-600 dark:text-gray-300 leading-relaxed space-y-1">
-              <p>
-                <strong>1. Skill 是智能体的「大脑指南 (SOP)」</strong>：Skill 本质是遵循 <code className="bg-white/80 dark:bg-gray-700 px-1 py-0.5 rounded text-blue-600 dark:text-blue-400 font-mono">SKILL.md</code> 规范的作业指引文件，告诉智能体遇到特定场景时「怎么思考、按什么步骤检查与执行」。
-              </p>
-              <p>
-                <strong>2. 工具由环境原生提供或通过 MCP 挂载</strong>：Skill 内部声明的工具并不是让网关去编译下载，而是调用<strong>宿主环境原生工具</strong>（如 Claude Code / OpenCode 内置的终端命令与文件改写工具）或<strong>MCP 广场中的远程协议工具</strong>（如 Playwright / GitHub MCP），零下载负担、零网络等待。
-              </p>
-              <p>
-                <strong>3. 渐进式披露 (Progressive Disclosure)</strong>：Agent 启动时仅加载几十 tokens 的元数据，绝不撑爆上下文；只有用户触发该场景时，才按需将完整 SOP 读入上下文执行。
-              </p>
-            </div>
-          </div>
         </div>
       </div>
 
       {/* 搜索与分类导航 */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white dark:bg-gray-800/80 p-3 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white dark:bg-gray-800/80 p-2.5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-2xs">
         <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
           {categories.map(cat => {
             const Icon = cat.icon;
@@ -381,7 +321,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast }) {
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap transition-all ${active ? 'bg-amber-600 text-white shadow-sm' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60'}`}
+                className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg whitespace-nowrap transition-all ${active ? 'bg-amber-600 text-white shadow-2xs' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60'}`}
               >
                 <Icon className="w-3.5 h-3.5" />
                 <span>{cat.label}</span>
@@ -390,27 +330,27 @@ export default function SkillHubView({ adminFetch, onCopy, showToast }) {
           })}
         </div>
 
-        <div className="relative min-w-[240px]">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+        <div className="relative min-w-[220px]">
+          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
           <input
             type="text"
-            placeholder="搜索技能名称、SOP 工具或适用场景..."
+            placeholder="搜索技能名称或工具..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/60 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-amber-500"
+            className="w-full pl-8 pr-3 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/60 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-amber-500"
           />
         </div>
       </div>
 
       {/* 技能卡片列表 */}
       {filteredSkills.length === 0 ? (
-        <div className="p-12 text-center bg-white dark:bg-gray-800/50 rounded-xl border border-dashed border-gray-200 dark:border-gray-800">
-          <Sparkles className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+        <div className="p-10 text-center bg-white dark:bg-gray-800/50 rounded-xl border border-dashed border-gray-200 dark:border-gray-800">
+          <Sparkles className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">未找到匹配的 Agent 技能</p>
-          <p className="text-xs text-gray-400 mt-1">可在上方切换分类筛选，或点击右上角「新建自定义技能」添加您的专属 SOP</p>
+          <p className="text-xs text-gray-400 mt-1">可在上方切换分类筛选或点击「新建技能」添加</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredSkills.map(skill => {
             const isToggling = !!togglingSkill[skill.id];
             const isCustom = skill.id.startsWith('skill_') || skill.id.startsWith('custom_');
@@ -418,24 +358,29 @@ export default function SkillHubView({ adminFetch, onCopy, showToast }) {
             return (
               <div
                 key={skill.id}
-                className={`flex flex-col justify-between p-5 rounded-xl border transition-all duration-200 ${skill.enabled ? 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-sm hover:shadow-md' : 'border-gray-200/60 dark:border-gray-800/60 bg-gray-50/70 dark:bg-gray-850/50 opacity-80'}`}
+                className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-150 ${skill.enabled ? 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-2xs hover:shadow-xs' : 'border-gray-200/60 dark:border-gray-800/60 bg-gray-50/60 dark:bg-gray-850/40 opacity-75'}`}
               >
                 <div>
-                  {/* 头部标题与开关 */}
-                  <div className="flex items-start justify-between gap-3 mb-2.5">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200/50 dark:border-amber-800/50">
-                        {skill.id === 'git-workflow' ? <GitBranch className="w-5 h-5" /> :
-                         skill.id === 'test-driven-development' ? <Bug className="w-5 h-5" /> :
-                         skill.id === 'browser-automation' ? <Globe className="w-5 h-5" /> :
-                         <Lock className="w-5 h-5" />}
+                  {/* 头部：图标、名称与启停开关 */}
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200/50 dark:border-amber-800/50 shrink-0">
+                        {skill.id === 'git-workflow' ? <GitBranch className="w-4 h-4" /> :
+                         skill.id === 'test-driven-development' ? <Bug className="w-4 h-4" /> :
+                         skill.id === 'browser-automation' ? <Globe className="w-4 h-4" /> :
+                         <Lock className="w-4 h-4" />}
                       </div>
-                      <div>
-                        <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
-                          {skill.name}
-                        </h3>
-                        <div className="text-[11px] font-mono text-gray-400 dark:text-gray-500">
-                          {skill.id} · v{skill.version || '1.0.0'}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                            {skill.name}
+                          </h3>
+                          <span className="px-1.5 py-0.2 text-[10px] font-mono rounded bg-gray-100 dark:bg-gray-750 text-gray-500">
+                            v{skill.version || '1.0.0'}
+                          </span>
+                        </div>
+                        <div className="text-[11px] font-mono text-gray-400 truncate">
+                          {skill.id}
                         </div>
                       </div>
                     </div>
@@ -443,76 +388,71 @@ export default function SkillHubView({ adminFetch, onCopy, showToast }) {
                     <button
                       onClick={() => handleToggleSkill(skill.id, skill.enabled)}
                       disabled={isToggling}
-                      className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${skill.enabled ? 'bg-amber-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+                      className={`relative inline-flex h-4.5 w-8 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${skill.enabled ? 'bg-amber-600' : 'bg-gray-300 dark:bg-gray-600'}`}
                       title={skill.enabled ? '点击禁用' : '点击启用'}
                     >
                       <span
-                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${skill.enabled ? 'translate-x-4' : 'translate-x-0'}`}
+                        className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${skill.enabled ? 'translate-x-3.5' : 'translate-x-0'}`}
                       />
                     </button>
                   </div>
 
-                  {/* 工具运行方式标识 */}
-                  <div className="mb-3">
-                    {getToolTypeBadge(skill)}
-                  </div>
-
-                  {/* 描述信息 */}
-                  <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed mb-4">
+                  {/* 简介 */}
+                  <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed line-clamp-2 mb-2.5">
                     {skill.description}
                   </p>
 
-                  {/* 调用的工具清单 */}
-                  <div className="mb-4 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg border border-gray-100 dark:border-gray-800">
-                    <div className="flex items-center justify-between text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-                      <span>包含执行工具 ({skill.tools ? skill.tools.length : 0})</span>
-                      <span className="text-[10px] text-gray-400">无需额外下载</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(skill.tools || []).map(t => (
+                  {/* 适用工具清单 */}
+                  {skill.tools && skill.tools.length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-wrap mb-3 text-[11px]">
+                      <span className="text-gray-400">工具:</span>
+                      {skill.tools.slice(0, 5).map(t => (
                         <span
                           key={t}
-                          className="px-2 py-0.5 text-[11px] font-mono bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded border border-gray-200 dark:border-gray-700 shadow-2xs"
+                          className="px-1.5 py-0.5 font-mono text-[10px] bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-300 rounded border border-gray-200/80 dark:border-gray-750"
                         >
                           {t}
                         </span>
                       ))}
+                      {skill.tools.length > 5 && (
+                        <span className="text-gray-400 text-[10px]">+{skill.tools.length - 5}</span>
+                      )}
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* 卡片底部操作按钮 */}
-                <div className="pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2">
+                <div className="pt-2.5 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-1.5">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <a
                       href={`/api/v1/skills/${skill.id}/download`}
                       download={`${skill.id}.zip`}
-                      className="px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 rounded-md transition-colors flex items-center gap-1 border border-emerald-200/80 dark:border-emerald-800/80 shadow-2xs"
-                      title="下载包含 SKILL.md 与脚本的 agentskills.io 标准 ZIP 压缩包"
+                      className="px-2 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 rounded transition-colors inline-flex items-center gap-1 border border-emerald-200 dark:border-emerald-800/80"
+                      title="直接下载 .zip 压缩包"
                     >
-                      <DownloadCloud className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                      下载技能包 (.zip)
+                      <DownloadCloud className="w-3.5 h-3.5" />
+                      下载 .zip
                     </a>
                     <button
                       onClick={() => { setManifestSkill(skill); setManifestTab('skill_md'); }}
-                      className="px-2.5 py-1 text-xs font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/60 rounded-md transition-colors flex items-center gap-1"
+                      className="px-2 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-750 rounded transition-colors inline-flex items-center gap-1 border border-gray-200 dark:border-gray-700"
                     >
                       <FileText className="w-3.5 h-3.5" />
-                      查看内容
+                      查看 SOP
                     </button>
                     <button
                       onClick={() => { setSelectedSkillForGuide(skill); setClientGuideModalOpen(true); }}
-                      className="px-2.5 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-md transition-colors flex items-center gap-1"
+                      className="px-2 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded transition-colors inline-flex items-center gap-1"
                     >
                       <Terminal className="w-3.5 h-3.5" />
-                      接入客户端
+                      接入
                     </button>
                     <button
                       onClick={() => handleOpenTest(skill)}
-                      className="px-2.5 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors flex items-center gap-1"
+                      className="px-2 py-1 text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded transition-colors inline-flex items-center gap-1"
                     >
-                      <Play className="w-3.5 h-3.5" />
-                      模拟演练
+                      <Play className="w-3 h-3" />
+                      演练
                     </button>
                   </div>
 

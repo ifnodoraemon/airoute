@@ -425,137 +425,110 @@ if __name__ == "__main__":
   };
 
   return (
-    <div className="space-y-6">
-      {/* 顶部标题与说明 */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-gray-100 dark:border-gray-800">
+    <div className="space-y-5">
+      {/* 顶部标题与轻量操作栏 */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-gray-100 dark:border-gray-800">
         <div>
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl text-white shadow-md shadow-indigo-500/20">
-              <Cpu className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Model Context Protocol (MCP) 广场
-                </h1>
-                <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/50">
-                  Anthropic Spec 2024-11-05
-                </span>
-                <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40">
-                  ModelScope 风格
-                </span>
-              </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                外部协议连接服务中心：基于标准 JSON-RPC 2.0 (SSE / Stdio) 连接外部系统，提供统一鉴权、安全脱敏与客户端无缝对接。
-              </p>
-            </div>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-lg font-bold text-gray-900 dark:text-white">
+              Model Context Protocol (MCP) 广场
+            </h1>
+            <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
+              JSON-RPC 2.0
+            </span>
           </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            连接外部系统与协议扩展，支持 SSE 与 Stdio 传输，提供统一鉴权、安全脱敏与客户端对接。
+          </p>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-2">
           <button
             onClick={() => handleOpenProbe(null)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-750 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-2xs"
           >
-            <Radio className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-            在线协议探针
+            <Radio className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+            协议探针
           </button>
           <button
             onClick={() => { setSelectedServerForConfig(null); setConfigModalOpen(true); }}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-750 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-2xs"
           >
-            <FileCode className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-            客户端连接配置
+            <FileCode className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+            客户端配置
           </button>
           <button
             onClick={() => setAddServerModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all shadow-md shadow-indigo-500/20"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-2xs"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
             接入新服务
           </button>
           <button
             onClick={fetchServersAndSettings}
             disabled={loading}
-            className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 transition-colors"
+            className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-lg border border-gray-200 dark:border-gray-750 bg-white dark:bg-gray-800 hover:bg-gray-50 transition-colors"
             title="刷新服务状态"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
-      {/* 核心指标 & 全局管控卡片 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* 全局主控开关 */}
-        <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-sm flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-lg ${mcpSettings.mcp_enabled ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400'}`}>
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">网关 MCP 协议总闸</div>
-              <div className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2 mt-0.5">
-                {mcpSettings.mcp_enabled ? '运行就绪 (Active)' : '已停用 (Inactive)'}
-              </div>
-            </div>
+      {/* 核心指标与主控简报 */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-2xs">
+        <div className="flex items-center gap-4 flex-wrap text-xs">
+          {/* 总控开关 */}
+          <div className="flex items-center gap-2 pr-4 border-r border-gray-200 dark:border-gray-750">
+            <span className="font-medium text-gray-700 dark:text-gray-200">协议总闸:</span>
+            <button
+              onClick={handleToggleGlobalMcp}
+              disabled={togglingGlobal}
+              className={`relative inline-flex h-4.5 w-8 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${mcpSettings.mcp_enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+              title={mcpSettings.mcp_enabled ? '点击关闭 MCP' : '点击开启 MCP'}
+            >
+              <span
+                className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${mcpSettings.mcp_enabled ? 'translate-x-3.5' : 'translate-x-0'}`}
+              />
+            </button>
+            <span className={`text-[11px] font-medium ${mcpSettings.mcp_enabled ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400'}`}>
+              {mcpSettings.mcp_enabled ? '已激活' : '已停用'}
+            </span>
           </div>
+
+          {/* 活跃服务计数 */}
+          <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-300">
+            <span className="text-gray-400">活跃服务:</span>
+            <span className="font-semibold text-gray-900 dark:text-white">{onlineServersCount}</span>
+            <span className="text-gray-400">/ {servers.length}</span>
+          </div>
+
+          {/* 聚合工具计数 */}
+          <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-300">
+            <span className="text-gray-400">挂载工具:</span>
+            <span className="font-semibold text-gray-900 dark:text-white">{totalToolsCount}</span>
+            <span className="text-gray-400">个</span>
+          </div>
+        </div>
+
+        {/* SSE 端点展示与复制 */}
+        <div className="flex items-center gap-1.5 text-xs text-gray-500 shrink-0">
+          <span className="text-gray-400 text-[11px]">SSE 端点:</span>
+          <code className="px-1.5 py-0.5 rounded font-mono text-[11px] bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200/80 dark:border-gray-800">
+            /mcp/sse
+          </code>
           <button
-            onClick={handleToggleGlobalMcp}
-            disabled={togglingGlobal}
-            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${mcpSettings.mcp_enabled ? 'bg-emerald-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+            onClick={() => handleCopyText(sseUrl, 'sse-endpoint')}
+            className="p-1 text-gray-400 hover:text-indigo-600 transition-colors"
+            title="复制完整端点 URL"
           >
-            <span
-              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${mcpSettings.mcp_enabled ? 'translate-x-5' : 'translate-x-0'}`}
-            />
+            {copiedKey === 'sse-endpoint' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
           </button>
-        </div>
-
-        {/* 活跃 MCP 服务数 */}
-        <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-sm flex items-center gap-3">
-          <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-lg">
-            <Server className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">活跃 MCP 服务</div>
-            <div className="text-lg font-bold text-gray-900 dark:text-white flex items-baseline gap-1 mt-0.5">
-              <span>{onlineServersCount}</span>
-              <span className="text-xs font-normal text-gray-500 dark:text-gray-400">/ {servers.length} 已启用</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 聚合暴露 Tools 总数 */}
-        <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-sm flex items-center gap-3">
-          <div className="p-2.5 bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 rounded-lg">
-            <Wrench className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">聚合协议工具 (Tools)</div>
-            <div className="text-lg font-bold text-gray-900 dark:text-white flex items-baseline gap-1 mt-0.5">
-              <span>{totalToolsCount}</span>
-              <span className="text-xs font-normal text-gray-500 dark:text-gray-400">个生产级工具</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 协议传输端点 */}
-        <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-sm flex items-center gap-3">
-          <div className="p-2.5 bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded-lg">
-            <Zap className="w-5 h-5" />
-          </div>
-          <div className="overflow-hidden">
-            <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">网关 SSE 端点</div>
-            <div className="text-xs font-mono font-semibold text-gray-800 dark:text-gray-200 truncate mt-0.5" title={sseUrl}>
-              /mcp/sse
-            </div>
-          </div>
         </div>
       </div>
 
       {/* 搜索与分类导航 */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white dark:bg-gray-800/80 p-3 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
-        {/* 分类 Tabs */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white dark:bg-gray-800/80 p-2.5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-2xs">
         <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
           {categories.map(cat => {
             const Icon = cat.icon;
@@ -564,7 +537,7 @@ if __name__ == "__main__":
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap transition-all ${active ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60'}`}
+                className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg whitespace-nowrap transition-all ${active ? 'bg-indigo-600 text-white shadow-2xs' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60'}`}
               >
                 <Icon className="w-3.5 h-3.5" />
                 <span>{cat.name}</span>
@@ -573,28 +546,27 @@ if __name__ == "__main__":
           })}
         </div>
 
-        {/* 搜索输入框 */}
-        <div className="relative min-w-[240px]">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+        <div className="relative min-w-[220px]">
+          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
           <input
             type="text"
-            placeholder="搜索 MCP 服务、工具名或描述..."
+            placeholder="搜索 MCP 服务或工具..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/60 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="w-full pl-8 pr-3 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/60 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           />
         </div>
       </div>
 
       {/* MCP 服务卡片列表 */}
       {filteredServers.length === 0 ? (
-        <div className="p-12 text-center bg-white dark:bg-gray-800/50 rounded-xl border border-dashed border-gray-200 dark:border-gray-800">
-          <Cpu className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+        <div className="p-10 text-center bg-white dark:bg-gray-800/50 rounded-xl border border-dashed border-gray-200 dark:border-gray-800">
+          <Cpu className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">未找到匹配的 MCP 服务</p>
-          <p className="text-xs text-gray-400 mt-1">可更换分类筛选或点击右上角「接入新服务」进行自定义添加</p>
+          <p className="text-xs text-gray-400 mt-1">可在上方切换分类筛选或点击「接入新服务」</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredServers.map(server => {
             const isToggling = !!togglingServer[server.id];
             const isCustom = server.id.startsWith('custom-');
@@ -602,107 +574,87 @@ if __name__ == "__main__":
             return (
               <div
                 key={server.id}
-                className={`flex flex-col justify-between p-5 rounded-xl border transition-all duration-200 ${server.enabled ? 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-sm hover:shadow-md' : 'border-gray-200/60 dark:border-gray-800/60 bg-gray-50/70 dark:bg-gray-850/50 opacity-80'}`}
+                className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-150 ${server.enabled ? 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-2xs hover:shadow-xs' : 'border-gray-200/60 dark:border-gray-800/60 bg-gray-50/60 dark:bg-gray-850/40 opacity-75'}`}
               >
                 <div>
                   {/* 卡片头部 */}
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-lg ${server.id === 'airoute-gateway' ? 'bg-indigo-100 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}>
-                        {server.category === 'ops' ? <Server className="w-5 h-5" /> :
-                         server.category === 'dev' ? <Code2 className="w-5 h-5" /> :
-                         server.category === 'search' ? <Globe className="w-5 h-5" /> :
-                         server.category === 'db' ? <Database className="w-5 h-5" /> :
-                         server.category === 'ai' ? <Sparkles className="w-5 h-5" /> :
-                         <Layers className="w-5 h-5" />}
+                  <div className="flex items-start justify-between gap-2.5 mb-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`p-2 rounded-lg shrink-0 ${server.id === 'airoute-gateway' ? 'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-800/50' : 'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200/50 dark:border-gray-750'}`}>
+                        {server.category === 'ops' ? <Server className="w-4 h-4" /> :
+                         server.category === 'dev' ? <Code2 className="w-4 h-4" /> :
+                         server.category === 'search' ? <Globe className="w-4 h-4" /> :
+                         server.category === 'db' ? <Database className="w-4 h-4" /> :
+                         server.category === 'ai' ? <Sparkles className="w-4 h-4" /> :
+                         <Layers className="w-4 h-4" />}
                       </div>
-                      <div>
-                        <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
-                          {server.name}
-                        </h3>
-                        <div className="text-[11px] font-mono text-gray-400 dark:text-gray-500">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                            {server.name}
+                          </h3>
+                          <span className={`px-1.5 py-0.2 text-[10px] font-mono font-semibold rounded ${server.transport === 'sse' ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-300' : 'bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-300'}`}>
+                            {server.transport.toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="text-[11px] font-mono text-gray-400 truncate">
                           {server.id}
                         </div>
                       </div>
                     </div>
 
-                    {/* 开关 */}
                     <button
                       onClick={() => handleToggleServer(server.id, server.enabled)}
                       disabled={isToggling}
-                      className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${server.enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+                      className={`relative inline-flex h-4.5 w-8 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${server.enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'}`}
                       title={server.enabled ? '点击停用' : '点击启用'}
                     >
                       <span
-                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${server.enabled ? 'translate-x-4' : 'translate-x-0'}`}
+                        className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${server.enabled ? 'translate-x-3.5' : 'translate-x-0'}`}
                       />
                     </button>
                   </div>
 
-                  {/* 标签栏 */}
-                  <div className="flex items-center gap-1.5 flex-wrap mb-3">
-                    <span className={`px-2 py-0.5 text-[10px] font-semibold rounded ${server.transport === 'sse' ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/40' : 'bg-purple-50 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800/40'}`}>
-                      {server.transport.toUpperCase()}
-                    </span>
-                    <span className="px-2 py-0.5 text-[10px] rounded bg-gray-100 dark:bg-gray-700/60 text-gray-600 dark:text-gray-300">
-                      v{server.version || '1.0.0'}
-                    </span>
-                    <span className="px-2 py-0.5 text-[10px] rounded bg-gray-100 dark:bg-gray-700/60 text-gray-500 dark:text-gray-400">
-                      {server.author || 'Anthropic'}
-                    </span>
-                    {server.status === 'online' && (
-                      <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        Online
-                      </span>
-                    )}
-                  </div>
-
                   {/* 描述文案 */}
-                  <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed line-clamp-2 mb-4">
+                  <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed line-clamp-2 mb-2.5">
                     {server.description}
                   </p>
 
                   {/* 暴露的 Tools 标签组 */}
-                  <div className="mb-4">
-                    <div className="flex items-center justify-between text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-                      <span>包含工具 ({server.tools ? server.tools.length : 0})</span>
-                      <span className="text-[10px] text-gray-400 font-mono">JSON-RPC 2.0</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {(server.tools || []).slice(0, 4).map(t => (
+                  {server.tools && server.tools.length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-wrap mb-3 text-[11px]">
+                      <span className="text-gray-400">工具:</span>
+                      {server.tools.slice(0, 3).map(t => (
                         <span
                           key={t}
-                          className="px-2 py-0.5 text-[10px] font-mono bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 rounded border border-gray-200/60 dark:border-gray-700/50"
+                          className="px-1.5 py-0.5 font-mono text-[10px] bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-300 rounded border border-gray-200/80 dark:border-gray-750"
                         >
                           {t}
                         </span>
                       ))}
-                      {(server.tools || []).length > 4 && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-medium text-gray-400 dark:text-gray-500">
-                          +{server.tools.length - 4} 更多
-                        </span>
+                      {server.tools.length > 3 && (
+                        <span className="text-gray-400 text-[10px]">+{server.tools.length - 3}</span>
                       )}
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* 卡片底部操作栏 */}
-                <div className="pt-3 border-t border-gray-100 dark:border-gray-800/80 flex items-center justify-between gap-2">
+                <div className="pt-2.5 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-1.5">
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => handleOpenProbe(server)}
-                      className="px-2.5 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-md transition-colors flex items-center gap-1"
+                      className="px-2 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded transition-colors inline-flex items-center gap-1"
                     >
                       <Radio className="w-3.5 h-3.5" />
-                      探针测试
+                      调试探针
                     </button>
                     <button
                       onClick={() => { setSelectedServerForConfig(server); setConfigModalOpen(true); }}
-                      className="px-2.5 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors flex items-center gap-1"
+                      className="px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-750 rounded transition-colors inline-flex items-center gap-1 border border-gray-200 dark:border-gray-700"
                     >
                       <Terminal className="w-3.5 h-3.5" />
-                      连接配置
+                      配置
                     </button>
                   </div>
 

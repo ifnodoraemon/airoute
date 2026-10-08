@@ -1,3 +1,21 @@
+x-gateway-env: &gateway-env
+  TZ: ${TZ:-Asia/Shanghai}
+  DATABASE_URL: ${DATABASE_URL:-postgres://airoute:airoute_cluster_secret_pass_2026@postgres:5432/airoute?sslmode=disable}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  GATEWAY_ADMIN_SECRET: ${GATEWAY_ADMIN_SECRET:-airoute-cluster-admin-shared-secret-key-32b}
+  GATEWAY_ADMIN_USER: ${GATEWAY_ADMIN_USER:-admin}
+  GATEWAY_ADMIN_PASSWORD: ${GATEWAY_ADMIN_PASSWORD:-admin123}
+  ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+  INITIAL_USER_BALANCE: ${INITIAL_USER_BALANCE:-5.0}
+  REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-false}
+  STORAGE_DRIVER: ${STORAGE_DRIVER:-s3}
+  STORAGE_S3_ENDPOINT: ${STORAGE_S3_ENDPOINT:-http://storage:9000}
+  STORAGE_S3_BUCKET: ${STORAGE_S3_BUCKET:-airoute-skills}
+  STORAGE_S3_ACCESS_KEY: ${STORAGE_S3_ACCESS_KEY:-airoute}
+  STORAGE_S3_SECRET_KEY: ${STORAGE_S3_SECRET_KEY:-airoute_cluster_secret_pass_2026}
+  STORAGE_S3_REGION: ${STORAGE_S3_REGION:-us-east-1}
+  STORAGE_S3_PUBLIC_URL_PREFIX: ${STORAGE_S3_PUBLIC_URL_PREFIX:-}
+
 services:
   # ============================================================================
   # High-Availability Shared Relational Database (PostgreSQL 16)
@@ -7,11 +25,12 @@ services:
     image: postgres:16-alpine
     container_name: airoute-postgres
     restart: always
+    env_file: [.env]
     environment:
-      - POSTGRES_USER=airoute
-      - POSTGRES_PASSWORD=airoute_cluster_secret_pass_2026
-      - POSTGRES_DB=airoute
-      - PGDATA=/var/lib/postgresql/data/pgdata
+      POSTGRES_USER: ${POSTGRES_USER:-airoute}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airoute_cluster_secret_pass_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-airoute}
+      PGDATA: /var/lib/postgresql/data/pgdata
     expose:
       - "5432"
     volumes:
@@ -50,19 +69,9 @@ services:
     image: airoute:latest
     container_name: airoute-1
     restart: always
+    env_file: [.env]
     environment:
-      - TZ=Asia/Shanghai
-      - DATABASE_URL=postgres://airoute:airoute_cluster_secret_pass_2026@postgres:5432/airoute?sslmode=disable
-      - REDIS_URL=redis://redis:6379/0
-      - GATEWAY_ADMIN_SECRET=airoute-cluster-admin-shared-secret-key-32b
-      - GATEWAY_ADMIN_USER=${GATEWAY_ADMIN_USER:-admin}
-      - GATEWAY_ADMIN_PASSWORD=${GATEWAY_ADMIN_PASSWORD:-admin123}
-      - ALLOW_REGISTRATION=${ALLOW_REGISTRATION:-true}
-      - STORAGE_DRIVER=${STORAGE_DRIVER:-s3}
-      - STORAGE_S3_ENDPOINT=${STORAGE_S3_ENDPOINT:-http://storage:9000}
-      - STORAGE_S3_BUCKET=${STORAGE_S3_BUCKET:-airoute-skills}
-      - STORAGE_S3_ACCESS_KEY=${STORAGE_S3_ACCESS_KEY:-airoute}
-      - STORAGE_S3_SECRET_KEY=${STORAGE_S3_SECRET_KEY:-airoute_cluster_secret_pass_2026}
+      <<: *gateway-env
     volumes:
       - gateway-data:/app/data
       - ./configs/config.yaml:/app/configs/config.yaml:ro
@@ -91,19 +100,9 @@ services:
     image: airoute:latest
     container_name: airoute-2
     restart: always
+    env_file: [.env]
     environment:
-      - TZ=Asia/Shanghai
-      - DATABASE_URL=postgres://airoute:airoute_cluster_secret_pass_2026@postgres:5432/airoute?sslmode=disable
-      - REDIS_URL=redis://redis:6379/0
-      - GATEWAY_ADMIN_SECRET=airoute-cluster-admin-shared-secret-key-32b
-      - GATEWAY_ADMIN_USER=${GATEWAY_ADMIN_USER:-admin}
-      - GATEWAY_ADMIN_PASSWORD=${GATEWAY_ADMIN_PASSWORD:-admin123}
-      - ALLOW_REGISTRATION=${ALLOW_REGISTRATION:-true}
-      - STORAGE_DRIVER=${STORAGE_DRIVER:-s3}
-      - STORAGE_S3_ENDPOINT=${STORAGE_S3_ENDPOINT:-http://storage:9000}
-      - STORAGE_S3_BUCKET=${STORAGE_S3_BUCKET:-airoute-skills}
-      - STORAGE_S3_ACCESS_KEY=${STORAGE_S3_ACCESS_KEY:-airoute}
-      - STORAGE_S3_SECRET_KEY=${STORAGE_S3_SECRET_KEY:-airoute_cluster_secret_pass_2026}
+      <<: *gateway-env
     volumes:
       - gateway-data:/app/data
       - ./configs/config.yaml:/app/configs/config.yaml:ro
@@ -130,9 +129,10 @@ services:
     image: rustfs/rustfs:latest
     container_name: airoute-storage
     restart: always
+    env_file: [.env]
     environment:
-      - RUSTFS_ROOT_USER=${STORAGE_S3_ACCESS_KEY:-airoute}
-      - RUSTFS_ROOT_PASSWORD=${STORAGE_S3_SECRET_KEY:-airoute_cluster_secret_pass_2026}
+      RUSTFS_ROOT_USER: ${STORAGE_S3_ACCESS_KEY:-airoute}
+      RUSTFS_ROOT_PASSWORD: ${STORAGE_S3_SECRET_KEY:-airoute_cluster_secret_pass_2026}
     expose:
       - "9000"
       - "9001"

@@ -1,22 +1,29 @@
+# ==============================================================================
+# Airoute 核心配置文件 (YAML)
+# 所有参数均已与项目根目录下的 .env 统一环境变量打通，开箱即用
+# ==============================================================================
+
 server:
-  host: "0.0.0.0"
+  host: "${GATEWAY_HOST:-0.0.0.0}"
   port: 8080
   read_timeout_sec: 180
   write_timeout_sec: 180
   log_level: "info"
 
+# 数据库与分布式缓存连接 (由 .env DATABASE_URL / REDIS_URL 统管)
+# database_url: "${DATABASE_URL:-postgres://airoute:airoute_cluster_secret_pass_2026@postgres:5432/airoute?sslmode=disable}"
+# redis_url: "${REDIS_URL:-redis://redis:6379/0}"
+
 enable_fallback: true
 max_retries: 3
 default_timeout_seconds: 60
 
-# 管理员凭证配置 (Administrator Credentials)
-# 支持环境变量 GATEWAY_ADMIN_USER / GATEWAY_ADMIN_PASSWORD 覆盖
+# 管理员凭证配置 (由 .env GATEWAY_ADMIN_USER / GATEWAY_ADMIN_PASSWORD 统管)
 admin:
   username: "${GATEWAY_ADMIN_USER:-admin}"
   password: "${GATEWAY_ADMIN_PASSWORD:-admin123}"
 
-# 认证与用户策略配置 (Authentication & Governance)
-# 支持环境变量 ALLOW_REGISTRATION / REQUIRE_EMAIL_VERIFICATION / INITIAL_USER_BALANCE 覆盖
+# 认证与用户策略配置 (由 .env ALLOW_REGISTRATION / INITIAL_USER_BALANCE 统管)
 auth:
   allow_registration: true
   require_email_verification: false

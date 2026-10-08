@@ -1308,63 +1308,71 @@ func (h *AdminHandler) DownloadSkillZip(c *gin.Context) {
 	stor := h.getStorage()
 	key := storage.FormatSkillKey(skill.ID)
 
-	// If remote storage provides a presigned download URL (e.g. S3 / RustFS),
-	// redirect directly with HTTP 302 to offload gateway outbound bandwidth!
-	if presignedURL, err := stor.GetDownloadURL(c.Request.Context(), key, 30*time.Minute); err == nil && presignedURL != "" {
-		c.Redirect(http.StatusFound, presignedURL)
+	// 1. Ensure artifact is cached/stored in storage backend
+	exists, _ := stor.Exists(c.Request.Context(), key)
+	if !exists {
+		// Pack dynamically in memory
+		var buf bytes.Buffer
+		zw := zip.NewWriter(&buf)
+
+		// Root SKILL.md
+		if wSkill, err := zw.Create(fmt.Sprintf("%s/SKILL.md", skill.ID)); err == nil {
+			_, _ = wSkill.Write([]byte(skill.Manifest))
+		}
+
+		// scripts/run.sh helper
+		if wScript, err := zw.Create(fmt.Sprintf("%s/scripts/run.sh", skill.ID)); err == nil {
+			runScript := fmt.Sprintf("#!/usr/bin/env bash\n# Executable helper script for %s\n# agentskills.io open standard\necho \"[Skill %s] Executing task with tools: %s\"\n", skill.ID, skill.ID, strings.Join(skill.Tools, ", "))
+			_, _ = wScript.Write([]byte(runScript))
+		}
+
+		// references/metadata.json
+		if wRef, err := zw.Create(fmt.Sprintf("%s/references/metadata.json", skill.ID)); err == nil {
+			metaBytes, _ := json.MarshalIndent(skill, "", "  ")
+			_, _ = wRef.Write(metaBytes)
+		}
+
+		_ = zw.Close()
+		zipBytes := buf.Bytes()
+
+		putCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		_ = stor.Put(putCtx, key, bytes.NewReader(zipBytes), int64(len(zipBytes)), "application/zip")
+		cancel()
+	}
+
+	// 2. If an explicit public CDN / external domain prefix is configured, redirect to it.
+	// Otherwise, keep the single public gateway entrypoint to avoid leaking internal hostnames (e.g. storage:9000).
+	cfg := config.GetGlobalConfig().GetStorageConfig()
+	if cfg.Driver == "s3" && cfg.S3.PublicURLPrefix != "" && !strings.Contains(cfg.S3.PublicURLPrefix, "storage:") {
+		if presignedURL, err := stor.GetDownloadURL(c.Request.Context(), key, 30*time.Minute); err == nil && presignedURL != "" {
+			c.Redirect(http.StatusFound, presignedURL)
+			return
+		}
+	}
+
+	// 3. Authoritative Gateway Single-Entrypoint Stream with HTTP Caching & Zero-Leakage
+	etag := fmt.Sprintf("\"skill-%s-%s\"", skill.ID, skill.Version)
+	if match := c.GetHeader("If-None-Match"); match != "" && match == etag {
+		c.Status(http.StatusNotModified)
 		return
 	}
 
 	c.Header("Content-Type", "application/zip")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.zip\"", skill.ID))
+	c.Header("Cache-Control", "public, max-age=86400, stale-while-revalidate=3600")
+	c.Header("ETag", etag)
 
-	// Check if already cached in storage
-	if exists, _ := stor.Exists(c.Request.Context(), key); exists {
-		rc, size, err := stor.Get(c.Request.Context(), key)
-		if err == nil {
-			defer rc.Close()
-			if size > 0 {
-				c.Header("Content-Length", strconv.FormatInt(size, 10))
-			}
-			_, _ = io.Copy(c.Writer, rc)
-			return
-		}
+	rc, size, err := stor.Get(c.Request.Context(), key)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to stream artifact: " + err.Error()})
+		return
 	}
+	defer rc.Close()
 
-	// Pack dynamically in memory
-	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
-
-	// 1. Root SKILL.md
-	if wSkill, err := zw.Create(fmt.Sprintf("%s/SKILL.md", skill.ID)); err == nil {
-		_, _ = wSkill.Write([]byte(skill.Manifest))
+	if size > 0 {
+		c.Header("Content-Length", strconv.FormatInt(size, 10))
 	}
-
-	// 2. scripts/run.sh helper
-	if wScript, err := zw.Create(fmt.Sprintf("%s/scripts/run.sh", skill.ID)); err == nil {
-		runScript := fmt.Sprintf("#!/usr/bin/env bash\n# Executable helper script for %s\n# agentskills.io open standard\necho \"[Skill %s] Executing task with tools: %s\"\n", skill.ID, skill.ID, strings.Join(skill.Tools, ", "))
-		_, _ = wScript.Write([]byte(runScript))
-	}
-
-	// 3. references/metadata.json
-	if wRef, err := zw.Create(fmt.Sprintf("%s/references/metadata.json", skill.ID)); err == nil {
-		metaBytes, _ := json.MarshalIndent(skill, "", "  ")
-		_, _ = wRef.Write(metaBytes)
-	}
-
-	_ = zw.Close()
-
-	zipBytes := buf.Bytes()
-
-	// Persist to storage for subsequent requests
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		_ = stor.Put(ctx, key, bytes.NewReader(zipBytes), int64(len(zipBytes)), "application/zip")
-	}()
-
-	c.Header("Content-Length", strconv.Itoa(len(zipBytes)))
-	_, _ = c.Writer.Write(zipBytes)
+	_, _ = io.Copy(c.Writer, rc)
 }
 
 // GetStorageStatus returns current artifact storage configuration and health.
