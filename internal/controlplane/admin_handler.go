@@ -1433,11 +1433,30 @@ func ResolvePublicBaseURL(c *gin.Context) string {
 		}
 	}
 
+	if pub := os.Getenv("PUBLIC_URL"); pub != "" {
+		return pub
+	}
+	if pub := os.Getenv("GATEWAY_PUBLIC_URL"); pub != "" {
+		return pub
+	}
+
+	host := os.Getenv("GATEWAY_HOST")
+	if host == "" || host == "0.0.0.0" {
+		host = "127.0.0.1"
+	}
 	port := 8080
 	if cfg != nil && cfg.Server.Port > 0 {
 		port = cfg.Server.Port
+	} else if p := os.Getenv("GATEWAY_INGRESS_PORT"); p != "" {
+		if pi, err := strconv.Atoi(p); err == nil && pi > 0 {
+			port = pi
+		}
+	} else if p := os.Getenv("GATEWAY_PORT"); p != "" {
+		if pi, err := strconv.Atoi(p); err == nil && pi > 0 {
+			port = pi
+		}
 	}
-	return fmt.Sprintf("http://localhost:%d", port)
+	return fmt.Sprintf("http://%s:%d", host, port)
 }
 
 func (h *AdminHandler) resolvePublicBaseURL(c *gin.Context) string {
@@ -1517,7 +1536,7 @@ func (h *AdminHandler) ListMCPServers(c *gin.Context) {
 
 	baseURL := h.resolvePublicBaseURL(c)
 	for _, s := range servers {
-		if s.ID == "airoute-gateway" || strings.HasPrefix(s.Endpoint, "/") || strings.Contains(s.Endpoint, "localhost:8080/mcp") {
+		if s.ID == "airoute-gateway" || strings.HasPrefix(s.Endpoint, "/") || strings.Contains(s.Endpoint, "/mcp") {
 			s.Endpoint = baseURL + "/mcp/sse"
 		}
 	}
@@ -1644,7 +1663,7 @@ func (h *AdminHandler) ProbeMCPServer(c *gin.Context) {
 
 	baseURL := h.resolvePublicBaseURL(c)
 	endpoint := srv.Endpoint
-	if srv.ID == "airoute-gateway" || strings.HasPrefix(endpoint, "/") || strings.Contains(endpoint, "localhost:8080/mcp") {
+	if srv.ID == "airoute-gateway" || strings.HasPrefix(endpoint, "/") || strings.Contains(endpoint, "/mcp") {
 		endpoint = baseURL + "/mcp/sse"
 	}
 

@@ -13,6 +13,7 @@ import {
   Sparkles,
   ShieldCheck
 } from 'lucide-react';
+import { resolveGatewayUrl } from '../config';
 
 export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
   if (!isOpen) return null;
@@ -174,7 +175,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
         return;
       }
       if (provider === 'google') {
-        window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&response_type=code&scope=openid%20email%20profile&redirect_uri=${encodeURIComponent(window.location.origin + '/api/v1/auth/oauth/google/callback')}`;
+        window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&response_type=code&scope=openid%20email%20profile&redirect_uri=${encodeURIComponent(resolveGatewayUrl('/api/v1/auth/oauth/google/callback'))}`;
         return;
       }
     }

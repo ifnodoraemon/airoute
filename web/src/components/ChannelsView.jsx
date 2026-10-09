@@ -46,7 +46,7 @@ export default function ChannelsView({
     setNewChannel({
       name: '',
       type: 'gpustack',
-      base_url: 'http://10.232.16.83/v1-openai',
+      base_url: '',
       api_key: '',
       priority: 1,
       weight: 10,

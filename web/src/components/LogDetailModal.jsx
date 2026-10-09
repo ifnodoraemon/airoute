@@ -222,7 +222,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
             </div>
             <div className="p-3 flex justify-between bg-slate-50/50 dark:bg-slate-900/30">
               <span className="text-slate-500 font-medium">客户端 IP</span>
-              <span className="font-mono text-slate-600 dark:text-slate-300">{log.ip || '127.0.0.1'}</span>
+              <span className="font-mono text-slate-600 dark:text-slate-300">{log.ip || '-'}</span>
             </div>
           </div>
 

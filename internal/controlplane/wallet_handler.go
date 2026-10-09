@@ -266,7 +266,7 @@ func (h *AdminHandler) OAuthInitiate(c *gin.Context) {
 	clientID := os.Getenv(fmt.Sprintf("%s_CLIENT_ID", strings.ToUpper(provider)))
 	redirectURI := os.Getenv(fmt.Sprintf("%s_REDIRECT_URI", strings.ToUpper(provider)))
 	if redirectURI == "" {
-		redirectURI = fmt.Sprintf("http://%s/api/v1/auth/oauth/%s/callback", c.Request.Host, provider)
+		redirectURI = fmt.Sprintf("%s/api/v1/auth/oauth/%s/callback", ResolvePublicBaseURL(c), provider)
 	}
 
 	if clientID == "" {
@@ -435,7 +435,7 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 	clientSecret := os.Getenv(fmt.Sprintf("%s_CLIENT_SECRET", strings.ToUpper(provider)))
 	redirectURI := os.Getenv(fmt.Sprintf("%s_REDIRECT_URI", strings.ToUpper(provider)))
 	if redirectURI == "" {
-		redirectURI = fmt.Sprintf("http://%s/api/v1/auth/oauth/%s/callback", c.Request.Host, provider)
+		redirectURI = fmt.Sprintf("%s/api/v1/auth/oauth/%s/callback", ResolvePublicBaseURL(c), provider)
 	}
 
 	isTestOrDev := strings.HasSuffix(os.Args[0], ".test") || strings.Contains(os.Args[0], "/_test/") || strings.EqualFold(os.Getenv("ENABLE_SIMULATED_OAUTH"), "true")
@@ -979,17 +979,18 @@ func (h *AdminHandler) CreateStripeRechargeSession(c *gin.Context) {
 		Status:   "pending",
 	}
 
+	baseURL := ResolvePublicBaseURL(c)
 	stripeKey := os.Getenv("STRIPE_API_KEY")
 	successURL := os.Getenv("STRIPE_SUCCESS_URL")
 	if successURL == "" {
-		successURL = fmt.Sprintf("http://%s/app/?tab=wallet&recharge=success&order_no=%s", c.Request.Host, orderNo)
+		successURL = fmt.Sprintf("%s/app/?tab=wallet&recharge=success&order_no=%s", baseURL, orderNo)
 	}
 
 	if stripeKey != "" {
 		// Real Stripe checkout session creation
 		data := url.Values{}
 		data.Set("success_url", successURL)
-		data.Set("cancel_url", fmt.Sprintf("http://%s/app/?tab=wallet&recharge=cancel", c.Request.Host))
+		data.Set("cancel_url", fmt.Sprintf("%s/app/?tab=wallet&recharge=cancel", baseURL))
 		data.Set("payment_method_types[0]", "card")
 		data.Set("mode", "payment")
 		data.Set("client_reference_id", orderNo)

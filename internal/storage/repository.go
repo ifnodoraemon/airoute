@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -2076,7 +2077,12 @@ func (r *Repository) SeedDefaultMCPServers() error {
 			Description: "企业级关系型数据库 Schema 自动探测、只读隔离查询与慢 SQL 诊断",
 			Category:    "db",
 			Transport:   "stdio",
-			Endpoint:    "npx -y @modelcontextprotocol/server-postgres postgresql://localhost/db",
+			Endpoint: func() string {
+				if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
+					return "npx -y @modelcontextprotocol/server-postgres " + dbURL
+				}
+				return "npx -y @modelcontextprotocol/server-postgres postgresql://${POSTGRES_USER:-airoute}:${POSTGRES_PASSWORD:-password}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-airoute}"
+			}(),
 			Status:      "active",
 			Author:      "ModelContextProtocol",
 			Version:     "0.9.2",

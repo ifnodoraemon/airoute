@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -35,7 +36,13 @@ type S3Storage struct {
 func NewS3Storage(cfg config.S3Config) (*S3Storage, error) {
 	endpointStr := cfg.Endpoint
 	if endpointStr == "" {
-		endpointStr = "http://localhost:9000"
+		endpointStr = os.Getenv("STORAGE_S3_ENDPOINT")
+		if endpointStr == "" {
+			endpointStr = os.Getenv("S3_ENDPOINT")
+		}
+	}
+	if endpointStr == "" {
+		return nil, fmt.Errorf("S3/RustFS storage endpoint is not configured (STORAGE_S3_ENDPOINT is required)")
 	}
 	if !strings.HasPrefix(endpointStr, "http://") && !strings.HasPrefix(endpointStr, "https://") {
 		if cfg.UseSSL {

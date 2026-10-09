@@ -36,7 +36,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U airoute -d airoute"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-airoute} -d $${POSTGRES_DB:-airoute}"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -78,7 +78,7 @@ services:
     expose:
       - "8080"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:$${GATEWAY_PORT:-8080}/health || exit 1"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -109,7 +109,7 @@ services:
     expose:
       - "8080"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:$${GATEWAY_PORT:-8080}/health || exit 1"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -139,7 +139,7 @@ services:
     volumes:
       - storage-data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:9000/minio/health/live || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -152,7 +152,7 @@ services:
     container_name: airoute-lb
     restart: always
     ports:
-      - "8080:80"
+      - "${GATEWAY_INGRESS_PORT:-${GATEWAY_PORT:-8080}}:80"
     volumes:
       - ./deploy/nginx-compose.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:

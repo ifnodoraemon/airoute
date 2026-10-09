@@ -794,7 +794,7 @@ export default function App() {
           ...prev,
           name: 'gpustack-cluster',
           type: 'gpustack',
-          base_url: 'http://10.232.16.83/v1-openai',
+          base_url: prev.base_url || '',
           api_key: prev.api_key || '',
           priority: 1,
           weight: 10,
@@ -4770,6 +4770,7 @@ helm install airoute ./helm/airoute -n gateway --create-namespace
                     placeholder={
                       newChannel.type === 'ollama' ? '例如: http://<宿主机IP或容器服务名>:11434/v1' :
                       newChannel.type === 'vllm' ? '例如: http://<宿主机IP或集群域名>:8000/v1' :
+                      newChannel.type === 'gpustack' ? '例如: http://<GPUStack服务IP或集群域名>/v1-openai' :
                       'https://api.deepseek.com 或私有网关端点'
                     }
                     className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-xs"
@@ -5163,7 +5164,7 @@ helm install airoute ./helm/airoute -n gateway --create-namespace
           setNewChannel({
             name: '',
             type: 'gpustack',
-            base_url: 'http://10.232.16.83/v1-openai',
+            base_url: '',
             api_key: '',
             priority: 1,
             weight: 10,

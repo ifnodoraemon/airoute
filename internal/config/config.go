@@ -213,7 +213,7 @@ func DefaultConfig() *Config {
 			Driver:    "local",
 			LocalPath: "data/storage",
 			S3: S3Config{
-				Endpoint:  "http://localhost:9000",
+				Endpoint:  os.Getenv("STORAGE_S3_ENDPOINT"),
 				Bucket:    "airoute-skills",
 				AccessKey: "airoute",
 				SecretKey: "airoute_cluster_secret_pass_2026",
@@ -314,7 +314,7 @@ func (c *Config) GetStorageConfig() StorageConfig {
 		Driver:    "local",
 		LocalPath: "data/storage",
 		S3: S3Config{
-			Endpoint:  "http://localhost:9000",
+			Endpoint:  os.Getenv("STORAGE_S3_ENDPOINT"),
 			Bucket:    "airoute-skills",
 			AccessKey: "airoute",
 			SecretKey: "airoute_cluster_secret_pass_2026",

@@ -26,9 +26,28 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
-const (
-	defaultEndpoint = "http://localhost:8080"
-)
+func resolveDefaultCLIEndpoint() string {
+	if ep := os.Getenv("AIROUTE_ENDPOINT"); ep != "" {
+		return ep
+	}
+	if pub := os.Getenv("PUBLIC_URL"); pub != "" {
+		return pub
+	}
+	if pub := os.Getenv("GATEWAY_PUBLIC_URL"); pub != "" {
+		return pub
+	}
+	host := os.Getenv("GATEWAY_HOST")
+	if host == "" || host == "0.0.0.0" {
+		host = "127.0.0.1"
+	}
+	port := "8080"
+	if p := os.Getenv("GATEWAY_INGRESS_PORT"); p != "" {
+		port = p
+	} else if p := os.Getenv("GATEWAY_PORT"); p != "" {
+		port = p
+	}
+	return fmt.Sprintf("http://%s:%s", host, port)
+}
 
 // Version is dynamically populated at build time via -ldflags="-X main.Version=vX.Y.Z"
 var Version = "0.1.0"
@@ -74,10 +93,7 @@ func main() {
 		return
 	}
 
-	endpoint := os.Getenv("AIROUTE_ENDPOINT")
-	if endpoint == "" {
-		endpoint = defaultEndpoint
-	}
+	endpoint := resolveDefaultCLIEndpoint()
 	token := os.Getenv("AIROUTE_TOKEN")
 
 	switch command {
@@ -315,7 +331,7 @@ func printHelp() {
   -db <path>        SQLite 数据库路径 (默认: data/gateway.db 或 $GATEWAY_DB_DSN)
 
 %s环境变量 (Environment Variables):%s
-  AIROUTE_ENDPOINT  CLI 连接的网关地址 (默认: http://localhost:8080)
+  AIROUTE_ENDPOINT  CLI 连接的网关地址 (默认: 动态解析或 http://$GATEWAY_HOST:$GATEWAY_PORT)
   AIROUTE_TOKEN     CLI 认证 Token
   DATABASE_URL      PostgreSQL 连接串 (配置后自动激活集群分布式存储)
   REDIS_URL         Redis 连接串 (配置后自动激活多节点分布式缓存与热更新)
@@ -356,7 +372,7 @@ func handleStatus(endpoint, token string) {
 	req, _ := http.NewRequest(http.MethodGet, endpoint+"/health", nil)
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Printf("%s✕ 无法连接到 Airoute 路由网关服务 (%v)%s\n请确认网关容器或服务正在运行 (默认: http://localhost:8080)\n", colorRed, err, colorReset)
+		fmt.Printf("%s✕ 无法连接到 Airoute 路由网关服务 (%v)%s\n请确认网关容器或服务正在运行 (当前目标端点: %s)\n", colorRed, err, colorReset, endpoint)
 		os.Exit(1)
 	}
 	defer resp.Body.Close()

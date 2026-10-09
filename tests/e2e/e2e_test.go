@@ -17,9 +17,20 @@ import (
 )
 
 var (
-	baseURL   = getEnv("AIROUTE_URL", "http://127.0.0.1:8080")
-	adminUser = getEnv("AIROUTE_ADMIN_USER", "admin")
-	adminPass = getEnv("AIROUTE_ADMIN_PASS", "admin123")
+	baseURL = func() string {
+		if u := os.Getenv("AIROUTE_URL"); u != "" {
+			return u
+		}
+		port := "8080"
+		if p := os.Getenv("GATEWAY_INGRESS_PORT"); p != "" {
+			port = p
+		} else if p := os.Getenv("GATEWAY_PORT"); p != "" {
+			port = p
+		}
+		return fmt.Sprintf("http://127.0.0.1:%s", port)
+	}()
+	adminUser = getEnv("AIROUTE_ADMIN_USER", getEnv("GATEWAY_ADMIN_USER", "admin"))
+	adminPass = getEnv("AIROUTE_ADMIN_PASS", getEnv("GATEWAY_ADMIN_PASSWORD", "admin123"))
 )
 
 func getEnv(key, defaultVal string) string {

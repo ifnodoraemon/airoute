@@ -66,7 +66,7 @@ storage:
   driver: "${STORAGE_DRIVER:-local}"
   local_path: "${STORAGE_LOCAL_PATH:-data/storage}"
   s3:
-    endpoint: "${STORAGE_S3_ENDPOINT:-http://localhost:9000}"   # S3 / Airoute Storage 服务端点
+    endpoint: "${STORAGE_S3_ENDPOINT}"                          # S3 / Airoute Storage 服务端点 (由环境变量提供)
     bucket: "${STORAGE_S3_BUCKET:-airoute-skills}"               # 技能包存储桶
     access_key: "${STORAGE_S3_ACCESS_KEY:-airoute}"             # S3 Access Key ID
     secret_key: "${STORAGE_S3_SECRET_KEY:-airoute_cluster_secret_pass_2026}" # S3 Secret Access Key
