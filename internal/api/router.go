@@ -21,11 +21,16 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 	r.Use(middleware.TraceMiddleware())
 	r.Use(middleware.AccessLogMiddleware())
 
-	// Enterprise CORS Headers
+	// Enterprise CORS & Security Headers
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key, X-API-Key, anthropic-version, x-goog-api-key, x-admin-token, X-Session-ID, X-Request-ID, X-Airoute-Trace-Id, MCP-Protocol-Version, Stripe-Signature")
+		c.Header("Access-Control-Expose-Headers", "Content-Disposition, Content-Length, X-Airoute-Trace-Id, X-Request-Id, X-Airoute-Cost, X-Airoute-Off-Peak, X-Airoute-Off-Peak-Discount, X-Airoute-Cached-Tokens, X-Airoute-Saved-Cost, X-Cache-Status, X-RateLimit-Limit-Requests, Retry-After")
+		c.Header("X-Content-Type-Options", "nosniff")
+		c.Header("X-Frame-Options", "SAMEORIGIN")
+		c.Header("X-XSS-Protection", "1; mode=block")
+
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
@@ -41,6 +46,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 	// Public health and observability endpoints
 	r.GET("/health", handler.HandleHealth)
 	r.HEAD("/health", handler.HandleHealth)
+	r.GET("/metrics", handler.HandleMetrics)
 	r.HEAD("/", func(c *gin.Context) {
 		c.Status(200)
 	})

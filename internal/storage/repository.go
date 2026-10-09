@@ -2031,7 +2031,7 @@ func (r *Repository) SeedDefaultMCPServers() error {
 			Description: "企业级 AI 网关核心管控与路由服务，暴露集群熔断、模型拓扑、数据脱敏与智能仲裁",
 			Category:    "ops",
 			Transport:   "sse",
-			Endpoint:    "http://localhost:8080/mcp/sse",
+			Endpoint:    "/mcp/sse",
 			Status:      "online",
 			Author:      "Airoute Official",
 			Version:     "1.2.0",

@@ -137,7 +137,7 @@ func genSessionID() string {
 func (h *MCPHandler) HandleMCPSSE(c *gin.Context) {
 	if h.repo != nil && h.repo.GetSetting("mcp_enabled", "true") == "false" {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": "MCP 服务在 Nano 网关中已按需关闭。如需使用，请在控制台开启 MCP 服务。",
+			"error": "MCP 服务在 Airoute 网关中已按需关闭。如需使用，请在控制台开启 MCP 服务。",
 		})
 		return
 	}

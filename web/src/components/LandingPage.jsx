@@ -14,6 +14,7 @@ import {
   Volume2,
   Video
 } from 'lucide-react';
+import { getGatewayOrigin } from '../config';
 
 export default function LandingPage({
   isLoggedIn,
@@ -29,7 +30,7 @@ export default function LandingPage({
   const [copiedSnippet, setCopiedSnippet] = useState('');
   const [activeSnippetTab, setActiveSnippetTab] = useState('python');
 
-  const origin = window.location.origin || 'http://localhost:8080';
+  const origin = getGatewayOrigin();
 
   const copyCode = (text, key) => {
     navigator.clipboard.writeText(text);

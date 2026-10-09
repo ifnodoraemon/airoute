@@ -31,6 +31,7 @@ import {
   Lock,
   Boxes
 } from 'lucide-react';
+import { getGatewayOrigin, resolveGatewayUrl } from '../config';
 
 export default function McpIntegrationView({ adminFetch, onCopy, showToast }) {
   const [servers, setServers] = useState([]);
@@ -81,10 +82,11 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast }) {
   const [probeRunning, setProbeRunning] = useState(false);
   const [probeResult, setProbeResult] = useState(null);
   const [probeLatency, setProbeLatency] = useState(null);
+  const [lastSentPayload, setLastSentPayload] = useState(null);
 
-  const origin = typeof window !== 'undefined' && window.location ? window.location.origin : 'http://localhost:8080';
-  const sseUrl = `${origin}/mcp/sse`;
-  const messagesUrl = `${origin}/mcp/messages`;
+  const origin = getGatewayOrigin();
+  const sseUrl = resolveGatewayUrl(mcpSettings?.sse_endpoint || '/mcp/sse');
+  const messagesUrl = resolveGatewayUrl(mcpSettings?.messages_endpoint || '/mcp/messages');
 
   const fetchServersAndSettings = async () => {
     if (!adminFetch) return;
@@ -235,14 +237,49 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast }) {
     }
   };
 
+  const getCurrentRpcPayload = () => {
+    if (probeMethod === 'server/discover') {
+      return {
+        jsonrpc: "2.0",
+        id: "probe-discover-" + (probeServer ? probeServer.id : 'core'),
+        method: "server/discover",
+        params: {}
+      };
+    } else if (probeMethod === 'tools/list') {
+      return {
+        jsonrpc: "2.0",
+        id: "probe-list-" + (probeServer ? probeServer.id : 'core'),
+        method: "tools/list",
+        params: {}
+      };
+    } else {
+      let parsedArgs = {};
+      try {
+        parsedArgs = JSON.parse(probeToolArgs);
+      } catch (e) {
+        parsedArgs = { _syntax_hint: "JSON 待补全" };
+      }
+      return {
+        jsonrpc: "2.0",
+        id: "probe-call-" + (probeServer ? probeServer.id : 'core'),
+        method: "tools/call",
+        params: {
+          name: probeToolName,
+          arguments: parsedArgs
+        }
+      };
+    }
+  };
+
   const handleOpenProbe = (server) => {
     setProbeServer(server);
     setProbeResult(null);
     setProbeLatency(null);
+    setLastSentPayload(null);
     if (server && server.tools && server.tools.length > 0) {
       setProbeToolName(server.tools[0]);
     } else {
-      setProbeToolName('airoute_cluster_status');
+      setProbeToolName('airoute_data_redact');
     }
     setProbeModalOpen(true);
   };
@@ -287,6 +324,8 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast }) {
           }
         };
       }
+
+      setLastSentPayload(rpcReq);
 
       const res = await fetch(messagesUrl, {
         method: 'POST',
@@ -351,7 +390,7 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast }) {
         "airoute-gateway": {
           url: sseUrl,
           headers: {
-            "Authorization": "Bearer YOUR_AIRUTE_KEY"
+            "Authorization": "Bearer YOUR_AIROUTE_KEY"
           }
         },
         ...(selectedServerForConfig && selectedServerForConfig.id !== 'airoute-gateway' ? {
@@ -369,13 +408,15 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast }) {
     return JSON.stringify({
       mcpServers: {
         "airoute-gateway": {
-          command: "curl",
-          args: ["-N", sseUrl]
+          command: "npx",
+          args: ["-y", "mcp-remote", sseUrl]
         },
         ...(selectedServerForConfig && selectedServerForConfig.id !== 'airoute-gateway' ? {
           [selectedServerForConfig.id]: {
-            command: selectedServerForConfig.transport === 'stdio' ? "npx" : "curl",
-            args: selectedServerForConfig.transport === 'stdio' ? ["-y", selectedServerForConfig.endpoint.replace('npx -y ', '')] : ["-N", selectedServerForConfig.endpoint]
+            command: "npx",
+            args: selectedServerForConfig.transport === 'stdio' 
+              ? ["-y", ...selectedServerForConfig.endpoint.replace('npx -y ', '').split(' ')] 
+              : ["-y", "mcp-remote", selectedServerForConfig.endpoint]
           }
         } : {})
       }
@@ -922,7 +963,7 @@ if __name__ == "__main__":
       {/* 在线 JSON-RPC 2.0 协议探针控制台 */}
       {probeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-3xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-5xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-lg">
@@ -944,6 +985,17 @@ if __name__ == "__main__":
               >
                 <X className="w-5 h-5" />
               </button>
+            </div>
+
+            {/* 协议教程与通信原理解析 */}
+            <div className="p-3 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 rounded-xl text-xs text-indigo-900 dark:text-indigo-200">
+              <div className="flex items-center gap-2 font-semibold mb-1 text-indigo-700 dark:text-indigo-300">
+                <BookOpen className="w-4 h-4" />
+                <span>MCP 双向通信原理解析与接入教程</span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-indigo-700/80 dark:text-indigo-300/80">
+                <b>标准交互流:</b> 客户端首先发起 <code className="font-mono bg-indigo-100 dark:bg-indigo-900/60 px-1 py-0.5 rounded">GET /mcp/sse</code> 建立长连接握手；随后将左侧的 <b>JSON-RPC 2.0 请求报文</b> 通过 <code className="font-mono bg-indigo-100 dark:bg-indigo-900/60 px-1 py-0.5 rounded">POST /mcp/messages</code> 投递至网关。网关安全审计并调度工具后，将右侧的 <b>响应结果</b> 实时返回给客户端。
+              </p>
             </div>
 
             {/* 方法与参数选择 */}
@@ -1056,27 +1108,68 @@ if __name__ == "__main__":
                 </button>
               </div>
 
-              {/* 探针响应输出 */}
-              {probeResult && (
-                <div>
-                  <div className="flex items-center justify-between text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                    <span className="flex items-center gap-1.5">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                      服务器响应 (Response Payload)
+              {/* 双向报文链路对比: 发送报文 (左) 与 响应结果 (右) */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-2">
+                {/* 1. 发送请求报文 */}
+                <div className="flex flex-col space-y-1.5">
+                  <div className="flex items-center justify-between text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    <span className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
+                      <Send className="w-3.5 h-3.5" />
+                      发送报文 (Request Payload: POST {messagesUrl})
                     </span>
                     <button
-                      onClick={() => handleCopyText(JSON.stringify(probeResult, null, 2), 'probe-res')}
-                      className="inline-flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                      type="button"
+                      onClick={() => handleCopyText(JSON.stringify(lastSentPayload || getCurrentRpcPayload(), null, 2), 'probe-req')}
+                      className="inline-flex items-center gap-1 text-[11px] font-normal text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                     >
-                      {copiedKey === 'probe-res' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                      复制响应
+                      {copiedKey === 'probe-req' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                      复制请求
                     </button>
                   </div>
-                  <div className="bg-gray-900 text-gray-100 p-4 rounded-xl font-mono text-xs overflow-x-auto max-h-60 border border-gray-800">
-                    <pre>{JSON.stringify(probeResult, null, 2)}</pre>
+                  <div className="bg-gray-900 text-gray-100 p-3.5 rounded-xl font-mono text-xs overflow-x-auto min-h-[160px] max-h-64 border border-gray-800 shadow-inner">
+                    <pre>{JSON.stringify(lastSentPayload || getCurrentRpcPayload(), null, 2)}</pre>
+                  </div>
+                  <div className="text-[11px] text-gray-400 flex items-center justify-between">
+                    <span>协议规范: JSON-RPC 2.0</span>
+                    <span>目标方法: {probeMethod}</span>
                   </div>
                 </div>
-              )}
+
+                {/* 2. 网关接收响应 */}
+                <div className="flex flex-col space-y-1.5">
+                  <div className="flex items-center justify-between text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      接收响应 (Response Payload: HTTP 200 OK)
+                    </span>
+                    {probeResult && (
+                      <button
+                        type="button"
+                        onClick={() => handleCopyText(JSON.stringify(probeResult, null, 2), 'probe-res')}
+                        className="inline-flex items-center gap-1 text-[11px] font-normal text-gray-500 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                      >
+                        {copiedKey === 'probe-res' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                        复制响应
+                      </button>
+                    )}
+                  </div>
+                  <div className="bg-gray-900 text-gray-100 p-3.5 rounded-xl font-mono text-xs overflow-x-auto min-h-[160px] max-h-64 border border-gray-800 shadow-inner flex flex-col justify-start">
+                    {probeResult ? (
+                      <pre>{JSON.stringify(probeResult, null, 2)}</pre>
+                    ) : (
+                      <div className="h-full flex flex-col items-center justify-center text-gray-500 text-center py-8">
+                        <Terminal className="w-8 h-8 mb-2 opacity-40 text-indigo-400" />
+                        <p className="text-xs font-medium text-gray-400">等待发送探针</p>
+                        <p className="text-[11px] text-gray-500 mt-1">点击上方“发送 JSON-RPC 2.0 报文”发起实时调用测试</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-gray-400 flex items-center justify-between">
+                    <span>网关延迟: {probeLatency !== null ? `${probeLatency} ms` : '--'}</span>
+                    <span>状态: {probeResult ? (probeResult.error ? 'RPC 异常' : '成功返回') : '待调用'}</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-end pt-2 border-t border-gray-100 dark:border-gray-800">

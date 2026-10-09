@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -138,6 +139,8 @@ func RateLimitMiddleware() gin.HandlerFunc {
 			allowed, err := client.AllowRPM(c.Request.Context(), k.Key, k.RPM)
 			if err == nil {
 				if !allowed {
+					c.Header("X-RateLimit-Limit-Requests", strconv.Itoa(k.RPM))
+					c.Header("Retry-After", "1")
 					c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 						"error": gin.H{
 							"message": "Cluster rate limit exceeded (RPM limit reached). Please slow down requests.",
@@ -156,6 +159,8 @@ func RateLimitMiddleware() gin.HandlerFunc {
 		// 2. Fallback to high-performance local in-memory token bucket
 		bucket := GlobalRateLimiter.getBucket(k.Key, k.RPM)
 		if !bucket.allow() {
+			c.Header("X-RateLimit-Limit-Requests", strconv.Itoa(k.RPM))
+			c.Header("Retry-After", "1")
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"error": gin.H{
 					"message": "Rate limit exceeded (RPM limit reached). Please slow down requests.",

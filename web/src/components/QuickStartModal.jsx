@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Copy, Check, Terminal, Code, Cpu, Sparkles, BookOpen } from 'lucide-react';
+import { getGatewayOrigin } from '../config';
 
 export default function QuickStartModal({ apiKey, onClose, onCopy }) {
   if (!apiKey) return null;
@@ -7,8 +8,8 @@ export default function QuickStartModal({ apiKey, onClose, onCopy }) {
   const [activeTab, setActiveTab] = useState('python');
   const [copiedTab, setCopiedTab] = useState('');
 
-  const origin = window.location.origin || 'http://localhost:8080';
-  const baseUrl = `${origin}/v1`;
+  const origin = getGatewayOrigin();
+  const baseUrl = origin ? `${origin}/v1` : '/v1';
   const keyStr = apiKey.key || 'sk-airoute-xxxx';
 
   const pythonCode = `from openai import OpenAI

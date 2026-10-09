@@ -43,13 +43,16 @@ func TestAPI_HealthMetricsAndWebUI(t *testing.T) {
 		t.Fatalf("expected 200 OK for /health, got %d", w.Code)
 	}
 
-	// 2. Test GET /metrics (temporarily disabled for public access -> returns 404)
+	// 2. Test GET /metrics (Prometheus scrape endpoint)
 	reqMetrics := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	wMetrics := httptest.NewRecorder()
 	engine.ServeHTTP(wMetrics, reqMetrics)
 
-	if wMetrics.Code != http.StatusNotFound {
-		t.Fatalf("expected 404 NotFound for public /metrics (temporarily disabled), got %d", wMetrics.Code)
+	if wMetrics.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for Prometheus /metrics, got %d", wMetrics.Code)
+	}
+	if !bytes.Contains(wMetrics.Body.Bytes(), []byte("airoute_requests_total")) {
+		t.Fatalf("expected Prometheus metric 'airoute_requests_total', got: %s", wMetrics.Body.String())
 	}
 
 	// 2b. Test GET /api/v1/public/status (standalone public status page API)

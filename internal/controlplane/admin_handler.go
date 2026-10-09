@@ -368,7 +368,7 @@ func (h *AdminHandler) CreateAPIKey(c *gin.Context) {
 	if rec.Key == "" {
 		b := make([]byte, 16)
 		_, _ = rand.Read(b)
-		rec.Key = fmt.Sprintf("sk-nano-%s", hex.EncodeToString(b))
+		rec.Key = fmt.Sprintf("sk-airoute-%s", hex.EncodeToString(b))
 	}
 	if rec.TenantID == "" {
 		rec.TenantID = "default-app"
@@ -1107,8 +1107,16 @@ func (h *AdminHandler) ProbeModelRoute(c *gin.Context) {
 func (h *AdminHandler) ListLogs(c *gin.Context) {
 	limitStr := c.DefaultQuery("limit", "50")
 	limit, _ := strconv.Atoi(limitStr)
+	if limit <= 0 {
+		limit = 50
+	} else if limit > 1000 {
+		limit = 1000
+	}
 	offsetStr := c.DefaultQuery("offset", "0")
 	offset, _ := strconv.Atoi(offsetStr)
+	if offset < 0 {
+		offset = 0
+	}
 
 	filter := storage.LogFilter{
 		Limit:     limit,
@@ -1395,6 +1403,47 @@ func (h *AdminHandler) GetStorageStatus(c *gin.Context) {
 	})
 }
 
+// ResolvePublicBaseURL dynamically resolves the public base URL of the gateway
+// prioritizing configuration/env (PUBLIC_URL, GATEWAY_PUBLIC_URL) or HTTP proxy headers.
+func ResolvePublicBaseURL(c *gin.Context) string {
+	cfg := config.GetGlobalConfig()
+	if cfg != nil {
+		if pub := cfg.GetPublicURL(); pub != "" {
+			return pub
+		}
+	}
+
+	if c != nil && c.Request != nil {
+		proto := c.GetHeader("X-Forwarded-Proto")
+		if proto == "" {
+			if c.Request.TLS != nil {
+				proto = "https"
+			} else {
+				proto = "http"
+			}
+		}
+
+		host := c.GetHeader("X-Forwarded-Host")
+		if host == "" {
+			host = c.Request.Host
+		}
+
+		if host != "" {
+			return fmt.Sprintf("%s://%s", proto, host)
+		}
+	}
+
+	port := 8080
+	if cfg != nil && cfg.Server.Port > 0 {
+		port = cfg.Server.Port
+	}
+	return fmt.Sprintf("http://localhost:%d", port)
+}
+
+func (h *AdminHandler) resolvePublicBaseURL(c *gin.Context) string {
+	return ResolvePublicBaseURL(c)
+}
+
 // GetMCPSettings returns the master MCP enable/disable switch and config.
 func (h *AdminHandler) GetMCPSettings(c *gin.Context) {
 	enabled := h.repo.GetSetting("mcp_enabled", "true") == "true"
@@ -1415,6 +1464,8 @@ func (h *AdminHandler) GetMCPSettings(c *gin.Context) {
 		}
 	}
 
+	baseURL := h.resolvePublicBaseURL(c)
+
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
 		"data": gin.H{
@@ -1424,8 +1475,9 @@ func (h *AdminHandler) GetMCPSettings(c *gin.Context) {
 			"active_servers_count": activeServersCount,
 			"total_servers_count":  len(servers),
 			"active_tools_count":   totalToolsCount,
-			"sse_endpoint":         "/mcp/sse",
-			"messages_endpoint":    "/mcp/messages",
+			"sse_endpoint":         baseURL + "/mcp/sse",
+			"messages_endpoint":    baseURL + "/mcp/messages",
+			"public_base_url":      baseURL,
 		},
 	})
 }
@@ -1462,6 +1514,14 @@ func (h *AdminHandler) ListMCPServers(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "获取 MCP 服务器列表失败: " + err.Error()})
 		return
 	}
+
+	baseURL := h.resolvePublicBaseURL(c)
+	for _, s := range servers {
+		if s.ID == "airoute-gateway" || strings.HasPrefix(s.Endpoint, "/") || strings.Contains(s.Endpoint, "localhost:8080/mcp") {
+			s.Endpoint = baseURL + "/mcp/sse"
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": servers})
 }
 
@@ -1582,12 +1642,19 @@ func (h *AdminHandler) ProbeMCPServer(c *gin.Context) {
 		return
 	}
 
+	baseURL := h.resolvePublicBaseURL(c)
+	endpoint := srv.Endpoint
+	if srv.ID == "airoute-gateway" || strings.HasPrefix(endpoint, "/") || strings.Contains(endpoint, "localhost:8080/mcp") {
+		endpoint = baseURL + "/mcp/sse"
+	}
+
 	latencyMs := 8 + (time.Now().UnixNano()%12000000)/1000000
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
 		"data": gin.H{
 			"id":          srv.ID,
 			"name":        srv.Name,
+			"endpoint":    endpoint,
 			"status":      "online",
 			"latency_ms":  latencyMs,
 			"transport":   srv.Transport,

@@ -5,7 +5,8 @@
 
 server:
   host: "${GATEWAY_HOST:-0.0.0.0}"
-  port: 8080
+  port: ${GATEWAY_PORT:-8080}
+  public_url: "${PUBLIC_URL}"
   read_timeout_sec: 180
   write_timeout_sec: 180
   log_level: "info"

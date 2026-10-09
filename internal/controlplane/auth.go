@@ -393,7 +393,7 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 	// Auto-generate initial API key for the new user
 	keyBytes := make([]byte, 16)
 	_, _ = rand.Read(keyBytes)
-	newKey := "sk-nano-" + hex.EncodeToString(keyBytes)
+	newKey := "sk-airoute-" + hex.EncodeToString(keyBytes)
 	_ = h.repo.CreateAPIKey(&storage.APIKeyRecord{
 		Key:           newKey,
 		TenantID:      user.Username,

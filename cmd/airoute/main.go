@@ -268,6 +268,9 @@ func runServer(args []string) {
 	go func() {
 		telemetry.Logger.Info(fmt.Sprintf("🚀 Airoute listening on http://%s", addr))
 		telemetry.Logger.Info(fmt.Sprintf("🌐 工作台入口: http://%s/app/ (或 http://%s/)", addr, addr))
+		if pub := cfg.GetPublicURL(); pub != "" {
+			telemetry.Logger.Info(fmt.Sprintf("🔗 外部公共端点 (Public Base URL): %s", pub))
+		}
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			telemetry.Logger.Error("server fatal error", "error", err.Error())
 			os.Exit(1)

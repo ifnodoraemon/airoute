@@ -12,6 +12,7 @@ import {
   Server,
   Sparkles
 } from 'lucide-react';
+import { getGatewayBaseUrl } from '../config';
 
 export default function AccountManageModal({
   isOpen,
@@ -37,7 +38,7 @@ export default function AccountManageModal({
   const [copiedBaseUrl, setCopiedBaseUrl] = useState(false);
 
   const isAdmin = adminUser?.role === 'admin';
-  const apiBaseUrl = typeof window !== 'undefined' ? `${window.location.origin}/v1` : 'http://localhost:8080/v1';
+  const apiBaseUrl = getGatewayBaseUrl();
 
   const handleCopyBaseUrl = () => {
     navigator.clipboard.writeText(apiBaseUrl);

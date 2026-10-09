@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/billing"
 	"github.com/ifnodoraemon/airoute/internal/config"
+	"github.com/ifnodoraemon/airoute/internal/controlplane"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/router"
@@ -949,12 +950,14 @@ func (h *Handler) HandlePublicStatus(c *gin.Context) {
 	cfg := config.GetGlobalConfig()
 	requireVerify := cfg.IsEmailVerificationRequired()
 	allowReg := cfg.IsRegistrationAllowed()
+	baseURL := controlplane.ResolvePublicBaseURL(c)
 
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
 		"data": gin.H{
 			"status":                     overallStatus,
 			"uptime_pct":                 99.99,
+			"public_url":                 baseURL,
 			"models":                     modelStatuses,
 			"models_count":               len(models),
 			"allow_registration":         allowReg,

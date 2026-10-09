@@ -100,6 +100,23 @@ func GetTraceIDFromContext(ctx context.Context) string {
 	return ""
 }
 
+func sanitizeURLQuery(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	parts := strings.Split(raw, "&")
+	for i, p := range parts {
+		kv := strings.SplitN(p, "=", 2)
+		if len(kv) == 2 {
+			k := strings.ToLower(kv[0])
+			if k == "key" || k == "apikey" || k == "token" || k == "secret" || k == "password" {
+				parts[i] = kv[0] + "=[REDACTED]"
+			}
+		}
+	}
+	return strings.Join(parts, "&")
+}
+
 // AccessLogMiddleware outputs structured JSON logs for all processed requests,
 // embedding the TraceID for centralized log aggregation and monitoring.
 func AccessLogMiddleware() gin.HandlerFunc {
@@ -110,8 +127,8 @@ func AccessLogMiddleware() gin.HandlerFunc {
 
 		c.Next()
 
-		// Skip health checks to keep logs clean
-		if path == "/health" || path == "/api/v1/public/status" {
+		// Skip high-frequency probes and metrics scrapers to keep logs clean
+		if path == "/health" || path == "/api/v1/public/status" || path == "/metrics" {
 			return
 		}
 
@@ -121,7 +138,7 @@ func AccessLogMiddleware() gin.HandlerFunc {
 		clientIP := c.ClientIP()
 
 		if raw != "" {
-			path = path + "?" + raw
+			path = path + "?" + sanitizeURLQuery(raw)
 		}
 
 		telemetry.Logger.Info("http_access",

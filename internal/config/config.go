@@ -19,6 +19,7 @@ type ServerConfig struct {
 	WriteTimeoutSec int    `yaml:"write_timeout_sec"`
 	LogLevel        string `yaml:"log_level"`
 	RedisURL        string `yaml:"redis_url"`
+	PublicURL       string `yaml:"public_url"`
 }
 
 // AdminConfig defines initial administrator credentials.
@@ -193,6 +194,7 @@ func DefaultConfig() *Config {
 			WriteTimeoutSec: 120,
 			LogLevel:        "info",
 			RedisURL:        redisURL,
+			PublicURL:       os.Getenv("PUBLIC_URL"),
 		},
 		Admin: AdminConfig{
 			Username: "admin",
@@ -357,6 +359,20 @@ func (c *Config) GetStorageConfig() StorageConfig {
 	return sc
 }
 
+// GetPublicURL returns configured public-facing gateway URL, prioritizing env over config.
+func (c *Config) GetPublicURL() string {
+	if u := os.Getenv("PUBLIC_URL"); u != "" && (strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")) {
+		return strings.TrimRight(strings.TrimSpace(u), "/")
+	}
+	if u := os.Getenv("GATEWAY_PUBLIC_URL"); u != "" && (strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")) {
+		return strings.TrimRight(strings.TrimSpace(u), "/")
+	}
+	if c != nil && c.Server.PublicURL != "" && (strings.HasPrefix(c.Server.PublicURL, "http://") || strings.HasPrefix(c.Server.PublicURL, "https://")) {
+		return strings.TrimRight(strings.TrimSpace(c.Server.PublicURL), "/")
+	}
+	return ""
+}
+
 // LoadConfig loads the configuration from a YAML file.
 func LoadConfig(path string) (*Config, error) {
 	cfg := DefaultConfig()
@@ -378,6 +394,11 @@ func LoadConfig(path string) (*Config, error) {
 
 	if env := os.Getenv("REDIS_URL"); env != "" {
 		cfg.Server.RedisURL = env
+	}
+	if env := os.Getenv("PUBLIC_URL"); env != "" && (strings.HasPrefix(env, "http://") || strings.HasPrefix(env, "https://")) {
+		cfg.Server.PublicURL = env
+	} else if env := os.Getenv("GATEWAY_PUBLIC_URL"); env != "" && (strings.HasPrefix(env, "http://") || strings.HasPrefix(env, "https://")) {
+		cfg.Server.PublicURL = env
 	}
 
 	SetGlobalConfig(cfg)

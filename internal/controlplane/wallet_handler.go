@@ -218,7 +218,7 @@ func (h *AdminHandler) Register(c *gin.Context) {
 	// Automatically generate an initial API key for the new user
 	keyBytes := make([]byte, 16)
 	_, _ = rand.Read(keyBytes)
-	newKey := "sk-nano-" + hex.EncodeToString(keyBytes)
+	newKey := "sk-airoute-" + hex.EncodeToString(keyBytes)
 
 	_ = h.repo.CreateAPIKey(&storage.APIKeyRecord{
 		Key:           newKey,
@@ -517,7 +517,7 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 		keyBytes := make([]byte, 16)
 		_, _ = rand.Read(keyBytes)
 		_ = h.repo.CreateAPIKey(&storage.APIKeyRecord{
-			Key:           "sk-nano-" + hex.EncodeToString(keyBytes),
+			Key:           "sk-airoute-" + hex.EncodeToString(keyBytes),
 			TenantID:      username,
 			UserID:        user.ID,
 			GroupName:     "default",
@@ -1223,7 +1223,7 @@ func (h *AdminHandler) CreateUserKey(c *gin.Context) {
 
 	keyBytes := make([]byte, 16)
 	_, _ = rand.Read(keyBytes)
-	newKey := "sk-nano-" + hex.EncodeToString(keyBytes)
+	newKey := "sk-airoute-" + hex.EncodeToString(keyBytes)
 
 	rec := &storage.APIKeyRecord{
 		Key:           newKey,

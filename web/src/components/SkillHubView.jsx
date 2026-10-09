@@ -33,6 +33,7 @@ import {
   Folder,
   FolderTree
 } from 'lucide-react';
+import { getGatewayOrigin } from '../config';
 
 export default function SkillHubView({ adminFetch, onCopy, showToast }) {
   const [skills, setSkills] = useState([]);
@@ -69,6 +70,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast }) {
   });
 
   const [copiedKey, setCopiedKey] = useState('');
+  const origin = getGatewayOrigin();
 
   const fetchSkills = async () => {
     if (!adminFetch) return;
@@ -214,7 +216,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast }) {
     } else if (skill.id === 'test-driven-development') {
       setTestPrompt('为字符串反转函数设计失败测试用例，覆盖空串、中文字符与 Emoji 边界。');
     } else if (skill.id === 'browser-automation') {
-      setTestPrompt('打开 http://localhost:8080 并截图确认页面核心标题正常渲染。');
+      setTestPrompt(`打开 ${origin} 并截图确认页面核心标题正常渲染。`);
     } else if (skill.id === 'security-audit') {
       setTestPrompt('扫描项目中所有 SQL 查询代码，检查是否存在未做参数化绑定的字符串拼接注入漏洞。');
     } else {
@@ -553,7 +555,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast }) {
                         <div className="font-semibold text-gray-800 dark:text-gray-200 flex items-center justify-between">
                           <span>步骤 1：下载并解压标准技能包至 Claude Code 技能目录</span>
                           <button
-                            onClick={() => handleCopyText(`mkdir -p .claude/skills && curl -sL http://localhost:8080/api/v1/skills/${currentId}/download -o ${currentId}.zip && unzip -q -o ${currentId}.zip -d .claude/skills/ && rm -f ${currentId}.zip`, 'cmd-claude-curl')}
+                            onClick={() => handleCopyText(`mkdir -p .claude/skills && curl -sL ${origin}/api/v1/skills/${currentId}/download -o ${currentId}.zip && unzip -q -o ${currentId}.zip -d .claude/skills/ && rm -f ${currentId}.zip`, 'cmd-claude-curl')}
                             className="text-amber-600 hover:underline inline-flex items-center gap-1 text-[11px]"
                           >
                             {copiedKey === 'cmd-claude-curl' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
@@ -563,7 +565,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast }) {
                         <pre className="p-2.5 bg-gray-900 text-gray-100 rounded font-mono text-[11px] overflow-x-auto">
 {`# 一键下载解压标准包 (${currentId}.zip)
 mkdir -p .claude/skills
-curl -sL http://localhost:8080/api/v1/skills/${currentId}/download -o ${currentId}.zip
+curl -sL ${origin}/api/v1/skills/${currentId}/download -o ${currentId}.zip
 unzip -q -o ${currentId}.zip -d .claude/skills/
 rm -f ${currentId}.zip`}
                         </pre>
@@ -587,7 +589,7 @@ rm -f ${currentId}.zip`}
                         <div className="font-semibold text-gray-800 dark:text-gray-200 flex items-center justify-between">
                           <span>步骤 1：下载并解压标准技能包至 OpenCode 技能目录</span>
                           <button
-                            onClick={() => handleCopyText(`mkdir -p .opencode/skills && curl -sL http://localhost:8080/api/v1/skills/${currentId}/download -o ${currentId}.zip && unzip -q -o ${currentId}.zip -d .opencode/skills/ && rm -f ${currentId}.zip`, 'cmd-opencode-curl')}
+                            onClick={() => handleCopyText(`mkdir -p .opencode/skills && curl -sL ${origin}/api/v1/skills/${currentId}/download -o ${currentId}.zip && unzip -q -o ${currentId}.zip -d .opencode/skills/ && rm -f ${currentId}.zip`, 'cmd-opencode-curl')}
                             className="text-amber-600 hover:underline inline-flex items-center gap-1 text-[11px]"
                           >
                             {copiedKey === 'cmd-opencode-curl' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
@@ -597,7 +599,7 @@ rm -f ${currentId}.zip`}
                         <pre className="p-2.5 bg-gray-900 text-gray-100 rounded font-mono text-[11px] overflow-x-auto">
 {`# 一键下载解压标准包 (${currentId}.zip)
 mkdir -p .opencode/skills
-curl -sL http://localhost:8080/api/v1/skills/${currentId}/download -o ${currentId}.zip
+curl -sL ${origin}/api/v1/skills/${currentId}/download -o ${currentId}.zip
 unzip -q -o ${currentId}.zip -d .opencode/skills/
 rm -f ${currentId}.zip`}
                         </pre>
@@ -620,7 +622,7 @@ rm -f ${currentId}.zip`}
                       <div className="font-semibold text-gray-800 dark:text-gray-200 flex items-center justify-between">
                         <span>Python SDK (OpenAI / Codex API) 载入与网关调用示例：</span>
                         <button
-                          onClick={() => handleCopyText(`import os\nimport urllib.request\nimport zipfile\nimport pathlib\nfrom openai import OpenAI\n\n# 1. 自动拉取技能包并解压\nskill_id = "${currentId}"\nzip_path = f"{skill_id}.zip"\nurllib.request.urlretrieve(f"http://localhost:8080/api/v1/skills/{skill_id}/download", zip_path)\nwith zipfile.ZipFile(zip_path, "r") as z:\n    z.extractall(".skills/")\nos.remove(zip_path)\n\n# 2. 读取解压后的纯净 SKILL.md 作为 System SOP\nskill_sop = pathlib.Path(f".skills/{skill_id}/SKILL.md").read_text(encoding="utf-8")\n\n# 3. 接入 airoute 统一网关\nclient = OpenAI(base_url="http://localhost:8080/v1", api_key="sk-airoute-key")\nresponse = client.chat.completions.create(\n    model="claude-3-7-sonnet",\n    messages=[\n        {"role": "system", "content": f"Follow this Skill SOP:\\n{skill_sop}"},\n        {"role": "user", "content": "请按照工作流规范执行当前任务"}\n    ]\n)\nprint(response.choices[0].message.content)`, 'cmd-codex')}
+                          onClick={() => handleCopyText(`import os\nimport urllib.request\nimport zipfile\nimport pathlib\nfrom openai import OpenAI\n\n# 1. 自动拉取技能包并解压\nskill_id = "${currentId}"\nzip_path = f"{skill_id}.zip"\nurllib.request.urlretrieve(f"${origin}/api/v1/skills/{skill_id}/download", zip_path)\nwith zipfile.ZipFile(zip_path, "r") as z:\n    z.extractall(".skills/")\nos.remove(zip_path)\n\n# 2. 读取解压后的纯净 SKILL.md 作为 System SOP\nskill_sop = pathlib.Path(f".skills/{skill_id}/SKILL.md").read_text(encoding="utf-8")\n\n# 3. 接入 airoute 统一网关\nclient = OpenAI(base_url="${origin}/v1", api_key="sk-airoute-key")\nresponse = client.chat.completions.create(\n    model="claude-3-7-sonnet",\n    messages=[\n        {"role": "system", "content": f"Follow this Skill SOP:\\n{skill_sop}"},\n        {"role": "user", "content": "请按照工作流规范执行当前任务"}\n    ]\n)\nprint(response.choices[0].message.content)`, 'cmd-codex')}
                           className="text-amber-600 hover:underline inline-flex items-center gap-1 text-[11px]"
                         >
                           {copiedKey === 'cmd-codex' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
@@ -637,7 +639,7 @@ from openai import OpenAI
 # 1. 自动拉取技能包并解压
 skill_id = "${currentId}"
 zip_path = f"{skill_id}.zip"
-urllib.request.urlretrieve(f"http://localhost:8080/api/v1/skills/{skill_id}/download", zip_path)
+urllib.request.urlretrieve(f"${origin}/api/v1/skills/{skill_id}/download", zip_path)
 with zipfile.ZipFile(zip_path, "r") as z:
     z.extractall(".skills/")
 os.remove(zip_path)
@@ -646,7 +648,7 @@ os.remove(zip_path)
 skill_sop = pathlib.Path(f".skills/{skill_id}/SKILL.md").read_text(encoding="utf-8")
 
 # 3. 接入 airoute 统一网关
-client = OpenAI(base_url="http://localhost:8080/v1", api_key="sk-airoute-key")
+client = OpenAI(base_url="${origin}/v1", api_key="sk-airoute-key")
 response = client.chat.completions.create(
     model="claude-3-7-sonnet",
     messages=[
@@ -665,7 +667,7 @@ print(response.choices[0].message.content)`}
                         <div className="font-semibold text-gray-800 dark:text-gray-200 flex items-center justify-between">
                           <span>Cursor / Cline 导入方案</span>
                           <button
-                            onClick={() => handleCopyText(`mkdir -p .cursor/skills && curl -sL http://localhost:8080/api/v1/skills/${currentId}/download -o ${currentId}.zip && unzip -q -o ${currentId}.zip -d .cursor/skills/ && rm -f ${currentId}.zip`, 'cmd-cursor')}
+                            onClick={() => handleCopyText(`mkdir -p .cursor/skills && curl -sL ${origin}/api/v1/skills/${currentId}/download -o ${currentId}.zip && unzip -q -o ${currentId}.zip -d .cursor/skills/ && rm -f ${currentId}.zip`, 'cmd-cursor')}
                             className="text-amber-600 hover:underline inline-flex items-center gap-1 text-[11px]"
                           >
                             {copiedKey === 'cmd-cursor' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
@@ -675,7 +677,7 @@ print(response.choices[0].message.content)`}
                         <pre className="p-2.5 bg-gray-900 text-gray-100 rounded font-mono text-[11px] overflow-x-auto">
 {`# 方案 A: 解压至 Cursor 技能目录
 mkdir -p .cursor/skills
-curl -sL http://localhost:8080/api/v1/skills/${currentId}/download -o ${currentId}.zip
+curl -sL ${origin}/api/v1/skills/${currentId}/download -o ${currentId}.zip
 unzip -q -o ${currentId}.zip -d .cursor/skills/
 rm -f ${currentId}.zip
 
@@ -883,7 +885,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
                   <div className="flex items-center justify-between text-gray-700 dark:text-gray-300 font-medium">
                     <span>终端下载并解压命令 (Terminal Quickstart)</span>
                     <button
-                      onClick={() => handleCopyText(`curl -sL http://localhost:8080/api/v1/skills/${manifestSkill.id}/download -o ${manifestSkill.id}.zip && unzip -q -o ${manifestSkill.id}.zip -d skills/`, 'tree-curl')}
+                      onClick={() => handleCopyText(`curl -sL ${origin}/api/v1/skills/${manifestSkill.id}/download -o ${manifestSkill.id}.zip && unzip -q -o ${manifestSkill.id}.zip -d skills/`, 'tree-curl')}
                       className="text-amber-600 hover:underline inline-flex items-center gap-1 text-[11px]"
                     >
                       {copiedKey === 'tree-curl' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
@@ -891,7 +893,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
                     </button>
                   </div>
                   <pre className="p-2 bg-gray-900 text-gray-200 rounded font-mono text-[11px] overflow-x-auto">
-{`curl -sL http://localhost:8080/api/v1/skills/${manifestSkill.id}/download -o ${manifestSkill.id}.zip
+{`curl -sL ${origin}/api/v1/skills/${manifestSkill.id}/download -o ${manifestSkill.id}.zip
 unzip -q -o ${manifestSkill.id}.zip -d skills/`}
                   </pre>
                 </div>

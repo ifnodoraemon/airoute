@@ -19,6 +19,7 @@ import {
   Copy,
   Check
 } from 'lucide-react';
+import { getGatewayOrigin } from '../config';
 
 export default function ServiceStatus({
   isStandalone = true,
@@ -281,7 +282,8 @@ export default function ServiceStatus({
     { id: 'embeddings', label: '向量嵌入', count: modalityCounts['embeddings'] || 0 },
   ].filter(item => item.id === 'all' || item.count > 0);
 
-  const currentHost = typeof window !== 'undefined' ? window.location.host : 'localhost:8080';
+  const origin = getGatewayOrigin();
+  const currentHost = origin ? origin.replace(/^https?:\/\//, '') : (typeof window !== 'undefined' && window.location.host ? window.location.host : 'gateway');
 
   const content = (
     <div className="space-y-6">

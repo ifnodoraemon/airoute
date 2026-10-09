@@ -15,6 +15,7 @@ import {
   ShieldAlert,
   Zap
 } from 'lucide-react';
+import { getGatewayOrigin } from '../config';
 
 export default function KeysView({
   keys = [],
@@ -146,7 +147,8 @@ export default function KeysView({
 
   // Copy cURL sample snippet
   const copyCurlSnippet = (keyStr) => {
-    const curl = `curl http://localhost:8080/v1/chat/completions \\
+    const origin = getGatewayOrigin();
+    const curl = `curl ${origin}/v1/chat/completions \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer ${keyStr}" \\
   -d '{

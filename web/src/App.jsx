@@ -76,6 +76,7 @@ import ChannelsView from './components/ChannelsView';
 import KeysView from './components/KeysView';
 import LogsView from './components/LogsView';
 import { translations } from './i18n';
+import { getGatewayOrigin, getGatewayBaseUrl, setPublicGatewayUrl } from './config';
 
 // Audit-log pagination: server-side page size, kept in one place for the
 // fetch limit, the offset stepping, and the page-number math in LogsView.
@@ -251,6 +252,16 @@ export default function App() {
         })
         .catch(() => {});
     }
+
+    // Query gateway public status to resolve canonical external gateway URL
+    fetch('/api/v1/public/status')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.data && data.data.public_url) {
+          setPublicGatewayUrl(data.data.public_url);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // Authenticated fetch helper for Control Plane APIs
@@ -909,9 +920,9 @@ export default function App() {
       case 'ollama':
         setNewChannel(prev => ({
           ...prev,
-          name: 'ollama-local',
+          name: 'ollama-service',
           type: 'ollama',
-          base_url: 'http://localhost:11434/v1',
+          base_url: prev.base_url || '',
           api_key: prev.api_key || 'ollama',
           priority: 1,
           weight: 10,
@@ -920,14 +931,14 @@ export default function App() {
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings'],
         }));
-        showToast('已载入 Ollama 本地开源模板', 'info');
+        showToast('已载入 Ollama 模型列表模板，请输入您的端点地址', 'info');
         break;
       case 'vllm':
         setNewChannel(prev => ({
           ...prev,
-          name: 'vllm-local',
+          name: 'vllm-service',
           type: 'vllm',
-          base_url: 'http://localhost:8000/v1',
+          base_url: prev.base_url || '',
           api_key: prev.api_key || 'none',
           priority: 1,
           weight: 10,
@@ -936,14 +947,14 @@ export default function App() {
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings'],
         }));
-        showToast('已载入 vLLM 本地集群模板', 'info');
+        showToast('已载入 vLLM 模型列表模板，请输入您的端点地址', 'info');
         break;
       case 'sub2api':
         setNewChannel(prev => ({
           ...prev,
           name: 'sub2api-upstream',
           type: 'sub2api',
-          base_url: 'https://your-sub2api.example.com/v1',
+          base_url: prev.base_url || '',
           api_key: prev.api_key || '',
           priority: 1,
           weight: 10,
@@ -959,7 +970,7 @@ export default function App() {
           ...prev,
           name: 'custom-downstream',
           type: 'custom',
-          base_url: 'http://localhost:8000/v1',
+          base_url: prev.base_url || '',
           api_key: prev.api_key || '',
           priority: 2,
           weight: 10,
@@ -968,7 +979,7 @@ export default function App() {
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'embeddings', 'rerank', 'images', 'audio_speech', 'videos'],
         }));
-        showToast('已载入自定义下游模板', 'info');
+        showToast('已载入自定义下游模板，请输入您的服务端点', 'info');
         break;
       default:
         break;
@@ -1009,7 +1020,7 @@ export default function App() {
   const handleBatchTest = handleBatchPing;
 
   const generateCurlForPlayground = () => {
-    const origin = window.location.origin || 'http://localhost:8080';
+    const origin = getGatewayOrigin();
     const key = getEffectivePlayApiKey() || 'sk-airoute-your-key';
     return `curl -X POST "${origin}/v1/chat/completions" \\
   -H "Authorization: Bearer ${key}" \\
@@ -1536,21 +1547,23 @@ export default function App() {
   };
 
   const copyPlaygroundCurl = () => {
+    const origin = getGatewayOrigin();
     const targetKey = getEffectivePlayApiKey();
     const targetModel = playModel || 'deepseek-v4-flash';
     const authHeader = targetKey ? `  -H "Authorization: Bearer ${targetKey}" \\\n` : '';
-    const curl = `curl http://localhost:8080/v1/chat/completions \\\n  -H "Content-Type: application/json" \\\n${authHeader}  -d '{\n    "model": "${targetModel}",\n    "messages": [{"role": "user", "content": ${JSON.stringify(playPrompt || 'Hello Airoute!')}}],\n    "stream": ${playStream}\n  }'`;
+    const curl = `curl ${origin}/v1/chat/completions \\\n  -H "Content-Type: application/json" \\\n${authHeader}  -d '{\n    "model": "${targetModel}",\n    "messages": [{"role": "user", "content": ${JSON.stringify(playPrompt || 'Hello Airoute!')}}],\n    "stream": ${playStream}\n  }'`;
     navigator.clipboard.writeText(curl);
     showToast('cURL 请求命令已复制到剪贴板', 'success');
   };
 
   const copyPlaygroundPython = () => {
+    const origin = getGatewayOrigin();
     const targetKey = getEffectivePlayApiKey();
     const targetModel = playModel || 'deepseek-v4-flash';
     const py = `from openai import OpenAI
 
 client = OpenAI(
-    base_url="http://localhost:8080/v1",
+    base_url="${origin}/v1",
     api_key="${targetKey || 'sk-airoute-xxxx'}"
 )
 
@@ -4363,7 +4376,7 @@ ${playStream ? 'for chunk in response:\n    if chunk.choices[0].delta.content:\n
                 )}
 
                 {docsSection === 'quickstart' && (() => {
-                  const docOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080';
+                  const docOrigin = getGatewayOrigin();
                   const docBaseUrl = `${docOrigin}/v1`;
                   return (
                   <div className="space-y-4">
@@ -4424,7 +4437,7 @@ for chunk in response:
                 })()}
 
                 {docsSection === 'claude' && (() => {
-                  const docOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080';
+                  const docOrigin = getGatewayOrigin();
                   return (
                   <div className="space-y-4">
                     <div className="border-b border-slate-100 pb-3">
@@ -4563,7 +4576,9 @@ GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
                   </div>
                 )}
 
-                {docsSection === 'rerank' && (
+                {docsSection === 'rerank' && (() => {
+                  const docOrigin = getGatewayOrigin();
+                  return (
                   <div className="space-y-4">
                     <div className="border-b border-slate-100 pb-3">
                       <h3 className="text-base font-bold text-slate-900">Rerank 检索重排 API 规范 (/v1/rerank)</h3>
@@ -4574,7 +4589,7 @@ GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
                       <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
                         <span className="font-bold text-slate-900">1. 重排请求格式 (POST /v1/rerank):</span>
                         <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl font-mono overflow-x-auto text-[11px] leading-relaxed">
-{`curl -X POST http://localhost:8080/v1/rerank \\
+{`curl -X POST ${docOrigin}/v1/rerank \\
   -H "Authorization: Bearer sk-airoute-xxxx" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -4628,7 +4643,8 @@ GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
                       </div>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
 
                 {docsSection === 'deploy' && (
                   <div className="space-y-4">
@@ -4751,7 +4767,11 @@ helm install airoute ./helm/airoute -n gateway --create-namespace
                     required
                     value={newChannel.base_url}
                     onChange={(e) => setNewChannel({ ...newChannel, base_url: e.target.value })}
-                    placeholder="https://api.deepseek.com"
+                    placeholder={
+                      newChannel.type === 'ollama' ? '例如: http://<宿主机IP或容器服务名>:11434/v1' :
+                      newChannel.type === 'vllm' ? '例如: http://<宿主机IP或集群域名>:8000/v1' :
+                      'https://api.deepseek.com 或私有网关端点'
+                    }
                     className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-xs"
                   />
                   <button
