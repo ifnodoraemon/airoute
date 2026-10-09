@@ -3091,6 +3091,8 @@ ${playStream ? 'for chunk in response:\n    if chunk.choices[0].delta.content:\n
           {currentTab === 'mcp' && (
             <McpIntegrationView
               adminFetch={adminFetch}
+              adminToken={adminToken}
+              keys={keys}
               onCopy={(txt) => {
                 navigator.clipboard.writeText(txt);
                 showToast('已复制到剪贴板！', 'success');

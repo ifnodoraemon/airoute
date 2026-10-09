@@ -33,13 +33,205 @@ import {
 } from 'lucide-react';
 import { getGatewayOrigin, resolveGatewayUrl } from '../config';
 
-export default function McpIntegrationView({ adminFetch, onCopy, showToast }) {
+const TOOL_TEMPLATES = {
+  // 网关原生安全与审计
+  airoute_data_redact: {
+    label: 'airoute_data_redact (敏感数据脱敏与隐私合规)',
+    group: '网关原生安全审计',
+    defaultArgs: '{\n  "text": "客户张三 手机13812345678 身份证110101199003072345 密钥sk-abcdef123456"\n}'
+  },
+  airoute_sql_security_check: {
+    label: 'airoute_sql_security_check (SQL高危注入拦截与安全审计)',
+    group: '网关原生安全审计',
+    defaultArgs: '{\n  "query": "DROP TABLE users; -- 注入攻击"\n}'
+  },
+  airoute_cluster_status: {
+    label: 'airoute_cluster_status (集群高可用健康探活与指标)',
+    group: '网关原生运维',
+    defaultArgs: '{\n}'
+  },
+  airoute_model_topology: {
+    label: 'airoute_model_topology (模型路由矩阵与拓扑视图)',
+    group: '网关原生运维',
+    defaultArgs: '{\n  "modality": "chat"\n}'
+  },
+  airoute_deep_search: {
+    label: 'airoute_deep_search (高质量结构化联网深度检索)',
+    group: '网关原生增强',
+    defaultArgs: '{\n  "query": "DeepSeek R1 模型推理架构与性能",\n  "max_results": 5\n}'
+  },
+  airoute_recommend_model: {
+    label: 'airoute_recommend_model (智能模型选型与吞吐仲裁)',
+    group: '网关原生增强',
+    defaultArgs: '{\n  "task_type": "coding",\n  "max_budget_per_m": 1.0\n}'
+  },
+  airoute_query_logs: {
+    label: 'airoute_query_logs (统一审计日志快速检索)',
+    group: '网关原生运维',
+    defaultArgs: '{\n  "limit": 10\n}'
+  },
+
+  // Puppeteer 无头浏览器
+  puppeteer_navigate: {
+    label: 'puppeteer_navigate (无头浏览器页面导航与加载)',
+    group: 'Puppeteer 浏览器渲染',
+    defaultArgs: '{\n  "url": "https://news.ycombinator.com"\n}'
+  },
+  puppeteer_screenshot: {
+    label: 'puppeteer_screenshot (页面视口全景截图捕获)',
+    group: 'Puppeteer 浏览器渲染',
+    defaultArgs: '{\n  "name": "homepage_preview",\n  "full_page": false\n}'
+  },
+  puppeteer_click: {
+    label: 'puppeteer_click (DOM 节点模拟点击与交互)',
+    group: 'Puppeteer 浏览器渲染',
+    defaultArgs: '{\n  "selector": "button.submit"\n}'
+  },
+  puppeteer_evaluate: {
+    label: 'puppeteer_evaluate (沙箱安全 JavaScript 表达式求值)',
+    group: 'Puppeteer 浏览器渲染',
+    defaultArgs: '{\n  "script": "document.title"\n}'
+  },
+
+  // 关系型与嵌入式数据库
+  read_query: {
+    label: 'read_query (Postgres 只读安全 SQL 查询)',
+    group: '数据库与持久存储',
+    defaultArgs: '{\n  "query": "SELECT id, name, status, latency_ms FROM public.channels LIMIT 5;"\n}'
+  },
+  list_tables: {
+    label: 'list_tables (枚举数据表元数据清单)',
+    group: '数据库与持久存储',
+    defaultArgs: '{\n}'
+  },
+  describe_table: {
+    label: 'describe_table (获取数据表字段与约束模式)',
+    group: '数据库与持久存储',
+    defaultArgs: '{\n  "table_name": "channels"\n}'
+  },
+  query: {
+    label: 'query (通用数据库查询执行)',
+    group: '数据库与持久存储',
+    defaultArgs: '{\n  "query": "SELECT 1 as test_conn;"\n}'
+  },
+
+  // 深度推理
+  sequentialthinking: {
+    label: 'sequentialthinking (思维链深层分步逻辑推理)',
+    group: '深度反思与推理',
+    defaultArgs: '{\n  "thought": "分析分布式网关集群在流量洪峰下的限流与缓存降级拓扑",\n  "thoughtNumber": 1,\n  "totalThoughts": 3\n}'
+  },
+
+  // GitHub / Git 研发协作
+  search_repositories: {
+    label: 'search_repositories (GitHub 仓库检索)',
+    group: '代码协作与版本控制',
+    defaultArgs: '{\n  "query": "airoute language:Go"\n}'
+  },
+  create_issue: {
+    label: 'create_issue (创建规范化协同工单)',
+    group: '代码协作与版本控制',
+    defaultArgs: '{\n  "title": "网关 MCP 协议探针联调测试",\n  "body": "企业级统一接入网关协议探测已顺利通过验证"\n}'
+  },
+  get_file_contents: {
+    label: 'get_file_contents (获取仓库代码文件详情)',
+    group: '代码协作与版本控制',
+    defaultArgs: '{\n  "owner": "airoute",\n  "repo": "gateway",\n  "path": "README.md"\n}'
+  },
+  create_pull_request: {
+    label: 'create_pull_request (创建代码拉取审查请求)',
+    group: '代码协作与版本控制',
+    defaultArgs: '{\n  "title": "feat: mcp probe auth token",\n  "base": "main",\n  "head": "feature/mcp"\n}'
+  },
+  git_status: {
+    label: 'git_status (查询本地 Git 仓库工作树状态)',
+    group: '代码协作与版本控制',
+    defaultArgs: '{\n}'
+  },
+  git_diff: {
+    label: 'git_diff (查看变更差异对比)',
+    group: '代码协作与版本控制',
+    defaultArgs: '{\n}'
+  },
+
+  // DevOps & 容器
+  docker_ps: {
+    label: 'docker_ps (枚举当前运行中容器列表)',
+    group: 'DevOps 与容器运维',
+    defaultArgs: '{\n}'
+  },
+  docker_logs: {
+    label: 'docker_logs (检索容器最新标准输出日志)',
+    group: 'DevOps 与容器运维',
+    defaultArgs: '{\n  "container": "airoute-gateway-1",\n  "tail": 50\n}'
+  },
+
+  // 长期记忆与知识图谱
+  create_entities: {
+    label: 'create_entities (向长期记忆图谱写入实体节点)',
+    group: '长期记忆与知识图谱',
+    defaultArgs: '{\n  "entities": [\n    {"name": "airoute_gateway", "type": "infrastructure", "observations": ["HA dual node", "port 8080"]}\n  ]\n}'
+  },
+  read_graph: {
+    label: 'read_graph (读取跨会话完整实体拓扑图谱)',
+    group: '长期记忆与知识图谱',
+    defaultArgs: '{\n}'
+  },
+
+  // 网页检索
+  brave_web_search: {
+    label: 'brave_web_search (Brave 隐私实时网页检索)',
+    group: '网络检索与抓取',
+    defaultArgs: '{\n  "query": "Model Context Protocol enterprise architecture"\n}'
+  },
+  web_fetch_markdown: {
+    label: 'web_fetch_markdown (网页解析提炼结构化Markdown)',
+    group: '网络检索与抓取',
+    defaultArgs: '{\n  "url": "https://example.com"\n}'
+  }
+};
+
+const getToolInfo = (toolName) => {
+  if (TOOL_TEMPLATES[toolName]) {
+    return TOOL_TEMPLATES[toolName];
+  }
+  return {
+    label: `${toolName} (MCP 工具)`,
+    group: '扩展与自定义服务工具',
+    defaultArgs: '{\n}'
+  };
+};
+
+const getDefaultArgsForTool = (toolName) => {
+  return getToolInfo(toolName).defaultArgs;
+};
+
+export default function McpIntegrationView({ adminFetch, adminToken, keys = [], onCopy, showToast }) {
   const [servers, setServers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [togglingServer, setTogglingServer] = useState({});
   const [copiedKey, setCopiedKey] = useState('');
+
+  // Token Management
+  const getInitialToken = () => {
+    if (keys && keys.length > 0) {
+      const active = keys.find(k => k.status === 'active' || k.status === 1 || !k.status);
+      return active ? active.key : keys[0].key;
+    }
+    return adminToken || '';
+  };
+
+  const [probeToken, setProbeToken] = useState('');
+  const [configToken, setConfigToken] = useState('');
+  const [requestViewTab, setRequestViewTab] = useState('wire'); // 'wire' | 'json' | 'curl'
+
+  useEffect(() => {
+    const initTok = getInitialToken();
+    if (!probeToken && initTok) setProbeToken(initTok);
+    if (!configToken && initTok) setConfigToken(initTok);
+  }, [keys, adminToken]);
 
   // MCP Master Switch & Stats
   const [mcpSettings, setMcpSettings] = useState({
@@ -78,7 +270,7 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast }) {
   const [probeServer, setProbeServer] = useState(null);
   const [probeMethod, setProbeMethod] = useState('server/discover');
   const [probeToolName, setProbeToolName] = useState('airoute_data_redact');
-  const [probeToolArgs, setProbeToolArgs] = useState('{\n  "text": "客户张三 手机13812345678 身份证110101199003072345 密钥sk-abc123xyz789"\n}');
+  const [probeToolArgs, setProbeToolArgs] = useState(getDefaultArgsForTool('airoute_data_redact'));
   const [probeRunning, setProbeRunning] = useState(false);
   const [probeResult, setProbeResult] = useState(null);
   const [probeLatency, setProbeLatency] = useState(null);
@@ -271,15 +463,23 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast }) {
     }
   };
 
+  const handleSelectTool = (name) => {
+    setProbeToolName(name);
+    setProbeToolArgs(getDefaultArgsForTool(name));
+  };
+
   const handleOpenProbe = (server) => {
     setProbeServer(server);
     setProbeResult(null);
     setProbeLatency(null);
     setLastSentPayload(null);
-    if (server && server.tools && server.tools.length > 0) {
-      setProbeToolName(server.tools[0]);
-    } else {
-      setProbeToolName('airoute_data_redact');
+    const initialTool = (server && server.tools && server.tools.length > 0)
+      ? server.tools[0]
+      : 'airoute_data_redact';
+    setProbeToolName(initialTool);
+    setProbeToolArgs(getDefaultArgsForTool(initialTool));
+    if (!probeToken) {
+      setProbeToken(getInitialToken());
     }
     setProbeModalOpen(true);
   };
@@ -327,9 +527,14 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast }) {
 
       setLastSentPayload(rpcReq);
 
+      const headers = { 'Content-Type': 'application/json' };
+      if (probeToken && probeToken.trim()) {
+        headers['Authorization'] = `Bearer ${probeToken.trim()}`;
+      }
+
       const res = await fetch(messagesUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(rpcReq)
       });
       const data = await res.json();
@@ -349,6 +554,27 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast }) {
     }
   };
 
+  const getWireRequestText = () => {
+    const payload = lastSentPayload || getCurrentRpcPayload();
+    let path = '/mcp/messages';
+    let host = 'localhost:8080';
+    try {
+      const u = new URL(messagesUrl, window.location.origin);
+      path = u.pathname + (u.search || '');
+      host = u.host;
+    } catch (e) {
+      // fallback
+    }
+    const token = probeToken?.trim() || 'YOUR_AIROUTE_KEY';
+    return `POST ${path} HTTP/1.1\nHost: ${host}\nContent-Type: application/json\nAuthorization: Bearer ${token}\n\n${JSON.stringify(payload, null, 2)}`;
+  };
+
+  const getCurlRequestText = () => {
+    const payload = lastSentPayload || getCurrentRpcPayload();
+    const token = probeToken?.trim() || 'YOUR_AIROUTE_KEY';
+    return `curl -X POST "${messagesUrl}" \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer ${token}" \\\n  -d '${JSON.stringify(payload)}'`;
+  };
+
   const handleCopyText = (text, key) => {
     if (onCopy) {
       onCopy(text);
@@ -357,7 +583,7 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast }) {
     }
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(''), 2000);
-    if (showToast) showToast('配置已复制到剪贴板', 'success');
+    if (showToast) showToast('内容已复制到剪贴板', 'success');
   };
 
   const categories = [
@@ -383,21 +609,23 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast }) {
   const totalToolsCount = servers.reduce((acc, s) => acc + (s.tools ? s.tools.length : 0), 0);
   const onlineServersCount = servers.filter(s => s.enabled).length;
 
-  // Code Generation for Clients
+  // Code Generation for Clients with Token Support
   const getCursorConfig = () => {
+    const token = configToken?.trim() || 'YOUR_AIROUTE_KEY';
     return JSON.stringify({
       mcpServers: {
         "airoute-gateway": {
           url: sseUrl,
           headers: {
-            "Authorization": "Bearer YOUR_AIROUTE_KEY"
+            "Authorization": `Bearer ${token}`
           }
         },
         ...(selectedServerForConfig && selectedServerForConfig.id !== 'airoute-gateway' ? {
           [selectedServerForConfig.id]: {
             command: selectedServerForConfig.transport === 'stdio' ? "npx" : undefined,
             args: selectedServerForConfig.transport === 'stdio' ? selectedServerForConfig.endpoint.replace('npx -y ', '').split(' ') : undefined,
-            url: selectedServerForConfig.transport === 'sse' ? selectedServerForConfig.endpoint : undefined
+            url: selectedServerForConfig.transport === 'sse' ? selectedServerForConfig.endpoint : undefined,
+            headers: selectedServerForConfig.transport === 'sse' ? { "Authorization": `Bearer ${token}` } : undefined
           }
         } : {})
       }
@@ -405,18 +633,25 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast }) {
   };
 
   const getClaudeConfig = () => {
+    const token = configToken?.trim() || 'YOUR_AIROUTE_KEY';
     return JSON.stringify({
       mcpServers: {
         "airoute-gateway": {
           command: "npx",
-          args: ["-y", "mcp-remote", sseUrl]
+          args: ["-y", "mcp-remote", sseUrl, "--header", `Authorization: Bearer ${token}`],
+          env: {
+            "AIRoute_API_KEY": token
+          }
         },
         ...(selectedServerForConfig && selectedServerForConfig.id !== 'airoute-gateway' ? {
           [selectedServerForConfig.id]: {
             command: "npx",
             args: selectedServerForConfig.transport === 'stdio' 
               ? ["-y", ...selectedServerForConfig.endpoint.replace('npx -y ', '').split(' ')] 
-              : ["-y", "mcp-remote", selectedServerForConfig.endpoint]
+              : ["-y", "mcp-remote", selectedServerForConfig.endpoint, "--header", `Authorization: Bearer ${token}`],
+            env: {
+              "AIRoute_API_KEY": token
+            }
           }
         } : {})
       }
@@ -424,11 +659,15 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast }) {
   };
 
   const getClineConfig = () => {
+    const token = configToken?.trim() || 'YOUR_AIROUTE_KEY';
     return JSON.stringify({
       mcpServers: {
         "airoute-gateway": {
           type: "sse",
           url: sseUrl,
+          headers: {
+            "Authorization": `Bearer ${token}`
+          },
           autoApprove: [
             "airoute_cluster_status",
             "airoute_data_redact",
@@ -440,29 +679,58 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast }) {
   };
 
   const getPythonSnippet = () => {
+    const token = configToken?.trim() || 'YOUR_AIROUTE_KEY';
     return `from mcp import ClientSession, StdioServerParameters
 from mcp.client.sse import sse_client
+import asyncio
 
 async def run_mcp_client():
-    # 连接 Airoute 统一 MCP 代理网关
-    async with sse_client("${sseUrl}") as (read_stream, write_stream):
+    # 配置统一鉴权 Token 请求头 (支持虚拟 API Key 与多租户配额隔离)
+    headers = {
+        "Authorization": "Bearer ${token}"
+    }
+
+    # 连接 Airoute 统一 MCP 代理网关 SSE 端点
+    async with sse_client("${sseUrl}", headers=headers) as (read_stream, write_stream):
         async with ClientSession(read_stream, write_stream) as session:
             await session.initialize()
             
-            # 列出网关聚合的所有 MCP 工具
+            # 列出网关聚合的所有 MCP 安全工具
             tools = await session.list_tools()
-            print(f"发现 {len(tools.tools)} 个可用安全工具")
+            print(f"网关已就绪，挂载 {len(tools.tools)} 个安全合规工具")
             
             # 调用数据安全脱敏工具示例
             result = await session.call_tool(
                 "airoute_data_redact",
-                arguments={"text": "机密手机号: 13800138000"}
+                arguments={"text": "客户张三 手机13812345678 密钥sk-abcdef123456"}
             )
-            print("脱敏结果:", result.content[0].text)
+            print("脱敏审计响应:", result.content[0].text)
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(run_mcp_client())`;
+  };
+
+  const getCurlSnippet = () => {
+    const token = configToken?.trim() || 'YOUR_AIROUTE_KEY';
+    return `# 1. 建立 MCP SSE 事件流长连接 (监听工具通知与端点握手)
+curl -N -H "Authorization: Bearer ${token}" \\
+  "${sseUrl}"
+
+# 2. 发送 JSON-RPC 2.0 请求报文 (执行工具或发现服务)
+curl -X POST "${messagesUrl}" \\
+  -H "Authorization: Bearer ${token}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "cli-test-01",
+    "method": "tools/call",
+    "params": {
+      "name": "airoute_data_redact",
+      "arguments": {
+        "text": "客户张三 手机13812345678 密钥sk-abcdef123456"
+      }
+    }
+  }'`;
   };
 
   return (
@@ -741,18 +1009,59 @@ if __name__ == "__main__":
               </button>
             </div>
 
+            {/* 注入鉴权 Token 凭证栏 */}
+            <div className="p-3 bg-gray-50 dark:bg-gray-900/60 rounded-xl border border-gray-200 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2">
+                <Lock className="w-4 h-4 text-indigo-500" />
+                <div>
+                  <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">
+                    鉴权凭证注入 (Authorization Token / API Key)
+                  </span>
+                  <span className="hidden sm:inline text-[10px] text-gray-400 ml-2">
+                    (自动写入客户端配置文件与请求头)
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {keys && keys.length > 0 && (
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) setConfigToken(e.target.value);
+                    }}
+                    className="px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-850 text-gray-700 dark:text-gray-200"
+                    defaultValue=""
+                  >
+                    <option value="" disabled>选择已发行 Key...</option>
+                    {keys.map(k => (
+                      <option key={k.key} value={k.key}>
+                        {k.name ? `${k.name} (${k.key.slice(0, 10)}...)` : k.key}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <input
+                  type="text"
+                  value={configToken}
+                  onChange={(e) => setConfigToken(e.target.value)}
+                  placeholder="YOUR_AIROUTE_KEY"
+                  className="px-2.5 py-1 text-xs font-mono rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-850 text-gray-900 dark:text-white min-w-[200px]"
+                />
+              </div>
+            </div>
+
             {/* 客户端选择 Tabs */}
-            <div className="flex items-center gap-2 border-b border-gray-200 dark:border-gray-800 pb-2">
+            <div className="flex items-center gap-2 border-b border-gray-200 dark:border-gray-800 pb-2 overflow-x-auto">
               {[
                 { id: 'cursor', label: 'Cursor (.cursor/mcp.json)' },
                 { id: 'claude', label: 'Claude Desktop' },
                 { id: 'cline', label: 'Cline / Roo-Code' },
-                { id: 'python', label: 'Python SDK' }
+                { id: 'python', label: 'Python SDK' },
+                { id: 'curl', label: 'cURL / 终端 CLI' }
               ].map(c => (
                 <button
                   key={c.id}
                   onClick={() => setActiveConfigClient(c.id)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${activeConfigClient === c.id ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap transition-colors ${activeConfigClient === c.id ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                 >
                   {c.label}
                 </button>
@@ -767,12 +1076,14 @@ if __name__ == "__main__":
                   {activeConfigClient === 'claude' && '配置文件位置: ~/Library/Application Support/Claude/claude_desktop_config.json'}
                   {activeConfigClient === 'cline' && '配置文件位置: Cline Settings -> MCP Servers'}
                   {activeConfigClient === 'python' && '安装依赖: pip install mcp httpx'}
+                  {activeConfigClient === 'curl' && '终端命令行测试 (自动携带 Authorization Bearer 鉴权头)'}
                 </span>
                 <button
                   onClick={() => {
                     const code = activeConfigClient === 'cursor' ? getCursorConfig() :
                                  activeConfigClient === 'claude' ? getClaudeConfig() :
-                                 activeConfigClient === 'cline' ? getClineConfig() : getPythonSnippet();
+                                 activeConfigClient === 'cline' ? getClineConfig() :
+                                 activeConfigClient === 'python' ? getPythonSnippet() : getCurlSnippet();
                     handleCopyText(code, 'client-config');
                   }}
                   className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
@@ -783,11 +1094,12 @@ if __name__ == "__main__":
               </div>
 
               <div className="bg-gray-900 text-gray-100 p-4 rounded-xl font-mono text-xs overflow-x-auto border border-gray-800">
-                <pre>
+                <pre className="whitespace-pre-wrap leading-relaxed">
                   {activeConfigClient === 'cursor' && getCursorConfig()}
                   {activeConfigClient === 'claude' && getClaudeConfig()}
                   {activeConfigClient === 'cline' && getClineConfig()}
                   {activeConfigClient === 'python' && getPythonSnippet()}
+                  {activeConfigClient === 'curl' && getCurlSnippet()}
                 </pre>
               </div>
             </div>
@@ -998,9 +1310,79 @@ if __name__ == "__main__":
               </p>
             </div>
 
-            {/* 方法与参数选择 */}
+            {/* 鉴权 Token 凭证与目标服务配置栏 */}
+            <div className="p-3 bg-gray-50 dark:bg-gray-900/60 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-indigo-500" />
+                  <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">
+                    鉴权凭证 (Authorization Token / 虚拟 API Key)
+                  </span>
+                  <span className="text-[10px] text-gray-400">
+                    (支持 Bearer Token 与 X-API-Key 多租户隔离)
+                  </span>
+                </div>
+                {keys && keys.length > 0 && (
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <span className="text-[11px] text-gray-400">快捷填充:</span>
+                    <select
+                      onChange={(e) => {
+                        if (e.target.value) setProbeToken(e.target.value);
+                      }}
+                      className="px-2 py-1 text-[11px] rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200"
+                      defaultValue=""
+                    >
+                      <option value="" disabled>选择网关已发行 Key...</option>
+                      {keys.map(k => (
+                        <option key={k.key} value={k.key}>
+                          {k.name ? `${k.name} (${k.key.slice(0, 10)}...)` : k.key}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+              <input
+                type="text"
+                value={probeToken}
+                onChange={(e) => setProbeToken(e.target.value)}
+                placeholder="输入虚拟 API Key 或管理员 Token (如 sk-airoute-...)"
+                className="w-full px-3 py-1.5 font-mono text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-850 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+
+            {/* 方法、服务与参数选择 */}
             <div className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    目标 MCP 服务 (Target Server)
+                  </label>
+                  <select
+                    value={probeServer ? probeServer.id : 'all'}
+                    onChange={(e) => {
+                      const sid = e.target.value;
+                      if (sid === 'all') {
+                        setProbeServer(null);
+                      } else {
+                        const found = servers.find(s => s.id === sid);
+                        setProbeServer(found || null);
+                        if (found && found.tools && found.tools.length > 0) {
+                          handleSelectTool(found.tools[0]);
+                        }
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                  >
+                    <option value="all">🌐 统一 MCP 聚合网关 (全部已启用服务)</option>
+                    {servers.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.id})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                     探针方法 (JSON-RPC Method)
@@ -1023,29 +1405,43 @@ if __name__ == "__main__":
                     </label>
                     <select
                       value={probeToolName}
-                      onChange={(e) => {
-                        const name = e.target.value;
-                        setProbeToolName(name);
-                        if (name === 'airoute_data_redact') {
-                          setProbeToolArgs('{\n  "text": "用户张三 身份证110101199003072345 手机13812345678 密钥sk-abcdef123456"\n}');
-                        } else if (name === 'airoute_sql_security_check') {
-                          setProbeToolArgs('{\n  "query": "DROP TABLE users; -- 注入攻击"\n}');
-                        } else if (name === 'airoute_deep_search') {
-                          setProbeToolArgs('{\n  "query": "DeepSeek R1 模型推理架构与性能"\n}');
-                        } else if (name === 'airoute_recommend_model') {
-                          setProbeToolArgs('{\n  "task_type": "coding",\n  "max_budget_per_m": 1.0\n}');
-                        } else {
-                          setProbeToolArgs('{}');
-                        }
-                      }}
+                      onChange={(e) => handleSelectTool(e.target.value)}
                       className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono"
                     >
-                      <option value="airoute_data_redact">airoute_data_redact (敏感数据脱敏)</option>
-                      <option value="airoute_sql_security_check">airoute_sql_security_check (SQL安全审计拦截)</option>
-                      <option value="airoute_cluster_status">airoute_cluster_status (集群高可用状态)</option>
-                      <option value="airoute_model_topology">airoute_model_topology (模型拓扑与路由矩阵)</option>
-                      <option value="airoute_deep_search">airoute_deep_search (高质量结构化联网深度检索)</option>
-                      <option value="airoute_recommend_model">airoute_recommend_model (智能模型选型仲裁)</option>
+                      {/* 如果当前指定了服务，将其工具置顶 */}
+                      {probeServer && probeServer.tools && probeServer.tools.length > 0 && (
+                        <optgroup label={`★ 当前服务 [${probeServer.name || probeServer.id}] 工具集`}>
+                          {probeServer.tools.map(t => (
+                            <option key={`cur-${t}`} value={t}>
+                              {getToolInfo(t).label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+
+                      {/* 按分类分组呈现内置与生态工具 */}
+                      {Object.entries(
+                        Object.entries(TOOL_TEMPLATES).reduce((acc, [name, info]) => {
+                          acc[info.group] = acc[info.group] || [];
+                          acc[info.group].push({ name, ...info });
+                          return acc;
+                        }, {})
+                      ).map(([grp, toolList]) => (
+                        <optgroup key={grp} label={grp}>
+                          {toolList.map(t => (
+                            <option key={t.name} value={t.name}>
+                              {t.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+
+                      {/* 容底项：若选中工具不在模板库中 */}
+                      {!TOOL_TEMPLATES[probeToolName] && (!probeServer?.tools?.includes(probeToolName)) && (
+                        <optgroup label="自定义探针工具">
+                          <option value={probeToolName}>{probeToolName} (当前选定工具)</option>
+                        </optgroup>
+                      )}
                     </select>
                   </div>
                 )}
@@ -1057,27 +1453,45 @@ if __name__ == "__main__":
                     <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
                       工具输入参数 (JSON Arguments)
                     </label>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <button
                         type="button"
-                        onClick={() => {
-                          setProbeToolName('airoute_data_redact');
-                          setProbeToolArgs('{\n  "text": "用户张三 身份证110101199003072345 手机13812345678 密钥sk-abcdef123456"\n}');
-                        }}
-                        className="text-[10px] text-indigo-600 hover:underline"
+                        onClick={() => handleSelectTool('airoute_data_redact')}
+                        className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline"
                       >
-                        敏感脱敏示例
+                        敏感脱敏
                       </button>
                       <span className="text-gray-300 dark:text-gray-600">|</span>
                       <button
                         type="button"
-                        onClick={() => {
-                          setProbeToolName('airoute_sql_security_check');
-                          setProbeToolArgs('{\n  "query": "DROP TABLE users; -- 注入攻击"\n}');
-                        }}
-                        className="text-[10px] text-rose-600 hover:underline"
+                        onClick={() => handleSelectTool('airoute_sql_security_check')}
+                        className="text-[10px] text-rose-600 dark:text-rose-400 hover:underline"
                       >
-                        危险 SQL 拦截示例
+                        SQL拦截
+                      </button>
+                      <span className="text-gray-300 dark:text-gray-600">|</span>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectTool('puppeteer_navigate')}
+                        className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline"
+                      >
+                        Puppeteer导航
+                      </button>
+                      <span className="text-gray-300 dark:text-gray-600">|</span>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectTool('read_query')}
+                        className="text-[10px] text-amber-600 dark:text-amber-400 hover:underline"
+                      >
+                        只读SQL
+                      </button>
+                      <span className="text-gray-300 dark:text-gray-600">|</span>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectTool('sequentialthinking')}
+                        className="text-[10px] text-purple-600 dark:text-purple-400 hover:underline"
+                      >
+                        深度推理
                       </button>
                     </div>
                   </div>
@@ -1113,25 +1527,59 @@ if __name__ == "__main__":
                 {/* 1. 发送请求报文 */}
                 <div className="flex flex-col space-y-1.5">
                   <div className="flex items-center justify-between text-xs font-semibold text-gray-700 dark:text-gray-300">
-                    <span className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
-                      <Send className="w-3.5 h-3.5" />
-                      发送报文 (Request Payload: POST {messagesUrl})
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400">
+                        <Send className="w-3.5 h-3.5" />
+                        发送请求报文
+                      </span>
+                      <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 ml-1 text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() => setRequestViewTab('wire')}
+                          className={`px-1.5 py-0.5 rounded ${requestViewTab === 'wire' ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-300 shadow-2xs font-medium' : 'text-gray-500 hover:text-gray-800'}`}
+                        >
+                          HTTP报文
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRequestViewTab('json')}
+                          className={`px-1.5 py-0.5 rounded ${requestViewTab === 'json' ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-300 shadow-2xs font-medium' : 'text-gray-500 hover:text-gray-800'}`}
+                        >
+                          JSON-RPC
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRequestViewTab('curl')}
+                          className={`px-1.5 py-0.5 rounded ${requestViewTab === 'curl' ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-300 shadow-2xs font-medium' : 'text-gray-500 hover:text-gray-800'}`}
+                        >
+                          cURL
+                        </button>
+                      </div>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => handleCopyText(JSON.stringify(lastSentPayload || getCurrentRpcPayload(), null, 2), 'probe-req')}
+                      onClick={() => {
+                        const txt = requestViewTab === 'wire' ? getWireRequestText() :
+                                    requestViewTab === 'json' ? JSON.stringify(lastSentPayload || getCurrentRpcPayload(), null, 2) :
+                                    getCurlRequestText();
+                        handleCopyText(txt, 'probe-req');
+                      }}
                       className="inline-flex items-center gap-1 text-[11px] font-normal text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                     >
                       {copiedKey === 'probe-req' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                       复制请求
                     </button>
                   </div>
-                  <div className="bg-gray-900 text-gray-100 p-3.5 rounded-xl font-mono text-xs overflow-x-auto min-h-[160px] max-h-64 border border-gray-800 shadow-inner">
-                    <pre>{JSON.stringify(lastSentPayload || getCurrentRpcPayload(), null, 2)}</pre>
+                  <div className="bg-gray-900 text-gray-100 p-3.5 rounded-xl font-mono text-xs overflow-x-auto min-h-[170px] max-h-64 border border-gray-800 shadow-inner">
+                    <pre className="whitespace-pre-wrap leading-relaxed">
+                      {requestViewTab === 'wire' && getWireRequestText()}
+                      {requestViewTab === 'json' && JSON.stringify(lastSentPayload || getCurrentRpcPayload(), null, 2)}
+                      {requestViewTab === 'curl' && getCurlRequestText()}
+                    </pre>
                   </div>
                   <div className="text-[11px] text-gray-400 flex items-center justify-between">
-                    <span>协议规范: JSON-RPC 2.0</span>
-                    <span>目标方法: {probeMethod}</span>
+                    <span>传输端点: POST {messagesUrl}</span>
+                    <span>鉴权: {probeToken ? 'Bearer Token (已配置)' : '未配置 Token'}</span>
                   </div>
                 </div>
 
@@ -1153,9 +1601,9 @@ if __name__ == "__main__":
                       </button>
                     )}
                   </div>
-                  <div className="bg-gray-900 text-gray-100 p-3.5 rounded-xl font-mono text-xs overflow-x-auto min-h-[160px] max-h-64 border border-gray-800 shadow-inner flex flex-col justify-start">
+                  <div className="bg-gray-900 text-gray-100 p-3.5 rounded-xl font-mono text-xs overflow-x-auto min-h-[170px] max-h-64 border border-gray-800 shadow-inner flex flex-col justify-start">
                     {probeResult ? (
-                      <pre>{JSON.stringify(probeResult, null, 2)}</pre>
+                      <pre className="whitespace-pre-wrap leading-relaxed">{JSON.stringify(probeResult, null, 2)}</pre>
                     ) : (
                       <div className="h-full flex flex-col items-center justify-center text-gray-500 text-center py-8">
                         <Terminal className="w-8 h-8 mb-2 opacity-40 text-indigo-400" />
