@@ -1,7 +1,7 @@
 # ==============================================================================
 # Stage 1: Build Web Frontend (React 19 + Tailwind CSS)
 # ==============================================================================
-FROM node:22-alpine AS web-builder
+FROM node:25-alpine AS web-builder
 
 WORKDIR /app/web
 COPY web/package*.json ./
