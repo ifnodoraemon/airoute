@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/api"
 	"github.com/ifnodoraemon/airoute/internal/controlplane"
@@ -182,13 +183,51 @@ func TestSkills_OnDemandTogglingAndMCP(t *testing.T) {
 	assert.Contains(t, wSql.Body.String(), "CRITICAL")
 	assert.Contains(t, wSql.Body.String(), "DROP")
 
+	// 4.1 Test plaza tools present in tools/list
+	var toolNameSet = make(map[string]bool)
+	for _, tl := range mcpResp.Result.Tools {
+		toolNameSet[tl.Name] = true
+	}
+	assert.True(t, toolNameSet["puppeteer_navigate"])
+	assert.True(t, toolNameSet["read_query"])
+	assert.True(t, toolNameSet["sequentialthinking"])
+
+	// 4.2 Test airoute_recommend_model with task_type fallback argument
+	recCallReq := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      4,
+		"method":  "tools/call",
+		"params": map[string]interface{}{
+			"name": "airoute_recommend_model",
+			"arguments": map[string]interface{}{
+				"task_type": "coding",
+			},
+		},
+	}
+	bRec, _ := json.Marshal(recCallReq)
+	reqRec := httptest.NewRequest(http.MethodPost, "/mcp/messages", bytes.NewReader(bRec))
+	wRec := httptest.NewRecorder()
+	engine.ServeHTTP(wRec, reqRec)
+	assert.Equal(t, http.StatusOK, wRec.Code)
+	assert.Contains(t, wRec.Body.String(), "deepseek-chat")
+
+	// 4.3 Test /api/v1/admin/mcp/toggle endpoint
+	adminToken, err := controlplane.GenerateAdminToken("admin", "admin", 24*time.Hour)
+	assert.NoError(t, err)
+	toggleReq := httptest.NewRequest(http.MethodPost, "/api/v1/admin/mcp/toggle", bytes.NewReader([]byte(`{"mcp_enabled": false}`)))
+	toggleReq.Header.Set("Authorization", "Bearer "+adminToken)
+	toggleReq.Header.Set("Content-Type", "application/json")
+	wToggle := httptest.NewRecorder()
+	engine.ServeHTTP(wToggle, toggleReq)
+	assert.Equal(t, http.StatusOK, wToggle.Code)
+	assert.Equal(t, "false", repo.GetSetting("mcp_enabled", "true"))
+
 	// 5. Turn OFF git-workflow skill on-demand
 	err = repo.SetSkillEnabled("git-workflow", false)
 	assert.NoError(t, err)
 	assert.False(t, repo.IsSkillEnabled("git-workflow"))
 
-	// 6. Turn OFF Master MCP Switch
-	_ = repo.SetSetting("mcp_enabled", "false")
+	// 6. Turn OFF Master MCP Switch verified via MCP call
 	reqMCPDisabled := httptest.NewRequest(http.MethodPost, "/mcp/messages", bytes.NewReader(body))
 	wMCPDisabled := httptest.NewRecorder()
 	engine.ServeHTTP(wMCPDisabled, reqMCPDisabled)

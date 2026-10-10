@@ -168,6 +168,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 					adminOnly.DELETE("/skills/:id", adminHandler.DeleteSkill)
 					adminOnly.POST("/skills/:id/toggle", adminHandler.ToggleSkill)
 					adminOnly.POST("/mcp/settings", adminHandler.UpdateMCPSettings)
+					adminOnly.POST("/mcp/toggle", adminHandler.UpdateMCPSettings)
 					adminOnly.POST("/mcp/servers", adminHandler.SaveMCPServer)
 					adminOnly.POST("/mcp/servers/:id/toggle", adminHandler.ToggleMCPServer)
 					adminOnly.DELETE("/mcp/servers/:id", adminHandler.DeleteMCPServer)

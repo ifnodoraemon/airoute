@@ -109,6 +109,12 @@ func (a *AnthropicAdapter) ToCanonical(ctx context.Context, input any) (*model.C
 			}
 
 			if hasToolResult {
+				if len(textParts) > 0 {
+					canonicalMsgs = append(canonicalMsgs, model.ChatMessage{
+						Role:    msg.Role,
+						Content: strings.Join(textParts, "\n"),
+					})
+				}
 				continue
 			}
 

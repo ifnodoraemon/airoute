@@ -20,6 +20,7 @@
 - [🔌 供应商与下游对接指南 (Provider Integration Guide)](docs/PROVIDER_GUIDE.md)
 - [🛡️ 高可用集群与容灾部署架构 (HA Architecture)](docs/HA_ARCHITECTURE.md)
 - [📦 发版与镜像发布流程 (Release Guide)](docs/RELEASE_GUIDE.md)
+- [📐 软件工程哲学与架构规范指南 (Engineering Guidelines)](docs/ENGINEERING_GUIDELINES.md)
 
 ---
 

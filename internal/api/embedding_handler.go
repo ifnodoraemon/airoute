@@ -6,106 +6,52 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/airoute/internal/billing"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/model"
-	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
 // HandleEmbeddings handles POST /v1/embeddings.
 func (h *Handler) HandleEmbeddings(c *gin.Context) {
 	var req model.EmbeddingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"message": fmt.Sprintf("Invalid JSON request body: %v", err),
-				"type":    "invalid_request_error",
-				"code":    "invalid_payload",
-			},
-		})
+		RespondOpenAIError(c, http.StatusBadRequest, fmt.Sprintf("Invalid JSON request body: %v", err), "invalid_request_error", "invalid_payload")
 		return
 	}
 
 	if req.Model == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"message": "Missing 'model' field in request body",
-				"type":    "invalid_request_error",
-				"code":    "missing_model",
-			},
-		})
+		RespondOpenAIError(c, http.StatusBadRequest, "Missing 'model' field in request body", "invalid_request_error", "missing_model")
 		return
 	}
 
 	if req.Input == nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"message": "Missing 'input' field in request body",
-				"type":    "invalid_request_error",
-				"code":    "missing_input",
-			},
-		})
+		RespondOpenAIError(c, http.StatusBadRequest, "Missing 'input' field in request body", "invalid_request_error", "missing_input")
 		return
 	}
 
-	// Validate authorization for requested model
 	if !middleware.ValidateModelAllowed(c, req.Model) {
-		c.JSON(http.StatusForbidden, gin.H{
-			"error": gin.H{
-				"message": fmt.Sprintf("Your API key is not permitted to access model '%s'", req.Model),
-				"type":    "forbidden",
-				"code":    "model_not_allowed",
-			},
-		})
+		RespondOpenAIError(c, http.StatusForbidden, fmt.Sprintf("Your API key is not permitted to access model '%s'", req.Model), "forbidden", "model_not_allowed")
 		return
 	}
 
 	start := time.Now()
-	// Resolve the session ID before dispatch so failed requests can be
-	// audited with the same session identity as successful ones.
-	sessionID := c.GetHeader("X-Session-ID")
-	if sessionID == "" {
-		sessionID = c.GetHeader("X-Airoute-Session-ID")
-	}
-	if sessionID == "" {
-		sessionID = fmt.Sprintf("sess_emb_%d_%x", time.Now().Unix(), time.Now().UnixNano()%1000000)
-	}
-	c.Header("X-Airoute-Session-ID", sessionID)
+	sessionID := resolveGenericSessionID(c, "emb")
 
 	resp, err := h.dispatcher.DispatchEmbedding(c.Request.Context(), &req)
 	if err != nil {
 		recordFailedRequest(c, sessionID, req.Model, time.Since(start), http.StatusBadGateway)
-		c.JSON(http.StatusBadGateway, gin.H{
-			"error": gin.H{
-				"message": err.Error(),
-				"type":    "gateway_error",
-				"code":    "upstream_failure",
-			},
-		})
+		RespondOpenAIError(c, http.StatusBadGateway, err.Error(), "gateway_error", "upstream_failure")
 		return
 	}
 
-	dur := time.Since(start)
-	var cost float64
-	if billing.GlobalEngine != nil {
-		cost, _ = billing.GlobalEngine.CalculateCostWithGroup(req.Model, getKeyGroup(c), resp.Usage.PromptTokens, 0, 0)
-	}
-	if storage.GlobalAsyncLogger != nil {
-		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
-			TraceID:          middleware.GetTraceID(c),
-			Channel:          resp.Channel,
-			SessionID:        sessionID,
-			APIKey:           getRequestAPIKey(c),
-			TenantID:         c.GetString("tenant_id"),
-			Model:            req.Model,
-			PromptTokens:     resp.Usage.PromptTokens,
-			CompletionTokens: 0,
-			TotalTokens:      resp.Usage.TotalTokens,
-			Cost:             cost,
-			DurationMs:       dur.Milliseconds(),
-			StatusCode:       http.StatusOK,
-		})
-	}
+	RecordUsage(c, AuditRecordParams{
+		SessionID:    sessionID,
+		Channel:      resp.Channel,
+		Model:        req.Model,
+		PromptTokens: resp.Usage.PromptTokens,
+		TotalTokens:  resp.Usage.TotalTokens,
+		Duration:     time.Since(start),
+		StatusCode:   http.StatusOK,
+	})
 
 	c.JSON(http.StatusOK, resp)
 }

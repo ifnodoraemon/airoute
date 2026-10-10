@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
@@ -47,19 +48,45 @@ func (a *GeminiAdapter) ToCanonical(ctx context.Context, input any) (*model.Chat
 		}
 		var text string
 		var toolCalls []model.ToolCall
+		var contentParts []model.ContentPart
+		var hasMultimodal bool
+
 		for _, p := range c.Parts {
 			if p.Text != "" {
 				text += p.Text
+				contentParts = append(contentParts, model.ContentPart{
+					Type: model.ContentPartText,
+					Text: p.Text,
+				})
+			}
+			if p.InlineData != nil && p.InlineData.Data != "" {
+				hasMultimodal = true
+				mime := p.InlineData.MimeType
+				if mime == "" {
+					mime = "image/jpeg"
+				}
+				contentParts = append(contentParts, model.ContentPart{
+					Type: model.ContentPartImageURL,
+					ImageURL: &model.ImageURLPart{
+						URL: fmt.Sprintf("data:%s;base64,%s", mime, p.InlineData.Data),
+					},
+				})
 			}
 			if p.FunctionCall != nil {
 				idx := len(toolCalls)
+				argsStr := "{}"
+				if p.FunctionCall.Args != nil {
+					if b, err := json.Marshal(p.FunctionCall.Args); err == nil {
+						argsStr = string(b)
+					}
+				}
 				toolCalls = append(toolCalls, model.ToolCall{
 					Index: &idx,
 					ID:    p.FunctionCall.Name,
 					Type:  "function",
 					Function: model.FunctionCall{
 						Name:      p.FunctionCall.Name,
-						Arguments: "{}",
+						Arguments: argsStr,
 					},
 				})
 			}
@@ -68,9 +95,15 @@ func (a *GeminiAdapter) ToCanonical(ctx context.Context, input any) (*model.Chat
 				text = fmt.Sprintf("%v", p.FunctionResponse.Response)
 			}
 		}
+
+		var content any = text
+		if hasMultimodal {
+			content = contentParts
+		}
+
 		msgs = append(msgs, model.ChatMessage{
 			Role:      role,
-			Content:   text,
+			Content:   content,
 			ToolCalls: toolCalls,
 		})
 	}
@@ -123,9 +156,14 @@ func (a *GeminiAdapter) FromCanonical(ctx context.Context, resp *model.ChatCompl
 			parts = append(parts, provider.GeminiPart{Text: choice.Message.GetContentString()})
 		}
 		for _, tc := range choice.Message.ToolCalls {
+			var args map[string]any
+			if tc.Function.Arguments != "" {
+				_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
+			}
 			parts = append(parts, provider.GeminiPart{
 				FunctionCall: &provider.GeminiFunctionCall{
 					Name: tc.Function.Name,
+					Args: args,
 				},
 			})
 		}
@@ -134,7 +172,16 @@ func (a *GeminiAdapter) FromCanonical(ctx context.Context, resp *model.ChatCompl
 		}
 		c.Content.Role = "model"
 		c.Content.Parts = parts
-		c.FinishReason = "STOP"
+		finishReason := "STOP"
+		if choice.FinishReason != nil {
+			switch *choice.FinishReason {
+			case "length":
+				finishReason = "MAX_TOKENS"
+			default:
+				finishReason = "STOP"
+			}
+		}
+		c.FinishReason = finishReason
 		candidates = append(candidates, c)
 	}
 

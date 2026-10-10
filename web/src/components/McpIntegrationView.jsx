@@ -63,7 +63,7 @@ const TOOL_TEMPLATES = {
   airoute_recommend_model: {
     label: 'airoute_recommend_model (智能模型选型与吞吐仲裁)',
     group: '网关原生增强',
-    defaultArgs: '{\n  "task_type": "coding",\n  "max_budget_per_m": 1.0\n}'
+    defaultArgs: '{\n  "task_description": "企业级高并发智能选型与路由仲裁",\n  "priority": "quality"\n}'
   },
   airoute_query_logs: {
     label: 'airoute_query_logs (统一审计日志快速检索)',
@@ -170,7 +170,7 @@ const TOOL_TEMPLATES = {
   create_entities: {
     label: 'create_entities (向长期记忆图谱写入实体节点)',
     group: '长期记忆与知识图谱',
-    defaultArgs: '{\n  "entities": [\n    {"name": "airoute_gateway", "type": "infrastructure", "observations": ["HA dual node", "port 8080"]}\n  ]\n}'
+    defaultArgs: '{\n  "entities": [\n    {"name": "airoute_gateway", "type": "infrastructure", "observations": ["HA dual node", "healthy"]}\n  ]\n}'
   },
   read_graph: {
     label: 'read_graph (读取跨会话完整实体拓扑图谱)',
@@ -557,7 +557,7 @@ export default function McpIntegrationView({ adminFetch, adminToken, keys = [], 
   const getWireRequestText = () => {
     const payload = lastSentPayload || getCurrentRpcPayload();
     let path = '/mcp/messages';
-    let host = 'localhost:8080';
+    let host = typeof window !== 'undefined' && window.location?.host ? window.location.host : 'api.airoute.local';
     try {
       const u = new URL(messagesUrl, window.location.origin);
       path = u.pathname + (u.search || '');

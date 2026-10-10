@@ -1,514 +1,49 @@
 package controlplane
 
 import (
-	"crypto/hmac"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"net/http"
-	"os"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/airoute/internal/config"
-	"github.com/ifnodoraemon/airoute/internal/storage"
-	"github.com/ifnodoraemon/airoute/internal/telemetry"
-	"golang.org/x/crypto/bcrypt"
 )
 
-var (
-	// Secure shared secret across cluster replicas for stateless HMAC token verification.
-	// Reads GATEWAY_ADMIN_SECRET or NANO_SECRET_KEY, falling back to a cryptographically secure random secret.
-	adminSecret = func() []byte {
-		sec := os.Getenv("GATEWAY_ADMIN_SECRET")
-		if sec == "" {
-			sec = os.Getenv("NANO_SECRET_KEY")
-		}
-		if sec == "" {
-			b := make([]byte, 32)
-			if _, err := rand.Read(b); err == nil {
-				sec = hex.EncodeToString(b)
-			} else {
-				sec = fmt.Sprintf("airoute-rnd-%d", time.Now().UnixNano())
-			}
-		}
-		return []byte(sec)
-	}()
-)
-
-// AdminClaims holds token payload.
-type AdminClaims struct {
-	Username  string `json:"sub"`
-	Role      string `json:"role"`
-	ExpiresAt int64  `json:"exp"`
-}
-
-// GenerateAdminToken creates an HMAC-SHA256 signed stateless token.
-func GenerateAdminToken(username, role string, duration time.Duration) (string, error) {
-	claims := AdminClaims{
-		Username:  username,
-		Role:      role,
-		ExpiresAt: time.Now().Add(duration).Unix(),
+// GetClaimsFromContext safely extracts verified AdminClaims from the gin context.
+func GetClaimsFromContext(c *gin.Context) (*AdminClaims, bool) {
+	if c == nil {
+		return nil, false
 	}
-	data, err := json.Marshal(claims)
-	if err != nil {
-		return "", err
-	}
-	payloadB64 := base64.RawURLEncoding.EncodeToString(data)
-	mac := hmac.New(sha256.New, adminSecret)
-	mac.Write([]byte(payloadB64))
-	sigHex := hex.EncodeToString(mac.Sum(nil))
-	return fmt.Sprintf("%s.%s", payloadB64, sigHex), nil
-}
-
-// VerifyAdminToken parses and validates the token signature and expiration.
-func VerifyAdminToken(token string) (*AdminClaims, error) {
-	parts := strings.Split(token, ".")
-	if len(parts) != 2 {
-		return nil, errors.New("invalid token format")
-	}
-	payloadB64, sigHex := parts[0], parts[1]
-
-	mac := hmac.New(sha256.New, adminSecret)
-	mac.Write([]byte(payloadB64))
-	expectedSig := hex.EncodeToString(mac.Sum(nil))
-
-	if !hmac.Equal([]byte(sigHex), []byte(expectedSig)) {
-		return nil, errors.New("invalid token signature")
-	}
-
-	data, err := base64.RawURLEncoding.DecodeString(payloadB64)
-	if err != nil {
-		return nil, errors.New("malformed token payload")
-	}
-
-	var claims AdminClaims
-	if err := json.Unmarshal(data, &claims); err != nil {
-		return nil, errors.New("invalid token claims")
-	}
-
-	if time.Now().Unix() > claims.ExpiresAt {
-		return nil, errors.New("token expired")
-	}
-
-	return &claims, nil
-}
-
-// LoginRequest defines credentials.
-type LoginRequest struct {
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
-}
-
-// Login handles user authentication.
-func (h *AdminHandler) Login(c *gin.Context) {
-	var req LoginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "用户名和密码不能为空"})
-		return
-	}
-
-	user, err := h.repo.GetUserByUsername(req.Username)
-	if err != nil || user == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "用户名或密码错误"})
-		return
-	}
-
-	if strings.EqualFold(user.Status, "locked") {
-		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "该账户已被管理员锁定，无法登录"})
-		return
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "用户名或密码错误"})
-		return
-	}
-
-	expiryHours := config.GetGlobalConfig().GetTokenExpiryHours()
-	token, err := GenerateAdminToken(user.Username, user.Role, time.Duration(expiryHours)*time.Hour)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "生成鉴权 Token 失败"})
-		return
-	}
-
-	isDefaultPass := false
-	if strings.EqualFold(user.Role, "admin") {
-		if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte("admin123")); err == nil {
-			isDefaultPass = true
-		}
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": gin.H{
-			"token": token,
-			"user": gin.H{
-				"id":                  user.ID,
-				"username":            user.Username,
-				"email":               user.Email,
-				"role":                user.Role,
-				"status":              user.Status,
-				"balance":             user.Balance,
-				"is_admin":            strings.EqualFold(user.Role, "admin"),
-				"group_name":          user.GroupName,
-				"is_default_password": isDefaultPass,
-			},
-		},
-		"message": "登录成功",
-	})
-}
-
-// GetMe returns current authenticated user information.
-func (h *AdminHandler) GetMe(c *gin.Context) {
 	claimsVal, exists := c.Get("admin_claims")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "未登录"})
-		return
-	}
-	claims := claimsVal.(*AdminClaims)
-
-	user, err := h.repo.GetUserByUsername(claims.Username)
-	if err != nil || user == nil {
-		c.JSON(http.StatusOK, gin.H{
-			"code": 0,
-			"data": gin.H{
-				"username":            claims.Username,
-				"role":                claims.Role,
-				"status":              "active",
-				"balance":             0.0,
-				"is_admin":            strings.EqualFold(claims.Role, "admin"),
-				"group_name":          "default",
-				"is_default_password": false,
-			},
-		})
-		return
-	}
-
-	isDefaultPass := false
-	if strings.EqualFold(user.Role, "admin") {
-		if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte("admin123")); err == nil {
-			isDefaultPass = true
-		}
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"code": 0,
-		"data": gin.H{
-			"id":                  user.ID,
-			"username":            user.Username,
-			"email":               user.Email,
-			"role":                user.Role,
-			"status":              user.Status,
-			"balance":             user.Balance,
-			"is_admin":            strings.EqualFold(user.Role, "admin"),
-			"group_name":          user.GroupName,
-			"is_default_password": isDefaultPass,
-		},
-	})
-}
-
-// ChangePasswordRequest defines password update.
-type ChangePasswordRequest struct {
-	OldPassword string `json:"old_password" binding:"required"`
-	NewPassword string `json:"new_password" binding:"required"`
-}
-
-// ChangePassword allows admin to change their password.
-func (h *AdminHandler) ChangePassword(c *gin.Context) {
-	claimsVal, exists := c.Get("admin_claims")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "未登录"})
-		return
-	}
-	claims := claimsVal.(*AdminClaims)
-
-	var req ChangePasswordRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "请求参数不完整"})
-		return
-	}
-
-	if len(req.NewPassword) < 6 {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "新密码长度至少需要 6 个字符"})
-		return
-	}
-
-	user, err := h.repo.GetUserByUsername(claims.Username)
-	if err != nil || user == nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": 404, "error": "用户不存在"})
-		return
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.OldPassword)); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "旧密码验证失败"})
-		return
-	}
-
-	newHash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "密码加密失败"})
-		return
-	}
-
-	if err := h.repo.UpdateUserPassword(user.Username, string(newHash)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "更新密码失败: " + err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "密码修改成功，请使用新密码重新登录"})
-}
-
-// ListUsers returns all users with balance, status, role, and group.
-func (h *AdminHandler) ListUsers(c *gin.Context) {
-	claimsVal, exists := c.Get("admin_claims")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "未登录"})
-		return
+		return nil, false
 	}
 	claims, ok := claimsVal.(*AdminClaims)
-	if !ok || claims.Role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "权限不足，仅超级管理员可查看用户列表"})
-		return
-	}
-
-	users, err := h.repo.ListUsers()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "查询用户列表失败: " + err.Error()})
-		return
-	}
-	type UserDTO struct {
-		ID        int64   `json:"id"`
-		Username  string  `json:"username"`
-		Email     string  `json:"email"`
-		Role      string  `json:"role"`
-		Status    string  `json:"status"`
-		Balance   float64 `json:"balance"`
-		GroupName string  `json:"group_name"`
-		CreatedAt string  `json:"created_at"`
-		UpdatedAt string  `json:"updated_at"`
-	}
-	res := make([]UserDTO, 0)
-	for _, u := range users {
-		res = append(res, UserDTO{
-			ID:        u.ID,
-			Username:  u.Username,
-			Email:     u.Email,
-			Role:      u.Role,
-			Status:    u.Status,
-			Balance:   u.Balance,
-			GroupName: u.GroupName,
-			CreatedAt: u.CreatedAt.Format("2006-01-02 15:04:05"),
-			UpdatedAt: u.UpdatedAt.Format("2006-01-02 15:04:05"),
-		})
-	}
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": res})
+	return claims, ok && claims != nil
 }
 
-// CreateUserRequest defines payload to create a new user account.
-type CreateUserRequest struct {
-	Username  string  `json:"username" binding:"required"`
-	Email     string  `json:"email"`
-	Password  string  `json:"password" binding:"required"`
-	Role      string  `json:"role"`
-	Status    string  `json:"status"`
-	Balance   float64 `json:"balance"`
-	GroupName string  `json:"group_name"`
+// RequireAuthClaims validates that the request has an authenticated session, writing a 401 response if absent.
+func RequireAuthClaims(c *gin.Context) (*AdminClaims, bool) {
+	claims, ok := GetClaimsFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "请先登录账号"})
+		return nil, false
+	}
+	return claims, true
 }
 
-// CreateUser adds a new user with quota, group, and automatically creates an initial API key.
-func (h *AdminHandler) CreateUser(c *gin.Context) {
-	claimsVal, exists := c.Get("admin_claims")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "未登录"})
-		return
+// RequireAdminClaims validates that the request has super-admin privileges, writing 401 or 403 responses if not.
+func RequireAdminClaims(c *gin.Context, forbiddenMsg string) (*AdminClaims, bool) {
+	claims, ok := RequireAuthClaims(c)
+	if !ok {
+		return nil, false
 	}
-	claims := claimsVal.(*AdminClaims)
 	if claims.Role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "权限不足，仅超级管理员可创建账号"})
-		return
+		if forbiddenMsg == "" {
+			forbiddenMsg = "权限不足，仅超级管理员可执行此操作"
+		}
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": forbiddenMsg})
+		return nil, false
 	}
-
-	var req CreateUserRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "用户名和密码不能为空"})
-		return
-	}
-
-	req.Username = strings.TrimSpace(req.Username)
-	if len(req.Username) < 3 {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "用户名至少需要 3 个字符"})
-		return
-	}
-	if len(req.Password) < 6 {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "密码长度至少需要 6 个字符"})
-		return
-	}
-
-	if req.Role == "" {
-		req.Role = "user"
-	}
-	if req.Status == "" {
-		req.Status = "active"
-	}
-	if req.GroupName == "" {
-		req.GroupName = "default"
-	}
-	if req.Role == "admin" && req.Balance <= 0 {
-		req.Balance = 9999999.0
-	} else if req.Balance <= 0 {
-		req.Balance = 10.0 // Default initial quota
-	}
-
-	existing, _ := h.repo.GetUserByUsername(req.Username)
-	if existing != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "该用户名已存在"})
-		return
-	}
-
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "密码加密失败"})
-		return
-	}
-
-	user := &storage.UserRecord{
-		Username:     req.Username,
-		Email:        req.Email,
-		PasswordHash: string(hash),
-		Role:         req.Role,
-		Status:       req.Status,
-		Balance:      req.Balance,
-		GroupName:    req.GroupName,
-	}
-	if err := h.repo.CreateUser(user); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "创建用户失败: " + err.Error()})
-		return
-	}
-
-	// Auto-generate initial API key for the new user
-	keyBytes := make([]byte, 16)
-	_, _ = rand.Read(keyBytes)
-	newKey := "sk-airoute-" + hex.EncodeToString(keyBytes)
-	_ = h.repo.CreateAPIKey(&storage.APIKeyRecord{
-		Key:           newKey,
-		TenantID:      user.Username,
-		UserID:        user.ID,
-		GroupName:     user.GroupName,
-		AllowedModels: []string{"*"},
-		RPM:           60,
-		TPM:           100000,
-		Budget:        100.0,
-		Status:        "active",
-	})
-	h.syncDataPlane()
-
-	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"message": "创建账号成功",
-		"data": gin.H{
-			"id":         user.ID,
-			"username":   user.Username,
-			"email":      user.Email,
-			"role":       user.Role,
-			"status":     user.Status,
-			"balance":    user.Balance,
-			"group_name": user.GroupName,
-			"api_key":    newKey,
-		},
-	})
-}
-
-// DeleteUser deletes an account by username.
-func (h *AdminHandler) DeleteUser(c *gin.Context) {
-	claimsVal, exists := c.Get("admin_claims")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "未登录"})
-		return
-	}
-	claims := claimsVal.(*AdminClaims)
-	if claims.Role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "权限不足，仅超级管理员可删除账号"})
-		return
-	}
-
-	targetUsername := c.Param("username")
-	if targetUsername == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "请指定要删除的用户名"})
-		return
-	}
-
-	if targetUsername == claims.Username {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "无法删除当前正在登录的账号"})
-		return
-	}
-
-	adminRoot := config.GetGlobalConfig().GetAdminUsername()
-	if targetUsername == "admin" || targetUsername == adminRoot {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "系统初始管理员账号不允许删除"})
-		return
-	}
-
-	if err := h.repo.DeleteUser(targetUsername); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "删除用户失败: " + err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "账号已成功删除"})
-}
-
-// ResetUserPasswordRequest defines reset payload.
-type ResetUserPasswordRequest struct {
-	NewPassword string `json:"new_password" binding:"required"`
-}
-
-// ResetUserPassword allows administrator to reset password of any user.
-func (h *AdminHandler) ResetUserPassword(c *gin.Context) {
-	claimsVal, exists := c.Get("admin_claims")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "未登录"})
-		return
-	}
-	claims := claimsVal.(*AdminClaims)
-	if claims.Role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "权限不足，仅管理员可重置密码"})
-		return
-	}
-
-	targetUsername := c.Param("username")
-	if targetUsername == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "请指定要重置密码的用户名"})
-		return
-	}
-
-	var req ResetUserPasswordRequest
-	if err := c.ShouldBindJSON(&req); err != nil || len(req.NewPassword) < 6 {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "新密码长度至少需要 6 个字符"})
-		return
-	}
-
-	targetUser, err := h.repo.GetUserByUsername(targetUsername)
-	if err != nil || targetUser == nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": 404, "error": "目标用户不存在"})
-		return
-	}
-
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "密码加密失败"})
-		return
-	}
-
-	if err := h.repo.UpdateUserPassword(targetUsername, string(hash)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "重置密码失败: " + err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"code": 0, "message": fmt.Sprintf("已成功重置用户 [%s] 的密码", targetUsername)})
+	return claims, true
 }
 
 // AdminAuthMiddleware validates the admin bearer token.
@@ -519,8 +54,6 @@ func (h *AdminHandler) AdminAuthMiddleware() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-
-
 
 		authHeader := c.GetHeader("Authorization")
 		var token string
@@ -560,55 +93,11 @@ func (h *AdminHandler) AdminAuthMiddleware() gin.HandlerFunc {
 // RequireAdminRole verifies that the authenticated user possesses the admin role.
 func (h *AdminHandler) RequireAdminRole() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		claimsVal, exists := c.Get("admin_claims")
-		if !exists {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "未登录"})
-			return
-		}
-		claims, ok := claimsVal.(*AdminClaims)
+		claims, ok := GetClaimsFromContext(c)
 		if !ok || claims.Role != "admin" {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": 403, "error": "权限不足，仅超级管理员可执行此操作"})
 			return
 		}
 		c.Next()
-	}
-}
-
-// InitDefaultAdmin ensures an admin account is ready based on config or env.
-func InitDefaultAdmin(repo *storage.Repository, cfgs ...*config.Config) {
-	var cfg *config.Config
-	if len(cfgs) > 0 && cfgs[0] != nil {
-		cfg = cfgs[0]
-	} else {
-		cfg = config.GetGlobalConfig()
-	}
-
-	adminUser := cfg.GetAdminUsername()
-	adminPass := cfg.GetAdminPassword()
-	forceReset := os.Getenv("GATEWAY_ADMIN_RESET") == "true" || os.Getenv("GATEWAY_ADMIN_RESET") == "1"
-
-	existing, _ := repo.GetUserByUsername(adminUser)
-	if existing == nil {
-		_ = repo.EnsureDefaultAdmin(adminUser, adminPass)
-		telemetry.Logger.Info("initialized administrator account", "username", adminUser)
-	} else if forceReset {
-		hash, err := bcrypt.GenerateFromPassword([]byte(adminPass), bcrypt.DefaultCost)
-		if err == nil {
-			_ = repo.UpdateUserPassword(adminUser, string(hash))
-			telemetry.Logger.Info("force-reset administrator password from configuration", "username", adminUser)
-		}
-	} else if adminPass != "admin123" {
-		// If custom admin password is provided and current user is still using default "admin123", synchronize it
-		if err := bcrypt.CompareHashAndPassword([]byte(existing.PasswordHash), []byte("admin123")); err == nil {
-			hash, err := bcrypt.GenerateFromPassword([]byte(adminPass), bcrypt.DefaultCost)
-			if err == nil {
-				_ = repo.UpdateUserPassword(adminUser, string(hash))
-				telemetry.Logger.Info("synchronized administrator password with configured credentials", "username", adminUser)
-			}
-		}
-	}
-
-	if adminPass == "admin123" {
-		telemetry.Logger.Warn("⚠️ SECURITY WARNING: System initialized with default administrator credentials (admin/admin123). Please change the administrator password immediately via Web Console or set GATEWAY_ADMIN_PASSWORD for production environments!")
 	}
 }

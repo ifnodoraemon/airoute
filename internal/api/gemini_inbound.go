@@ -2,21 +2,17 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/adapter"
-	"github.com/ifnodoraemon/airoute/internal/billing"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/provider"
 	"github.com/ifnodoraemon/airoute/internal/router"
-	"github.com/ifnodoraemon/airoute/internal/storage"
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 	"github.com/ifnodoraemon/airoute/internal/validator"
 )
@@ -73,7 +69,6 @@ func (h *Handler) HandleGeminiModelDetail(c *gin.Context) {
 
 // HandleGeminiAction handles POST /v1beta/models/*modelAction for Google Gemini SDKs.
 func (h *Handler) HandleGeminiAction(c *gin.Context) {
-
 	param := strings.TrimPrefix(c.Param("modelAction"), "/")
 	param = strings.TrimPrefix(param, "models/")
 
@@ -155,238 +150,48 @@ func (h *Handler) HandleGeminiAction(c *gin.Context) {
 	start := time.Now()
 
 	if !isStream {
-		resp, err := h.dispatcher.Dispatch(reqCtx, canonicalReq)
-		if err != nil {
-			recordFailedRequest(c, sessionID, canonicalReq.Model, time.Since(start), http.StatusBadGateway)
-			c.JSON(http.StatusBadGateway, gin.H{
-				"error": gin.H{
-					"code":    502,
-					"message": err.Error(),
-					"status":  "UNAVAILABLE",
-				},
-			})
-			return
-		}
-
-		geminiResp := convertCanonicalToGeminiResponse(resp)
-		dur := time.Since(start)
-		pTokens := 0
-		cTokens := 0
-		if resp.Usage != nil {
-			pTokens = resp.Usage.PromptTokens
-			cTokens = resp.Usage.CompletionTokens
-		}
-		var cost float64
-		var isOffPeak bool
-		var offPeakDiscount float64 = 1.0
-		keyGroup := getKeyGroup(c)
-		if billing.GlobalEngine != nil {
-			cost, _, _, isOffPeak, offPeakDiscount = billing.GlobalEngine.CalculateCostDetailedWithGroup(modelName, keyGroup, pTokens, cTokens, 0, time.Now())
-		}
-		telemetry.GlobalMetrics.RecordRequestWithModel(modelName, true, dur, pTokens, cTokens)
-		if storage.GlobalAsyncLogger != nil {
-			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
-				TraceID:          middleware.GetTraceID(c),
-				ChatID:           resp.ID,
-				Channel:          resp.Channel,
-				SessionID:        sessionID,
-				APIKey:           getRequestAPIKey(c),
-				TenantID:         c.GetString(middleware.ContextKeyTenant),
-				Model:            modelName,
-				PromptTokens:     pTokens,
-				CompletionTokens: cTokens,
-				TotalTokens:      pTokens + cTokens,
-				Cost:             cost,
-				IsOffPeak:        isOffPeak,
-				OffPeakDiscount:  offPeakDiscount,
-				DurationMs:       dur.Milliseconds(),
-				StatusCode:       http.StatusOK,
-			})
-		}
-		c.JSON(http.StatusOK, geminiResp)
+		h.handleGeminiUnary(c, reqCtx, canonicalReq, modelName, sessionID, start)
 		return
 	}
 
-	streamChan, err := h.dispatcher.DispatchStream(reqCtx, canonicalReq)
-	if err != nil {
-		recordFailedRequest(c, sessionID, canonicalReq.Model, time.Since(start), http.StatusBadGateway)
-		c.JSON(http.StatusBadGateway, gin.H{
-			"error": gin.H{
-				"code":    502,
-				"message": err.Error(),
-				"status":  "UNAVAILABLE",
-			},
-		})
-		return
-	}
-
-	c.Header("Content-Type", "text/event-stream")
-	c.Header("Cache-Control", "no-cache")
-	c.Header("Connection", "keep-alive")
-	c.Header("X-Accel-Buffering", "no")
-	c.Status(http.StatusOK)
-
-	flusher, ok := c.Writer.(http.Flusher)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Streaming unsupported"})
-		return
-	}
-	flusher.Flush()
-
-	w := c.Writer
-	totalPromptTokens := 0
-	totalCompTokens := 0
-	firstTokenRecorded := false
-	upstreamChannel := ""      // populated from the first stream event
-	geminiUpstreamChatID := "" // upstream response ID, captured from the first chunk
-
-	var recordOnce sync.Once
-	recordStreamEnd := func() {
-		dur := time.Since(start)
-		var cost float64
-		var isOffPeak bool
-		var offPeakDiscount float64 = 1.0
-		keyGroup := getKeyGroup(c)
-		if billing.GlobalEngine != nil {
-			cost, _, _, isOffPeak, offPeakDiscount = billing.GlobalEngine.CalculateCostDetailedWithGroup(modelName, keyGroup, totalPromptTokens, totalCompTokens, 0, time.Now())
-		}
-		telemetry.GlobalMetrics.RecordRequest(true, dur, totalPromptTokens, totalCompTokens)
-		if storage.GlobalAsyncLogger != nil {
-			storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
-				TraceID:          middleware.GetTraceID(c),
-				ChatID:           geminiUpstreamChatID,
-				Channel:          upstreamChannel,
-				SessionID:        sessionID,
-				APIKey:           getRequestAPIKey(c),
-				TenantID:         c.GetString(middleware.ContextKeyTenant),
-				Model:            modelName,
-				PromptTokens:     totalPromptTokens,
-				CompletionTokens: totalCompTokens,
-				TotalTokens:      totalPromptTokens + totalCompTokens,
-				Cost:             cost,
-				IsOffPeak:        isOffPeak,
-				OffPeakDiscount:  offPeakDiscount,
-				DurationMs:       dur.Milliseconds(),
-				StatusCode:       http.StatusOK,
-			})
-		}
-	}
-	defer recordOnce.Do(recordStreamEnd)
-
-	for {
-		select {
-		case <-c.Request.Context().Done():
-			return
-		case event, open := <-streamChan:
-			if !open {
-				recordOnce.Do(recordStreamEnd)
-				return
-			}
-
-			// Capture the serving channel before any short-circuit (terminal
-			// events return/continue first); the dispatcher stamps every event.
-			if upstreamChannel == "" && event.Channel != "" {
-				upstreamChannel = event.Channel
-			}
-
-			if event.Err != nil {
-				errChunk := gin.H{
-					"error": gin.H{
-						"code":    500,
-						"message": event.Err.Error(),
-					},
-				}
-				errBytes, _ := json.Marshal(errChunk)
-				fmt.Fprintf(w, "data: %s\n\n", errBytes)
-				flusher.Flush()
-				return
-			}
-
-			if event.IsDone {
-				continue
-			}
-
-			if event.Chunk != nil {
-				// Capture the upstream response ID from the first chunk
-				if event.Chunk.ID != "" && geminiUpstreamChatID == "" {
-					geminiUpstreamChatID = event.Chunk.ID
-				}
-
-				if len(event.Chunk.Choices) > 0 {
-					chunkChoice := event.Chunk.Choices[0]
-					var geminiParts []gin.H
-
-					if chunkChoice.Delta.Content != "" {
-						if !firstTokenRecorded {
-							telemetry.GlobalMetrics.RecordTTFT(time.Since(start))
-							firstTokenRecorded = true
-						}
-						totalCompTokens++
-						geminiParts = append(geminiParts, gin.H{"text": chunkChoice.Delta.Content})
-					}
-
-					for _, tc := range chunkChoice.Delta.ToolCalls {
-						var args map[string]any
-						_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
-						geminiParts = append(geminiParts, gin.H{
-							"functionCall": gin.H{
-								"name": tc.Function.Name,
-								"args": args,
-							},
-						})
-					}
-
-					finishReason := ""
-					if chunkChoice.FinishReason != nil {
-						if *chunkChoice.FinishReason == "tool_calls" {
-							finishReason = "STOP"
-						} else if *chunkChoice.FinishReason == "length" {
-							finishReason = "MAX_TOKENS"
-						} else {
-							finishReason = "STOP"
-						}
-					}
-
-					if len(geminiParts) > 0 || finishReason != "" {
-						candidate := gin.H{
-							"index": 0,
-							"content": gin.H{
-								"role":  "model",
-								"parts": geminiParts,
-							},
-						}
-						if finishReason != "" {
-							candidate["finishReason"] = finishReason
-						}
-
-						chunkObj := gin.H{
-							"candidates": []gin.H{candidate},
-						}
-
-						if event.Chunk.Usage != nil {
-							totalPromptTokens = event.Chunk.Usage.PromptTokens
-							totalCompTokens = event.Chunk.Usage.CompletionTokens
-							chunkObj["usageMetadata"] = gin.H{
-								"promptTokenCount":     totalPromptTokens,
-								"candidatesTokenCount": totalCompTokens,
-								"totalTokenCount":      totalPromptTokens + totalCompTokens,
-							}
-						}
-
-						chunkBytes, _ := json.Marshal(chunkObj)
-						fmt.Fprintf(w, "data: %s\n\n", chunkBytes)
-						flusher.Flush()
-					}
-				}
-			}
-		}
-	}
+	h.handleGeminiStream(c, reqCtx, canonicalReq, modelName, sessionID, start)
 }
 
-var defaultGeminiAdapter = adapter.NewGeminiAdapter()
+func (h *Handler) handleGeminiUnary(c *gin.Context, reqCtx context.Context, canonicalReq *model.ChatCompletionRequest, modelName, sessionID string, start time.Time) {
+	resp, err := h.dispatcher.Dispatch(reqCtx, canonicalReq)
+	if err != nil {
+		recordFailedRequest(c, sessionID, canonicalReq.Model, time.Since(start), http.StatusBadGateway)
+		RespondGeminiError(c, http.StatusBadGateway, err.Error(), "UNAVAILABLE")
+		return
+	}
+
+	geminiResp := convertCanonicalToGeminiResponse(resp)
+	dur := time.Since(start)
+	pTokens := 0
+	cTokens := 0
+	if resp.Usage != nil {
+		pTokens = resp.Usage.PromptTokens
+		cTokens = resp.Usage.CompletionTokens
+	}
+	RecordUsage(c, AuditRecordParams{
+		SessionID:        sessionID,
+		ChatID:           resp.ID,
+		Channel:          resp.Channel,
+		Model:            modelName,
+		PromptTokens:     pTokens,
+		CompletionTokens: cTokens,
+		Duration:         dur,
+		StatusCode:       http.StatusOK,
+	})
+	c.JSON(http.StatusOK, geminiResp)
+}
 
 func convertInboundGeminiToCanonical(modelName string, geminiReq *provider.GeminiRequest, stream bool) *model.ChatCompletionRequest {
-	req, err := defaultGeminiAdapter.ToCanonical(context.Background(), geminiReq)
+	ad, ok := adapter.Get("gemini")
+	if !ok {
+		ad = adapter.NewGeminiAdapter()
+	}
+	req, err := ad.ToCanonical(context.Background(), geminiReq)
 	if err != nil {
 		return &model.ChatCompletionRequest{Model: modelName, Stream: stream}
 	}
@@ -395,59 +200,16 @@ func convertInboundGeminiToCanonical(modelName string, geminiReq *provider.Gemin
 	return req
 }
 
-func convertCanonicalToGeminiResponse(resp *model.ChatCompletionResponse) gin.H {
-	replyText := ""
-	var toolCalls []model.ToolCall
-	finishReason := "STOP"
-
-	if len(resp.Choices) > 0 {
-		choice := resp.Choices[0]
-		replyText = choice.Message.GetContentString()
-		toolCalls = choice.Message.ToolCalls
-		if choice.FinishReason != nil && *choice.FinishReason == "length" {
-			finishReason = "MAX_TOKENS"
+func convertCanonicalToGeminiResponse(resp *model.ChatCompletionResponse) any {
+	ad, ok := adapter.Get("gemini")
+	if !ok {
+		ad = adapter.NewGeminiAdapter()
+	}
+	out, err := ad.FromCanonical(context.Background(), resp)
+	if err != nil {
+		return gin.H{
+			"candidates": []gin.H{},
 		}
 	}
-
-	var parts []gin.H
-	if replyText != "" {
-		parts = append(parts, gin.H{"text": replyText})
-	}
-	for _, tc := range toolCalls {
-		var args map[string]any
-		_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
-		parts = append(parts, gin.H{
-			"functionCall": gin.H{
-				"name": tc.Function.Name,
-				"args": args,
-			},
-		})
-	}
-
-	promptTokens := 0
-	compTokens := 0
-	totalTokens := 0
-	if resp.Usage != nil {
-		promptTokens = resp.Usage.PromptTokens
-		compTokens = resp.Usage.CompletionTokens
-		totalTokens = resp.Usage.TotalTokens
-	}
-
-	return gin.H{
-		"candidates": []gin.H{
-			{
-				"content": gin.H{
-					"role":  "model",
-					"parts": parts,
-				},
-				"finishReason": finishReason,
-				"index":        0,
-			},
-		},
-		"usageMetadata": gin.H{
-			"promptTokenCount":     promptTokens,
-			"candidatesTokenCount": compTokens,
-			"totalTokenCount":      totalTokens,
-		},
-	}
+	return out
 }
