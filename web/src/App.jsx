@@ -51,7 +51,13 @@ import {
   DollarSign,
   Coins,
   Bot,
-  Wallet
+  Wallet,
+  Sun,
+  Moon,
+  Menu,
+  PanelLeftClose,
+  PanelLeft,
+  Split
 } from 'lucide-react';
 import Toast from './components/Toast';
 import QuickStartModal from './components/QuickStartModal';
@@ -75,6 +81,11 @@ import WalletManagementView from './components/WalletManagementView';
 import ChannelsView from './components/ChannelsView';
 import KeysView from './components/KeysView';
 import LogsView from './components/LogsView';
+import DashboardView from './components/DashboardView';
+import PlaygroundView from './components/PlaygroundView';
+import DocsView from './components/DocsView';
+import OnboardingModal from './components/OnboardingModal';
+import VisualTopologyModal from './components/VisualTopologyModal';
 import { translations } from './i18n';
 import { getGatewayOrigin, getGatewayBaseUrl, setPublicGatewayUrl } from './config';
 
@@ -93,13 +104,26 @@ export default function App() {
     localStorage.setItem('airoute_lang', nextLang);
   };
 
-  // Enforce pure light mode only & dynamic document title
+  // Theme State (Dark / Light)
+  const [theme, setTheme] = useState(() => localStorage.getItem('airoute_theme') || 'dark');
+
+  const toggleTheme = () => {
+    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
+  // Synchronize theme to document element class & dynamic title
   useEffect(() => {
-    document.documentElement.classList.remove('dark');
-    document.documentElement.classList.add('light');
-    localStorage.setItem('airoute_theme', 'light');
+    const root = document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+      root.classList.remove('light');
+    } else {
+      root.classList.remove('dark');
+      root.classList.add('light');
+    }
+    localStorage.setItem('airoute_theme', theme);
     document.title = lang === 'zh' ? 'Airoute · AI路由器' : 'Airoute';
-  }, [lang]);
+  }, [theme, lang]);
 
   const [toast, setToast] = useState({ show: false, message: '', type: 'info' });
   const toastTimerRef = useRef(null);
@@ -212,6 +236,10 @@ export default function App() {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [showOnboardingModal, setShowOnboardingModal] = useState(false);
+  const [showTopologyModal, setShowTopologyModal] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [authTab, setAuthTab] = useState(() => initialRoute.authTab);
 
   // Global Command Palette shortcut (Cmd+K / Ctrl+K)
@@ -420,90 +448,9 @@ export default function App() {
   const [selectedKeyIds, setSelectedKeyIds] = useState([]);
   const [selectedChannelIds, setSelectedChannelIds] = useState([]);
 
-  // Playground Modality Switcher
-  const [playModality, setPlayModality] = useState('chat'); // 'chat' | 'images' | 'audio_speech' | 'audio_transcription' | 'videos' | 'embeddings'
-  const [playApiKey, setPlayApiKey] = useState('');
-  const [isCustomKey, setIsCustomKey] = useState(false);
-  const [customKeyInput, setCustomKeyInput] = useState('');
-  const [playLoading, setPlayLoading] = useState(false);
-  const [playDurationMs, setPlayDurationMs] = useState(0);
-  const [playOutput, setPlayOutput] = useState('');
-
-  // Auto-select first available API key for Playground
-  useEffect(() => {
-    if (!playApiKey && keys.length > 0 && !isCustomKey) {
-      setPlayApiKey(keys[0].key);
-    }
-  }, [keys, playApiKey, isCustomKey]);
-
-  const getEffectivePlayApiKey = () => {
-    if (isCustomKey) return customKeyInput.trim();
-    if (playApiKey === '__none__') return '';
-    if (playApiKey) return playApiKey;
-    if (keys.length > 0) return keys[0].key;
-    return '';
-  };
-
-  const selectedKeyObj = keys.find(k => k.key === (isCustomKey ? customKeyInput.trim() : (playApiKey === '__none__' ? '' : playApiKey)));
-
-  // 1. Chat & Completions state
+  // Playground Modality and Model selector state (for navigation from channels/routes)
+  const [playModality, setPlayModality] = useState('chat');
   const [playModel, setPlayModel] = useState('');
-  const [playProtocol, setPlayProtocol] = useState('openai_chat');
-  const [playStream, setPlayStream] = useState(true);
-  const [playPrompt, setPlayPrompt] = useState('请用一句话介绍你自己和你的技术架构。');
-  const [playImageUrl, setPlayImageUrl] = useState('');
-  const [playTTFTMs, setPlayTTFTMs] = useState(0);
-  const [playReasoningOutput, setPlayReasoningOutput] = useState('');
-
-  // 2. Image Generation state
-  const [imgModel, setImgModel] = useState('');
-  const [imgPrompt, setImgPrompt] = useState('极简现代高科技数据中心，赛博光影质感，8k 渲染');
-  const [imgSize, setImgSize] = useState('1024x1024');
-  const [imgQuality, setImgQuality] = useState('standard');
-  const [imgResult, setImgResult] = useState(null);
-
-  // 3. Audio Speech (TTS) state
-  const [ttsModel, setTtsModel] = useState('');
-  const [ttsVoice, setTtsVoice] = useState('alloy');
-  const [ttsSpeed, setTtsSpeed] = useState(1.0);
-  const [ttsInput, setTtsInput] = useState('欢迎体验 AI 路由器极致性能企业级大模型与多模态网关系统。');
-  const [ttsAudioUrl, setTtsAudioUrl] = useState(null);
-
-  // 4. Audio Transcription (STT) state
-  const [sttModel, setSttModel] = useState('');
-  const [sttFile, setSttFile] = useState(null);
-  const [sttResult, setSttResult] = useState('');
-
-  // 5. Video Generation & Polling state
-  const [videoModel, setVideoModel] = useState('');
-  const [videoPrompt, setVideoPrompt] = useState('未来城市高空飞车俯瞰镜头，黎明晨光映照');
-  const [videoAspectRatio, setVideoAspectRatio] = useState('16:9');
-  const [videoTaskId, setVideoTaskId] = useState('');
-  const [videoTaskStatus, setVideoTaskStatus] = useState('');
-  const [videoResultUrl, setVideoResultUrl] = useState('');
-  const [videoPollCount, setVideoPollCount] = useState(0);
-
-  // 6. Vector Embedding state
-  const [embedModel, setEmbedModel] = useState('');
-  const [embedInput, setEmbedInput] = useState('AI 路由器高性能分布式网关，全双工零内存拷贝分发');
-  const [embedResult, setEmbedResult] = useState(null);
-  const [embedDim, setEmbedDim] = useState(0);
-
-  // 7. Rerank state
-  const [rerankModel, setRerankModel] = useState('');
-  const [rerankQuery, setRerankQuery] = useState('什么是企业级大模型网关的高可用与容灾设计？');
-  const [rerankDocs, setRerankDocs] = useState([
-    'AI 路由器采用全双工流式转发与零内存拷贝架构，首字分块前支持透明故障转移与熔断兜底。',
-    '今天天气非常晴朗，公园里的樱花盛开了，很适合去散步或野餐。',
-    '基于 Raft 协议的分布式数据库能保证网络分区状态下的强一致性与多副本高可用。',
-    '网关内置动态跨协议转换引擎，实现 OpenAI、Anthropic Claude 与 Gemini 协议全双工互转。',
-    'Cross-Encoder 重排模型能够对初筛候选文档与查询进行精细全量语义交互打分。',
-  ].join('\n---\n'));
-  const [rerankTopN, setRerankTopN] = useState(3);
-  const [rerankResult, setRerankResult] = useState(null);
-
-  // Docs tab category
-  const [docsSection, setDocsSection] = useState('architecture');
 
   const inferClientModality = (m) => {
     const lower = (m || '').toLowerCase();
@@ -515,68 +462,6 @@ export default function App() {
     if (lower.includes('image') || lower.includes('dall-e') || lower.includes('flux') || lower.includes('midjourney') || lower.includes('stable-diffusion') || lower.includes('seedream') || lower.includes('sdxl')) return 'images';
     return 'chat';
   };
-
-  // Helper to get platform-added models for a specific modality, dynamically filtered by selected API Key
-  const getPlaygroundModels = (modality) => {
-    let list = [];
-    if (modelRoutes && modelRoutes.length > 0) {
-      const matched = modelRoutes.filter(r => r.modality === modality).map(r => r.model);
-      if (matched.length > 0) list = matched;
-    }
-    if (list.length === 0 && models && models.length > 0) {
-      const matched = models.filter(m => inferClientModality(m) === modality);
-      if (matched.length > 0) {
-        list = matched;
-      } else if (modality === 'chat') {
-        list = models.filter(m => inferClientModality(m) === 'chat');
-      }
-    }
-
-    // Dynamic filtering based on currently selected API Key's allowed_models
-    if (selectedKeyObj && selectedKeyObj.allowed_models && selectedKeyObj.allowed_models.length > 0) {
-      if (!selectedKeyObj.allowed_models.includes('*')) {
-        const allowedSet = new Set(selectedKeyObj.allowed_models);
-        const filtered = list.filter(m => allowedSet.has(m));
-        // If the key explicitly configured models that match this modality
-        const extra = selectedKeyObj.allowed_models.filter(m => inferClientModality(m) === modality && !filtered.includes(m));
-        return [...filtered, ...extra];
-      }
-    }
-
-    return list;
-  };
-
-  // Synchronize modality models whenever API key or available models change
-  useEffect(() => {
-    const chatModels = getPlaygroundModels('chat');
-    if (chatModels.length > 0 && !chatModels.includes(playModel)) {
-      setPlayModel(chatModels[0]);
-    }
-    const imgModels = getPlaygroundModels('images');
-    if (imgModels.length > 0 && !imgModels.includes(imgModel)) {
-      setImgModel(imgModels[0]);
-    }
-    const ttsModels = getPlaygroundModels('audio_speech');
-    if (ttsModels.length > 0 && !ttsModels.includes(ttsModel)) {
-      setTtsModel(ttsModels[0]);
-    }
-    const sttModels = getPlaygroundModels('audio_transcription');
-    if (sttModels.length > 0 && !sttModels.includes(sttModel)) {
-      setSttModel(sttModels[0]);
-    }
-    const vidModels = getPlaygroundModels('videos');
-    if (vidModels.length > 0 && !vidModels.includes(videoModel)) {
-      setVideoModel(vidModels[0]);
-    }
-    const embModels = getPlaygroundModels('embeddings');
-    if (embModels.length > 0 && !embModels.includes(embedModel)) {
-      setEmbedModel(embModels[0]);
-    }
-    const rrkModels = getPlaygroundModels('rerank');
-    if (rrkModels.length > 0 && !rrkModels.includes(rerankModel)) {
-      setRerankModel(rrkModels[0]);
-    }
-  }, [playApiKey, isCustomKey, customKeyInput, modelRoutes, models, keys]);
 
   // Load backend data
   const fetchData = async (overrideToken) => {
@@ -618,20 +503,7 @@ export default function App() {
         };
 
         const effChat = getModModels('chat');
-        const effImg = getModModels('images');
-        const effTts = getModModels('audio_speech');
-        const effStt = getModModels('audio_transcription');
-        const effVid = getModModels('videos');
-        const effEmb = getModModels('embeddings');
-        const effRrk = getModModels('rerank');
-
         setPlayModel(prev => (prev && effChat.includes(prev)) ? prev : (effChat[0] || ''));
-        setImgModel(prev => (prev && effImg.includes(prev)) ? prev : (effImg[0] || ''));
-        setTtsModel(prev => (prev && effTts.includes(prev)) ? prev : (effTts[0] || ''));
-        setSttModel(prev => (prev && effStt.includes(prev)) ? prev : (effStt[0] || ''));
-        setVideoModel(prev => (prev && effVid.includes(prev)) ? prev : (effVid[0] || ''));
-        setEmbedModel(prev => (prev && effEmb.includes(prev)) ? prev : (effEmb[0] || ''));
-        setRerankModel(prev => (prev && effRrk.includes(prev)) ? prev : (effRrk[0] || ''));
       }
     } catch (e) {
       console.error('Fetch data failed:', e);
@@ -1397,518 +1269,6 @@ export default function App() {
     setTimeout(() => setCopiedKey(''), 2500);
   };
 
-  // 1. Chat Execution
-  const handleSendChat = async () => {
-    if (!playPrompt.trim()) return;
-    setPlayLoading(true);
-    setPlayOutput('');
-    setPlayReasoningOutput('');
-    setPlayDurationMs(0);
-    setPlayTTFTMs(0);
-
-    const start = Date.now();
-    let firstTokenTime = null;
-
-    const headers = { 'Content-Type': 'application/json' };
-    const activeKey = getEffectivePlayApiKey();
-    if (activeKey) {
-      headers['Authorization'] = `Bearer ${activeKey}`;
-      headers['x-api-key'] = activeKey;
-    }
-
-    let url = '/v1/chat/completions';
-    let body = {};
-
-    if (playProtocol === 'openai_response') {
-      url = '/v1/responses';
-      body = {
-        model: playModel,
-        input: playPrompt,
-        instructions: 'You are a helpful and concise AI assistant.',
-        stream: playStream,
-      };
-    } else if (playProtocol === 'anthropic_messages') {
-      url = '/v1/messages';
-      let content = playPrompt;
-      if (playImageUrl) {
-        content = [
-          { type: 'text', text: playPrompt },
-          { type: 'image_url', image_url: { url: playImageUrl } },
-        ];
-      }
-      body = {
-        model: playModel,
-        messages: [{ role: 'user', content }],
-        stream: playStream,
-        max_tokens: 1024,
-      };
-    } else {
-      url = '/v1/chat/completions';
-      let content = playPrompt;
-      if (playImageUrl) {
-        content = [
-          { type: 'text', text: playPrompt },
-          { type: 'image_url', image_url: { url: playImageUrl } },
-        ];
-      }
-      body = {
-        model: playModel,
-        messages: [{ role: 'user', content }],
-        stream: playStream,
-      };
-    }
-
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: res.statusText }));
-        setPlayOutput(`Error: ${JSON.stringify(err, null, 2)}`);
-        return;
-      }
-
-      if (!playStream) {
-        const data = await res.json();
-        setPlayDurationMs(Date.now() - start);
-        if (playProtocol === 'openai_response') {
-          setPlayOutput(data.output?.[0]?.content?.[0]?.text || JSON.stringify(data, null, 2));
-        } else if (playProtocol === 'openai_text') {
-          setPlayOutput(data.choices?.[0]?.text || '');
-        } else if (playProtocol === 'anthropic_messages') {
-          setPlayOutput(data.content?.[0]?.text || '');
-        } else {
-          setPlayOutput(data.choices?.[0]?.message?.content || '');
-          if (data.choices?.[0]?.message?.reasoning_content) {
-            setPlayReasoningOutput(data.choices[0].message.reasoning_content);
-          }
-        }
-      } else {
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed.startsWith('data:')) continue;
-            const dataContent = trimmed.substring(5).trim();
-            if (dataContent === '[DONE]') continue;
-
-            try {
-              const chunk = JSON.parse(dataContent);
-              let textDelta = '';
-              let reasoningDelta = '';
-              if (chunk.choices?.[0]?.delta?.content) {
-                textDelta = chunk.choices[0].delta.content;
-              } else if (chunk.choices?.[0]?.text) {
-                textDelta = chunk.choices[0].text;
-              } else if (chunk.delta?.text) {
-                textDelta = chunk.delta.text;
-              } else if (chunk.type === 'response.output_text.delta' && chunk.delta) {
-                textDelta = chunk.delta;
-              }
-
-              if (chunk.choices?.[0]?.delta?.reasoning_content) {
-                reasoningDelta = chunk.choices[0].delta.reasoning_content;
-              }
-
-              if (reasoningDelta) {
-                setPlayReasoningOutput(prev => prev + reasoningDelta);
-              }
-
-              if (textDelta) {
-                if (!firstTokenTime) {
-                  firstTokenTime = Date.now();
-                  setPlayTTFTMs(firstTokenTime - start);
-                }
-                setPlayOutput(prev => prev + textDelta);
-              }
-            } catch (e) {}
-          }
-        }
-        setPlayDurationMs(Date.now() - start);
-      }
-    } catch (e) {
-      setPlayOutput(`Request Failed: ${e.message}`);
-    } finally {
-      setPlayLoading(false);
-    }
-  };
-
-  const copyPlaygroundCurl = () => {
-    const origin = getGatewayOrigin();
-    const targetKey = getEffectivePlayApiKey();
-    const targetModel = playModel || 'deepseek-v4-flash';
-    const authHeader = targetKey ? `  -H "Authorization: Bearer ${targetKey}" \\\n` : '';
-    const curl = `curl ${origin}/v1/chat/completions \\\n  -H "Content-Type: application/json" \\\n${authHeader}  -d '{\n    "model": "${targetModel}",\n    "messages": [{"role": "user", "content": ${JSON.stringify(playPrompt || 'Hello Airoute!')}}],\n    "stream": ${playStream}\n  }'`;
-    navigator.clipboard.writeText(curl);
-    showToast('cURL 请求命令已复制到剪贴板', 'success');
-  };
-
-  const copyPlaygroundPython = () => {
-    const origin = getGatewayOrigin();
-    const targetKey = getEffectivePlayApiKey();
-    const targetModel = playModel || 'deepseek-v4-flash';
-    const py = `from openai import OpenAI
-
-client = OpenAI(
-    base_url="${origin}/v1",
-    api_key="${targetKey || 'sk-airoute-xxxx'}"
-)
-
-response = client.chat.completions.create(
-    model="${targetModel}",
-    messages=[{"role": "user", "content": ${JSON.stringify(playPrompt || 'Hello Airoute!')}}],
-    stream=${playStream ? 'True' : 'False'}
-)
-
-${playStream ? 'for chunk in response:\n    if chunk.choices[0].delta.content:\n        print(chunk.choices[0].delta.content, end="", flush=True)' : 'print(response.choices[0].message.content)'}`;
-    navigator.clipboard.writeText(py);
-    showToast('Python 接入代码已复制到剪贴板', 'success');
-  };
-
-  const clearPlaygroundOutput = () => {
-    setPlayOutput('');
-    setPlayReasoningOutput('');
-    setImgResult(null);
-    setTtsAudioUrl('');
-    setSttResult('');
-    setVideoResultUrl('');
-    setVideoTaskStatus('');
-    setEmbedResult(null);
-    setRerankResult(null);
-    setPlayTTFTMs(0);
-    setPlayDurationMs(0);
-  };
-
-  const playTokensPerSec = (() => {
-    if (!playOutput || !playDurationMs || playDurationMs <= (playTTFTMs || 0)) return null;
-    const estTokens = Math.max(1, Math.round(playOutput.length / 2.5));
-    const activeSec = (playDurationMs - (playTTFTMs || 0)) / 1000;
-    if (activeSec <= 0.05) return null;
-    return (estTokens / activeSec).toFixed(1);
-  })();
-
-  // 2. Image Generation Execution
-  const handleGenerateImage = async () => {
-    if (!imgPrompt.trim()) return;
-    setPlayLoading(true);
-    setImgResult(null);
-    setPlayOutput('');
-    setPlayDurationMs(0);
-    const start = Date.now();
-
-    try {
-      const headers = { 'Content-Type': 'application/json' };
-      const activeKey = getEffectivePlayApiKey();
-      if (activeKey) {
-        headers['Authorization'] = `Bearer ${activeKey}`;
-      }
-      const res = await fetch('/v1/images/generations', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          model: imgModel,
-          prompt: imgPrompt,
-          size: imgSize,
-          quality: imgQuality,
-          n: 1,
-        }),
-      });
-      setPlayDurationMs(Date.now() - start);
-      const data = await res.json();
-      if (!res.ok) {
-        setPlayOutput(`生图请求失败 (${res.status}):\n${JSON.stringify(data, null, 2)}`);
-      } else {
-        const item = data.data?.[0];
-        setImgResult(item || null);
-        setPlayOutput(JSON.stringify(data, null, 2));
-      }
-    } catch (e) {
-      setPlayOutput(`生图网络异常: ${e.message}`);
-    } finally {
-      setPlayLoading(false);
-    }
-  };
-
-  // 3. Audio Speech Execution (TTS)
-  const handleGenerateSpeech = async () => {
-    if (!ttsInput.trim()) return;
-    setPlayLoading(true);
-    if (ttsAudioUrl) {
-      URL.revokeObjectURL(ttsAudioUrl);
-      setTtsAudioUrl(null);
-    }
-    setPlayOutput('');
-    setPlayDurationMs(0);
-    const start = Date.now();
-
-    try {
-      const headers = { 'Content-Type': 'application/json' };
-      const activeKey = getEffectivePlayApiKey();
-      if (activeKey) {
-        headers['Authorization'] = `Bearer ${activeKey}`;
-      }
-      const res = await fetch('/v1/audio/speech', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          model: ttsModel,
-          input: ttsInput,
-          voice: ttsVoice,
-          speed: parseFloat(ttsSpeed) || 1.0,
-          response_format: 'mp3',
-        }),
-      });
-      setPlayDurationMs(Date.now() - start);
-      if (!res.ok) {
-        const err = await res.text();
-        setPlayOutput(`语音合成失败 (${res.status}):\n${err}`);
-      } else {
-        const blob = await res.blob();
-        const audioUrl = URL.createObjectURL(blob);
-        setTtsAudioUrl(audioUrl);
-        setPlayOutput(`✅ 语音合成成功！\n音频大小: ${(blob.size / 1024).toFixed(1)} KB\n格式: audio/mpeg (MP3)`);
-      }
-    } catch (e) {
-      setPlayOutput(`语音合成异常: ${e.message}`);
-    } finally {
-      setPlayLoading(false);
-    }
-  };
-
-  // 4. Audio Transcription Execution (STT)
-  const handleTranscribeAudio = async () => {
-    if (!sttFile) {
-      alert('请先选择要转写的音频文件');
-      return;
-    }
-    setPlayLoading(true);
-    setSttResult('');
-    setPlayOutput('');
-    setPlayDurationMs(0);
-    const start = Date.now();
-
-    try {
-      const formData = new FormData();
-      formData.append('file', sttFile);
-      formData.append('model', sttModel);
-
-      const headers = {};
-      const activeKey = getEffectivePlayApiKey();
-      if (activeKey) {
-        headers['Authorization'] = `Bearer ${activeKey}`;
-      }
-
-      const res = await fetch('/v1/audio/transcriptions', {
-        method: 'POST',
-        headers,
-        body: formData,
-      });
-      setPlayDurationMs(Date.now() - start);
-      const data = await res.json();
-      if (!res.ok) {
-        setPlayOutput(`语音识别失败 (${res.status}):\n${JSON.stringify(data, null, 2)}`);
-      } else {
-        setSttResult(data.text || '');
-        setPlayOutput(JSON.stringify(data, null, 2));
-      }
-    } catch (e) {
-      setPlayOutput(`语音识别异常: ${e.message}`);
-    } finally {
-      setPlayLoading(false);
-    }
-  };
-
-  // 5. Video Generation & Task Polling
-  const pollVideoTask = (taskId, startTime) => {
-    let attempts = 0;
-    const interval = setInterval(async () => {
-      attempts++;
-      setVideoPollCount(attempts);
-      try {
-        const headers = {};
-        const activeKey = getEffectivePlayApiKey();
-        if (activeKey) headers['Authorization'] = `Bearer ${activeKey}`;
-        const res = await fetch(`/v1/videos/tasks/${taskId}`, { headers });
-        const data = await res.json();
-        setVideoTaskStatus(data.status || 'PROCESSING');
-        setPlayOutput(`[轮询第 ${attempts} 次] 任务状态: ${data.status}\n` + JSON.stringify(data, null, 2));
-        setPlayDurationMs(Date.now() - startTime);
-
-        const st = (data.status || '').toLowerCase();
-        if (st === 'success' || st === 'succeeded') {
-          clearInterval(interval);
-          setVideoResultUrl(data.video_url || '');
-          setPlayLoading(false);
-        } else if (st === 'failed' || attempts >= 30) {
-          clearInterval(interval);
-          setPlayLoading(false);
-        }
-      } catch (e) {
-        clearInterval(interval);
-        setPlayLoading(false);
-      }
-    }, 2000);
-  };
-
-  const handleGenerateVideo = async () => {
-    if (!videoPrompt.trim()) return;
-    setPlayLoading(true);
-    setVideoTaskId('');
-    setVideoTaskStatus('PENDING');
-    setVideoResultUrl('');
-    setVideoPollCount(0);
-    setPlayOutput('');
-    setPlayDurationMs(0);
-    const start = Date.now();
-
-    try {
-      const headers = { 'Content-Type': 'application/json' };
-      const activeKey = getEffectivePlayApiKey();
-      if (activeKey) {
-        headers['Authorization'] = `Bearer ${activeKey}`;
-      }
-      const res = await fetch('/v1/videos/generations', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          model: videoModel,
-          prompt: videoPrompt,
-          aspect_ratio: videoAspectRatio,
-        }),
-      });
-      setPlayDurationMs(Date.now() - start);
-      const data = await res.json();
-      if (!res.ok) {
-        setPlayOutput(`视频生成提交失败 (${res.status}):\n${JSON.stringify(data, null, 2)}`);
-        setPlayLoading(false);
-        return;
-      }
-      setPlayOutput(JSON.stringify(data, null, 2));
-      const tid = data.task_id || data.id;
-      setVideoTaskId(tid);
-      setVideoTaskStatus(data.status || 'PROCESSING');
-      const initSt = (data.status || '').toLowerCase();
-      if ((initSt === 'success' || initSt === 'succeeded') && data.video_url) {
-        setVideoResultUrl(data.video_url);
-        setPlayLoading(false);
-      } else if (tid) {
-        pollVideoTask(tid, start);
-      } else {
-        setPlayLoading(false);
-      }
-    } catch (e) {
-      setPlayOutput(`创建视频任务异常: ${e.message}`);
-      setPlayLoading(false);
-    }
-  };
-
-  // 6. Vector Embedding Execution
-  const handleGenerateEmbedding = async () => {
-    if (!embedInput.trim()) return;
-    setPlayLoading(true);
-    setEmbedResult(null);
-    setEmbedDim(0);
-    setPlayOutput('');
-    setPlayDurationMs(0);
-    const start = Date.now();
-
-    try {
-      const headers = { 'Content-Type': 'application/json' };
-      const activeKey = getEffectivePlayApiKey();
-      if (activeKey) {
-        headers['Authorization'] = `Bearer ${activeKey}`;
-      }
-      const lines = embedInput.split('\n').map(l => l.trim()).filter(Boolean);
-      const inputPayload = lines.length > 1 ? lines : embedInput;
-
-      const res = await fetch('/v1/embeddings', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          model: embedModel,
-          input: inputPayload,
-        }),
-      });
-      setPlayDurationMs(Date.now() - start);
-      const data = await res.json();
-      if (!res.ok) {
-        setPlayOutput(`向量化请求失败 (${res.status}):\n${JSON.stringify(data, null, 2)}`);
-      } else {
-        const firstEmb = data.data?.[0]?.embedding || [];
-        setEmbedResult(data);
-        setEmbedDim(firstEmb.length);
-        setPlayOutput(JSON.stringify(data, null, 2));
-      }
-    } catch (e) {
-      setPlayOutput(`向量化网络异常: ${e.message}`);
-    } finally {
-      setPlayLoading(false);
-    }
-  };
-
-  // 7. Cross-Encoder Rerank Execution
-  const handleExecuteRerank = async () => {
-    if (!rerankQuery.trim() || !rerankDocs.trim()) {
-      alert('请输入检索 Query 和待重排候选文档');
-      return;
-    }
-    setPlayLoading(true);
-    setRerankResult(null);
-    setPlayOutput('');
-    setPlayDurationMs(0);
-    const start = Date.now();
-
-    try {
-      const headers = { 'Content-Type': 'application/json' };
-      const activeKey = getEffectivePlayApiKey();
-      if (activeKey) {
-        headers['Authorization'] = `Bearer ${activeKey}`;
-      }
-      let docList = [];
-      if (rerankDocs.includes('\n---\n')) {
-        docList = rerankDocs.split('\n---\n').map(s => s.trim()).filter(Boolean);
-      } else {
-        docList = rerankDocs.split('\n').map(s => s.trim()).filter(Boolean);
-      }
-
-      const res = await fetch('/v1/rerank', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          model: rerankModel,
-          query: rerankQuery,
-          documents: docList,
-          top_n: parseInt(rerankTopN) || 3,
-          return_documents: true,
-        }),
-      });
-      setPlayDurationMs(Date.now() - start);
-      const data = await res.json();
-      if (!res.ok) {
-        setPlayOutput(`重排请求失败 (${res.status}):\n${JSON.stringify(data, null, 2)}`);
-      } else {
-        setRerankResult(data);
-        setPlayOutput(JSON.stringify(data, null, 2));
-      }
-    } catch (e) {
-      setPlayOutput(`重排网络异常: ${e.message}`);
-    } finally {
-      setPlayLoading(false);
-    }
-  };
 
   const filteredLogs = logs.filter(l => {
     if (!logFilter) return true;
@@ -2053,7 +1413,7 @@ ${playStream ? 'for chunk in response:\n    if chunk.choices[0].delta.content:\n
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-800 font-sans selection:bg-indigo-500 selection:text-white transition-colors duration-200">
+    <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-[#0b0f19] text-slate-800 dark:text-slate-100 font-sans selection:bg-indigo-500 selection:text-white transition-colors duration-200">
       {/* Toast Notification */}
       <Toast toast={toast} onClose={() => setToast(prev => ({ ...prev, show: false }))} />
 
@@ -2100,9 +1460,23 @@ ${playStream ? 'for chunk in response:\n    if chunk.choices[0].delta.content:\n
         />
       )}
 
+      {/* Mobile Drawer Backdrop */}
+      {mobileMenuOpen && (
+        <div
+          onClick={() => setMobileMenuOpen(false)}
+          className="fixed inset-0 bg-slate-900/60 z-30 md:hidden backdrop-blur-xs animate-in fade-in"
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-64 bg-white/95 border-r border-slate-200/80 flex flex-col backdrop-blur-xl shadow-xs shrink-0">
-        <div className="p-5 border-b border-slate-100 flex items-center">
+      <aside
+        className={`bg-white/95 dark:bg-[#111726]/95 border-r border-slate-200/80 dark:border-slate-800/80 flex flex-col backdrop-blur-xl shadow-xs shrink-0 transition-all duration-200 z-30 ${
+          sidebarCollapsed ? 'w-20' : 'w-64'
+        } ${
+          mobileMenuOpen ? 'fixed inset-y-0 left-0 w-64 shadow-2xl flex' : 'hidden md:flex'
+        }`}
+      >
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
           <div
             onClick={() => setViewMode('landing')}
             className="flex items-center space-x-3 cursor-pointer group transition duration-150 hover:opacity-90"
@@ -2111,15 +1485,25 @@ ${playStream ? 'for chunk in response:\n    if chunk.choices[0].delta.content:\n
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-sky-400 flex items-center justify-center shadow-lg shadow-indigo-500/25 text-white shrink-0 group-hover:shadow-indigo-500/40 transition">
               <Zap className="w-5 h-5 fill-white text-white" />
             </div>
-            <div>
-              <h1 className="font-bold text-base text-slate-900 tracking-tight group-hover:text-indigo-600 transition">
-                Airoute
-              </h1>
-              <span className="text-[11px] text-indigo-600 font-semibold tracking-wide block">
-                {t.brandSubtitle}
-              </span>
-            </div>
+            {!sidebarCollapsed && (
+              <div>
+                <h1 className="font-bold text-base text-slate-900 dark:text-slate-100 tracking-tight group-hover:text-indigo-600 transition">
+                  Airoute
+                </h1>
+                <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold tracking-wide block">
+                  {t.brandSubtitle}
+                </span>
+              </div>
+            )}
           </div>
+
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="hidden md:flex p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+            title={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
+          >
+            {sidebarCollapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+          </button>
         </div>
 
         {/* Command Palette Trigger */}
@@ -2491,9 +1875,18 @@ ${playStream ? 'for chunk in response:\n    if chunk.choices[0].delta.content:\n
       {/* Main Container */}
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         {/* Top Header */}
-        <header className="h-16 bg-white/90 backdrop-blur-md border-b border-slate-200/80 flex items-center justify-between px-8 sticky top-0 z-20 shadow-xs">
+        <header className="h-16 bg-white/90 dark:bg-[#111726]/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between px-4 sm:px-8 sticky top-0 z-20 shadow-xs">
           <div className="flex items-center space-x-3">
-            <h2 className="text-base font-bold text-slate-900 tracking-tight">
+            {/* Mobile Hamburger Toggle */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden p-2 rounded-xl text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              title="打开导航栏"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
+            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 tracking-tight">
               {currentTab === 'dashboard' && t.navDashboard}
               {currentTab === 'models' && t.navModels}
               {currentTab === 'pricing' && t.navPricing}
@@ -2510,25 +1903,54 @@ ${playStream ? 'for chunk in response:\n    if chunk.choices[0].delta.content:\n
 
             <button
               onClick={() => setShowCommandPalette(true)}
-              className="hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200 text-xs text-slate-500 hover:text-slate-800 transition cursor-pointer shadow-2xs ml-3"
+              className="hidden lg:flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200/80 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition cursor-pointer shadow-2xs ml-3"
               title="全局快捷检索与指令面板 (⌘K)"
             >
               <Search className="w-3.5 h-3.5 text-slate-400" />
               <span>快速搜索指令或模型...</span>
-              <kbd className="text-[10px] bg-white border border-slate-200 rounded px-1.5 py-0.5 font-mono font-semibold text-slate-400">
+              <kbd className="text-[10px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-1.5 py-0.5 font-mono font-semibold text-slate-400">
                 ⌘K
               </kbd>
             </button>
           </div>
 
-          <div className="flex items-center space-x-2.5">
+          <div className="flex items-center space-x-2 sm:space-x-2.5">
+            {/* Visual Topology Modal Trigger */}
+            <button
+              onClick={() => setShowTopologyModal(true)}
+              className="hidden sm:flex text-xs px-2.5 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-semibold items-center space-x-1.5 transition border border-indigo-200 dark:border-indigo-800 shadow-2xs cursor-pointer"
+              title="查看可视化路由拓扑与容灾流程"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>容灾拓扑</span>
+            </button>
+
+            {/* Guided Onboarding Trigger */}
+            <button
+              onClick={() => setShowOnboardingModal(true)}
+              className="text-xs px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white font-semibold flex items-center space-x-1.5 transition shadow-xs cursor-pointer"
+              title="打开开发者极速上手指引向导"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">新手向导</span>
+            </button>
+
+            {/* Theme Toggle Button */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition border border-slate-200 dark:border-slate-700 shadow-2xs cursor-pointer"
+              title={theme === 'dark' ? '切换为浅色模式' : '切换为深色模式'}
+            >
+              {theme === 'dark' ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-indigo-600" />}
+            </button>
+
             {/* Language Switcher Pill */}
             <button
               onClick={toggleLang}
-              className="text-xs px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold flex items-center space-x-1.5 transition border border-slate-200 shadow-2xs cursor-pointer"
+              className="text-xs px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold flex items-center space-x-1 transition border border-slate-200 dark:border-slate-700 shadow-2xs cursor-pointer"
               title={lang === 'zh' ? 'Switch to English' : '切换为简体中文'}
             >
-              <Globe className="w-3.5 h-3.5 text-indigo-600" />
+              <Globe className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
               <span>{t.langToggle}</span>
             </button>
 
@@ -2536,14 +1958,14 @@ ${playStream ? 'for chunk in response:\n    if chunk.choices[0].delta.content:\n
               href="https://github.com/ifnodoraemon/airoute"
               target="_blank"
               rel="noreferrer"
-              className="text-xs px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 font-medium flex items-center space-x-1.5 transition"
+              className="hidden md:flex text-xs px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-medium items-center space-x-1.5 transition"
             >
               <ExternalLink className="w-3.5 h-3.5" />
               <span>GitHub</span>
             </a>
 
             {/* Account info & actions */}
-            <div className="flex items-center space-x-2.5 pl-2 border-l border-slate-200">
+            <div className="flex items-center space-x-2 sm:space-x-2.5 pl-2 border-l border-slate-200 dark:border-slate-800">
               {adminUser?.role === 'admin' ? (
                 <div className="flex items-center space-x-2">
                   <button
@@ -2655,323 +2077,24 @@ ${playStream ? 'for chunk in response:\n    if chunk.choices[0].delta.content:\n
 
           {/* 1. ENTERPRISE BUSINESS & TELEMETRY DASHBOARD */}
           {currentTab === 'dashboard' && (
-            <div className="space-y-6">
-              {/* 1.0 OVERVIEW HEADER BAR */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-3xl p-5 shadow-xs">
-                <div>
-                  <div className="flex items-center space-x-2.5">
-                    <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
-                      用量与业务概览
-                    </h3>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>
-                      实时同步中
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    实时调用量、Token 吞吐、各上游通道连通性与调用审计流水
-                  </p>
-                </div>
-
-                <div className="flex items-center space-x-2.5">
-                  <button
-                    onClick={() => {
-                      fetchData();
-                      fetchLogs();
-                      showToast('数据已刷新', 'info');
-                    }}
-                    className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition flex items-center space-x-1.5 cursor-pointer"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    <span>刷新</span>
-                  </button>
-                  {adminUser?.role === 'admin' && (
-                    <button
-                      onClick={() => setShowChannelModal(true)}
-                      className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-xs font-semibold text-white transition shadow-xs flex items-center space-x-1.5 cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>接入服务商</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* 1.1 CORE SLA & TELEMETRY KPIS */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-                <div className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-xs hover:border-indigo-400 transition group">
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">累计请求量</span>
-                  <div className="mt-3 flex items-baseline justify-between">
-                    <span className="text-2xl font-extrabold text-slate-900 font-mono">{stats.total_requests || 0}</span>
-                    <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600 group-hover:scale-110 transition">
-                      <Zap className="w-4 h-4" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-xs hover:border-emerald-400 transition group">
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">活跃服务商</span>
-                  <div className="mt-3 flex items-baseline justify-between">
-                    <span className="text-2xl font-extrabold text-emerald-600 font-mono">{channels.length}</span>
-                    <div className="p-2 bg-emerald-50 rounded-xl text-emerald-600 group-hover:scale-110 transition">
-                      <Layers className="w-4 h-4" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-xs hover:border-sky-400 transition group">
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">累计 Token</span>
-                  <div className="mt-3 flex items-baseline justify-between">
-                    <span className="text-2xl font-extrabold text-sky-600 font-mono">{stats.total_tokens || 0}</span>
-                    <div className="p-2 bg-sky-50 rounded-xl text-sky-600 group-hover:scale-110 transition">
-                      <Activity className="w-4 h-4" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-xs hover:border-amber-400 transition group">
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">首字时延 (TTFT)</span>
-                  <div className="mt-3 flex items-baseline justify-between">
-                    <span className="text-2xl font-extrabold text-amber-600 font-mono">
-                      {(stats.avg_ttft_ms || 0).toFixed(0)} <span className="text-xs text-slate-400 font-normal">ms</span>
-                    </span>
-                    <div className="p-2 bg-amber-50 rounded-xl text-amber-600 group-hover:scale-110 transition">
-                      <Clock className="w-4 h-4" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-xs hover:border-indigo-400 transition group">
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">累计消费扣减</span>
-                  <div className="mt-3 flex items-baseline justify-between">
-                    <span className="text-2xl font-extrabold text-slate-900 font-mono">
-                      ¥{(stats.total_cost || 0).toFixed(4)}
-                    </span>
-                    <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600 group-hover:scale-110 transition">
-                      <DollarSign className="w-4 h-4" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-xs hover:border-emerald-400 transition group">
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">缓存节省资金</span>
-                  <div className="mt-3 flex items-baseline justify-between">
-                    <span className="text-2xl font-extrabold text-emerald-600 font-mono">
-                      ¥{(stats.saved_cost || 0).toFixed(4)}
-                    </span>
-                    <div className="p-2 bg-emerald-50 rounded-xl text-emerald-600 group-hover:scale-110 transition">
-                      <Sparkles className="w-4 h-4" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* 1.2 UPSTREAM PROVIDERS HEALTH & CIRCUIT BREAKER MATRIX */}
-              <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-3xl overflow-hidden shadow-xs">
-                <div className="p-5 border-b border-slate-100 dark:border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div>
-                    <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center space-x-2">
-                      <Shield className="w-4 h-4 text-emerald-500" />
-                      <span>上游服务商状态</span>
-                    </h3>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={handleBatchTest}
-                      disabled={batchTesting || channels.length === 0}
-                      className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition flex items-center space-x-1.5"
-                    >
-                      <Activity className={`w-3.5 h-3.5 ${batchTesting ? 'animate-spin text-indigo-500' : 'text-emerald-500'}`} />
-                      <span>全渠道体检</span>
-                    </button>
-                    <button
-                      onClick={() => setCurrentTab('channels')}
-                      className="px-3.5 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-semibold transition"
-                    >
-                      渠道配置 ({channels.length}) →
-                    </button>
-                  </div>
-                </div>
-
-                {channels.length === 0 ? (
-                  <div className="p-10 text-center flex flex-col items-center justify-center space-y-3">
-                    <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800/80 flex items-center justify-center text-indigo-500">
-                      <Server className="w-5 h-5" />
-                    </div>
-                    <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-100">暂无服务商</h4>
-                    <button
-                      onClick={() => setShowChannelModal(true)}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs transition flex items-center space-x-1.5"
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>接入服务商</span>
-                    </button>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs uppercase bg-slate-50/60 dark:bg-slate-900/60">
-                          <th className="py-3 px-6 font-semibold">服务商名称</th>
-                          <th className="py-3 px-6 font-semibold">协议类型</th>
-                          <th className="py-3 px-6 font-semibold">接入 Base URL</th>
-                          <th className="py-3 px-6 font-semibold">支持模型数</th>
-                          <th className="py-3 px-6 font-semibold">熔断器状态</th>
-                          <th className="py-3 px-6 font-semibold">最近延迟</th>
-                          <th className="py-3 px-6 text-right font-semibold">体检操作</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
-                        {channels.map((ch) => {
-                          const latInfo = channelLatencies[ch.id];
-                          const breaker = ch.breaker_status || 'CLOSED';
-                          return (
-                            <tr key={ch.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition">
-                              <td className="py-3.5 px-6 font-semibold text-slate-800 dark:text-slate-200">
-                                {ch.name}
-                              </td>
-                              <td className="py-3.5 px-6">
-                                <span className="px-2.5 py-0.5 rounded-lg text-[11px] font-mono font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                                  {ch.type}
-                                </span>
-                              </td>
-                              <td className="py-3.5 px-6 font-mono text-[11px] text-slate-500 dark:text-slate-400 max-w-xs truncate">
-                                {ch.base_url}
-                              </td>
-                              <td className="py-3.5 px-6 font-medium text-slate-700 dark:text-slate-300">
-                                {ch.models?.length || 0} 个模型
-                              </td>
-                              <td className="py-3.5 px-6">
-                                <span
-                                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
-                                    breaker === 'CLOSED'
-                                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60'
-                                      : breaker === 'HALF-OPEN'
-                                      ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/60'
-                                      : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/60'
-                                  }`}
-                                >
-                                  <span
-                                    className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
-                                      breaker === 'CLOSED'
-                                        ? 'bg-emerald-500'
-                                        : breaker === 'HALF-OPEN'
-                                        ? 'bg-amber-500 animate-pulse'
-                                        : 'bg-rose-500'
-                                    }`}
-                                  ></span>
-                                  {breaker === 'CLOSED' ? '正常' : breaker === 'HALF-OPEN' ? '半开恢复' : '熔断隔离'}
-                                </span>
-                              </td>
-                              <td className="py-3.5 px-6 font-mono text-xs">
-                                {latInfo ? (
-                                  latInfo.success ? (
-                                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{latInfo.latencyMs} ms</span>
-                                  ) : (
-                                    <span className="text-rose-500">异常</span>
-                                  )
-                                ) : (
-                                  <span className="text-slate-400">-</span>
-                                )}
-                              </td>
-                              <td className="py-3.5 px-6 text-right">
-                                <button
-                                  onClick={() => handleTestChannel(ch)}
-                                  disabled={testingId === ch.id}
-                                  className="text-xs px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 font-medium transition inline-flex items-center space-x-1"
-                                >
-                                  {testingId === ch.id ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
-                                  <span>Ping</span>
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              {/* 1.4 RECENT TRAFFIC AUDIT STREAM */}
-              <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-3xl overflow-hidden shadow-xs">
-                <div className="p-5 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-                  <div>
-                    <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center space-x-2">
-                      <History className="w-4 h-4 text-sky-500" />
-                      <span>最近请求</span>
-                    </h3>
-                  </div>
-                  <button
-                    onClick={() => setCurrentTab('logs')}
-                    className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
-                  >
-                    全部审计日志 ({logs.length}) →
-                  </button>
-                </div>
-
-                {logs.length === 0 ? (
-                  <div className="p-8 text-center text-xs text-slate-400 dark:text-slate-500">
-                    暂无请求记录
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs uppercase bg-slate-50/60 dark:bg-slate-900/60">
-                          <th className="py-3 px-6 font-semibold">请求时间</th>
-                          <th className="py-3 px-6 font-semibold">调用方 / 团队</th>
-                          <th className="py-3 px-6 font-semibold">请求模型</th>
-                          <th className="py-3 px-6 font-semibold">路由命中的上游</th>
-                          <th className="py-3 px-6 font-semibold">状态码</th>
-                          <th className="py-3 px-6 font-semibold">首字 (TTFT) / 总耗时</th>
-                          <th className="py-3 px-6 font-semibold">Token 消耗</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
-                        {logs.slice(0, 5).map((log) => (
-                          <tr
-                            key={log.id}
-                            onClick={() => setSelectedLog(log)}
-                            className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 cursor-pointer transition"
-                          >
-                            <td className="py-3 px-6 font-mono text-slate-500">
-                              {new Date(log.created_at).toLocaleTimeString()}
-                            </td>
-                            <td className="py-3 px-6 font-medium text-slate-800 dark:text-slate-200">
-                              {log.tenant_id || 'anonymous'}
-                            </td>
-                            <td className="py-3 px-6 font-mono font-semibold text-indigo-600 dark:text-indigo-400">
-                              {log.model}
-                            </td>
-                            <td className="py-3 px-6 text-slate-600 dark:text-slate-300 font-medium">
-                              {log.channel_name || '默认通道'}
-                            </td>
-                            <td className="py-3 px-6">
-                              <span
-                                className={`px-2 py-0.5 rounded-full font-mono font-bold text-[11px] ${
-                                  log.status_code >= 200 && log.status_code < 300
-                                    ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300'
-                                    : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300'
-                                }`}
-                              >
-                                {log.status_code}
-                              </span>
-                            </td>
-                            <td className="py-3 px-6 font-mono text-slate-700 dark:text-slate-300">
-                              {log.ttft_ms} ms / {log.duration_ms} ms
-                            </td>
-                            <td className="py-3 px-6 font-mono text-slate-600 dark:text-slate-300">
-                              {log.total_tokens}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
+            <DashboardView
+              stats={stats}
+              channels={channels}
+              logs={logs}
+              channelLatencies={channelLatencies}
+              testingId={testingId}
+              batchTesting={batchTesting}
+              handleBatchTest={handleBatchTest}
+              handleTestChannel={handleTestChannel}
+              fetchData={fetchData}
+              fetchLogs={fetchLogs}
+              showToast={showToast}
+              setCurrentTab={setCurrentTab}
+              setShowChannelModal={setShowChannelModal}
+              setActiveLogDetail={setActiveLogDetail}
+              adminUser={adminUser}
+              onOpenTopology={() => setShowTopologyModal(true)}
+            />
           )}
 
           {/* 1.5. MODEL ROUTES TAB */}
@@ -3139,1537 +2262,20 @@ ${playStream ? 'for chunk in response:\n    if chunk.choices[0].delta.content:\n
 
           {/* 5. MULTIMODAL PLAYGROUND TAB */}
           {currentTab === 'playground' && (
-            <div className="space-y-4">
-              {/* Modality Selector Bar */}
-              <div className="bg-white border border-slate-200/80 rounded-2xl p-1.5 shadow-xs flex flex-wrap items-center gap-1.5">
-                {[
-                  { id: 'chat', label: 'Chat 对话', icon: MessageSquare, activeColor: 'bg-indigo-600 text-white' },
-                  { id: 'images', label: 'Images 绘图', icon: ImageIcon, activeColor: 'bg-pink-600 text-white' },
-                  { id: 'audio_speech', label: 'TTS 语音合成', icon: Volume2, activeColor: 'bg-cyan-600 text-white' },
-                  { id: 'audio_transcription', label: 'STT 语音转写', icon: Mic, activeColor: 'bg-teal-600 text-white' },
-                  { id: 'videos', label: 'Video 视频生成', icon: Video, activeColor: 'bg-purple-600 text-white' },
-                  { id: 'embeddings', label: 'Embedding 向量', icon: Cpu, activeColor: 'bg-emerald-600 text-white' },
-                  { id: 'rerank', label: 'Rerank 重排', icon: Sliders, activeColor: 'bg-amber-600 text-white' },
-                ].map(tab => {
-                  const Icon = tab.icon;
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => setPlayModality(tab.id)}
-                      className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
-                        playModality === tab.id
-                          ? tab.activeColor
-                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                      }`}
-                    >
-                      <Icon className="w-3.5 h-3.5" />
-                      <span>{tab.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Modality Layout: Controls + Output */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Left: Modality Controls */}
-                <div className="bg-white border border-slate-200/80 rounded-2xl p-6 space-y-4 shadow-xs">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <h3 className="font-bold text-slate-900 text-sm flex items-center space-x-2">
-                      <Sparkles className="w-4 h-4 text-indigo-600" />
-                      <span>参数设置</span>
-                    </h3>
-                  </div>
-
-                  {/* Common: API Key selector & Allowed Models link */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
-                        <Key className="w-3.5 h-3.5 text-indigo-500" />
-                        <span>API 访问密钥 (关联模型权限)</span>
-                      </label>
-                      {keys.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsCustomKey(!isCustomKey);
-                            if (isCustomKey && keys.length > 0) {
-                              setPlayApiKey(keys[0].key);
-                            }
-                          }}
-                          className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer font-medium"
-                        >
-                          {isCustomKey ? '切换为下拉选择' : '自定义输入密钥'}
-                        </button>
-                      )}
-                    </div>
-
-                    {isCustomKey || keys.length === 0 ? (
-                      <div className="space-y-1">
-                        <input
-                          type="text"
-                          value={customKeyInput}
-                          onChange={(e) => setCustomKeyInput(e.target.value)}
-                          placeholder={keys.length > 0 ? 'sk-airoute-xxxx (输入自定义密钥)' : 'sk-airoute-xxxx (留空将使用网关免密直通)'}
-                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono"
-                        />
-                        <p className="text-[11px] text-slate-400">
-                          {keys.length === 0 ? '当前账号暂无 API Key，留空可直接测试免密直通' : '正在使用自定义手动输入的密钥进行演练测试'}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <select
-                          value={playApiKey}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (val === '__custom__') {
-                              setIsCustomKey(true);
-                              setCustomKeyInput('');
-                            } else {
-                              setPlayApiKey(val);
-                            }
-                          }}
-                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono"
-                        >
-                          {keys.map((k) => {
-                            const isLimited = k.allowed_models && k.allowed_models.length > 0 && !k.allowed_models.includes('*');
-                            const modelDesc = isLimited ? `限定 ${k.allowed_models.length} 个模型` : '全模型可用';
-                            const title = `${k.tenant_id ? k.tenant_id + ' - ' : ''}${k.key.slice(0, 10)}...${k.key.slice(-4)} (${modelDesc})`;
-                            return (
-                              <option key={k.key || k.id} value={k.key}>
-                                {title}
-                              </option>
-                            );
-                          })}
-                          <option value="__none__">免密直通 (不带 API Key)</option>
-                          <option value="__custom__">+ 手动输入其它密钥...</option>
-                        </select>
-
-                        {/* Selected Key Permission Details */}
-                        {selectedKeyObj && (
-                          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md font-medium border ${
-                              selectedKeyObj.allowed_models && selectedKeyObj.allowed_models.length > 0 && !selectedKeyObj.allowed_models.includes('*')
-                                ? 'bg-amber-50 text-amber-700 border-amber-200/80'
-                                : 'bg-emerald-50 text-emerald-700 border-emerald-200/80'
-                            }`}>
-                              {selectedKeyObj.allowed_models && selectedKeyObj.allowed_models.length > 0 && !selectedKeyObj.allowed_models.includes('*')
-                                ? `授权模型 (${selectedKeyObj.allowed_models.length}个): ${selectedKeyObj.allowed_models.join(', ')}`
-                                : '模型权限: 全部可用'}
-                            </span>
-                            {selectedKeyObj.budget > 0 && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/80 font-medium">
-                                额度: ¥{Number(selectedKeyObj.budget).toFixed(2)}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        {playApiKey === '__none__' && (
-                          <div className="text-[11px] text-slate-500 bg-slate-100/80 px-2 py-1 rounded-md">
-                            💡 已选择免密直通模式，网关将跳过 API Key 校验直接代理转发
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 1. CHAT CONTROLS */}
-                  {playModality === 'chat' && (
-                    <>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">测试接口协议</label>
-                        <select
-                          value={playProtocol}
-                          onChange={(e) => setPlayProtocol(e.target.value)}
-                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
-                        >
-                          <option value="openai_chat">OpenAI Chat (/v1/chat/completions 对话补全)</option>
-                          <option value="openai_response">OpenAI Responses (/v1/responses 官方新代智能体协议)</option>
-                          <option value="anthropic_messages">Anthropic Claude (/v1/messages 原生协议)</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">目标模型 (已添加模型)</label>
-                        {getPlaygroundModels('chat').length > 0 ? (
-                          <select
-                            value={getPlaygroundModels('chat').includes(playModel) ? playModel : (getPlaygroundModels('chat')[0] || '')}
-                            onChange={(e) => setPlayModel(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-indigo-500 font-mono"
-                          >
-                            {getPlaygroundModels('chat').map((m) => (
-                              <option key={m} value={m}>
-                                {m}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                            {selectedKeyObj && selectedKeyObj.allowed_models && !selectedKeyObj.allowed_models.includes('*')
-                              ? `当前选中的 API Key 未授权对话模型权限 (已授权模型: ${selectedKeyObj.allowed_models.join(', ') || '无'})`
-                              : '当前未挂载可用模型，请先前往【模型服务商】接入服务商并同步模型。'}
-                          </div>
-                        )}
-                      </div>
-
-                      {playProtocol !== 'openai_text' && (
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center space-x-1">
-                            <ImageIcon className="w-3.5 h-3.5 text-indigo-600" />
-                            <span>多模态视觉图片 URL (可选)</span>
-                          </label>
-                          <input
-                            type="text"
-                            value={playImageUrl}
-                            onChange={(e) => setPlayImageUrl(e.target.value)}
-                            placeholder="https://... 或 data:image/png;base64,..."
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:bg-white font-mono"
-                          />
-                        </div>
-                      )}
-
-                      <div className="flex items-center space-x-2 pt-2">
-                        <input
-                          type="checkbox"
-                          id="streamCheck"
-                          checked={playStream}
-                          onChange={(e) => setPlayStream(e.target.checked)}
-                          className="rounded border-slate-300 text-indigo-600 focus:ring-0"
-                        />
-                        <label htmlFor="streamCheck" className="text-sm font-medium text-slate-700 cursor-pointer">
-                          开启 SSE 流式输出 (Streaming)
-                        </label>
-                      </div>
-                    </>
-                  )}
-
-                  {/* 2. IMAGE CONTROLS */}
-                  {playModality === 'images' && (
-                    <>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">生图模型 (已添加模型)</label>
-                        {getPlaygroundModels('images').length > 0 ? (
-                          <select
-                            value={getPlaygroundModels('images').includes(imgModel) ? imgModel : (getPlaygroundModels('images')[0] || '')}
-                            onChange={(e) => setImgModel(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-pink-500 font-mono"
-                          >
-                            {getPlaygroundModels('images').map((m) => (
-                              <option key={m} value={m}>{m}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                            {selectedKeyObj && selectedKeyObj.allowed_models && !selectedKeyObj.allowed_models.includes('*')
-                              ? `当前选中的 API Key 未授权生图模型权限 (已授权模型: ${selectedKeyObj.allowed_models.join(', ') || '无'})`
-                              : '平台暂无已添加的生图模型，请先前往【模型路由】配置。'}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-600 mb-1">分辨率 (Size)</label>
-                          <select
-                            value={imgSize}
-                            onChange={(e) => setImgSize(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-pink-500 focus:bg-white"
-                          >
-                            <option value="1024x1024">1024x1024 (方形)</option>
-                            <option value="1792x1024">1792x1024 (横屏)</option>
-                            <option value="1024x1792">1024x1792 (竖屏)</option>
-                            <option value="512x512">512x512 (快速)</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-600 mb-1">画质 (Quality)</label>
-                          <select
-                            value={imgQuality}
-                            onChange={(e) => setImgQuality(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-pink-500 focus:bg-white"
-                          >
-                            <option value="standard">standard (标准)</option>
-                            <option value="hd">hd (高清渲染)</option>
-                          </select>
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {/* 3. TTS CONTROLS */}
-                  {playModality === 'audio_speech' && (
-                    <>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">TTS 语音合成模型 (已添加模型)</label>
-                        {getPlaygroundModels('audio_speech').length > 0 ? (
-                          <select
-                            value={getPlaygroundModels('audio_speech').includes(ttsModel) ? ttsModel : (getPlaygroundModels('audio_speech')[0] || '')}
-                            onChange={(e) => setTtsModel(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-cyan-500 font-mono"
-                          >
-                            {getPlaygroundModels('audio_speech').map((m) => (
-                              <option key={m} value={m}>{m}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                            {selectedKeyObj && selectedKeyObj.allowed_models && !selectedKeyObj.allowed_models.includes('*')
-                              ? `当前选中的 API Key 未授权 TTS 语音合成模型权限 (已授权模型: ${selectedKeyObj.allowed_models.join(', ') || '无'})`
-                              : '平台暂无已添加的语音合成模型，请先前往【模型路由】配置。'}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-600 mb-1">音色 (Voice)</label>
-                          <select
-                            value={ttsVoice}
-                            onChange={(e) => setTtsVoice(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-cyan-500 focus:bg-white"
-                          >
-                            <option value="alloy">alloy (自然中性)</option>
-                            <option value="echo">echo (温和男声)</option>
-                            <option value="fable">fable (英伦叙事)</option>
-                            <option value="onyx">onyx (沉稳深邃)</option>
-                            <option value="nova">nova (活泼清亮)</option>
-                            <option value="shimmer">shimmer (清晰柔和)</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-600 mb-1">语速 (Speed: {ttsSpeed}x)</label>
-                          <input
-                            type="range"
-                            min="0.5"
-                            max="2.0"
-                            step="0.1"
-                            value={ttsSpeed}
-                            onChange={(e) => setTtsSpeed(parseFloat(e.target.value))}
-                            className="w-full mt-2 accent-cyan-600 cursor-pointer"
-                          />
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {/* 4. STT CONTROLS */}
-                  {playModality === 'audio_transcription' && (
-                    <>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">语音识别模型 (已添加模型)</label>
-                        {getPlaygroundModels('audio_transcription').length > 0 ? (
-                          <select
-                            value={getPlaygroundModels('audio_transcription').includes(sttModel) ? sttModel : (getPlaygroundModels('audio_transcription')[0] || '')}
-                            onChange={(e) => setSttModel(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-teal-500 font-mono"
-                          >
-                            {getPlaygroundModels('audio_transcription').map((m) => (
-                              <option key={m} value={m}>{m}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                            {selectedKeyObj && selectedKeyObj.allowed_models && !selectedKeyObj.allowed_models.includes('*')
-                              ? `当前选中的 API Key 未授权语音识别模型权限 (已授权模型: ${selectedKeyObj.allowed_models.join(', ') || '无'})`
-                              : '平台暂无已添加的语音识别模型，请先前往【模型路由】配置。'}
-                          </div>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">选择录音 / 音频文件 (MP3, WAV, M4A)</label>
-                        <input
-                          type="file"
-                          accept="audio/*,.mp3,.wav,.m4a,.webm"
-                          onChange={(e) => setSttFile(e.target.files?.[0] || null)}
-                          className="w-full text-xs text-slate-600 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 cursor-pointer border border-slate-200 rounded-xl p-2 bg-slate-50"
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {/* 5. VIDEO CONTROLS */}
-                  {playModality === 'videos' && (
-                    <>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">视频生成模型 (已添加模型)</label>
-                        {getPlaygroundModels('videos').length > 0 ? (
-                          <select
-                            value={getPlaygroundModels('videos').includes(videoModel) ? videoModel : (getPlaygroundModels('videos')[0] || '')}
-                            onChange={(e) => setVideoModel(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-purple-500 font-mono"
-                          >
-                            {getPlaygroundModels('videos').map((m) => (
-                              <option key={m} value={m}>{m}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                            {selectedKeyObj && selectedKeyObj.allowed_models && !selectedKeyObj.allowed_models.includes('*')
-                              ? `当前选中的 API Key 未授权视频生成模型权限 (已授权模型: ${selectedKeyObj.allowed_models.join(', ') || '无'})`
-                              : '平台暂无已添加的视频生成模型，请先前往【模型路由】配置。'}
-                          </div>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">视频画面比例 (Aspect Ratio)</label>
-                        <select
-                          value={videoAspectRatio}
-                          onChange={(e) => setVideoAspectRatio(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-purple-500 focus:bg-white"
-                        >
-                          <option value="16:9">16:9 (横屏电影感)</option>
-                          <option value="9:16">9:16 (竖屏短视频)</option>
-                          <option value="1:1">1:1 (方形)</option>
-                        </select>
-                      </div>
-                    </>
-                  )}
-
-                  {/* 6. EMBEDDINGS CONTROLS */}
-                  {playModality === 'embeddings' && (
-                    <>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">向量模型 (已添加模型)</label>
-                        {getPlaygroundModels('embeddings').length > 0 ? (
-                          <select
-                            value={getPlaygroundModels('embeddings').includes(embedModel) ? embedModel : (getPlaygroundModels('embeddings')[0] || '')}
-                            onChange={(e) => setEmbedModel(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 font-mono"
-                          >
-                            {getPlaygroundModels('embeddings').map((m) => (
-                              <option key={m} value={m}>{m}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                            {selectedKeyObj && selectedKeyObj.allowed_models && !selectedKeyObj.allowed_models.includes('*')
-                              ? `当前选中的 API Key 未授权向量模型权限 (已授权模型: ${selectedKeyObj.allowed_models.join(', ') || '无'})`
-                              : '平台暂无已添加的向量模型，请先前往【模型路由】配置。'}
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  )}
-
-                  {/* 7. RERANK CONTROLS */}
-                  {playModality === 'rerank' && (
-                    <>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">重排模型 (已添加模型)</label>
-                        {getPlaygroundModels('rerank').length > 0 ? (
-                          <select
-                            value={getPlaygroundModels('rerank').includes(rerankModel) ? rerankModel : (getPlaygroundModels('rerank')[0] || '')}
-                            onChange={(e) => setRerankModel(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-amber-500 font-mono"
-                          >
-                            {getPlaygroundModels('rerank').map((m) => (
-                              <option key={m} value={m}>{m}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                            {selectedKeyObj && selectedKeyObj.allowed_models && !selectedKeyObj.allowed_models.includes('*')
-                              ? `当前选中的 API Key 未授权重排模型权限 (已授权模型: ${selectedKeyObj.allowed_models.join(', ') || '无'})`
-                              : '平台暂无已添加的重排模型，请先前往【模型路由】配置。'}
-                          </div>
-                        )}
-                      </div>
-
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <label className="text-xs font-semibold text-slate-600">截断输出条数 (Top N)</label>
-                          <span className="font-mono text-xs font-bold text-amber-600">{rerankTopN} 条</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="1"
-                          max="10"
-                          step="1"
-                          value={rerankTopN}
-                          onChange={(e) => setRerankTopN(parseInt(e.target.value) || 3)}
-                          className="w-full accent-amber-600 cursor-pointer"
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {/* Telemetry Footer */}
-                  <div className="pt-4 border-t border-slate-100 text-xs text-slate-500 space-y-2">
-                    {playModality === 'chat' && (
-                      <div className="flex justify-between">
-                        <span>首字延迟 (TTFT):</span>
-                        <span className="font-mono font-bold text-amber-600">{playTTFTMs ? `${playTTFTMs} ms` : '-'}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between">
-                      <span>总执行耗时:</span>
-                      <span className="font-mono font-bold text-indigo-600">{playDurationMs ? `${playDurationMs} ms` : '-'}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right: Interactive Result & Output View */}
-                <div className="lg:col-span-2 bg-white border border-slate-200/80 rounded-2xl p-6 flex flex-col h-[650px] shadow-xs">
-                  {/* Action & Snippet Bar */}
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3 text-xs">
-                    <span className="font-bold text-slate-700 flex items-center space-x-1.5">
-                      <Terminal className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>调用结果输出</span>
-                      {playTokensPerSec && (
-                        <span className="ml-2 font-mono text-[11px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          ⚡ {playTokensPerSec} tokens/s
-                        </span>
-                      )}
-                    </span>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={copyPlaygroundCurl}
-                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition flex items-center space-x-1 cursor-pointer"
-                        title="复制等效 cURL 请求命令"
-                      >
-                        <Code className="w-3 h-3 text-indigo-600" />
-                        <span>复制 cURL</span>
-                      </button>
-                      <button
-                        onClick={copyPlaygroundPython}
-                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition flex items-center space-x-1 cursor-pointer"
-                        title="复制 Python OpenAI SDK 接入代码"
-                      >
-                        <Code className="w-3 h-3 text-amber-600" />
-                        <span>复制 Python</span>
-                      </button>
-                      {(playOutput || playReasoningOutput || imgResult || ttsAudioUrl || sttResult || videoResultUrl || embedResult || rerankResult) && (
-                        <button
-                          onClick={clearPlaygroundOutput}
-                          className="px-2 py-1 text-slate-400 hover:text-rose-600 rounded-lg transition text-[11px] cursor-pointer"
-                          title="清空当前调试输出"
-                        >
-                          清空
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Result Body */}
-                  <div className="flex-1 overflow-y-auto space-y-4 p-4 rounded-xl border border-slate-200 leading-relaxed bg-slate-50/60">
-                    {/* Chat Result */}
-                    {playModality === 'chat' && (
-                      <div className="font-mono text-sm whitespace-pre-wrap text-slate-800 space-y-3">
-                        {playReasoningOutput && (
-                          <div className="p-3.5 bg-amber-50/70 border border-amber-200/80 rounded-xl text-xs text-amber-950 font-mono shadow-xs">
-                            <div className="font-bold flex items-center space-x-1.5 text-amber-800 mb-1.5">
-                              <Sparkles className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
-                              <span>深度思维链推理过程 (Reasoning Content)</span>
-                            </div>
-                            <div className="whitespace-pre-wrap leading-relaxed text-amber-900/90 text-[11px]">
-                              {playReasoningOutput}
-                            </div>
-                          </div>
-                        )}
-                        <div>
-                          {playOutput || (!playReasoningOutput && (
-                            <div className="text-slate-400 text-center py-32 font-sans flex flex-col items-center justify-center space-y-2">
-                              <Sparkles className="w-8 h-8 text-indigo-400 stroke-1" />
-                              <span>暂无对话内容</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Image Result */}
-                    {playModality === 'images' && (
-                      <div className="h-full flex flex-col items-center justify-center">
-                        {imgResult ? (
-                          <div className="flex flex-col items-center space-y-3 w-full">
-                            <div className="relative group max-h-[400px] overflow-hidden rounded-xl border border-slate-200 shadow-md bg-black">
-                              <img
-                                src={imgResult.url || `data:image/png;base64,${imgResult.b64_json}`}
-                                alt="Generated"
-                                className="max-h-[380px] w-auto object-contain mx-auto"
-                              />
-                            </div>
-                            <div className="flex items-center space-x-3">
-                              <a
-                                href={imgResult.url || `data:image/png;base64,${imgResult.b64_json}`}
-                                download="airoute-generated.png"
-                                target="_blank"
-                                rel="noreferrer"
-                                className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white text-xs font-semibold rounded-xl flex items-center space-x-1.5 transition shadow-xs"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                                <span>下载高清原图</span>
-                              </a>
-                              {imgResult.revised_prompt && (
-                                <span className="text-xs text-slate-500 max-w-sm truncate" title={imgResult.revised_prompt}>
-                                  Prompt: {imgResult.revised_prompt}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-slate-400 text-center py-32 font-sans flex flex-col items-center justify-center space-y-2">
-                            <ImageIcon className="w-8 h-8 text-pink-400 stroke-1" />
-                            <span>暂无生成图片</span>
-                          </div>
-                        )}
-                        {playOutput && (
-                          <details className="w-full mt-4 text-xs font-mono bg-white p-3 rounded-xl border border-slate-200">
-                            <summary className="cursor-pointer text-slate-500 font-semibold">查看接口完整 JSON 响应</summary>
-                            <pre className="mt-2 text-slate-700 whitespace-pre-wrap">{playOutput}</pre>
-                          </details>
-                        )}
-                      </div>
-                    )}
-
-                    {/* TTS Result */}
-                    {playModality === 'audio_speech' && (
-                      <div className="h-full flex flex-col items-center justify-center">
-                        {ttsAudioUrl ? (
-                          <div className="w-full max-w-md bg-white border border-slate-200 p-6 rounded-2xl shadow-sm text-center space-y-4">
-                            <div className="w-12 h-12 bg-cyan-50 rounded-2xl flex items-center justify-center mx-auto text-cyan-600">
-                              <Volume2 className="w-6 h-6" />
-                            </div>
-                            <div>
-                              <h4 className="font-semibold text-slate-900">语音合成就绪</h4>
-                              <p className="text-xs text-slate-500 mt-1 font-mono">模型: {ttsModel} · 音色: {ttsVoice}</p>
-                            </div>
-                            <audio controls autoPlay src={ttsAudioUrl} className="w-full" />
-                            <a
-                              href={ttsAudioUrl}
-                              download="airoute-speech.mp3"
-                              className="inline-flex items-center space-x-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-semibold shadow-xs transition"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                              <span>下载 MP3 音频文件</span>
-                            </a>
-                          </div>
-                        ) : (
-                          <div className="text-slate-400 text-center py-32 font-sans flex flex-col items-center justify-center space-y-2">
-                            <Volume2 className="w-8 h-8 text-cyan-400 stroke-1" />
-                            <span>暂无合成语音</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* STT Result */}
-                    {playModality === 'audio_transcription' && (
-                      <div className="h-full flex flex-col justify-between">
-                        {sttResult ? (
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-semibold text-teal-700 uppercase tracking-wider">识别转写结果:</span>
-                              <button
-                                onClick={() => copyToClipboard(sttResult)}
-                                className="px-3 py-1 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-lg text-xs font-medium flex items-center space-x-1"
-                              >
-                                <Copy className="w-3.5 h-3.5" />
-                                <span>复制文本</span>
-                              </button>
-                            </div>
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 text-slate-900 font-sans leading-relaxed text-sm whitespace-pre-wrap">
-                              {sttResult}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-slate-400 text-center py-32 font-sans flex flex-col items-center justify-center space-y-2">
-                            <Mic className="w-8 h-8 text-teal-400 stroke-1" />
-                            <span>暂无转写结果</span>
-                          </div>
-                        )}
-                        {playOutput && (
-                          <details className="w-full mt-4 text-xs font-mono bg-white p-3 rounded-xl border border-slate-200">
-                            <summary className="cursor-pointer text-slate-500 font-semibold">查看 Whisper JSON 响应</summary>
-                            <pre className="mt-2 text-slate-700 whitespace-pre-wrap">{playOutput}</pre>
-                          </details>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Video Result */}
-                    {playModality === 'videos' && (
-                      <div className="h-full flex flex-col items-center justify-center">
-                        {videoTaskStatus ? (
-                          <div className="w-full max-w-lg bg-white border border-slate-200 p-6 rounded-2xl shadow-sm text-center space-y-4">
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                              <span className="text-xs font-mono text-slate-500">Task: {videoTaskId || '创建中...'}</span>
-                              <span className={`px-2.5 py-0.5 rounded text-xs font-mono font-semibold ${
-                                videoTaskStatus === 'SUCCESS'
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                  : videoTaskStatus === 'FAILED'
-                                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                                  : 'bg-purple-50 text-purple-700 border border-purple-200 animate-pulse'
-                              }`}>
-                                {videoTaskStatus} {videoPollCount > 0 && `(轮询: ${videoPollCount})`}
-                              </span>
-                            </div>
-
-                            {videoResultUrl ? (
-                              <div className="space-y-3">
-                                <video controls autoPlay src={videoResultUrl} className="w-full rounded-xl max-h-[320px] bg-black" />
-                                <a
-                                  href={videoResultUrl}
-                                  download="airoute-video.mp4"
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center space-x-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-semibold shadow-xs transition"
-                                >
-                                  <Download className="w-3.5 h-3.5" />
-                                  <span>下载视频</span>
-                                </a>
-                              </div>
-                            ) : (
-                              <div className="py-8 flex flex-col items-center space-y-2">
-                                <RefreshCw className="w-8 h-8 text-purple-500 animate-spin" />
-                                <p className="text-sm font-semibold text-slate-700">正在生成视频...</p>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="text-slate-400 text-center py-32 font-sans flex flex-col items-center justify-center space-y-2">
-                            <Video className="w-8 h-8 text-purple-400 stroke-1" />
-                            <span>暂无生成视频</span>
-                          </div>
-                        )}
-                        {playOutput && (
-                          <details className="w-full mt-4 text-xs font-mono bg-white p-3 rounded-xl border border-slate-200">
-                            <summary className="cursor-pointer text-slate-500 font-semibold">查看接口完整 JSON 响应</summary>
-                            <pre className="mt-2 text-slate-700 whitespace-pre-wrap">{playOutput}</pre>
-                          </details>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Embeddings Result */}
-                    {playModality === 'embeddings' && (
-                      <div className="h-full flex flex-col justify-between">
-                        {embedResult ? (
-                          <div className="space-y-4">
-                            <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-200">
-                              <div className="flex items-center space-x-3 text-xs">
-                                <span className="font-semibold text-slate-700">特征维度:</span>
-                                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-mono font-bold rounded border border-emerald-200">
-                                   {embedDim} 维
-                                </span>
-                                <span className="font-semibold text-slate-700">条数:</span>
-                                <span className="font-mono font-bold text-slate-900">
-                                  {embedResult.data?.length || 1} 条
-                                </span>
-                                {embedResult.usage && (
-                                  <>
-                                    <span className="font-semibold text-slate-700">Prompt Tokens:</span>
-                                    <span className="font-mono font-bold text-indigo-600">
-                                      {embedResult.usage.prompt_tokens}
-                                    </span>
-                                  </>
-                                )}
-                              </div>
-                              <button
-                                onClick={() => copyToClipboard(JSON.stringify(embedResult.data, null, 2))}
-                                className="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-medium flex items-center space-x-1"
-                              >
-                                <Copy className="w-3.5 h-3.5" />
-                                <span>复制向量数据</span>
-                              </button>
-                            </div>
-
-                            {/* Visual Vector Preview */}
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-2">
-                              <span className="text-xs font-bold text-slate-700 block">首条特征前 16 维数值热度预览:</span>
-                              <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5 font-mono text-[11px]">
-                                {(embedResult.data?.[0]?.embedding || []).slice(0, 16).map((val, idx) => (
-                                  <div
-                                    key={idx}
-                                    className={`p-1.5 rounded text-center font-semibold truncate ${
-                                      val >= 0
-                                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-100'
-                                        : 'bg-rose-50 text-rose-800 border border-rose-100'
-                                    }`}
-                                    title={`维度 #${idx}: ${val}`}
-                                  >
-                                    {val.toFixed(4)}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-slate-400 text-center py-32 font-sans flex flex-col items-center justify-center space-y-2">
-                            <Cpu className="w-8 h-8 text-emerald-400 stroke-1" />
-                            <span>暂无向量特征数据</span>
-                          </div>
-                        )}
-
-                        {playOutput && (
-                          <details className="w-full mt-4 text-xs font-mono bg-white p-3 rounded-xl border border-slate-200">
-                            <summary className="cursor-pointer text-slate-500 font-semibold">查看接口完整 JSON 响应</summary>
-                            <pre className="mt-2 text-slate-700 whitespace-pre-wrap max-h-48 overflow-y-auto">{playOutput}</pre>
-                          </details>
-                        )}
-                      </div>
-                    )}
-
-                    {/* 7. Rerank Result */}
-                    {playModality === 'rerank' && (
-                      <div className="h-full flex flex-col justify-between">
-                        {rerankResult ? (
-                          <div className="space-y-4">
-                            <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-200">
-                              <div className="flex items-center space-x-3 text-xs">
-                                <span className="font-semibold text-slate-700">命中排序:</span>
-                                <span className="px-2 py-0.5 bg-amber-50 text-amber-700 font-mono font-bold rounded border border-amber-200">
-                                  Top {rerankResult.results?.length || 0}
-                                </span>
-                                {rerankResult.usage && (
-                                  <>
-                                    <span className="font-semibold text-slate-700">总 Token:</span>
-                                    <span className="font-mono font-bold text-indigo-600">
-                                      {rerankResult.usage.total_tokens || rerankResult.usage.prompt_tokens || 0}
-                                    </span>
-                                  </>
-                                )}
-                              </div>
-                              <button
-                                onClick={() => copyToClipboard(JSON.stringify(rerankResult.results, null, 2))}
-                                className="px-3 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg text-xs font-medium flex items-center space-x-1"
-                              >
-                                <Copy className="w-3.5 h-3.5" />
-                                <span>复制重排数据</span>
-                              </button>
-                            </div>
-
-                            {/* Ranked Cards */}
-                            <div className="space-y-3 overflow-y-auto max-h-[460px] pr-1">
-                              {(rerankResult.results || []).map((item, idx) => {
-                                const rawScore = Number(item.relevance_score || 0);
-                                const pct = Math.min(100, Math.max(0, rawScore > 1 ? rawScore : rawScore * 100));
-                                const docText = typeof item.document === 'object' ? item.document?.text : item.document;
-                                return (
-                                  <div key={idx} className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs space-y-2.5">
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center space-x-2">
-                                        <span className={`px-2.5 py-0.5 rounded text-xs font-bold font-mono ${
-                                          idx === 0
-                                            ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                                            : idx === 1
-                                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                            : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                                        }`}>
-                                          #{idx + 1}
-                                        </span>
-                                        <span className="text-xs text-slate-400 font-mono">原文档序号: #{item.index}</span>
-                                      </div>
-                                      <span className="text-xs font-mono font-bold text-slate-800">
-                                        得分: <span className="text-amber-600">{rawScore.toFixed(4)}</span>
-                                      </span>
-                                    </div>
-                                    <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                                      <div
-                                        className={`h-full rounded-full transition-all duration-500 ${
-                                          idx === 0 ? 'bg-amber-500' : idx === 1 ? 'bg-emerald-500' : 'bg-indigo-500'
-                                        }`}
-                                        style={{ width: `${pct}%` }}
-                                      />
-                                    </div>
-                                    {docText && (
-                                      <div className="text-xs text-slate-700 leading-relaxed font-sans bg-slate-50/80 p-3 rounded-lg border border-slate-100">
-                                        {docText}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-slate-400 text-center py-32 font-sans flex flex-col items-center justify-center space-y-2">
-                            <Sliders className="w-8 h-8 text-amber-400 stroke-1" />
-                            <span>暂无重排结果</span>
-                          </div>
-                        )}
-
-                        {playOutput && (
-                          <details className="w-full mt-4 text-xs font-mono bg-white p-3 rounded-xl border border-slate-200">
-                            <summary className="cursor-pointer text-slate-500 font-semibold">查看接口完整 JSON 响应</summary>
-                            <pre className="mt-2 text-slate-700 whitespace-pre-wrap max-h-48 overflow-y-auto">{playOutput}</pre>
-                          </details>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Input & Action Bar */}
-                  <div className="pt-4 flex space-x-3">
-                    {playModality === 'chat' && (
-                      <>
-                        <textarea
-                          rows={2}
-                          value={playPrompt}
-                          onChange={(e) => setPlayPrompt(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && e.ctrlKey) handleSendChat();
-                          }}
-                          placeholder="输入测试提示词... (Ctrl+Enter 发送)"
-                          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:bg-white resize-none"
-                        />
-                        <button
-                          onClick={handleSendChat}
-                          disabled={playLoading}
-                          className="px-6 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-semibold flex items-center justify-center space-x-2 transition shadow-sm"
-                        >
-                          {playLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                          <span>发送</span>
-                        </button>
-                      </>
-                    )}
-
-                    {playModality === 'images' && (
-                      <>
-                        <textarea
-                          rows={2}
-                          value={imgPrompt}
-                          onChange={(e) => setImgPrompt(e.target.value)}
-                          placeholder="输入画面描述词 Prompt..."
-                          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-slate-800 focus:outline-none focus:border-pink-500 focus:bg-white resize-none"
-                        />
-                        <button
-                          onClick={handleGenerateImage}
-                          disabled={playLoading}
-                          className="px-6 bg-pink-600 hover:bg-pink-700 disabled:opacity-50 text-white rounded-xl font-semibold flex items-center justify-center space-x-2 transition shadow-sm"
-                        >
-                          {playLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
-                          <span>生成图片</span>
-                        </button>
-                      </>
-                    )}
-
-                    {playModality === 'audio_speech' && (
-                      <>
-                        <textarea
-                          rows={2}
-                          value={ttsInput}
-                          onChange={(e) => setTtsInput(e.target.value)}
-                          placeholder="输入要转成语音的文本内容..."
-                          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-slate-800 focus:outline-none focus:border-cyan-500 focus:bg-white resize-none"
-                        />
-                        <button
-                          onClick={handleGenerateSpeech}
-                          disabled={playLoading}
-                          className="px-6 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white rounded-xl font-semibold flex items-center justify-center space-x-2 transition shadow-sm"
-                        >
-                          {playLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Volume2 className="w-4 h-4" />}
-                          <span>合成语音</span>
-                        </button>
-                      </>
-                    )}
-
-                    {playModality === 'audio_transcription' && (
-                      <button
-                        onClick={handleTranscribeAudio}
-                        disabled={playLoading || !sttFile}
-                        className="w-full py-3 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-xl font-semibold flex items-center justify-center space-x-2 transition shadow-sm"
-                      >
-                        {playLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
-                        <span>开始语音识别并转录</span>
-                      </button>
-                    )}
-
-                    {playModality === 'videos' && (
-                      <>
-                        <textarea
-                          rows={2}
-                          value={videoPrompt}
-                          onChange={(e) => setVideoPrompt(e.target.value)}
-                          placeholder="输入视频场景描述词 Prompt..."
-                          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-slate-800 focus:outline-none focus:border-purple-500 focus:bg-white resize-none"
-                        />
-                        <button
-                          onClick={handleGenerateVideo}
-                          disabled={playLoading}
-                          className="px-6 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl font-semibold flex items-center justify-center space-x-2 transition shadow-sm"
-                        >
-                          {playLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Video className="w-4 h-4" />}
-                          <span>创建视频任务</span>
-                        </button>
-                      </>
-                    )}
-
-                    {playModality === 'embeddings' && (
-                      <>
-                        <textarea
-                          rows={2}
-                          value={embedInput}
-                          onChange={(e) => setEmbedInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && e.ctrlKey) handleGenerateEmbedding();
-                          }}
-                          placeholder="输入待向量化文本，支持换行批量输入... (Ctrl+Enter 发送)"
-                          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:bg-white resize-none"
-                        />
-                        <button
-                          onClick={handleGenerateEmbedding}
-                          disabled={playLoading || !embedInput.trim()}
-                          className="px-6 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-semibold flex items-center justify-center space-x-2 transition shadow-sm text-sm"
-                        >
-                          {playLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                          <span>生成向量</span>
-                        </button>
-                      </>
-                    )}
-
-                    {playModality === 'rerank' && (
-                      <div className="flex-1 flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
-                        <div className="flex-1 space-y-2">
-                          <input
-                            type="text"
-                            value={rerankQuery}
-                            onChange={(e) => setRerankQuery(e.target.value)}
-                            placeholder="输入检索 Query 查询语句..."
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-amber-500 focus:bg-white font-medium"
-                          />
-                          <textarea
-                            rows={2}
-                            value={rerankDocs}
-                            onChange={(e) => setRerankDocs(e.target.value)}
-                            placeholder="输入候选文档列表（使用 --- 隔开每篇文档）..."
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:outline-none focus:border-amber-500 focus:bg-white resize-none font-mono"
-                          />
-                        </div>
-                        <button
-                          onClick={handleExecuteRerank}
-                          disabled={playLoading || !rerankQuery.trim() || !rerankDocs.trim()}
-                          className="px-6 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-xl font-semibold flex items-center justify-center space-x-2 transition shadow-sm text-sm shrink-0 self-end sm:self-stretch"
-                        >
-                          {playLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sliders className="w-4 h-4" />}
-                          <span>执行重排</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <PlaygroundView
+              keys={keys}
+              models={models}
+              modelRoutes={modelRoutes}
+              adminFetch={adminFetch}
+              showToast={showToast}
+              initialModel={playModel}
+              initialModality={playModality}
+            />
           )}
 
           {/* 6. DOCS TAB */}
-          {/* 6. DOCS TAB */}
           {currentTab === 'docs' && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              {/* Category sidebar */}
-              <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-3xl p-4 space-y-1 shadow-xs h-fit">
-                <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-3 mb-2 block">接入与规范文档</span>
-                <button
-                  onClick={() => setDocsSection('architecture')}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition ${
-                    docsSection === 'architecture'
-                      ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/60'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <Shield className="w-3.5 h-3.5 text-indigo-500" />
-                  <span>核心架构与高可用设计</span>
-                </button>
-                <button
-                  onClick={() => setDocsSection('quickstart')}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition ${
-                    docsSection === 'quickstart'
-                      ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/60'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <Code className="w-3.5 h-3.5" />
-                  <span>OpenAI SDK 极速接入</span>
-                </button>
-                <button
-                  onClick={() => setDocsSection('claude')}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition ${
-                    docsSection === 'claude'
-                      ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/60'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <Terminal className="w-3.5 h-3.5" />
-                  <span>Claude Messages API 接入</span>
-                </button>
-                <button
-                  onClick={() => setDocsSection('multimodal')}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition ${
-                    docsSection === 'multimodal'
-                      ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/60'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <ImageIcon className="w-3.5 h-3.5" />
-                  <span>多模态 (图/音/视) 接口规范</span>
-                </button>
-                <button
-                  onClick={() => setDocsSection('cascading')}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition ${
-                    docsSection === 'cascading'
-                      ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/60'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <Layers className="w-3.5 h-3.5" />
-                  <span>级联模型映射语法</span>
-                </button>
-                <button
-                  onClick={() => setDocsSection('rerank')}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition ${
-                    docsSection === 'rerank'
-                      ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/60'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <Sliders className="w-3.5 h-3.5" />
-                  <span>Rerank 检索重排规范</span>
-                </button>
-                <button
-                  onClick={() => setDocsSection('deploy')}
-                  className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition ${
-                    docsSection === 'deploy'
-                      ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/60'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <Server className="w-3.5 h-3.5" />
-                  <span>Docker & K8s 高可用部署</span>
-                </button>
-              </div>
-
-              {/* Doc Content */}
-              <div className="md:col-span-3 bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-3xl p-6 shadow-xs space-y-6">
-                {docsSection === 'architecture' && (
-                  <div className="space-y-6">
-                    <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
-                      <div className="flex items-center space-x-2">
-                        <Shield className="w-5 h-5 text-indigo-500" />
-                        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                          Airoute 核心架构与高可用设计规范
-                        </h3>
-                      </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                        为企业私有化部署打造的超高性能、全双工协议转换与零感知容灾大模型统一接入网关。
-                      </p>
-                    </div>
-
-                    {/* Feature 1: Pre-Token Fallback */}
-                    <div className="p-5 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800/60 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-bold text-sm text-indigo-900 dark:text-indigo-200 flex items-center space-x-2">
-                          <Shield className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                          <span>1. 首字前无感容灾兜底 (Pre-Token Fallback)</span>
-                        </h4>
-                        <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-semibold">
-                          Zero-Perception Failover
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
-                        遭遇上游 429 (并发限流)、500/502/503 (服务端异常) 或网络连接超时，首字分块发出前毫秒内切换到备份 Provider，客户端完全无感，连接不中断，零错误率。
-                      </p>
-                      <div className="bg-white dark:bg-[#0b0f19] p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-900/50 text-xs space-y-2">
-                        <span className="font-semibold text-slate-800 dark:text-slate-200 block">容灾工作流时序:</span>
-                        <div className="font-mono text-[11px] text-slate-600 dark:text-slate-400 space-y-1">
-                          <div>[客户端请求] ➔ Airoute ➔ 首选渠道 A (Primary Provider)</div>
-                          <div className="text-amber-600 dark:text-amber-400">↳ 发生 429 Rate Limit / 500 错误 (未输出首字 chunk)</div>
-                          <div className="text-emerald-600 dark:text-emerald-400">↳ 网关拦截异常并在 15ms 内重定向至备份渠道 B (Backup Provider)</div>
-                          <div>↳ 客户端正常接收首字分块及完整 SSE 数据流，业务层调用成功率稳定保持 100%</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Feature 2: Protocol Translation */}
-                    <div className="p-5 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-bold text-sm text-emerald-900 dark:text-emerald-200 flex items-center space-x-2">
-                          <Cpu className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                          <span>2. 智能探测 & 全双工协议转换 (Full-Duplex Protocol Matrix)</span>
-                        </h4>
-                        <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 font-semibold">
-                          Bi-Directional Translation
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
-                        原生支持 OpenAI、Claude Messages、Gemini 与主流推理协议，并实现全双工流式实时转译。客户端使用任何主流 SDK 均可自由互通！
-                      </p>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse text-xs">
-                          <thead>
-                            <tr className="border-b border-emerald-200/60 dark:border-emerald-800/60 text-slate-500 dark:text-slate-400">
-                              <th className="py-2 px-3 font-semibold">下游客户端调用协议</th>
-                              <th className="py-2 px-3 font-semibold">网关接入端点</th>
-                              <th className="py-2 px-3 font-semibold">支持的上游后端提供商</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-emerald-100 dark:divide-emerald-900/40 text-[11px]">
-                            <tr>
-                              <td className="py-2 px-3 font-mono text-indigo-600 dark:text-indigo-400 font-semibold">OpenAI Chat</td>
-                              <td className="py-2 px-3 font-mono">/v1/chat/completions</td>
-                              <td className="py-2 px-3">OpenAI, DeepSeek, Claude, Gemini 及主流推理集群</td>
-                            </tr>
-                            <tr>
-                              <td className="py-2 px-3 font-mono text-indigo-600 dark:text-indigo-400 font-semibold">OpenAI Responses</td>
-                              <td className="py-2 px-3 font-mono">/v1/responses</td>
-                              <td className="py-2 px-3">新代智能体协议，支持全格式转译与流式推导</td>
-                            </tr>
-                            <tr>
-                              <td className="py-2 px-3 font-mono text-indigo-600 dark:text-indigo-400 font-semibold">Claude Messages</td>
-                              <td className="py-2 px-3 font-mono">/v1/messages</td>
-                              <td className="py-2 px-3">Anthropic 官方、OpenAI 格式上游、主流私有推理集群</td>
-                            </tr>
-                            <tr>
-                              <td className="py-2 px-3 font-mono text-indigo-600 dark:text-indigo-400 font-semibold">Google Gemini</td>
-                              <td className="py-2 px-3 font-mono">/v1beta/models/*</td>
-                              <td className="py-2 px-3">Gemini 官方、OpenAI 格式上游全双工转译</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-
-                    {/* Feature 3: Multimodal Pipeline */}
-                    <div className="p-5 rounded-2xl bg-purple-50/50 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-800/60 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-bold text-sm text-purple-900 dark:text-purple-200 flex items-center space-x-2">
-                          <Layers className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                          <span>3. 全模态统一管道 (Unified Pipeline)</span>
-                        </h4>
-                        <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-semibold">
-                          Unified Pipeline
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
-                        Chat 对话、AI 生图 (DALL-E / Flux)、语音合成 (TTS)、Whisper 语音转录与翻译、视频生成均采用统一调度分发，高内聚低耦合，共享熔断、鉴权与计量基础设施。
-                      </p>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-center">
-                        <div className="p-2.5 rounded-xl bg-white dark:bg-[#0b0f19] border border-purple-100 dark:border-purple-900/50">
-                          <span className="text-xs font-bold text-purple-700 dark:text-purple-300">💬 文本/对话</span>
-                          <p className="text-[10px] text-slate-400 mt-0.5">SSE 零拷贝流式</p>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-white dark:bg-[#0b0f19] border border-purple-100 dark:border-purple-900/50">
-                          <span className="text-xs font-bold text-pink-700 dark:text-pink-300">🎨 图像生成</span>
-                          <p className="text-[10px] text-slate-400 mt-0.5">/v1/images/generations</p>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-white dark:bg-[#0b0f19] border border-purple-100 dark:border-purple-900/50">
-                          <span className="text-xs font-bold text-cyan-700 dark:text-cyan-300">🔊 语音 TTS/STT</span>
-                          <p className="text-[10px] text-slate-400 mt-0.5">音频二进制直通流</p>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-white dark:bg-[#0b0f19] border border-purple-100 dark:border-purple-900/50">
-                          <span className="text-xs font-bold text-teal-700 dark:text-teal-300">🎬 视频生成</span>
-                          <p className="text-[10px] text-slate-400 mt-0.5">异步任务与轮询</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Feature 4: High Availability */}
-                    <div className="p-5 rounded-2xl bg-sky-50/50 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-800/60 space-y-2">
-                      <h4 className="font-bold text-sm text-sky-900 dark:text-sky-200 flex items-center space-x-2">
-                        <Server className="w-4 h-4 text-sky-600 dark:text-sky-400" />
-                        <span>4. Zero-DB 热路径与双节点双活高可用架构</span>
-                      </h4>
-                      <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
-                        数据面读操作 100% 内存无锁运行，无任何数据库 IO 延迟；控制面配置变更通过 WAL 模式原子写入并毫秒级广播至内存。前置 Nginx 对 2 个网关副本进行加权轮询，实现节点故障秒级隔离与 99.99% 高可用。
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {docsSection === 'quickstart' && (() => {
-                  const docOrigin = getGatewayOrigin();
-                  const docBaseUrl = `${docOrigin}/v1`;
-                  return (
-                  <div className="space-y-4">
-                    <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
-                      <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Python OpenAI SDK 接入指南</h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">将官方 OpenAI SDK 的 base_url 直接指向 Airoute 网关入口即可（自适应当前访问域名与端口）。</p>
-                    </div>
-
-                    <div className="relative group">
-                      <pre className="p-4 bg-slate-900 text-slate-100 rounded-xl text-xs font-mono overflow-x-auto leading-relaxed">
-{`from openai import OpenAI
-
-client = OpenAI(
-    base_url="${docBaseUrl}",  # Airoute 网关入口 (自适应当前主机与端口)
-    api_key="sk-airoute-xxxx",               # 在工作台签发的客户端访问密钥
-)
-
-response = client.chat.completions.create(
-    model="deepseek-v3",                 # 支持任意映射模型
-    messages=[{"role": "user", "content": "你好！"}],
-    stream=True,                         # 原生毫秒级 SSE 流式传输
-)
-
-for chunk in response:
-    content = chunk.choices[0].delta.content or ""
-    print(content, end="", flush=True)`}
-                      </pre>
-                      <button
-                        onClick={() => copyToClipboard(`from openai import OpenAI\n\nclient = OpenAI(\n    base_url="${docBaseUrl}",\n    api_key="sk-airoute-xxxx",\n)\n\nresponse = client.chat.completions.create(\n    model="deepseek-v3",\n    messages=[{"role": "user", "content": "你好！"}],\n    stream=True,\n)\n\nfor chunk in response:\n    content = chunk.choices[0].delta.content or ""\n    print(content, end="", flush=True)`)}
-                        className="absolute top-3 right-3 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] font-mono flex items-center space-x-1"
-                      >
-                        <Copy className="w-3 h-3" />
-                        <span>复制</span>
-                      </button>
-                    </div>
-
-                    <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs text-amber-900 dark:text-amber-200 space-y-1">
-                      <span className="font-bold flex items-center space-x-1">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                        <span>DeepSeek-R1 / OpenAI o1 思维链透明透传:</span>
-                      </span>
-                      <p className="leading-relaxed">
-                        网关在流式与非流式模式下均原生支持 <code>reasoning_content</code> 字段的零拷贝透传。前端应用或 NextChat / LobeChat 可直接原生渲染展开思维链推导卡片。
-                      </p>
-                    </div>
-
-                    <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
-                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-2">cURL 极速调试命令:</h4>
-                      <pre className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-mono text-slate-700 dark:text-slate-300 overflow-x-auto">
-{`curl -X POST "${docBaseUrl}/chat/completions" \\
-  -H "Authorization: Bearer sk-airoute-xxxx" \\
-  -H "Content-Type: application/json" \\
-  -d '{"model": "deepseek-v3", "messages": [{"role": "user", "content": "Ping"}], "stream": true}'`}
-                      </pre>
-                    </div>
-                  </div>
-                  );
-                })()}
-
-                {docsSection === 'claude' && (() => {
-                  const docOrigin = getGatewayOrigin();
-                  return (
-                  <div className="space-y-4">
-                    <div className="border-b border-slate-100 pb-3">
-                      <h3 className="text-base font-bold text-slate-900">Anthropic Claude Messages API 接入</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">原生支持 Claude Code、Cursor、Cline 等工具直接使用 Anthropic 原生协议调用任何异构下游！</p>
-                    </div>
-
-                    <pre className="p-4 bg-slate-900 text-slate-100 rounded-xl text-xs font-mono overflow-x-auto leading-relaxed">
-{`import anthropic
-
-client = anthropic.Anthropic(
-    base_url="${docOrigin}",  # 网关根路径，将自动请求 /v1/messages
-    api_key="sk-airoute-xxxx",            # 在工作台签发的客户端访问密钥
-)
-
-message = client.messages.create(
-    model="claude-3-7-sonnet",
-    max_tokens=1024,
-    messages=[
-        {"role": "user", "content": "请介绍量子计算的核心原理。"}
-    ]
-)
-print(message.content[0].text)`}
-                    </pre>
-
-                    <div className="p-4 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 rounded-xl text-xs text-indigo-900 dark:text-indigo-200 space-y-1">
-                      <span className="font-bold">💡 全双工协议转换特性:</span>
-                      <p>
-                        即使您的下游供应商是仅支持 OpenAI 协议的私有集群，客户端通过 Anthropic SDK 请求时，网关也会在内存零拷贝将 Claude Messages 双向转换为 OpenAI Completions 并在返回时转回 Anthropic 格式。
-                      </p>
-                    </div>
-
-                    <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
-                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">Anthropic Token 预估计算 (/v1/messages/count_tokens):</h4>
-                      <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl text-xs font-mono overflow-x-auto">
-{`curl -X POST "${docOrigin}/v1/messages/count_tokens" \\
-  -H "x-api-key: sk-airoute-xxxx" \\
-  -H "anthropic-version: 2023-06-01" \\
-  -H "Content-Type: application/json" \\
-  -d '{"model": "claude-3-7-sonnet", "messages": [{"role": "user", "content": "Hello world"}]}'
-
-# 响应示例:
-# {"input_tokens": 12}`}
-                      </pre>
-                    </div>
-                  </div>
-                  );
-                })()}
-
-                {docsSection === 'multimodal' && (
-                  <div className="space-y-4">
-                    <div className="border-b border-slate-100 pb-3">
-                      <h3 className="text-base font-bold text-slate-900">多模态 API 接口规范</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">生图、语音合成 TTS、语音识别 STT、语音翻译、视频生成与轮询均通过统一熔断与分发管道提供。</p>
-                    </div>
-
-                    <div className="space-y-3 text-xs">
-                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                        <span className="font-bold text-pink-700">🎨 1. AI 图像生成 (/v1/images/generations)</span>
-                        <pre className="mt-1 font-mono text-slate-700">
-{`POST /v1/images/generations
-{"model": "flux-1-schnell", "prompt": "cyberpunk city, 8k", "size": "1024x1024"}`}
-                        </pre>
-                      </div>
-
-                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                        <span className="font-bold text-cyan-700">🔊 2. 语音合成 TTS (/v1/audio/speech)</span>
-                        <pre className="mt-1 font-mono text-slate-700">
-{`POST /v1/audio/speech
-{"model": "tts-1", "input": "你好世界", "voice": "alloy", "response_format": "mp3"}
-(返回二进制流式音频流，零内存占用直连客户端)`}
-                        </pre>
-                      </div>
-
-                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                        <span className="font-bold text-teal-700">🎙️ 3. Whisper 语音转录 (/v1/audio/transcriptions)</span>
-                        <pre className="mt-1 font-mono text-slate-700">
-{`POST /v1/audio/transcriptions (multipart/form-data)
-file=@recording.mp3; model=whisper-large-v3-turbo`}
-                        </pre>
-                      </div>
-
-                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                        <span className="font-bold text-teal-700">🌐 4. Whisper 语音翻译 (/v1/audio/translations)</span>
-                        <pre className="mt-1 font-mono text-slate-700">
-{`POST /v1/audio/translations (multipart/form-data)
-file=@foreign_speech.mp3; model=whisper-large-v3-turbo
-(将源语言音频直接翻译并转录为英文文本)`}
-                        </pre>
-                      </div>
-
-                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                        <span className="font-bold text-purple-700">🎬 5. 视频生成与轮询 (/v1/videos/generations & /v1/videos/tasks/:id)</span>
-                        <pre className="mt-1 font-mono text-slate-700">
-{`POST /v1/videos/generations -> 返回 {"task_id": "task_xxx", "status": "PENDING"}
-GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
-                        </pre>
-                      </div>
-
-                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                        <span className="font-bold text-emerald-700">🧠 6. 文本向量化 Embeddings (/v1/embeddings)</span>
-                        <pre className="mt-1 font-mono text-slate-700">
-{`POST /v1/embeddings
-{"model": "text-embedding-3-small", "input": "企业级超高性能大模型网关"}
-(支持单文本或数组批量输入，自动适配各类私有集群、Ollama、Gemini 与 OpenAI 原生接口)`}
-                        </pre>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {docsSection === 'cascading' && (
-                  <div className="space-y-4">
-                    <div className="border-b border-slate-100 pb-3">
-                      <h3 className="text-base font-bold text-slate-900">级联模型别名与通配映射</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">不设任何斜杠深度限制，支持多组织层级命名与任意前缀重写。</p>
-                    </div>
-
-                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-3">
-                      <h4 className="font-bold text-slate-900">映射格式与示例:</h4>
-                      <ul className="list-disc pl-5 space-y-1.5 text-slate-700">
-                        <li>
-                          <strong>精确别名重写:</strong> <code>yy/xxx/xx:xxx/xx</code> <br />
-                          客户端请求 <code>yy/xxx/xx</code>，发往上游时自动零拷贝重写为 <code>xxx/xx</code>。
-                        </li>
-                        <li>
-                          <strong>前缀通配映射:</strong> <code>org/dept/*:*</code> <br />
-                          客户端请求 <code>org/dept/v1/deepseek-ai/DeepSeek-V4-Pro</code>，自动剥离前缀发往目标集群。
-                        </li>
-                        <li>
-                          <strong>服务商自动前缀:</strong> <code>&lt;ProviderName&gt;/&lt;Model&gt;</code> <br />
-                          当存在多个提供商均提供 <code>gpt-6</code> 时，客户端可直接指定 <code>openai-us/gpt-6</code> 精准定向路由！
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-                )}
-
-                {docsSection === 'rerank' && (() => {
-                  const docOrigin = getGatewayOrigin();
-                  return (
-                  <div className="space-y-4">
-                    <div className="border-b border-slate-100 pb-3">
-                      <h3 className="text-base font-bold text-slate-900">Rerank 检索重排 API 规范 (/v1/rerank)</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">全面兼容 Cohere、Hugging Face TEI、Xinference 与 Infinity 等重排标准协议。</p>
-                    </div>
-
-                    <div className="space-y-3 text-xs">
-                      <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                        <span className="font-bold text-slate-900">1. 重排请求格式 (POST /v1/rerank):</span>
-                        <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl font-mono overflow-x-auto text-[11px] leading-relaxed">
-{`curl -X POST ${docOrigin}/v1/rerank \\
-  -H "Authorization: Bearer sk-airoute-xxxx" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "model": "bge-reranker-large",
-    "query": "什么是企业级大模型网关的高可用与容灾设计？",
-    "documents": [
-      "Airoute 采用全双工流式转发，首字分块前支持透明故障转移与熔断兜底。",
-      "今天天气非常晴朗，公园里的樱花盛开了，很适合去散步或野餐。",
-      "基于 Raft 协议的分布式数据库能保证网络分区状态下的强一致性与多副本高可用。"
-    ],
-    "top_n": 2,
-    "return_documents": true
-  }'`}
-                        </pre>
-                      </div>
-
-                      <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                        <span className="font-bold text-slate-900">2. 重排结果响应格式 (JSON):</span>
-                        <pre className="p-3 bg-slate-900 text-emerald-400 rounded-xl font-mono overflow-x-auto text-[11px] leading-relaxed">
-{`{
-  "id": "rerank-a8c1f9b2",
-  "results": [
-    {
-      "index": 0,
-      "relevance_score": 0.9856,
-      "document": {
-        "text": "Airoute 采用全双工流式转发，首字分块前支持透明故障转移与熔断兜底。"
-      }
-    },
-    {
-      "index": 2,
-      "relevance_score": 0.3210,
-      "document": {
-        "text": "基于 Raft 协议的分布式数据库能保证网络分区状态下的强一致性与多副本高可用。"
-      }
-    }
-  ],
-  "usage": {
-    "prompt_tokens": 128,
-    "total_tokens": 128
-  }
-}`}
-                        </pre>
-                      </div>
-
-                      <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
-                        <span className="font-bold">🎯 高可用熔断与透明兜底保障:</span>
-                        <p className="leading-relaxed">
-                          当首选重排提供商（如私有部署的集群实例）发生 OOM、503 或网络异常时，Airoute 会在毫秒级内自动安全切换至备选重排提供商，为企业级 RAG 知识库检索流水线提供全天候 99.99% 的 SLA 稳定可用保障。
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  );
-                })()}
-
-                {docsSection === 'deploy' && (
-                  <div className="space-y-4">
-                    <div className="border-b border-slate-100 pb-3">
-                      <h3 className="text-base font-bold text-slate-900">生产环境高可用集群部署 (HA)</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">提供开箱即用的多副本 Docker Compose 与生产级 Kubernetes Helm Chart。</p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <h4 className="text-xs font-bold text-slate-800">1. Docker Compose (2 副本 Gateway + Nginx 负载均衡):</h4>
-                      <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl text-xs font-mono overflow-x-auto">
-docker compose up -d --build
-                      </pre>
-
-                      <h4 className="text-xs font-bold text-slate-800 pt-2">2. Kubernetes Helm 一键部署:</h4>
-                      <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl text-xs font-mono overflow-x-auto">
-helm install airoute ./helm/airoute -n gateway --create-namespace
-                      </pre>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+            <DocsView showToast={showToast} />
           )}
         </div>
       </main>
@@ -5147,6 +2753,29 @@ helm install airoute ./helm/airoute -n gateway --create-namespace
           fetchData(token);
           fetchLogs({}, token);
         }}
+      />
+
+      {/* 3-Step Guided Developer Onboarding Modal */}
+      <OnboardingModal
+        isOpen={showOnboardingModal}
+        onClose={() => setShowOnboardingModal(false)}
+        keys={keys}
+        models={models}
+        onNavigateToPlayground={(m) => {
+          setPlayModel(m);
+          setCurrentTab('playground');
+        }}
+        showToast={showToast}
+      />
+
+      {/* Visual Routing Topology & Failover Modal */}
+      <VisualTopologyModal
+        isOpen={showTopologyModal}
+        onClose={() => setShowTopologyModal(false)}
+        channels={channels}
+        modelRoutes={modelRoutes}
+        onTestChannel={handleTestChannel}
+        showToast={showToast}
       />
 
       {/* Global Command Palette (Cmd+K) */}
