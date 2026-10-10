@@ -35,7 +35,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/airoute ./cmd/air
 # ==============================================================================
 # Stage 3: Minimal Production Image
 # ==============================================================================
-FROM alpine:3.21
+FROM alpine:3.24
 
 RUN apk add --no-cache ca-certificates tzdata curl && \
     addgroup -S gateway && adduser -S gateway -G gateway
