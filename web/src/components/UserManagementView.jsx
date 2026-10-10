@@ -22,7 +22,8 @@ import {
   Coins
 } from 'lucide-react';
 
-export default function UserManagementView({ adminUser, adminFetch, showToast }) {
+export default function UserManagementView({ adminUser, adminFetch, showToast, lang = 'zh', t }) {
+  const isZh = lang === 'zh';
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
@@ -371,7 +372,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-lg font-bold text-slate-900 tracking-tight">
-            用户管理
+            {isZh ? '用户管理' : 'User Management'}
           </h2>
         </div>
 
@@ -385,7 +386,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
             className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm hover:shadow transition cursor-pointer"
           >
             <UserPlus className="w-4 h-4" />
-            <span>新建用户</span>
+            <span>{isZh ? '新建用户' : 'New User'}</span>
           </button>
         </div>
       </div>
@@ -394,7 +395,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-5 rounded-2xl bg-white border border-slate-100 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-xs font-semibold text-slate-400">总注册用户</div>
+            <div className="text-xs font-semibold text-slate-400">{isZh ? '总注册用户' : 'Total Users'}</div>
             <div className="text-2xl font-black text-slate-900 mt-1">{totalUsers}</div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
@@ -404,7 +405,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
 
         <div className="p-5 rounded-2xl bg-white border border-slate-100 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-xs font-semibold text-slate-400">超级管理员</div>
+            <div className="text-xs font-semibold text-slate-400">{isZh ? '超级管理员' : 'Administrators'}</div>
             <div className="text-2xl font-black text-purple-700 mt-1">{adminCount}</div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600">
@@ -414,7 +415,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
 
         <div className="p-5 rounded-2xl bg-white border border-slate-100 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-xs font-semibold text-slate-400">普通用户</div>
+            <div className="text-xs font-semibold text-slate-400">{isZh ? '普通用户' : 'Regular Users'}</div>
             <div className="text-2xl font-black text-emerald-700 mt-1">{regularCount}</div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
@@ -424,7 +425,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
 
         <div className="p-5 rounded-2xl bg-white border border-slate-100 shadow-xs flex items-center justify-between">
           <div>
-            <div className="text-xs font-semibold text-slate-400">已锁定账号</div>
+            <div className="text-xs font-semibold text-slate-400">{isZh ? '已锁定账号' : 'Locked Accounts'}</div>
             <div className="text-2xl font-black text-rose-700 mt-1">{lockedCount}</div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600">
@@ -432,8 +433,6 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
           </div>
         </div>
       </div>
-
-
 
       {/* 3. Search and Filters */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">
@@ -444,7 +443,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
               type="text"
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
-              placeholder="搜索用户名、邮箱、分组名称..."
+              placeholder={isZh ? '搜索用户名、邮箱、分组名称...' : 'Search username, email, group...'}
               className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-indigo-500 focus:bg-white"
             />
           </div>
@@ -460,7 +459,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              全部
+              {isZh ? '全部' : 'All'}
             </button>
             <button
               onClick={() => setRoleFilter('admin')}
@@ -470,7 +469,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              管理员
+              {isZh ? '管理员' : 'Admins'}
             </button>
             <button
               onClick={() => setRoleFilter('user')}
@@ -480,7 +479,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              普通用户
+              {isZh ? '普通用户' : 'Users'}
             </button>
           </div>
 
@@ -488,7 +487,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
             onClick={fetchUsers}
             disabled={loading}
             className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
-            title="刷新列表"
+            title={isZh ? '刷新列表' : 'Refresh list'}
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-indigo-600' : ''}`} />
           </button>
@@ -501,13 +500,13 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-slate-100 text-slate-400 uppercase font-bold bg-slate-50/50">
-                <th className="py-3.5 px-4">用户标识与邮箱</th>
-                <th className="py-3.5 px-4">角色</th>
-                <th className="py-3.5 px-4">状态</th>
-                <th className="py-3.5 px-4">钱包余额 / 额度</th>
-                <th className="py-3.5 px-4" title="管理员为该用户分配的保障等级，用户创建 Key 时可享此等级或默认组">账号保障分组</th>
-                <th className="py-3.5 px-4">注册时间</th>
-                <th className="py-3.5 px-4 text-right">操作</th>
+                <th className="py-3.5 px-4">{isZh ? '用户标识与邮箱' : 'User & Email'}</th>
+                <th className="py-3.5 px-4">{isZh ? '角色' : 'Role'}</th>
+                <th className="py-3.5 px-4">{isZh ? '状态' : 'Status'}</th>
+                <th className="py-3.5 px-4">{isZh ? '钱包余额 / 额度' : 'Balance / Quota'}</th>
+                <th className="py-3.5 px-4" title={isZh ? '管理员为该用户分配的保障等级，用户创建 Key 时可享此等级或默认组' : 'Tier assigned by admin, user keys can enjoy this tier or default'}>{isZh ? '账号保障分组' : 'Account Tier'}</th>
+                <th className="py-3.5 px-4">{isZh ? '注册时间' : 'Registered At'}</th>
+                <th className="py-3.5 px-4 text-right">{isZh ? '操作' : 'Actions'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -515,7 +514,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                 <tr>
                   <td colSpan="7" className="py-12 text-center text-slate-400">
                     <RefreshCw className="w-5 h-5 animate-spin text-indigo-600 mx-auto mb-2" />
-                    <span>正在加载用户数据...</span>
+                    <span>{isZh ? '正在加载用户数据...' : 'Loading users...'}</span>
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
@@ -542,12 +541,12 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                               <span>{u.username}</span>
                               {isCurrentAdmin && (
                                 <span className="text-[10px] px-1.5 py-0.2 bg-indigo-50 text-indigo-600 rounded-md font-semibold">
-                                  当前登录
+                                  {isZh ? '当前登录' : 'Current'}
                                 </span>
                               )}
                             </div>
                             <div className="text-[11px] text-slate-400">
-                              {u.email || '未绑定邮箱'}
+                              {u.email || (isZh ? '未绑定邮箱' : 'No email')}
                             </div>
                           </div>
                         </div>
@@ -563,10 +562,10 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                               ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
                               : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                           } disabled:opacity-75 disabled:cursor-not-allowed`}
-                          title={isSysAdmin ? '系统默认管理员不可修改角色' : (isCurrentAdmin ? '当前登录账号不可降级自己' : '点击切换用户角色')}
+                          title={isSysAdmin ? (isZh ? '系统默认管理员不可修改角色' : 'Cannot change role of system admin') : (isCurrentAdmin ? (isZh ? '当前登录账号不可降级自己' : 'Cannot demote current user') : (isZh ? '点击切换用户角色' : 'Switch role'))}
                         >
-                          <option value="user">普通用户 (user)</option>
-                          <option value="admin">超级管理员 (admin)</option>
+                          <option value="user">{isZh ? '普通用户 (user)' : 'Regular User (user)'}</option>
+                          <option value="admin">{isZh ? '超级管理员 (admin)' : 'Administrator (admin)'}</option>
                         </select>
                       </td>
 
@@ -578,14 +577,14 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                               : 'bg-emerald-100 text-emerald-800'
                           }`}
                         >
-                          {isLocked ? '已锁定 (禁止调用)' : '正常使用'}
+                          {isLocked ? (isZh ? '已锁定 (禁止调用)' : 'Locked') : (isZh ? '正常使用' : 'Active')}
                         </span>
                       </td>
 
                       <td className="py-3 px-4">
                         <div className="flex items-center space-x-2">
                           {u.role === 'admin' ? (
-                            <span className="font-bold text-indigo-600">¥ 无限额度</span>
+                            <span className="font-bold text-indigo-600">{isZh ? '¥ 无限额度' : '¥ Unlimited'}</span>
                           ) : (
                             <span
                               className={`font-mono font-bold ${
@@ -603,7 +602,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                               setQuotaModalError('');
                             }}
                             className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-600 transition"
-                            title="调整用户额度"
+                            title={isZh ? '调整用户额度' : 'Adjust balance'}
                           >
                             <Coins className="w-3.5 h-3.5" />
                           </button>
@@ -615,7 +614,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                           value={u.group_name || 'default'}
                           onChange={(e) => {
                             if (e.target.value === '__custom__') {
-                              const custom = window.prompt(`请输入用户 [${u.username}] 的新保障分组标识 (如 partner / promo):`);
+                              const custom = window.prompt(isZh ? `请输入用户 [${u.username}] 的新保障分组标识 (如 partner / promo):` : `Enter new tier for [${u.username}]:`);
                               if (custom && custom.trim()) {
                                 handleUpdateGroup(u, custom.trim().toLowerCase());
                               }
@@ -627,10 +626,10 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                         >
                           {allAvailableGroups.map(g => (
                             <option key={g} value={g}>
-                              {g === 'default' ? '默认组 (default)' : g === 'vip' ? 'VIP 组 (vip)' : g === 'enterprise' ? '企业组 (enterprise)' : `${g} 组`}
+                              {g === 'default' ? (isZh ? '默认组 (default)' : 'Default (default)') : g === 'vip' ? (isZh ? 'VIP 组 (vip)' : 'VIP (vip)') : g === 'enterprise' ? (isZh ? '企业组 (enterprise)' : 'Enterprise (enterprise)') : `${g} ${isZh ? '组' : 'Group'}`}
                             </option>
                           ))}
-                          <option value="__custom__">+ 输入自定义分组...</option>
+                          <option value="__custom__">{isZh ? '+ 输入自定义分组...' : '+ Custom tier...'}</option>
                         </select>
                       </td>
 
@@ -648,7 +647,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                               ? 'bg-rose-50 text-rose-600 hover:bg-rose-100'
                               : 'hover:bg-slate-100 text-slate-500 hover:text-rose-600'
                           } disabled:opacity-30`}
-                          title={isLocked ? '点击解锁账号' : '点击锁定账号'}
+                          title={isLocked ? (isZh ? '点击解锁账号' : 'Unlock account') : (isZh ? '点击锁定账号' : 'Lock account')}
                         >
                           {isLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
                         </button>
@@ -661,7 +660,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                             setResetModalError('');
                           }}
                           className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-indigo-600 transition"
-                          title="重置登录密码"
+                          title={isZh ? '重置登录密码' : 'Reset password'}
                         >
                           <Key className="w-3.5 h-3.5" />
                         </button>
@@ -671,7 +670,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                           onClick={() => handleDeleteUser(u.username)}
                           disabled={isSysAdmin || isCurrentAdmin}
                           className="p-1.5 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 transition disabled:opacity-30"
-                          title="删除用户"
+                          title={isZh ? '删除用户' : 'Delete user'}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -692,7 +691,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center space-x-2">
                 <UserPlus className="w-5 h-5 text-indigo-600" />
-                <h3 className="font-bold text-base text-slate-900">创建新用户账号</h3>
+                <h3 className="font-bold text-base text-slate-900">{isZh ? '创建新用户账号' : 'Create User Account'}</h3>
               </div>
               <button
                 onClick={() => setShowAddModal(false)}
@@ -711,19 +710,19 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
 
             <form onSubmit={handleCreateUser} className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">登录用户名 *</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{isZh ? '登录用户名 *' : 'Username *'}</label>
                 <input
                   type="text"
                   required
                   value={newUsername}
                   onChange={(e) => setNewUsername(e.target.value)}
-                  placeholder="至少 3 个字符"
+                  placeholder={isZh ? '至少 3 个字符' : 'At least 3 characters'}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">绑定邮箱 (选填)</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">{isZh ? '绑定邮箱 (选填)' : 'Email (Optional)'}</label>
                 <input
                   type="email"
                   value={newEmail}
@@ -735,14 +734,14 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-semibold text-slate-700">登录密码 *</label>
+                  <label className="text-xs font-semibold text-slate-700">{isZh ? '登录密码 *' : 'Password *'}</label>
                   <button
                     type="button"
                     onClick={() => setNewPassword(generateSecurePassword())}
                     className="text-[11px] text-indigo-600 hover:underline flex items-center space-x-1"
                   >
                     <Sparkles className="w-3 h-3" />
-                    <span>随机生成</span>
+                    <span>{isZh ? '随机生成' : 'Generate'}</span>
                   </button>
                 </div>
                 <div className="relative">
@@ -751,7 +750,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                     required
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="至少 6 个字符"
+                    placeholder={isZh ? '至少 6 个字符' : 'At least 6 characters'}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-10 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white font-mono"
                   />
                   <button
@@ -766,33 +765,33 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">权限角色</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">{isZh ? '权限角色' : 'Role'}</label>
                   <select
                     value={newRole}
                     onChange={(e) => setNewRole(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
                   >
-                    <option value="user">普通用户 (user)</option>
-                    <option value="admin">超级管理员 (admin)</option>
+                    <option value="user">{isZh ? '普通用户 (user)' : 'Regular User (user)'}</option>
+                    <option value="admin">{isZh ? '超级管理员 (admin)' : 'Administrator (admin)'}</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">初始状态</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">{isZh ? '初始状态' : 'Initial Status'}</label>
                   <select
                     value={newStatus}
                     onChange={(e) => setNewStatus(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
                   >
-                    <option value="active">正常活跃 (active)</option>
-                    <option value="locked">直接锁定 (locked)</option>
+                    <option value="active">{isZh ? '正常活跃 (active)' : 'Active (active)'}</option>
+                    <option value="locked">{isZh ? '直接锁定 (locked)' : 'Locked (locked)'}</option>
                   </select>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">初始额度 (CNY)</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">{isZh ? '初始额度 (CNY)' : 'Initial Balance (CNY)'}</label>
                   <input
                     type="number"
                     step="0.01"
@@ -804,7 +803,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">账号保障分组 (Tier)</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">{isZh ? '账号保障分组 (Tier)' : 'Account Tier'}</label>
                   <div className="space-y-1.5">
                     <select
                       value={allAvailableGroups.includes(newGroupName) ? newGroupName : '__custom__'}
@@ -817,15 +816,15 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                     >
                       {allAvailableGroups.map(g => (
                         <option key={g} value={g}>
-                          {g === 'default' ? '默认组 (default)' : g === 'vip' ? 'VIP 组 (vip)' : g === 'enterprise' ? '企业组 (enterprise)' : `${g} 组`}
+                          {g === 'default' ? (isZh ? '默认组 (default)' : 'Default (default)') : g === 'vip' ? (isZh ? 'VIP 组 (vip)' : 'VIP (vip)') : g === 'enterprise' ? (isZh ? '企业组 (enterprise)' : 'Enterprise (enterprise)') : `${g} ${isZh ? '组' : 'Group'}`}
                         </option>
                       ))}
-                      <option value="__custom__">自定义输入新分组...</option>
+                      <option value="__custom__">{isZh ? '自定义输入新分组...' : 'Custom tier...'}</option>
                     </select>
                     {(!allAvailableGroups.includes(newGroupName) || newGroupName === '') && (
                       <input
                         type="text"
-                        placeholder="输入新保障分组标识 (如 partner / dev)"
+                        placeholder={isZh ? '输入新保障分组标识 (如 partner / dev)' : 'Enter tier ID (e.g. partner / dev)'}
                         value={newGroupName}
                         onChange={(e) => setNewGroupName(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 font-mono"
@@ -839,16 +838,16 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-medium"
+                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-medium cursor-pointer"
                 >
-                  取消
+                  {isZh ? '取消' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
                   disabled={creating}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm disabled:opacity-50"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
                 >
-                  {creating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <span>确认创建</span>}
+                  {creating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <span>{isZh ? '确认创建' : 'Create User'}</span>}
                 </button>
               </div>
             </form>
@@ -863,7 +862,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center space-x-2">
                 <Coins className="w-5 h-5 text-indigo-600" />
-                <h3 className="font-bold text-base text-slate-900">调整用户可用额度</h3>
+                <h3 className="font-bold text-base text-slate-900">{isZh ? '调整用户可用额度' : 'Adjust User Quota / Balance'}</h3>
               </div>
               <button
                 onClick={() => setQuotaTargetUser(null)}
@@ -874,8 +873,8 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
             </div>
 
             <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-xs space-y-1">
-              <div className="text-slate-500">目标用户: <span className="font-bold text-slate-900">{quotaTargetUser.username}</span></div>
-              <div className="text-slate-500">当前余额: <span className="font-bold font-mono text-indigo-600">¥ {Number(quotaTargetUser.balance || 0).toFixed(2)}</span></div>
+              <div className="text-slate-500">{isZh ? '目标用户:' : 'Target User:'} <span className="font-bold text-slate-900">{quotaTargetUser.username}</span></div>
+              <div className="text-slate-500">{isZh ? '当前余额:' : 'Current Balance:'} <span className="font-bold font-mono text-indigo-600">¥ {Number(quotaTargetUser.balance || 0).toFixed(2)}</span></div>
             </div>
 
             {quotaModalError && (
@@ -893,7 +892,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                     quotaMode === 'delta' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'
                   }`}
                 >
-                  增减额度 (+/-)
+                  {isZh ? '增减额度 (+/-)' : 'Add/Deduct (+/-)'}
                 </button>
                 <button
                   type="button"
@@ -902,13 +901,13 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                     quotaMode === 'exact' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'
                   }`}
                 >
-                  设定确切余额
+                  {isZh ? '设定确切余额' : 'Set Exact Balance'}
                 </button>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  {quotaMode === 'delta' ? '调整额度数值 (可输入负数扣除)' : '设定新的账户余额'}
+                  {quotaMode === 'delta' ? (isZh ? '调整额度数值 (可输入负数扣除)' : 'Adjustment Amount (negative to deduct)') : (isZh ? '设定新的账户余额' : 'New Account Balance')}
                 </label>
                 <input
                   type="number"
@@ -943,7 +942,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                   }}
                   className="px-2 py-1 bg-rose-50 hover:bg-rose-100 rounded-lg text-[10px] font-bold text-rose-700 cursor-pointer"
                 >
-                  归零
+                  {isZh ? '归零' : 'Zero'}
                 </button>
               </div>
 
@@ -951,16 +950,16 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                 <button
                   type="button"
                   onClick={() => setQuotaTargetUser(null)}
-                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-medium"
+                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-medium cursor-pointer"
                 >
-                  取消
+                  {isZh ? '取消' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
                   disabled={adjustingQuota}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm disabled:opacity-50"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
                 >
-                  {adjustingQuota ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <span>确认更新</span>}
+                  {adjustingQuota ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <span>{isZh ? '确认更新' : 'Update Balance'}</span>}
                 </button>
               </div>
             </form>
@@ -975,7 +974,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center space-x-2">
                 <Key className="w-5 h-5 text-indigo-600" />
-                <h3 className="font-bold text-base text-slate-900">重置用户密码</h3>
+                <h3 className="font-bold text-base text-slate-900">{isZh ? '重置用户密码' : 'Reset User Password'}</h3>
               </div>
               <button
                 onClick={() => setResetTargetUser(null)}
@@ -986,7 +985,9 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
             </div>
 
             <p className="text-xs text-slate-500">
-              正在重置用户 <span className="font-bold text-slate-900">[{resetTargetUser.username}]</span> 的登录密码。
+              {isZh ? '正在重置用户 ' : 'Resetting password for user '}
+              <span className="font-bold text-slate-900">[{resetTargetUser.username}]</span>
+              {isZh ? ' 的登录密码。' : '.'}
             </p>
 
             {resetModalError && (
@@ -998,14 +999,14 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
             <form onSubmit={handleResetPassword} className="space-y-3">
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-semibold text-slate-700">新密码 *</label>
+                  <label className="text-xs font-semibold text-slate-700">{isZh ? '新密码 *' : 'New Password *'}</label>
                   <button
                     type="button"
                     onClick={() => setResetPassword(generateSecurePassword())}
-                    className="text-[11px] text-indigo-600 hover:underline flex items-center space-x-1"
+                    className="text-[11px] text-indigo-600 hover:underline flex items-center space-x-1 cursor-pointer"
                   >
                     <Sparkles className="w-3 h-3" />
-                    <span>随机生成</span>
+                    <span>{isZh ? '随机生成' : 'Generate'}</span>
                   </button>
                 </div>
                 <div className="relative">
@@ -1014,13 +1015,13 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                     required
                     value={resetPassword}
                     onChange={(e) => setResetPassword(e.target.value)}
-                    placeholder="至少 6 个字符"
+                    placeholder={isZh ? '至少 6 个字符' : 'At least 6 characters'}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-10 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 font-mono"
                   />
                   <button
                     type="button"
                     onClick={() => setShowResetPassPlain(!showResetPassPlain)}
-                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
                   >
                     {showResetPassPlain ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -1031,16 +1032,16 @@ export default function UserManagementView({ adminUser, adminFetch, showToast })
                 <button
                   type="button"
                   onClick={() => setResetTargetUser(null)}
-                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-medium"
+                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-medium cursor-pointer"
                 >
-                  取消
+                  {isZh ? '取消' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
                   disabled={resetting}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm disabled:opacity-50"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
                 >
-                  {resetting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <span>确认重置</span>}
+                  {resetting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <span>{isZh ? '确认重置' : 'Reset Password'}</span>}
                 </button>
               </div>
             </form>

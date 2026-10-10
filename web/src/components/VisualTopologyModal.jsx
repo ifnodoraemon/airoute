@@ -22,17 +22,20 @@ export default function VisualTopologyModal({
   channels = [],
   modelRoutes = [],
   onTestChannel,
-  showToast
+  showToast,
+  lang = 'zh',
+  t
 }) {
+  const isZh = lang === 'zh';
   const [simulatedFailure, setSimulatedFailure] = useState(false);
   const [selectedRouteModel, setSelectedRouteModel] = useState('deepseek-v3');
 
   if (!isOpen) return null;
 
   const activeChannels = channels.filter(c => c.status === 'active');
-  const primaryChannel = activeChannels[0] || { name: 'GPUStack 本地私有集群', type: 'gpustack', priority: 1, breaker_status: 'CLOSED' };
-  const backupChannel = activeChannels[1] || { name: 'Sub2API 聚合冗余通道', type: 'sub2api', priority: 2, breaker_status: 'CLOSED' };
-  const drChannel = activeChannels[2] || { name: '官方直连备灾通道', type: 'openai', priority: 3, breaker_status: 'CLOSED' };
+  const primaryChannel = activeChannels[0] || { name: isZh ? 'GPUStack 本地私有集群' : 'GPUStack Private Cluster', type: 'gpustack', priority: 1, breaker_status: 'CLOSED' };
+  const backupChannel = activeChannels[1] || { name: isZh ? 'Sub2API 聚合冗余通道' : 'Sub2API Redundant Channel', type: 'sub2api', priority: 2, breaker_status: 'CLOSED' };
+  const drChannel = activeChannels[2] || { name: isZh ? '官方直连备灾通道' : 'Official Direct DR Channel', type: 'openai', priority: 3, breaker_status: 'CLOSED' };
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in">
@@ -45,13 +48,15 @@ export default function VisualTopologyModal({
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight flex items-center space-x-2">
-                <span>智能容灾拓扑与模型调度流向图</span>
+                <span>{isZh ? '智能容灾拓扑与模型调度流向图' : 'Visual Routing & Failover Flow Topology'}</span>
                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
                   Pre-Token Fallback SLA 99.99%
                 </span>
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                全链路可视化展现：入站协议转译 ➔ 级联前缀剥离 ➔ 优先级动态选路 ➔ 三态熔断器容灾
+                {isZh
+                  ? '全链路可视化展现：入站协议转译 ➔ 级联前缀剥离 ➔ 优先级动态选路 ➔ 三态熔断器容灾'
+                  : 'Full-duplex pipeline: Inbound translation ➔ Prefix stripping ➔ Dynamic priority queue ➔ Tri-state breaker fallback'}
               </p>
             </div>
           </div>
@@ -61,7 +66,12 @@ export default function VisualTopologyModal({
               onClick={() => {
                 setSimulatedFailure(!simulatedFailure);
                 if (showToast) {
-                  showToast(simulatedFailure ? '已恢复正常生产调度拓扑' : '已注入首选渠道 429 故障，触发毫秒级透明漂移！', simulatedFailure ? 'info' : 'warning');
+                  showToast(
+                    simulatedFailure
+                      ? (isZh ? '已恢复正常生产调度拓扑' : 'Restored normal production topology')
+                      : (isZh ? '已注入首选渠道 429 故障，触发毫秒级透明漂移！' : 'Injected primary 429 outage: triggered zero-loss failover!'),
+                    simulatedFailure ? 'info' : 'warning'
+                  );
                 }
               }}
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer border ${
@@ -71,7 +81,7 @@ export default function VisualTopologyModal({
               }`}
             >
               {simulatedFailure ? <RotateCcw className="w-3.5 h-3.5 animate-spin" /> : <ShieldAlert className="w-3.5 h-3.5 text-amber-500" />}
-              <span>{simulatedFailure ? '复位故障模拟' : '演练注入故障 (Chaos)'}</span>
+              <span>{simulatedFailure ? (isZh ? '复位故障模拟' : 'Reset Simulation') : (isZh ? '演练注入故障 (Chaos)' : 'Simulate Outage (Chaos)')}</span>
             </button>
 
             <button
@@ -89,186 +99,156 @@ export default function VisualTopologyModal({
             <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
             <div className="space-y-1">
               <div className="font-bold">
-                ⚠️ 首选提供商 (Priority 1) 发生 429 Rate Limit 限流 / 500 异常
+                {isZh
+                  ? '⚠️ 首选提供商 (Priority 1) 发生 429 Rate Limit 限流 / 500 异常'
+                  : '⚠️ Primary Provider (Priority 1) Hit 429 Rate Limit / 500 Outage'}
               </div>
               <p className="text-[11px] leading-relaxed">
-                Airoute 数据面拦截异常并在首字输出前（15ms 内）自动旁路故障节点，流量无感切换至 Priority 2 备用提供商。客户端请求保持 100% 连通与不中断！
+                {isZh
+                  ? 'Airoute 数据面拦截异常并在首字输出前（15ms 内）自动旁路故障节点，流量无感切换至 Priority 2 备用提供商。客户端请求保持 100% 连通与不中断！'
+                  : 'Airoute intercepted the error before the first chunk (<15ms) and automatically bypassed the faulty node, shifting traffic smoothly to Priority 2. Zero client downtime!'}
               </p>
             </div>
           </div>
         )}
 
-        {/* Interactive Topology Graph Flow */}
-        <div className="space-y-6">
-          {/* Layer 1: Client Inbound */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                1. 客户端多协议接入
-              </span>
-              <div className="font-bold text-xs text-slate-800 dark:text-slate-200 flex items-center space-x-1.5">
-                <Zap className="w-3.5 h-3.5 text-indigo-500" />
-                <span>OpenAI / Claude / Gemini SDK</span>
-              </div>
-              <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                /v1/chat/completions<br/>
-                /v1/messages
-              </div>
+        {/* 5-Stage Visual Pipeline Graph */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 relative py-4">
+          {/* Stage 1: Client Inbound */}
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 flex flex-col items-center text-center space-y-2">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
+              <Zap className="w-5 h-5" />
             </div>
-
-            <div className="flex justify-center text-indigo-500 dark:text-indigo-400">
-              <ArrowRight className="w-6 h-6 hidden md:block" />
-              <div className="md:hidden font-mono text-xs">↓</div>
-            </div>
-
-            {/* Layer 2: Gateway Kernel & Cascading */}
-            <div className="p-4 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 space-y-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 block">
-                2. 网关内核与级联重写
-              </span>
-              <div className="font-bold text-xs text-indigo-950 dark:text-indigo-200 flex items-center space-x-1.5">
-                <Cpu className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Zero-DB 路由决策引擎</span>
-              </div>
-              <div className="text-[11px] font-mono text-slate-600 dark:text-slate-300">
-                通配剥离: org/* ➔ *<br/>
-                决策延迟: &lt; 50μs
-              </div>
-            </div>
-
-            <div className="flex justify-center text-indigo-500 dark:text-indigo-400">
-              <ArrowRight className="w-6 h-6 hidden md:block" />
-              <div className="md:hidden font-mono text-xs">↓</div>
-            </div>
+            <span className="font-bold text-xs text-slate-900 dark:text-slate-100">{isZh ? '1. 客户端 Inbound' : '1. Client Inbound'}</span>
+            <span className="text-[10px] text-slate-400 font-mono">OpenAI / Claude / Gemini SDK</span>
           </div>
 
-          {/* Layer 3: Dynamic Priority Fallback Queue */}
-          <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Shield className="w-4 h-4 text-emerald-500" />
-                <span className="font-bold text-xs text-slate-800 dark:text-slate-200">
-                  3. 多渠道优先级分发队列 (Fallback & Circuit Breaker Matrix)
-                </span>
-              </div>
-              <span className="text-[11px] text-slate-400 font-mono">
-                当前排队渠道数: {activeChannels.length || 3}
-              </span>
+          {/* Stage 2: Rewrite & Normalization */}
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 flex flex-col items-center text-center space-y-2">
+            <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
+              <Cpu className="w-5 h-5" />
             </div>
-
-            {/* Channel Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {/* Primary Channel */}
-              <div
-                className={`p-4 rounded-2xl border transition relative ${
-                  simulatedFailure
-                    ? 'bg-rose-50/50 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800 opacity-60'
-                    : 'bg-emerald-50/60 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 shadow-md ring-2 ring-emerald-500/20'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300">
-                    优先级 1 (首选)
-                  </span>
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                      simulatedFailure
-                        ? 'bg-rose-100 dark:bg-rose-900 text-rose-700 dark:text-rose-300 border-rose-300'
-                        : 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border-emerald-300'
-                    }`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full mr-1 ${simulatedFailure ? 'bg-rose-500' : 'bg-emerald-500 animate-pulse'}`}></span>
-                    {simulatedFailure ? '熔断隔离 (OPEN)' : '正常命中 (ACTIVE)'}
-                  </span>
-                </div>
-                <div className="font-bold text-xs text-slate-800 dark:text-slate-100 truncate">
-                  {primaryChannel.name}
-                </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-1">
-                  类型: {primaryChannel.type} · 权重: 10
-                </div>
-                <div className="mt-2 text-[10px] text-slate-400">
-                  {simulatedFailure ? '❌ 已旁路死节点避免雪崩' : '⚡ 承载 100% 活跃常规请求'}
-                </div>
-              </div>
-
-              {/* Secondary Backup Channel */}
-              <div
-                className={`p-4 rounded-2xl border transition relative ${
-                  simulatedFailure
-                    ? 'bg-emerald-50/80 dark:bg-emerald-950/50 border-emerald-400 dark:border-emerald-700 shadow-lg ring-2 ring-emerald-500/30'
-                    : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                    优先级 2 (备用)
-                  </span>
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                      simulatedFailure
-                        ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border-emerald-300 animate-pulse'
-                        : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200'
-                    }`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full mr-1 ${simulatedFailure ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
-                    {simulatedFailure ? '接管接流 (ROUTED)' : '热备待命 (STANDBY)'}
-                  </span>
-                </div>
-                <div className="font-bold text-xs text-slate-800 dark:text-slate-100 truncate">
-                  {backupChannel.name}
-                </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-1">
-                  类型: {backupChannel.type} · 权重: 10
-                </div>
-                <div className="mt-2 text-[10px] text-slate-400">
-                  {simulatedFailure ? '🚀 15ms 内无感漂移成功，保障调用成功' : '随时就绪，首字前无感容灾'}
-                </div>
-              </div>
-
-              {/* Disaster Recovery Channel */}
-              <div className="p-4 rounded-2xl border bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                    优先级 3 (托底兜底)
-                  </span>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600">
-                    兜底待命
-                  </span>
-                </div>
-                <div className="font-bold text-xs text-slate-800 dark:text-slate-100 truncate">
-                  {drChannel.name}
-                </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-1">
-                  类型: {drChannel.type} · 权重: 5
-                </div>
-                <div className="mt-2 text-[10px] text-slate-400">
-                  多集群多供应商最后一道防线
-                </div>
-              </div>
-            </div>
+            <span className="font-bold text-xs text-slate-900 dark:text-slate-100">{isZh ? '2. 协议与前缀重写' : '2. Normalize & Rewrite'}</span>
+            <span className="text-[10px] text-slate-400 font-mono">{isZh ? '剥离前缀 / 全双工互转' : 'Prefix strip / Translation'}</span>
           </div>
 
-          {/* SLA Protection Principles Footer */}
-          <div className="p-4 bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800/60 rounded-2xl text-xs space-y-2">
-            <div className="font-bold text-indigo-950 dark:text-indigo-200 flex items-center space-x-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-              <span>三态智能熔断与无感自愈核心算法 (Tri-State State Machine)</span>
+          {/* Stage 3: Priority Fallback Queue */}
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 flex flex-col items-center text-center space-y-2">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+              <Layers className="w-5 h-5" />
             </div>
-            <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-[11px]">
-              当某上游渠道连续发生 3 次网络超时或 5xx 错误时，该节点立即进入 <code>OPEN (熔断)</code> 状态并在内存中维持 30 秒冷却；冷却期结束后自动进入 <code>HALF-OPEN (半开)</code> 进行单次探活，验证健康后自动恢复 <code>CLOSED (闭合)</code>，实现全自动无人值守自愈。
-            </p>
+            <span className="font-bold text-xs text-slate-900 dark:text-slate-100">{isZh ? '3. 动态优先级队列' : '3. Fallback Queue'}</span>
+            <span className="text-[10px] text-slate-400 font-mono">{isZh ? 'WRR 权重 + 优先级' : 'Priority + WRR Weights'}</span>
+          </div>
+
+          {/* Stage 4: Circuit Breaker Matrix */}
+          <div className={`p-4 rounded-2xl border flex flex-col items-center text-center space-y-2 transition ${
+            simulatedFailure 
+              ? 'bg-rose-50/70 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-950'
+              : 'bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800'
+          }`}>
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${
+              simulatedFailure
+                ? 'bg-rose-100 text-rose-600 animate-pulse'
+                : 'bg-amber-50 dark:bg-amber-950 text-amber-600'
+            }`}>
+              <Shield className="w-5 h-5" />
+            </div>
+            <span className="font-bold text-xs text-slate-900 dark:text-slate-100">{isZh ? '4. 三态熔断器矩阵' : '4. Breaker Matrix'}</span>
+            <span className="text-[10px] font-mono text-slate-400">
+              {simulatedFailure ? (isZh ? '首选已熔断 ➔ 旁路' : 'Primary Tripped ➔ Bypassed') : (isZh ? '闭合 Closed (正常)' : 'Closed (Healthy)')}
+            </span>
+          </div>
+
+          {/* Stage 5: Upstream Providers */}
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 flex flex-col items-center text-center space-y-2">
+            <div className="w-10 h-10 rounded-xl bg-cyan-50 dark:bg-cyan-950 text-cyan-600 dark:text-cyan-400 flex items-center justify-center font-bold">
+              <Server className="w-5 h-5" />
+            </div>
+            <span className="font-bold text-xs text-slate-900 dark:text-slate-100">{isZh ? '5. 目标上游集群' : '5. Upstream Cluster'}</span>
+            <span className="text-[10px] text-slate-400 font-mono">{channels.length} {isZh ? '个承载节点' : 'Providers Active'}</span>
           </div>
         </div>
 
-        {/* Action Button */}
-        <div className="mt-6 flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-5 py-2.5 bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-white text-white dark:text-slate-900 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
-          >
-            完成查看
-          </button>
+        {/* Live Fallback Routing Table */}
+        <div className="mt-4 p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3">
+          <h4 className="font-bold text-xs text-slate-800 dark:text-slate-200 flex items-center justify-between">
+            <span>{isZh ? '当前选路与容灾排队顺序 (Fallback Execution Queue)' : 'Fallback Execution Queue & Dispatch Status'}</span>
+            <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-mono">Model: {selectedRouteModel}</span>
+          </h4>
+
+          <div className="space-y-2">
+            {/* Priority 1 */}
+            <div className={`p-3 rounded-xl border flex items-center justify-between text-xs transition ${
+              simulatedFailure
+                ? 'bg-rose-50/60 dark:bg-rose-950/30 border-rose-300 dark:border-rose-900/60 opacity-60'
+                : 'bg-white dark:bg-slate-800 border-emerald-300 dark:border-emerald-800'
+            }`}>
+              <div className="flex items-center space-x-2.5">
+                <span className="w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center font-bold text-[10px]">
+                  1
+                </span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{primaryChannel.name}</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-mono text-slate-500">
+                  {primaryChannel.type}
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                {simulatedFailure ? (
+                  <span className="text-rose-600 dark:text-rose-400 font-bold text-[11px] flex items-center space-x-1">
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                    <span>{isZh ? '已熔断跳闸 (旁路跳过)' : 'Tripped (Bypassed)'}</span>
+                  </span>
+                ) : (
+                  <span className="text-emerald-600 dark:text-emerald-400 font-bold text-[11px] flex items-center space-x-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>{isZh ? '首选承载通道 (Closed)' : 'Primary Active (Closed)'}</span>
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Priority 2 */}
+            <div className={`p-3 rounded-xl border flex items-center justify-between text-xs transition ${
+              simulatedFailure
+                ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-800 shadow-xs'
+                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+            }`}>
+              <div className="flex items-center space-x-2.5">
+                <span className="w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center font-bold text-[10px]">
+                  2
+                </span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{backupChannel.name}</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-mono text-slate-500">
+                  {backupChannel.type}
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                {simulatedFailure ? (
+                  <span className="text-emerald-600 dark:text-emerald-400 font-bold text-[11px] flex items-center space-x-1 animate-pulse">
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>{isZh ? '⚡ 自动接管流量中 (Active Target)' : '⚡ Active Target (Auto-Failover)'}</span>
+                  </span>
+                ) : (
+                  <span className="text-slate-400 text-[11px]">{isZh ? '热备就绪 (Hot Standby)' : 'Hot Standby'}</span>
+                )}
+              </div>
+            </div>
+
+            {/* Priority 3 */}
+            <div className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs">
+              <div className="flex items-center space-x-2.5">
+                <span className="w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center font-bold text-[10px]">
+                  3
+                </span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{drChannel.name}</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-mono text-slate-500">
+                  {drChannel.type}
+                </span>
+              </div>
+              <span className="text-slate-400 text-[11px]">{isZh ? '三级底线兜底 (Cold DR Backup)' : 'Cold DR Backup'}</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -45,6 +45,7 @@ export default function CommandPalette({
   const inputRef = useRef(null);
   const listRef = useRef(null);
 
+  const isZh = lang === 'zh';
   const isAdmin = adminUser?.role === 'admin';
 
   useEffect(() => {
@@ -55,44 +56,48 @@ export default function CommandPalette({
     }
   }, [isOpen]);
 
+  const catNav = isZh ? '页面导航' : 'Navigation';
+  const catAction = isZh ? '快捷操作' : 'Actions';
+  const catModels = isZh ? '挂载模型' : 'Models';
+
   // Build searchable items
   const navItems = [
     ...(isAdmin ? [
-      { id: 'nav-dashboard', category: '页面导航', label: '用量与业务概览大盘', icon: BarChart3, action: () => { setCurrentTab('dashboard'); setViewMode('console'); onClose(); } },
-      { id: 'nav-models', category: '页面导航', label: '模型路由与拓扑', icon: Cpu, action: () => { setCurrentTab('models'); setViewMode('console'); onClose(); } },
-      { id: 'nav-channels', category: '页面导航', label: '上游服务商接入与体检', icon: Server, action: () => { setCurrentTab('channels'); setViewMode('console'); onClose(); } },
-      { id: 'nav-pricing', category: '页面导航', label: '模型费率与阶梯定价', icon: DollarSign, action: () => { setCurrentTab('pricing'); setViewMode('console'); onClose(); } },
-      { id: 'nav-users', category: '页面导航', label: '组织架构与用户管理', icon: ShieldCheck, action: () => { setCurrentTab('users'); setViewMode('console'); onClose(); } },
-      { id: 'nav-skills', category: '页面导航', label: 'Skill Hub 智能体技能中心', icon: Sparkles, action: () => { setCurrentTab('skills'); setViewMode('console'); onClose(); } },
-      { id: 'nav-mcp', category: '页面导航', label: 'MCP 协议广场与连接中心', icon: Cpu, action: () => { setCurrentTab('mcp'); setViewMode('console'); onClose(); } },
+      { id: 'nav-dashboard', category: catNav, label: isZh ? '用量与业务概览大盘' : 'Telemetry & SLA Cockpit', icon: BarChart3, action: () => { setCurrentTab('dashboard'); setViewMode('console'); onClose(); } },
+      { id: 'nav-models', category: catNav, label: isZh ? '模型路由与拓扑' : 'Model Routes & Topo', icon: Cpu, action: () => { setCurrentTab('models'); setViewMode('console'); onClose(); } },
+      { id: 'nav-channels', category: catNav, label: isZh ? '上游服务商接入与体检' : 'Upstream Channels & Health', icon: Server, action: () => { setCurrentTab('channels'); setViewMode('console'); onClose(); } },
+      { id: 'nav-pricing', category: catNav, label: isZh ? '模型费率与阶梯定价' : 'Model Pricing & Rates', icon: DollarSign, action: () => { setCurrentTab('pricing'); setViewMode('console'); onClose(); } },
+      { id: 'nav-users', category: catNav, label: isZh ? '组织架构与用户管理' : 'User Management', icon: ShieldCheck, action: () => { setCurrentTab('users'); setViewMode('console'); onClose(); } },
+      { id: 'nav-skills', category: catNav, label: isZh ? 'Skill Hub 智能体技能中心' : 'Skill Hub', icon: Sparkles, action: () => { setCurrentTab('skills'); setViewMode('console'); onClose(); } },
+      { id: 'nav-mcp', category: catNav, label: isZh ? 'MCP 协议广场与连接中心' : 'MCP Plaza & Connectors', icon: Cpu, action: () => { setCurrentTab('mcp'); setViewMode('console'); onClose(); } },
     ] : []),
-    { id: 'nav-keys', category: '页面导航', label: 'API 访问密钥管理', icon: Key, action: () => { setCurrentTab('keys'); setViewMode('console'); onClose(); } },
-    { id: 'nav-wallet', category: '页面导航', label: isAdmin ? '卡密生成与充值中心' : '我的钱包与充值卡密', icon: Wallet, action: () => { setCurrentTab('wallet'); setViewMode('console'); onClose(); } },
-    { id: 'nav-logs', category: '页面导航', label: '实时调用日志与对话审计', icon: History, action: () => { setCurrentTab('logs'); setViewMode('console'); onClose(); } },
-    { id: 'nav-playground', category: '页面导航', label: '多模态调试演练工作台', icon: Terminal, action: () => { setCurrentTab('playground'); setViewMode('console'); onClose(); } },
+    { id: 'nav-keys', category: catNav, label: isZh ? 'API 访问密钥管理' : 'API Key Management', icon: Key, action: () => { setCurrentTab('keys'); setViewMode('console'); onClose(); } },
+    { id: 'nav-wallet', category: catNav, label: isAdmin ? (isZh ? '卡密生成与充值中心' : 'Card Codes & Billing') : (isZh ? '我的钱包与充值卡密' : 'Wallet & Top-up'), icon: Wallet, action: () => { setCurrentTab('wallet'); setViewMode('console'); onClose(); } },
+    { id: 'nav-logs', category: catNav, label: isZh ? '实时调用日志与对话审计' : 'Audit Logs & Traces', icon: History, action: () => { setCurrentTab('logs'); setViewMode('console'); onClose(); } },
+    { id: 'nav-playground', category: catNav, label: isZh ? '多模态调试演练工作台' : 'Multimodal Playground', icon: Terminal, action: () => { setCurrentTab('playground'); setViewMode('console'); onClose(); } },
   ];
 
   const quickActionItems = [
-    { id: 'act-new-key', category: '快捷操作', label: '新建 API 访问密钥', icon: Plus, action: () => { onClose(); setCurrentTab('keys'); onOpenNewKey && onOpenNewKey(); } },
+    { id: 'act-new-key', category: catAction, label: isZh ? '新建 API 访问密钥' : 'Create API Key', icon: Plus, action: () => { onClose(); setCurrentTab('keys'); onOpenNewKey && onOpenNewKey(); } },
     ...(isAdmin ? [
-      { id: 'act-new-channel', category: '快捷操作', label: '接入新上游模型服务商', icon: Server, action: () => { onClose(); setCurrentTab('channels'); onOpenNewChannel && onOpenNewChannel(); } },
+      { id: 'act-new-channel', category: catAction, label: isZh ? '接入新上游模型服务商' : 'Connect Upstream Provider', icon: Server, action: () => { onClose(); setCurrentTab('channels'); onOpenNewChannel && onOpenNewChannel(); } },
     ] : []),
-    { id: 'act-status', category: '快捷操作', label: '查看公开服务健康状态页', icon: Zap, action: () => { setViewMode('status'); onClose(); } },
-    { id: 'act-docs', category: '快捷操作', label: '打开交互式开发文档', icon: ExternalLink, action: () => { setViewMode('landing'); onClose(); setTimeout(() => document.getElementById('docs')?.scrollIntoView({ behavior: 'smooth' }), 100); } },
-    { id: 'act-lang', category: '快捷操作', label: `切换界面语言 (当前: ${lang === 'zh' ? '简体中文' : 'English'})`, icon: Globe, action: () => { toggleLang && toggleLang(); onClose(); } },
-    { id: 'act-logout', category: '快捷操作', label: '安全退出当前登录账号', icon: LogOut, action: () => { onClose(); onLogout && onLogout(); } },
+    { id: 'act-status', category: catAction, label: isZh ? '查看公开服务健康状态页' : 'Public Status Page', icon: Zap, action: () => { setViewMode('status'); onClose(); } },
+    { id: 'act-docs', category: catAction, label: isZh ? '打开交互式开发文档' : 'Interactive API Docs', icon: ExternalLink, action: () => { setViewMode('landing'); onClose(); setTimeout(() => document.getElementById('docs')?.scrollIntoView({ behavior: 'smooth' }), 100); } },
+    { id: 'act-lang', category: catAction, label: isZh ? `切换界面语言 (当前: 简体中文)` : `Switch Interface Language (Current: English)`, icon: Globe, action: () => { toggleLang && toggleLang(); onClose(); } },
+    { id: 'act-logout', category: catAction, label: isZh ? '安全退出当前登录账号' : 'Log Out Current Account', icon: LogOut, action: () => { onClose(); onLogout && onLogout(); } },
   ];
 
   const modelItems = (models || []).slice(0, 15).map((m, idx) => ({
     id: `model-${idx}-${m}`,
-    category: '挂载模型',
+    category: catModels,
     label: m,
     icon: Sparkles,
     action: () => {
       setCurrentTab('playground');
       setViewMode('console');
       onClose();
-      if (showToast) showToast(`已快速定位模型: ${m}`, 'info');
+      if (showToast) showToast(isZh ? `已快速定位模型: ${m}` : `Selected model: ${m}`, 'info');
     }
   }));
 
@@ -148,7 +153,7 @@ export default function CommandPalette({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索功能模块、操作指令或模型 (支持 ↑ ↓ 导航)..."
+            placeholder={isZh ? '搜索功能模块、操作指令或模型 (支持 ↑ ↓ 导航)...' : 'Search modules, commands, or models (↑ ↓ to navigate)...'}
             className="w-full text-sm bg-transparent text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none"
           />
           {query && (
@@ -168,7 +173,7 @@ export default function CommandPalette({
         <div ref={listRef} className="overflow-y-auto p-2 space-y-1 flex-1">
           {filteredItems.length === 0 ? (
             <div className="py-12 text-center text-slate-400 text-xs">
-              未找到与 &quot;{query}&quot; 相关的导航或功能
+              {isZh ? `未找到与 "${query}" 相关的导航或功能` : `No navigation or actions matching "${query}"`}
             </div>
           ) : (
             filteredItems.map((item, idx) => {
@@ -215,11 +220,11 @@ export default function CommandPalette({
         {/* Footer shortcuts info */}
         <div className="px-5 py-2.5 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200/70 dark:border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <span>↑ ↓ 移动光标</span>
-            <span>↵ 确认跳转</span>
-            <span>ESC 关闭</span>
+            <span>{isZh ? '↑ ↓ 移动光标' : '↑ ↓ Navigate'}</span>
+            <span>{isZh ? '↵ 确认跳转' : '↵ Select'}</span>
+            <span>{isZh ? 'ESC 关闭' : 'ESC Close'}</span>
           </div>
-          <span className="font-mono text-slate-400">Airoute · 快捷控制中心</span>
+          <span className="font-mono text-slate-400">{isZh ? 'Airoute · 快捷控制中心' : 'Airoute · Command Center'}</span>
         </div>
       </div>
     </div>

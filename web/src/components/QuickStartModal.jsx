@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { X, Copy, Check, Terminal, Code, Cpu, Sparkles, BookOpen } from 'lucide-react';
 import { getGatewayOrigin } from '../config';
 
-export default function QuickStartModal({ apiKey, onClose, onCopy }) {
+export default function QuickStartModal({ apiKey, onClose, onCopy, lang = 'zh', t }) {
   if (!apiKey) return null;
 
+  const isZh = lang === 'zh';
   const [activeTab, setActiveTab] = useState('python');
   const [copiedTab, setCopiedTab] = useState('');
 
@@ -143,10 +144,10 @@ export ANTHROPIC_API_KEY="${keyStr}"
             </div>
             <div>
               <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 tracking-tight">
-                接入代码示例
+                {isZh ? '接入代码示例' : 'Integration Code Examples'}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                密钥: <code className="font-mono text-indigo-600 dark:text-indigo-400 font-semibold">{keyStr}</code> (应用: {apiKey.tenant_id})
+                {isZh ? '密钥: ' : 'Key: '}<code className="font-mono text-indigo-600 dark:text-indigo-400 font-semibold">{keyStr}</code> ({isZh ? '应用: ' : 'App: '}{apiKey.tenant_id})
               </p>
             </div>
           </div>
@@ -213,7 +214,7 @@ export ANTHROPIC_API_KEY="${keyStr}"
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
-              <span>桌面客户端</span>
+              <span>{isZh ? '桌面客户端' : 'Desktop Apps'}</span>
             </button>
           </div>
 
@@ -224,12 +225,12 @@ export ANTHROPIC_API_KEY="${keyStr}"
             {copiedTab === activeTab ? (
               <>
                 <Check className="w-3.5 h-3.5 text-emerald-300" />
-                <span>已复制！</span>
+                <span>{isZh ? '已复制！' : 'Copied!'}</span>
               </>
             ) : (
               <>
                 <Copy className="w-3.5 h-3.5" />
-                <span>复制代码</span>
+                <span>{isZh ? '复制代码' : 'Copy Code'}</span>
               </>
             )}
           </button>
@@ -244,9 +245,9 @@ export ANTHROPIC_API_KEY="${keyStr}"
         <div className="p-4 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-end text-xs">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-medium transition"
+            className="px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-medium transition cursor-pointer"
           >
-            关闭
+            {isZh ? '关闭' : 'Close'}
           </button>
         </div>
       </div>

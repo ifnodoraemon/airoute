@@ -39,6 +39,7 @@ export default function ServiceStatus({
   onBatchProbe,
   batchTesting = false,
 }) {
+  const isZh = lang === 'zh';
   const [hoveredDay, setHoveredDay] = useState(null);
   const [publicData, setPublicData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -91,13 +92,13 @@ export default function ServiceStatus({
     fetchPublicStatus();
     setCountdown(30);
     if (onRefresh) onRefresh();
-    if (showToast) showToast('服务状态已实时刷新', 'info');
+    if (showToast) showToast(isZh ? '服务状态已实时刷新' : 'Service status refreshed', 'info');
   };
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
     setCopiedModel(text);
-    if (showToast) showToast(`已复制模型名称: ${text}`, 'success');
+    if (showToast) showToast(isZh ? `已复制模型名称: ${text}` : `Copied model ID: ${text}`, 'success');
     setTimeout(() => setCopiedModel(''), 2000);
   };
 
@@ -207,54 +208,54 @@ export default function ServiceStatus({
     switch (modality) {
       case 'images':
         return {
-          label1: '生成总耗时',
+          label1: isZh ? '生成总耗时' : 'Generation Latency',
           val1: realProbeMs ? `~${(realProbeMs / 1000 + 1.8).toFixed(1)} s` : '~2.6 s',
-          label2: '渲染成功率',
+          label2: isZh ? '渲染成功率' : 'Render Success Rate',
           val2: '100.0%',
           uptime: '99.98%',
           realProbeMs
         };
       case 'audio':
         return {
-          label1: '转换首包时延',
+          label1: isZh ? '转换首包时延' : 'TTFT Audio Latency',
           val1: realProbeMs ? `${realProbeMs} ms` : '~380 ms',
-          label2: '音频实时率',
+          label2: isZh ? '音频实时率' : 'Real-Time Factor',
           val2: '0.12x RTF',
           uptime: '100.0%',
           realProbeMs
         };
       case 'videos':
         return {
-          label1: '调度队列时延',
+          label1: isZh ? '调度队列时延' : 'Queue Dispatch Latency',
           val1: realProbeMs ? `${realProbeMs} ms` : '~850 ms',
-          label2: '任务就绪率',
+          label2: isZh ? '任务就绪率' : 'Task Readiness',
           val2: '100.0%',
           uptime: '99.95%',
           realProbeMs
         };
       case 'embeddings':
         return {
-          label1: '向量计算时延',
+          label1: isZh ? '向量计算时延' : 'Embedding Latency',
           val1: realProbeMs ? `${realProbeMs} ms` : '~28 ms',
-          label2: '零首字等待',
+          label2: isZh ? '零首字等待' : 'Direct Return',
           val2: '100%',
           uptime: '100.0%',
           realProbeMs
         };
       case 'rerank':
         return {
-          label1: '重排序时延',
+          label1: isZh ? '重排序时延' : 'Rerank Latency',
           val1: realProbeMs ? `${realProbeMs} ms` : '~42 ms',
-          label2: 'Top-N 吞吐',
-          val2: '高并发',
+          label2: isZh ? 'Top-N 吞吐' : 'Top-N Throughput',
+          val2: isZh ? '高并发' : 'High Concurrency',
           uptime: '100.0%',
           realProbeMs
         };
       case 'vision':
         return {
-          label1: '首字时延 (P95)',
+          label1: isZh ? '首字时延 (P95)' : 'TTFT (P95)',
           val1: realProbeMs ? `${realProbeMs} ms` : '~210 ms',
-          label2: '视觉解析耗时',
+          label2: isZh ? '视觉解析耗时' : 'Vision Parse Time',
           val2: '~1.6 s',
           uptime: '99.99%',
           realProbeMs
@@ -262,9 +263,9 @@ export default function ServiceStatus({
       case 'chat':
       default:
         return {
-          label1: '首字时延 (P95)',
+          label1: isZh ? '首字时延 (P95)' : 'TTFT (P95)',
           val1: realProbeMs ? `${realProbeMs} ms` : '~160 ms',
-          label2: '平均处理时延',
+          label2: isZh ? '平均处理时延' : 'Avg Latency',
           val2: '~1.1 s',
           uptime: '99.99%',
           realProbeMs
@@ -273,13 +274,13 @@ export default function ServiceStatus({
   };
 
   const modalitiesList = [
-    { id: 'all', label: '全部模态', count: rawModels.length },
-    { id: 'chat', label: '文本对话', count: modalityCounts['chat'] || 0 },
-    { id: 'vision', label: '多模态视觉', count: modalityCounts['vision'] || 0 },
-    { id: 'images', label: '图像生成', count: modalityCounts['images'] || 0 },
-    { id: 'audio', label: '语音音频', count: modalityCounts['audio'] || 0 },
-    { id: 'videos', label: '视频生成', count: modalityCounts['videos'] || 0 },
-    { id: 'embeddings', label: '向量嵌入', count: modalityCounts['embeddings'] || 0 },
+    { id: 'all', label: isZh ? '全部模态' : 'All Modalities', count: rawModels.length },
+    { id: 'chat', label: isZh ? '文本对话' : 'Chat & Text', count: modalityCounts['chat'] || 0 },
+    { id: 'vision', label: isZh ? '多模态视觉' : 'Vision', count: modalityCounts['vision'] || 0 },
+    { id: 'images', label: isZh ? '图像生成' : 'Images', count: modalityCounts['images'] || 0 },
+    { id: 'audio', label: isZh ? '语音音频' : 'Audio', count: modalityCounts['audio'] || 0 },
+    { id: 'videos', label: isZh ? '视频生成' : 'Video', count: modalityCounts['videos'] || 0 },
+    { id: 'embeddings', label: isZh ? '向量嵌入' : 'Embeddings', count: modalityCounts['embeddings'] || 0 },
   ].filter(item => item.id === 'all' || item.count > 0);
 
   const origin = getGatewayOrigin();
@@ -333,18 +334,18 @@ export default function ServiceStatus({
                 ? 'bg-white/90 border-slate-200/80 text-slate-700 shadow-2xs hover:bg-slate-50'
                 : 'bg-slate-100 border-slate-300 text-slate-400'
             }`}
-            title={autoRefresh ? '点击暂停自动刷新' : '点击恢复 30 秒自动刷新'}
+            title={autoRefresh ? (isZh ? '点击暂停自动刷新' : 'Click to pause auto refresh') : (isZh ? '点击恢复 30 秒自动刷新' : 'Click to resume 30s auto refresh')}
           >
             {autoRefresh ? (
               <>
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>自动刷新: {countdown}s</span>
+                <span>{isZh ? `自动刷新: ${countdown}s` : `Auto: ${countdown}s`}</span>
                 <Pause className="w-3 h-3 text-slate-400 ml-0.5" />
               </>
             ) : (
               <>
                 <span className="w-2 h-2 rounded-full bg-slate-300"></span>
-                <span>已暂停</span>
+                <span>{isZh ? '已暂停' : 'Paused'}</span>
                 <Play className="w-3 h-3 text-slate-500 ml-0.5" />
               </>
             )}
@@ -354,10 +355,10 @@ export default function ServiceStatus({
             onClick={handleManualRefresh}
             disabled={loading}
             className="p-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 transition shadow-2xs flex items-center space-x-1 text-xs font-medium cursor-pointer disabled:opacity-50"
-            title={t ? t.statusRefresh : '刷新状态'}
+            title={t ? t.statusRefresh : (isZh ? '刷新状态' : 'Refresh status')}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-indigo-600' : ''}`} />
-            <span className="hidden sm:inline">{t ? t.statusRefresh : '刷新'}</span>
+            <span className="hidden sm:inline">{t ? t.statusRefresh : (isZh ? '刷新' : 'Refresh')}</span>
           </button>
         </div>
       </div>
@@ -366,52 +367,52 @@ export default function ServiceStatus({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">30 天服务可用率</span>
+            <span className="text-xs font-medium text-slate-500">{isZh ? '30 天服务可用率' : '30-Day SLA Uptime'}</span>
             <span className="p-1 rounded-lg bg-emerald-50 text-emerald-600">
               <ShieldCheck className="w-3.5 h-3.5" />
             </span>
           </div>
           <div>
             <span className="text-2xl font-extrabold text-slate-900 font-mono tracking-tight">99.99%</span>
-            <span className="text-xs text-emerald-600 font-medium ml-2">SLA 达标</span>
+            <span className="text-xs text-emerald-600 font-medium ml-2">{isZh ? 'SLA 达标' : 'SLA Met'}</span>
           </div>
         </div>
 
         <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">首字无感容灾率</span>
+            <span className="text-xs font-medium text-slate-500">{isZh ? '首字无感容灾率' : 'Zero-Downtime Failover'}</span>
             <span className="p-1 rounded-lg bg-indigo-50 text-indigo-600">
               <Zap className="w-3.5 h-3.5" />
             </span>
           </div>
           <div>
             <span className="text-2xl font-extrabold text-indigo-700 font-mono tracking-tight">100%</span>
-            <span className="text-xs text-indigo-600 font-medium ml-2">毫秒漂移</span>
+            <span className="text-xs text-indigo-600 font-medium ml-2">{isZh ? '毫秒漂移' : 'Sub-50ms MTTR'}</span>
           </div>
         </div>
 
         <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">统一治理模型数</span>
+            <span className="text-xs font-medium text-slate-500">{isZh ? '统一治理模型数' : 'Active Model Routes'}</span>
             <span className="p-1 rounded-lg bg-purple-50 text-purple-600">
               <Cpu className="w-3.5 h-3.5" />
             </span>
           </div>
           <div>
             <span className="text-2xl font-extrabold text-purple-700 font-mono tracking-tight">{rawModels.length}</span>
-            <span className="text-xs text-slate-500 ml-1.5 font-sans">个在线大模型</span>
+            <span className="text-xs text-slate-500 ml-1.5 font-sans">{isZh ? '个在线大模型' : 'Online LLMs'}</span>
           </div>
         </div>
 
         <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">集群拓扑状态</span>
+            <span className="text-xs font-medium text-slate-500">{isZh ? '集群拓扑状态' : 'Cluster Topology'}</span>
             <span className="p-1 rounded-lg bg-sky-50 text-sky-600">
               <Network className="w-3.5 h-3.5" />
             </span>
           </div>
           <div>
-            <span className="text-lg font-bold text-slate-900 tracking-tight">多节点双活</span>
+            <span className="text-lg font-bold text-slate-900 tracking-tight">{isZh ? '多节点双活' : 'Active-Active'}</span>
             <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 ml-2 animate-pulse"></span>
           </div>
         </div>
@@ -445,14 +446,14 @@ export default function ServiceStatus({
                 <span className="p-1.5 rounded-xl bg-sky-100 text-sky-600">
                   <Globe className="w-4 h-4" />
                 </span>
-                <span className="font-semibold text-xs text-slate-800">负载均衡 (LB)</span>
+                <span className="font-semibold text-xs text-slate-800">{isZh ? '负载均衡 (LB)' : 'Load Balancer (LB)'}</span>
               </div>
               <span className="text-[11px] font-mono px-2 py-0.5 rounded-lg bg-emerald-100/70 text-emerald-700 font-semibold truncate max-w-[120px]" title={currentHost}>
                 {currentHost}
               </span>
             </div>
             <div className="text-[11px] text-slate-500 flex justify-between font-mono">
-              <span>Nginx 反向代理</span>
+              <span>{isZh ? 'Nginx 反向代理' : 'Nginx Reverse Proxy'}</span>
               <span className="text-emerald-600 font-semibold">Round-Robin</span>
             </div>
           </div>
@@ -464,14 +465,14 @@ export default function ServiceStatus({
                 <span className="p-1.5 rounded-xl bg-indigo-100 text-indigo-600">
                   <Server className="w-4 h-4" />
                 </span>
-                <span className="font-semibold text-xs text-slate-800">计算节点 #1</span>
+                <span className="font-semibold text-xs text-slate-800">{isZh ? '计算节点 #1' : 'Gateway Node #1'}</span>
               </div>
               <span className="text-[11px] font-mono px-2 py-0.5 rounded-lg bg-indigo-100/70 text-indigo-700 font-semibold">
                 gateway-1
               </span>
             </div>
             <div className="text-[11px] text-slate-500 flex justify-between font-mono">
-              <span>运算转发引擎</span>
+              <span>{isZh ? '运算转发引擎' : 'Dispatch Engine'}</span>
               <span className="text-emerald-600 font-semibold flex items-center space-x-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                 <span>Active</span>
@@ -486,14 +487,14 @@ export default function ServiceStatus({
                 <span className="p-1.5 rounded-xl bg-purple-100 text-purple-600">
                   <Server className="w-4 h-4" />
                 </span>
-                <span className="font-semibold text-xs text-slate-800">计算节点 #2</span>
+                <span className="font-semibold text-xs text-slate-800">{isZh ? '计算节点 #2' : 'Gateway Node #2'}</span>
               </div>
               <span className="text-[11px] font-mono px-2 py-0.5 rounded-lg bg-purple-100/70 text-purple-700 font-semibold">
                 gateway-2
               </span>
             </div>
             <div className="text-[11px] text-slate-500 flex justify-between font-mono">
-              <span>运算转发引擎</span>
+              <span>{isZh ? '运算转发引擎' : 'Dispatch Engine'}</span>
               <span className="text-emerald-600 font-semibold flex items-center space-x-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                 <span>Active</span>
@@ -510,7 +511,7 @@ export default function ServiceStatus({
           <div>
             <h3 className="text-sm font-semibold text-slate-900 flex items-center space-x-2">
               <Activity className="w-4 h-4 text-indigo-500" />
-              <span>核心模型运行健康度与 30 天可用性 SLA</span>
+              <span>{isZh ? '核心模型运行健康度与 30 天可用性 SLA' : 'Core Model Health & 30-Day SLA Uptime'}</span>
             </h3>
           </div>
 
@@ -522,7 +523,7 @@ export default function ServiceStatus({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="搜索模型名称..."
+                placeholder={isZh ? '搜索模型名称...' : 'Search model ID...'}
                 className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-2xs w-48 sm:w-56"
               />
               {searchQuery && (
@@ -536,7 +537,7 @@ export default function ServiceStatus({
             </div>
 
             <span className="text-xs text-slate-500 font-mono hidden sm:inline">
-              显示 {displayModels.length} / {rawModels.length}
+              {isZh ? `显示 ${displayModels.length} / ${rawModels.length}` : `Showing ${displayModels.length} / ${rawModels.length}`}
             </span>
           </div>
         </div>
@@ -569,18 +570,18 @@ export default function ServiceStatus({
         {loading && displayModels.length === 0 ? (
           <div className="bg-white border border-slate-200/80 rounded-3xl p-12 text-center text-slate-400 text-xs flex flex-col items-center justify-center space-y-2">
             <RefreshCw className="w-5 h-5 text-indigo-500 animate-spin" />
-            <p>正在获取实时模型可用性状态...</p>
+            <p>{isZh ? '正在获取实时模型可用性状态...' : 'Fetching live model health telemetry...'}</p>
           </div>
         ) : displayModels.length === 0 ? (
           <div className="bg-white border border-slate-200/80 rounded-3xl p-12 text-center text-slate-400 text-xs space-y-2">
             <Filter className="w-8 h-8 text-slate-300 mx-auto" />
-            <p>未找到符合条件的大模型服务</p>
+            <p>{isZh ? '未找到符合条件的大模型服务' : 'No matching models found'}</p>
             {(searchQuery || selectedModality !== 'all') && (
               <button
                 onClick={() => { setSearchQuery(''); setSelectedModality('all'); }}
                 className="text-indigo-600 hover:underline text-xs font-semibold cursor-pointer"
               >
-                清空筛选条件
+                {isZh ? '清空筛选条件' : 'Clear filters'}
               </button>
             )}
           </div>
@@ -606,7 +607,7 @@ export default function ServiceStatus({
                         <button
                           onClick={() => copyToClipboard(mr.model)}
                           className="text-slate-400 hover:text-indigo-600 transition cursor-pointer p-0.5"
-                          title="复制模型名称"
+                          title={isZh ? '复制模型名称' : 'Copy model ID'}
                         >
                           {copiedModel === mr.model ? (
                             <Check className="w-3.5 h-3.5 text-emerald-600" />
@@ -622,12 +623,12 @@ export default function ServiceStatus({
                         <p className="text-xs text-slate-500 mt-1 flex items-center flex-wrap gap-1.5">
                           {mr.activeProviders !== undefined && (
                             <span>
-                              {mr.activeProviders}/{mr.totalProviders} {t ? t.statusActivePool : '健康渠道提供商'}
+                              {mr.activeProviders}/{mr.totalProviders} {t ? t.statusActivePool : (isZh ? '健康渠道提供商' : 'Healthy Channels')}
                             </span>
                           )}
                           {mr.fallback_model && (
                             <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md font-mono text-[11px] border border-amber-200">
-                              ➔ 容灾: {mr.fallback_model}
+                              {isZh ? '➔ 容灾: ' : '➔ Fallback: '}{mr.fallback_model}
                             </span>
                           )}
                         </p>
@@ -640,14 +641,14 @@ export default function ServiceStatus({
                         : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                     }`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${isDegraded ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`}></span>
-                      <span>{isDegraded ? (t ? t.statusDegradedBadge : '延迟升高') : (t ? t.statusOperationalBadge : '运行正常')}</span>
+                      <span>{isDegraded ? (t ? t.statusDegradedBadge : (isZh ? '延迟升高' : 'Degraded')) : (t ? t.statusOperationalBadge : (isZh ? '运行正常' : 'Operational'))}</span>
                     </span>
                   </div>
 
                   {/* Latency & Availability Stats tailored for modality */}
                   <div className="grid grid-cols-3 gap-2 py-2.5 px-3 rounded-2xl bg-slate-50/80 border border-slate-100 text-xs">
                     <div>
-                      <span className="text-slate-400 block text-[10px]">{t ? t.statusUptime30Days : '最近 30 天可用率'}</span>
+                      <span className="text-slate-400 block text-[10px]">{t ? t.statusUptime30Days : (isZh ? '最近 30 天可用率' : '30-Day Uptime')}</span>
                       <span className="font-mono font-bold text-emerald-600">{metrics.uptime}</span>
                     </div>
                     <div>
@@ -655,7 +656,7 @@ export default function ServiceStatus({
                       <span className="font-mono font-bold text-slate-700 flex items-center space-x-1">
                         <span>{metrics.val1}</span>
                         {metrics.realProbeMs && (
-                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" title="实测探针延迟"></span>
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" title={isZh ? '实测探针延迟' : 'Live probe latency'}></span>
                         )}
                       </span>
                     </div>
@@ -668,9 +669,9 @@ export default function ServiceStatus({
                   {/* 30-Day Uptime Bar (DeepSeek / GitHub Style) */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between text-[10px] text-slate-400">
-                      <span>30 天前</span>
-                      <span className="text-emerald-600 font-medium">100.0% 可用率</span>
-                      <span>今天</span>
+                      <span>{isZh ? '30 天前' : '30d ago'}</span>
+                      <span className="text-emerald-600 font-medium">{isZh ? '100.0% 可用率' : '100.0% Uptime'}</span>
+                      <span>{isZh ? '今天' : 'Today'}</span>
                     </div>
                     <div className="flex items-center space-x-1 h-7 bg-slate-50 p-1 rounded-xl border border-slate-100">
                       {bars.map((bar, idx) => (
@@ -683,13 +684,13 @@ export default function ServiceStatus({
                               ? 'bg-emerald-500 hover:scale-y-110'
                               : 'bg-amber-400 hover:scale-y-110'
                           }`}
-                          title={`${bar.date}: ${bar.uptime} 可用`}
+                          title={`${bar.date}: ${bar.uptime} ${isZh ? '可用' : 'uptime'}`}
                         />
                       ))}
                     </div>
                     {hoveredDay && hoveredDay.startsWith(mr.model) && (
                       <div className="text-[10px] font-mono text-center text-slate-500 pt-0.5">
-                        {hoveredDay.split(':')[1]}: 可用率 {hoveredDay.split(':')[2]}
+                        {hoveredDay.split(':')[1]}: {isZh ? '可用率 ' : 'Uptime '}{hoveredDay.split(':')[2]}
                       </div>
                     )}
                   </div>
@@ -707,7 +708,7 @@ export default function ServiceStatus({
             <div className="flex items-center space-x-2">
               <Layers className="w-4 h-4 text-indigo-500" />
               <h3 className="font-semibold text-slate-900 text-sm">
-                {t ? t.statusCircuitBreakers : '上游提供商与熔断探针矩阵'}
+                {t ? t.statusCircuitBreakers : (isZh ? '上游提供商与熔断探针矩阵' : 'Upstream Channels & Circuit Breakers')}
               </h3>
             </div>
 
@@ -718,7 +719,7 @@ export default function ServiceStatus({
                 className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50 self-start sm:self-auto"
               >
                 <Activity className={`w-3.5 h-3.5 ${batchTesting ? 'animate-spin' : ''}`} />
-                <span>{batchTesting ? '正在并发探活...' : '一键探测全部渠道'}</span>
+                <span>{batchTesting ? (isZh ? '正在并发探活...' : 'Probing in parallel...') : (isZh ? '一键探测全部渠道' : 'Probe All Channels')}</span>
               </button>
             )}
           </div>
@@ -727,10 +728,10 @@ export default function ServiceStatus({
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-100 text-[11px] text-slate-400 uppercase">
-                  <th className="py-2.5 px-4 font-semibold">{t ? t.statusChannelName : '渠道名称'}</th>
-                  <th className="py-2.5 px-4 font-semibold">{t ? t.statusChannelType : '协议类型'}</th>
-                  <th className="py-2.5 px-4 font-semibold">{t ? t.statusBreakerState : '熔断器状态'}</th>
-                  <th className="py-2.5 px-4 font-semibold">{t ? t.statusProbeLatency : '实时探测延迟'}</th>
+                  <th className="py-2.5 px-4 font-semibold">{t ? t.statusChannelName : (isZh ? '渠道名称' : 'Channel Name')}</th>
+                  <th className="py-2.5 px-4 font-semibold">{t ? t.statusChannelType : (isZh ? '协议类型' : 'Protocol')}</th>
+                  <th className="py-2.5 px-4 font-semibold">{t ? t.statusBreakerState : (isZh ? '熔断器状态' : 'Circuit Breaker')}</th>
+                  <th className="py-2.5 px-4 font-semibold">{t ? t.statusProbeLatency : (isZh ? '实时探测延迟' : 'Live Latency')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
@@ -753,24 +754,24 @@ export default function ServiceStatus({
                         {isTripped ? (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200 inline-flex items-center space-x-1">
                             <XCircle className="w-3 h-3 text-rose-500" />
-                            <span>{t ? t.statusStateOpen : '已熔断跳闸'}</span>
+                            <span>{t ? t.statusStateOpen : (isZh ? '已熔断跳闸' : 'Tripped (Open)')}</span>
                           </span>
                         ) : (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center space-x-1">
                             <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                            <span>{t ? t.statusStateClosed : '健康闭合'}</span>
+                            <span>{t ? t.statusStateClosed : (isZh ? '健康闭合' : 'Closed (Healthy)')}</span>
                           </span>
                         )}
                       </td>
                       <td className="py-3 px-4 font-mono text-[11px]">
                         {lat ? (
                           lat.error ? (
-                            <span className="text-rose-600 font-semibold">超时 / 探测失败</span>
+                            <span className="text-rose-600 font-semibold">{isZh ? '超时 / 探测失败' : 'Timeout / Failed'}</span>
                           ) : (
                             <span className="text-emerald-600 font-semibold">{lat.latency_ms} ms</span>
                           )
                         ) : (
-                          <span className="text-slate-400">~35 ms (探针正常)</span>
+                          <span className="text-slate-400">{isZh ? '~35 ms (探针正常)' : '~35 ms (Normal)'}</span>
                         )}
                       </td>
                     </tr>
@@ -808,7 +809,7 @@ export default function ServiceStatus({
                   Airoute
                 </span>
                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  {t ? t.statusOperationalBadge : '运行正常'}
+                  {t ? t.statusOperationalBadge : (isZh ? '运行正常' : 'Operational')}
                 </span>
               </div>
               <span className="text-[11px] text-slate-500 block">
@@ -862,13 +863,13 @@ export default function ServiceStatus({
       {/* Footer */}
       <footer className="border-t border-slate-200/80 bg-white py-6 mt-12 text-center text-xs text-slate-400">
         <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p>© {new Date().getFullYear()} Airoute · 企业级大模型与多模态网关</p>
+          <p>© {new Date().getFullYear()} Airoute · {isZh ? '企业级大模型与多模态网关' : 'Enterprise AI Gateway'}</p>
           <div className="flex items-center space-x-4">
             <button onClick={onBackHome} className="hover:text-indigo-600 transition cursor-pointer">
-              门户首页
+              {isZh ? '门户首页' : 'Home'}
             </button>
             <span>·</span>
-            <span className="text-emerald-600 font-medium">SLA 99.99% 双活保障</span>
+            <span className="text-emerald-600 font-medium">{isZh ? 'SLA 99.99% 双活保障' : 'SLA 99.99% Active-Active'}</span>
           </div>
         </div>
       </footer>

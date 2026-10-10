@@ -18,13 +18,15 @@ import {
   Info
 } from 'lucide-react';
 
-function formatDaysLabel(days) {
+function formatDaysLabel(days, isZh = true) {
   if (!days || days.length === 0 || days.length === 7) return '';
-  const dayNames = { 1: '周一', 2: '周二', 3: '周三', 4: '周四', 5: '周五', 6: '周六', 7: '周日' };
+  const dayNames = isZh 
+    ? { 1: '周一', 2: '周二', 3: '周三', 4: '周四', 5: '周五', 6: '周六', 7: '周日' }
+    : { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 7: 'Sun' };
   const sorted = [...days].sort((a, b) => a - b);
-  if (sorted.length === 5 && sorted.every((d, i) => d === i + 1)) return '工作日';
-  if (sorted.length === 2 && sorted[0] === 6 && sorted[1] === 7) return '周末';
-  return sorted.map(d => dayNames[d] || d).join('、');
+  if (sorted.length === 5 && sorted.every((d, i) => d === i + 1)) return isZh ? '工作日' : 'Weekdays';
+  if (sorted.length === 2 && sorted[0] === 6 && sorted[1] === 7) return isZh ? '周末' : 'Weekends';
+  return sorted.map(d => dayNames[d] || d).join(isZh ? '、' : ', ');
 }
 
 function parseMinutes(t) {
@@ -37,19 +39,21 @@ function parseMinutes(t) {
   return h * 60 + m;
 }
 
-export function checkSlotsOverlap(slots) {
+export function checkSlotsOverlap(slots, isZh = true) {
   if (!slots || slots.length < 2) return null;
-  const dayNames = { 1: '周一', 2: '周二', 3: '周三', 4: '周四', 5: '周五', 6: '周六', 7: '周日' };
+  const dayNames = isZh 
+    ? { 1: '周一', 2: '周二', 3: '周三', 4: '周四', 5: '周五', 6: '周六', 7: '周日' }
+    : { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 7: 'Sun' };
 
   for (let i = 0; i < slots.length; i++) {
     const s1 = slots[i];
     const s1Start = parseMinutes(s1.start);
     const s1End = parseMinutes(s1.end);
     if (s1Start === null || s1End === null) {
-      return `时段「${s1.name || i + 1}」时间格式无效 (格式需为 HH:MM)`;
+      return isZh ? `时段「${s1.name || i + 1}」时间格式无效 (格式需为 HH:MM)` : `Slot "${s1.name || i + 1}" format invalid (must be HH:MM)`;
     }
     if (s1Start === s1End) {
-      return `时段「${s1.name || i + 1}」开始时间与结束时间不能相同`;
+      return isZh ? `时段「${s1.name || i + 1}」开始时间与结束时间不能相同` : `Slot "${s1.name || i + 1}" start and end time cannot be the same`;
     }
 
     const segs1 = s1Start < s1End 
@@ -64,7 +68,7 @@ export function checkSlotsOverlap(slots) {
       const s2End = parseMinutes(s2.end);
       if (s2Start === null || s2End === null) continue;
       if (s2Start === s2End) {
-        return `时段「${s2.name || j + 1}」开始时间与结束时间不能相同`;
+        return isZh ? `时段「${s2.name || j + 1}」开始时间与结束时间不能相同` : `Slot "${s2.name || j + 1}" start and end time cannot be the same`;
       }
 
       const days2 = (s2.days && s2.days.length > 0) ? s2.days : [1, 2, 3, 4, 5, 6, 7];
@@ -80,8 +84,10 @@ export function checkSlotsOverlap(slots) {
       for (const seg1 of segs1) {
         for (const seg2 of segs2) {
           if (Math.max(seg1.s, seg2.s) < Math.min(seg1.e, seg2.e)) {
-            const overlapDaysStr = commonDays.length === 7 ? '每天' : commonDays.map(d => dayNames[d] || d).join('、');
-            return `时段「${s1.name || i + 1}」(${s1.start}-${s1.end}) 与 时段「${s2.name || j + 1}」(${s2.start}-${s2.end}) 在【${overlapDaysStr}】存在时间重叠，请调整时段避免冲突`;
+            const overlapDaysStr = commonDays.length === 7 ? (isZh ? '每天' : 'Everyday') : commonDays.map(d => dayNames[d] || d).join(isZh ? '、' : ', ');
+            return isZh 
+              ? `时段「${s1.name || i + 1}」(${s1.start}-${s1.end}) 与 时段「${s2.name || j + 1}」(${s2.start}-${s2.end}) 在【${overlapDaysStr}】存在时间重叠，请调整时段避免冲突`
+              : `Slot "${s1.name || i + 1}" (${s1.start}-${s1.end}) overlaps with slot "${s2.name || j + 1}" (${s2.start}-${s2.end}) on [${overlapDaysStr}]. Please adjust to resolve.`;
           }
         }
       }
@@ -90,14 +96,14 @@ export function checkSlotsOverlap(slots) {
   return null;
 }
 
-function parseSlotsFromPrice(p) {
+function parseSlotsFromPrice(p, isZh = true) {
   if (p && p.off_peak_slots) {
     try {
       const parsed = JSON.parse(p.off_peak_slots);
       if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed.map((s, idx) => ({
           id: `slot-${idx + 1}-${Date.now()}`,
-          name: s.name || `时段 ${idx + 1}`,
+          name: s.name || (isZh ? `时段 ${idx + 1}` : `Slot ${idx + 1}`),
           start: s.start || '00:00',
           end: s.end || '08:30',
           discount: s.discount !== undefined ? parseFloat(s.discount) : 0.5,
@@ -109,7 +115,7 @@ function parseSlotsFromPrice(p) {
   if (p && (p.off_peak_start || p.off_peak_end)) {
     return [{
       id: `slot-1-${Date.now()}`,
-      name: '时段 1',
+      name: isZh ? '时段 1' : 'Slot 1',
       start: p.off_peak_start || '00:00',
       end: p.off_peak_end || '08:30',
       discount: p.off_peak_discount ?? 0.5,
@@ -117,11 +123,12 @@ function parseSlotsFromPrice(p) {
     }];
   }
   return [
-    { id: `slot-1-${Date.now()}`, name: '时段 1', start: '00:00', end: '08:30', discount: 0.5, days: [] }
+    { id: `slot-1-${Date.now()}`, name: isZh ? '时段 1' : 'Slot 1', start: '00:00', end: '08:30', discount: 0.5, days: [] }
   ];
 }
 
-export default function PricingManager({ adminFetch, showToast, stats = {}, isAdmin = true }) {
+export default function PricingManager({ adminFetch, showToast, stats = {}, isAdmin = true, lang = 'zh', t }) {
+  const isZh = lang === 'zh';
   const [prices, setPrices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -145,7 +152,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
     off_peak_enabled: true,
     weekend_all_day: true,
     slots: [
-      { id: 'slot-1', name: '时段 1', start: '00:00', end: '08:30', discount: 0.5, days: [] }
+      { id: 'slot-1', name: isZh ? '时段 1' : 'Slot 1', start: '00:00', end: '08:30', discount: 0.5, days: [] }
     ]
   });
   const [saving, setSaving] = useState(false);
@@ -204,24 +211,24 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
     const g = (group || 'default').toLowerCase();
     if (g === 'vip') {
       return {
-        label: 'VIP 用户组',
+        label: isZh ? 'VIP 用户组' : 'VIP Tier',
         className: 'bg-amber-50 text-amber-700 border-amber-200'
       };
     }
     if (g === 'enterprise') {
       return {
-        label: '企业大客户',
+        label: isZh ? '企业大客户' : 'Enterprise Tier',
         className: 'bg-purple-50 text-purple-700 border-purple-200'
       };
     }
     if (g === 'default') {
       return {
-        label: '默认基础组',
+        label: isZh ? '默认基础组' : 'Default Tier',
         className: 'bg-indigo-50 text-indigo-700 border-indigo-200'
       };
     }
     return {
-      label: `${group} 组`,
+      label: isZh ? `${group} 组` : `${group} Tier`,
       className: 'bg-sky-50 text-sky-700 border-sky-200'
     };
   };
@@ -270,7 +277,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
       off_peak_enabled: true,
       weekend_all_day: true,
       slots: [
-        { id: `slot-${Date.now()}`, name: '时段 1', start: '00:00', end: '08:30', discount: 0.5, days: [] }
+        { id: `slot-${Date.now()}`, name: isZh ? '时段 1' : 'Slot 1', start: '00:00', end: '08:30', discount: 0.5, days: [] }
       ]
     });
     setFormError('');
@@ -289,7 +296,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
       currency: p.currency || 'CNY',
       off_peak_enabled: p.off_peak_enabled !== false,
       weekend_all_day: p.weekend_all_day !== false,
-      slots: parseSlotsFromPrice(p)
+      slots: parseSlotsFromPrice(p, isZh)
     });
     setFormError('');
     setShowModal(true);
@@ -303,7 +310,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
         ...prev.slots,
         {
           id: nextId,
-          name: `时段 ${prev.slots.length + 1}`,
+          name: isZh ? `时段 ${prev.slots.length + 1}` : `Slot ${prev.slots.length + 1}`,
           start: '12:00',
           end: '14:00',
           discount: 0.8,
@@ -352,7 +359,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
   };
 
   const handleDelete = async (model, groupName = 'default') => {
-    if (!window.confirm(`确定删除模型 [${model}] 在 [${groupName}] 分组的定价规则？`)) {
+    if (!window.confirm(isZh ? `确定删除模型 [${model}] 在 [${groupName}] 分组的定价规则？` : `Are you sure you want to delete pricing rule for model [${model}] in group [${groupName}]?`)) {
       return;
     }
     try {
@@ -361,19 +368,19 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(`已删除 [${groupName}] 组模型 [${model}] 定价规则`, 'success');
+        showToast(isZh ? `已删除 [${groupName}] 组模型 [${model}] 定价规则` : `Deleted pricing rule for model [${model}] in [${groupName}]`, 'success');
         fetchPrices();
       } else {
-        showToast(data.error || '删除失败', 'warning');
+        showToast(data.error || (isZh ? '删除失败' : 'Failed to delete'), 'warning');
       }
     } catch (err) {
-      showToast('请求异常: ' + err.message, 'error');
+      showToast((isZh ? '请求异常: ' : 'Request error: ') + err.message, 'error');
     }
   };
 
   const handleBatchDelete = async () => {
     if (selectedKeys.length === 0) return;
-    if (!window.confirm(`确定批量删除选中的 ${selectedKeys.length} 个模型定价规则？`)) {
+    if (!window.confirm(isZh ? `确定批量删除选中的 ${selectedKeys.length} 个模型定价规则？` : `Delete selected ${selectedKeys.length} pricing rules?`)) {
       return;
     }
     const items = selectedKeys.map(k => {
@@ -389,37 +396,37 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(data.message || '已批量删除定价规则', 'success');
+        showToast(data.message || (isZh ? '已批量删除定价规则' : 'Batch deleted pricing rules'), 'success');
         setSelectedKeys([]);
         fetchPrices();
       } else {
-        showToast(data.error || '批量删除失败', 'warning');
+        showToast(data.error || (isZh ? '批量删除失败' : 'Batch delete failed'), 'warning');
       }
     } catch (err) {
-      showToast('请求异常: ' + err.message, 'error');
+      showToast((isZh ? '请求异常: ' : 'Request error: ') + err.message, 'error');
     }
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
     if (!formData.model.trim()) {
-      setFormError('请输入模型标识 (例如 deepseek-chat 或 gpt-4o)');
+      setFormError(isZh ? '请输入模型标识 (例如 deepseek-chat 或 gpt-4o)' : 'Please enter model ID (e.g. deepseek-chat or gpt-4o)');
       return;
     }
 
     if (formData.off_peak_enabled) {
       if (!formData.slots || formData.slots.length === 0) {
-        setFormError('开启分时优惠后，请至少添加一个时间段');
+        setFormError(isZh ? '开启分时优惠后，请至少添加一个时间段' : 'Please add at least one time slot when off-peak discount is enabled');
         return;
       }
       for (let i = 0; i < formData.slots.length; i++) {
         const s = formData.slots[i];
         if (!s.start || !s.end) {
-          setFormError(`时段 [${s.name || i + 1}] 开始与结束时间不能为空`);
+          setFormError(isZh ? `时段 [${s.name || i + 1}] 开始与结束时间不能为空` : `Slot [${s.name || i + 1}] start and end time cannot be empty`);
           return;
         }
       }
-      const overlapErr = checkSlotsOverlap(formData.slots);
+      const overlapErr = checkSlotsOverlap(formData.slots, isZh);
       if (overlapErr) {
         setFormError(overlapErr);
         return;
@@ -465,14 +472,14 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(`已保存 [${payload.group_name}] 组模型 [${payload.model}] 定价规则`, 'success');
+        showToast(isZh ? `已保存 [${payload.group_name}] 组模型 [${payload.model}] 定价规则` : `Saved pricing rule for [${payload.model}] in [${payload.group_name}]`, 'success');
         setShowModal(false);
         fetchPrices();
       } else {
-        setFormError(data.error || '保存失败');
+        setFormError(data.error || (isZh ? '保存失败' : 'Failed to save'));
       }
     } catch (err) {
-      setFormError('网络请求异常: ' + err.message);
+      setFormError((isZh ? '网络请求异常: ' : 'Network error: ') + err.message);
     } finally {
       setSaving(false);
     }
@@ -485,7 +492,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-lg font-bold text-slate-900 tracking-tight">
-              模型定价
+              {isZh ? '模型定价' : 'Model Pricing'}
             </h2>
           </div>
 
@@ -496,14 +503,14 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-semibold shadow-xs flex items-center space-x-1.5 transition cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>新建定价规则</span>
+                <span>{isZh ? '新建定价规则' : 'New Pricing Rule'}</span>
               </button>
             )}
             <button
               onClick={fetchPrices}
               disabled={loading}
               className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-2xl transition cursor-pointer"
-              title="刷新费率"
+              title={isZh ? '刷新费率' : 'Refresh'}
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-indigo-600' : ''}`} />
             </button>
@@ -515,7 +522,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
       {isAdmin && selectedKeys.length > 0 && (
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-indigo-50 border border-indigo-200 px-5 py-3 rounded-2xl animate-in fade-in gap-3">
           <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-900">
-            <span>已选中 {selectedKeys.length} 个模型定价规则</span>
+            <span>{isZh ? `已选中 ${selectedKeys.length} 个模型定价规则` : `${selectedKeys.length} pricing rule(s) selected`}</span>
           </div>
           <div className="flex items-center space-x-2">
             <button
@@ -523,13 +530,13 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
               className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold shadow-xs transition flex items-center space-x-1 cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>批量删除</span>
+              <span>{isZh ? '批量删除' : 'Delete Selected'}</span>
             </button>
             <button
               onClick={() => setSelectedKeys([])}
               className="px-3 py-1.5 bg-white text-slate-700 border border-slate-200 text-xs font-medium rounded-xl hover:bg-slate-50 transition cursor-pointer"
             >
-              取消选择
+              {isZh ? '取消选择' : 'Deselect'}
             </button>
           </div>
         </div>
@@ -539,12 +546,18 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
       <div className="bg-white border border-slate-200/80 rounded-3xl shadow-xs overflow-hidden">
         {/* Group Filter Tabs */}
         <div className="flex flex-wrap items-center gap-2 px-6 pt-5 pb-3 border-b border-slate-100">
-          <span className="text-xs text-slate-400 font-medium mr-1">价格分组:</span>
+          <span className="text-xs text-slate-400 font-medium mr-1">{isZh ? '价格分组:' : 'Price Group:'}</span>
           {[
-            { id: 'all', label: '全部规则' },
+            { id: 'all', label: isZh ? '全部规则' : 'All Rules' },
             ...availableGroups.map(g => ({
               id: g,
-              label: g === 'default' ? '默认组 (default)' : g === 'vip' ? 'VIP组 (vip)' : g === 'enterprise' ? '企业组 (enterprise)' : `${g} 组`
+              label: g === 'default' 
+                ? (isZh ? '默认组 (default)' : 'Default (default)')
+                : g === 'vip' 
+                  ? (isZh ? 'VIP组 (vip)' : 'VIP (vip)')
+                  : g === 'enterprise' 
+                    ? (isZh ? '企业组 (enterprise)' : 'Enterprise (enterprise)')
+                    : `${g} ${isZh ? '组' : 'Tier'}`
             }))
           ].map(tab => {
             const count = tab.id === 'all' ? prices.length : prices.filter(p => (p.group_name || 'default') === tab.id).length;
@@ -571,11 +584,13 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
         {loading && prices.length === 0 ? (
           <div className="p-12 text-center text-slate-400 text-xs flex items-center justify-center space-x-2">
             <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
-            <span>加载费率规则中...</span>
+            <span>{isZh ? '加载费率规则中...' : 'Loading pricing rules...'}</span>
           </div>
         ) : filteredPrices.length === 0 ? (
           <div className="p-12 text-center text-slate-400 text-xs">
-            {prices.length === 0 ? '暂无配置的定价规则，点击上方「新建定价规则」进行添加' : '当前分组下暂无定价规则，点击上方「新建定价规则」添加'}
+            {prices.length === 0 
+              ? (isZh ? '暂无配置的定价规则，点击上方「新建定价规则」进行添加' : 'No pricing rules configured. Click "New Pricing Rule" above to create one.') 
+              : (isZh ? '当前分组下暂无定价规则，点击上方「新建定价规则」添加' : 'No pricing rules in this group. Click "New Pricing Rule" to add.')}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -598,14 +613,14 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                       />
                     </th>
                   )}
-                  <th className="py-3 px-6">模型标识</th>
-                  <th className="py-3 px-4">适用用户组</th>
-                  <th className="py-3 px-4">基准输入 (1M)</th>
-                  <th className="py-3 px-4">基准输出 (1M)</th>
-                  <th className="py-3 px-4">缓存命中 (1M)</th>
-                  <th className="py-3 px-4">分时优惠时段</th>
-                  <th className="py-3 px-4">当前生效费率</th>
-                  {isAdmin && <th className="py-3 px-6 text-right">操作</th>}
+                  <th className="py-3 px-6">{isZh ? '模型标识' : 'Model'}</th>
+                  <th className="py-3 px-4">{isZh ? '适用用户组' : 'Group Tier'}</th>
+                  <th className="py-3 px-4">{isZh ? '基准输入 (1M)' : 'Prompt (1M)'}</th>
+                  <th className="py-3 px-4">{isZh ? '基准输出 (1M)' : 'Completion (1M)'}</th>
+                  <th className="py-3 px-4">{isZh ? '缓存命中 (1M)' : 'Cache Hit (1M)'}</th>
+                  <th className="py-3 px-4">{isZh ? '分时优惠时段' : 'Off-Peak Windows'}</th>
+                  <th className="py-3 px-4">{isZh ? '当前生效费率' : 'Live Rate'}</th>
+                  {isAdmin && <th className="py-3 px-6 text-right">{isZh ? '操作' : 'Actions'}</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -628,7 +643,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                   }
                   if (displaySlots.length === 0 && (p.off_peak_start || p.off_peak_end)) {
                     displaySlots = [{
-                      name: '优惠时段',
+                      name: isZh ? '优惠时段' : 'Off-Peak',
                       start: p.off_peak_start || '00:00',
                       end: p.off_peak_end || '08:30',
                       discount: p.off_peak_discount ?? 0.5
@@ -677,7 +692,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                           {currencySym}{Number(p.cache_read_price || 0).toFixed(2)}
                           {p.prompt_price > 0 && (
                             <span className="text-[10px] text-slate-400 ml-1">
-                              ({Math.round(((p.prompt_price - p.cache_read_price) / p.prompt_price) * 100)}% 节省)
+                              ({Math.round(((p.prompt_price - p.cache_read_price) / p.prompt_price) * 100)}% {isZh ? '节省' : 'Saved'})
                             </span>
                           )}
                         </div>
@@ -689,7 +704,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                           <div className="space-y-1.5">
                             <div className="flex flex-wrap gap-1.5">
                               {displaySlots.map((slot, sIdx) => {
-                                const daysStr = formatDaysLabel(slot.days);
+                                const daysStr = formatDaysLabel(slot.days, isZh);
                                 return (
                                   <span
                                     key={sIdx}
@@ -699,7 +714,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                                     <span>
                                       {slot.name ? `${slot.name}: ` : ''}
                                       {daysStr ? `${daysStr} ` : ''}
-                                      {slot.start}-{slot.end} ({Math.round((slot.discount ?? 0.5) * 10)}折)
+                                      {slot.start}-{slot.end} ({isZh ? `${Math.round((slot.discount ?? 0.5) * 10)}折` : `${Math.round((1 - (slot.discount ?? 0.5)) * 100)}% Off`})
                                     </span>
                                   </span>
                                 );
@@ -708,12 +723,12 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                             {p.weekend_all_day && (
                               <div className="text-[11px] text-slate-400 flex items-center space-x-1">
                                 <Calendar className="w-3 h-3 text-slate-400" />
-                                <span>周六日全天享受优惠</span>
+                                <span>{isZh ? '周六日全天享受优惠' : 'Weekend all-day discount active'}</span>
                               </div>
                             )}
                           </div>
                         ) : (
-                          <span className="text-slate-400 text-xs">全天统一定价</span>
+                          <span className="text-slate-400 text-xs">{isZh ? '全天统一定价' : 'Uniform 24/7 Pricing'}</span>
                         )}
                       </td>
 
@@ -723,19 +738,19 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                           <div className="space-y-0.5">
                             <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                              <span>优惠 {Math.round(discount * 10)}折 生效中</span>
+                              <span>{isZh ? `优惠 ${Math.round(discount * 10)}折 生效中` : `${Math.round((1 - discount) * 100)}% Off Active`}</span>
                             </span>
                             <div className="text-xs text-emerald-700 font-bold">
-                              输入 {currencySym}{effPrompt.toFixed(2)} / 输出 {currencySym}{effComp.toFixed(2)}
+                              {isZh ? '输入' : 'Prompt'} {currencySym}{effPrompt.toFixed(2)} / {isZh ? '输出' : 'Output'} {currencySym}{effComp.toFixed(2)}
                             </div>
                           </div>
                         ) : (
                           <div className="space-y-0.5">
                             <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-medium">
-                              <span>基准单价</span>
+                              <span>{isZh ? '基准单价' : 'Standard Rate'}</span>
                             </span>
                             <div className="text-xs text-slate-700 font-medium">
-                              输入 {currencySym}{effPrompt.toFixed(2)} / 输出 {currencySym}{effComp.toFixed(2)}
+                              {isZh ? '输入' : 'Prompt'} {currencySym}{effPrompt.toFixed(2)} / {isZh ? '输出' : 'Output'} {currencySym}{effComp.toFixed(2)}
                             </div>
                           </div>
                         )}
@@ -748,13 +763,13 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                             onClick={() => handleOpenEdit(p)}
                             className="px-3 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium transition cursor-pointer"
                           >
-                            编辑
+                            {isZh ? '编辑' : 'Edit'}
                           </button>
                           <button
                             onClick={() => handleDelete(p.model, p.group_name || 'default')}
                             className="px-3 py-1 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 text-xs font-medium transition cursor-pointer"
                           >
-                            删除
+                            {isZh ? '删除' : 'Delete'}
                           </button>
                         </td>
                       )}
@@ -774,7 +789,9 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
             <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-slate-900 text-base">
-                  {editingPrice ? `编辑 [${editingPrice.model}] 定价` : '新建模型定价与分时规则'}
+                  {editingPrice 
+                    ? (isZh ? `编辑 [${editingPrice.model}] 定价` : `Edit [${editingPrice.model}] Pricing`) 
+                    : (isZh ? '新建模型定价与分时规则' : 'New Pricing & Off-Peak Rule')}
                 </h3>
               </div>
               <button
@@ -796,14 +813,14 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
               {/* Field 1: Model Identifier */}
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">
-                  模型名称 (Model) <span className="text-rose-500">*</span>
+                  {isZh ? '模型名称 (Model)' : 'Model ID'} <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
                   disabled={!!editingPrice}
                   list="unpriced-models-datalist"
-                  placeholder="如 deepseek-chat 或点击下方一键选择"
+                  placeholder={isZh ? '如 deepseek-chat 或点击下方一键选择' : 'e.g. deepseek-chat or select below'}
                   value={formData.model}
                   onChange={(e) => setFormData({ ...formData, model: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-indigo-500 disabled:opacity-60 text-xs"
@@ -818,7 +835,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
               {/* Field: User Group Tier */}
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">
-                  适用用户组 (Group Tier) <span className="text-rose-500">*</span>
+                  {isZh ? '适用用户组 (Group Tier)' : 'Target Group Tier'} <span className="text-rose-500">*</span>
                 </label>
                 {editingPrice ? (
                   <div className="flex items-center space-x-2 py-1">
@@ -840,13 +857,19 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                               : 'bg-white hover:bg-indigo-50/60 border-slate-200 text-slate-700'
                           }`}
                         >
-                          {g === 'default' ? '默认组 (default)' : g === 'vip' ? 'VIP组 (vip)' : g === 'enterprise' ? '企业组 (enterprise)' : `${g} 组`}
+                          {g === 'default' 
+                            ? (isZh ? '默认组 (default)' : 'Default (default)') 
+                            : g === 'vip' 
+                              ? (isZh ? 'VIP组 (vip)' : 'VIP (vip)') 
+                              : g === 'enterprise' 
+                                ? (isZh ? '企业组 (enterprise)' : 'Enterprise (enterprise)') 
+                                : `${g} ${isZh ? '组' : 'Tier'}`}
                         </button>
                       ))}
                     </div>
                     <input
                       type="text"
-                      placeholder="或输入自定义用户组标识 (如 partner / test 等)"
+                      placeholder={isZh ? '或输入自定义用户组标识 (如 partner / test 等)' : 'Or input custom group identifier (e.g. partner / test)'}
                       value={formData.group_name}
                       onChange={(e) => setFormData({ ...formData, group_name: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '') })}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-indigo-500 text-xs"
@@ -858,12 +881,12 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
               {/* Field 2: Base Rates */}
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
                 <span className="font-bold text-slate-800 block text-xs">
-                  基准单价 (每 1,000,000 Tokens)
+                  {isZh ? '基准单价 (每 1,000,000 Tokens)' : 'Base Price (per 1,000,000 Tokens)'}
                 </span>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="block text-slate-600 font-medium mb-1">
-                      输入单价 (¥)
+                      {isZh ? '输入单价 (¥)' : 'Prompt Price (¥)'}
                     </label>
                     <input
                       type="number"
@@ -885,7 +908,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
 
                   <div>
                     <label className="block text-slate-600 font-medium mb-1">
-                      输出单价 (¥)
+                      {isZh ? '输出单价 (¥)' : 'Completion Price (¥)'}
                     </label>
                     <input
                       type="number"
@@ -900,7 +923,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
 
                   <div>
                     <label className="block text-emerald-700 font-medium mb-1">
-                      缓存命中 (¥)
+                      {isZh ? '缓存命中 (¥)' : 'Cache Hit (¥)'}
                     </label>
                     <input
                       type="number"
@@ -920,7 +943,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                   <div className="flex items-center space-x-2">
                     <Moon className="w-4 h-4 text-indigo-600" />
                     <span className="font-bold text-slate-900">
-                      开启分时优惠
+                      {isZh ? '开启分时优惠' : 'Enable Off-Peak Discount'}
                     </span>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
@@ -938,7 +961,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                   <div className="space-y-3 pt-1 animate-in fade-in">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-slate-700">
-                        优惠时间段列表 (支持自由配置任意多个时段)
+                        {isZh ? '优惠时间段列表 (支持自由配置任意多个时段)' : 'Time Windows (Multiple custom windows supported)'}
                       </span>
                       <button
                         type="button"
@@ -946,7 +969,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                         className="inline-flex items-center space-x-1 px-3 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-2xs transition cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>添加时间段</span>
+                        <span>{isZh ? '添加时间段' : 'Add Time Window'}</span>
                       </button>
                     </div>
 
@@ -961,7 +984,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                               </span>
                               <input
                                 type="text"
-                                placeholder="时段名称 (选填)"
+                                placeholder={isZh ? '时段名称 (选填)' : 'Slot name (optional)'}
                                 value={slot.name}
                                 onChange={(e) => handleUpdateSlot(slot.id, 'name', e.target.value)}
                                 className="w-28 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
@@ -976,7 +999,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                                 onChange={(e) => handleUpdateSlot(slot.id, 'start', e.target.value)}
                                 className="w-18 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-mono text-center text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
                               />
-                              <span className="text-slate-400 text-xs">至</span>
+                              <span className="text-slate-400 text-xs">{isZh ? '至' : 'to'}</span>
                               <input
                                 type="text"
                                 placeholder="08:30"
@@ -992,16 +1015,16 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                                 onChange={(e) => handleUpdateSlot(slot.id, 'discount', parseFloat(e.target.value))}
                                 className="px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:outline-none focus:border-indigo-500"
                               >
-                                <option value="0.1">1 折 (10%)</option>
-                                <option value="0.2">2 折 (20%)</option>
-                                <option value="0.3">3 折 (30%)</option>
-                                <option value="0.4">4 折 (40%)</option>
-                                <option value="0.5">5 折 (50%)</option>
-                                <option value="0.6">6 折 (60%)</option>
-                                <option value="0.7">7 折 (70%)</option>
-                                <option value="0.8">8 折 (80%)</option>
-                                <option value="0.85">8.5 折 (85%)</option>
-                                <option value="0.9">9 折 (90%)</option>
+                                <option value="0.1">{isZh ? '1 折 (10%)' : '90% Off (10%)'}</option>
+                                <option value="0.2">{isZh ? '2 折 (20%)' : '80% Off (20%)'}</option>
+                                <option value="0.3">{isZh ? '3 折 (30%)' : '70% Off (30%)'}</option>
+                                <option value="0.4">{isZh ? '4 折 (40%)' : '60% Off (40%)'}</option>
+                                <option value="0.5">{isZh ? '5 折 (50%)' : '50% Off (50%)'}</option>
+                                <option value="0.6">{isZh ? '6 折 (60%)' : '40% Off (60%)'}</option>
+                                <option value="0.7">{isZh ? '7 折 (70%)' : '30% Off (70%)'}</option>
+                                <option value="0.8">{isZh ? '8 折 (80%)' : '20% Off (80%)'}</option>
+                                <option value="0.85">{isZh ? '8.5 折 (85%)' : '15% Off (85%)'}</option>
+                                <option value="0.9">{isZh ? '9 折 (90%)' : '10% Off (90%)'}</option>
                               </select>
 
                               {formData.slots.length > 1 && (
@@ -1009,7 +1032,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                                   type="button"
                                   onClick={() => handleRemoveSlot(slot.id)}
                                   className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                                  title="删除该时段"
+                                  title={isZh ? '删除该时段' : 'Delete slot'}
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -1019,16 +1042,16 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
 
                           {/* Zero-burden Weekday Selector */}
                           <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 text-xs">
-                            <span className="text-slate-400 text-[11px]">生效周期:</span>
+                            <span className="text-slate-400 text-[11px]">{isZh ? '生效周期:' : 'Active on:'}</span>
                             <div className="flex items-center space-x-1">
                               {[
-                                { label: '一', val: 1 },
-                                { label: '二', val: 2 },
-                                { label: '三', val: 3 },
-                                { label: '四', val: 4 },
-                                { label: '五', val: 5 },
-                                { label: '六', val: 6 },
-                                { label: '日', val: 7 }
+                                { label: isZh ? '一' : 'M', val: 1 },
+                                { label: isZh ? '二' : 'T', val: 2 },
+                                { label: isZh ? '三' : 'W', val: 3 },
+                                { label: isZh ? '四' : 'T', val: 4 },
+                                { label: isZh ? '五' : 'F', val: 5 },
+                                { label: isZh ? '六' : 'S', val: 6 },
+                                { label: isZh ? '日' : 'S', val: 7 }
                               ].map(({ label, val }) => {
                                 const isActive = isDayActive(slot.days, val);
                                 return (
@@ -1041,14 +1064,14 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                                         ? 'bg-indigo-600 text-white font-semibold shadow-2xs'
                                         : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
                                     }`}
-                                    title={`周${label}`}
+                                    title={isZh ? `周${label}` : `Day ${val}`}
                                   >
                                     {label}
                                   </button>
                                 );
                               })}
                               <span className="text-[11px] text-indigo-600 font-medium ml-1.5">
-                                {formatDaysLabel(slot.days) || '每天'}
+                                {formatDaysLabel(slot.days, isZh) || (isZh ? '每天' : 'Everyday')}
                               </span>
                             </div>
                           </div>
@@ -1064,7 +1087,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                           onChange={(e) => setFormData({ ...formData, weekend_all_day: e.target.checked })}
                           className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                         />
-                        <span className="font-medium">周六与周日全天享受优惠折扣</span>
+                        <span className="font-medium">{isZh ? '周六与周日全天享受优惠折扣' : 'All-day discount on Saturdays and Sundays'}</span>
                       </label>
                     </div>
                   </div>
@@ -1076,22 +1099,22 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition font-medium"
+                  className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition font-medium cursor-pointer"
                 >
-                  取消
+                  {isZh ? '取消' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition shadow-sm flex items-center space-x-1.5 disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition shadow-sm flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
                 >
                   {saving ? (
                     <>
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>正在保存...</span>
+                      <span>{isZh ? '正在保存...' : 'Saving...'}</span>
                     </>
                   ) : (
-                    <span>保存定价</span>
+                    <span>{isZh ? '保存定价' : 'Save Pricing'}</span>
                   )}
                 </button>
               </div>

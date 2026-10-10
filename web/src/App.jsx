@@ -86,7 +86,7 @@ import PlaygroundView from './components/PlaygroundView';
 import DocsView from './components/DocsView';
 import OnboardingModal from './components/OnboardingModal';
 import VisualTopologyModal from './components/VisualTopologyModal';
-import { translations } from './i18n';
+import { translations, I18nContext } from './i18n';
 import { getGatewayOrigin, getGatewayBaseUrl, setPublicGatewayUrl } from './config';
 
 // Audit-log pagination: server-side page size, kept in one place for the
@@ -97,6 +97,7 @@ export default function App() {
   // Language State (bilingual i18n)
   const [lang, setLang] = useState(() => localStorage.getItem('airoute_lang') || 'zh');
   const t = translations[lang] || translations.zh;
+  const isZh = lang === 'zh';
 
   const toggleLang = () => {
     const nextLang = lang === 'zh' ? 'en' : 'zh';
@@ -1286,134 +1287,153 @@ export default function App() {
 
   if (viewMode === 'landing') {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-indigo-500 selection:text-white">
-        <Toast toast={toast} onClose={() => setToast(prev => ({ ...prev, show: false }))} />
-        <LandingPage
-          isLoggedIn={!!adminToken}
-          adminUser={adminUser}
-          onOpenLogin={() => {
-            setAuthTab('login');
-            setViewMode('auth');
-          }}
-          onEnterConsole={() => {
-            if (adminToken) {
-              setViewMode('console');
-            } else {
+      <I18nContext.Provider value={{ lang, setLang, toggleLang, t }}>
+        <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-indigo-500 selection:text-white">
+          <Toast toast={toast} onClose={() => setToast(prev => ({ ...prev, show: false }))} />
+          <LandingPage
+            isLoggedIn={!!adminToken}
+            adminUser={adminUser}
+            lang={lang}
+            setLang={setLang}
+            toggleLang={toggleLang}
+            t={t}
+            onOpenLogin={() => {
               setAuthTab('login');
               setViewMode('auth');
-            }
-          }}
-          onViewDocs={() => {
-            setCurrentTab('docs');
-            if (adminToken) {
+            }}
+            onEnterConsole={() => {
+              if (adminToken) {
+                setViewMode('console');
+              } else {
+                setAuthTab('login');
+                setViewMode('auth');
+              }
+            }}
+            onViewDocs={() => {
+              setCurrentTab('docs');
+              if (adminToken) {
+                setViewMode('console');
+              } else {
+                setAuthTab('login');
+                setViewMode('auth');
+              }
+            }}
+            onViewStatus={() => setViewMode('status')}
+            stats={stats}
+            channelsCount={channels.length}
+            modelsCount={models.length}
+          />
+          <LoginModal
+            isOpen={showLoginModal}
+            onClose={() => setShowLoginModal(false)}
+            lang={lang}
+            t={t}
+            onLoginSuccess={(token, user) => {
+              setStoredAuth(token, user);
+              setAdminToken(token);
+              setAdminUser(user);
+              const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
+              setCurrentTab(defTab);
+              setShowLoginModal(false);
               setViewMode('console');
-            } else {
-              setAuthTab('login');
-              setViewMode('auth');
-            }
-          }}
-          onViewStatus={() => setViewMode('status')}
-          stats={stats}
-          channelsCount={channels.length}
-          modelsCount={models.length}
-        />
-        <LoginModal
-          isOpen={showLoginModal}
-          onClose={() => setShowLoginModal(false)}
-          onLoginSuccess={(token, user) => {
-            setStoredAuth(token, user);
-            setAdminToken(token);
-            setAdminUser(user);
-            const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
-            setCurrentTab(defTab);
-            setShowLoginModal(false);
-            setViewMode('console');
-            showToast(`欢迎回来，${user.username}！`, 'success');
-            fetchData(token);
-            fetchLogs({}, token);
-          }}
-        />
-      </div>
+              showToast(isZh ? `欢迎回来，${user.username}！` : `Welcome back, ${user.username}!`, 'success');
+              fetchData(token);
+              fetchLogs({}, token);
+            }}
+          />
+        </div>
+      </I18nContext.Provider>
     );
   }
 
   if (viewMode === 'auth') {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-indigo-500 selection:text-white">
-        <Toast toast={toast} onClose={() => setToast(prev => ({ ...prev, show: false }))} />
-        <AuthPage
-          initialTab={authTab}
-          onLoginSuccess={(token, user) => {
-            setStoredAuth(token, user);
-            setAdminToken(token);
-            setAdminUser(user);
-            const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
-            setCurrentTab(defTab);
-            setViewMode('console');
-            showToast(`欢迎回来，${user.username}！`, 'success');
-            fetchData(token);
-            fetchLogs({}, token);
-          }}
-          onBackHome={() => setViewMode('landing')}
-        />
-      </div>
+      <I18nContext.Provider value={{ lang, setLang, toggleLang, t }}>
+        <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-indigo-500 selection:text-white">
+          <Toast toast={toast} onClose={() => setToast(prev => ({ ...prev, show: false }))} />
+          <AuthPage
+            initialTab={authTab}
+            lang={lang}
+            setLang={setLang}
+            toggleLang={toggleLang}
+            t={t}
+            onLoginSuccess={(token, user) => {
+              setStoredAuth(token, user);
+              setAdminToken(token);
+              setAdminUser(user);
+              const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
+              setCurrentTab(defTab);
+              setViewMode('console');
+              showToast(isZh ? `欢迎回来，${user.username}！` : `Welcome back, ${user.username}!`, 'success');
+              fetchData(token);
+              fetchLogs({}, token);
+            }}
+            onBackHome={() => setViewMode('landing')}
+          />
+        </div>
+      </I18nContext.Provider>
     );
   }
 
   if (viewMode === 'status') {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-indigo-500 selection:text-white">
-        <Toast toast={toast} onClose={() => setToast(prev => ({ ...prev, show: false }))} />
-        <ServiceStatus
-          isStandalone={true}
-          onBackHome={() => setViewMode('landing')}
-          onEnterConsole={() => {
-            if (adminToken) {
-              setViewMode('console');
-            } else {
+      <I18nContext.Provider value={{ lang, setLang, toggleLang, t }}>
+        <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-indigo-500 selection:text-white">
+          <Toast toast={toast} onClose={() => setToast(prev => ({ ...prev, show: false }))} />
+          <ServiceStatus
+            isStandalone={true}
+            onBackHome={() => setViewMode('landing')}
+            onEnterConsole={() => {
+              if (adminToken) {
+                setViewMode('console');
+              } else {
+                setAuthTab('login');
+                setViewMode('auth');
+              }
+            }}
+            onOpenLogin={() => {
               setAuthTab('login');
               setViewMode('auth');
-            }
-          }}
-          onOpenLogin={() => {
-            setAuthTab('login');
-            setViewMode('auth');
-          }}
-          isLoggedIn={!!adminToken}
-          lang={lang}
-          setLang={setLang}
-          t={t}
-          modelRoutes={modelRoutes}
-          channels={channels}
-          onRefresh={fetchData}
-          probeLatencies={channelLatencies}
-          adminFetch={adminFetch}
-          showToast={showToast}
-          onBatchProbe={handleBatchPing}
-          batchTesting={batchTesting}
-        />
-        <LoginModal
-          isOpen={showLoginModal}
-          onClose={() => setShowLoginModal(false)}
-          onLoginSuccess={(token, user) => {
-            setStoredAuth(token, user);
-            setAdminToken(token);
-            setAdminUser(user);
-            const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
-            setCurrentTab(defTab);
-            setShowLoginModal(false);
-            setViewMode('console');
-            showToast(`欢迎回来，${user.username}！`, 'success');
-            fetchData(token);
-            fetchLogs({}, token);
-          }}
-        />
-      </div>
+            }}
+            isLoggedIn={!!adminToken}
+            lang={lang}
+            setLang={setLang}
+            t={t}
+            modelRoutes={modelRoutes}
+            channels={channels}
+            onRefresh={fetchData}
+            probeLatencies={channelLatencies}
+            adminFetch={adminFetch}
+            showToast={showToast}
+            onBatchProbe={handleBatchPing}
+            batchTesting={batchTesting}
+          />
+          <LoginModal
+            isOpen={showLoginModal}
+            onClose={() => setShowLoginModal(false)}
+            lang={lang}
+            t={t}
+            onLoginSuccess={(token, user) => {
+              setStoredAuth(token, user);
+              setAdminToken(token);
+              setAdminUser(user);
+              const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
+              setCurrentTab(defTab);
+              setShowLoginModal(false);
+              setViewMode('console');
+              showToast(isZh ? `欢迎回来，${user.username}！` : `Welcome back, ${user.username}!`, 'success');
+              fetchData(token);
+              fetchLogs({}, token);
+            }}
+          />
+        </div>
+      </I18nContext.Provider>
     );
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-[#0b0f19] text-slate-800 dark:text-slate-100 font-sans selection:bg-indigo-500 selection:text-white transition-colors duration-200">
+    <I18nContext.Provider value={{ lang, setLang, toggleLang, t }}>
+      <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-[#0b0f19] text-slate-800 dark:text-slate-100 font-sans selection:bg-indigo-500 selection:text-white transition-colors duration-200">
       {/* Toast Notification */}
       <Toast toast={toast} onClose={() => setToast(prev => ({ ...prev, show: false }))} />
 
@@ -1424,8 +1444,10 @@ export default function App() {
           onClose={() => setActiveQuickKey(null)}
           onCopy={(txt) => {
             navigator.clipboard.writeText(txt);
-            showToast('调用代码已复制到剪贴板！', 'success');
+            showToast(isZh ? '调用代码已复制到剪贴板！' : 'Integration code copied to clipboard!', 'success');
           }}
+          lang={lang}
+          t={t}
         />
       )}
 
@@ -1436,15 +1458,17 @@ export default function App() {
           onClose={() => setActiveLogDetail(null)}
           onCopy={(txt) => {
             navigator.clipboard.writeText(txt);
-            showToast('已复制到剪贴板！', 'success');
+            showToast(isZh ? '已复制到剪贴板！' : 'Copied to clipboard!', 'success');
           }}
           onFilterBySession={(sid) => {
             setSessionFilter(sid);
             setLogOffset(0);
             fetchLogs({ sessionFilter: sid, offset: 0 });
-            showToast(`已按对话 ID: ${sid} 筛选`, 'info');
+            showToast(isZh ? `已按会话 ID: ${sid} 筛选` : `Filtered by session ID: ${sid}`, 'info');
           }}
           onDeleteLog={handleDeleteSingleLog}
+          lang={lang}
+          t={t}
         />
       )}
 
@@ -1455,8 +1479,10 @@ export default function App() {
           onClose={() => setCurlExportCmd('')}
           onCopy={(txt) => {
             navigator.clipboard.writeText(txt);
-            showToast('cURL 命令已复制到剪贴板！', 'success');
+            showToast(isZh ? 'cURL 命令已复制到剪贴板！' : 'cURL command copied to clipboard!', 'success');
           }}
+          lang={lang}
+          t={t}
         />
       )}
 
@@ -1511,11 +1537,11 @@ export default function App() {
           <button
             onClick={() => setShowCommandPalette(true)}
             className="w-full flex items-center justify-between px-3 py-2 bg-slate-100/80 hover:bg-slate-200/70 border border-slate-200/80 rounded-xl text-xs text-slate-500 hover:text-slate-800 transition cursor-pointer"
-            title="快捷搜索 / 指令面板 (⌘K)"
+            title={isZh ? '快捷搜索 / 指令面板 (⌘K)' : 'Command Palette (⌘K)'}
           >
             <div className="flex items-center space-x-2">
               <Search className="w-3.5 h-3.5 text-slate-400" />
-              <span>快速检索 / 指令</span>
+              <span>{isZh ? '快速检索 / 指令' : 'Quick Search / Command'}</span>
             </div>
             <kbd className="text-[10px] bg-white border border-slate-200 rounded px-1.5 py-0.5 font-mono font-semibold text-slate-400">
               ⌘K
@@ -1530,7 +1556,7 @@ export default function App() {
               {/* Group 1: 监控与分析 */}
               <div>
                 <span className="px-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase block mb-1">
-                  监控与分析
+                  {isZh ? '监控与分析' : 'Monitoring & Analytics'}
                 </span>
                 <div className="space-y-1">
                   <button
@@ -1571,7 +1597,7 @@ export default function App() {
               {/* Group 2: 模型网关与调度 */}
               <div>
                 <span className="px-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase block mb-1">
-                  模型网关与调度
+                  {isZh ? '模型网关与调度' : 'Gateway & Routing'}
                 </span>
                 <div className="space-y-1">
                   <button
@@ -1631,7 +1657,7 @@ export default function App() {
               {/* Group 3: 访问控制与资产 */}
               <div>
                 <span className="px-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase block mb-1">
-                  安全与身份资产
+                  {isZh ? '安全与身份资产' : 'Security & Identity'}
                 </span>
                 <div className="space-y-1">
                   <button
@@ -1677,7 +1703,7 @@ export default function App() {
                   >
                     <div className="flex items-center space-x-2.5">
                       <Wallet className="w-4 h-4 text-teal-600" />
-                      <span>卡密与充值</span>
+                      <span>{isZh ? '卡密与充值' : 'Wallet & Credits'}</span>
                     </div>
                   </button>
                 </div>
@@ -1686,7 +1712,7 @@ export default function App() {
               {/* Group 4: 演练与扩展 */}
               <div>
                 <span className="px-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase block mb-1">
-                  演练与协议生态
+                  {isZh ? '演练与协议生态' : 'Playground & Ecosystem'}
                 </span>
                 <div className="space-y-1">
                   <button
@@ -1738,7 +1764,7 @@ export default function App() {
             <div className="space-y-4">
               <div>
                 <span className="px-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase block mb-1">
-                  资产与凭据
+                  {isZh ? '资产与凭据' : 'Assets & Credentials'}
                 </span>
                 <div className="space-y-1">
                   <button
@@ -1751,7 +1777,7 @@ export default function App() {
                   >
                     <div className="flex items-center space-x-2.5">
                       <Wallet className="w-4 h-4 text-emerald-600" />
-                      <span>{t.navWallet || '我的钱包'}</span>
+                      <span>{t.navWallet || (isZh ? '我的钱包' : 'My Wallet')}</span>
                     </div>
                   </button>
 
@@ -1778,7 +1804,7 @@ export default function App() {
 
               <div>
                 <span className="px-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase block mb-1">
-                  演练与使用
+                  {isZh ? '演练与使用' : 'Playground & Usage'}
                 </span>
                 <div className="space-y-1">
                   <button
@@ -1837,11 +1863,11 @@ export default function App() {
                 }, 100);
               }}
               className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl border border-slate-200/70 bg-slate-50/50 hover:bg-indigo-50/50 hover:border-indigo-200 text-xs font-semibold text-slate-600 hover:text-indigo-600 transition cursor-pointer group"
-              title="前往门户首页查阅交互式开发文档"
+              title={isZh ? '前往门户首页查阅交互式开发文档' : 'Go to portal to view interactive developer documentation'}
             >
               <div className="flex items-center space-x-2.5">
                 <BookOpen className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-500" />
-                <span>{t.navViewDocs}</span>
+                <span>{t.navViewDocs || (isZh ? '开发文档 ↗' : 'API Docs ↗')}</span>
               </div>
               <ExternalLink className="w-3 h-3 opacity-50 group-hover:opacity-100" />
             </button>
@@ -1855,7 +1881,7 @@ export default function App() {
               type="button"
               onClick={() => setViewMode('status')}
               className="flex items-center space-x-1.5 text-emerald-600 hover:text-emerald-700 font-medium text-xs cursor-pointer hover:underline"
-              title="查看公开对外服务健康状态页面"
+              title={isZh ? '查看公开对外服务健康状态页面' : 'View public service status page'}
             >
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span>{t.statusOperationalBadge}</span>
@@ -1864,9 +1890,9 @@ export default function App() {
               type="button"
               onClick={() => setViewMode('status')}
               className="text-[11px] text-indigo-600 hover:text-indigo-800 hover:underline font-medium cursor-pointer"
-              title="查看公开对外服务健康状态页面"
+              title={isZh ? '查看公开对外服务健康状态页面' : 'View public service status page'}
             >
-              对外状态页 ↗
+              {isZh ? '对外状态页 ↗' : 'Public Status ↗'}
             </button>
           </div>
         </div>
@@ -1881,7 +1907,7 @@ export default function App() {
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="md:hidden p-2 rounded-xl text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-              title="打开导航栏"
+              title={isZh ? '打开导航栏' : 'Toggle navigation menu'}
             >
               <Menu className="w-5 h-5" />
             </button>
@@ -1892,11 +1918,11 @@ export default function App() {
               {currentTab === 'pricing' && t.navPricing}
               {currentTab === 'channels' && t.navChannels}
               {currentTab === 'keys' && t.navKeys}
-              {currentTab === 'wallet' && (adminUser?.role === 'admin' ? '卡密与充值管理' : (t.navWallet || '我的钱包'))}
+              {currentTab === 'wallet' && (adminUser?.role === 'admin' ? (isZh ? '卡密与充值管理' : 'Wallet & Credits') : (t.navWallet || (isZh ? '我的钱包' : 'My Wallet')))}
               {currentTab === 'logs' && t.navLogs}
               {currentTab === 'skills' && (t.navSkills || 'Skill Hub')}
               {currentTab === 'mcp' && (t.navMcp || 'MCP 广场')}
-              {currentTab === 'users' && (t.navUsers || '用户管理')}
+              {currentTab === 'users' && (t.navUsers || (isZh ? '用户管理' : 'User Management'))}
               {currentTab === 'playground' && t.navPlayground}
               {currentTab === 'docs' && t.navDocs}
             </h2>
@@ -1904,10 +1930,10 @@ export default function App() {
             <button
               onClick={() => setShowCommandPalette(true)}
               className="hidden lg:flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200/80 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition cursor-pointer shadow-2xs ml-3"
-              title="全局快捷检索与指令面板 (⌘K)"
+              title={isZh ? '全局快捷检索与指令面板 (⌘K)' : 'Command Palette (⌘K)'}
             >
               <Search className="w-3.5 h-3.5 text-slate-400" />
-              <span>快速搜索指令或模型...</span>
+              <span>{isZh ? '快速搜索指令或模型...' : 'Quick search commands or models...'}</span>
               <kbd className="text-[10px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-1.5 py-0.5 font-mono font-semibold text-slate-400">
                 ⌘K
               </kbd>
@@ -1919,27 +1945,27 @@ export default function App() {
             <button
               onClick={() => setShowTopologyModal(true)}
               className="hidden sm:flex text-xs px-2.5 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-semibold items-center space-x-1.5 transition border border-indigo-200 dark:border-indigo-800 shadow-2xs cursor-pointer"
-              title="查看可视化路由拓扑与容灾流程"
+              title={isZh ? '查看可视化路由拓扑与容灾流程' : 'View Visual Routing Topology & Failover'}
             >
               <Layers className="w-3.5 h-3.5" />
-              <span>容灾拓扑</span>
+              <span>{isZh ? '容灾拓扑' : 'Topology'}</span>
             </button>
 
             {/* Guided Onboarding Trigger */}
             <button
               onClick={() => setShowOnboardingModal(true)}
               className="text-xs px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white font-semibold flex items-center space-x-1.5 transition shadow-xs cursor-pointer"
-              title="打开开发者极速上手指引向导"
+              title={isZh ? '打开开发者极速上手指引向导' : 'Open Developer Guided Onboarding'}
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">新手向导</span>
+              <span className="hidden sm:inline">{isZh ? '新手向导' : 'Onboarding'}</span>
             </button>
 
             {/* Theme Toggle Button */}
             <button
               onClick={toggleTheme}
               className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition border border-slate-200 dark:border-slate-700 shadow-2xs cursor-pointer"
-              title={theme === 'dark' ? '切换为浅色模式' : '切换为深色模式'}
+              title={theme === 'dark' ? (isZh ? '切换为浅色模式' : 'Switch to Light Mode') : (isZh ? '切换为深色模式' : 'Switch to Dark Mode')}
             >
               {theme === 'dark' ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-indigo-600" />}
             </button>
@@ -1971,31 +1997,31 @@ export default function App() {
                   <button
                     onClick={() => setShowAccountModal(true)}
                     className="flex items-center space-x-1.5 text-xs text-slate-700 font-medium px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 transition cursor-pointer"
-                    title="账号设置与个人中心"
+                    title={isZh ? '账号设置与个人中心' : 'Account Settings'}
                   >
                     <User className="w-3.5 h-3.5 text-indigo-600" />
                     <span>{adminUser?.username || 'admin'}</span>
                     <span className="text-[10px] text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded font-mono font-bold">
-                      管理员
+                      {isZh ? '管理员' : 'Admin'}
                     </span>
                   </button>
                   <button
                     onClick={() => setCurrentTab('wallet')}
                     className="px-2.5 py-1 text-xs font-semibold text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition cursor-pointer"
-                    title="卡密生成与充值中心"
+                    title={isZh ? '卡密生成与充值中心' : 'Redeem Cards & Wallet'}
                   >
-                    卡密中心
+                    {isZh ? '卡密中心' : 'Redeem Center'}
                   </button>
                 </div>
               ) : (
                 <div className="flex items-center space-x-2">
                   <span className="text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200">
-                    {adminUser?.group_name ? `${adminUser.group_name} 组` : '默认组'}
+                    {adminUser?.group_name ? `${adminUser.group_name} ${isZh ? '组' : 'Tier'}` : (isZh ? '默认组' : 'Default Tier')}
                   </span>
                   <button
                     onClick={() => setCurrentTab('wallet')}
                     className="flex items-center space-x-1.5 text-xs text-emerald-800 font-bold px-2.5 py-1 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition cursor-pointer"
-                    title="点击管理钱包与充值"
+                    title={isZh ? '点击管理钱包与充值' : 'Manage Wallet & Top-up'}
                   >
                     <Coins className="w-3.5 h-3.5 text-emerald-600" />
                     <span>¥{Number(adminUser?.balance || 0).toFixed(2)}</span>
@@ -2003,7 +2029,7 @@ export default function App() {
                   <button
                     onClick={() => setShowAccountModal(true)}
                     className="flex items-center space-x-1.5 text-xs text-slate-700 hover:text-slate-900 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl font-medium transition cursor-pointer"
-                    title="账号设置与个人中心"
+                    title={isZh ? '账号设置与个人中心' : 'Account Settings'}
                   >
                     <User className="w-3.5 h-3.5 text-slate-500" />
                     <span>{adminUser?.username}</span>
@@ -2013,7 +2039,7 @@ export default function App() {
               <button
                 onClick={handleLogout}
                 className="p-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 transition cursor-pointer"
-                title="退出登录"
+                title={isZh ? '退出登录' : 'Logout'}
               >
                 <LogOut className="w-3.5 h-3.5" />
               </button>
@@ -2031,10 +2057,10 @@ export default function App() {
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-rose-900">
-                    安全风险预警：当前管理员账号使用默认初始密码
+                    {isZh ? '安全风险预警：当前管理员账号使用默认初始密码' : 'Security Alert: Admin account is using default initial password'}
                   </h4>
                   <p className="text-xs text-rose-700 mt-0.5">
-                    为保障网关控制台与算力资产安全，强烈建议您立即修改初始密码，避免未授权访问风险。
+                    {isZh ? '为保障网关控制台与算力资产安全，强烈建议您立即修改初始密码，避免未授权访问风险。' : 'To protect gateway security and compute assets, please change default password immediately.'}
                   </p>
                 </div>
               </div>
@@ -2043,7 +2069,7 @@ export default function App() {
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition shrink-0 cursor-pointer flex items-center space-x-1.5"
               >
                 <Lock className="w-3.5 h-3.5" />
-                <span>立即修改密码</span>
+                <span>{isZh ? '立即修改密码' : 'Change Password'}</span>
               </button>
             </div>
           )}
@@ -2057,10 +2083,12 @@ export default function App() {
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-amber-900 dark:text-amber-200">
-                    {Number(adminUser.balance || 0) <= 0 ? '钱包额度已耗尽 (余额不足)' : '钱包余额偏低预警'}
+                    {Number(adminUser.balance || 0) <= 0 ? (isZh ? '钱包额度已耗尽 (余额不足)' : 'Wallet Balance Depleted') : (isZh ? '钱包余额偏低预警' : 'Low Wallet Balance Alert')}
                   </h4>
                   <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                    当前可用额度为 <strong className="font-mono font-bold">¥{Number(adminUser.balance || 0).toFixed(4)}</strong>。为避免生产 API 接口调用中断，请及时充值或兑换卡密。
+                    {isZh 
+                      ? `当前可用额度为 ¥${Number(adminUser.balance || 0).toFixed(4)}。为避免生产 API 接口调用中断，请及时充值或兑换卡密。`
+                      : `Current balance is ¥${Number(adminUser.balance || 0).toFixed(4)}. Please top up or redeem cards to prevent API interruption.`}
                   </p>
                 </div>
               </div>
@@ -2069,7 +2097,7 @@ export default function App() {
                   onClick={() => setCurrentTab('wallet')}
                   className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer"
                 >
-                  前往充值 / 兑换卡密 →
+                  {isZh ? '前往充值 / 兑换卡密 →' : 'Top up / Redeem Card →'}
                 </button>
               </div>
             </div>
@@ -2094,6 +2122,8 @@ export default function App() {
               setActiveLogDetail={setActiveLogDetail}
               adminUser={adminUser}
               onOpenTopology={() => setShowTopologyModal(true)}
+              lang={lang}
+              t={t}
             />
           )}
 
@@ -2102,6 +2132,8 @@ export default function App() {
             <ModelRoutesManager
               adminFetch={adminFetch}
               showToast={showToast}
+              lang={lang}
+              t={t}
               onNavigateToPlayground={(m, modality) => {
                 setPlayModel(m);
                 if (modality && modality !== 'chat') {
@@ -2121,6 +2153,8 @@ export default function App() {
               showToast={showToast}
               stats={stats}
               isAdmin={adminUser?.role === 'admin'}
+              lang={lang}
+              t={t}
             />
           )}
 
@@ -2144,6 +2178,8 @@ export default function App() {
               testingId={testingId}
               handleEditChannel={handleEditChannel}
               handleDeleteChannel={handleDeleteChannel}
+              lang={lang}
+              t={t}
             />
           )}
 
@@ -2165,6 +2201,8 @@ export default function App() {
               adminUser={adminUser}
               pricingGroups={pricingGroups}
               onNavigateToPricing={() => setCurrentTab('pricing')}
+              lang={lang}
+              t={t}
             />
           )}
 
@@ -2195,6 +2233,8 @@ export default function App() {
               setActiveLogDetail={setActiveLogDetail}
               showToast={showToast}
               handleDeleteSingleLog={handleDeleteSingleLog}
+              lang={lang}
+              t={t}
             />
           )}
 
@@ -2204,9 +2244,11 @@ export default function App() {
               adminFetch={adminFetch}
               onCopy={(txt) => {
                 navigator.clipboard.writeText(txt);
-                showToast('已复制到剪贴板！', 'success');
+                showToast(isZh ? '已复制到剪贴板！' : 'Copied to clipboard!', 'success');
               }}
               showToast={showToast}
+              lang={lang}
+              t={t}
             />
           )}
 
@@ -2218,9 +2260,11 @@ export default function App() {
               keys={keys}
               onCopy={(txt) => {
                 navigator.clipboard.writeText(txt);
-                showToast('已复制到剪贴板！', 'success');
+                showToast(isZh ? '已复制到剪贴板！' : 'Copied to clipboard!', 'success');
               }}
               showToast={showToast}
+              lang={lang}
+              t={t}
             />
           )}
 
@@ -2231,6 +2275,8 @@ export default function App() {
               adminToken={adminToken}
               adminFetch={adminFetch}
               showToast={showToast}
+              lang={lang}
+              t={t}
             />
           )}
 
@@ -2257,6 +2303,8 @@ export default function App() {
                 });
                 fetchUserProfile();
               }}
+              lang={lang}
+              t={t}
             />
           )}
 
@@ -2270,12 +2318,14 @@ export default function App() {
               showToast={showToast}
               initialModel={playModel}
               initialModality={playModality}
+              lang={lang}
+              t={t}
             />
           )}
 
           {/* 6. DOCS TAB */}
           {currentTab === 'docs' && (
-            <DocsView showToast={showToast} />
+            <DocsView showToast={showToast} lang={lang} t={t} />
           )}
         </div>
       </main>
@@ -2287,7 +2337,7 @@ export default function App() {
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
               <div>
                 <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 tracking-tight">
-                  {editingChannelId ? '编辑服务商' : '接入服务商'}
+                  {editingChannelId ? (isZh ? '编辑服务商' : 'Edit Upstream Provider') : (isZh ? '接入服务商' : 'Connect New Provider')}
                 </h3>
               </div>
               <button
@@ -2321,21 +2371,21 @@ export default function App() {
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-slate-700 dark:text-slate-300 text-[11px] flex items-center space-x-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
-                      <span>快捷预设服务商 (点击一键自动填入):</span>
+                      <span>{isZh ? '快捷预设服务商 (点击一键自动填入):' : 'Quick Presets (1-click autofill):'}</span>
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {[
-                      { key: 'deepseek', label: 'DeepSeek', badge: '官方' },
-                      { key: 'gpustack', label: 'GPUStack', badge: '私有集群' },
-                      { key: 'zhipu', label: '智谱 GLM', badge: '国产主流' },
-                      { key: 'doubao', label: '火山豆包', badge: '多模态/视频' },
-                      { key: 'moonshot', label: '月之暗面 Kimi', badge: '长文本' },
-                      { key: 'openai', label: 'OpenAI', badge: '全协议' },
+                      { key: 'deepseek', label: 'DeepSeek', badge: isZh ? '官方' : 'Official' },
+                      { key: 'gpustack', label: 'GPUStack', badge: isZh ? '私有集群' : 'Cluster' },
+                      { key: 'zhipu', label: '智谱 GLM', badge: isZh ? '国产主流' : 'GLM' },
+                      { key: 'doubao', label: '火山豆包', badge: isZh ? '多模态/视频' : 'Multimodal' },
+                      { key: 'moonshot', label: '月之暗面 Kimi', badge: isZh ? '长文本' : 'Kimi' },
+                      { key: 'openai', label: 'OpenAI', badge: isZh ? '全协议' : 'Full Suite' },
                       { key: 'anthropic', label: 'Claude', badge: 'Anthropic' },
-                      { key: 'gemini', label: 'Google Gemini', badge: '多模态' },
-                      { key: 'ollama', label: 'Ollama', badge: '本地开源' },
-                      { key: 'vllm', label: 'vLLM', badge: '自建集群' },
+                      { key: 'gemini', label: 'Google Gemini', badge: isZh ? '多模态' : 'Multimodal' },
+                      { key: 'ollama', label: 'Ollama', badge: isZh ? '本地开源' : 'Local' },
+                      { key: 'vllm', label: 'vLLM', badge: isZh ? '自建集群' : 'vLLM' },
                     ].map(p => (
                       <button
                         key={p.key}
@@ -2354,7 +2404,7 @@ export default function App() {
               {/* Field 1: Name */}
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  服务商名称 <span className="text-rose-500">*</span>
+                  {isZh ? '服务商名称' : 'Provider Name'} <span className="text-rose-500">*</span>
                 </label>
                 <input
                   required
@@ -2368,7 +2418,7 @@ export default function App() {
               {/* Field 2: Base URL + Test Ping */}
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  服务商 Base URL <span className="text-rose-500">*</span>
+                  {isZh ? '服务商 Base URL' : 'Provider Base URL'} <span className="text-rose-500">*</span>
                 </label>
                 <div className="flex space-x-2">
                   <input
@@ -2376,10 +2426,10 @@ export default function App() {
                     value={newChannel.base_url}
                     onChange={(e) => setNewChannel({ ...newChannel, base_url: e.target.value })}
                     placeholder={
-                      newChannel.type === 'ollama' ? '例如: http://<宿主机IP或容器服务名>:11434/v1' :
-                      newChannel.type === 'vllm' ? '例如: http://<宿主机IP或集群域名>:8000/v1' :
-                      newChannel.type === 'gpustack' ? '例如: http://<GPUStack服务IP或集群域名>/v1-openai' :
-                      'https://api.deepseek.com 或私有网关端点'
+                      newChannel.type === 'ollama' ? (isZh ? '例如: http://<宿主机IP或容器服务名>:11434/v1' : 'e.g. http://<host-ip-or-container>:11434/v1') :
+                      newChannel.type === 'vllm' ? (isZh ? '例如: http://<宿主机IP或集群域名>:8000/v1' : 'e.g. http://<host-ip-or-cluster>:8000/v1') :
+                      newChannel.type === 'gpustack' ? (isZh ? '例如: http://<GPUStack服务IP或集群域名>/v1-openai' : 'e.g. http://<gpustack-ip-or-domain>/v1-openai') :
+                      (isZh ? 'https://api.deepseek.com 或私有网关端点' : 'https://api.deepseek.com or private gateway endpoint')
                     }
                     className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-xs"
                   />
@@ -2390,7 +2440,7 @@ export default function App() {
                     className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 shadow-2xs transition disabled:opacity-50 shrink-0 cursor-pointer"
                   >
                     {probing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-                    <span>{probing ? '连通中...' : '测试连通性'}</span>
+                    <span>{probing ? (isZh ? '连通中...' : 'Probing...') : (isZh ? '测试连通性' : 'Test Ping')}</span>
                   </button>
                 </div>
               </div>
@@ -2405,14 +2455,14 @@ export default function App() {
                     type={showApiKeyPlain ? 'text' : 'password'}
                     value={newChannel.api_key}
                     onChange={(e) => setNewChannel({ ...newChannel, api_key: e.target.value })}
-                    placeholder="留空或填 none 表示免密"
+                    placeholder={isZh ? '留空或填 none 表示免密' : 'Leave empty or none for no auth'}
                     className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl pl-3 pr-10 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-xs"
                   />
                   <button
                     type="button"
                     onClick={() => setShowApiKeyPlain(!showApiKeyPlain)}
                     className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
-                    title={showApiKeyPlain ? '隐藏密钥' : '显示明文'}
+                    title={showApiKeyPlain ? (isZh ? '隐藏密钥' : 'Hide Key') : (isZh ? '显示明文' : 'Show Plaintext')}
                   >
                     {showApiKeyPlain ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -2428,13 +2478,13 @@ export default function App() {
               {/* Collapsible Advanced Settings */}
               <details className="group border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 bg-slate-50/60 dark:bg-slate-900/40">
                 <summary className="font-semibold text-slate-700 dark:text-slate-300 cursor-pointer flex items-center justify-between select-none">
-                  <span>高级设置</span>
+                  <span>{isZh ? '高级设置' : 'Advanced Settings'}</span>
                   <span className="text-slate-400 group-open:rotate-180 transition-transform text-xs">▼</span>
                 </summary>
 
                 <div className="pt-3 space-y-3.5 border-t border-slate-200/60 dark:border-slate-800 mt-2.5">
                   <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">服务引擎类型</label>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">{isZh ? '服务引擎类型' : 'Engine Type'}</label>
                     <select
                       value={newChannel.type}
                       onChange={(e) => setNewChannel({ ...newChannel, type: e.target.value })}
@@ -2442,7 +2492,7 @@ export default function App() {
                     >
                       <option value="gpustack">GPUStack</option>
                       <option value="deepseek">DeepSeek</option>
-                      <option value="openai">OpenAI (及所有兼容服务商)</option>
+                      <option value="openai">{isZh ? 'OpenAI (及所有兼容服务商)' : 'OpenAI (and compatible)'}</option>
                       <option value="anthropic">Claude / Anthropic</option>
                       <option value="gemini">Gemini</option>
                       <option value="vllm">vLLM</option>
@@ -2466,7 +2516,7 @@ export default function App() {
 
                   <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-[11px] text-slate-500 mb-1">优先级 (1最先)</label>
+                      <label className="block text-[11px] text-slate-500 mb-1">{isZh ? '优先级 (1最先)' : 'Priority (1 highest)'}</label>
                       <input
                         type="number"
                         value={newChannel.priority}
@@ -2475,7 +2525,7 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] text-slate-500 mb-1">负载权重</label>
+                      <label className="block text-[11px] text-slate-500 mb-1">{isZh ? '负载权重' : 'Weight'}</label>
                       <input
                         type="number"
                         value={newChannel.weight}
@@ -2484,7 +2534,7 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] text-slate-500 mb-1">超时时间 (秒)</label>
+                      <label className="block text-[11px] text-slate-500 mb-1">{isZh ? '超时时间 (秒)' : 'Timeout (s)'}</label>
                       <input
                         type="number"
                         value={newChannel.timeout_seconds || 60}
@@ -2501,16 +2551,16 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setShowChannelModal(false)}
-                className="px-4 py-2 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 font-medium transition"
+                className="px-4 py-2 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 font-medium transition cursor-pointer"
               >
-                取消
+                {isZh ? '取消' : 'Cancel'}
               </button>
               <button
                 type="button"
                 onClick={handleCreateChannel}
                 className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition cursor-pointer"
               >
-                {editingChannelId ? '保存配置' : '确认接入'}
+                {editingChannelId ? (isZh ? '保存配置' : 'Save Changes') : (isZh ? '确认接入' : 'Connect Provider')}
               </button>
             </div>
           </form>
@@ -2523,7 +2573,7 @@ export default function App() {
           <form onSubmit={handleCreateKey} className="bg-white dark:bg-[#111726] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
               <div>
-                <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 tracking-tight">新建 API 密钥</h3>
+                <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 tracking-tight">{isZh ? '新建 API 密钥' : 'Create API Key'}</h3>
               </div>
               <button
                 type="button"
@@ -2537,19 +2587,19 @@ export default function App() {
             <div className="space-y-4 text-xs">
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  密钥名称 <span className="text-rose-500">*</span>
+                  {isZh ? '密钥名称' : 'Key Name / Description'} <span className="text-rose-500">*</span>
                 </label>
                 <input
                   value={newKey.tenant_id}
                   onChange={(e) => setNewKey({ ...newKey, tenant_id: e.target.value })}
-                  placeholder="如 个人开发 / Cursor / Claude Code"
+                  placeholder={isZh ? '如 个人开发 / Cursor / Claude Code' : 'e.g. Cursor, Claude Code, Dev Team'}
                   className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 text-xs"
                 />
               </div>
 
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 text-xs">
-                  计费分组 (Pricing Group)
+                  {isZh ? '计费分组 (Pricing Group)' : 'Pricing Group'}
                 </label>
                 {adminUser?.role === 'admin' ? (
                   <div className="space-y-2">
@@ -2565,13 +2615,13 @@ export default function App() {
                               : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
                           }`}
                         >
-                          {g === 'default' ? '默认组 (default)' : g === 'vip' ? 'VIP组 (vip)' : g === 'enterprise' ? '企业组 (enterprise)' : `${g} 组`}
+                          {g === 'default' ? (isZh ? '默认组 (default)' : 'Default (default)') : g === 'vip' ? (isZh ? 'VIP组 (vip)' : 'VIP (vip)') : g === 'enterprise' ? (isZh ? '企业组 (enterprise)' : 'Enterprise (enterprise)') : `${g} ${isZh ? '组' : 'Group'}`}
                         </button>
                       ))}
                     </div>
                     <input
                       type="text"
-                      placeholder="或输入自定义计费分组标识"
+                      placeholder={isZh ? '或输入自定义计费分组标识' : 'or enter custom pricing group ID'}
                       value={newKey.group_name || ''}
                       onChange={(e) => setNewKey({ ...newKey, group_name: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '') })}
                       className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 text-xs"
@@ -2590,8 +2640,8 @@ export default function App() {
                               : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
                           }`}
                         >
-                          <div className="text-xs font-bold">默认基础组 (default)</div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">标准定价，适合常规调用或测试环境</div>
+                          <div className="text-xs font-bold">{isZh ? '默认基础组 (default)' : 'Default Group (default)'}</div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{isZh ? '标准定价，适合常规调用或测试环境' : 'Standard rate, ideal for general dev and testing'}</div>
                         </button>
                         <button
                           type="button"
@@ -2603,19 +2653,19 @@ export default function App() {
                           }`}
                         >
                           <div className="text-xs font-bold text-amber-600 dark:text-amber-400">
-                            {adminUser.group_name.toUpperCase()} 专属保障组
+                            {adminUser.group_name.toUpperCase()} {isZh ? '专属保障组' : 'Tier Group'}
                           </div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">享受您账号签约的特权与优惠费率</div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{isZh ? '享受您账号签约的特权与优惠费率' : 'Enjoy your account negotiated discount rates'}</div>
                         </button>
                       </div>
                     ) : (
                       <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
                         <div>
-                          <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">默认计费组 (Standard)</div>
-                          <div className="text-[11px] text-slate-400 mt-0.5">该密钥调用将按通用标准费率结算扣费</div>
+                          <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">{isZh ? '默认计费组 (Standard)' : 'Default Group (Standard)'}</div>
+                          <div className="text-[11px] text-slate-400 mt-0.5">{isZh ? '该密钥调用将按通用标准费率结算扣费' : 'Usage will be billed under general standard rates'}</div>
                         </div>
                         <span className="px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                          标准费率
+                          {isZh ? '标准费率' : 'Standard'}
                         </span>
                       </div>
                     )}
@@ -2625,7 +2675,7 @@ export default function App() {
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="font-semibold text-slate-700 dark:text-slate-300">API 密钥</label>
+                  <label className="font-semibold text-slate-700 dark:text-slate-300">{isZh ? 'API 密钥' : 'API Key'}</label>
                   <button
                     type="button"
                     onClick={() => {
@@ -2634,23 +2684,23 @@ export default function App() {
                     }}
                     className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 cursor-pointer"
                   >
-                    <span>随机生成</span>
+                    <span>{isZh ? '随机生成' : 'Generate'}</span>
                   </button>
                 </div>
                 <input
                   value={newKey.key}
                   onChange={(e) => setNewKey({ ...newKey, key: e.target.value })}
-                  placeholder="留空自动生成"
+                  placeholder={isZh ? '留空自动生成' : 'Leave empty to auto-generate'}
                   className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-xs"
                 />
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="font-semibold text-slate-700 dark:text-slate-300">额度限制 (CNY, 0 为不限)</label>
+                  <label className="font-semibold text-slate-700 dark:text-slate-300">{isZh ? '额度限制 (CNY, 0 为不限)' : 'Quota Limit (CNY, 0 for unlimited)'}</label>
                   <div className="flex items-center space-x-1.5 text-[11px]">
                     {[
-                      { label: '不限', val: 0 },
+                      { label: isZh ? '不限' : 'Unlimited', val: 0 },
                       { label: '¥10', val: 10 },
                       { label: '¥50', val: 50 },
                       { label: '¥100', val: 100 },
@@ -2678,10 +2728,10 @@ export default function App() {
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="font-semibold text-slate-700 dark:text-slate-300">速率限制 (RPM, 0 为不限)</label>
+                  <label className="font-semibold text-slate-700 dark:text-slate-300">{isZh ? '速率限制 (RPM, 0 为不限)' : 'Rate Limit (RPM, 0 for unlimited)'}</label>
                   <div className="flex items-center space-x-1.5 text-[11px]">
                     {[
-                      { label: '不限', val: 0 },
+                      { label: isZh ? '不限' : 'Unlimited', val: 0 },
                       { label: '60', val: 60 },
                       { label: '120', val: 120 },
                       { label: '600', val: 600 },
@@ -2712,13 +2762,13 @@ export default function App() {
                 onClick={() => setShowKeyModal(false)}
                 className="px-4 py-2 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 font-medium transition cursor-pointer"
               >
-                取消
+                {isZh ? '取消' : 'Cancel'}
               </button>
               <button
                 type="submit"
                 className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition cursor-pointer"
               >
-                确认创建
+                {isZh ? '确认创建' : 'Create Key'}
               </button>
             </div>
           </form>
@@ -2733,8 +2783,10 @@ export default function App() {
         adminToken={adminToken}
         adminFetch={adminFetch}
         showToast={showToast}
+        lang={lang}
+        t={t}
         onPasswordChanged={() => {
-          showToast('密码修改成功，请牢记新密码', 'success');
+          showToast(isZh ? '密码修改成功，请牢记新密码' : 'Password changed successfully', 'success');
         }}
       />
 
@@ -2742,6 +2794,8 @@ export default function App() {
       <LoginModal
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
+        lang={lang}
+        t={t}
         onLoginSuccess={(token, user) => {
           setStoredAuth(token, user);
           setAdminToken(token);
@@ -2749,7 +2803,7 @@ export default function App() {
           const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
           setCurrentTab(defTab);
           setShowLoginModal(false);
-          showToast(`欢迎回来，${user.username}！`, 'success');
+          showToast(isZh ? `欢迎回来，${user.username}！` : `Welcome back, ${user.username}!`, 'success');
           fetchData(token);
           fetchLogs({}, token);
         }}
@@ -2766,6 +2820,8 @@ export default function App() {
           setCurrentTab('playground');
         }}
         showToast={showToast}
+        lang={lang}
+        t={t}
       />
 
       {/* Visual Routing Topology & Failover Modal */}
@@ -2776,6 +2832,8 @@ export default function App() {
         modelRoutes={modelRoutes}
         onTestChannel={handleTestChannel}
         showToast={showToast}
+        lang={lang}
+        t={t}
       />
 
       {/* Global Command Palette (Cmd+K) */}
@@ -2813,5 +2871,6 @@ export default function App() {
         showToast={showToast}
       />
     </div>
+    </I18nContext.Provider>
   );
 }

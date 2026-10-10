@@ -15,9 +15,10 @@ import {
 } from 'lucide-react';
 import { resolveGatewayUrl } from '../config';
 
-export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
+export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh', t }) {
   if (!isOpen) return null;
 
+  const isZh = lang === 'zh';
   const [activeTab, setActiveTab] = useState('login'); // 'login' or 'register'
 
   // Login state
@@ -82,10 +83,10 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
         onLoginSuccess(data.data.token, data.data.user);
         onClose();
       } else {
-        setError(data.error || '登录失败，请检查账号或密码');
+        setError(data.error || (isZh ? '登录失败，请检查账号或密码' : 'Sign in failed, please check credentials'));
       }
     } catch (err) {
-      setError('网络请求失败，请确保网关服务正在运行: ' + err.message);
+      setError(isZh ? ('网络请求失败，请确保网关服务正在运行: ' + err.message) : ('Network request failed: ' + err.message));
     } finally {
       setLoading(false);
     }
@@ -94,7 +95,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
   // Send Email Verification Code
   const handleSendCode = async () => {
     if (!regEmail.trim()) {
-      setError('请先填写有效的电子邮箱');
+      setError(isZh ? '请先填写有效的电子邮箱' : 'Please enter a valid email address first');
       return;
     }
     setError('');
@@ -109,7 +110,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        setSuccessMsg(data.message || '验证码已发送至邮箱，请查收');
+        setSuccessMsg(data.message || (isZh ? '验证码已发送至邮箱，请查收' : 'Verification code sent to your email'));
         setCodeCountdown(60);
         const timer = setInterval(() => {
           setCodeCountdown((prev) => {
@@ -121,10 +122,10 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
           });
         }, 1000);
       } else {
-        setError(data.error || '发送验证码失败');
+        setError(data.error || (isZh ? '发送验证码失败' : 'Failed to send code'));
       }
     } catch (err) {
-      setError('请求异常: ' + err.message);
+      setError((isZh ? '请求异常: ' : 'Request error: ') + err.message);
     } finally {
       setSendingCode(false);
     }
@@ -156,10 +157,10 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
         onLoginSuccess(data.data.token, data.data.user);
         onClose();
       } else {
-        setError(data.error || '注册失败');
+        setError(data.error || (isZh ? '注册失败' : 'Registration failed'));
       }
     } catch (err) {
-      setError('网络请求失败: ' + err.message);
+      setError((isZh ? '网络请求失败: ' : 'Network request failed: ') + err.message);
     } finally {
       setLoading(false);
     }
@@ -179,7 +180,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
         return;
       }
     }
-    setError(`企业 OAuth 登录需在服务端环境配置 ${provider.toUpperCase()}_CLIENT_ID 与密钥。当前请使用企业账号密码登录。`);
+    setError(isZh ? `企业 OAuth 登录需在服务端环境配置 ${provider.toUpperCase()}_CLIENT_ID 与密钥。当前请使用企业账号密码登录。` : `Enterprise OAuth requires ${provider.toUpperCase()}_CLIENT_ID configured on server. Please use credentials login.`);
   };
 
   return (
@@ -193,9 +194,9 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
             </div>
             <div>
               <h3 className="font-bold text-base text-slate-900 tracking-tight">
-                Airoute 统一门户
+                {isZh ? 'Airoute 统一门户' : 'Airoute Portal'}
               </h3>
-              <p className="text-[11px] text-slate-500">统一身份验证与额度管理</p>
+              <p className="text-[11px] text-slate-500">{isZh ? '统一身份验证与额度管理' : 'Unified Auth & Quota Management'}</p>
             </div>
           </div>
           <button
@@ -222,7 +223,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              账号登录
+              {isZh ? '账号登录' : 'Sign In'}
             </button>
             <button
               type="button"
@@ -237,7 +238,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              <span>注册账号</span>
+              <span>{isZh ? '注册账号' : 'Register'}</span>
             </button>
           </div>
         ) : null}
@@ -261,7 +262,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
           <form onSubmit={handleLoginSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                用户名或绑定邮箱
+                {isZh ? '用户名或绑定邮箱' : 'Username or Email'}
               </label>
               <div className="relative">
                 <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -270,7 +271,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="admin / 注册用户名 / 邮箱"
+                  placeholder={isZh ? 'admin / 注册用户名 / 邮箱' : 'admin / username / email'}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
                 />
               </div>
@@ -278,7 +279,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                登录密码
+                {isZh ? '登录密码' : 'Password'}
               </label>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -287,14 +288,14 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="密码"
+                  placeholder={isZh ? '密码' : 'Password'}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-10 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 transition cursor-pointer"
-                  title={showPassword ? '隐藏密码' : '显示密码'}
+                  title={showPassword ? (isZh ? '隐藏密码' : 'Hide password') : (isZh ? '显示密码' : 'Show password')}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -310,11 +311,11 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
                 {loading ? (
                   <>
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>正在登录...</span>
+                    <span>{isZh ? '正在登录...' : 'Signing in...'}</span>
                   </>
                 ) : (
                   <>
-                    <span>登录平台</span>
+                    <span>{isZh ? '登录平台' : 'Sign In'}</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </>
                 )}
@@ -326,7 +327,9 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
               <div className="pt-2">
                 <div className="relative flex py-2 items-center">
                   <div className="flex-grow border-t border-slate-200"></div>
-                  <span className="flex-shrink mx-3 text-[10px] text-slate-400 uppercase font-semibold">快速三方登录</span>
+                  <span className="flex-shrink mx-3 text-[10px] text-slate-400 uppercase font-semibold">
+                    {isZh ? '快速三方登录' : 'Social Sign-in'}
+                  </span>
                   <div className="flex-grow border-t border-slate-200"></div>
                 </div>
 
@@ -369,7 +372,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
           <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                用户名
+                {isZh ? '用户名' : 'Username'}
               </label>
               <div className="relative">
                 <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -378,7 +381,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
                   type="text"
                   value={regUsername}
                   onChange={(e) => setRegUsername(e.target.value)}
-                  placeholder="字母/数字，至少 3 字符"
+                  placeholder={isZh ? '字母/数字，至少 3 字符' : 'Letters/digits, min 3 chars'}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
                 />
               </div>
@@ -386,7 +389,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                邮箱地址
+                {isZh ? '邮箱地址' : 'Email Address'}
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -404,7 +407,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
             {sysConfig.require_email_verification && (
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  邮箱验证码
+                  {isZh ? '邮箱验证码' : 'Email Verification Code'}
                 </label>
                 <div className="flex space-x-2">
                   <input
@@ -413,7 +416,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
                     maxLength={6}
                     value={regCode}
                     onChange={(e) => setRegCode(e.target.value)}
-                    placeholder="6 位验证码"
+                    placeholder={isZh ? '6 位验证码' : '6-digit code'}
                     className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
                   />
                   <button
@@ -425,9 +428,9 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
                     {sendingCode ? (
                       <RefreshCw className="w-3.5 h-3.5 animate-spin mx-auto" />
                     ) : codeCountdown > 0 ? (
-                      `${codeCountdown}s 后重试`
+                      `${codeCountdown}s ${isZh ? '后重试' : 'retry'}`
                     ) : (
-                      '获取验证码'
+                      isZh ? '获取验证码' : 'Send Code'
                     )}
                   </button>
                 </div>
@@ -436,7 +439,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                设置密码
+                {isZh ? '设置密码' : 'Password'}
               </label>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -445,7 +448,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
                   type={showPassword ? 'text' : 'password'}
                   value={regPassword}
                   onChange={(e) => setRegPassword(e.target.value)}
-                  placeholder="至少 6 位字符"
+                  placeholder={isZh ? '至少 6 位字符' : 'At least 6 characters'}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-10 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
                 />
                 <button
@@ -467,11 +470,11 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
                 {loading ? (
                   <>
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>正在创建账号...</span>
+                    <span>{isZh ? '正在创建账号...' : 'Creating account...'}</span>
                   </>
                 ) : (
                   <>
-                    <span>立即注册并登录</span>
+                    <span>{isZh ? '立即注册并登录' : 'Register & Enter'}</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </>
                 )}

@@ -206,7 +206,8 @@ const getDefaultArgsForTool = (toolName) => {
   return getToolInfo(toolName).defaultArgs;
 };
 
-export default function McpIntegrationView({ adminFetch, adminToken, keys = [], onCopy, showToast }) {
+export default function McpIntegrationView({ adminFetch, adminToken, keys = [], onCopy, showToast, lang = 'zh', t }) {
+  const isZh = lang === 'zh';
   const [servers, setServers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -587,13 +588,13 @@ export default function McpIntegrationView({ adminFetch, adminToken, keys = [], 
   };
 
   const categories = [
-    { id: 'all', name: '全部服务', icon: Boxes },
-    { id: 'ops', name: '网关原生', icon: Server },
-    { id: 'dev', name: '研发协作', icon: Code2 },
-    { id: 'search', name: '搜索抓取', icon: Globe },
-    { id: 'db', name: '数据存储', icon: Database },
-    { id: 'ai', name: '深度推理', icon: Sparkles },
-    { id: 'productivity', name: '企业协同', icon: Layers }
+    { id: 'all', name: isZh ? '全部服务' : 'All Services', icon: Boxes },
+    { id: 'ops', name: isZh ? '网关原生' : 'Gateway Native', icon: Server },
+    { id: 'dev', name: isZh ? '研发协作' : 'Dev Collab', icon: Code2 },
+    { id: 'search', name: isZh ? '搜索抓取' : 'Search & Scrape', icon: Globe },
+    { id: 'db', name: isZh ? '数据存储' : 'Data & Storage', icon: Database },
+    { id: 'ai', name: isZh ? '深度推理' : 'Deep Reasoning', icon: Sparkles },
+    { id: 'productivity', name: isZh ? '企业协同' : 'Productivity', icon: Layers }
   ];
 
   const filteredServers = servers.filter(srv => {
@@ -740,14 +741,14 @@ curl -X POST "${messagesUrl}" \\
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-lg font-bold text-gray-900 dark:text-white">
-              Model Context Protocol (MCP) 广场
+              {isZh ? 'Model Context Protocol (MCP) 广场' : 'Model Context Protocol (MCP) Hub'}
             </h1>
             <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
               JSON-RPC 2.0
             </span>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            连接外部系统与协议扩展，支持 SSE 与 Stdio 传输，提供统一鉴权、安全脱敏与客户端对接。
+            {isZh ? '连接外部系统与协议扩展，支持 SSE 与 Stdio 传输，提供统一鉴权、安全脱敏与客户端对接。' : 'Connect external tools and protocol servers via SSE & Stdio with unified auth, data redaction, and client integration.'}
           </p>
         </div>
 
@@ -757,27 +758,27 @@ curl -X POST "${messagesUrl}" \\
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-750 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-2xs"
           >
             <Radio className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-            协议探针
+            {isZh ? '协议探针' : 'Protocol Probe'}
           </button>
           <button
             onClick={() => { setSelectedServerForConfig(null); setConfigModalOpen(true); }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-750 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-2xs"
           >
             <FileCode className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-            客户端配置
+            {isZh ? '客户端配置' : 'Client Config'}
           </button>
           <button
             onClick={() => setAddServerModalOpen(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-2xs"
           >
             <Plus className="w-3.5 h-3.5" />
-            接入新服务
+            {isZh ? '接入新服务' : 'Add Server'}
           </button>
           <button
             onClick={fetchServersAndSettings}
             disabled={loading}
             className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-lg border border-gray-200 dark:border-gray-750 bg-white dark:bg-gray-800 hover:bg-gray-50 transition-colors"
-            title="刷新服务状态"
+            title={isZh ? '刷新服务状态' : 'Refresh Server Status'}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -789,47 +790,47 @@ curl -X POST "${messagesUrl}" \\
         <div className="flex items-center gap-4 flex-wrap text-xs">
           {/* 总控开关 */}
           <div className="flex items-center gap-2 pr-4 border-r border-gray-200 dark:border-gray-750">
-            <span className="font-medium text-gray-700 dark:text-gray-200">协议总闸:</span>
+            <span className="font-medium text-gray-700 dark:text-gray-200">{isZh ? '协议总闸:' : 'Master Switch:'}</span>
             <button
               onClick={handleToggleGlobalMcp}
               disabled={togglingGlobal}
               className={`relative inline-flex h-4.5 w-8 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${mcpSettings.mcp_enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'}`}
-              title={mcpSettings.mcp_enabled ? '点击关闭 MCP' : '点击开启 MCP'}
+              title={mcpSettings.mcp_enabled ? (isZh ? '点击关闭 MCP' : 'Click to disable MCP') : (isZh ? '点击开启 MCP' : 'Click to enable MCP')}
             >
               <span
                 className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${mcpSettings.mcp_enabled ? 'translate-x-3.5' : 'translate-x-0'}`}
               />
             </button>
             <span className={`text-[11px] font-medium ${mcpSettings.mcp_enabled ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400'}`}>
-              {mcpSettings.mcp_enabled ? '已激活' : '已停用'}
+              {mcpSettings.mcp_enabled ? (isZh ? '已激活' : 'Active') : (isZh ? '已停用' : 'Disabled')}
             </span>
           </div>
 
           {/* 活跃服务计数 */}
           <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-300">
-            <span className="text-gray-400">活跃服务:</span>
+            <span className="text-gray-400">{isZh ? '活跃服务:' : 'Active Servers:'}</span>
             <span className="font-semibold text-gray-900 dark:text-white">{onlineServersCount}</span>
             <span className="text-gray-400">/ {servers.length}</span>
           </div>
 
           {/* 聚合工具计数 */}
           <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-300">
-            <span className="text-gray-400">挂载工具:</span>
+            <span className="text-gray-400">{isZh ? '挂载工具:' : 'Mounted Tools:'}</span>
             <span className="font-semibold text-gray-900 dark:text-white">{totalToolsCount}</span>
-            <span className="text-gray-400">个</span>
+            <span className="text-gray-400">{isZh ? '个' : ' tools'}</span>
           </div>
         </div>
 
         {/* SSE 端点展示与复制 */}
         <div className="flex items-center gap-1.5 text-xs text-gray-500 shrink-0">
-          <span className="text-gray-400 text-[11px]">SSE 端点:</span>
+          <span className="text-gray-400 text-[11px]">{isZh ? 'SSE 端点:' : 'SSE Endpoint:'}</span>
           <code className="px-1.5 py-0.5 rounded font-mono text-[11px] bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200/80 dark:border-gray-800">
             /mcp/sse
           </code>
           <button
             onClick={() => handleCopyText(sseUrl, 'sse-endpoint')}
             className="p-1 text-gray-400 hover:text-indigo-600 transition-colors"
-            title="复制完整端点 URL"
+            title={isZh ? '复制完整端点 URL' : 'Copy Full Endpoint URL'}
           >
             {copiedKey === 'sse-endpoint' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
           </button>
@@ -859,7 +860,7 @@ curl -X POST "${messagesUrl}" \\
           <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
           <input
             type="text"
-            placeholder="搜索 MCP 服务或工具..."
+            placeholder={isZh ? '搜索 MCP 服务或工具...' : 'Search MCP servers or tools...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-8 pr-3 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/60 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -871,8 +872,12 @@ curl -X POST "${messagesUrl}" \\
       {filteredServers.length === 0 ? (
         <div className="p-10 text-center bg-white dark:bg-gray-800/50 rounded-xl border border-dashed border-gray-200 dark:border-gray-800">
           <Cpu className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
-          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">未找到匹配的 MCP 服务</p>
-          <p className="text-xs text-gray-400 mt-1">可在上方切换分类筛选或点击「接入新服务」</p>
+          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            {isZh ? '未找到匹配的 MCP 服务' : 'No matching MCP servers found'}
+          </p>
+          <p className="text-xs text-gray-400 mt-1">
+            {isZh ? '可在上方切换分类筛选或点击「接入新服务」' : 'Switch category filters above or click "Add Server"'}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -916,7 +921,7 @@ curl -X POST "${messagesUrl}" \\
                       onClick={() => handleToggleServer(server.id, server.enabled)}
                       disabled={isToggling}
                       className={`relative inline-flex h-4.5 w-8 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${server.enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'}`}
-                      title={server.enabled ? '点击停用' : '点击启用'}
+                      title={server.enabled ? (isZh ? '点击停用' : 'Click to disable') : (isZh ? '点击启用' : 'Click to enable')}
                     >
                       <span
                         className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${server.enabled ? 'translate-x-3.5' : 'translate-x-0'}`}
@@ -932,7 +937,7 @@ curl -X POST "${messagesUrl}" \\
                   {/* 暴露的 Tools 标签组 */}
                   {server.tools && server.tools.length > 0 && (
                     <div className="flex items-center gap-1.5 flex-wrap mb-3 text-[11px]">
-                      <span className="text-gray-400">工具:</span>
+                      <span className="text-gray-400">{isZh ? '工具:' : 'Tools:'}</span>
                       {server.tools.slice(0, 3).map(t => (
                         <span
                           key={t}
@@ -956,14 +961,14 @@ curl -X POST "${messagesUrl}" \\
                       className="px-2 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded transition-colors inline-flex items-center gap-1"
                     >
                       <Radio className="w-3.5 h-3.5" />
-                      调试探针
+                      {isZh ? '调试探针' : 'Probe'}
                     </button>
                     <button
                       onClick={() => { setSelectedServerForConfig(server); setConfigModalOpen(true); }}
                       className="px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-750 rounded transition-colors inline-flex items-center gap-1 border border-gray-200 dark:border-gray-700"
                     >
                       <Terminal className="w-3.5 h-3.5" />
-                      配置
+                      {isZh ? '配置' : 'Config'}
                     </button>
                   </div>
 
@@ -971,7 +976,7 @@ curl -X POST "${messagesUrl}" \\
                     <button
                       onClick={() => handleDeleteServer(server.id)}
                       className="p-1 text-gray-400 hover:text-rose-500 rounded transition-colors"
-                      title="移除自定义 MCP 服务"
+                      title={isZh ? '移除自定义 MCP 服务' : 'Remove custom MCP server'}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -994,10 +999,12 @@ curl -X POST "${messagesUrl}" \\
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-gray-900 dark:text-white">
-                    客户端连接配置指南
+                    {isZh ? '客户端连接配置指南' : 'Client Connection Guide'}
                   </h3>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {selectedServerForConfig ? `针对 [${selectedServerForConfig.name}] 的专属配置` : '将 Airoute 统一 MCP 网关导入您的 AI 客户端'}
+                    {selectedServerForConfig 
+                      ? (isZh ? `针对 [${selectedServerForConfig.name}] 的专属配置` : `Configuration for [${selectedServerForConfig.name}]`)
+                      : (isZh ? '将 Airoute 统一 MCP 网关导入您的 AI 客户端' : 'Integrate Airoute unified MCP gateway into your AI clients')}
                   </p>
                 </div>
               </div>
@@ -1015,10 +1022,10 @@ curl -X POST "${messagesUrl}" \\
                 <Lock className="w-4 h-4 text-indigo-500" />
                 <div>
                   <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">
-                    鉴权凭证注入 (Authorization Token / API Key)
+                    {isZh ? '鉴权凭证注入 (Authorization Token / API Key)' : 'Auth Credential Injection (Token / API Key)'}
                   </span>
                   <span className="hidden sm:inline text-[10px] text-gray-400 ml-2">
-                    (自动写入客户端配置文件与请求头)
+                    {isZh ? '(自动写入客户端配置文件与请求头)' : '(Injected into client configs & headers)'}
                   </span>
                 </div>
               </div>
@@ -1028,10 +1035,10 @@ curl -X POST "${messagesUrl}" \\
                     onChange={(e) => {
                       if (e.target.value) setConfigToken(e.target.value);
                     }}
-                    className="px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-850 text-gray-700 dark:text-gray-200"
+                    className="px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-855 text-gray-700 dark:text-gray-200"
                     defaultValue=""
                   >
-                    <option value="" disabled>选择已发行 Key...</option>
+                    <option value="" disabled>{isZh ? '选择已发行 Key...' : 'Select issued key...'}</option>
                     {keys.map(k => (
                       <option key={k.key} value={k.key}>
                         {k.name ? `${k.name} (${k.key.slice(0, 10)}...)` : k.key}
@@ -1056,7 +1063,7 @@ curl -X POST "${messagesUrl}" \\
                 { id: 'claude', label: 'Claude Desktop' },
                 { id: 'cline', label: 'Cline / Roo-Code' },
                 { id: 'python', label: 'Python SDK' },
-                { id: 'curl', label: 'cURL / 终端 CLI' }
+                { id: 'curl', label: isZh ? 'cURL / 终端 CLI' : 'cURL / Terminal CLI' }
               ].map(c => (
                 <button
                   key={c.id}
@@ -1072,11 +1079,11 @@ curl -X POST "${messagesUrl}" \\
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                  {activeConfigClient === 'cursor' && '配置文件位置: 项目根目录 .cursor/mcp.json'}
-                  {activeConfigClient === 'claude' && '配置文件位置: ~/Library/Application Support/Claude/claude_desktop_config.json'}
-                  {activeConfigClient === 'cline' && '配置文件位置: Cline Settings -> MCP Servers'}
-                  {activeConfigClient === 'python' && '安装依赖: pip install mcp httpx'}
-                  {activeConfigClient === 'curl' && '终端命令行测试 (自动携带 Authorization Bearer 鉴权头)'}
+                  {activeConfigClient === 'cursor' && (isZh ? '配置文件位置: 项目根目录 .cursor/mcp.json' : 'Config path: project root .cursor/mcp.json')}
+                  {activeConfigClient === 'claude' && (isZh ? '配置文件位置: ~/Library/Application Support/Claude/claude_desktop_config.json' : 'Config path: ~/Library/Application Support/Claude/claude_desktop_config.json')}
+                  {activeConfigClient === 'cline' && (isZh ? '配置文件位置: Cline Settings -> MCP Servers' : 'Config path: Cline Settings -> MCP Servers')}
+                  {activeConfigClient === 'python' && (isZh ? '安装依赖: pip install mcp httpx' : 'Dependencies: pip install mcp httpx')}
+                  {activeConfigClient === 'curl' && (isZh ? '终端命令行测试 (自动携带 Authorization Bearer 鉴权头)' : 'Terminal CLI test (auto-includes Authorization Bearer header)')}
                 </span>
                 <button
                   onClick={() => {
@@ -1089,7 +1096,7 @@ curl -X POST "${messagesUrl}" \\
                   className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                 >
                   {copiedKey === 'client-config' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedKey === 'client-config' ? '已复制' : '复制配置'}</span>
+                  <span>{copiedKey === 'client-config' ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制配置' : 'Copy Config')}</span>
                 </button>
               </div>
 
@@ -1107,7 +1114,8 @@ curl -X POST "${messagesUrl}" \\
             <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/50 rounded-lg text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
               <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
               <div>
-                <strong>安全最佳实践：</strong>所有客户端均通过 Airoute 统一协议代理连接，无需直接暴露内部数据库或私有服务凭据。网关会自动执行参数脱敏与 SQL 注入审计。
+                <strong>{isZh ? '安全最佳实践：' : 'Security Best Practice: '}</strong>
+                {isZh ? '所有客户端均通过 Airoute 统一协议代理连接，无需直接暴露内部数据库或私有服务凭据。网关会自动执行参数脱敏与 SQL 注入审计。' : 'All clients connect via the unified Airoute protocol proxy without exposing database or private server credentials. Gateway auto-executes redaction and SQL injection auditing.'}
               </div>
             </div>
 
@@ -1116,7 +1124,7 @@ curl -X POST "${messagesUrl}" \\
                 onClick={() => setConfigModalOpen(false)}
                 className="px-4 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700"
               >
-                关闭
+                {isZh ? '关闭' : 'Close'}
               </button>
             </div>
           </div>
@@ -1134,10 +1142,10 @@ curl -X POST "${messagesUrl}" \\
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-gray-900 dark:text-white">
-                    接入新 MCP 服务
+                    {isZh ? '接入新 MCP 服务' : 'Connect New MCP Server'}
                   </h3>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    遵循 ModelScope / Anthropic 规范标准接入自定义协议服务
+                    {isZh ? '遵循 ModelScope / Anthropic 规范标准接入自定义协议服务' : 'Connect custom protocol servers adhering to ModelScope / Anthropic standards'}
                   </p>
                 </div>
               </div>
@@ -1153,7 +1161,7 @@ curl -X POST "${messagesUrl}" \\
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    服务唯一标识 (ID) *
+                    {isZh ? '服务唯一标识 (ID) *' : 'Server Unique ID *'}
                   </label>
                   <input
                     type="text"
@@ -1166,12 +1174,12 @@ curl -X POST "${messagesUrl}" \\
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    服务显示名称 *
+                    {isZh ? '服务显示名称 *' : 'Server Display Name *'}
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="如: Docker 容器管理服务"
+                    placeholder={isZh ? '如: Docker 容器管理服务' : 'e.g. Docker Container Service'}
                     value={newServer.name}
                     onChange={(e) => setNewServer({ ...newServer, name: e.target.value })}
                     className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
@@ -1182,44 +1190,44 @@ curl -X POST "${messagesUrl}" \\
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    分类领域
+                    {isZh ? '分类领域' : 'Category'}
                   </label>
                   <select
                     value={newServer.category}
                     onChange={(e) => setNewServer({ ...newServer, category: e.target.value })}
                     className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
                   >
-                    <option value="ops">运维网关 (ops)</option>
-                    <option value="dev">研发协作 (dev)</option>
-                    <option value="search">搜索抓取 (search)</option>
-                    <option value="db">数据存储 (db)</option>
-                    <option value="ai">深度推理 (ai)</option>
-                    <option value="productivity">企业协同 (productivity)</option>
+                    <option value="ops">{isZh ? '运维网关 (ops)' : 'Ops Gateway (ops)'}</option>
+                    <option value="dev">{isZh ? '研发协作 (dev)' : 'Dev Collaboration (dev)'}</option>
+                    <option value="search">{isZh ? '搜索抓取 (search)' : 'Search & Scrape (search)'}</option>
+                    <option value="db">{isZh ? '数据存储 (db)' : 'Data & Storage (db)'}</option>
+                    <option value="ai">{isZh ? '深度推理 (ai)' : 'Deep Reasoning (ai)'}</option>
+                    <option value="productivity">{isZh ? '企业协同 (productivity)' : 'Enterprise Collab (productivity)'}</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    传输通道 (Transport)
+                    {isZh ? '传输通道 (Transport)' : 'Transport Channel'}
                   </label>
                   <select
                     value={newServer.transport}
                     onChange={(e) => setNewServer({ ...newServer, transport: e.target.value })}
                     className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
                   >
-                    <option value="stdio">stdio (本地命令/子进程)</option>
-                    <option value="sse">sse (远程 HTTP Server-Sent Events)</option>
+                    <option value="stdio">{isZh ? 'stdio (本地命令/子进程)' : 'stdio (Local Process)'}</option>
+                    <option value="sse">{isZh ? 'sse (远程 HTTP Server-Sent Events)' : 'sse (Remote HTTP SSE)'}</option>
                   </select>
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  服务 Endpoint / 执行命令 *
+                  {isZh ? '服务 Endpoint / 执行命令 *' : 'Service Endpoint / Command *'}
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="如: npx -y @modelcontextprotocol/server-docker 或 https://mcp.example.com/sse"
+                  placeholder={isZh ? '如: npx -y @modelcontextprotocol/server-docker 或 https://mcp.example.com/sse' : 'e.g. npx -y @modelcontextprotocol/server-docker or https://mcp.example.com/sse'}
                   value={newServer.endpoint}
                   onChange={(e) => setNewServer({ ...newServer, endpoint: e.target.value })}
                   className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
@@ -1228,11 +1236,11 @@ curl -X POST "${messagesUrl}" \\
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  服务描述
+                  {isZh ? '服务描述' : 'Description'}
                 </label>
                 <textarea
                   rows="2"
-                  placeholder="简述该 MCP 服务的功能、适用场景及接入说明..."
+                  placeholder={isZh ? '简述该 MCP 服务的功能、适用场景及接入说明...' : 'Describe MCP server capabilities, scenario, and instructions...'}
                   value={newServer.description}
                   onChange={(e) => setNewServer({ ...newServer, description: e.target.value })}
                   className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
@@ -1241,7 +1249,7 @@ curl -X POST "${messagesUrl}" \\
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  暴露的 Tools 工具集 (逗号分隔)
+                  {isZh ? '暴露的 Tools 工具集 (逗号分隔)' : 'Exposed Tools (comma separated)'}
                 </label>
                 <input
                   type="text"
@@ -1258,13 +1266,13 @@ curl -X POST "${messagesUrl}" \\
                   onClick={() => setAddServerModalOpen(false)}
                   className="px-4 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200"
                 >
-                  取消
+                  {isZh ? '取消' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
                   className="px-4 py-2 text-xs font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-sm"
                 >
-                  确认接入
+                  {isZh ? '确认接入' : 'Confirm Registration'}
                 </button>
               </div>
             </form>
@@ -1283,11 +1291,11 @@ curl -X POST "${messagesUrl}" \\
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                    在线协议探针控制台
+                    {isZh ? '在线协议探针控制台' : 'Online Protocol Probe Console'}
                     <span className="text-xs font-mono font-normal text-indigo-500">JSON-RPC 2.0</span>
                   </h3>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    向网关端点 {messagesUrl} 发送标准协议报文并实时验证安全拦截与工具输出
+                    {isZh ? `向网关端点 ${messagesUrl} 发送标准协议报文并实时验证安全拦截与工具输出` : `Send standard JSON-RPC 2.0 messages to ${messagesUrl} to verify security interception & output`}
                   </p>
                 </div>
               </div>
@@ -1303,10 +1311,14 @@ curl -X POST "${messagesUrl}" \\
             <div className="p-3 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 rounded-xl text-xs text-indigo-900 dark:text-indigo-200">
               <div className="flex items-center gap-2 font-semibold mb-1 text-indigo-700 dark:text-indigo-300">
                 <BookOpen className="w-4 h-4" />
-                <span>MCP 双向通信原理解析与接入教程</span>
+                <span>{isZh ? 'MCP 双向通信原理解析与接入教程' : 'MCP Bi-directional Architecture & Tutorial'}</span>
               </div>
               <p className="text-[11px] leading-relaxed text-indigo-700/80 dark:text-indigo-300/80">
-                <b>标准交互流:</b> 客户端首先发起 <code className="font-mono bg-indigo-100 dark:bg-indigo-900/60 px-1 py-0.5 rounded">GET /mcp/sse</code> 建立长连接握手；随后将左侧的 <b>JSON-RPC 2.0 请求报文</b> 通过 <code className="font-mono bg-indigo-100 dark:bg-indigo-900/60 px-1 py-0.5 rounded">POST /mcp/messages</code> 投递至网关。网关安全审计并调度工具后，将右侧的 <b>响应结果</b> 实时返回给客户端。
+                {isZh ? (
+                  <><b>标准交互流:</b> 客户端首先发起 <code className="font-mono bg-indigo-100 dark:bg-indigo-900/60 px-1 py-0.5 rounded">GET /mcp/sse</code> 建立长连接握手；随后将左侧的 <b>JSON-RPC 2.0 请求报文</b> 通过 <code className="font-mono bg-indigo-100 dark:bg-indigo-900/60 px-1 py-0.5 rounded">POST /mcp/messages</code> 投递至网关。网关安全审计并调度工具后，将右侧的 <b>响应结果</b> 实时返回给客户端。</>
+                ) : (
+                  <><b>Standard Flow:</b> Clients initiate <code className="font-mono bg-indigo-100 dark:bg-indigo-900/60 px-1 py-0.5 rounded">GET /mcp/sse</code> handshake, then send <b>JSON-RPC 2.0 request</b> via <code className="font-mono bg-indigo-100 dark:bg-indigo-900/60 px-1 py-0.5 rounded">POST /mcp/messages</code>. Gateway audits security and dispatches tools, returning <b>responses</b> in real-time.</>
+                )}
               </p>
             </div>
 
@@ -1316,15 +1328,15 @@ curl -X POST "${messagesUrl}" \\
                 <div className="flex items-center gap-2">
                   <Lock className="w-4 h-4 text-indigo-500" />
                   <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">
-                    鉴权凭证 (Authorization Token / 虚拟 API Key)
+                    {isZh ? '鉴权凭证 (Authorization Token / 虚拟 API Key)' : 'Authentication Token / Virtual API Key'}
                   </span>
                   <span className="text-[10px] text-gray-400">
-                    (支持 Bearer Token 与 X-API-Key 多租户隔离)
+                    {isZh ? '(支持 Bearer Token 与 X-API-Key 多租户隔离)' : '(Supports Bearer Token & multi-tenant isolation)'}
                   </span>
                 </div>
                 {keys && keys.length > 0 && (
                   <div className="flex items-center gap-1.5 text-xs">
-                    <span className="text-[11px] text-gray-400">快捷填充:</span>
+                    <span className="text-[11px] text-gray-400">{isZh ? '快捷填充:' : 'Quick Fill:'}</span>
                     <select
                       onChange={(e) => {
                         if (e.target.value) setProbeToken(e.target.value);
@@ -1332,7 +1344,7 @@ curl -X POST "${messagesUrl}" \\
                       className="px-2 py-1 text-[11px] rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200"
                       defaultValue=""
                     >
-                      <option value="" disabled>选择网关已发行 Key...</option>
+                      <option value="" disabled>{isZh ? '选择网关已发行 Key...' : 'Select issued key...'}</option>
                       {keys.map(k => (
                         <option key={k.key} value={k.key}>
                           {k.name ? `${k.name} (${k.key.slice(0, 10)}...)` : k.key}
@@ -1346,7 +1358,7 @@ curl -X POST "${messagesUrl}" \\
                 type="text"
                 value={probeToken}
                 onChange={(e) => setProbeToken(e.target.value)}
-                placeholder="输入虚拟 API Key 或管理员 Token (如 sk-airoute-...)"
+                placeholder={isZh ? '输入虚拟 API Key 或管理员 Token (如 sk-airoute-...)' : 'Enter API Key or Admin Token (e.g., sk-airoute-...)'}
                 className="w-full px-3 py-1.5 font-mono text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-850 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               />
             </div>
@@ -1356,7 +1368,7 @@ curl -X POST "${messagesUrl}" \\
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    目标 MCP 服务 (Target Server)
+                    {isZh ? '目标 MCP 服务 (Target Server)' : 'Target MCP Server'}
                   </label>
                   <select
                     value={probeServer ? probeServer.id : 'all'}
@@ -1374,7 +1386,7 @@ curl -X POST "${messagesUrl}" \\
                     }}
                     className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
                   >
-                    <option value="all">🌐 统一 MCP 聚合网关 (全部已启用服务)</option>
+                    <option value="all">{isZh ? '🌐 统一 MCP 聚合网关 (全部已启用服务)' : '🌐 Unified MCP Gateway (All Enabled Services)'}</option>
                     {servers.map(s => (
                       <option key={s.id} value={s.id}>
                         {s.name} ({s.id})
@@ -1385,23 +1397,23 @@ curl -X POST "${messagesUrl}" \\
 
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    探针方法 (JSON-RPC Method)
+                    {isZh ? '探针方法 (JSON-RPC Method)' : 'Probe Method (JSON-RPC Method)'}
                   </label>
                   <select
                     value={probeMethod}
                     onChange={(e) => setProbeMethod(e.target.value)}
                     className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
                   >
-                    <option value="server/discover">server/discover (服务与能力探测)</option>
-                    <option value="tools/list">tools/list (枚举工具列表与 Schema)</option>
-                    <option value="tools/call">tools/call (在线执行具体工具)</option>
+                    <option value="server/discover">{isZh ? 'server/discover (服务与能力探测)' : 'server/discover (Discover Capabilities)'}</option>
+                    <option value="tools/list">{isZh ? 'tools/list (枚举工具列表与 Schema)' : 'tools/list (List Tools & Schema)'}</option>
+                    <option value="tools/call">{isZh ? 'tools/call (在线执行具体工具)' : 'tools/call (Execute Specific Tool)'}</option>
                   </select>
                 </div>
 
                 {probeMethod === 'tools/call' && (
                   <div>
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      选择目标工具 (Tool Name)
+                      {isZh ? '选择目标工具 (Tool Name)' : 'Select Target Tool (Tool Name)'}
                     </label>
                     <select
                       value={probeToolName}
@@ -1410,7 +1422,7 @@ curl -X POST "${messagesUrl}" \\
                     >
                       {/* 如果当前指定了服务，将其工具置顶 */}
                       {probeServer && probeServer.tools && probeServer.tools.length > 0 && (
-                        <optgroup label={`★ 当前服务 [${probeServer.name || probeServer.id}] 工具集`}>
+                        <optgroup label={isZh ? `★ 当前服务 [${probeServer.name || probeServer.id}] 工具集` : `★ Current Server [${probeServer.name || probeServer.id}] Tools`}>
                           {probeServer.tools.map(t => (
                             <option key={`cur-${t}`} value={t}>
                               {getToolInfo(t).label}
@@ -1438,8 +1450,8 @@ curl -X POST "${messagesUrl}" \\
 
                       {/* 容底项：若选中工具不在模板库中 */}
                       {!TOOL_TEMPLATES[probeToolName] && (!probeServer?.tools?.includes(probeToolName)) && (
-                        <optgroup label="自定义探针工具">
-                          <option value={probeToolName}>{probeToolName} (当前选定工具)</option>
+                        <optgroup label={isZh ? '自定义探针工具' : 'Custom Probe Tool'}>
+                          <option value={probeToolName}>{probeToolName} ({isZh ? '当前选定工具' : 'Selected'})</option>
                         </optgroup>
                       )}
                     </select>
@@ -1451,7 +1463,7 @@ curl -X POST "${messagesUrl}" \\
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                      工具输入参数 (JSON Arguments)
+                      {isZh ? '工具输入参数 (JSON Arguments)' : 'Tool Input Arguments (JSON Arguments)'}
                     </label>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <button
@@ -1459,7 +1471,7 @@ curl -X POST "${messagesUrl}" \\
                         onClick={() => handleSelectTool('airoute_data_redact')}
                         className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline"
                       >
-                        敏感脱敏
+                        {isZh ? '敏感脱敏' : 'Redaction'}
                       </button>
                       <span className="text-gray-300 dark:text-gray-600">|</span>
                       <button
@@ -1467,7 +1479,7 @@ curl -X POST "${messagesUrl}" \\
                         onClick={() => handleSelectTool('airoute_sql_security_check')}
                         className="text-[10px] text-rose-600 dark:text-rose-400 hover:underline"
                       >
-                        SQL拦截
+                        {isZh ? 'SQL拦截' : 'SQL Guard'}
                       </button>
                       <span className="text-gray-300 dark:text-gray-600">|</span>
                       <button
@@ -1475,7 +1487,7 @@ curl -X POST "${messagesUrl}" \\
                         onClick={() => handleSelectTool('puppeteer_navigate')}
                         className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline"
                       >
-                        Puppeteer导航
+                        {isZh ? 'Puppeteer导航' : 'Puppeteer'}
                       </button>
                       <span className="text-gray-300 dark:text-gray-600">|</span>
                       <button
@@ -1483,7 +1495,7 @@ curl -X POST "${messagesUrl}" \\
                         onClick={() => handleSelectTool('read_query')}
                         className="text-[10px] text-amber-600 dark:text-amber-400 hover:underline"
                       >
-                        只读SQL
+                        {isZh ? '只读SQL' : 'Read-only SQL'}
                       </button>
                       <span className="text-gray-300 dark:text-gray-600">|</span>
                       <button
@@ -1491,7 +1503,7 @@ curl -X POST "${messagesUrl}" \\
                         onClick={() => handleSelectTool('sequentialthinking')}
                         className="text-[10px] text-purple-600 dark:text-purple-400 hover:underline"
                       >
-                        深度推理
+                        {isZh ? '深度推理' : 'Thinking'}
                       </button>
                     </div>
                   </div>
@@ -1508,7 +1520,7 @@ curl -X POST "${messagesUrl}" \\
                 <span className="text-xs text-gray-400">
                   {probeLatency !== null && (
                     <span className="text-emerald-500 font-mono">
-                      ✓ 往返耗时: {probeLatency} ms
+                      ✓ {isZh ? `往返耗时: ${probeLatency} ms` : `Roundtrip: ${probeLatency} ms`}
                     </span>
                   )}
                 </span>
@@ -1518,7 +1530,7 @@ curl -X POST "${messagesUrl}" \\
                   className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-sm"
                 >
                   <Send className={`w-3.5 h-3.5 ${probeRunning ? 'animate-pulse' : ''}`} />
-                  <span>{probeRunning ? '探针执行中...' : '发送 JSON-RPC 2.0 报文'}</span>
+                  <span>{probeRunning ? (isZh ? '探针执行中...' : 'Probing...') : (isZh ? '发送 JSON-RPC 2.0 报文' : 'Send JSON-RPC 2.0 Request')}</span>
                 </button>
               </div>
 
@@ -1530,7 +1542,7 @@ curl -X POST "${messagesUrl}" \\
                     <div className="flex items-center gap-1.5">
                       <span className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400">
                         <Send className="w-3.5 h-3.5" />
-                        发送请求报文
+                        {isZh ? '发送请求报文' : 'Request Payload'}
                       </span>
                       <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 ml-1 text-[10px]">
                         <button
@@ -1538,7 +1550,7 @@ curl -X POST "${messagesUrl}" \\
                           onClick={() => setRequestViewTab('wire')}
                           className={`px-1.5 py-0.5 rounded ${requestViewTab === 'wire' ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-300 shadow-2xs font-medium' : 'text-gray-500 hover:text-gray-800'}`}
                         >
-                          HTTP报文
+                          {isZh ? 'HTTP报文' : 'Wire'}
                         </button>
                         <button
                           type="button"
@@ -1567,7 +1579,7 @@ curl -X POST "${messagesUrl}" \\
                       className="inline-flex items-center gap-1 text-[11px] font-normal text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                     >
                       {copiedKey === 'probe-req' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                      复制请求
+                      {isZh ? '复制请求' : 'Copy Request'}
                     </button>
                   </div>
                   <div className="bg-gray-900 text-gray-100 p-3.5 rounded-xl font-mono text-xs overflow-x-auto min-h-[170px] max-h-64 border border-gray-800 shadow-inner">
@@ -1578,8 +1590,8 @@ curl -X POST "${messagesUrl}" \\
                     </pre>
                   </div>
                   <div className="text-[11px] text-gray-400 flex items-center justify-between">
-                    <span>传输端点: POST {messagesUrl}</span>
-                    <span>鉴权: {probeToken ? 'Bearer Token (已配置)' : '未配置 Token'}</span>
+                    <span>{isZh ? `传输端点: POST ${messagesUrl}` : `Endpoint: POST ${messagesUrl}`}</span>
+                    <span>{isZh ? (probeToken ? '鉴权: Bearer Token (已配置)' : '鉴权: 未配置 Token') : (probeToken ? 'Auth: Bearer Token' : 'Auth: None')}</span>
                   </div>
                 </div>
 
@@ -1588,7 +1600,7 @@ curl -X POST "${messagesUrl}" \\
                   <div className="flex items-center justify-between text-xs font-semibold text-gray-700 dark:text-gray-300">
                     <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      接收响应 (Response Payload: HTTP 200 OK)
+                      {isZh ? '接收响应 (Response Payload: HTTP 200 OK)' : 'Response Payload (HTTP 200 OK)'}
                     </span>
                     {probeResult && (
                       <button
@@ -1597,7 +1609,7 @@ curl -X POST "${messagesUrl}" \\
                         className="inline-flex items-center gap-1 text-[11px] font-normal text-gray-500 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
                       >
                         {copiedKey === 'probe-res' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                        复制响应
+                        {isZh ? '复制响应' : 'Copy Response'}
                       </button>
                     )}
                   </div>
@@ -1607,14 +1619,14 @@ curl -X POST "${messagesUrl}" \\
                     ) : (
                       <div className="h-full flex flex-col items-center justify-center text-gray-500 text-center py-8">
                         <Terminal className="w-8 h-8 mb-2 opacity-40 text-indigo-400" />
-                        <p className="text-xs font-medium text-gray-400">等待发送探针</p>
-                        <p className="text-[11px] text-gray-500 mt-1">点击上方“发送 JSON-RPC 2.0 报文”发起实时调用测试</p>
+                        <p className="text-xs font-medium text-gray-400">{isZh ? '等待发送探针' : 'Awaiting Probe Execution'}</p>
+                        <p className="text-[11px] text-gray-500 mt-1">{isZh ? '点击上方“发送 JSON-RPC 2.0 报文”发起实时调用测试' : 'Click "Send JSON-RPC 2.0 Request" above to test live execution'}</p>
                       </div>
                     )}
                   </div>
                   <div className="text-[11px] text-gray-400 flex items-center justify-between">
-                    <span>网关延迟: {probeLatency !== null ? `${probeLatency} ms` : '--'}</span>
-                    <span>状态: {probeResult ? (probeResult.error ? 'RPC 异常' : '成功返回') : '待调用'}</span>
+                    <span>{isZh ? `网关延迟: ${probeLatency !== null ? `${probeLatency} ms` : '--'}` : `Latency: ${probeLatency !== null ? `${probeLatency} ms` : '--'}`}</span>
+                    <span>{isZh ? `状态: ${probeResult ? (probeResult.error ? 'RPC 异常' : '成功返回') : '待调用'}` : `Status: ${probeResult ? (probeResult.error ? 'RPC Error' : 'Success') : 'Pending'}`}</span>
                   </div>
                 </div>
               </div>
@@ -1625,7 +1637,7 @@ curl -X POST "${messagesUrl}" \\
                 onClick={() => setProbeModalOpen(false)}
                 className="px-4 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700"
               >
-                关闭
+                {isZh ? '关闭' : 'Close'}
               </button>
             </div>
           </div>

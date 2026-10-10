@@ -56,7 +56,10 @@ export default function LogsView({
   setActiveLogDetail,
   showToast,
   handleDeleteSingleLog,
+  lang = 'zh',
+  t
 }) {
+  const isZh = lang === 'zh';
   const [copiedId, setCopiedId] = useState('');
   const [autoRefreshInterval, setAutoRefreshInterval] = useState(0); // 0 (off), 5, 10, 30
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'success' | 'error'
@@ -163,17 +166,19 @@ export default function LogsView({
             <div>
               <div className="flex items-center space-x-2">
                 <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
-                  对话审计与请求日志
+                  {isZh ? '对话审计与请求日志' : 'Audit Logs & Traces'}
                 </h3>
                 {autoRefreshInterval > 0 && (
                   <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-                    <span>{autoRefreshInterval}s 轮询中</span>
+                    <span>{autoRefreshInterval}s {isZh ? '轮询中' : 'polling'}</span>
                   </span>
                 )}
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                全链路 Trace 追溯、Token 消耗计量与企业安全审计留存
+                {isZh
+                  ? '全链路 Trace 追溯、Token 消耗计量与企业安全审计留存'
+                  : 'End-to-end trace auditing, token metering, and enterprise compliance logs'}
               </p>
             </div>
           </div>
@@ -183,7 +188,7 @@ export default function LogsView({
             {/* Active Chat/Session/Trace Filter Tag */}
             {sessionFilter && (
               <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 text-xs text-purple-700 dark:text-purple-300 animate-in fade-in">
-                <span className="text-[11px] text-slate-400">已锁定链路:</span>
+                <span className="text-[11px] text-slate-400">{isZh ? '已锁定链路:' : 'Locked Trace:'}</span>
                 <span className="font-mono font-bold max-w-[140px] truncate">{sessionFilter}</span>
                 <button
                   onClick={() => {
@@ -191,7 +196,7 @@ export default function LogsView({
                     fetchLogs({ sessionFilter: '' });
                   }}
                   className="hover:text-rose-500 ml-1 font-bold transition cursor-pointer"
-                  title="清除筛选"
+                  title={isZh ? '清除筛选' : 'Clear filter'}
                 >
                   ✕
                 </button>
@@ -205,7 +210,7 @@ export default function LogsView({
                 type="text"
                 value={logFilter}
                 onChange={(e) => setLogFilter(e.target.value)}
-                placeholder="筛选 Trace / 会话 / 模型 / 渠道..."
+                placeholder={isZh ? '筛选 Trace / 会话 / 模型 / 渠道...' : 'Filter trace, session, model, channel...'}
                 className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl pl-8 pr-3 py-2 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
               />
             </div>
@@ -216,12 +221,12 @@ export default function LogsView({
                 value={autoRefreshInterval}
                 onChange={(e) => setAutoRefreshInterval(Number(e.target.value))}
                 className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs font-semibold focus:outline-none cursor-pointer transition shadow-2xs"
-                title="选择自动刷新频率"
+                title={isZh ? '选择自动刷新频率' : 'Select refresh interval'}
               >
-                <option value={0}>暂停自动刷新</option>
-                <option value={5}>⚡ 每 5 秒刷新</option>
-                <option value={10}>⏱️ 每 10 秒刷新</option>
-                <option value={30}>⏲️ 每 30 秒刷新</option>
+                <option value={0}>{isZh ? '暂停自动刷新' : 'Pause Auto-Refresh'}</option>
+                <option value={5}>{isZh ? '⚡ 每 5 秒刷新' : '⚡ Every 5s'}</option>
+                <option value={10}>{isZh ? '⏱️ 每 10 秒刷新' : '⏱️ Every 10s'}</option>
+                <option value={30}>{isZh ? '⏲️ 每 30 秒刷新' : '⏲️ Every 30s'}</option>
               </select>
             </div>
 
@@ -232,27 +237,27 @@ export default function LogsView({
               className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition border border-slate-200 dark:border-slate-700 cursor-pointer shadow-2xs"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${logLoading ? 'animate-spin' : ''}`} />
-              <span>刷新</span>
+              <span>{isZh ? '刷新' : 'Refresh'}</span>
             </button>
 
             {/* Export CSV Button */}
             <button
               onClick={handleExportCSV}
               className="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition border border-slate-200 dark:border-slate-700 cursor-pointer shadow-2xs"
-              title="导出当前筛选结果为 CSV 审计报表"
+              title={isZh ? '导出当前筛选结果为 CSV 审计报表' : 'Export current filtered results as CSV'}
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-              <span>导出报表</span>
+              <span>{isZh ? '导出报表' : 'Export CSV'}</span>
             </button>
 
             {/* Clear All Logs Button */}
             <button
               onClick={handleClearLogs}
               className="px-3 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-900/60 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer"
-              title="清空全部审计调用日志"
+              title={isZh ? '清空全部审计调用日志' : 'Clear all audit logs'}
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>清空</span>
+              <span>{isZh ? '清空' : 'Clear'}</span>
             </button>
           </div>
         </div>
@@ -263,15 +268,15 @@ export default function LogsView({
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center space-x-1.5 text-slate-500 dark:text-slate-400 font-medium">
               <Clock className="w-3.5 h-3.5 text-slate-400" />
-              <span>时间跨度:</span>
+              <span>{isZh ? '时间跨度:' : 'Time Range:'}</span>
             </div>
             <div className="inline-flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/80 dark:border-slate-800">
               {[
-                { id: 'all', label: '全部' },
-                { id: '1h', label: '近 1 小时' },
-                { id: 'today', label: '今天' },
-                { id: '7d', label: '近 7 天' },
-                { id: 'custom', label: '自定义' },
+                { id: 'all', label: isZh ? '全部' : 'All' },
+                { id: '1h', label: isZh ? '近 1 小时' : '1h' },
+                { id: 'today', label: isZh ? '今天' : 'Today' },
+                { id: '7d', label: isZh ? '近 7 天' : '7d' },
+                { id: 'custom', label: isZh ? '自定义' : 'Custom' },
               ].map((item) => (
                 <button
                   key={item.id}
@@ -300,21 +305,21 @@ export default function LogsView({
                   value={customStartTime}
                   onChange={(e) => setCustomStartTime(e.target.value)}
                   className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2 py-1 text-xs text-slate-700 dark:text-slate-200"
-                  title="开始时间"
+                  title={isZh ? '开始时间' : 'Start time'}
                 />
-                <span className="text-slate-400">至</span>
+                <span className="text-slate-400">{isZh ? '至' : 'to'}</span>
                 <input
                   type="datetime-local"
                   value={customEndTime}
                   onChange={(e) => setCustomEndTime(e.target.value)}
                   className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2 py-1 text-xs text-slate-700 dark:text-slate-200"
-                  title="结束时间"
+                  title={isZh ? '结束时间' : 'End time'}
                 />
                 <button
                   onClick={() => fetchLogs({ timeRange: 'custom' })}
                   className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition cursor-pointer"
                 >
-                  查询
+                  {isZh ? '查询' : 'Query'}
                 </button>
               </div>
             )}
@@ -322,7 +327,7 @@ export default function LogsView({
 
           {/* Status Filter Tabs */}
           <div className="flex items-center space-x-1.5">
-            <span className="text-slate-500 dark:text-slate-400 font-medium">调用状态:</span>
+            <span className="text-slate-500 dark:text-slate-400 font-medium">{isZh ? '调用状态:' : 'Status:'}</span>
             <div className="inline-flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/80 dark:border-slate-800">
               <button
                 onClick={() => setStatusFilter('all')}
@@ -332,7 +337,7 @@ export default function LogsView({
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
-                全部
+                {isZh ? '全部' : 'All'}
               </button>
               <button
                 onClick={() => setStatusFilter('success')}
@@ -342,7 +347,7 @@ export default function LogsView({
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
-                仅成功 (2xx)
+                {isZh ? '仅成功 (2xx)' : 'Success (2xx)'}
               </button>
               <button
                 onClick={() => setStatusFilter('error')}
@@ -352,7 +357,7 @@ export default function LogsView({
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
-                仅异常 (4xx/5xx)
+                {isZh ? '仅异常 (4xx/5xx)' : 'Errors (4xx/5xx)'}
               </button>
             </div>
           </div>
@@ -363,7 +368,7 @@ export default function LogsView({
       {selectedLogIds.length > 0 && (
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 px-5 py-3 rounded-2xl animate-in fade-in gap-3">
           <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-900 dark:text-indigo-200">
-            <span>已选中 {selectedLogIds.length} 条调用日志</span>
+            <span>{isZh ? `已选中 ${selectedLogIds.length} 条调用日志` : `Selected ${selectedLogIds.length} log entries`}</span>
           </div>
           <div className="flex items-center space-x-2">
             <button
@@ -371,13 +376,13 @@ export default function LogsView({
               className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl shadow-xs transition flex items-center space-x-1 cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>批量删除</span>
+              <span>{isZh ? '批量删除' : 'Batch Delete'}</span>
             </button>
             <button
               onClick={() => setSelectedLogIds([])}
               className="px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-medium rounded-xl hover:bg-slate-50 transition cursor-pointer"
             >
-              取消选择
+              {isZh ? '取消选择' : 'Deselect All'}
             </button>
           </div>
         </div>
@@ -403,15 +408,15 @@ export default function LogsView({
                     }}
                   />
                 </th>
-                <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">请求时间</th>
-                <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">Trace ID / 对话 ID</th>
-                <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">请求模型 (Model)</th>
-                <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">命中渠道 (Provider)</th>
-                <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">租户 / API 密钥</th>
-                <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">Token (输入/输出/总)</th>
-                <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">扣费 / 缓存命中</th>
-                <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">耗时 / TTFT</th>
-                <th className="py-2.5 px-4 text-right font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">状态与详情</th>
+                <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">{isZh ? '请求时间' : 'Time'}</th>
+                <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">{isZh ? 'Trace ID / 会话 ID' : 'Trace ID / Session'}</th>
+                <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">{isZh ? '请求模型 (Model)' : 'Model'}</th>
+                <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">{isZh ? '命中渠道 (Provider)' : 'Provider'}</th>
+                <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">{isZh ? '租户 / API 密钥' : 'Tenant / Key'}</th>
+                <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">{isZh ? 'Token (输入/输出/总)' : 'Tokens (In/Out/Total)'}</th>
+                <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">{isZh ? '扣费 / 缓存命中' : 'Cost / Cache'}</th>
+                <th className="py-2.5 px-4 font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">{isZh ? '耗时 / TTFT' : 'Duration / TTFT'}</th>
+                <th className="py-2.5 px-4 text-right font-semibold sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">{isZh ? '状态与详情' : 'Status & Details'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
@@ -555,18 +560,18 @@ export default function LogsView({
                         {log.is_off_peak && (
                           <span
                             className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200"
-                            title={`分时计费优惠 ${(log.off_peak_discount || 0.5) * 100}%`}
+                            title={`Off-peak ${(log.off_peak_discount || 0.5) * 100}%`}
                           >
-                            🌙 闲时 {Math.round((log.off_peak_discount || 0.5) * 10)}折
+                            🌙 {isZh ? `闲时 ${Math.round((log.off_peak_discount || 0.5) * 10)}折` : `Off-peak ${Math.round((1 - (log.off_peak_discount || 0.5)) * 100)}% off`}
                           </span>
                         )}
                       </div>
                       {log.cached_tokens > 0 ? (
                         <span className="block text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-0">
-                          ⚡ 缓存: {log.cached_tokens} (省 90%)
+                          ⚡ {isZh ? `缓存: ${log.cached_tokens} (省 90%)` : `Cached: ${log.cached_tokens} (saved 90%)`}
                         </span>
                       ) : (
-                        <span className="block text-[10px] text-slate-400 mt-0">无缓存命中</span>
+                        <span className="block text-[10px] text-slate-400 mt-0">{isZh ? '无缓存命中' : 'No cache hit'}</span>
                       )}
                     </td>
                     <td className="py-2.5 px-4 text-slate-700 dark:text-slate-300 font-sans">
@@ -600,7 +605,7 @@ export default function LogsView({
                         {log.status_code || 200}
                       </span>
                       <span className="text-[11px] text-indigo-600 dark:text-indigo-400 group-hover:underline">
-                        详情 →
+                        {isZh ? '详情 →' : 'Detail →'}
                       </span>
                       <button
                         onClick={(e) => {
@@ -608,7 +613,7 @@ export default function LogsView({
                           handleDeleteSingleLog(log.id);
                         }}
                         className="p-1 text-slate-400 hover:text-rose-600 transition rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/50 inline-flex items-center align-middle cursor-pointer"
-                        title="删除此记录"
+                        title={isZh ? '删除此记录' : 'Delete log'}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -621,7 +626,7 @@ export default function LogsView({
                   <td colSpan="10" className="py-12 text-center text-slate-400 font-sans">
                     <div className="flex flex-col items-center justify-center space-y-2">
                       <History className="w-8 h-8 text-slate-300 dark:text-slate-600 stroke-1" />
-                      <span>暂无匹配的审计调用记录</span>
+                      <span>{isZh ? '暂无匹配的审计调用记录' : 'No matching audit logs found'}</span>
                       {(logFilter || sessionFilter || statusFilter !== 'all') && (
                         <button
                           onClick={() => {
@@ -632,7 +637,7 @@ export default function LogsView({
                           }}
                           className="text-xs text-indigo-600 hover:underline font-semibold cursor-pointer"
                         >
-                          重置所有筛选条件
+                          {isZh ? '重置所有筛选条件' : 'Reset all filters'}
                         </button>
                       )}
                     </div>
@@ -646,8 +651,10 @@ export default function LogsView({
         {/* Server-side pagination */}
         <div className="flex items-center justify-between p-4 border-t border-slate-200/60 dark:border-slate-800/60">
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            第 {Math.floor(logOffset / logPageSize) + 1} 页 · 本页展示 {displayedLogs.length} 条
-            {displayedLogs.length < logsLength ? ` (筛选后 / 累计 ${logsLength})` : ''}
+            {isZh
+              ? `第 ${Math.floor(logOffset / logPageSize) + 1} 页 · 本页展示 ${displayedLogs.length} 条`
+              : `Page ${Math.floor(logOffset / logPageSize) + 1} · Showing ${displayedLogs.length}`}
+            {displayedLogs.length < logsLength ? (isZh ? ` (筛选后 / 累计 ${logsLength})` : ` (filtered / total ${logsLength})`) : ''}
           </span>
           <div className="flex items-center space-x-2">
             <button
@@ -656,7 +663,7 @@ export default function LogsView({
               disabled={logLoading || logOffset <= 0}
               className="px-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
-              上一页
+              {isZh ? '上一页' : 'Previous'}
             </button>
             <button
               type="button"
@@ -664,7 +671,7 @@ export default function LogsView({
               disabled={logLoading || logsLength < logPageSize}
               className="px-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
-              下一页
+              {isZh ? '下一页' : 'Next'}
             </button>
           </div>
         </div>

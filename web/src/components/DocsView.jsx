@@ -13,7 +13,8 @@ import {
 } from 'lucide-react';
 import { getGatewayOrigin } from '../config';
 
-export default function DocsView({ showToast }) {
+export default function DocsView({ showToast, lang = 'zh', t }) {
+  const isZh = lang === 'zh';
   const [docsSection, setDocsSection] = useState('architecture');
   const [copiedKey, setCopiedKey] = useState('');
 
@@ -25,7 +26,7 @@ export default function DocsView({ showToast }) {
     setCopiedKey(key || 'code');
     setTimeout(() => setCopiedKey(''), 2200);
     if (showToast) {
-      showToast('代码已复制到剪贴板', 'success');
+      showToast(isZh ? '代码已复制到剪贴板' : 'Code copied to clipboard', 'success');
     }
   };
 
@@ -33,90 +34,92 @@ export default function DocsView({ showToast }) {
     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
       {/* Category sidebar */}
       <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-3xl p-4 space-y-1 shadow-xs h-fit">
-        <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-3 mb-2 block">接入与规范文档</span>
+        <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-3 mb-2 block">
+          {isZh ? '接入与规范文档' : 'Documentation & Specs'}
+        </span>
         
         <button
           onClick={() => setDocsSection('architecture')}
-          className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition ${
+          className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition cursor-pointer ${
             docsSection === 'architecture'
               ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/60'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
           <Shield className="w-3.5 h-3.5 text-indigo-500" />
-          <span>核心架构与高可用设计</span>
+          <span>{isZh ? '核心架构与高可用设计' : 'Architecture & HA'}</span>
         </button>
 
         <button
           onClick={() => setDocsSection('quickstart')}
-          className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition ${
+          className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition cursor-pointer ${
             docsSection === 'quickstart'
               ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/60'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
           <Code className="w-3.5 h-3.5" />
-          <span>OpenAI SDK 极速接入</span>
+          <span>{isZh ? 'OpenAI SDK 极速接入' : 'OpenAI SDK Quickstart'}</span>
         </button>
 
         <button
           onClick={() => setDocsSection('claude')}
-          className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition ${
+          className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition cursor-pointer ${
             docsSection === 'claude'
               ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/60'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
           <Terminal className="w-3.5 h-3.5" />
-          <span>Claude Messages API 接入</span>
+          <span>{isZh ? 'Claude Messages API 接入' : 'Claude Messages API'}</span>
         </button>
 
         <button
           onClick={() => setDocsSection('multimodal')}
-          className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition ${
+          className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition cursor-pointer ${
             docsSection === 'multimodal'
               ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/60'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
           <ImageIcon className="w-3.5 h-3.5" />
-          <span>多模态 (图/音/视) 接口规范</span>
+          <span>{isZh ? '多模态 (图/音/视) 接口规范' : 'Multimodal Endpoints'}</span>
         </button>
 
         <button
           onClick={() => setDocsSection('cascading')}
-          className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition ${
+          className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition cursor-pointer ${
             docsSection === 'cascading'
               ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/60'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
           <Layers className="w-3.5 h-3.5" />
-          <span>级联模型映射语法</span>
+          <span>{isZh ? '级联模型映射语法' : 'Cascading Mapping Rules'}</span>
         </button>
 
         <button
           onClick={() => setDocsSection('rerank')}
-          className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition ${
+          className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition cursor-pointer ${
             docsSection === 'rerank'
               ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/60'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
           <Sliders className="w-3.5 h-3.5" />
-          <span>Rerank 检索重排规范</span>
+          <span>{isZh ? 'Rerank 检索重排规范' : 'Rerank API Guide'}</span>
         </button>
 
         <button
           onClick={() => setDocsSection('deploy')}
-          className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition ${
+          className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition cursor-pointer ${
             docsSection === 'deploy'
               ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/60'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
           <Server className="w-3.5 h-3.5" />
-          <span>Docker & K8s 高可用部署</span>
+          <span>{isZh ? 'Docker & K8s 高可用部署' : 'Cluster Deployment'}</span>
         </button>
       </div>
 

@@ -36,8 +36,11 @@ export default function PlaygroundView({
   adminFetch,
   showToast,
   initialModel = '',
-  initialModality = 'chat'
+  initialModality = 'chat',
+  lang = 'zh',
+  t
 }) {
+  const isZh = lang === 'zh';
   const [playModality, setPlayModality] = useState(initialModality || 'chat');
   const [playMode, setPlayMode] = useState('single'); // 'single' | 'arena'
   const [playApiKey, setPlayApiKey] = useState('');
@@ -80,12 +83,10 @@ export default function PlaygroundView({
     }
     if (list.length === 0 && models && models.length > 0) {
       const matched = models.filter(m => inferClientModality(m) === modality);
-      if (matched.length > 0) {
-        list = matched;
-      } else if (modality === 'chat') {
-        list = models.filter(m => inferClientModality(m) === 'chat');
-      }
+      if (matched.length > 0) list = matched;
+      else if (modality === 'chat') list = models.filter(m => inferClientModality(m) === 'chat');
     }
+
     if (selectedKeyObj && selectedKeyObj.allowed_models && selectedKeyObj.allowed_models.length > 0) {
       if (!selectedKeyObj.allowed_models.includes('*')) {
         const allowedSet = new Set(selectedKeyObj.allowed_models);
@@ -94,130 +95,114 @@ export default function PlaygroundView({
         return [...filtered, ...extra];
       }
     }
-    return list.length > 0 ? list : ['deepseek-v3', 'gpt-4o', 'claude-3-5-sonnet'];
+    return list;
   };
 
-  // Chat Parameters
   const chatModels = getPlaygroundModels('chat');
-  const [playModel, setPlayModel] = useState(() => initialModel || chatModels[0] || 'deepseek-v3');
-  const [arenaModelB, setArenaModelB] = useState(() => chatModels[1] || chatModels[0] || 'gpt-4o');
-  const [playProtocol, setPlayProtocol] = useState('openai_chat');
+  const imgModels = getPlaygroundModels('images');
+  const ttsModels = getPlaygroundModels('audio_speech');
+
+  // Single Model state
+  const [playModel, setPlayModel] = useState(initialModel || (chatModels[0] || ''));
+  const [arenaModelB, setArenaModelB] = useState(chatModels[1] || chatModels[0] || '');
   const [playStream, setPlayStream] = useState(true);
   const [temperature, setTemperature] = useState(0.7);
   const [maxTokens, setMaxTokens] = useState(2048);
-  const [topP, setTopP] = useState(1.0);
-  const [systemPrompt, setSystemPrompt] = useState('你是由 Airoute 高性能大模型网关代理的专业全能 AI 助手。');
+  const [systemPrompt, setSystemPrompt] = useState(
+    isZh ? '你是一个极具专业素养的 AI 架构专家与全栈工程师，回答请严谨、精炼、富有洞见。' : 'You are a highly professional AI architecture expert and full-stack engineer. Answer concisely and with precision.'
+  );
   const [showSystemPrompt, setShowSystemPrompt] = useState(false);
-  const [playImageUrl, setPlayImageUrl] = useState('');
 
-  // Multi-turn chat history
+  // Chat conversation history & streaming output
   const [messages, setMessages] = useState([
-    { role: 'user', content: '请用一句话介绍 Airoute 的核心架构优势。' }
+    { role: 'user', content: isZh ? '请简要介绍 Airoute 企业级大模型与多模态网关的核心架构优势。' : 'Briefly introduce the architectural advantages of Airoute LLM and multimodal gateway.' }
   ]);
   const [chatInput, setChatInput] = useState('');
   const [playLoading, setPlayLoading] = useState(false);
-  const [playDurationMs, setPlayDurationMs] = useState(0);
-  const [playTTFTMs, setPlayTTFTMs] = useState(0);
+
+  // Single Model Output & Live Telemetry
   const [playOutput, setPlayOutput] = useState('');
   const [playReasoningOutput, setPlayReasoningOutput] = useState('');
-  const [playTokensPerSec, setPlayTokensPerSec] = useState('');
+  const [playTTFTMs, setPlayTTFTMs] = useState(0);
+  const [playDurationMs, setPlayDurationMs] = useState(0);
+  const [playTokensPerSec, setPlayTokensPerSec] = useState(0);
 
-  // Arena Comparison State
+  // Arena Contender B Output & Telemetry
   const [arenaOutputB, setArenaOutputB] = useState('');
   const [arenaReasoningB, setArenaReasoningB] = useState('');
-  const [arenaDurationB, setArenaDurationB] = useState(0);
   const [arenaTTFTB, setArenaTTFTB] = useState(0);
-  const [arenaTokensPerSecB, setArenaTokensPerSecB] = useState('');
+  const [arenaDurationB, setArenaDurationB] = useState(0);
+  const [arenaTokensPerSecB, setArenaTokensPerSecB] = useState(0);
 
-  // Image Generation
-  const imgModels = getPlaygroundModels('images');
-  const [imgModel, setImgModel] = useState(() => imgModels[0] || 'flux-1-schnell');
-  const [imgPrompt, setImgPrompt] = useState('极简现代高科技数据中心，赛博光影质感，8k 渲染');
+  // Multimodal sub-states
+  const [imgModel, setImgModel] = useState(imgModels[0] || '');
+  const [imgPrompt, setImgPrompt] = useState(isZh ? '极简未来数据中心机房，幽蓝光纤与量子矩阵，8k 渲染' : 'Minimalist futuristic data center, cyan optical fiber and quantum matrix, 8k render');
   const [imgSize, setImgSize] = useState('1024x1024');
   const [imgQuality, setImgQuality] = useState('standard');
   const [imgResult, setImgResult] = useState(null);
 
-  // Audio Speech (TTS)
-  const ttsModels = getPlaygroundModels('audio_speech');
-  const [ttsModel, setTtsModel] = useState(() => ttsModels[0] || 'tts-1');
+  const [ttsModel, setTtsModel] = useState(ttsModels[0] || '');
   const [ttsVoice, setTtsVoice] = useState('alloy');
   const [ttsSpeed, setTtsSpeed] = useState(1.0);
-  const [ttsInput, setTtsInput] = useState('欢迎体验 Airoute 极致性能企业级大模型与多模态网关系统。');
+  const [ttsInput, setTtsInput] = useState(isZh ? '欢迎使用 Airoute 企业级大模型与多模态网关系统。' : 'Welcome to Airoute enterprise LLM and multimodal gateway system.');
   const [ttsAudioUrl, setTtsAudioUrl] = useState(null);
 
-  // Audio Transcription (STT)
-  const sttModels = getPlaygroundModels('audio_transcription');
-  const [sttModel, setSttModel] = useState(() => sttModels[0] || 'whisper-large-v3-turbo');
-  const [sttFile, setSttFile] = useState(null);
-  const [sttResult, setSttResult] = useState('');
+  // Sync initial model
+  useEffect(() => {
+    if (chatModels.length > 0 && !chatModels.includes(playModel)) {
+      setPlayModel(chatModels[0]);
+    }
+    if (chatModels.length > 1 && !chatModels.includes(arenaModelB)) {
+      setArenaModelB(chatModels[1]);
+    }
+  }, [chatModels, playModel, arenaModelB]);
 
-  // Video
-  const vidModels = getPlaygroundModels('videos');
-  const [videoModel, setVideoModel] = useState(() => vidModels[0] || 'cogvideox-5b');
-  const [videoPrompt, setVideoPrompt] = useState('未来城市高空飞车俯瞰镜头，黎明晨光映照');
-  const [videoAspectRatio, setVideoAspectRatio] = useState('16:9');
-  const [videoTaskId, setVideoTaskId] = useState('');
-  const [videoResultUrl, setVideoResultUrl] = useState('');
-  const [videoStatus, setVideoStatus] = useState('');
-
-  // Embeddings
-  const embModels = getPlaygroundModels('embeddings');
-  const [embedModel, setEmbedModel] = useState(() => embModels[0] || 'text-embedding-3-small');
-  const [embedInput, setEmbedInput] = useState('Airoute 高性能分布式网关，全双工零内存拷贝分发');
-  const [embedResult, setEmbedResult] = useState(null);
-
-  // Rerank
-  const rrkModels = getPlaygroundModels('rerank');
-  const [rerankModel, setRerankModel] = useState(() => rrkModels[0] || 'bge-reranker-large');
-  const [rerankQuery, setRerankQuery] = useState('什么是企业级大模型网关的高可用与容灾设计？');
-  const [rerankDocs, setRerankDocs] = useState([
-    'Airoute 采用全双工流式转发与零内存拷贝架构，首字分块前支持透明故障转移与熔断兜底。',
-    '今天天气非常晴朗，公园里的樱花盛开了，很适合去散步或野餐。',
-    '基于 Raft 协议的分布式数据库能保证网络分区状态下的强一致性与多副本高可用。'
-  ].join('\n---\n'));
-  const [rerankTopN, setRerankTopN] = useState(2);
-  const [rerankResult, setRerankResult] = useState(null);
-
-  const [copiedKey, setCopiedKey] = useState('');
-
-  const copyToClipboard = (text, key) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKey(key);
-    setTimeout(() => setCopiedKey(''), 2000);
-    if (showToast) showToast('已复制到剪贴板', 'success');
+  const copyToClipboard = (txt, label = '') => {
+    navigator.clipboard.writeText(txt);
+    if (showToast) showToast(isZh ? `${label || '内容'} 已复制到剪贴板！` : `${label || 'Content'} copied to clipboard!`, 'success');
   };
 
-  // Execute Chat Run (Single or Arena)
+  // Run chat invocation
   const handleRunChat = async () => {
-    const key = getEffectiveApiKey();
+    if (!chatInput.trim() && messages.length === 0) return;
+    const currentInput = chatInput.trim() || messages[messages.length - 1]?.content || '';
+    if (!currentInput) return;
+
+    const newMessages = [...messages, { role: 'user', content: currentInput }];
+    setMessages(newMessages);
+    setChatInput('');
     setPlayLoading(true);
+
+    // Reset Model A
     setPlayOutput('');
     setPlayReasoningOutput('');
-    setArenaOutputB('');
-    setArenaReasoningB('');
     setPlayTTFTMs(0);
-    setArenaTTFTB(0);
-    setPlayTokensPerSec('');
-    setArenaTokensPerSecB('');
+    setPlayDurationMs(0);
+    setPlayTokensPerSec(0);
 
-    const conversationPayload = [];
-    if (systemPrompt.trim()) {
-      conversationPayload.push({ role: 'system', content: systemPrompt.trim() });
+    // Reset Model B (Arena)
+    if (playMode === 'arena') {
+      setArenaOutputB('');
+      setArenaReasoningB('');
+      setArenaTTFTB(0);
+      setArenaDurationB(0);
+      setArenaTokensPerSecB(0);
     }
-    messages.forEach(m => conversationPayload.push({ role: m.role, content: m.content }));
-    if (chatInput.trim()) {
-      conversationPayload.push({ role: 'user', content: chatInput.trim() });
-      setMessages(prev => [...prev, { role: 'user', content: chatInput.trim() }]);
-      setChatInput('');
-    }
+
+    const payloadMessages = [
+      ...(systemPrompt.trim() ? [{ role: 'system', content: systemPrompt.trim() }] : []),
+      ...newMessages
+    ];
 
     const runModelStream = async (targetModel, setOutput, setReasoning, setTTFT, setDuration, setTPS) => {
       const startTime = Date.now();
       let firstByteTime = null;
       let fullContent = '';
       let fullReasoning = '';
+
       try {
         const headers = { 'Content-Type': 'application/json' };
+        const key = getEffectiveApiKey();
         if (key) headers['Authorization'] = `Bearer ${key}`;
 
         const res = await fetch('/v1/chat/completions', {
@@ -225,56 +210,56 @@ export default function PlaygroundView({
           headers,
           body: JSON.stringify({
             model: targetModel,
-            messages: conversationPayload,
+            messages: payloadMessages,
             temperature,
             max_tokens: maxTokens,
-            top_p: topP,
             stream: playStream
           })
         });
 
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
-          setOutput(`[HTTP ${res.status}] ${errData.error?.message || res.statusText}`);
-          setDuration(Date.now() - startTime);
+          setOutput(`[Error ${res.status}] ${errData.error?.message || res.statusText}`);
           return;
         }
 
         if (playStream && res.body) {
           const reader = res.body.getReader();
-          const decoder = new TextDecoder();
+          const decoder = new TextDecoder('utf-8');
+          let done = false;
           let buffer = '';
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            if (!firstByteTime) {
-              firstByteTime = Date.now();
-              setTTFT(firstByteTime - startTime);
-            }
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
+          while (!done) {
+            const { value, done: readerDone } = await reader.read();
+            done = readerDone;
+            if (value) {
+              if (!firstByteTime) {
+                firstByteTime = Date.now();
+                setTTFT(firstByteTime - startTime);
+              }
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || '';
 
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed.startsWith('data:')) continue;
-              const payload = trimmed.replace(/^data:\s*/, '').trim();
-              if (payload === '[DONE]') continue;
-              try {
-                const parsed = JSON.parse(payload);
-                const delta = parsed.choices?.[0]?.delta;
-                if (delta) {
-                  if (delta.reasoning_content) {
-                    fullReasoning += delta.reasoning_content;
-                    setReasoning(fullReasoning);
-                  }
-                  if (delta.content) {
-                    fullContent += delta.content;
-                    setOutput(fullContent);
-                  }
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (trimmed.startsWith('data: ')) {
+                  const dataStr = trimmed.slice(6);
+                  if (dataStr === '[DONE]') continue;
+                  try {
+                    const parsed = JSON.parse(dataStr);
+                    const delta = parsed.choices?.[0]?.delta;
+                    if (delta?.reasoning_content) {
+                      fullReasoning += delta.reasoning_content;
+                      setReasoning(fullReasoning);
+                    }
+                    if (delta?.content) {
+                      fullContent += delta.content;
+                      setOutput(fullContent);
+                    }
+                  } catch (e) {}
                 }
-              } catch (e) {}
+              }
             }
           }
         } else {
@@ -337,7 +322,7 @@ export default function PlaygroundView({
       if (res.ok && data.data && data.data[0]) {
         setImgResult(data.data[0]);
       } else {
-        if (showToast) showToast(`绘图失败: ${data.error?.message || '未知错误'}`, 'error');
+        if (showToast) showToast(isZh ? `绘图失败: ${data.error?.message || '未知错误'}` : `Image generation failed: ${data.error?.message || 'Unknown error'}`, 'error');
       }
     } catch (e) {
       if (showToast) showToast(e.message, 'error');
@@ -373,7 +358,7 @@ export default function PlaygroundView({
         setTtsAudioUrl(url);
       } else {
         const err = await res.json().catch(() => ({}));
-        if (showToast) showToast(`TTS 失败: ${err.error?.message || '未知错误'}`, 'error');
+        if (showToast) showToast(isZh ? `TTS 失败: ${err.error?.message || '未知错误'}` : `TTS failed: ${err.error?.message || 'Unknown error'}`, 'error');
       }
     } catch (e) {
       if (showToast) showToast(e.message, 'error');
@@ -388,13 +373,13 @@ export default function PlaygroundView({
       <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-1.5 shadow-xs flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
           {[
-            { id: 'chat', label: 'Chat 对话', icon: MessageSquare, activeColor: 'bg-indigo-600 text-white' },
-            { id: 'images', label: 'Images 绘图', icon: ImageIcon, activeColor: 'bg-pink-600 text-white' },
-            { id: 'audio_speech', label: 'TTS 语音合成', icon: Volume2, activeColor: 'bg-cyan-600 text-white' },
-            { id: 'audio_transcription', label: 'STT 语音转写', icon: Mic, activeColor: 'bg-teal-600 text-white' },
-            { id: 'videos', label: 'Video 视频生成', icon: Video, activeColor: 'bg-purple-600 text-white' },
-            { id: 'embeddings', label: 'Embedding 向量', icon: Cpu, activeColor: 'bg-emerald-600 text-white' },
-            { id: 'rerank', label: 'Rerank 重排', icon: Sliders, activeColor: 'bg-amber-600 text-white' },
+            { id: 'chat', label: isZh ? 'Chat 对话' : 'Chat', icon: MessageSquare, activeColor: 'bg-indigo-600 text-white' },
+            { id: 'images', label: isZh ? 'Images 绘图' : 'Images', icon: ImageIcon, activeColor: 'bg-pink-600 text-white' },
+            { id: 'audio_speech', label: isZh ? 'TTS 语音合成' : 'TTS Speech', icon: Volume2, activeColor: 'bg-cyan-600 text-white' },
+            { id: 'audio_transcription', label: isZh ? 'STT 语音转写' : 'STT Audio', icon: Mic, activeColor: 'bg-teal-600 text-white' },
+            { id: 'videos', label: isZh ? 'Video 视频生成' : 'Videos', icon: Video, activeColor: 'bg-purple-600 text-white' },
+            { id: 'embeddings', label: isZh ? 'Embedding 向量' : 'Embeddings', icon: Cpu, activeColor: 'bg-emerald-600 text-white' },
+            { id: 'rerank', label: isZh ? 'Rerank 重排' : 'Rerank', icon: Sliders, activeColor: 'bg-amber-600 text-white' },
           ].map(tab => {
             const Icon = tab.icon;
             return (
@@ -425,7 +410,7 @@ export default function PlaygroundView({
                   : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
               }`}
             >
-              单模型
+              {isZh ? '单模型' : 'Single Model'}
             </button>
             <button
               onClick={() => setPlayMode('arena')}
@@ -436,7 +421,7 @@ export default function PlaygroundView({
               }`}
             >
               <Split className="w-3 h-3" />
-              <span>双模型对决 (Arena)</span>
+              <span>{isZh ? '双模型对决 (Arena)' : 'Model Arena'}</span>
             </button>
           </div>
         )}
@@ -449,7 +434,7 @@ export default function PlaygroundView({
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
             <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm flex items-center space-x-2">
               <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-              <span>参数配置</span>
+              <span>{isZh ? '参数配置' : 'Hyperparameters'}</span>
             </h3>
           </div>
 
@@ -458,14 +443,14 @@ export default function PlaygroundView({
             <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between mb-1">
               <span className="flex items-center space-x-1">
                 <Key className="w-3.5 h-3.5 text-indigo-500" />
-                <span>API 访问密钥</span>
+                <span>{isZh ? 'API 访问密钥' : 'API Key'}</span>
               </span>
               {keys.length > 0 && (
                 <button
                   onClick={() => setIsCustomKey(!isCustomKey)}
                   className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                 >
-                  {isCustomKey ? '下拉选择' : '自定义'}
+                  {isCustomKey ? (isZh ? '下拉选择' : 'Select') : (isZh ? '自定义' : 'Custom')}
                 </button>
               )}
             </label>
@@ -475,7 +460,7 @@ export default function PlaygroundView({
                 type="text"
                 value={customKeyInput}
                 onChange={(e) => setCustomKeyInput(e.target.value)}
-                placeholder="sk-airoute-xxxx (留空使用免密直通)"
+                placeholder={isZh ? 'sk-airoute-xxxx (留空使用免密直通)' : 'sk-airoute-xxxx (leave empty for unauthenticated)'}
                 className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
               />
             ) : (
@@ -489,7 +474,7 @@ export default function PlaygroundView({
                     {k.tenant_id ? `${k.tenant_id} - ` : ''}{k.key.slice(0, 10)}...{k.key.slice(-4)}
                   </option>
                 ))}
-                <option value="__none__">免密直通 (不带 API Key)</option>
+                <option value="__none__">{isZh ? '免密直通 (不带 API Key)' : 'Public / Unauthenticated'}</option>
               </select>
             )}
           </div>
@@ -500,7 +485,7 @@ export default function PlaygroundView({
               {/* Primary Model */}
               <div>
                 <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                  {playMode === 'arena' ? '对决模型 A (Primary Model)' : '目标模型'}
+                  {playMode === 'arena' ? (isZh ? '对决模型 A (Primary Model)' : 'Contender Model A') : (isZh ? '目标模型' : 'Target Model')}
                 </label>
                 <select
                   value={playModel}
@@ -517,7 +502,7 @@ export default function PlaygroundView({
               {playMode === 'arena' && (
                 <div>
                   <label className="block text-xs font-semibold text-purple-600 dark:text-purple-400 mb-1">
-                    对决模型 B (Arena Contender)
+                    {isZh ? '对决模型 B (Arena Contender)' : 'Contender Model B'}
                   </label>
                   <select
                     value={arenaModelB}
@@ -537,7 +522,7 @@ export default function PlaygroundView({
                   onClick={() => setShowSystemPrompt(!showSystemPrompt)}
                   className="w-full flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer"
                 >
-                  <span>系统人设 (System Prompt)</span>
+                  <span>{isZh ? '系统人设 (System Prompt)' : 'System Prompt'}</span>
                   {showSystemPrompt ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                 </button>
                 {showSystemPrompt && (
@@ -554,7 +539,7 @@ export default function PlaygroundView({
               <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <div>
                   <div className="flex justify-between text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                    <span>温度 (Temperature)</span>
+                    <span>{isZh ? '温度 (Temperature)' : 'Temperature'}</span>
                     <span className="font-mono text-indigo-600 dark:text-indigo-400">{temperature}</span>
                   </div>
                   <input
@@ -570,7 +555,7 @@ export default function PlaygroundView({
 
                 <div>
                   <div className="flex justify-between text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                    <span>最大生成 Token (Max Tokens)</span>
+                    <span>{isZh ? '最大生成 Token (Max Tokens)' : 'Max Tokens'}</span>
                     <span className="font-mono text-indigo-600 dark:text-indigo-400">{maxTokens}</span>
                   </div>
                   <input
@@ -593,7 +578,7 @@ export default function PlaygroundView({
                     className="rounded border-slate-300 text-indigo-600 focus:ring-0 cursor-pointer"
                   />
                   <label htmlFor="streamCheck" className="text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
-                    开启 SSE 流式输出 (Streaming)
+                    {isZh ? '开启 SSE 流式输出 (Streaming)' : 'Enable SSE Streaming'}
                   </label>
                 </div>
               </div>
@@ -604,7 +589,7 @@ export default function PlaygroundView({
           {playModality === 'images' && (
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">生图模型</label>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">{isZh ? '生图模型' : 'Image Model'}</label>
                 <select
                   value={imgModel}
                   onChange={(e) => setImgModel(e.target.value)}
@@ -617,20 +602,20 @@ export default function PlaygroundView({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">画面尺寸 (Size)</label>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">{isZh ? '画面尺寸 (Size)' : 'Image Size'}</label>
                 <select
                   value={imgSize}
                   onChange={(e) => setImgSize(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100"
                 >
-                  <option value="1024x1024">1024x1024 (方形 1:1)</option>
-                  <option value="1792x1024">1792x1024 (横屏 16:9)</option>
-                  <option value="1024x1792">1024x1792 (竖屏 9:16)</option>
+                  <option value="1024x1024">{isZh ? '1024x1024 (方形 1:1)' : '1024x1024 (Square 1:1)'}</option>
+                  <option value="1792x1024">{isZh ? '1792x1024 (横屏 16:9)' : '1792x1024 (Landscape 16:9)'}</option>
+                  <option value="1024x1792">{isZh ? '1024x1792 (竖屏 9:16)' : '1024x1792 (Portrait 9:16)'}</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">画面提示词 (Prompt)</label>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">{isZh ? '画面提示词 (Prompt)' : 'Prompt'}</label>
                 <textarea
                   rows={3}
                   value={imgPrompt}
@@ -645,7 +630,7 @@ export default function PlaygroundView({
                 className="w-full py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold shadow-xs transition flex items-center justify-center space-x-1.5 cursor-pointer"
               >
                 {playLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                <span>{playLoading ? '渲染生成中...' : '生成图像'}</span>
+                <span>{playLoading ? (isZh ? '渲染生成中...' : 'Rendering...') : (isZh ? '生成图像' : 'Generate Image')}</span>
               </button>
             </div>
           )}
@@ -654,7 +639,7 @@ export default function PlaygroundView({
           {playModality === 'audio_speech' && (
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">语音合成模型</label>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">{isZh ? '语音合成模型' : 'TTS Model'}</label>
                 <select
                   value={ttsModel}
                   onChange={(e) => setTtsModel(e.target.value)}
@@ -667,22 +652,22 @@ export default function PlaygroundView({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">音色 (Voice)</label>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">{isZh ? '音色 (Voice)' : 'Voice'}</label>
                 <select
                   value={ttsVoice}
                   onChange={(e) => setTtsVoice(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100"
                 >
-                  <option value="alloy">alloy (自然中性)</option>
-                  <option value="echo">echo (沉稳男声)</option>
-                  <option value="fable">fable (磁性叙事)</option>
-                  <option value="nova">nova (明朗女声)</option>
-                  <option value="shimmer">shimmer (温柔女声)</option>
+                  <option value="alloy">alloy ({isZh ? '自然中性' : 'Neutral'})</option>
+                  <option value="echo">echo ({isZh ? '沉稳男声' : 'Deep Male'})</option>
+                  <option value="fable">fable ({isZh ? '磁性叙事' : 'Narrative'})</option>
+                  <option value="nova">nova ({isZh ? '明朗女声' : 'Clear Female'})</option>
+                  <option value="shimmer">shimmer ({isZh ? '温柔女声' : 'Soft Female'})</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">文本内容</label>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">{isZh ? '文本内容' : 'Text Input'}</label>
                 <textarea
                   rows={3}
                   value={ttsInput}
@@ -697,7 +682,7 @@ export default function PlaygroundView({
                 className="w-full py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-xs transition flex items-center justify-center space-x-1.5 cursor-pointer"
               >
                 {playLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Volume2 className="w-3.5 h-3.5" />}
-                <span>{playLoading ? '合成中...' : '生成语音'}</span>
+                <span>{playLoading ? (isZh ? '合成中...' : 'Synthesizing...') : (isZh ? '生成语音' : 'Synthesize Speech')}</span>
               </button>
             </div>
           )}
@@ -705,20 +690,20 @@ export default function PlaygroundView({
           {/* Telemetry Summary Footer */}
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 space-y-1.5">
             <div className="flex justify-between">
-              <span>首字时延 (TTFT):</span>
+              <span>{isZh ? '首字时延 (TTFT):' : 'TTFT Latency:'}</span>
               <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
                 {playTTFTMs ? `${playTTFTMs} ms` : '-'}
               </span>
             </div>
             <div className="flex justify-between">
-              <span>总耗时:</span>
+              <span>{isZh ? '总耗时:' : 'Duration:'}</span>
               <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
                 {playDurationMs ? `${playDurationMs} ms` : '-'}
               </span>
             </div>
             {playTokensPerSec && (
               <div className="flex justify-between">
-                <span>吞吐速度:</span>
+                <span>{isZh ? '吞吐速度:' : 'Speed:'}</span>
                 <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
                   ⚡ {playTokensPerSec} tokens/s
                 </span>
@@ -735,21 +720,21 @@ export default function PlaygroundView({
               <Terminal className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
               <span className="font-bold text-slate-800 dark:text-slate-200">
                 {playModality === 'chat'
-                  ? (playMode === 'arena' ? '双模型横向比对评测竞技场 (Arena)' : '连续多轮对话调试')
-                  : '多模态结果呈现'}
+                  ? (playMode === 'arena' ? (isZh ? '双模型横向比对评测竞技场 (Arena)' : 'Model Arena Side-by-Side Comparison') : (isZh ? '连续多轮对话调试' : 'Conversational Testing Stream'))
+                  : (isZh ? '多模态结果呈现' : 'Multimodal Output Stream')}
               </span>
             </div>
 
             <div className="flex items-center space-x-2">
               <button
                 onClick={() => {
-                  const curlCmd = `curl -X POST "${getGatewayOrigin()}/v1/chat/completions" \\\n  -H "Authorization: Bearer ${getEffectiveApiKey()}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"model": "${playModel}", "messages": [{"role": "user", "content": "你好"}], "stream": true}'`;
-                  copyToClipboard(curlCmd, 'curl');
+                  const curlCmd = `curl -X POST "${getGatewayOrigin()}/v1/chat/completions" \\\n  -H "Authorization: Bearer ${getEffectiveApiKey()}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"model": "${playModel}", "messages": [{"role": "user", "content": "Hello"}], "stream": true}'`;
+                  copyToClipboard(curlCmd, 'cURL');
                 }}
                 className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg font-medium transition flex items-center space-x-1 cursor-pointer"
               >
                 <Code className="w-3 h-3 text-indigo-500" />
-                <span>复制 cURL</span>
+                <span>{isZh ? '复制 cURL' : 'Copy cURL'}</span>
               </button>
 
               <button
@@ -763,7 +748,7 @@ export default function PlaygroundView({
                 }}
                 className="px-2 py-1 text-slate-400 hover:text-rose-600 transition text-[11px] cursor-pointer"
               >
-                清空对话
+                {isZh ? '清空会话' : 'Clear Chat'}
               </button>
             </div>
           </div>
@@ -781,7 +766,7 @@ export default function PlaygroundView({
                       className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                     >
                       <div className="text-[10px] text-slate-400 font-mono mb-1">
-                        {msg.role === 'user' ? '调用方 (User)' : `${playModel} (Assistant)`}
+                        {msg.role === 'user' ? (isZh ? '调用方 (User)' : 'User') : `${playModel} (Assistant)`}
                       </div>
                       <div
                         className={`max-w-[85%] rounded-2xl p-3.5 text-xs leading-relaxed ${
@@ -800,7 +785,7 @@ export default function PlaygroundView({
                     <div className="p-3.5 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 rounded-2xl text-xs text-amber-950 dark:text-amber-200">
                       <div className="font-bold flex items-center space-x-1.5 text-amber-800 dark:text-amber-400 mb-1">
                         <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-                        <span>深度思维链 (Reasoning Content):</span>
+                        <span>{isZh ? '深度思维链 (Reasoning Content):' : 'Reasoning Process:'}</span>
                       </div>
                       <div className="whitespace-pre-wrap text-[11px] font-mono leading-relaxed">
                         {playReasoningOutput}
@@ -811,7 +796,7 @@ export default function PlaygroundView({
                   {playOutput && (
                     <div className="flex flex-col items-start">
                       <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono mb-1">
-                        {playModel} (响应输出)
+                        {playModel} {isZh ? '(响应输出)' : '(Response)'}
                       </div>
                       <div className="max-w-[90%] rounded-2xl p-3.5 text-xs bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700 shadow-xs whitespace-pre-wrap leading-relaxed">
                         {playOutput}
@@ -830,7 +815,7 @@ export default function PlaygroundView({
                       </span>
                       <div className="text-[10px] font-mono text-slate-500 space-x-2">
                         <span>TTFT: {playTTFTMs ? `${playTTFTMs}ms` : '-'}</span>
-                        <span>速度: {playTokensPerSec ? `${playTokensPerSec}tps` : '-'}</span>
+                        <span>{isZh ? '速度' : 'Speed'}: {playTokensPerSec ? `${playTokensPerSec}tps` : '-'}</span>
                       </div>
                     </div>
                     {playReasoningOutput && (
@@ -841,7 +826,7 @@ export default function PlaygroundView({
                     <div className="text-xs text-slate-800 dark:text-slate-100 whitespace-pre-wrap leading-relaxed">
                       {playOutput || (
                         <div className="text-center py-24 text-slate-400 text-xs">
-                          等待发送评测指令...
+                          {isZh ? '等待发送评测指令...' : 'Awaiting prompt evaluation...'}
                         </div>
                       )}
                     </div>
@@ -855,7 +840,7 @@ export default function PlaygroundView({
                       </span>
                       <div className="text-[10px] font-mono text-slate-500 space-x-2">
                         <span>TTFT: {arenaTTFTB ? `${arenaTTFTB}ms` : '-'}</span>
-                        <span>速度: {arenaTokensPerSecB ? `${arenaTokensPerSecB}tps` : '-'}</span>
+                        <span>{isZh ? '速度' : 'Speed'}: {arenaTokensPerSecB ? `${arenaTokensPerSecB}tps` : '-'}</span>
                       </div>
                     </div>
                     {arenaReasoningB && (
@@ -866,7 +851,7 @@ export default function PlaygroundView({
                     <div className="text-xs text-slate-800 dark:text-slate-100 whitespace-pre-wrap leading-relaxed">
                       {arenaOutputB || (
                         <div className="text-center py-24 text-slate-400 text-xs">
-                          等待发送评测指令...
+                          {isZh ? '等待发送评测指令...' : 'Awaiting prompt evaluation...'}
                         </div>
                       )}
                     </div>
@@ -886,7 +871,7 @@ export default function PlaygroundView({
                       handleRunChat();
                     }
                   }}
-                  placeholder={playMode === 'arena' ? '输入统一 Prompt，同时对两款模型展开并发比对...' : '输入对话 Prompt，按回车发送...'}
+                  placeholder={playMode === 'arena' ? (isZh ? '输入统一 Prompt，同时对两款模型展开并发比对...' : 'Enter prompt to benchmark both models simultaneously...') : (isZh ? '输入对话 Prompt，按回车发送...' : 'Enter prompt, press Enter to send...')}
                   className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
                 />
                 <button
@@ -899,7 +884,7 @@ export default function PlaygroundView({
                   }`}
                 >
                   {playLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                  <span>{playLoading ? '流式推导中...' : (playMode === 'arena' ? '并发对决测试' : '发送请求')}</span>
+                  <span>{playLoading ? (isZh ? '流式推导中...' : 'Generating...') : (playMode === 'arena' ? (isZh ? '并发对决测试' : 'Run Arena Test') : (isZh ? '发送请求' : 'Send'))}</span>
                 </button>
               </div>
             </div>
@@ -925,13 +910,13 @@ export default function PlaygroundView({
                     className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white text-xs font-bold rounded-xl flex items-center space-x-1.5 transition shadow-xs cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>下载高清原图</span>
+                    <span>{isZh ? '下载高清原图' : 'Download High-Res'}</span>
                   </a>
                 </div>
               ) : (
                 <div className="text-center text-slate-400 space-y-2">
                   <ImageIcon className="w-12 h-12 stroke-1 mx-auto text-slate-300" />
-                  <p className="text-xs">点击左侧【生成图像】开始 AI 视觉渲染</p>
+                  <p className="text-xs">{isZh ? '点击左侧【生成图像】开始 AI 视觉渲染' : 'Click [Generate Image] on the left to start AI rendering'}</p>
                 </div>
               )}
             </div>
@@ -946,14 +931,14 @@ export default function PlaygroundView({
                     <Volume2 className="w-6 h-6" />
                   </div>
                   <span className="font-bold text-xs text-slate-800 dark:text-slate-200">
-                    语音合成渲染完成 (MP3 直通流)
+                    {isZh ? '语音合成渲染完成 (MP3 直通流)' : 'Audio Synthesis Completed (Direct MP3 Stream)'}
                   </span>
                   <audio controls src={ttsAudioUrl} className="w-full" autoPlay />
                 </div>
               ) : (
                 <div className="text-center text-slate-400 space-y-2">
                   <FileAudio className="w-12 h-12 stroke-1 mx-auto text-slate-300" />
-                  <p className="text-xs">点击左侧【生成语音】开始流式音频合成</p>
+                  <p className="text-xs">{isZh ? '点击左侧【生成语音】开始流式音频合成' : 'Click [Synthesize Speech] on the left to start streaming audio'}</p>
                 </div>
               )}
             </div>

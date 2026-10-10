@@ -31,8 +31,11 @@ import ModelRouteModal, { getChannelModels } from './ModelRouteModal';
 export default function ModelRoutesManager({
   adminFetch,
   showToast,
-  onNavigateToPlayground
+  onNavigateToPlayground,
+  lang = 'zh',
+  t
 }) {
+  const isZh = lang === 'zh';
   const [modelRoutes, setModelRoutes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -207,19 +210,19 @@ export default function ModelRoutesManager({
   const getModalityBadge = (modality) => {
     switch (modality) {
       case 'images':
-        return { label: '生图', color: 'text-amber-700 bg-amber-50 border-amber-200' };
+        return { label: isZh ? '生图' : 'Image', color: 'text-amber-700 bg-amber-50 border-amber-200' };
       case 'audio_speech':
-        return { label: '语音TTS', color: 'text-rose-700 bg-rose-50 border-rose-200' };
+        return { label: isZh ? '语音TTS' : 'TTS', color: 'text-rose-700 bg-rose-50 border-rose-200' };
       case 'audio_transcription':
-        return { label: '语音STT', color: 'text-orange-700 bg-orange-50 border-orange-200' };
+        return { label: isZh ? '语音STT' : 'STT', color: 'text-orange-700 bg-orange-50 border-orange-200' };
       case 'videos':
-        return { label: '视频', color: 'text-purple-700 bg-purple-50 border-purple-200' };
+        return { label: isZh ? '视频' : 'Video', color: 'text-purple-700 bg-purple-50 border-purple-200' };
       case 'embeddings':
-        return { label: '嵌入', color: 'text-cyan-700 bg-cyan-50 border-cyan-200' };
+        return { label: isZh ? '嵌入' : 'Embedding', color: 'text-cyan-700 bg-cyan-50 border-cyan-200' };
       case 'rerank':
-        return { label: '重排', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
+        return { label: isZh ? '重排' : 'Rerank', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
       default:
-        return { label: '对话/文本', color: 'text-indigo-700 bg-indigo-50 border-indigo-200' };
+        return { label: isZh ? '对话/文本' : 'Chat', color: 'text-indigo-700 bg-indigo-50 border-indigo-200' };
     }
   };
 
@@ -231,7 +234,7 @@ export default function ModelRoutesManager({
       <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center space-x-2.5">
-            <h2 className="text-lg font-bold text-slate-900 tracking-tight">模型路由与分发</h2>
+            <h2 className="text-lg font-bold text-slate-900 tracking-tight">{isZh ? '模型路由与分发' : 'Model Routes & Dispatch'}</h2>
           </div>
 
           <div className="flex items-center space-x-2 shrink-0">
@@ -240,7 +243,7 @@ export default function ModelRoutesManager({
               className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center space-x-1.5 transition cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>新建模型路由</span>
+              <span>{isZh ? '新建模型路由' : 'New Model Route'}</span>
             </button>
             <button
               onClick={fetchModelRoutes}
@@ -248,7 +251,7 @@ export default function ModelRoutesManager({
               className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 border border-slate-200 transition flex items-center space-x-1.5 cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-              <span>刷新</span>
+              <span>{isZh ? '刷新' : 'Refresh'}</span>
             </button>
           </div>
         </div>
@@ -257,12 +260,12 @@ export default function ModelRoutesManager({
         <div className="mt-4 pt-3.5 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
           <div className="flex items-center space-x-1 overflow-x-auto pb-1 max-w-full">
             {[
-              { id: 'all', label: '全部模态' },
-              { id: 'chat', label: '对话' },
-              { id: 'images', label: '生图' },
-              { id: 'videos', label: '视频' },
-              { id: 'audio_speech', label: '语音' },
-              { id: 'embeddings', label: '向量' }
+              { id: 'all', label: isZh ? '全部模态' : 'All' },
+              { id: 'chat', label: isZh ? '对话' : 'Chat' },
+              { id: 'images', label: isZh ? '生图' : 'Images' },
+              { id: 'videos', label: isZh ? '视频' : 'Video' },
+              { id: 'audio_speech', label: isZh ? '语音' : 'Audio' },
+              { id: 'embeddings', label: isZh ? '向量' : 'Embedding' }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -284,7 +287,7 @@ export default function ModelRoutesManager({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索模型或服务商..."
+              placeholder={isZh ? '搜索模型或服务商...' : 'Search model or provider...'}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
             />
           </div>
@@ -295,7 +298,7 @@ export default function ModelRoutesManager({
       {selectedModels.length > 0 && (
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-indigo-50 border border-indigo-200 px-5 py-3 rounded-2xl animate-in fade-in gap-3">
           <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-900">
-            <span>已选中 {selectedModels.length} 个模型路由</span>
+            <span>{isZh ? `已选中 ${selectedModels.length} 个模型路由` : `Selected ${selectedModels.length} routes`}</span>
           </div>
           <div className="flex items-center space-x-2">
             <button
@@ -303,13 +306,13 @@ export default function ModelRoutesManager({
               className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl shadow-xs transition flex items-center space-x-1 cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>批量删除</span>
+              <span>{isZh ? '批量删除' : 'Batch Delete'}</span>
             </button>
             <button
               onClick={() => setSelectedModels([])}
               className="px-3 py-1.5 bg-white text-slate-700 border border-slate-200 text-xs font-medium rounded-xl hover:bg-slate-50 transition cursor-pointer"
             >
-              取消选择
+              {isZh ? '取消选择' : 'Deselect All'}
             </button>
           </div>
         </div>
@@ -320,7 +323,7 @@ export default function ModelRoutesManager({
         {filteredRoutes.length === 0 ? (
           <div className="p-10 text-center flex flex-col items-center justify-center space-y-2">
             <Cpu className="w-10 h-10 text-slate-300" />
-            <h4 className="font-semibold text-xs text-slate-800">暂无模型路由</h4>
+            <h4 className="font-semibold text-xs text-slate-800">{isZh ? '暂无模型路由' : 'No Model Routes'}</h4>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -341,11 +344,11 @@ export default function ModelRoutesManager({
                       }}
                     />
                   </th>
-                  <th className="py-3 px-5 font-semibold">模型标识</th>
-                  <th className="py-3 px-4 font-semibold">上游服务商 (权重)</th>
-                  <th className="py-3 px-4 font-semibold">容灾降级</th>
-                  <th className="py-3 px-4 font-semibold">费率 (输入/输出)</th>
-                  <th className="py-3 px-5 text-right font-semibold">操作</th>
+                  <th className="py-3 px-5 font-semibold">{isZh ? '模型标识' : 'Model ID'}</th>
+                  <th className="py-3 px-4 font-semibold">{isZh ? '上游服务商 (权重)' : 'Upstream Channels (Weight)'}</th>
+                  <th className="py-3 px-4 font-semibold">{isZh ? '容灾降级' : 'Failover Target'}</th>
+                  <th className="py-3 px-4 font-semibold">{isZh ? '费率 (输入/输出)' : 'Rates (Prompt/Comp)'}</th>
+                  <th className="py-3 px-5 text-right font-semibold">{isZh ? '操作' : 'Actions'}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -399,14 +402,14 @@ export default function ModelRoutesManager({
                               const ch = allChannels.find(c => c.id === p.channel_id);
                               let warnMsg = null;
                               if (!ch) {
-                                warnMsg = '渠道不存在或已删除';
+                                warnMsg = isZh ? '渠道不存在或已删除' : 'Channel missing';
                               } else if (ch.status === 'inactive' || ch.status === 'disabled') {
-                                warnMsg = '渠道已停用';
+                                warnMsg = isZh ? '渠道已停用' : 'Channel disabled';
                               } else {
                                 const chModels = getChannelModels(ch);
                                 const mapped = p.mapped_model || route.model;
                                 if (chModels.length > 0 && !chModels.includes('*') && !chModels.includes(mapped)) {
-                                  warnMsg = `渠道未声明模型: ${mapped}`;
+                                  warnMsg = isZh ? `渠道未声明模型: ${mapped}` : `Model undeclared: ${mapped}`;
                                 }
                               }
 
@@ -418,18 +421,18 @@ export default function ModelRoutesManager({
                                       ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-2xs'
                                       : 'bg-slate-100 border-slate-200 text-slate-700'
                                   }`}
-                                  title={warnMsg ? `⚠️ ${warnMsg}` : p.mapped_model ? `上游模型: ${p.mapped_model}` : ''}
+                                  title={warnMsg ? `⚠️ ${warnMsg}` : p.mapped_model ? `${isZh ? '上游模型: ' : 'Upstream: '}${p.mapped_model}` : ''}
                                 >
                                   {warnMsg && <span className="text-amber-500 font-bold">⚠️</span>}
                                   <span>{p.channel_name}</span>
                                   <strong className={`${warnMsg ? 'text-amber-700' : 'text-indigo-600'} font-mono font-bold`}>
-                                    {p.weight_percent ? `${p.weight_percent}%` : `权重${p.weight}`}
+                                    {p.weight_percent ? `${p.weight_percent}%` : `${isZh ? '权重' : 'w:'}${p.weight}`}
                                   </strong>
                                 </span>
                               );
                             })}
                             {(route.providers || []).length === 0 && (
-                              <span className="text-rose-500 text-[11px]">未绑定上游</span>
+                              <span className="text-rose-500 text-[11px]">{isZh ? '未绑定上游' : 'No Upstream'}</span>
                             )}
                           </div>
                         </td>
@@ -439,10 +442,10 @@ export default function ModelRoutesManager({
                           {route.fallback_model ? (
                             <span className="inline-flex items-center space-x-1 text-sky-700 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-lg text-[11px] font-medium">
                               <Shield className="w-3 h-3 text-sky-600" />
-                              <span>降级: {route.fallback_model}</span>
+                              <span>{isZh ? '降级: ' : 'Fallback: '}{route.fallback_model}</span>
                             </span>
                           ) : (
-                            <span className="text-slate-400 text-[11px]">直通返回</span>
+                            <span className="text-slate-400 text-[11px]">{isZh ? '直通返回' : 'Direct Return'}</span>
                           )}
                         </td>
 
@@ -455,12 +458,12 @@ export default function ModelRoutesManager({
                               </span>
                               {price.off_peak_enabled !== false && (
                                 <span className="bg-indigo-50 border border-indigo-200 text-indigo-700 px-1.5 py-0.2 rounded font-medium text-[10px]">
-                                  🌙 闲时优惠
+                                  🌙 {isZh ? '闲时优惠' : 'Off-peak'}
                                 </span>
                               )}
                             </div>
                           ) : (
-                            <span className="text-slate-400 text-[11px]">基准计费</span>
+                            <span className="text-slate-400 text-[11px]">{isZh ? '基准计费' : 'Standard'}</span>
                           )}
                         </td>
 
@@ -470,19 +473,19 @@ export default function ModelRoutesManager({
                             onClick={() => handleOpenEdit(route)}
                             className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium transition cursor-pointer"
                           >
-                            配置分发
+                            {isZh ? '配置分发' : 'Configure'}
                           </button>
                           <button
                             onClick={() => setExpandedModel(isExpanded ? null : route.model)}
                             className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer inline-flex items-center"
-                            title={isExpanded ? '收起详情' : '展开服务商明细'}
+                            title={isExpanded ? (isZh ? '收起详情' : 'Collapse') : (isZh ? '展开服务商明细' : 'Expand Details')}
                           >
                             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                           </button>
                           <button
                             onClick={() => handleDeleteRoute(route.model)}
                             className="p-1 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer inline-flex items-center"
-                            title="删除路由"
+                            title={isZh ? '删除路由' : 'Delete Route'}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -495,7 +498,9 @@ export default function ModelRoutesManager({
                           <td colSpan="6" className="p-4 pl-8 space-y-3">
                             <div className="flex items-center justify-between text-xs">
                               <span className="font-semibold text-slate-800">
-                                上游服务商明细与实时连通性探测 ({route.providers?.length || 0})
+                                {isZh
+                                  ? `上游服务商明细与实时连通性探测 (${route.providers?.length || 0})`
+                                  : `Upstream Providers & Health Probing (${route.providers?.length || 0})`}
                               </span>
                               <button
                                 onClick={() => handleProbeRoute(route.model)}
@@ -503,7 +508,7 @@ export default function ModelRoutesManager({
                                 className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-xs font-medium text-slate-700 flex items-center space-x-1 transition cursor-pointer"
                               >
                                 <Zap className={`w-3 h-3 text-amber-500 ${probingModel === route.model ? 'animate-pulse' : ''}`} />
-                                <span>{probingModel === route.model ? '探测中...' : '测试所有下游延迟'}</span>
+                                <span>{probingModel === route.model ? (isZh ? '探测中...' : 'Probing...') : (isZh ? '测试所有下游延迟' : 'Test Downstream Latency')}</span>
                               </button>
                             </div>
 
@@ -511,11 +516,11 @@ export default function ModelRoutesManager({
                               <table className="w-full text-left">
                                 <thead className="bg-slate-50 text-slate-500 text-[11px] border-b border-slate-200">
                                   <tr>
-                                    <th className="py-2 px-4 font-semibold">服务商名称</th>
-                                    <th className="py-2 px-4 font-semibold">服务引擎</th>
-                                    <th className="py-2 px-4 font-semibold">分流权重</th>
-                                    <th className="py-2 px-4 font-semibold">远端模型映射</th>
-                                    <th className="py-2 px-4 font-semibold text-right">健康状态 / 探测延迟</th>
+                                    <th className="py-2 px-4 font-semibold">{isZh ? '服务商名称' : 'Provider Name'}</th>
+                                    <th className="py-2 px-4 font-semibold">{isZh ? '服务引擎' : 'Engine'}</th>
+                                    <th className="py-2 px-4 font-semibold">{isZh ? '分流权重' : 'Weight'}</th>
+                                    <th className="py-2 px-4 font-semibold">{isZh ? '远端模型映射' : 'Remote Model'}</th>
+                                    <th className="py-2 px-4 font-semibold text-right">{isZh ? '健康状态 / 探测延迟' : 'Health / Latency'}</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
@@ -530,7 +535,7 @@ export default function ModelRoutesManager({
                                           {p.channel_type}
                                         </td>
                                         <td className="py-2 px-4 text-indigo-600 font-bold">
-                                          {p.weight_percent ? `${p.weight_percent}%` : `权重: ${p.weight}`}
+                                          {p.weight_percent ? `${p.weight_percent}%` : `${isZh ? '权重: ' : 'Weight: '}${p.weight}`}
                                         </td>
                                         <td className="py-2 px-4 text-slate-600">
                                           {p.mapped_model || route.model}
@@ -542,7 +547,7 @@ export default function ModelRoutesManager({
                                             </span>
                                           ) : (
                                             <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200 text-[10px]">
-                                              正常就绪
+                                              {isZh ? '正常就绪' : 'Ready'}
                                             </span>
                                           )}
                                         </td>
@@ -578,6 +583,8 @@ export default function ModelRoutesManager({
           }}
           adminFetch={adminFetch}
           showToast={showToast}
+          lang={lang}
+          t={t}
         />
       )}
     </div>

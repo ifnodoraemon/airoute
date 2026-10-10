@@ -24,8 +24,11 @@ export default function OnboardingModal({
   keys = [],
   models = [],
   onNavigateToPlayground,
-  showToast
+  showToast,
+  lang = 'zh',
+  t
 }) {
+  const isZh = lang === 'zh';
   const [step, setStep] = useState(1);
   const [selectedKey, setSelectedKey] = useState(() => (keys.length > 0 ? keys[0].key : 'sk-airoute-demo-key'));
   const [selectedProtocol, setSelectedProtocol] = useState('openai');
@@ -43,7 +46,7 @@ export default function OnboardingModal({
     navigator.clipboard.writeText(text);
     setCopiedKey(key || 'snippet');
     setTimeout(() => setCopiedKey(''), 2000);
-    if (showToast) showToast('已复制到剪贴板！', 'success');
+    if (showToast) showToast(isZh ? '已复制到剪贴板！' : 'Copied to clipboard!', 'success');
   };
 
   const handleTestProbe = async () => {
@@ -59,7 +62,7 @@ export default function OnboardingModal({
         },
         body: JSON.stringify({
           model: selectedModel,
-          messages: [{ role: 'user', content: 'Ping: 首次接入握手测试' }],
+          messages: [{ role: 'user', content: isZh ? 'Ping: 首次接入握手测试' : 'Ping: First handshake probe' }],
           max_tokens: 30,
           stream: false,
         }),
@@ -70,10 +73,10 @@ export default function OnboardingModal({
         setTestResult({
           success: true,
           latency: duration,
-          text: data.choices[0].message?.content || '通信正常！',
+          text: data.choices[0].message?.content || (isZh ? '通信正常！' : 'Communication healthy!'),
           model: data.model || selectedModel,
         });
-        if (showToast) showToast('握手成功！网关通信正常', 'success');
+        if (showToast) showToast(isZh ? '握手成功！网关通信正常' : 'Handshake successful! Gateway is online', 'success');
       } else {
         setTestResult({
           success: false,
@@ -85,7 +88,7 @@ export default function OnboardingModal({
       setTestResult({
         success: false,
         latency: Date.now() - start,
-        error: e.message || '网络连接超时',
+        error: e.message || (isZh ? '网络连接超时' : 'Connection timeout'),
       });
     } finally {
       setTestingPing(false);
@@ -101,12 +104,15 @@ client = OpenAI(
 
 response = client.chat.completions.create(
     model="${selectedModel}",
-    messages=[{"role": "user", "content": "你好，请介绍系统优势"}],
-    stream=True,
+    messages=[
+        {"role": "user", "content": "Hello Airoute!"}
+    ],
+    stream=True
 )
 
 for chunk in response:
-    print(chunk.choices[0].delta.content or "", end="", flush=True)`;
+    print(chunk.choices[0].delta.content or "", end="")
+`;
 
   const tsCode = `import OpenAI from "openai";
 
@@ -118,7 +124,7 @@ const client = new OpenAI({
 async function main() {
   const stream = await client.chat.completions.create({
     model: "${selectedModel}",
-    messages: [{ role: "user", content: "你好！" }],
+    messages: [{ role: "user", content: "Hello Airoute!" }],
     stream: true,
   });
 
@@ -127,16 +133,20 @@ async function main() {
   }
 }
 
-main();`;
+main();
+`;
 
   const curlCode = `curl -X POST "${origin}/v1/chat/completions" \\
   -H "Authorization: Bearer ${selectedKey}" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "${selectedModel}",
-    "messages": [{"role": "user", "content": "Hello Airoute!"}],
+    "messages": [
+      {"role": "user", "content": "Hello Airoute!"}
+    ],
     "stream": true
-  }'`;
+  }'
+`;
 
   const claudeCode = `import anthropic
 
@@ -148,41 +158,41 @@ client = anthropic.Anthropic(
 message = client.messages.create(
     model="${selectedModel}",
     max_tokens=1024,
-    messages=[{"role": "user", "content": "Hello from Claude SDK"}]
+    messages=[
+        {"role": "user", "content": "Hello Airoute from Claude SDK!"}
+    ]
 )
-print(message.content[0].text)`;
+print(message.content[0].text)
+`;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in">
-      <div className="bg-white dark:bg-[#111726] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 max-w-2xl w-full shadow-2xl relative max-h-[92vh] overflow-y-auto">
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-5 right-5 p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-        >
-          <X className="w-5 h-5" />
-        </button>
-
-        {/* Modal Header */}
-        <div className="flex items-center space-x-3 mb-6">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-sky-500 text-white flex items-center justify-center shadow-lg shadow-indigo-500/25 shrink-0">
-            <Zap className="w-5 h-5 fill-white text-white" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-[#111726] border border-slate-200 dark:border-slate-800 rounded-3xl max-w-2xl w-full p-6 sm:p-7 shadow-2xl relative space-y-6">
+        {/* Header */}
+        <div className="flex items-start justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-500 to-sky-500 text-white flex items-center justify-center shadow-md">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                {isZh ? '开发者极速上手接入向导' : 'Developer Onboarding Wizard'}
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                {isZh ? '3 步完成密钥配置、多协议代码生成与网关实时连通性探测' : '3 steps: API Key selection, multi-protocol SDK snippet generation & live handshake probe'}
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight flex items-center space-x-2">
-              <span>开发者极速上手指南</span>
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
-                Time-to-Hello-World &lt; 60s
-              </span>
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              仅需 3 步，完成 API 凭据签发、模型选取与生产端点首发握手
-            </p>
-          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
-        {/* Steps Breadcrumb */}
-        <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100 dark:border-slate-800 text-xs font-semibold">
+        {/* Step Indicator */}
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 text-xs font-semibold">
           <button
             onClick={() => setStep(1)}
             className={`flex items-center space-x-2 pb-1 transition ${
@@ -194,7 +204,7 @@ print(message.content[0].text)`;
             <span className="w-5 h-5 rounded-full bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-[11px]">
               1
             </span>
-            <span>签发/选定密钥</span>
+            <span>{isZh ? '选择或获取密钥' : 'Select API Key'}</span>
           </button>
 
           <ArrowRight className="w-3.5 h-3.5 text-slate-300" />
@@ -210,7 +220,7 @@ print(message.content[0].text)`;
             <span className="w-5 h-5 rounded-full bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-[11px]">
               2
             </span>
-            <span>选择模型与协议</span>
+            <span>{isZh ? '选择模型与协议' : 'Choose Protocol & Model'}</span>
           </button>
 
           <ArrowRight className="w-3.5 h-3.5 text-slate-300" />
@@ -226,7 +236,7 @@ print(message.content[0].text)`;
             <span className="w-5 h-5 rounded-full bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-[11px]">
               3
             </span>
-            <span>代码接入与握手</span>
+            <span>{isZh ? '代码接入与握手' : 'SDK & Handshake Probe'}</span>
           </button>
         </div>
 
@@ -236,7 +246,7 @@ print(message.content[0].text)`;
             <div className="bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800/80">
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center space-x-1.5">
                 <Key className="w-3.5 h-3.5 text-indigo-500" />
-                <span>选择用于接入调用的 API 密钥 (API Key)</span>
+                <span>{isZh ? '选择用于接入调用的 API 密钥 (API Key)' : 'Select API Key for client requests'}</span>
               </label>
 
               {keys.length > 0 ? (
@@ -254,12 +264,14 @@ print(message.content[0].text)`;
                     ))}
                   </select>
                   <p className="text-[11px] text-slate-400">
-                    💡 该密钥已自动关联默认扣费组与全模态访问权限。
+                    💡 {isZh ? '该密钥已自动关联默认扣费组与全模态访问权限。' : 'This key is automatically mapped to the default billing group and full multimodal scope.'}
                   </p>
                 </div>
               ) : (
                 <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs text-amber-800 dark:text-amber-300">
-                  当前暂无已签发的 API 密钥。可使用演示临时密钥进行测试，或前往【API 密钥】菜单创建企业级密钥。
+                  {isZh 
+                    ? '当前暂无已签发的 API 密钥。可使用演示临时密钥进行测试，或前往【API 密钥】菜单创建企业级密钥。' 
+                    : 'No API keys issued yet. You may use the demo key for testing, or navigate to [API Keys] to create one.'}
                 </div>
               )}
 
@@ -273,7 +285,7 @@ print(message.content[0].text)`;
                   className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-lg font-medium transition flex items-center space-x-1 shrink-0"
                 >
                   {copiedKey === 'key' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedKey === 'key' ? '已复制' : '复制密钥'}</span>
+                  <span>{copiedKey === 'key' ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制密钥' : 'Copy Key')}</span>
                 </button>
               </div>
             </div>
@@ -284,7 +296,7 @@ print(message.content[0].text)`;
                 onClick={() => setStep(2)}
                 className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition flex items-center space-x-1.5 cursor-pointer"
               >
-                <span>下一步：选择模型与协议</span>
+                <span>{isZh ? '下一步：选择模型与协议' : 'Next: Protocol & Model'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -296,11 +308,11 @@ print(message.content[0].text)`;
           <div className="space-y-4 animate-in fade-in duration-150">
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
-                客户端 SDK 协议格式
+                {isZh ? '客户端 SDK 协议格式' : 'Client SDK Protocol'}
               </label>
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { id: 'openai', label: 'OpenAI 官方协议', sub: '/v1/chat/completions' },
+                  { id: 'openai', label: isZh ? 'OpenAI 官方协议' : 'OpenAI Standard', sub: '/v1/chat/completions' },
                   { id: 'claude', label: 'Claude Messages', sub: '/v1/messages' },
                   { id: 'gemini', label: 'Google Gemini', sub: '/v1beta/models/*' },
                 ].map((p) => (
@@ -323,7 +335,7 @@ print(message.content[0].text)`;
 
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
-                测试请求模型 (挂载模型)
+                {isZh ? '测试请求模型 (挂载模型)' : 'Target Model'}
               </label>
               {models.length > 0 ? (
                 <select
@@ -347,7 +359,7 @@ print(message.content[0].text)`;
                 />
               )}
               <p className="text-[11px] text-slate-400 mt-1">
-                Airoute 会根据此模型名称，通过多通道优先级和三态熔断引擎无感分发。
+                {isZh ? 'Airoute 会根据此模型名称，通过多通道优先级和三态熔断引擎无感分发。' : 'Airoute automatically routes requests across multiple upstream channels with zero-loss fallback.'}
               </p>
             </div>
 
@@ -355,16 +367,16 @@ print(message.content[0].text)`;
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold transition"
+                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold transition cursor-pointer"
               >
-                上一步
+                {isZh ? '上一步' : 'Back'}
               </button>
               <button
                 type="button"
                 onClick={() => setStep(3)}
                 className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition flex items-center space-x-1.5 cursor-pointer"
               >
-                <span>下一步：代码验证与握手</span>
+                <span>{isZh ? '下一步：代码验证与握手' : 'Next: Code & Handshake'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -414,7 +426,7 @@ print(message.content[0].text)`;
                 className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-medium flex items-center space-x-1 transition cursor-pointer"
               >
                 {copiedKey === snippetTab ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                <span>{copiedKey === snippetTab ? '已复制' : '复制代码'}</span>
+                <span>{copiedKey === snippetTab ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制代码' : 'Copy Code')}</span>
               </button>
             </div>
 
@@ -432,10 +444,10 @@ print(message.content[0].text)`;
                 <div>
                   <span className="font-bold text-xs text-indigo-950 dark:text-indigo-200 flex items-center space-x-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-indigo-600 animate-pulse" />
-                    <span>在线握手探测 (Live Handshake Probe)</span>
+                    <span>{isZh ? '在线握手探测 (Live Handshake Probe)' : 'Live Handshake Probe'}</span>
                   </span>
                   <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
-                    从浏览器直接发送首次轻量请求，实时校验网关连通度与首字时延
+                    {isZh ? '从浏览器直接发送首次轻量请求，实时校验网关连通度与首字时延' : 'Send lightweight probe directly from the browser to verify gateway connectivity and latency'}
                   </p>
                 </div>
 
@@ -446,7 +458,7 @@ print(message.content[0].text)`;
                   className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shrink-0 shadow-xs cursor-pointer"
                 >
                   {testingPing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-                  <span>{testingPing ? '探测中...' : '立即测试握手'}</span>
+                  <span>{testingPing ? (isZh ? '探测中...' : 'Probing...') : (isZh ? '立即测试握手' : 'Test Handshake')}</span>
                 </button>
               </div>
 
@@ -460,10 +472,10 @@ print(message.content[0].text)`;
                 >
                   <div className="flex items-center justify-between font-bold">
                     <span>
-                      {testResult.success ? '✅ 握手成功！' : '❌ 探测返回异常'}
+                      {testResult.success ? (isZh ? '✅ 握手成功！' : '✅ Handshake Successful!') : (isZh ? '❌ 探测返回异常' : '❌ Handshake Error')}
                     </span>
                     <span className="text-[11px] font-mono">
-                      耗时: {testResult.latency} ms
+                      {isZh ? '耗时' : 'Latency'}: {testResult.latency} ms
                     </span>
                   </div>
                   <div className="mt-1 text-[11px] truncate">
@@ -480,7 +492,7 @@ print(message.content[0].text)`;
                 onClick={() => setStep(2)}
                 className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold transition cursor-pointer"
               >
-                上一步
+                {isZh ? '上一步' : 'Back'}
               </button>
 
               <div className="flex items-center space-x-2">
@@ -495,7 +507,7 @@ print(message.content[0].text)`;
                   className="px-4 py-2.5 bg-indigo-50 dark:bg-indigo-950 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold transition flex items-center space-x-1 cursor-pointer"
                 >
                   <Terminal className="w-3.5 h-3.5" />
-                  <span>前往调试演练场 →</span>
+                  <span>{isZh ? '前往调试演练场 →' : 'Go to Playground →'}</span>
                 </button>
 
                 <button
@@ -503,7 +515,7 @@ print(message.content[0].text)`;
                   onClick={onClose}
                   className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition cursor-pointer"
                 >
-                  完成向导
+                  {isZh ? '完成向导' : 'Finish Wizard'}
                 </button>
               </div>
             </div>

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { X, Copy, Check, Activity, Clock, Zap, Server, Key, AlertCircle, Shield, Trash2 } from 'lucide-react';
 
-export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession, onDeleteLog }) {
+export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession, onDeleteLog, lang = 'zh', t }) {
   if (!log) return null;
 
+  const isZh = lang === 'zh';
   const [copied, setCopied] = useState(false);
 
   const handleCopyRaw = () => {
@@ -29,7 +30,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
             </div>
             <div>
               <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 tracking-tight flex items-center space-x-2">
-                <span>请求审计详情</span>
+                <span>{isZh ? '请求审计详情' : 'Audit Log Inspector'}</span>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
                   isSuccess
                     ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300'
@@ -39,13 +40,13 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
                 </span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                记录 ID: #{log.id} · 时间: {log.created_at ? new Date(log.created_at).toLocaleString() : '刚刚'}
+                {isZh ? '记录 ID: #' : 'Log ID: #'}{log.id} · {isZh ? '时间: ' : 'Time: '}{log.created_at ? new Date(log.created_at).toLocaleString() : (isZh ? '刚刚' : 'Just now')}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
+            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -56,25 +57,25 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
           {/* Top key metric cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80">
-              <span className="text-[11px] text-slate-400 block font-medium">请求模型</span>
+              <span className="text-[11px] text-slate-400 block font-medium">{isZh ? '请求模型' : 'Model'}</span>
               <span className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400 truncate block mt-1">
                 {log.model || '-'}
               </span>
             </div>
             <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80">
-              <span className="text-[11px] text-slate-400 block font-medium">路由渠道</span>
+              <span className="text-[11px] text-slate-400 block font-medium">{isZh ? '路由渠道' : 'Channel'}</span>
               <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate block mt-1">
-                {log.channel || '直通/多源'}
+                {log.channel || (isZh ? '直通/多源' : 'Direct / Multi')}
               </span>
             </div>
             <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80">
-              <span className="text-[11px] text-slate-400 block font-medium">首字延迟 (TTFT)</span>
+              <span className="text-[11px] text-slate-400 block font-medium">{isZh ? '首字延迟 (TTFT)' : 'TTFT Latency'}</span>
               <span className="text-xs font-bold text-amber-600 dark:text-amber-400 block mt-1">
                 {log.ttft_ms ? `${log.ttft_ms} ms` : '-'}
               </span>
             </div>
             <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80">
-              <span className="text-[11px] text-slate-400 block font-medium">总执行耗时</span>
+              <span className="text-[11px] text-slate-400 block font-medium">{isZh ? '总执行耗时' : 'Total Duration'}</span>
               <span className="text-xs font-bold text-slate-900 dark:text-slate-100 block mt-1">
                 {log.duration_ms} ms
               </span>
@@ -84,10 +85,10 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
           {/* Details list */}
           <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800/60 overflow-hidden text-xs">
             <div className="p-3 flex items-center justify-between bg-purple-50/50 dark:bg-purple-950/30">
-              <span className="text-slate-500 font-medium">链路追踪 ID (Trace ID)</span>
+              <span className="text-slate-500 font-medium">{isZh ? '链路追踪 ID (Trace ID)' : 'Trace ID'}</span>
               <div className="flex items-center space-x-2">
                 <span className="font-mono text-xs font-bold text-purple-700 dark:text-purple-300">
-                  {log.trace_id || '未生成'}
+                  {log.trace_id || (isZh ? '未生成' : 'N/A')}
                 </span>
                 {log.trace_id && (
                   <>
@@ -98,7 +99,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
                         setTimeout(() => setCopied(false), 2000);
                       }}
                       className="p-1 hover:bg-white dark:hover:bg-slate-800 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer"
-                      title="复制 Trace ID"
+                      title={isZh ? '复制 Trace ID' : 'Copy Trace ID'}
                     >
                       <Copy className="w-3 h-3" />
                     </button>
@@ -110,7 +111,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
                         }}
                         className="px-2 py-0.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-medium transition cursor-pointer"
                       >
-                        追踪全链路
+                        {isZh ? '追踪全链路' : 'Trace Flow'}
                       </button>
                     )}
                   </>
@@ -119,7 +120,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
             </div>
             {log.chat_id && (
               <div className="p-3 flex items-center justify-between bg-sky-50/40 dark:bg-sky-950/30">
-                <span className="text-slate-500 font-medium">对话 ID (Chat ID)</span>
+                <span className="text-slate-500 font-medium">{isZh ? '对话 ID (Chat ID)' : 'Chat ID'}</span>
                 <div className="flex items-center space-x-2">
                   <span className="font-mono text-xs font-bold text-sky-700 dark:text-sky-300">
                     {log.chat_id}
@@ -131,7 +132,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
                       setTimeout(() => setCopied(false), 2000);
                     }}
                     className="p-1 hover:bg-white dark:hover:bg-slate-800 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer"
-                    title="复制对话 ID"
+                    title={isZh ? '复制对话 ID' : 'Copy Chat ID'}
                   >
                     <Copy className="w-3 h-3" />
                   </button>
@@ -140,7 +141,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
             )}
             {log.session_id && (
               <div className="p-3 flex items-center justify-between bg-indigo-50/40 dark:bg-indigo-950/30">
-                <span className="text-slate-500 font-medium">会话 ID (Session ID)</span>
+                <span className="text-slate-500 font-medium">{isZh ? '会话 ID (Session ID)' : 'Session ID'}</span>
                 <div className="flex items-center space-x-2">
                   <span className="font-mono text-xs font-bold text-indigo-700 dark:text-indigo-300">
                     {log.session_id}
@@ -152,7 +153,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
                       setTimeout(() => setCopied(false), 2000);
                     }}
                     className="p-1 hover:bg-white dark:hover:bg-slate-800 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer"
-                    title="复制会话 ID"
+                    title={isZh ? '复制会话 ID' : 'Copy Session ID'}
                   >
                     <Copy className="w-3 h-3" />
                   </button>
@@ -164,64 +165,64 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
                       }}
                       className="px-2 py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-medium transition cursor-pointer"
                     >
-                      筛选此会话
+                      {isZh ? '筛选此会话' : 'Filter Session'}
                     </button>
                   )}
                 </div>
               </div>
             )}
             <div className="p-3 flex justify-between bg-slate-50/50 dark:bg-slate-900/30">
-              <span className="text-slate-500 font-medium">应用 / 团队</span>
+              <span className="text-slate-500 font-medium">{isZh ? '应用 / 团队' : 'App / Tenant'}</span>
               <span className="font-semibold text-slate-800 dark:text-slate-200">{log.tenant_id || 'anonymous'}</span>
             </div>
             <div className="p-3 flex justify-between">
-              <span className="text-slate-500 font-medium">API 密钥</span>
-              <span className="font-mono text-indigo-600 dark:text-indigo-400">{log.api_key || '无'}</span>
+              <span className="text-slate-500 font-medium">{isZh ? 'API 密钥' : 'API Key'}</span>
+              <span className="font-mono text-indigo-600 dark:text-indigo-400">{log.api_key || (isZh ? '无' : 'None')}</span>
             </div>
             <div className="p-3 flex justify-between bg-slate-50/50 dark:bg-slate-900/30">
-              <span className="text-slate-500 font-medium">Token 明细</span>
+              <span className="text-slate-500 font-medium">{isZh ? 'Token 明细' : 'Token Breakdown'}</span>
               <span className="text-slate-800 dark:text-slate-200">
-                输入: <strong className="text-indigo-600 dark:text-indigo-400">{log.prompt_tokens}</strong> · 
-                输出: <strong className="text-emerald-600 dark:text-emerald-400">{log.completion_tokens}</strong> · 
-                合计: <strong className="text-slate-900 dark:text-slate-100">{log.total_tokens}</strong>
+                {isZh ? '输入: ' : 'Prompt: '}<strong className="text-indigo-600 dark:text-indigo-400">{log.prompt_tokens}</strong> · 
+                {isZh ? ' 输出: ' : ' Completion: '}<strong className="text-emerald-600 dark:text-emerald-400">{log.completion_tokens}</strong> · 
+                {isZh ? ' 合计: ' : ' Total: '}<strong className="text-slate-900 dark:text-slate-100">{log.total_tokens}</strong>
               </span>
             </div>
             <div className="p-3 flex justify-between">
-              <span className="text-slate-500 font-medium">计费扣减</span>
+              <span className="text-slate-500 font-medium">{isZh ? '计费扣减' : 'Billed Cost'}</span>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
                   ¥{(log.cost || 0).toFixed(4)}
                 </span>
                 {log.is_off_peak && (
                   <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                    闲时 ({Math.round((log.off_peak_discount || 0.5) * 10)}折)
+                    {isZh ? `闲时 (${Math.round((log.off_peak_discount || 0.5) * 10)}折)` : `Off-peak (${Math.round((1 - (log.off_peak_discount || 0.5)) * 100)}% off)`}
                   </span>
                 )}
                 {log.cached_tokens > 0 ? (
                   <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    缓存: {log.cached_tokens} Tokens
+                    {isZh ? `缓存: ${log.cached_tokens} Tokens` : `Cache: ${log.cached_tokens} Tokens`}
                   </span>
                 ) : (
-                  <span className="text-slate-400 text-[11px]">未命中缓存</span>
+                  <span className="text-slate-400 text-[11px]">{isZh ? '未命中缓存' : 'Cache miss'}</span>
                 )}
               </div>
             </div>
             <div className="p-3 flex justify-between bg-slate-50/50 dark:bg-slate-900/30">
-              <span className="text-slate-500 font-medium">计费核算公式</span>
+              <span className="text-slate-500 font-medium">{isZh ? '计费核算公式' : 'Billing Formula'}</span>
               <span className="font-mono text-xs text-slate-700 dark:text-slate-300">
                 {log.cost > 0 ? (
                   <>
-                    <span>(输入 {log.prompt_tokens} + 输出 {log.completion_tokens}) × 模型单价</span>
-                    {log.is_off_peak && <span className="text-indigo-600 font-semibold"> × 闲时 {Math.round((log.off_peak_discount || 0.5) * 10)}折</span>}
+                    <span>({isZh ? '输入' : 'Prompt'} {log.prompt_tokens} + {isZh ? '输出' : 'Completion'} {log.completion_tokens}) × {isZh ? '模型单价' : 'Unit Price'}</span>
+                    {log.is_off_peak && <span className="text-indigo-600 font-semibold"> × {isZh ? `闲时 ${Math.round((log.off_peak_discount || 0.5) * 10)}折` : 'Off-peak rate'}</span>}
                     <span> = ¥{(log.cost || 0).toFixed(4)}</span>
                   </>
                 ) : (
-                  <span className="text-emerald-600 font-medium">零费率模型或管理员豁免计费</span>
+                  <span className="text-emerald-600 font-medium">{isZh ? '零费率模型或管理员豁免计费' : 'Zero-cost tier or admin billing exemption'}</span>
                 )}
               </span>
             </div>
             <div className="p-3 flex justify-between bg-slate-50/50 dark:bg-slate-900/30">
-              <span className="text-slate-500 font-medium">客户端 IP</span>
+              <span className="text-slate-500 font-medium">{isZh ? '客户端 IP' : 'Client IP'}</span>
               <span className="font-mono text-slate-600 dark:text-slate-300">{log.ip || '-'}</span>
             </div>
           </div>
@@ -231,7 +232,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
             <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 text-rose-800 dark:text-rose-300 text-xs">
               <div className="font-semibold mb-1 flex items-center space-x-1.5">
                 <AlertCircle className="w-3.5 h-3.5" />
-                <span>上游异常信息</span>
+                <span>{isZh ? '上游异常信息' : 'Upstream Error Details'}</span>
               </div>
               <div className="font-mono">{log.error_message}</div>
             </div>
@@ -240,13 +241,13 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
           {/* Raw JSON toggle */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">原始日志 JSON</span>
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">{isZh ? '原始日志 JSON' : 'Raw Log JSON'}</span>
               <button
                 onClick={handleCopyRaw}
-                className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 font-medium"
+                className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 font-medium cursor-pointer"
               >
                 {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                <span>{copied ? '已复制' : '复制 JSON'}</span>
+                <span>{copied ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制 JSON' : 'Copy JSON')}</span>
               </button>
             </div>
             <pre className="p-3 rounded-2xl bg-slate-950 text-slate-300 font-mono text-[11px] overflow-x-auto max-h-40 leading-normal">
@@ -261,7 +262,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
             {onDeleteLog && (
               <button
                 onClick={() => {
-                  if (window.confirm('确认删除该条审计调用日志？')) {
+                  if (window.confirm(isZh ? '确认删除该条审计调用日志？' : 'Are you sure you want to delete this audit log?')) {
                     onDeleteLog(log.id);
                     onClose();
                   }
@@ -269,7 +270,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
                 className="px-3 py-1.5 rounded-xl text-xs font-medium text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition flex items-center space-x-1.5 cursor-pointer border border-rose-200 dark:border-rose-900/60"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>删除此日志</span>
+                <span>{isZh ? '删除此日志' : 'Delete Log'}</span>
               </button>
             )}
           </div>
@@ -277,7 +278,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
             onClick={onClose}
             className="px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-medium transition cursor-pointer"
           >
-            关闭
+            {isZh ? '关闭' : 'Close'}
           </button>
         </div>
       </div>

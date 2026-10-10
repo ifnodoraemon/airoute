@@ -51,10 +51,13 @@ export default function ModelRouteModal({
   allChannels = [],
   onSaveSuccess,
   adminFetch,
-  showToast
+  showToast,
+  lang = 'zh',
+  t
 }) {
   if (!isOpen) return null;
 
+  const isZh = lang === 'zh';
   const isNew = !modelRoute || modelRoute.isNew;
   const [modelName, setModelName] = useState(modelRoute?.model || '');
   const [fallbackModel, setFallbackModel] = useState(modelRoute?.fallback_model || '');
@@ -203,7 +206,7 @@ export default function ModelRouteModal({
 
     const targetModel = modelName.trim();
     if (!targetModel) {
-      setError('请输入模型标识 (例如 deepseek-chat 或 gpt-4o)');
+      setError(isZh ? '请输入模型标识 (例如 deepseek-chat 或 gpt-4o)' : 'Please enter model ID (e.g., deepseek-chat or gpt-4o)');
       return;
     }
 
@@ -239,14 +242,14 @@ export default function ModelRouteModal({
       const data = await res.json();
 
       if (res.ok && data.code === 0) {
-        showToast(`模型 [${targetModel}] 路由配置已保存并完成热重载！`, 'success');
+        showToast(isZh ? `模型 [${targetModel}] 路由配置已保存并完成热重载！` : `Model [${targetModel}] route configuration saved and reloaded!`, 'success');
         onSaveSuccess();
         onClose();
       } else {
-        setError(data.error || '保存失败，请稍后重试');
+        setError(data.error || (isZh ? '保存失败，请稍后重试' : 'Failed to save, please retry'));
       }
     } catch (err) {
-      setError('网络异常: ' + err.message);
+      setError((isZh ? '网络异常: ' : 'Network error: ') + err.message);
     } finally {
       setSaving(false);
     }
@@ -263,7 +266,7 @@ export default function ModelRouteModal({
             </div>
             <div>
               <h3 className="font-bold text-base text-slate-900 tracking-tight">
-                {isNew ? '新建模型路由' : '配置模型路由'}
+                {isNew ? (isZh ? '新建模型路由' : 'Create Model Route') : (isZh ? '配置模型路由' : 'Configure Model Route')}
               </h3>
               {!isNew && (
                 <span className="font-mono text-xs text-indigo-600 font-medium">
@@ -292,7 +295,7 @@ export default function ModelRouteModal({
           {/* Field 1: Model Identifier */}
           <div>
             <label className="block font-semibold text-slate-800 mb-1">
-              模型标识 <span className="text-rose-500">*</span>
+              {isZh ? '模型标识' : 'Model Identifier'} <span className="text-rose-500">*</span>
             </label>
             <input
               type="text"
@@ -301,7 +304,7 @@ export default function ModelRouteModal({
               list="channel-models-datalist"
               value={modelName}
               onChange={(e) => setModelName(e.target.value)}
-              placeholder="如 deepseek-chat 或从下方一键选择"
+              placeholder={isZh ? '如 deepseek-chat 或从下方一键选择' : 'e.g., deepseek-chat or select below'}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-xs text-slate-900 focus:outline-none focus:border-indigo-500 disabled:bg-slate-100 disabled:text-slate-500"
             />
             <datalist id="channel-models-datalist">
@@ -316,7 +319,7 @@ export default function ModelRouteModal({
             {isNew && channelModelCandidates.length > 0 && (
               <div className="mt-2 pt-2 border-t border-slate-100">
                 <span className="text-[11px] text-slate-500 font-medium block mb-1.5">
-                  已连通服务商的模型 (点击自动填入并直接绑定服务商):
+                  {isZh ? '已连通服务商的模型 (点击自动填入并直接绑定服务商):' : 'Connected provider models (click to auto-fill & bind):'}
                 </span>
                 <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
                   {channelModelCandidates.map((c) => {
@@ -349,13 +352,13 @@ export default function ModelRouteModal({
             <div className="flex items-center justify-between">
               <label className="font-semibold text-slate-800 flex items-center space-x-1.5">
                 <Layers className="w-3.5 h-3.5 text-indigo-500" />
-                <span>上游服务商 ({providers.length})</span>
+                <span>{isZh ? '上游服务商' : 'Upstream Providers'} ({providers.length})</span>
               </label>
             </div>
 
             {providers.length === 0 ? (
               <div className="p-3 rounded-xl bg-slate-50 border border-dashed border-slate-200 text-center text-slate-400 text-xs">
-                未绑定服务商
+                {isZh ? '未绑定服务商' : 'No upstream providers bound'}
               </div>
             ) : (
               <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100">
@@ -374,20 +377,20 @@ export default function ModelRouteModal({
                           </span>
                           {pModels.length > 0 && (
                             <span className="text-[10px] text-slate-400">
-                              ({pModels.length} 个可用模型)
+                              {isZh ? `(${pModels.length} 个可用模型)` : `(${pModels.length} models available)`}
                             </span>
                           )}
                         </div>
 
                         <div className="flex items-center space-x-1.5">
-                          <span className="text-[11px] text-slate-400 shrink-0">上游模型:</span>
+                          <span className="text-[11px] text-slate-400 shrink-0">{isZh ? '上游模型:' : 'Mapped Model:'}</span>
                           {isCustomMode || pModels.length === 0 ? (
                             <div className="flex-1 flex items-center space-x-1.5">
                               <input
                                 type="text"
                                 value={p.mapped_model}
                                 onChange={(e) => handleMappedModelChange(p.channel_id, e.target.value)}
-                                placeholder="远端模型标识 (可选)"
+                                placeholder={isZh ? '远端模型标识 (可选)' : 'Remote model ID (optional)'}
                                 className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-[11px] font-mono text-slate-700 focus:outline-none focus:border-indigo-400"
                               />
                               {pModels.length > 0 && (
@@ -395,9 +398,9 @@ export default function ModelRouteModal({
                                   type="button"
                                   onClick={() => setCustomModeMap(prev => ({ ...prev, [p.channel_id]: false }))}
                                   className="text-[10px] text-indigo-600 hover:text-indigo-800 px-2 py-1 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition cursor-pointer shrink-0 font-medium"
-                                  title="切换为服务商模型下拉列表"
+                                  title={isZh ? '切换为服务商模型下拉列表' : 'Switch to model dropdown'}
                                 >
-                                  从渠道选择
+                                  {isZh ? '从渠道选择' : 'From Channel'}
                                 </button>
                               )}
                             </div>
@@ -415,23 +418,23 @@ export default function ModelRouteModal({
                                 className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-[11px] font-mono text-slate-700 focus:outline-none focus:border-indigo-400 truncate cursor-pointer"
                               >
                                 {p.mapped_model && !pModels.includes(p.mapped_model) && (
-                                  <option value={p.mapped_model}>当前: {p.mapped_model}</option>
+                                  <option value={p.mapped_model}>{isZh ? `当前: ${p.mapped_model}` : `Current: ${p.mapped_model}`}</option>
                                 )}
                                 {modelName.trim() && !pModels.includes(modelName.trim()) && p.mapped_model !== modelName.trim() && (
-                                  <option value={modelName.trim()}>与路由同名 ({modelName.trim()})</option>
+                                  <option value={modelName.trim()}>{isZh ? `与路由同名 (${modelName.trim()})` : `Same as route (${modelName.trim()})`}</option>
                                 )}
                                 {pModels.map((m) => (
                                   <option key={m} value={m}>
-                                    {m} {m === modelName.trim() ? '(与路由同名)' : ''}
+                                    {m} {m === modelName.trim() ? (isZh ? '(与路由同名)' : '(Same as route)') : ''}
                                   </option>
                                 ))}
-                                <option value="__custom__">✏️ 自定义手填模型名...</option>
+                                <option value="__custom__">{isZh ? '✏️ 自定义手填模型名...' : '✏️ Custom model ID...'}</option>
                               </select>
                               <button
                                 type="button"
                                 onClick={() => setCustomModeMap(prev => ({ ...prev, [p.channel_id]: true }))}
                                 className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer shrink-0"
-                                title="手动输入自定义模型标识"
+                                title={isZh ? '手动输入自定义模型标识' : 'Enter custom model ID'}
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
                               </button>
@@ -444,13 +447,13 @@ export default function ModelRouteModal({
                             {(pChannel.status === 'inactive' || pChannel.status === 'disabled') && (
                               <div className="mt-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 flex items-center space-x-1">
                                 <span>⚠️</span>
-                                <span>该服务商渠道当前处于停用状态</span>
+                                <span>{isZh ? '该服务商渠道当前处于停用状态' : 'This upstream provider is currently inactive'}</span>
                               </div>
                             )}
                             {pModels.length > 0 && !pModels.includes('*') && p.mapped_model && !pModels.includes(p.mapped_model) && (
                               <div className="mt-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 flex items-center space-x-1">
                                 <span>⚠️</span>
-                                <span>渠道模型库中未声明「{p.mapped_model}」，请确认远端真实支持</span>
+                                <span>{isZh ? `渠道模型库中未声明「${p.mapped_model}」，请确认远端真实支持` : `Model "${p.mapped_model}" is not in channel catalog; verify remote availability`}</span>
                               </div>
                             )}
                           </>
@@ -459,7 +462,7 @@ export default function ModelRouteModal({
 
                       <div className="flex items-center space-x-3 shrink-0 self-end sm:self-center">
                         <div className="flex items-center space-x-1.5">
-                          <span className="text-[11px] text-slate-400">权重:</span>
+                          <span className="text-[11px] text-slate-400">{isZh ? '权重:' : 'Weight:'}</span>
                           <input
                             type="number"
                             min="1"
@@ -474,7 +477,7 @@ export default function ModelRouteModal({
                           type="button"
                           onClick={() => handleRemoveProvider(p.channel_id)}
                           className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                          title="移除服务商"
+                          title={isZh ? '移除服务商' : 'Remove provider'}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -494,7 +497,7 @@ export default function ModelRouteModal({
                     onChange={(e) => handleSelectChannelToAdd(e.target.value)}
                     className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
                   >
-                    <option value="">-- 选择上游服务商 --</option>
+                    <option value="">{isZh ? '-- 选择上游服务商 --' : '-- Select Upstream Provider --'}</option>
                     {availableChannelsToAdd.map((ch) => (
                       <option key={ch.id} value={ch.id}>
                         {ch.name} ({ch.type})
@@ -509,7 +512,7 @@ export default function ModelRouteModal({
                           type="text"
                           value={selectedModelToAdd}
                           onChange={(e) => setSelectedModelToAdd(e.target.value)}
-                          placeholder="上游模型标识"
+                          placeholder={isZh ? '上游模型标识' : 'Upstream model ID'}
                           className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 font-mono text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
                         />
                       ) : (
@@ -526,14 +529,14 @@ export default function ModelRouteModal({
                           className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 font-mono text-xs text-slate-800 focus:outline-none focus:border-indigo-500 truncate cursor-pointer"
                         >
                           {modelName.trim() && !addChannelModels.includes(modelName.trim()) && (
-                            <option value={modelName.trim()}>与路由同名 ({modelName.trim()})</option>
+                            <option value={modelName.trim()}>{isZh ? `与路由同名 (${modelName.trim()})` : `Same as route (${modelName.trim()})`}</option>
                           )}
                           {addChannelModels.map(m => (
                             <option key={m} value={m}>
-                              {m} {m === modelName.trim() ? '(同名)' : ''}
+                              {m} {m === modelName.trim() ? (isZh ? '(同名)' : '(Same)') : ''}
                             </option>
                           ))}
-                          <option value="__custom__">✏️ 自定义输入...</option>
+                          <option value="__custom__">{isZh ? '✏️ 自定义输入...' : '✏️ Custom input...'}</option>
                         </select>
                       )}
 
@@ -546,7 +549,7 @@ export default function ModelRouteModal({
                           }}
                           className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-[10px] whitespace-nowrap cursor-pointer"
                         >
-                          列表
+                          {isZh ? '列表' : 'List'}
                         </button>
                       )}
                     </div>
@@ -559,7 +562,7 @@ export default function ModelRouteModal({
                     className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl font-semibold shadow-xs flex items-center justify-center space-x-1 transition shrink-0 cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>添加</span>
+                    <span>{isZh ? '添加' : 'Add'}</span>
                   </button>
                 </div>
               </div>
@@ -572,19 +575,19 @@ export default function ModelRouteModal({
             <div>
               <label className="font-semibold text-slate-800 flex items-center space-x-1.5 mb-1">
                 <Shield className="w-3.5 h-3.5 text-indigo-500" />
-                <span>容灾降级</span>
+                <span>{isZh ? '容灾降级' : 'Disaster Recovery / Fallback'}</span>
               </label>
               <select
                 value={fallbackModel}
                 onChange={(e) => setFallbackModel(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-mono text-slate-800 focus:outline-none focus:border-indigo-500"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-mono text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
               >
-                <option value="">-- 无 (直接返回错误) --</option>
+                <option value="">{isZh ? '-- 无 (直接返回错误) --' : '-- None (Fail Fast on Error) --'}</option>
                 {allModels
                   .filter(m => m !== modelName)
                   .map(m => (
                     <option key={m} value={m}>
-                      降级至: {m}
+                      {isZh ? `降级至: ${m}` : `Fallback to: ${m}`}
                     </option>
                   ))}
               </select>
@@ -594,11 +597,11 @@ export default function ModelRouteModal({
             <div>
               <label className="font-semibold text-slate-800 flex items-center space-x-1.5 mb-1.5">
                 <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
-                <span>计费单价 (元/1M)</span>
+                <span>{isZh ? '计费单价 (元/1M Tokens)' : 'Pricing Unit (CNY/1M Tokens)'}</span>
               </label>
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <span className="block text-[10px] text-slate-400 mb-0.5">输入</span>
+                  <span className="block text-[10px] text-slate-400 mb-0.5">{isZh ? '输入' : 'Prompt'}</span>
                   <input
                     type="number"
                     step="0.01"
@@ -610,7 +613,7 @@ export default function ModelRouteModal({
                   />
                 </div>
                 <div>
-                  <span className="block text-[10px] text-slate-400 mb-0.5">输出</span>
+                  <span className="block text-[10px] text-slate-400 mb-0.5">{isZh ? '输出' : 'Completion'}</span>
                   <input
                     type="number"
                     step="0.01"
@@ -622,7 +625,7 @@ export default function ModelRouteModal({
                   />
                 </div>
                 <div>
-                  <span className="block text-[10px] text-emerald-700 mb-0.5">缓存读取</span>
+                  <span className="block text-[10px] text-emerald-700 mb-0.5">{isZh ? '缓存读取' : 'Cache Read'}</span>
                   <input
                     type="number"
                     step="0.01"
@@ -638,8 +641,8 @@ export default function ModelRouteModal({
               {/* Time-of-use discount toggle */}
               <div className="mt-2.5 p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
                 <div>
-                  <span className="block text-xs font-semibold text-slate-700">分时优惠</span>
-                  <span className="block text-[11px] text-slate-400">开启后享受优惠费率，可在「模型定价」自定义任意时间段</span>
+                  <span className="block text-xs font-semibold text-slate-700">{isZh ? '分时优惠' : 'Time-of-Use Off-Peak Discount'}</span>
+                  <span className="block text-[11px] text-slate-400">{isZh ? '开启后享受优惠费率，可在「模型定价」自定义任意时间段' : 'Enjoy discounted rates during off-peak hours'}</span>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -661,7 +664,7 @@ export default function ModelRouteModal({
               onClick={onClose}
               className="px-4 py-1.5 text-slate-500 hover:text-slate-800 font-medium transition cursor-pointer"
             >
-              取消
+              {isZh ? '取消' : 'Cancel'}
             </button>
             <button
               type="submit"
@@ -669,7 +672,7 @@ export default function ModelRouteModal({
               className="px-5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold shadow-xs transition flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
             >
               {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-              <span>{isNew ? '创建模型' : '保存'}</span>
+              <span>{isNew ? (isZh ? '创建模型' : 'Create Route') : (isZh ? '保存' : 'Save')}</span>
             </button>
           </div>
         </form>
