@@ -85,6 +85,7 @@ import PlaygroundView from './components/PlaygroundView';
 import DocsView from './components/DocsView';
 import OnboardingModal from './components/OnboardingModal';
 import VisualTopologyModal from './components/VisualTopologyModal';
+import AiCopilot from './components/AiCopilot';
 import { translations, I18nContext } from './i18n';
 import { getGatewayOrigin, getGatewayBaseUrl, setPublicGatewayUrl, copyToClipboard as crossOriginCopy } from './config';
 
@@ -238,6 +239,7 @@ export default function App() {
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
   const [showTopologyModal, setShowTopologyModal] = useState(false);
+  const [showAiCopilot, setShowAiCopilot] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [authTab, setAuthTab] = useState(() => initialRoute.authTab);
@@ -1493,6 +1495,11 @@ export default function App() {
             showToast(isZh ? `已按会话 ID: ${sid} 筛选` : `Filtered by session ID: ${sid}`, 'info');
           }}
           onDeleteLog={handleDeleteSingleLog}
+          onNavigate={(targetTab) => {
+            setCurrentTab(targetTab);
+            setViewMode('console');
+            setActiveLogDetail(null);
+          }}
           lang={lang}
           t={t}
         />
@@ -2477,6 +2484,28 @@ export default function App() {
         lang={lang}
         onLogout={handleLogout}
         showToast={showToast}
+        onOpenCopilotWithQuery={(q) => {
+          setShowAiCopilot(true);
+        }}
+      />
+
+      {/* Airoute AI Copilot (Cmd+J / Floating Omnibar) */}
+      <AiCopilot
+        isOpen={showAiCopilot}
+        onClose={() => setShowAiCopilot(false)}
+        onToggle={() => setShowAiCopilot(prev => !prev)}
+        setCurrentTab={setCurrentTab}
+        setViewMode={setViewMode}
+        models={models}
+        channels={channels}
+        keys={keys}
+        logs={logs}
+        modelRoutes={modelRoutes}
+        stats={stats}
+        lang={lang}
+        t={t}
+        showToast={showToast}
+        adminUser={adminUser}
       />
     </div>
     </I18nContext.Provider>

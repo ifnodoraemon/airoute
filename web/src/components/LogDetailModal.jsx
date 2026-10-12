@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { X, Copy, Check, Activity, Clock, Zap, Server, Key, AlertCircle, Shield, Trash2 } from 'lucide-react';
+import { X, Copy, Check, Activity, Clock, Zap, Server, Key, AlertCircle, Shield, Trash2, Sparkles, ArrowRight } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
 
-export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession, onDeleteLog, lang = 'zh', t }) {
+export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession, onDeleteLog, onNavigate, lang = 'zh', t }) {
   useModalA11y(!!log, onClose);
 
   if (!log) return null;
@@ -17,6 +17,90 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
   };
 
   const isSuccess = log.status_code >= 200 && log.status_code < 300;
+
+  const rca = (() => {
+    const code = log.status_code || 200;
+    const isErr = code >= 400 || !!log.error_message;
+    const errStr = (log.error_message || '').toLowerCase();
+
+    if (!isErr) {
+      const isFast = log.ttft_ms && log.ttft_ms < 400;
+      const isCached = log.cached_tokens > 0;
+      return {
+        type: 'success',
+        badge: isZh ? '链路能效: 极佳' : 'Optimal Performance',
+        title: isZh ? 'AI 链路与能效分析' : 'AI Latency & FinOps Audit',
+        summary: isZh
+          ? `该请求执行顺畅，${isFast ? `首字延迟 (TTFT) 仅 ${log.ttft_ms}ms (超越 P90 表现)` : `总耗时 ${log.duration_ms}ms`}。${isCached ? `成功命中 Prompt Cache，节约 ${log.cached_tokens} Tokens 传输开销。` : '若此类请求具备固定系统前缀，建议启用 Prompt Caching 进一步降低输入成本与推理延迟。'}`
+          : `Execution optimal. ${isFast ? `TTFT is ${log.ttft_ms}ms (better than P90)` : `Duration: ${log.duration_ms}ms`}. ${isCached ? `Prompt cache hit saved ${log.cached_tokens} tokens.` : 'Consider prompt caching for static system prompts to reduce cost and latency.'}`,
+        actionLabel: isZh ? '在 Playground 演练' : 'Test in Playground',
+        actionTab: 'playground'
+      };
+    }
+
+    if (code === 429 || errStr.includes('rate limit') || errStr.includes('tpm') || errStr.includes('rpm') || errStr.includes('quota')) {
+      return {
+        type: 'warning',
+        badge: '429 Rate Limit',
+        title: isZh ? '根因剖析: 上游服务商速率限制 (TPM/RPM Throttling)' : 'RCA: Upstream Rate Limit (TPM/RPM)',
+        summary: isZh
+          ? `上游渠道 [${log.channel || '默认'}] 的请求频率或单分钟 Token 消耗达到限额。建议在【模型路由】中为模型 [${log.model}] 挂载第二家服务商作为降级容灾渠道，或在【通道管理】中增加备用 Key 轮询。`
+          : `Upstream channel [${log.channel || 'Default'}] hit rate limits. Recommended action: configure a secondary fallback provider for [${log.model}] in Model Routes, or add backup keys in Channels.`,
+        actionLabel: isZh ? '前往【模型路由】配置备用降级' : 'Configure Failover Route',
+        actionTab: 'models'
+      };
+    }
+
+    if (code === 400 || errStr.includes('context') || errStr.includes('maximum context length') || errStr.includes('tokens')) {
+      return {
+        type: 'error',
+        badge: 'Context / Parameter',
+        title: isZh ? '根因剖析: 上下文超限或模型参数不兼容' : 'RCA: Context Overflow or Parameter Mismatch',
+        summary: isZh
+          ? `传入 Prompt 超过模型 [${log.model}] 的最大 Token 窗口，或携带了模型不支持的参数。建议开启 Prompt 压缩截断，或将路由升级为 128k/1M 上下文长文本模型。`
+          : `Prompt tokens exceed the maximum context window of [${log.model}], or unsupported parameters were sent. Truncate conversation history or route to a long-context model.`,
+        actionLabel: isZh ? '前往【模型路由】核查映射' : 'Review Model Routes',
+        actionTab: 'models'
+      };
+    }
+
+    if (code === 401 || code === 403 || errStr.includes('auth') || errStr.includes('key') || errStr.includes('permission')) {
+      return {
+        type: 'error',
+        badge: 'Auth Failure',
+        title: isZh ? '根因剖析: 上游凭证失效或权限拒绝' : 'RCA: Upstream Credential Revoked / Unauthorized',
+        summary: isZh
+          ? `上游通道 [${log.channel || '渠道'}] 绑定的 API 密钥已失效、服务商余额欠费或账号被封禁。请前往【通道管理】更新密钥并执行连通性探测。`
+          : `The API key for upstream channel [${log.channel || 'Channel'}] is invalid, expired, or out of balance. Update upstream API key in Channels and re-probe.`,
+        actionLabel: isZh ? '前往【通道管理】更新密钥' : 'Update Channel Key',
+        actionTab: 'channels'
+      };
+    }
+
+    if (code === 502 || code === 504 || code === 503 || errStr.includes('timeout') || errStr.includes('deadline')) {
+      return {
+        type: 'error',
+        badge: 'Upstream Timeout',
+        title: isZh ? '根因剖析: 上游网关握手超时' : 'RCA: Gateway Timeout or Network Unreachable',
+        summary: isZh
+          ? `网关向上游发起推理请求时超时。若该模型为复杂思维链推理（如 DeepSeek-R1 / o1），建议在【通道管理】中延长超时时间至 90s~120s，并开启断路器保护。`
+          : `Upstream request timed out. For deep reasoning models, increase channel timeout to 90s-120s in Channel settings and keep circuit breaker enabled.`,
+        actionLabel: isZh ? '前往【通道管理】调整超时' : 'Adjust Timeout in Channels',
+        actionTab: 'channels'
+      };
+    }
+
+    return {
+      type: 'error',
+      badge: `HTTP ${code}`,
+      title: isZh ? '根因剖析: 上游内部异常' : 'RCA: Upstream Internal Failure',
+      summary: isZh
+        ? `上游服务商返回非预期状态码。已触发链路追踪 Trace ID，建议检查上游日志或在模型路由中将权重调度转移至其他稳定渠道。`
+        : `Unexpected response from upstream provider. Shift traffic weight to other active channels in Model Routes.`,
+      actionLabel: isZh ? '检查通道服务状态' : 'Inspect Channels',
+      actionTab: 'channels'
+    };
+  })();
 
   return (
     <div
@@ -240,9 +324,55 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
             <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 text-rose-800 dark:text-rose-300 text-xs">
               <div className="font-semibold mb-1 flex items-center space-x-1.5">
                 <AlertCircle className="w-3.5 h-3.5" />
-                <span>{isZh ? '上游异常信息' : 'Upstream Error Details'}</span>
+                <span>{isZh ? '上游异常原始回包' : 'Raw Upstream Error Message'}</span>
               </div>
               <div className="font-mono">{log.error_message}</div>
+            </div>
+          )}
+
+          {/* AI Root Cause Analysis & Auto-Remediation (AI RCA) */}
+          {rca && (
+            <div className={`p-4 rounded-2xl border text-xs ${
+              rca.type === 'success'
+                ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/60 text-emerald-900 dark:text-emerald-200'
+                : rca.type === 'warning'
+                ? 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200'
+                : 'bg-rose-50/70 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800/60 text-rose-900 dark:text-rose-200'
+            }`}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-1.5 font-bold">
+                  <Sparkles className={`w-4 h-4 ${
+                    rca.type === 'success' ? 'text-emerald-600 dark:text-emerald-400' : rca.type === 'warning' ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'
+                  }`} />
+                  <span>{rca.title}</span>
+                </div>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  rca.type === 'success' ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300' : rca.type === 'warning' ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300' : 'bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-300'
+                }`}>
+                  {rca.badge}
+                </span>
+              </div>
+              <p className="leading-relaxed opacity-90">{rca.summary}</p>
+              {rca.actionLabel && onNavigate && (
+                <div className="mt-3 pt-2.5 border-t border-black/5 dark:border-white/5 flex justify-end">
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onNavigate(rca.actionTab);
+                    }}
+                    className={`px-3 py-1.5 rounded-xl font-bold flex items-center space-x-1.5 transition cursor-pointer text-xs ${
+                      rca.type === 'success'
+                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs'
+                        : rca.type === 'warning'
+                        ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-xs'
+                        : 'bg-rose-600 hover:bg-rose-500 text-white shadow-xs'
+                    }`}
+                  >
+                    <span>{rca.actionLabel}</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

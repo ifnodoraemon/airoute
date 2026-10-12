@@ -199,6 +199,8 @@ export default function ModelRoutesManager({
     setTimeout(() => setCopiedModel(''), 2000);
   };
 
+  const spofRoutes = modelRoutes.filter(r => (r.providers || []).length <= 1);
+
   const filteredRoutes = modelRoutes.filter(r => {
     if (selectedModality !== 'all' && r.modality !== selectedModality) {
       return false;
@@ -316,6 +318,48 @@ export default function ModelRoutesManager({
               {isZh ? '取消选择' : 'Deselect All'}
             </button>
           </div>
+        </div>
+      )}
+
+      {/* AI Topology Resilience & Failover Audit */}
+      {modelRoutes.length > 0 && (
+        <div className={`p-4 rounded-2xl border text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+          spofRoutes.length > 0
+            ? 'bg-amber-50/70 border-amber-200/80 text-amber-900'
+            : 'bg-emerald-50/70 border-emerald-200/80 text-emerald-900'
+        }`}>
+          <div className="flex items-center space-x-2.5">
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+              spofRoutes.length > 0 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+            }`}>
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2 font-bold">
+                <span>{isZh ? 'AI 拓扑容灾健康度诊断' : 'AI Topology Resilience Audit'}</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] ${
+                  spofRoutes.length > 0 ? 'bg-amber-200/80 text-amber-800' : 'bg-emerald-200/80 text-emerald-800'
+                }`}>
+                  {spofRoutes.length > 0 ? (isZh ? `${spofRoutes.length} 个模型存在单点风险` : `${spofRoutes.length} SPOF Risks`) : (isZh ? '高可用架构完善' : 'Resilient Architecture')}
+                </span>
+              </div>
+              <p className="text-[11px] opacity-80 mt-0.5">
+                {spofRoutes.length > 0
+                  ? (isZh
+                      ? `检测到部分模型（如 ${spofRoutes.slice(0, 3).map(r => r.model).join(', ')}）仅绑定了单一提供商。建议开启自动故障转移并挂载备用渠道。`
+                      : `Models (${spofRoutes.slice(0, 3).map(r => r.model).join(', ')}) lack fallback redundancy. Add backup providers for 99.9% uptime.`)
+                  : (isZh ? '所有模型路由均已挂载多级异构服务商与优先级保底策略，具备高并发零停机容灾能力。' : 'All routes configured with multi-tier providers and priority failover.')}
+              </p>
+            </div>
+          </div>
+          {spofRoutes.length > 0 && (
+            <button
+              onClick={() => setActiveEditRoute(spofRoutes[0])}
+              className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shrink-0 cursor-pointer shadow-2xs transition"
+            >
+              {isZh ? `立即配置 [${spofRoutes[0].model}] 容灾` : `Fix [${spofRoutes[0].model}] Failover`}
+            </button>
+          )}
         </div>
       )}
 

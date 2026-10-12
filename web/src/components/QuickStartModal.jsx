@@ -9,7 +9,7 @@ export default function QuickStartModal({ apiKey, onClose, onCopy, lang = 'zh', 
   if (!apiKey) return null;
 
   const isZh = lang === 'zh';
-  const [activeTab, setActiveTab] = useState('python');
+  const [activeTab, setActiveTab] = useState('cursor');
   const [copiedTab, setCopiedTab] = useState('');
 
   const origin = getGatewayOrigin();
@@ -94,14 +94,77 @@ async function main() {
 main();
 `;
 
-  const claudeEnvCode = `# 在终端中配置环境变量后，Claude Code / Cline / Cursor 将直接经由 Airoute 分发
+  const cursorCode = `# ==============================================================================
+# Cursor IDE AI 编程助手开箱配置指南
+# ==============================================================================
+
+# 步骤 1：打开 Cursor 设置 (Settings -> Models)
+# 步骤 2：开启 "OpenAI API Key" 并配置自定义 Base URL：
+Override OpenAI Base URL: ${baseUrl}
+API Key: ${keyStr}
+
+# 步骤 3：在模型列表中添加当前网关已启用的模型：
+# - deepseek-chat
+# - deepseek-reasoner
+# - claude-3-5-sonnet
+# - gpt-4o
+
+# 步骤 4：(推荐) 在项目根目录创建 .cursorrules 注入网关规则：
+# """
+# All LLM completions route through high-availability gateway (Airoute).
+# Zero-hallucination principle: Keep code accurate and self-contained.
+# """
+`;
+
+  const claudeEnvCode = `# ==============================================================================
+# 1. Claude Code CLI 终端配置 (Anthropic 协议透明分发)
+# ==============================================================================
 export ANTHROPIC_BASE_URL="${origin}"
 export ANTHROPIC_API_KEY="${keyStr}"
 
-# 如果在 Cursor / Cline 中使用 OpenAI 兼容模式：
-# Base URL: ${baseUrl}
-# API Key: ${keyStr}
-# Model: deepseek-v4.1-flash 或 claude-opus-5.5
+# 终端直接启动
+claude
+
+# ==============================================================================
+# 2. Claude Desktop MCP 配置 (~/.config/Claude/claude_desktop_config.json)
+# ==============================================================================
+# {
+#   "mcpServers": {
+#     "airoute-gateway": {
+#       "command": "npx",
+#       "args": ["-y", "@modelcontextprotocol/server-fetch"],
+#       "env": {
+#         "AIROUTE_BASE_URL": "${origin}",
+#         "AIROUTE_API_KEY": "${keyStr}"
+#       }
+#     }
+#   }
+# }
+`;
+
+  const langchainCode = `# ==============================================================================
+# LangChain & LlamaIndex AI 智能体框架调用示例
+# ==============================================================================
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage, SystemMessage
+
+# 初始化模型客户端 (经由 Airoute 自适应负载均衡与断路器调度)
+llm = ChatOpenAI(
+    base_url="${baseUrl}",
+    api_key="${keyStr}",
+    model="deepseek-chat",
+    temperature=0.3,
+    streaming=True
+)
+
+messages = [
+    SystemMessage(content="You are an enterprise AI system architect."),
+    HumanMessage(content="请比较双活负载均衡与主备故障转移的权衡考量。")
+]
+
+# 流式生成推导
+for chunk in llm.stream(messages):
+    print(chunk.content, end="", flush=True)
 `;
 
   const desktopClientGuide = `# 常用第三方客户端配置指南 (NextChat / Chatbox / LobeChat / Cherry Studio)
@@ -113,7 +176,7 @@ export ANTHROPIC_API_KEY="${keyStr}"
 #    ${keyStr}
 # 
 # 3. 自定义模型列表:
-#    在客户端模型设置中填入当前网关已启用的模型名称 (例如 deepseek-v4.1-flash, gpt-6 或部署的本地模型)
+#    在客户端模型设置中填入当前网关已启用的模型名称 (例如 deepseek-chat, gpt-4o, claude-3-5-sonnet)
 # 
 # 4. 特色体验:
 #    网关原生支持 DeepSeek-R1 思维链流式展开与全双工协议转换。
@@ -121,12 +184,14 @@ export ANTHROPIC_API_KEY="${keyStr}"
 
   const getCode = () => {
     switch (activeTab) {
+      case 'cursor': return cursorCode;
+      case 'claude': return claudeEnvCode;
+      case 'langchain': return langchainCode;
       case 'python': return pythonCode;
       case 'curl': return curlCode;
       case 'node': return nodeCode;
-      case 'claude': return claudeEnvCode;
       case 'client': return desktopClientGuide;
-      default: return pythonCode;
+      default: return cursorCode;
     }
   };
 
@@ -171,8 +236,41 @@ export ANTHROPIC_API_KEY="${keyStr}"
         <div className="px-6 pt-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 bg-white dark:bg-[#111726]">
           <div className="flex flex-wrap gap-2">
             <button
+              onClick={() => setActiveTab('cursor')}
+              className={`px-3.5 py-2 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 cursor-pointer ${
+                activeTab === 'cursor'
+                  ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>Cursor IDE</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('claude')}
+              className={`px-3.5 py-2 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 cursor-pointer ${
+                activeTab === 'claude'
+                  ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              <Terminal className="w-3.5 h-3.5" />
+              <span>Claude Code / MCP</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('langchain')}
+              className={`px-3.5 py-2 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 cursor-pointer ${
+                activeTab === 'langchain'
+                  ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              <Cpu className="w-3.5 h-3.5" />
+              <span>LangChain / Agents</span>
+            </button>
+            <button
               onClick={() => setActiveTab('python')}
-              className={`px-4 py-2 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 ${
+              className={`px-3.5 py-2 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 cursor-pointer ${
                 activeTab === 'python'
                   ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
@@ -182,8 +280,19 @@ export ANTHROPIC_API_KEY="${keyStr}"
               <span>Python SDK</span>
             </button>
             <button
+              onClick={() => setActiveTab('node')}
+              className={`px-3.5 py-2 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 cursor-pointer ${
+                activeTab === 'node'
+                  ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>Node / TS</span>
+            </button>
+            <button
               onClick={() => setActiveTab('curl')}
-              className={`px-4 py-2 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 ${
+              className={`px-3.5 py-2 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 cursor-pointer ${
                 activeTab === 'curl'
                   ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
@@ -193,30 +302,8 @@ export ANTHROPIC_API_KEY="${keyStr}"
               <span>cURL</span>
             </button>
             <button
-              onClick={() => setActiveTab('node')}
-              className={`px-4 py-2 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 ${
-                activeTab === 'node'
-                  ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
-                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-              }`}
-            >
-              <Cpu className="w-3.5 h-3.5" />
-              <span>Node / TS</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('claude')}
-              className={`px-4 py-2 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 ${
-                activeTab === 'claude'
-                  ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
-                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-              }`}
-            >
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>Claude Code / Cursor</span>
-            </button>
-            <button
               onClick={() => setActiveTab('client')}
-              className={`px-4 py-2 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 ${
+              className={`px-3.5 py-2 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 cursor-pointer ${
                 activeTab === 'client'
                   ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'

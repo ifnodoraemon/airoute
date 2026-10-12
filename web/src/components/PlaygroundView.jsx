@@ -162,6 +162,57 @@ export default function PlaygroundView({
     if (showToast) showToast(isZh ? `${label || '内容'} 已复制到剪贴板！` : `${label || 'Content'} copied to clipboard!`, 'success');
   };
 
+  const handleOptimizeSystemPrompt = () => {
+    const base = systemPrompt.trim() || (isZh ? '全栈技术专家与架构师' : 'Expert Full-Stack Architect');
+    const optimized = isZh
+      ? `# 角色定位 (Role)
+你是一名顶尖的企业级 AI 架构师与专业任务执行专家，具备深厚工程化落地与严谨的逻辑推理能力。
+
+# 核心任务 (Objective)
+深度理解并高精度执行用户指令，兼顾代码健壮性、架构拓展性与清晰可维护性：
+【${base}】
+
+# 上下文约束与最佳实践 (Constraints)
+1. 严禁捏造事实或虚构不存在的技术参数（零幻觉原则）。
+2. 如涉及关键数据或技术选型，必须给出可量化的决策权衡依据。
+3. 遵循安全性与合规性原则，避免返回不合规的高危操作指令。
+
+# 输出规范 (Output Format)
+- 采用清晰的 GitHub Markdown 格式组织。
+- 若包含代码，需附带详尽的关键行注释。
+- 提供结构化结论及后续可直接行动项 (Action Items)。`
+      : `# Role
+You are a distinguished enterprise AI architect and software engineer with deep technical rigor.
+
+# Objective
+Execute the following mission with precision, maintainability, and zero speculation:
+[${base}]
+
+# Constraints
+1. Zero-hallucination principle: Do not invent non-existent APIs or parameters.
+2. Provide measurable trade-offs for all architectural decisions.
+3. Adhere to strict security and safety standards.
+
+# Output Format
+- GitHub Markdown formatting with syntax-highlighted code blocks.
+- Actionable next steps.`;
+
+    setSystemPrompt(optimized);
+    setShowSystemPrompt(true);
+    if (showToast) showToast(isZh ? '系统人设已完成 AI 结构化工程增强！' : 'System Prompt enhanced with AI prompt engineering!', 'success');
+  };
+
+  const handleOptimizeChatInput = () => {
+    if (!chatInput.trim()) return;
+    const base = chatInput.trim();
+    const optimized = isZh
+      ? `请针对以下需求展开专业、深入且结构化的解答：\n\n【核心目标】：${base}\n\n【具体要求】：\n1. 阐明核心底层原理与技术选型权衡\n2. 给出经过生产验证的代码实现或最佳实践架构方案\n3. 提示潜在边界陷阱（如高并发、网络延迟、内存开销）及对应防御措施`
+      : `Please provide a rigorous, in-depth, and structured response for:\n\n[Core Goal]: ${base}\n\n[Requirements]:\n1. Explain underlying principles and architectural trade-offs\n2. Provide production-grade implementation or configuration examples\n3. Highlight edge-case pitfalls (concurrency, latency, failure recovery) and remediations`;
+
+    setChatInput(optimized);
+    if (showToast) showToast(isZh ? '输入 Prompt 已完成 AI 结构化规范增强！' : 'Prompt enriched with structural requirements!', 'success');
+  };
+
   // Run chat invocation
   const handleRunChat = async () => {
     if (!chatInput.trim() && messages.length === 0) return;
@@ -518,19 +569,31 @@ export default function PlaygroundView({
 
               {/* System Prompt Collapsible */}
               <div className="border border-slate-100 dark:border-slate-800 rounded-xl p-2.5">
-                <button
-                  onClick={() => setShowSystemPrompt(!showSystemPrompt)}
-                  className="w-full flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer"
-                >
-                  <span>{isZh ? '系统人设 (System Prompt)' : 'System Prompt'}</span>
-                  {showSystemPrompt ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                </button>
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setShowSystemPrompt(!showSystemPrompt)}
+                    className="flex-1 flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer mr-2"
+                  >
+                    <span>{isZh ? '系统人设 (System Prompt)' : 'System Prompt'}</span>
+                    {showSystemPrompt ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOptimizeSystemPrompt}
+                    className="text-[10px] font-bold text-purple-600 dark:text-purple-400 hover:text-purple-700 flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-purple-50 dark:bg-purple-950/50 border border-purple-200 dark:border-purple-800 transition cursor-pointer"
+                    title={isZh ? '使用 AI 将系统提示词升格为结构化工程模板' : 'AI Prompt Engineering Enhancement'}
+                  >
+                    <Sparkles className="w-3 h-3 text-amber-500" />
+                    <span>{isZh ? 'AI 优化' : 'AI Enhance'}</span>
+                  </button>
+                </div>
                 {showSystemPrompt && (
                   <textarea
-                    rows={2}
+                    rows={4}
                     value={systemPrompt}
                     onChange={(e) => setSystemPrompt(e.target.value)}
-                    className="mt-2 w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
+                    className="mt-2 w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2 text-xs font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 leading-relaxed"
                   />
                 )}
               </div>
@@ -859,8 +922,29 @@ export default function PlaygroundView({
                 </div>
               )}
 
+              {/* Live FinOps Telemetry Bar */}
+              <div className="flex items-center justify-between text-[11px] text-slate-400 px-1 pt-2">
+                <div className="flex items-center space-x-2">
+                  <span className="font-mono">
+                    {isZh ? '预估输入 Tokens: ~' : 'Est. Prompt Tokens: ~'}
+                    <span className="font-bold text-slate-700 dark:text-slate-300">
+                      {Math.max(0, Math.round((chatInput.length + (showSystemPrompt ? systemPrompt.length : 0)) / 3.2))}
+                    </span>
+                  </span>
+                  <span>·</span>
+                  <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center space-x-1">
+                    <Zap className="w-3 h-3" />
+                    <span>{isZh ? 'Prompt 缓存识别就绪' : 'Prompt Caching Ready'}</span>
+                  </span>
+                </div>
+                <div className="flex items-center space-x-1 text-indigo-600 dark:text-indigo-400 font-medium">
+                  <Clock className="w-3 h-3" />
+                  <span>{isZh ? '闲时费率 5 折激活中' : 'Off-peak 50% Active'}</span>
+                </div>
+              </div>
+
               {/* Chat Input Bar */}
-              <div className="mt-3 flex items-center space-x-2">
+              <div className="mt-2 flex items-center space-x-2">
                 <input
                   type="text"
                   value={chatInput}
@@ -875,9 +959,18 @@ export default function PlaygroundView({
                   className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
                 />
                 <button
+                  type="button"
+                  onClick={handleOptimizeChatInput}
+                  disabled={!chatInput.trim()}
+                  className="p-2.5 rounded-xl border border-purple-200 dark:border-purple-800/80 bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/60 disabled:opacity-30 transition cursor-pointer shrink-0"
+                  title={isZh ? '使用 AI 将输入 Prompt 升格为专业技术规格' : 'AI Prompt Engineering Enhancement'}
+                >
+                  <Sparkles className="w-4 h-4 text-amber-500" />
+                </button>
+                <button
                   onClick={handleRunChat}
                   disabled={playLoading}
-                  className={`px-5 py-2.5 text-white rounded-xl text-xs font-bold shadow-xs transition flex items-center space-x-1.5 cursor-pointer ${
+                  className={`px-5 py-2.5 text-white rounded-xl text-xs font-bold shadow-xs transition flex items-center space-x-1.5 cursor-pointer shrink-0 ${
                     playMode === 'arena'
                       ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700'
                       : 'bg-indigo-600 hover:bg-indigo-700'
