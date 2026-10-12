@@ -2444,7 +2444,28 @@ export default function App() {
                   <input
                     required
                     value={newChannel.base_url}
-                    onChange={(e) => setNewChannel({ ...newChannel, base_url: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const lower = val.toLowerCase();
+                      const updates = { base_url: val };
+                      if (!newChannel.name || newChannel.name === 'gpustack-primary') {
+                        if (lower.includes('deepseek')) updates.name = 'deepseek-provider';
+                        else if (lower.includes('anthropic')) updates.name = 'claude-provider';
+                        else if (lower.includes('openai')) updates.name = 'openai-provider';
+                        else if (lower.includes('gemini') || lower.includes('googleapis')) updates.name = 'gemini-provider';
+                        else if (lower.includes('ollama') || lower.includes('11434')) updates.name = 'ollama-local';
+                        else if (lower.includes('gpustack')) updates.name = 'gpustack-cluster';
+                        else if (lower.includes('zhipu') || lower.includes('bigmodel')) updates.name = 'zhipu-glm';
+                        else if (lower.includes('doubao') || lower.includes('volces')) updates.name = 'doubao-provider';
+                        else if (lower.includes('moonshot') || lower.includes('kimi')) updates.name = 'kimi-provider';
+                      }
+                      if (lower.includes('anthropic')) updates.type = 'anthropic';
+                      else if (lower.includes('deepseek')) updates.type = 'deepseek';
+                      else if (lower.includes('gemini') || lower.includes('googleapis')) updates.type = 'gemini';
+                      else if (lower.includes('ollama') || lower.includes('11434')) updates.type = 'ollama';
+                      else if (lower.includes('gpustack')) updates.type = 'gpustack';
+                      setNewChannel(prev => ({ ...prev, ...updates }));
+                    }}
                     placeholder={
                       newChannel.type === 'ollama' ? (isZh ? '例如: http://<宿主机IP或容器服务名>:11434/v1' : 'e.g. http://<host-ip-or-container>:11434/v1') :
                       newChannel.type === 'vllm' ? (isZh ? '例如: http://<宿主机IP或集群域名>:8000/v1' : 'e.g. http://<host-ip-or-cluster>:8000/v1') :

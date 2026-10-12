@@ -51,6 +51,18 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
         </button>
 
         <button
+          onClick={() => setDocsSection('philosophy')}
+          className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition cursor-pointer ${
+            docsSection === 'philosophy'
+              ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-bold border border-amber-200 dark:border-amber-800/60'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+          <span>{isZh ? '产品哲学：少即是多' : 'Philosophy: Less is More'}</span>
+        </button>
+
+        <button
           onClick={() => setDocsSection('quickstart')}
           className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition cursor-pointer ${
             docsSection === 'quickstart'
@@ -131,11 +143,11 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
               <div className="flex items-center space-x-2">
                 <Shield className="w-5 h-5 text-indigo-500" />
                 <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                  Airoute 核心架构与高可用设计规范
+                  {isZh ? 'Airoute 核心架构与高可用设计规范' : 'Airoute Architecture & High-Availability Design Specifications'}
                 </h3>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                为企业私有化部署打造的超高性能、全双工协议转换与零感知容灾大模型统一接入网关。
+                {isZh ? '为企业私有化部署打造的超高性能、全双工协议转换与零感知容灾大模型统一接入网关。' : 'Enterprise-grade ultra-high-performance AI gateway with full-duplex protocol translation and zero-perception failover.'}
               </p>
             </div>
 
@@ -264,6 +276,93 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
                   ? '数据面读操作 100% 内存无锁运行，无任何数据库 IO 延迟；控制面配置变更通过 WAL 模式原子写入并毫秒级广播至内存。前置 Nginx 对 2 个网关副本进行加权轮询，实现节点故障秒级隔离与 99.99% 高可用。'
                   : 'Data-plane reads run 100% in-memory with zero DB latency; control-plane updates sync atomically via WAL and broadcast in milliseconds. Dual active-active nodes with Nginx load balancing provide 99.99% uptime.'}
               </p>
+            </div>
+          </div>
+        )}
+
+        {docsSection === 'philosophy' && (
+          <div className="space-y-6">
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center space-x-2">
+                <Sparkles className="w-5 h-5 text-amber-500" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                  {isZh ? '产品哲学：少即是多 (Less, but better)' : 'Product Philosophy: Less, but better'}
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                {isZh
+                  ? '源自 Dieter Rams 经典设计准则。真正的产品力不是堆砌繁琐的噱头功能，而是通过克制的设计，把大模型转发、流式零拷贝、首字前容灾与开发体验做到极致。'
+                  : 'Inspired by Dieter Rams: true product excellence is not about accumulating bloated features, but exercising restraint to deliver extreme throughput, pre-token failover, and frictionless developer experience.'}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              {/* Pillar 1 */}
+              <div className="p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800/60 space-y-2">
+                <div className="flex items-center space-x-2 font-bold text-indigo-900 dark:text-indigo-200">
+                  <span className="w-5 h-5 rounded-lg bg-indigo-500 text-white flex items-center justify-center text-[10px]">1</span>
+                  <span>{isZh ? '架构极简：Zero-DB 热路径' : 'Minimalist Architecture: Zero-DB Fast Path'}</span>
+                </div>
+                <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
+                  {isZh
+                    ? '数据面读路径 100% 内存无锁运行，无任何数据库 I/O 延迟与复杂分布式协调。控制面配置变更基于 WAL 模式原子写入并毫秒级广播至内存。'
+                    : 'Data plane runs 100% in-memory with lock-free concurrency and zero DB I/O latency. Control plane updates sync atomically via WAL and broadcast in milliseconds.'}
+                </p>
+              </div>
+
+              {/* Pillar 2 */}
+              <div className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 space-y-2">
+                <div className="flex items-center space-x-2 font-bold text-emerald-900 dark:text-emerald-200">
+                  <span className="w-5 h-5 rounded-lg bg-emerald-500 text-white flex items-center justify-center text-[10px]">2</span>
+                  <span>{isZh ? '交互极简：开箱即用与智能推导' : 'Zero Mental Friction: 1-Click Presets'}</span>
+                </div>
+                <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
+                  {isZh
+                    ? '1 键预设主流大模型提供商（DeepSeek、GPUStack、GLM、Claude、Ollama）。粘贴 Base URL 自动推断引擎类型与智能命名，消除繁文缛节。'
+                    : '1-click presets for major providers (DeepSeek, GPUStack, GLM, Claude, Ollama). Pasting Base URLs automatically infers engine type and smart names.'}
+                </p>
+              </div>
+
+              {/* Pillar 3 */}
+              <div className="p-4 rounded-2xl bg-purple-50/50 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-800/60 space-y-2">
+                <div className="flex items-center space-x-2 font-bold text-purple-900 dark:text-purple-200">
+                  <span className="w-5 h-5 rounded-lg bg-purple-500 text-white flex items-center justify-center text-[10px]">3</span>
+                  <span>{isZh ? '信息极简：渐进式呈现 (Progressive Disclosure)' : 'Information Density: Progressive Disclosure'}</span>
+                </div>
+                <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
+                  {isZh
+                    ? '核心接入表单仅展示必填核心字段；复杂的 9 种模态勾选、级联模型映射、权重与熔断阈值收纳于折叠抽屉，拒绝认知过载。'
+                    : 'Core onboarding forms keep primary fields prominent; advanced protocol matrix, cascading mapping, and weights are neatly tucked into collapsible drawers.'}
+                </p>
+              </div>
+
+              {/* Pillar 4 */}
+              <div className="p-4 rounded-2xl bg-sky-50/50 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-800/60 space-y-2">
+                <div className="flex items-center space-x-2 font-bold text-sky-900 dark:text-sky-200">
+                  <span className="w-5 h-5 rounded-lg bg-sky-500 text-white flex items-center justify-center text-[10px]">4</span>
+                  <span>{isZh ? '工程极简：透明无感容灾自愈' : 'Resilience: Zero-Surprise Self-Healing'}</span>
+                </div>
+                <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
+                  {isZh
+                    ? '首字输出前遇到上游 429、500 或网络波动，网关在 15ms 内自动旁路至备用服务商。客户端保持 100% 连通，消灭业务层多余的重试样板代码。'
+                    : 'When upstream hits 429 or 500 errors, the gateway transparently reroutes to backup providers within 15ms before the first chunk, eliminating client retry boilerplate.'}
+                </p>
+              </div>
+            </div>
+
+            {/* Quote banner */}
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80 text-xs text-slate-700 dark:text-slate-300 flex items-start space-x-3">
+              <span className="text-lg">💡</span>
+              <div className="leading-relaxed">
+                <span className="font-bold block text-slate-900 dark:text-slate-100">
+                  {isZh ? '“Less, but better —— 少即是多，好的设计是尽可能少的设计。”' : '"Less, but better —— Good design is as little design as possible."'}
+                </span>
+                <span className="text-slate-500 dark:text-slate-400">
+                  {isZh
+                    ? 'Airoute 专注于为工程师提供最纯粹、低时延且毫不妥协的大模型网关体验。'
+                    : 'Airoute is dedicated to delivering the purest, lowest-latency, and uncompromising AI routing gateway experience.'}
+                </span>
+              </div>
             </div>
           </div>
         )}
