@@ -46,11 +46,21 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 	// Public health and observability endpoints
 	r.GET("/health", handler.HandleHealth)
 	r.HEAD("/health", handler.HandleHealth)
+	r.GET("/healthz", handler.HandleHealth)
+	r.HEAD("/healthz", handler.HandleHealth)
+	r.GET("/v1/health", handler.HandleHealth)
+	r.HEAD("/v1/health", handler.HandleHealth)
 	r.GET("/metrics", handler.HandleMetrics)
 	r.HEAD("/", func(c *gin.Context) {
 		c.Status(200)
 	})
 	r.GET("/api/v1/public/status", handler.HandlePublicStatus)
+
+	// Public API root probe endpoints (enables zero-friction discovery for tools probing Base URL)
+	r.GET("/v1", handler.HandleV1Info)
+	r.HEAD("/v1", handler.HandleV1Info)
+	r.GET("/v1beta", handler.HandleV1BetaInfo)
+	r.HEAD("/v1beta", handler.HandleV1BetaInfo)
 
 	// Model Context Protocol (MCP) server endpoints for AI Agents (Cursor, Claude Desktop, Cline, etc.)
 	var repo *storage.Repository
@@ -219,6 +229,24 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 		v1beta.GET("/models", handler.HandleGeminiModels)
 		v1beta.GET("/models/*modelAction", handler.HandleGeminiModelDetail)
 		v1beta.POST("/models/*modelAction", handler.HandleGeminiAction)
+	}
+
+	// Root-level aliases for clients configured with BaseURL without trailing /v1
+	// (e.g., OpenAI(base_url="http://localhost:8080"), Anthropic(base_url="http://localhost:8080"))
+	rootDataPlane := r.Group("")
+	rootDataPlane.Use(middleware.AuthMiddleware())
+	rootDataPlane.Use(middleware.RateLimitMiddleware())
+	{
+		rootDataPlane.POST("/chat/completions", handler.HandleChatCompletions)
+		rootDataPlane.POST("/completions", handler.HandleCompletions)
+		rootDataPlane.POST("/responses", handler.HandleResponses)
+		rootDataPlane.GET("/models", handler.HandleModels)
+		rootDataPlane.GET("/models/:model", handler.HandleModelDetail)
+		rootDataPlane.POST("/moderations", handler.HandleModerations)
+		rootDataPlane.POST("/embeddings", handler.HandleEmbeddings)
+		rootDataPlane.POST("/rerank", handler.HandleRerank)
+		rootDataPlane.POST("/messages", handler.HandleAnthropicMessages)
+		rootDataPlane.POST("/messages/count_tokens", handler.HandleAnthropicCountTokens)
 	}
 
 	return r

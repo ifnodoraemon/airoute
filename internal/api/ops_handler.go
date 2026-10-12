@@ -22,6 +22,59 @@ func (h *Handler) HandleHealth(c *gin.Context) {
 	})
 }
 
+// HandleV1Info handles GET /v1 and GET /v1/ - returns service capabilities directory.
+func (h *Handler) HandleV1Info(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"service": "airoute",
+		"status":  "operational",
+		"version": "0.1.0",
+		"message": "Airoute High-Performance AI Router & Multimodal Gateway API v1",
+		"protocols": []string{
+			"OpenAI Chat Completions (/v1/chat/completions)",
+			"OpenAI Responses API (/v1/responses)",
+			"OpenAI Text Completions (/v1/completions)",
+			"OpenAI Models Registry (/v1/models)",
+			"OpenAI Embeddings (/v1/embeddings)",
+			"OpenAI Moderations (/v1/moderations)",
+			"Cohere/BGE Semantic Rerank (/v1/rerank)",
+			"Anthropic Claude Messages (/v1/messages)",
+			"Google Gemini Models (/v1beta/models)",
+			"Multimodal Ingress (/v1/images/generations, /v1/audio/speech, /v1/audio/transcriptions, /v1/videos/generations)",
+			"Model Context Protocol (MCP 2024-11-05) (/v1/mcp, /v1/mcp/sse, /v1/mcp/messages)",
+		},
+		"endpoints": gin.H{
+			"chat_completions":     "/v1/chat/completions",
+			"completions":          "/v1/completions",
+			"responses":            "/v1/responses",
+			"models":               "/v1/models",
+			"embeddings":           "/v1/embeddings",
+			"rerank":               "/v1/rerank",
+			"messages":             "/v1/messages",
+			"images":               "/v1/images/generations",
+			"audio_speech":         "/v1/audio/speech",
+			"audio_transcriptions": "/v1/audio/transcriptions",
+			"audio_translations":   "/v1/audio/translations",
+			"videos":               "/v1/videos/generations",
+			"mcp":                  "/v1/mcp",
+		},
+		"documentation": "/app/",
+	})
+}
+
+// HandleV1BetaInfo handles GET /v1beta and GET /v1beta/ - returns Gemini ingress info.
+func (h *Handler) HandleV1BetaInfo(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"service": "airoute",
+		"status":  "operational",
+		"version": "0.1.0",
+		"message": "Airoute Google Gemini Protocol Ingress v1beta",
+		"endpoints": gin.H{
+			"models": "/v1beta/models",
+		},
+		"documentation": "/app/",
+	})
+}
+
 // HandleMetrics handles GET /metrics.
 func (h *Handler) HandleMetrics(c *gin.Context) {
 	c.Data(http.StatusOK, "text/plain; version=0.0.4; charset=utf-8", []byte(telemetry.GlobalMetrics.ToPrometheusFormat()))
