@@ -102,6 +102,8 @@ export default function CommandPalette({
     }
   }));
 
+  const allItems = [...navItems, ...quickActionItems, ...modelItems];
+
   const rawFiltered = query.trim()
     ? allItems.filter(item =>
         item.label.toLowerCase().includes(query.trim().toLowerCase()) ||
