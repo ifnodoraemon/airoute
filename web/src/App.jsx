@@ -308,7 +308,7 @@ export default function App() {
           setAdminUser(null);
           clearStoredAuth();
           setShowLoginModal(true);
-          showToast('登录凭证已失效，请重新登录', 'warning');
+          showToast(isZh ? '登录凭证已失效，请重新登录' : 'Session expired, please login again', 'warning');
         }
       }
       return res;
@@ -322,7 +322,7 @@ export default function App() {
     setAdminUser(null);
     clearStoredAuth();
     setViewMode('landing');
-    showToast('已安全退出账号', 'info');
+    showToast(isZh ? '已安全退出账号' : 'Successfully logged out', 'info');
   };
 
   const fetchUserProfile = async () => {
@@ -594,7 +594,7 @@ export default function App() {
   // Automatic Zero-Choice Debounced Probe
   const triggerProbe = async (url, apiKey, currentType) => {
     if (!url || !url.trim()) {
-      showToast('请先输入下游服务的 Base URL', 'warning');
+      showToast(isZh ? '请先输入下游服务的 Base URL' : 'Please enter the downstream Base URL first', 'warning');
       return;
     }
     setProbing(true);
@@ -629,27 +629,29 @@ export default function App() {
           type: isAuthWarning ? 'warning' : 'success',
           text: isAuthWarning
             ? `⚠️ ${d.message}`
-            : `✨ 连通测试成功 (耗时: ${d.latency_ms}ms)！已自动匹配 [${d.type}] 引擎，获取到 ${d.models?.length || 0} 个在线模型并勾选对应协议。`,
+            : (isZh
+                ? `✨ 连通测试成功 (耗时: ${d.latency_ms}ms)！已自动匹配 [${d.type}] 引擎，获取到 ${d.models?.length || 0} 个在线模型并勾选对应协议。`
+                : `✨ Probe passed (${d.latency_ms}ms)! Auto-matched [${d.type}] engine, discovered ${d.models?.length || 0} models and checked protocols.`),
         });
         showToast(
           isAuthWarning
-            ? '服务已连通，但下游开启了凭证鉴权 (HTTP 401)，请输入 API Key 提取在线模型'
-            : `连通测试成功！已同步 ${d.models?.length || 0} 个模型`,
+            ? (isZh ? '服务已连通，但下游开启了凭证鉴权 (HTTP 401)，请输入 API Key 提取在线模型' : 'Connected, but upstream requires authentication (HTTP 401). Please enter API Key.')
+            : (isZh ? `连通测试成功！已同步 ${d.models?.length || 0} 个模型` : `Connection passed! Synced ${d.models?.length || 0} models`),
           isAuthWarning ? 'warning' : 'success'
         );
       } else {
         setProbeAlert({
           type: 'error',
-          text: `❌ 探测失败: ${data.error || '无法连通指定上游服务，请检查网络连通性或服务端口'}`,
+          text: `❌ ${isZh ? '探测失败: ' : 'Probe failed: '}${data.error || (isZh ? '无法连通指定上游服务，请检查网络连通性或服务端口' : 'Cannot connect to upstream endpoint, please check network or port')}`,
         });
-        showToast('连通测试失败，请检查服务地址', 'error');
+        showToast(isZh ? '连通测试失败，请检查服务地址' : 'Connection test failed. Please verify endpoint URL', 'error');
       }
     } catch (e) {
       setProbeAlert({
         type: 'error',
-        text: `探测网络异常: ${e.message}`,
+        text: `${isZh ? '探测网络异常: ' : 'Network probe error: '}${e.message}`,
       });
-      showToast(`网络请求异常: ${e.message}`, 'error');
+      showToast(isZh ? `网络请求异常: ${e.message}` : `Network request error: ${e.message}`, 'error');
     } finally {
       setProbing(false);
     }
@@ -676,7 +678,7 @@ export default function App() {
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings', 'rerank', 'images'],
         }));
-        showToast('已载入 GPUStack 企业私有算力模板，点击探测或填入 API Key 即可拉取模型', 'info');
+        showToast(isZh ? '已载入 GPUStack 企业私有算力模板，点击探测或填入 API Key 即可拉取模型' : 'Loaded GPUStack enterprise template. Click Probe or enter API Key to sync models.', 'info');
         break;
       case 'deepseek':
         setNewChannel(prev => ({
@@ -692,7 +694,7 @@ export default function App() {
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'openai_text'],
         }));
-        showToast('已载入 DeepSeek 官方模板及模型列表', 'info');
+        showToast(isZh ? '已载入 DeepSeek 官方模板及模型列表' : 'Loaded DeepSeek official template and models', 'info');
         break;
       case 'zhipu':
         setNewChannel(prev => ({
@@ -708,7 +710,7 @@ export default function App() {
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings', 'images', 'videos'],
         }));
-        showToast('已载入 智谱 GLM 官方模板及模型列表', 'info');
+        showToast(isZh ? '已载入 智谱 GLM 官方模板及模型列表' : 'Loaded Zhipu GLM official template and models', 'info');
         break;
       case 'doubao':
         setNewChannel(prev => ({
@@ -724,7 +726,7 @@ export default function App() {
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings', 'images', 'audio_speech', 'videos'],
         }));
-        showToast('已载入 字节火山豆包 官方模板及模型列表', 'info');
+        showToast(isZh ? '已载入 字节火山豆包 官方模板及模型列表' : 'Loaded Volcengine Doubao official template and models', 'info');
         break;
       case 'moonshot':
         setNewChannel(prev => ({
@@ -740,7 +742,7 @@ export default function App() {
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'openai_text'],
         }));
-        showToast('已载入 月之暗面 Kimi 官方模板及模型列表', 'info');
+        showToast(isZh ? '已载入 月之暗面 Kimi 官方模板及模型列表' : 'Loaded Moonshot Kimi official template and models', 'info');
         break;
       case 'openai':
         setNewChannel(prev => ({
@@ -756,7 +758,7 @@ export default function App() {
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'openai_text', 'anthropic_messages', 'embeddings', 'rerank', 'images', 'audio_speech', 'audio_transcription', 'videos'],
         }));
-        showToast('已载入 OpenAI 官方模板及全能力模型', 'info');
+        showToast(isZh ? '已载入 OpenAI 官方模板及全能力模型' : 'Loaded OpenAI official template and all-capability models', 'info');
         break;
       case 'anthropic':
         setNewChannel(prev => ({
@@ -772,7 +774,7 @@ export default function App() {
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'anthropic_messages'],
         }));
-        showToast('已载入 Claude 官方模板及模型列表', 'info');
+        showToast(isZh ? '已载入 Claude 官方模板及模型列表' : 'Loaded Claude official template and models', 'info');
         break;
       case 'gemini':
         setNewChannel(prev => ({
@@ -788,7 +790,7 @@ export default function App() {
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'anthropic_messages', 'embeddings'],
         }));
-        showToast('已载入 Google Gemini 官方模板及模型列表', 'info');
+        showToast(isZh ? '已载入 Google Gemini 官方模板及模型列表' : 'Loaded Google Gemini official template and models', 'info');
         break;
       case 'ollama':
         setNewChannel(prev => ({
@@ -804,7 +806,7 @@ export default function App() {
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings'],
         }));
-        showToast('已载入 Ollama 模型列表模板，请输入您的端点地址', 'info');
+        showToast(isZh ? '已载入 Ollama 模型列表模板，请输入您的端点地址' : 'Loaded Ollama template. Please enter your endpoint URL', 'info');
         break;
       case 'vllm':
         setNewChannel(prev => ({
@@ -820,7 +822,7 @@ export default function App() {
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings'],
         }));
-        showToast('已载入 vLLM 模型列表模板，请输入您的端点地址', 'info');
+        showToast(isZh ? '已载入 vLLM 模型列表模板，请输入您的端点地址' : 'Loaded vLLM template. Please enter your endpoint URL', 'info');
         break;
       case 'sub2api':
         setNewChannel(prev => ({
@@ -836,7 +838,7 @@ export default function App() {
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'openai_text', 'anthropic_messages', 'embeddings', 'rerank', 'images', 'audio_speech', 'audio_transcription', 'videos'],
         }));
-        showToast('已载入 Sub2API 聚合模板', 'info');
+        showToast(isZh ? '已载入 Sub2API 聚合模板' : 'Loaded Sub2API aggregation template', 'info');
         break;
       case 'custom':
         setNewChannel(prev => ({
@@ -852,7 +854,7 @@ export default function App() {
           mapping_str: '',
           protocols: ['openai_chat', 'openai_response', 'embeddings', 'rerank', 'images', 'audio_speech', 'videos'],
         }));
-        showToast('已载入自定义下游模板，请输入您的服务端点', 'info');
+        showToast(isZh ? '已载入自定义下游模板，请输入您的服务端点' : 'Loaded custom downstream template. Please enter endpoint URL', 'info');
         break;
       default:
         break;
@@ -870,7 +872,7 @@ export default function App() {
   const handleBatchPing = async () => {
     if (channels.length === 0) return;
     setBatchTesting(true);
-    showToast('正在并发检测所有渠道连通性...', 'info');
+    showToast(isZh ? '正在并发检测所有渠道连通性...' : 'Testing all channels in parallel...', 'info');
     const results = {};
     await Promise.all(channels.map(async (ch) => {
       try {
@@ -879,7 +881,7 @@ export default function App() {
         results[ch.id] = {
           latency_ms: data.latency_ms || 0,
           success: data.code === 0,
-          error: data.error || (data.code === 0 ? '' : '连接失败')
+          error: data.error || (data.code === 0 ? '' : (isZh ? '连接失败' : 'Connection failed'))
         };
       } catch (e) {
         results[ch.id] = { latency_ms: 0, success: false, error: e.message };
@@ -888,7 +890,12 @@ export default function App() {
     setChannelLatencies(results);
     setBatchTesting(false);
     const successCount = Object.values(results).filter(r => r.success).length;
-    showToast(`体检完成: ${successCount}/${channels.length} 个渠道响应正常`, successCount === channels.length ? 'success' : 'warning');
+    showToast(
+      isZh
+        ? `体检完成: ${successCount}/${channels.length} 个渠道响应正常`
+        : `Health check complete: ${successCount}/${channels.length} channels responsive`,
+      successCount === channels.length ? 'success' : 'warning'
+    );
   };
   const handleBatchTest = handleBatchPing;
 
@@ -947,14 +954,14 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      showToast('Provider 更新成功，内存已热重载', 'success');
+      showToast(isZh ? 'Provider 更新成功，内存已热重载' : 'Provider updated successfully, memory hot-reloaded', 'success');
     } else {
       await adminFetch('/api/v1/admin/channels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      showToast('Provider 创建成功，内存已热重载', 'success');
+      showToast(isZh ? 'Provider 创建成功，内存已热重载' : 'Provider created successfully, memory hot-reloaded', 'success');
     }
 
     setShowChannelModal(false);
@@ -1000,9 +1007,9 @@ export default function App() {
 
   // Handle Channel Deletion
   const handleDeleteChannel = async (id) => {
-    if (!window.confirm('确认注销该模型提供商 (Provider)？')) return;
+    if (!window.confirm(isZh ? '确认注销该模型提供商 (Provider)？' : 'Are you sure you want to remove this Provider?')) return;
     await adminFetch(`/api/v1/admin/channels/${id}`, { method: 'DELETE' });
-    showToast('Provider 已注销，内存已原子更新', 'info');
+    showToast(isZh ? 'Provider 已注销，内存已原子更新' : 'Provider removed, memory atomically updated', 'info');
     fetchData();
   };
 
@@ -1017,16 +1024,16 @@ export default function App() {
           ...prev,
           [ch.id]: { latency_ms: data.latency_ms, success: true, error: '' }
         }));
-        showToast(`✅ [${ch.name}] 连通测试成功！耗时: ${data.latency_ms} ms`, 'success');
+        showToast(isZh ? `✅ [${ch.name}] 连通测试成功！耗时: ${data.latency_ms} ms` : `✅ [${ch.name}] Test successful! Latency: ${data.latency_ms} ms`, 'success');
       } else {
         setChannelLatencies(prev => ({
           ...prev,
-          [ch.id]: { latency_ms: 0, success: false, error: data.error || '连通失败' }
+          [ch.id]: { latency_ms: 0, success: false, error: data.error || (isZh ? '连通失败' : 'Failed') }
         }));
-        showToast(`❌ [${ch.name}] 测试失败: ${data.error || '无法连通'}`, 'error');
+        showToast(isZh ? `❌ [${ch.name}] 测试失败: ${data.error || '无法连通'}` : `❌ [${ch.name}] Test failed: ${data.error || 'Unreachable'}`, 'error');
       }
     } catch (e) {
-      showToast(`请求异常: ${e.message}`, 'error');
+      showToast((isZh ? '请求异常: ' : 'Request error: ') + e.message, 'error');
     } finally {
       setTestingId(null);
     }
@@ -1035,7 +1042,7 @@ export default function App() {
   // Batch Log Operations
   const handleBatchDeleteLogs = async () => {
     if (selectedLogIds.length === 0) return;
-    if (!window.confirm(`确认批量删除选中的 ${selectedLogIds.length} 条调用日志？`)) return;
+    if (!window.confirm(isZh ? `确认批量删除选中的 ${selectedLogIds.length} 条调用日志？` : `Confirm delete selected ${selectedLogIds.length} request logs?`)) return;
     try {
       const res = await adminFetch('/api/v1/admin/logs/batch-delete', {
         method: 'POST',
@@ -1044,31 +1051,31 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(data.message || '已批量删除所选日志', 'success');
+        showToast(data.message || (isZh ? '已批量删除所选日志' : 'Selected logs deleted successfully'), 'success');
         setSelectedLogIds([]);
         fetchLogs();
       } else {
-        showToast(data.error || '批量删除日志失败', 'error');
+        showToast(data.error || (isZh ? '批量删除日志失败' : 'Failed to delete logs'), 'error');
       }
     } catch (e) {
-      showToast('请求异常: ' + e.message, 'error');
+      showToast((isZh ? '请求异常: ' : 'Request error: ') + e.message, 'error');
     }
   };
 
   const handleClearLogs = async () => {
-    if (!window.confirm('⚠️ 确认清空所有调用日志？此操作无法撤销！')) return;
+    if (!window.confirm(isZh ? '⚠️ 确认清空所有调用日志？此操作无法撤销！' : '⚠️ Confirm clear all request logs? This action cannot be undone!')) return;
     try {
       const res = await adminFetch('/api/v1/admin/logs/clear', { method: 'POST' });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast('已清空全部调用历史日志', 'success');
+        showToast(isZh ? '已清空全部调用历史日志' : 'All request logs cleared', 'success');
         setSelectedLogIds([]);
         fetchLogs();
       } else {
-        showToast(data.error || '清空日志失败', 'error');
+        showToast(data.error || (isZh ? '清空日志失败' : 'Failed to clear logs'), 'error');
       }
     } catch (e) {
-      showToast('请求异常: ' + e.message, 'error');
+      showToast((isZh ? '请求异常: ' : 'Request error: ') + e.message, 'error');
     }
   };
 
@@ -1077,21 +1084,21 @@ export default function App() {
       const res = await adminFetch(`/api/v1/admin/logs/${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast('已删除该条调用日志', 'success');
+        showToast(isZh ? '已删除该条调用日志' : 'Request log deleted', 'success');
         setSelectedLogIds(prev => prev.filter(x => x !== id));
         fetchLogs();
       } else {
-        showToast(data.error || '删除日志失败', 'error');
+        showToast(data.error || (isZh ? '删除日志失败' : 'Failed to delete log'), 'error');
       }
     } catch (e) {
-      showToast('请求异常: ' + e.message, 'error');
+      showToast((isZh ? '请求异常: ' : 'Request error: ') + e.message, 'error');
     }
   };
 
   // Batch Key Operations
   const handleBatchDeleteKeys = async () => {
     if (selectedKeyIds.length === 0) return;
-    if (!window.confirm(`确认批量注销选中的 ${selectedKeyIds.length} 个 API 密钥？`)) return;
+    if (!window.confirm(isZh ? `确认批量注销选中的 ${selectedKeyIds.length} 个 API 密钥？` : `Confirm revoke selected ${selectedKeyIds.length} API keys?`)) return;
     try {
       const res = await adminFetch('/api/v1/admin/keys/batch-delete', {
         method: 'POST',
@@ -1100,14 +1107,14 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(data.message || '已批量注销密钥', 'success');
+        showToast(data.message || (isZh ? '已批量注销密钥' : 'Selected keys revoked'), 'success');
         setSelectedKeyIds([]);
         fetchData();
       } else {
-        showToast(data.error || '批量注销失败', 'error');
+        showToast(data.error || (isZh ? '批量注销失败' : 'Failed to revoke keys'), 'error');
       }
     } catch (e) {
-      showToast('请求异常: ' + e.message, 'error');
+      showToast((isZh ? '请求异常: ' : 'Request error: ') + e.message, 'error');
     }
   };
 
@@ -1121,21 +1128,21 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(data.message || '批量状态更新成功', 'success');
+        showToast(data.message || (isZh ? '批量状态更新成功' : 'Batch status update successful'), 'success');
         setSelectedKeyIds([]);
         fetchData();
       } else {
-        showToast(data.error || '更新失败', 'error');
+        showToast(data.error || (isZh ? '更新失败' : 'Update failed'), 'error');
       }
     } catch (e) {
-      showToast('请求异常: ' + e.message, 'error');
+      showToast((isZh ? '请求异常: ' : 'Request error: ') + e.message, 'error');
     }
   };
 
   // Batch Channel Operations
   const handleBatchDeleteChannels = async () => {
     if (selectedChannelIds.length === 0) return;
-    if (!window.confirm(`确认批量删除选中的 ${selectedChannelIds.length} 个服务商渠道？`)) return;
+    if (!window.confirm(isZh ? `确认批量删除选中的 ${selectedChannelIds.length} 个服务商渠道？` : `Confirm delete selected ${selectedChannelIds.length} channels?`)) return;
     try {
       const res = await adminFetch('/api/v1/admin/channels/batch-delete', {
         method: 'POST',
@@ -1144,14 +1151,14 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(data.message || '已批量删除服务商渠道', 'success');
+        showToast(data.message || (isZh ? '已批量删除服务商渠道' : 'Selected channels deleted'), 'success');
         setSelectedChannelIds([]);
         fetchData();
       } else {
-        showToast(data.error || '批量删除失败', 'error');
+        showToast(data.error || (isZh ? '批量删除失败' : 'Failed to delete channels'), 'error');
       }
     } catch (e) {
-      showToast('请求异常: ' + e.message, 'error');
+      showToast((isZh ? '请求异常: ' : 'Request error: ') + e.message, 'error');
     }
   };
 
@@ -1165,14 +1172,14 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(data.message || '批量更新状态成功', 'success');
+        showToast(data.message || (isZh ? '批量更新状态成功' : 'Batch update status successful'), 'success');
         setSelectedChannelIds([]);
         fetchData();
       } else {
-        showToast(data.error || '更新失败', 'error');
+        showToast(data.error || (isZh ? '更新失败' : 'Update failed'), 'error');
       }
     } catch (e) {
-      showToast('请求异常: ' + e.message, 'error');
+      showToast((isZh ? '请求异常: ' : 'Request error: ') + e.message, 'error');
     }
   };
 
@@ -1181,7 +1188,7 @@ export default function App() {
     const rand = 'sk-airoute-' + Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 6);
     const tenantNum = (keys?.length || 0) + 1;
     setNewKey({
-      tenant_id: `密钥-${tenantNum}`,
+      tenant_id: isZh ? `密钥-${tenantNum}` : `Key-${tenantNum}`,
       key: rand,
       rpm: 0,
       budget: 0,
@@ -1195,7 +1202,7 @@ export default function App() {
   const handleCreateKey = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (!newKey.tenant_id.trim()) {
-      showToast('请输入密钥名称', 'warning');
+      showToast(isZh ? '请输入密钥名称' : 'Please enter key name', 'warning');
       return;
     }
     try {
@@ -1206,14 +1213,14 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast('API 访问密钥创建成功', 'success');
+        showToast(isZh ? 'API 访问密钥创建成功' : 'API access key created successfully', 'success');
         setShowKeyModal(false);
         fetchKeys();
       } else {
-        showToast('创建失败: ' + (data.error || '未知错误'), 'error');
+        showToast((isZh ? '创建失败: ' : 'Creation failed: ') + (data.error || (isZh ? '未知错误' : 'Unknown error')), 'error');
       }
     } catch (e) {
-      showToast('请求异常: ' + e.message, 'error');
+      showToast((isZh ? '请求异常: ' : 'Request error: ') + e.message, 'error');
     }
   };
 
@@ -1227,38 +1234,43 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(`密钥计费分组已成功调整为 [${newGroup}]`, 'success');
+        showToast(isZh ? `密钥计费分组已成功调整为 [${newGroup}]` : `Key billing group updated to [${newGroup}]`, 'success');
         fetchData();
       } else {
-        showToast(`调整分组失败: ${data.error || '未知错误'}`, 'error');
+        showToast((isZh ? '调整分组失败: ' : 'Update group failed: ') + (data.error || (isZh ? '未知错误' : 'Unknown error')), 'error');
       }
     } catch (err) {
-      showToast(`请求异常: ${err.message}`, 'error');
+      showToast((isZh ? '请求异常: ' : 'Request error: ') + err.message, 'error');
     }
   };
 
   // Handle Key Deletion
   const handleDeleteKey = async (id) => {
-    if (!window.confirm('确认注销该客户端访问密钥？')) return;
+    if (!window.confirm(isZh ? '确认注销该客户端访问密钥？' : 'Are you sure you want to revoke this API key?')) return;
     await adminFetch(`/api/v1/admin/keys/${id}`, { method: 'DELETE' });
-    showToast('客户端访问密钥已注销', 'info');
+    showToast(isZh ? '客户端访问密钥已注销' : 'Client API key revoked', 'info');
     fetchData();
   };
 
   // Handle Key Status Toggle (Enable/Disable)
   const handleToggleKeyStatus = async (k) => {
     const nextStatus = k.status === 'disabled' ? 'active' : 'disabled';
-    const actionText = nextStatus === 'active' ? '启用' : '禁用/停用';
+    const actionText = nextStatus === 'active' ? (isZh ? '启用' : 'enable') : (isZh ? '禁用/停用' : 'disable');
     try {
       await adminFetch(`/api/v1/admin/keys/${k.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus }),
       });
-      showToast(`已${actionText}密钥 ${k.key}，集群毫秒级热同步完成`, 'success');
+      showToast(
+        isZh
+          ? `已${actionText}密钥 ${k.key}，集群毫秒级热同步完成`
+          : `Key ${k.key} status set to ${nextStatus}, cluster synced`,
+        'success'
+      );
       fetchData();
     } catch (err) {
-      showToast(`${actionText}失败: ${err.message}`, 'error');
+      showToast(`${actionText} ${isZh ? '失败: ' : 'failed: '}${err.message}`, 'error');
     }
   };
 
@@ -1266,7 +1278,7 @@ export default function App() {
   const copyToClipboard = (txt) => {
     navigator.clipboard.writeText(txt);
     setCopiedKey(txt);
-    showToast('已成功复制到剪贴板！', 'success');
+    showToast(isZh ? '已成功复制到剪贴板！' : 'Copied to clipboard!', 'success');
     setTimeout(() => setCopiedKey(''), 2500);
   };
 
@@ -2473,6 +2485,7 @@ export default function App() {
               <ModelChipManager
                 models={newChannel.models_str}
                 onChange={(list) => setNewChannel(prev => ({ ...prev, models_str: list.join(', ') }))}
+                lang={lang}
               />
 
               {/* Collapsible Advanced Settings */}
@@ -2506,12 +2519,14 @@ export default function App() {
                   <ModelMappingEditor
                     mappingStr={newChannel.mapping_str}
                     onChange={(val) => setNewChannel(prev => ({ ...prev, mapping_str: val }))}
+                    lang={lang}
                   />
 
                   <CapabilitiesSelector
                     protocols={newChannel.protocols}
                     onToggle={toggleProtocol}
                     onSetProtocols={(list) => setNewChannel(prev => ({ ...prev, protocols: list }))}
+                    lang={lang}
                   />
 
                   <div className="grid grid-cols-3 gap-3">

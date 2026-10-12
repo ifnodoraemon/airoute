@@ -2,19 +2,21 @@ import React from 'react';
 import { Layers, MessageSquare, Zap, Terminal, Sparkles, Image, Volume2, Mic, Cpu, Sliders, Video } from 'lucide-react';
 
 const CAPABILITIES = [
-  { id: 'openai_chat', name: 'Chat', path: '/v1/chat/completions', icon: MessageSquare, color: 'text-indigo-500' },
-  { id: 'openai_response', name: 'Responses', path: '/v1/responses', icon: Zap, color: 'text-emerald-500' },
-  { id: 'openai_text', name: 'Text 补全', path: '/v1/completions', icon: Terminal, color: 'text-sky-500' },
-  { id: 'anthropic_messages', name: 'Claude Messages', path: '/v1/messages', icon: Sparkles, color: 'text-amber-500' },
-  { id: 'images', name: 'Images', path: '/v1/images/generations', icon: Image, color: 'text-pink-500' },
-  { id: 'audio_speech', name: 'TTS', path: '/v1/audio/speech', icon: Volume2, color: 'text-cyan-500' },
-  { id: 'audio_transcription', name: 'STT', path: '/v1/audio/transcriptions', icon: Mic, color: 'text-teal-500' },
-  { id: 'embeddings', name: 'Embeddings', path: '/v1/embeddings', icon: Cpu, color: 'text-emerald-500' },
-  { id: 'rerank', name: 'Rerank', path: '/v1/rerank', icon: Sliders, color: 'text-amber-500' },
-  { id: 'videos', name: 'Videos', path: '/v1/videos/generations', icon: Video, color: 'text-purple-500' },
+  { id: 'openai_chat', name: 'Chat', nameZh: '对话', path: '/v1/chat/completions', icon: MessageSquare, color: 'text-indigo-500' },
+  { id: 'openai_response', name: 'Responses', nameZh: '智能体响应', path: '/v1/responses', icon: Zap, color: 'text-emerald-500' },
+  { id: 'openai_text', name: 'Text Completions', nameZh: 'Text 补全', path: '/v1/completions', icon: Terminal, color: 'text-sky-500' },
+  { id: 'anthropic_messages', name: 'Claude Messages', nameZh: 'Claude 消息', path: '/v1/messages', icon: Sparkles, color: 'text-amber-500' },
+  { id: 'images', name: 'Images', nameZh: '图像生成', path: '/v1/images/generations', icon: Image, color: 'text-pink-500' },
+  { id: 'audio_speech', name: 'TTS', nameZh: '语音合成', path: '/v1/audio/speech', icon: Volume2, color: 'text-cyan-500' },
+  { id: 'audio_transcription', name: 'STT', nameZh: '语音识别', path: '/v1/audio/transcriptions', icon: Mic, color: 'text-teal-500' },
+  { id: 'embeddings', name: 'Embeddings', nameZh: '向量嵌入', path: '/v1/embeddings', icon: Cpu, color: 'text-emerald-500' },
+  { id: 'rerank', name: 'Rerank', nameZh: '文档重排', path: '/v1/rerank', icon: Sliders, color: 'text-amber-500' },
+  { id: 'videos', name: 'Videos', nameZh: '视频生成', path: '/v1/videos/generations', icon: Video, color: 'text-purple-500' },
 ];
 
-export default function CapabilitiesSelector({ protocols = [], onToggle, onSetProtocols }) {
+export default function CapabilitiesSelector({ protocols = [], onToggle, onSetProtocols, lang = 'zh' }) {
+  const isZh = lang === 'zh';
+
   const handleSelectAll = () => {
     onSetProtocols(CAPABILITIES.map(c => c.id));
   };
@@ -32,7 +34,7 @@ export default function CapabilitiesSelector({ protocols = [], onToggle, onSetPr
       <div className="flex items-center justify-between">
         <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
           <Layers className="w-3.5 h-3.5 text-indigo-500" />
-          <span>协议能力 ({protocols.length}/{CAPABILITIES.length})</span>
+          <span>{isZh ? `协议能力 (${protocols.length}/${CAPABILITIES.length})` : `Protocol Capabilities (${protocols.length}/${CAPABILITIES.length})`}</span>
         </label>
         <div className="flex items-center space-x-2 text-[11px]">
           <button
@@ -40,7 +42,7 @@ export default function CapabilitiesSelector({ protocols = [], onToggle, onSetPr
             onClick={handleSelectAll}
             className="text-indigo-600 dark:text-indigo-400 hover:underline"
           >
-            全选
+            {isZh ? '全选' : 'Select All'}
           </button>
           <span className="text-slate-300 dark:text-slate-700">·</span>
           <button
@@ -48,7 +50,7 @@ export default function CapabilitiesSelector({ protocols = [], onToggle, onSetPr
             onClick={handleSelectChatOnly}
             className="text-indigo-600 dark:text-indigo-400 hover:underline"
           >
-            仅对话
+            {isZh ? '仅对话' : 'Chat Only'}
           </button>
           <span className="text-slate-300 dark:text-slate-700">·</span>
           <button
@@ -56,7 +58,7 @@ export default function CapabilitiesSelector({ protocols = [], onToggle, onSetPr
             onClick={handleClear}
             className="text-rose-500 hover:underline"
           >
-            清空
+            {isZh ? '清空' : 'Clear'}
           </button>
         </div>
       </div>
@@ -87,7 +89,7 @@ export default function CapabilitiesSelector({ protocols = [], onToggle, onSetPr
                 </span>
               </div>
               <div className="mt-2">
-                <div className="text-xs font-semibold leading-tight">{cap.name}</div>
+                <div className="text-xs font-semibold leading-tight">{isZh ? (cap.nameZh || cap.name) : cap.name}</div>
                 <div className="text-[10px] text-slate-400 font-mono truncate mt-0.5">{cap.path}</div>
               </div>
             </button>

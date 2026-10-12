@@ -52,7 +52,7 @@ export default function ModelRoutesManager({
 
   const handleBatchDeleteRoutes = async () => {
     if (selectedModels.length === 0) return;
-    if (!window.confirm(`确定批量删除选中的 ${selectedModels.length} 个模型路由配置？`)) {
+    if (!window.confirm(isZh ? `确定批量删除选中的 ${selectedModels.length} 个模型路由配置？` : `Delete selected ${selectedModels.length} model route configs?`)) {
       return;
     }
     try {
@@ -63,14 +63,14 @@ export default function ModelRoutesManager({
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(data.message || '已批量删除模型路由', 'success');
+        showToast(data.message || (isZh ? '已批量删除模型路由' : 'Selected model routes deleted'), 'success');
         setSelectedModels([]);
         fetchModelRoutes();
       } else {
-        showToast(data.error || '批量删除失败', 'warning');
+        showToast(data.error || (isZh ? '批量删除失败' : 'Failed to delete routes'), 'warning');
       }
     } catch (err) {
-      showToast('删除请求异常: ' + err.message, 'warning');
+      showToast((isZh ? '删除请求异常: ' : 'Delete error: ') + err.message, 'warning');
     }
   };
 
@@ -86,7 +86,7 @@ export default function ModelRoutesManager({
       if (routesRes.ok && data.code === 0) {
         setModelRoutes(data.data || []);
       } else {
-        showToast('获取模型路由拓扑失败', 'warning');
+        showToast(isZh ? '获取模型路由拓扑失败' : 'Failed to fetch model routes topology', 'warning');
       }
       if (channelsRes.ok) {
         const cData = await channelsRes.json();
@@ -97,14 +97,14 @@ export default function ModelRoutesManager({
         setPricingRates(pData.data || []);
       }
     } catch (err) {
-      showToast('网络请求异常: ' + err.message, 'warning');
+      showToast((isZh ? '网络请求异常: ' : 'Network error: ') + err.message, 'warning');
     } finally {
       setLoading(false);
     }
   };
 
   const handleDeleteRoute = async (modelName) => {
-    if (!window.confirm(`确定删除模型 [${modelName}] 路由配置及其服务商绑定？`)) {
+    if (!window.confirm(isZh ? `确定删除模型 [${modelName}] 路由配置及其服务商绑定？` : `Delete route config and provider bindings for [${modelName}]?`)) {
       return;
     }
     try {
@@ -113,13 +113,13 @@ export default function ModelRoutesManager({
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(`已删除模型 [${modelName}] 路由`, 'success');
+        showToast(isZh ? `已删除模型 [${modelName}] 路由` : `Deleted route for [${modelName}]`, 'success');
         fetchModelRoutes();
       } else {
-        showToast(data.error || '删除失败', 'warning');
+        showToast(data.error || (isZh ? '删除失败' : 'Failed to delete route'), 'warning');
       }
     } catch (err) {
-      showToast('删除请求异常: ' + err.message, 'warning');
+      showToast((isZh ? '删除请求异常: ' : 'Delete error: ') + err.message, 'warning');
     }
   };
 
@@ -181,12 +181,12 @@ export default function ModelRoutesManager({
           ...prev,
           [modelName]: data.data || []
         }));
-        showToast(`已完成 [${modelName}] 下游服务商实时连通性探测`, 'success');
+        showToast(isZh ? `已完成 [${modelName}] 下游服务商实时连通性探测` : `Latency probe complete for [${modelName}] downstreams`, 'success');
       } else {
-        showToast(data.error || '探测失败', 'warning');
+        showToast(data.error || (isZh ? '探测失败' : 'Probe failed'), 'warning');
       }
     } catch (err) {
-      showToast('探测异常: ' + err.message, 'warning');
+      showToast((isZh ? '探测异常: ' : 'Probe error: ') + err.message, 'warning');
     } finally {
       setProbingModel(null);
     }
@@ -385,7 +385,7 @@ export default function ModelRoutesManager({
                             <button
                               onClick={() => copyToClipboard(route.model)}
                               className="text-slate-400 hover:text-slate-600 transition cursor-pointer p-0.5"
-                              title="复制模型标识"
+                              title={isZh ? "复制模型标识" : "Copy model ID"}
                             >
                               {copiedModel === route.model ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
                             </button>

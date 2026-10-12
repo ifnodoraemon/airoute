@@ -443,19 +443,31 @@ GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
             </div>
 
             <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs space-y-3">
-              <h4 className="font-bold text-slate-900 dark:text-slate-100">映射格式与示例:</h4>
+              <h4 className="font-bold text-slate-900 dark:text-slate-100">{isZh ? '映射格式与示例:' : 'Mapping Formats & Examples:'}</h4>
               <ul className="list-disc pl-5 space-y-1.5 text-slate-700 dark:text-slate-300">
                 <li>
-                  <strong>精确别名重写:</strong> <code className="text-indigo-600 font-mono">yy/xxx/xx:xxx/xx</code> <br />
-                  客户端请求 <code className="text-indigo-600 font-mono">yy/xxx/xx</code>，发往上游时自动零拷贝重写为 <code className="text-indigo-600 font-mono">xxx/xx</code>。
+                  <strong>{isZh ? '精确别名重写:' : 'Exact Alias Rewrite:'}</strong> <code className="text-indigo-600 font-mono">yy/xxx/xx:xxx/xx</code> <br />
+                  {isZh ? (
+                    <>客户端请求 <code className="text-indigo-600 font-mono">yy/xxx/xx</code>，发往上游时自动零拷贝重写为 <code className="text-indigo-600 font-mono">xxx/xx</code>。</>
+                  ) : (
+                    <>Client requests <code className="text-indigo-600 font-mono">yy/xxx/xx</code>; gateway rewrites it to <code className="text-indigo-600 font-mono">xxx/xx</code> before dispatching.</>
+                  )}
                 </li>
                 <li>
-                  <strong>前缀通配映射:</strong> <code className="text-indigo-600 font-mono">org/dept/*:*</code> <br />
-                  客户端请求 <code className="text-indigo-600 font-mono">org/dept/v1/deepseek-ai/DeepSeek-V4-Pro</code>，自动剥离前缀发往目标集群。
+                  <strong>{isZh ? '前缀通配映射:' : 'Prefix Wildcard Mapping:'}</strong> <code className="text-indigo-600 font-mono">org/dept/*:*</code> <br />
+                  {isZh ? (
+                    <>客户端请求 <code className="text-indigo-600 font-mono">org/dept/v1/deepseek-ai/DeepSeek-V4-Pro</code>，自动剥离前缀发往目标集群。</>
+                  ) : (
+                    <>Client requests <code className="text-indigo-600 font-mono">org/dept/v1/deepseek-ai/DeepSeek-V4-Pro</code>; prefix is stripped and routed to upstream.</>
+                  )}
                 </li>
                 <li>
-                  <strong>服务商自动前缀:</strong> <code className="text-indigo-600 font-mono">&lt;ProviderName&gt;/&lt;Model&gt;</code> <br />
-                  当存在多个提供商均提供 <code className="text-indigo-600 font-mono">gpt-6</code> 时，客户端可直接指定 <code className="text-indigo-600 font-mono">openai-us/gpt-6</code> 精准定向路由！
+                  <strong>{isZh ? '服务商自动前缀:' : 'Provider Auto-Prefix Routing:'}</strong> <code className="text-indigo-600 font-mono">&lt;ProviderName&gt;/&lt;Model&gt;</code> <br />
+                  {isZh ? (
+                    <>当存在多个提供商均提供 <code className="text-indigo-600 font-mono">gpt-6</code> 时，客户端可直接指定 <code className="text-indigo-600 font-mono">openai-us/gpt-6</code> 精准定向路由！</>
+                  ) : (
+                    <>When multiple providers offer <code className="text-indigo-600 font-mono">gpt-6</code>, clients can directly route to <code className="text-indigo-600 font-mono">openai-us/gpt-6</code>!</>
+                  )}
                 </li>
               </ul>
             </div>
@@ -465,24 +477,24 @@ GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
         {docsSection === 'rerank' && (
           <div className="space-y-4">
             <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Rerank 检索重排 API 规范 (/v1/rerank)</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">全面兼容 Cohere、Hugging Face TEI、Xinference 与 Infinity 等重排标准协议。</p>
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{isZh ? 'Rerank 检索重排 API 规范 (/v1/rerank)' : 'Rerank Retrieval API Spec (/v1/rerank)'}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{isZh ? '全面兼容 Cohere、Hugging Face TEI、Xinference 与 Infinity 等重排标准协议。' : 'Fully compatible with Cohere, Hugging Face TEI, Xinference, and Infinity rerank standards.'}</p>
             </div>
 
             <div className="space-y-3 text-xs">
               <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
-                <span className="font-bold text-slate-900 dark:text-slate-100">1. 重排请求格式 (POST /v1/rerank):</span>
+                <span className="font-bold text-slate-900 dark:text-slate-100">{isZh ? '1. 重排请求格式 (POST /v1/rerank):' : '1. Rerank Request Format (POST /v1/rerank):'}</span>
                 <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl font-mono overflow-x-auto text-[11px] leading-relaxed">
 {`curl -X POST ${docOrigin}/v1/rerank \\
   -H "Authorization: Bearer sk-airoute-xxxx" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "bge-reranker-large",
-    "query": "什么是企业级大模型网关的高可用与容灾设计？",
+    "query": "${isZh ? '什么是企业级大模型网关的高可用与容灾设计？' : 'What is enterprise AI gateway HA and disaster recovery?'}",
     "documents": [
-      "Airoute 采用全双工流式转发，首字分块前支持透明故障转移与熔断兜底。",
-      "今天天气非常晴朗，公园里的樱花盛开了，很适合去散步或野餐。",
-      "基于 Raft 协议的分布式数据库能保证网络分区状态下的强一致性与多副本高可用。"
+      "${isZh ? 'Airoute 采用全双工流式转发，首字分块前支持透明故障转移与熔断兜底。' : 'Airoute uses full-duplex stream proxying with pre-token failover and circuit breaker protection.'}",
+      "${isZh ? '今天天气非常晴朗，公园里的樱花盛开了，很适合去散步或野餐。' : 'The weather is sunny today, suitable for taking a walk in the park.'}",
+      "${isZh ? '基于 Raft 协议的分布式数据库能保证网络分区状态下的强一致性与多副本高可用。' : 'Raft-based distributed databases guarantee strong consistency and partition tolerance.'}"
     ],
     "top_n": 2,
     "return_documents": true
@@ -491,9 +503,11 @@ GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
               </div>
 
               <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs text-amber-900 dark:text-amber-200 space-y-1">
-                <span className="font-bold">🎯 高可用熔断与透明兜底保障:</span>
+                <span className="font-bold">{isZh ? '🎯 高可用熔断与透明兜底保障:' : '🎯 High-Availability & Circuit Breaker Protection:'}</span>
                 <p className="leading-relaxed">
-                  当首选重排提供商（如私有部署的集群实例）发生 OOM、503 或网络异常时，Airoute 会在毫秒级内自动安全切换至备选重排提供商，为企业级 RAG 知识库检索流水线提供全天候 99.99% 的 SLA 稳定可用保障。
+                  {isZh
+                    ? '当首选重排提供商（如私有部署的集群实例）发生 OOM、503 或网络异常时，Airoute 会在毫秒级内自动安全切换至备选重排提供商，为企业级 RAG 知识库检索流水线提供全天候 99.99% 的 SLA 稳定可用保障。'
+                    : 'When the primary reranker instance encounters OOM, 503, or network errors, Airoute transparently switches to the backup provider within milliseconds, ensuring 99.99% uptime for RAG pipelines.'}
                 </p>
               </div>
             </div>
@@ -503,17 +517,17 @@ GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
         {docsSection === 'deploy' && (
           <div className="space-y-4">
             <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">生产环境高可用集群部署 (HA)</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">提供开箱即用的多副本 Docker Compose 与生产级 Kubernetes Helm Chart。</p>
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{isZh ? '生产环境高可用集群部署 (HA)' : 'Production High-Availability Deployment (HA)'}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{isZh ? '提供开箱即用的多副本 Docker Compose 与生产级 Kubernetes Helm Chart。' : 'Ready-to-use multi-replica Docker Compose and enterprise Kubernetes Helm Charts.'}</p>
             </div>
 
             <div className="space-y-3">
-              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">1. Docker Compose (2 副本 Gateway + Nginx 负载均衡):</h4>
+              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">{isZh ? '1. Docker Compose (2 副本 Gateway + Nginx 负载均衡):' : '1. Docker Compose (2 Gateway Replicas + Nginx Load Balancer):'}</h4>
               <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl text-xs font-mono overflow-x-auto">
 docker compose up -d --build
               </pre>
 
-              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 pt-2">2. Kubernetes Helm 一键部署:</h4>
+              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 pt-2">{isZh ? '2. Kubernetes Helm 一键部署:' : '2. Kubernetes Helm 1-Click Deployment:'}</h4>
               <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl text-xs font-mono overflow-x-auto">
 helm install airoute ./helm/airoute -n gateway --create-namespace
               </pre>

@@ -12,7 +12,8 @@ import {
   MessageSquare,
   Image as ImageIcon,
   Volume2,
-  Video
+  Video,
+  Globe
 } from 'lucide-react';
 import { getGatewayOrigin } from '../config';
 
@@ -25,8 +26,13 @@ export default function LandingPage({
   onViewStatus,
   stats,
   channelsCount,
-  modelsCount
+  modelsCount,
+  lang = 'zh',
+  setLang,
+  toggleLang,
+  t
 }) {
+  const isZh = lang === 'zh';
   const [copiedSnippet, setCopiedSnippet] = useState('');
   const [activeSnippetTab, setActiveSnippetTab] = useState('python');
 
@@ -118,25 +124,36 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
               ⚡
             </div>
             <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-indigo-700 via-purple-700 to-sky-600 bg-clip-text text-transparent">
-              AI 路由器
+              {isZh ? 'AI 路由器' : 'Airoute'}
             </span>
           </div>
 
           <nav className="hidden md:flex items-center space-x-8 text-xs font-semibold text-slate-600">
-            <a href="#features" className="hover:text-indigo-600 transition">核心特性</a>
-            <a href="#multimodal" className="hover:text-indigo-600 transition">全模态矩阵</a>
-            <a href="#docs" className="hover:text-indigo-600 transition">接入指南</a>
-            <a href="#pricing" className="hover:text-indigo-600 transition">模型定价</a>
+            <a href="#features" className="hover:text-indigo-600 transition">{isZh ? '核心特性' : 'Features'}</a>
+            <a href="#multimodal" className="hover:text-indigo-600 transition">{isZh ? '全模态矩阵' : 'Multimodal'}</a>
+            <a href="#docs" className="hover:text-indigo-600 transition">{isZh ? '接入指南' : 'Guides'}</a>
+            <a href="#pricing" className="hover:text-indigo-600 transition">{isZh ? '模型定价' : 'Pricing'}</a>
           </nav>
 
           <div className="flex items-center space-x-3">
+            {toggleLang && (
+              <button
+                type="button"
+                onClick={toggleLang}
+                className="flex text-xs px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold items-center space-x-1.5 transition border border-slate-200 cursor-pointer"
+              >
+                <Globe className="w-3.5 h-3.5 text-indigo-600" />
+                <span>{isZh ? 'EN' : '中'}</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={onViewStatus}
               className="flex text-xs px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium items-center space-x-1.5 transition border border-slate-200 cursor-pointer"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>服务状态</span>
+              <span>{isZh ? '服务状态' : 'Status'}</span>
             </button>
 
             {isLoggedIn ? (
@@ -145,7 +162,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                 className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
               >
                 <Server className="w-3.5 h-3.5" />
-                <span>进入工作台 →</span>
+                <span>{isZh ? '进入工作台 →' : 'Console →'}</span>
               </button>
             ) : (
               <button
@@ -153,7 +170,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
               >
                 <Key className="w-3.5 h-3.5" />
-                <span>登录 / 注册</span>
+                <span>{isZh ? '登录 / 注册' : 'Sign In / Register'}</span>
               </button>
             )}
           </div>
@@ -168,23 +185,43 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
             className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-white border border-slate-200 shadow-xs text-xs font-semibold text-slate-700 hover:border-indigo-400 hover:shadow-sm cursor-pointer transition"
           >
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>高可用集群运行中</span>
+            <span>{isZh ? '高可用集群运行中' : 'Cluster Running Healthy'}</span>
             <span className="text-slate-300">|</span>
             <span className="text-emerald-600 font-mono">SLA 99.99%</span>
             <span className="text-slate-300">|</span>
-            <span className="text-indigo-600 font-medium">状态详情 →</span>
+            <span className="text-indigo-600 font-medium">{isZh ? '状态详情 →' : 'Details →'}</span>
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-900 tracking-tight leading-tight">
-            2026 旗舰大模型与多模态<br />
-            <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-sky-600 bg-clip-text text-transparent">
-              统一调度与高性能接入网关
-            </span>
+            {isZh ? (
+              <>
+                2026 旗舰大模型与多模态<br />
+                <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-sky-600 bg-clip-text text-transparent">
+                  统一调度与高性能接入网关
+                </span>
+              </>
+            ) : (
+              <>
+                Next-Gen LLM & Multimodal<br />
+                <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-sky-600 bg-clip-text text-transparent">
+                  Unified AI Router & Gateway
+                </span>
+              </>
+            )}
           </h1>
 
           <p className="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
-            单核万级吞吐 · 全协议流式转发 · 故障无感容灾 · 闲时与缓存降本 95%<br />
-            统一收口 OpenAI、Claude、Gemini、DeepSeek 与全模态生成管线。
+            {isZh ? (
+              <>
+                单核万级吞吐 · 全协议流式转发 · 故障无感容灾 · 闲时与缓存降本 95%<br />
+                统一收口 OpenAI、Claude、Gemini、DeepSeek 与全模态生成管线。
+              </>
+            ) : (
+              <>
+                10k+ RPS per core · Zero-latency stream relay · Seamless failover · Up to 95% cache discounts<br />
+                Unified aggregation for OpenAI, Claude, Gemini, DeepSeek, and multimodal pipelines.
+              </>
+            )}
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
@@ -194,7 +231,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                 className="w-full sm:w-auto px-7 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-sm font-bold shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2 cursor-pointer"
               >
                 <Server className="w-4 h-4" />
-                <span>进入工作台</span>
+                <span>{isZh ? '进入工作台' : 'Enter Console'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             ) : (
@@ -203,7 +240,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                 className="w-full sm:w-auto px-7 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-sm font-bold shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2 cursor-pointer"
               >
                 <Key className="w-4 h-4" />
-                <span>进入企业控制台</span>
+                <span>{isZh ? '进入企业控制台' : 'Enter Admin Console'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             )}
@@ -213,7 +250,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
               className="w-full sm:w-auto px-7 py-3.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-2xl text-sm font-semibold shadow-xs transition flex items-center justify-center space-x-2 cursor-pointer"
             >
               <Code className="w-4 h-4 text-indigo-600" />
-              <span>查阅接入指南</span>
+              <span>{isZh ? '查阅接入指南' : 'View Documentation'}</span>
             </button>
           </div>
         </div>
@@ -223,7 +260,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
       <section id="features" className="py-28 px-6 max-w-6xl mx-auto w-full space-y-14">
         <div className="text-center max-w-2xl mx-auto">
           <h2 className="text-3xl font-black text-slate-900 tracking-tight">
-            工业级可靠性与核心优势
+            {isZh ? '工业级可靠性与核心优势' : 'Industrial-Grade Reliability & Core Advantages'}
           </h2>
         </div>
 
@@ -233,10 +270,12 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
               <Shield className="w-5 h-5" />
             </div>
             <h3 className="font-bold text-base text-slate-900">
-              首字前无感容灾
+              {isZh ? '首字前无感容灾' : 'Pre-Token Failover'}
             </h3>
             <p className="text-xs text-slate-600 leading-relaxed">
-              遭遇上游 429 限流或网络异常时，首字发出前毫秒内切换到备份渠道，客户端连接不中断。
+              {isZh
+                ? '遭遇上游 429 限流或网络异常时，首字发出前毫秒内切换到备份渠道，客户端连接不中断。'
+                : 'Instantly reroutes to backup channels within milliseconds on upstream 429 or network errors before the first token.'}
             </p>
           </div>
 
@@ -245,10 +284,12 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
               <Cpu className="w-5 h-5" />
             </div>
             <h3 className="font-bold text-base text-slate-900">
-              全协议双向转译
+              {isZh ? '全协议双向转译' : 'Bi-Directional Translation'}
             </h3>
             <p className="text-xs text-slate-600 leading-relaxed">
-              原生支持 OpenAI、Claude Messages、Gemini 与主流协议全双工转译，思维链深度思考内容零拷贝透传。
+              {isZh
+                ? '原生支持 OpenAI、Claude Messages、Gemini 与主流协议全双工转译，思维链深度思考内容零拷贝透传。'
+                : 'Native full-duplex translation across OpenAI, Claude Messages, and Gemini protocols with zero-copy reasoning tokens.'}
             </p>
           </div>
 
@@ -257,10 +298,12 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
               <Layers className="w-5 h-5" />
             </div>
             <h3 className="font-bold text-base text-slate-900">
-              全模态统一管道
+              {isZh ? '全模态统一管道' : 'Unified Multimodal Pipe'}
             </h3>
             <p className="text-xs text-slate-600 leading-relaxed">
-              Chat 对话、AI 生图、TTS 语音合成、Whisper 语音转写与视频生成采用统一分发管道，共享流控与计费。
+              {isZh
+                ? 'Chat 对话、AI 生图、TTS 语音合成、Whisper 语音转写与视频生成采用统一分发管道，共享流控与计费。'
+                : 'Chat, Image generation, TTS, Whisper transcription, and Video synthesis share unified routing and metering.'}
             </p>
           </div>
 
@@ -269,10 +312,12 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
               <Server className="w-5 h-6" />
             </div>
             <h3 className="font-bold text-base text-slate-900">
-              多活热备与故障自愈
+              {isZh ? '多活热备与故障自愈' : 'Active-Active Resilience'}
             </h3>
             <p className="text-xs text-slate-600 leading-relaxed">
-              集群节点多活互备与实时健康巡检。发生网络抖动或服务异常时毫秒级自动隔离与接管。
+              {isZh
+                ? '集群节点多活互备与实时健康巡检。发生网络抖动或服务异常时毫秒级自动隔离与接管。'
+                : 'Cluster nodes run active-active with live health inspections, automatically isolating failing upstreams.'}
             </p>
           </div>
         </div>
@@ -282,7 +327,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
       <section id="multimodal" className="py-28 px-6 max-w-6xl mx-auto w-full space-y-14 border-t border-slate-200/70">
         <div className="text-center max-w-2xl mx-auto">
           <h2 className="text-3xl font-black text-slate-900 tracking-tight">
-            全模态统一调度与极低资源消耗
+            {isZh ? '全模态统一调度与极低资源消耗' : 'Unified Multimodal Dispatch & Minimal Overhead'}
           </h2>
         </div>
 
@@ -292,9 +337,11 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
             <div className="w-11 h-11 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
               <MessageSquare className="w-5 h-5" />
             </div>
-            <h4 className="font-bold text-base text-slate-900">文本与深度推理</h4>
+            <h4 className="font-bold text-base text-slate-900">{isZh ? '文本与深度推理' : 'Text & Reasoning'}</h4>
             <p className="text-xs text-slate-600 leading-relaxed">
-              聚合 GPT-6、Claude Opus 5.5 与 DeepSeek-R1 全系列。基于会话哈希锁定同一 Provider，享受 90% Prompt 缓存优惠。
+              {isZh
+                ? '聚合 GPT-6、Claude Opus 5.5 与 DeepSeek-R1 全系列。基于会话哈希锁定同一 Provider，享受 90% Prompt 缓存优惠。'
+                : 'Aggregates GPT-6, Claude Opus 5.5, and DeepSeek-R1. Session affinity hash pins same provider for 90% prompt cache discounts.'}
             </p>
             <div className="pt-2 font-mono text-[11px] text-indigo-600 font-semibold">
               POST /v1/chat/completions
@@ -306,9 +353,11 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
             <div className="w-11 h-11 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
               <ImageIcon className="w-5 h-5" />
             </div>
-            <h4 className="font-bold text-base text-slate-900">超清生图与视觉</h4>
+            <h4 className="font-bold text-base text-slate-900">{isZh ? '超清生图与视觉' : 'Image & Vision'}</h4>
             <p className="text-xs text-slate-600 leading-relaxed">
-              支持 FLUX.1-Pro 超清生图与视觉分析。支持 OSS/S3 预签名直传，二进制绕行 CDN，网关带宽消耗直降 99%。
+              {isZh
+                ? '支持 FLUX.1-Pro 超清生图与视觉分析。支持 OSS/S3 预签名直传，二进制绕行 CDN，网关带宽消耗直降 99%。'
+                : 'Supports FLUX.1-Pro 2K/4K generation. Pre-signed OSS/S3 direct upload bypasses gateway bandwidth by 99%.'}
             </p>
             <div className="pt-2 font-mono text-[11px] text-amber-600 font-semibold">
               POST /v1/images/generations
@@ -320,9 +369,11 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
             <div className="w-11 h-11 rounded-2xl bg-teal-50 border border-teal-100 flex items-center justify-center text-teal-600">
               <Volume2 className="w-5 h-5" />
             </div>
-            <h4 className="font-bold text-base text-slate-900">实时语音与转写</h4>
+            <h4 className="font-bold text-base text-slate-900">{isZh ? '实时语音与转写' : 'Audio & Speech'}</h4>
             <p className="text-xs text-slate-600 leading-relaxed">
-              支持 16kHz mono Opus 压缩格式（体积立减 95%）；Whisper-Large-V3-Turbo 毫秒级语音转文字。
+              {isZh
+                ? '支持 16kHz mono Opus 压缩格式（体积立减 95%）；Whisper-Large-V3-Turbo 毫秒级语音转文字。'
+                : 'Supports 16kHz mono Opus audio compression (95% bandwidth reduction) and Whisper-Large-V3-Turbo fast transcription.'}
             </p>
             <div className="pt-2 font-mono text-[11px] text-teal-600 font-semibold">
               POST /v1/audio/transcriptions
@@ -334,9 +385,11 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
             <div className="w-11 h-11 rounded-2xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600">
               <Video className="w-5 h-5" />
             </div>
-            <h4 className="font-bold text-base text-slate-900">影视级视频生成</h4>
+            <h4 className="font-bold text-base text-slate-900">{isZh ? '影视级视频生成' : 'Cinematic Video'}</h4>
             <p className="text-xs text-slate-600 leading-relaxed">
-              集成 Sora 2 影视级视频生成，原生支持异步任务分发、生命周期状态轮询与视频直链获取。
+              {isZh
+                ? '集成 Sora 2 影视级视频生成，原生支持异步任务分发、生命周期状态轮询与视频直链获取。'
+                : 'Integrates Sora 2 cinematic video generation, native async job queueing, state polling, and direct asset delivery.'}
             </p>
             <div className="pt-2 font-mono text-[11px] text-purple-600 font-semibold">
               POST /v1/videos/generations
@@ -353,10 +406,14 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
             <span>Developer Guide</span>
           </div>
           <h2 className="text-3xl font-black text-slate-900 tracking-tight">
-            极简接入与快速开始
+            {isZh ? '极简接入与快速开始' : 'Quick Integration & Developer Guide'}
           </h2>
           <p className="text-sm text-slate-500">
-            仅需调整 <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-indigo-600 font-semibold">base_url</code> 与密钥，即刻享受高可用调度与分流
+            {isZh ? (
+              <>仅需调整 <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-indigo-600 font-semibold">base_url</code> 与密钥，即刻享受高可用调度与分流</>
+            ) : (
+              <>Simply configure <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-indigo-600 font-semibold">base_url</code> and API Key for instant high-availability routing</>
+            )}
           </p>
         </div>
 
@@ -367,9 +424,9 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
               {[
                 { id: 'python', label: 'Python (OpenAI)' },
                 { id: 'claude', label: 'Anthropic Claude' },
-                { id: 'curl', label: 'cURL 命令行' },
-                { id: 'multimodal', label: '全模态 API' },
-                { id: 'session', label: '会话缓存 (90% 降本)' }
+                { id: 'curl', label: isZh ? 'cURL 命令行' : 'cURL CLI' },
+                { id: 'multimodal', label: isZh ? '全模态 API' : 'Multimodal API' },
+                { id: 'session', label: isZh ? '会话缓存 (90% 降本)' : 'Session Cache (90% Off)' }
               ].map(t => (
                 <button
                   key={t.id}
@@ -399,12 +456,12 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
               {copiedSnippet === activeSnippetTab ? (
                 <>
                   <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  <span className="text-emerald-600 font-semibold">已复制</span>
+                  <span className="text-emerald-600 font-semibold">{isZh ? '已复制' : 'Copied'}</span>
                 </>
               ) : (
                 <>
                   <Copy className="w-3.5 h-3.5 text-slate-500" />
-                  <span>复制代码</span>
+                  <span>{isZh ? '复制代码' : 'Copy Code'}</span>
                 </>
               )}
             </button>
@@ -426,29 +483,33 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
       <section id="pricing" className="py-28 px-6 max-w-6xl mx-auto w-full space-y-12 border-t border-slate-200/80">
         <div className="text-center max-w-2xl mx-auto space-y-3">
           <h2 className="text-3xl font-black text-slate-900 tracking-tight">
-            2026 旗舰模型矩阵与基准费率
+            {isZh ? '2026 旗舰模型矩阵与基准费率' : '2026 Model Matrix & Reference Pricing'}
           </h2>
           <p className="text-sm text-slate-500">
-            支持 Prompt 缓存优惠（立减 90%）与灵活分时策略优惠（支持多时段与周末半价）
+            {isZh
+              ? '支持 Prompt 缓存优惠（立减 90%）与灵活分时策略优惠（支持多时段与周末半价）'
+              : 'Supports Prompt Caching discounts (up to 90% off) and off-peak / weekend discounts'}
           </p>
         </div>
 
         {/* Pricing Matrix Table */}
         <div className="bg-white border border-slate-200/90 rounded-3xl overflow-hidden shadow-sm">
           <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <h3 className="font-bold text-sm text-slate-900">主流模型费率对照表 (Rates per 1M Tokens)</h3>
+            <h3 className="font-bold text-sm text-slate-900">
+              {isZh ? '主流模型费率对照表 (Rates per 1M Tokens)' : 'Benchmark Model Rates (per 1M Tokens)'}
+            </h3>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/80 text-slate-400 uppercase tracking-wider text-[11px]">
-                  <th className="py-3 px-5 font-semibold">模型系列 (Series)</th>
-                  <th className="py-3 px-4 font-semibold">基准输入 (/1M)</th>
-                  <th className="py-3 px-4 font-semibold">基准输出 (/1M)</th>
-                  <th className="py-3 px-4 font-semibold">闲时优惠折率</th>
-                  <th className="py-3 px-4 font-semibold">Prompt 缓存命中 (/1M)</th>
-                  <th className="py-3 px-4 font-semibold">固定单次费用</th>
+                  <th className="py-3 px-5 font-semibold">{isZh ? '模型系列 (Series)' : 'Model Series'}</th>
+                  <th className="py-3 px-4 font-semibold">{isZh ? '基准输入 (/1M)' : 'Base Input (/1M)'}</th>
+                  <th className="py-3 px-4 font-semibold">{isZh ? '基准输出 (/1M)' : 'Base Output (/1M)'}</th>
+                  <th className="py-3 px-4 font-semibold">{isZh ? '闲时优惠折率' : 'Off-Peak Rate'}</th>
+                  <th className="py-3 px-4 font-semibold">{isZh ? 'Prompt 缓存命中 (/1M)' : 'Cache Hit (/1M)'}</th>
+                  <th className="py-3 px-4 font-semibold">{isZh ? '固定单次费用' : 'Fixed Unit Cost'}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700 font-mono">
@@ -456,11 +517,11 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
-                    <span>GPT-6 / GPT-6 Luna (OpenAI 系列)</span>
+                    <span>GPT-6 / GPT-6 Luna (OpenAI)</span>
                   </td>
                   <td className="py-3.5 px-4">¥12.00 ~ ¥25.00</td>
                   <td className="py-3.5 px-4">¥48.00 ~ ¥100.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-slate-400">标准计费</td>
+                  <td className="py-3.5 px-4 font-semibold text-slate-400">{isZh ? '标准计费' : 'Standard'}</td>
                   <td className="py-3.5 px-4 text-emerald-600 font-bold">¥6.00 ~ ¥12.50</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                 </tr>
@@ -469,11 +530,11 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-amber-600"></span>
-                    <span>Claude Opus 5.5 / Sonnet 5.5 (Claude 系列)</span>
+                    <span>Claude Opus 5.5 / Sonnet 5.5 (Claude)</span>
                   </td>
                   <td className="py-3.5 px-4">¥15.00 ~ ¥30.00</td>
                   <td className="py-3.5 px-4">¥75.00 ~ ¥150.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-slate-400">标准计费</td>
+                  <td className="py-3.5 px-4 font-semibold text-slate-400">{isZh ? '标准计费' : 'Standard'}</td>
                   <td className="py-3.5 px-4 text-emerald-600 font-bold">¥1.50 ~ ¥3.00</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                 </tr>
@@ -482,11 +543,11 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-blue-600"></span>
-                    <span>Gemini 4 Argon / 3.8 Flash (Gemini 系列)</span>
+                    <span>Gemini 4 Argon / 3.8 Flash (Gemini)</span>
                   </td>
                   <td className="py-3.5 px-4">¥1.00 ~ ¥18.00</td>
                   <td className="py-3.5 px-4">¥4.00 ~ ¥72.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-slate-400">标准计费</td>
+                  <td className="py-3.5 px-4 font-semibold text-slate-400">{isZh ? '标准计费' : 'Standard'}</td>
                   <td className="py-3.5 px-4 text-emerald-600 font-bold">¥0.25 ~ ¥4.50</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                 </tr>
@@ -495,11 +556,11 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
-                    <span>DeepSeek V4.1-Flash / R1 (DeepSeek 系列)</span>
+                    <span>DeepSeek V4.1-Flash / R1 (DeepSeek)</span>
                   </td>
                   <td className="py-3.5 px-4">¥1.50 ~ ¥4.00</td>
                   <td className="py-3.5 px-4">¥6.00 ~ ¥16.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥0.75 / ¥2.00 (半价)</td>
+                  <td className="py-3.5 px-4 font-semibold text-indigo-600">{isZh ? '¥0.75 / ¥2.00 (半价)' : '¥0.75 / ¥2.00 (50% Off)'}</td>
                   <td className="py-3.5 px-4 text-emerald-600 font-bold">¥0.35 ~ ¥1.00</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                 </tr>
@@ -508,11 +569,11 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-teal-600"></span>
-                    <span>通义千问 Qwen-3.8 / Qwen-Coder</span>
+                    <span>{isZh ? '通义千问 Qwen-3.8 / Qwen-Coder' : 'Alibaba Qwen-3.8 / Qwen-Coder'}</span>
                   </td>
                   <td className="py-3.5 px-4">¥3.50 ~ ¥5.00</td>
                   <td className="py-3.5 px-4">¥14.00 ~ ¥20.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-slate-400">标准计费</td>
+                  <td className="py-3.5 px-4 font-semibold text-slate-400">{isZh ? '标准计费' : 'Standard'}</td>
                   <td className="py-3.5 px-4 text-emerald-600 font-bold">¥0.85 ~ ¥1.25</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                 </tr>
@@ -521,11 +582,11 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-sky-600"></span>
-                    <span>智谱 GLM-5.3 Agent 系列</span>
+                    <span>{isZh ? '智谱 GLM-5.3 Agent 系列' : 'Zhipu GLM-5.3 Agent'}</span>
                   </td>
                   <td className="py-3.5 px-4">¥6.00</td>
                   <td className="py-3.5 px-4">¥24.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-slate-400">标准计费</td>
+                  <td className="py-3.5 px-4 font-semibold text-slate-400">{isZh ? '标准计费' : 'Standard'}</td>
                   <td className="py-3.5 px-4 text-emerald-600 font-bold">¥1.50</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                 </tr>
@@ -534,26 +595,26 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-                    <span>FLUX.1-Pro / FLUX.1-Schnell (图像系列)</span>
+                    <span>FLUX.1-Pro / FLUX.1-Schnell ({isZh ? '图像系列' : 'Image'})</span>
                   </td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥0.10 / 张</td>
+                  <td className="py-3.5 px-4 font-semibold text-indigo-600">{isZh ? '¥0.10 / 张' : '¥0.10 / img'}</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-4 font-bold text-slate-900">¥0.05 ~ ¥0.15 / 张</td>
+                  <td className="py-3.5 px-4 font-bold text-slate-900">{isZh ? '¥0.05 ~ ¥0.15 / 张' : '¥0.05 ~ ¥0.15 / img'}</td>
                 </tr>
 
                 {/* 8. 视频生成系列 */}
                 <tr className="hover:bg-slate-50/60 transition">
                   <td className="py-3.5 px-5 font-bold text-slate-900 font-sans flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-purple-600"></span>
-                    <span>CogVideoX-5B / Kling 4.0 (视频系列)</span>
+                    <span>CogVideoX-5B / Kling 4.0 ({isZh ? '视频系列' : 'Video'})</span>
                   </td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥0.50 / 次</td>
+                  <td className="py-3.5 px-4 font-semibold text-indigo-600">{isZh ? '¥0.50 / 次' : '¥0.50 / task'}</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-4 font-bold text-slate-900">¥0.80 / 次</td>
+                  <td className="py-3.5 px-4 font-bold text-slate-900">{isZh ? '¥0.80 / 次' : '¥0.80 / task'}</td>
                 </tr>
 
                 {/* 9. 实时语音与 Whisper 系列 */}
@@ -564,9 +625,9 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                   </td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-4 font-semibold text-indigo-600">¥0.015 / 分钟</td>
+                  <td className="py-3.5 px-4 font-semibold text-indigo-600">{isZh ? '¥0.015 / 分钟' : '¥0.015 / min'}</td>
                   <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-4 font-bold text-slate-900">¥0.02 ~ ¥0.03 / 分钟</td>
+                  <td className="py-3.5 px-4 font-bold text-slate-900">{isZh ? '¥0.02 ~ ¥0.03 / 分钟' : '¥0.02 ~ ¥0.03 / min'}</td>
                 </tr>
               </tbody>
             </table>
@@ -579,24 +640,24 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center space-x-2">
             <span className="font-extrabold text-slate-800 text-sm">Airoute</span>
-            <span>· © {new Date().getFullYear()} 极简高性能 AI 路由器</span>
+            <span>· © {new Date().getFullYear()} {isZh ? '极简高性能 AI 路由器' : 'Minimalist High-Performance AI Router'}</span>
           </div>
 
           <div className="flex items-center space-x-6">
             {isLoggedIn ? (
               <button onClick={onEnterConsole} className="text-indigo-600 hover:underline font-semibold cursor-pointer">
-                进入工作台
+                {isZh ? '进入工作台' : 'Enter Console'}
               </button>
             ) : (
               <button onClick={onOpenLogin} className="text-indigo-600 hover:underline font-semibold cursor-pointer">
-                登录 / 注册
+                {isZh ? '登录 / 注册' : 'Sign In / Register'}
               </button>
             )}
             <button onClick={onViewStatus} className="hover:text-slate-800 cursor-pointer">
-              服务运行状态 (SLA)
+              {isZh ? '服务运行状态 (SLA)' : 'Service Status (SLA)'}
             </button>
             <a href="https://github.com/ifnodoraemon/airoute" target="_blank" rel="noreferrer" className="hover:text-slate-800">
-              GitHub 源码
+              {isZh ? 'GitHub 源码' : 'GitHub Source'}
             </a>
           </div>
         </div>

@@ -123,12 +123,12 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
       const data = await res.json();
       if (res.ok && data.code === 0) {
         setSkills(prev => prev.map(s => s.id === skillId ? { ...s, enabled: !currentEnabled } : s));
-        if (showToast) showToast(`技能 [${skillId}] 已${!currentEnabled ? '启用' : '禁用'}`, 'success');
+        if (showToast) showToast(isZh ? `技能 [${skillId}] 已${!currentEnabled ? '启用' : '禁用'}` : `Skill [${skillId}] ${!currentEnabled ? 'enabled' : 'disabled'}`, 'success');
       } else {
-        if (showToast) showToast(data.error || '切换技能状态失败', 'error');
+        if (showToast) showToast(data.error || (isZh ? '切换技能状态失败' : 'Failed to toggle skill status'), 'error');
       }
     } catch (err) {
-      if (showToast) showToast('请求异常: ' + err.message, 'error');
+      if (showToast) showToast((isZh ? '请求异常: ' : 'Request error: ') + err.message, 'error');
     } finally {
       setTogglingSkill(prev => ({ ...prev, [skillId]: false }));
     }
@@ -138,7 +138,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
     e.preventDefault();
     if (!adminFetch) return;
     if (!newSkill.name.trim() || !newSkill.description.trim()) {
-      if (showToast) showToast('技能名称与描述不能为空', 'error');
+      if (showToast) showToast(isZh ? '技能名称与描述不能为空' : 'Skill name and description cannot be empty', 'error');
       return;
     }
 
@@ -157,7 +157,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        if (showToast) showToast('自定义技能创建成功', 'success');
+        if (showToast) showToast(isZh ? '自定义技能创建成功' : 'Custom skill created successfully', 'success');
         setCreateModalOpen(false);
         setNewSkill({
           id: '',
@@ -172,16 +172,16 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
         });
         fetchSkills();
       } else {
-        if (showToast) showToast(data.error || '创建失败', 'error');
+        if (showToast) showToast(data.error || (isZh ? '创建失败' : 'Creation failed'), 'error');
       }
     } catch (err) {
-      if (showToast) showToast('请求异常: ' + err.message, 'error');
+      if (showToast) showToast((isZh ? '请求异常: ' : 'Request error: ') + err.message, 'error');
     }
   };
 
   const handleDeleteSkill = async (skillId) => {
     if (!adminFetch) return;
-    if (!window.confirm(`确定要删除技能 [${skillId}] 吗？`)) return;
+    if (!window.confirm(isZh ? `确定要删除技能 [${skillId}] 吗？` : `Confirm delete skill [${skillId}]?`)) return;
     try {
       const res = await adminFetch(`/api/v1/admin/skills/${skillId}`, {
         method: 'DELETE'
@@ -189,12 +189,12 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
       const data = await res.json();
       if (res.ok && data.code === 0) {
         setSkills(prev => prev.filter(s => s.id !== skillId));
-        if (showToast) showToast(`技能 [${skillId}] 已删除`, 'success');
+        if (showToast) showToast(isZh ? `技能 [${skillId}] 已删除` : `Skill [${skillId}] deleted`, 'success');
       } else {
-        if (showToast) showToast(data.error || '删除失败', 'error');
+        if (showToast) showToast(data.error || (isZh ? '删除失败' : 'Delete failed'), 'error');
       }
     } catch (err) {
-      if (showToast) showToast('请求异常: ' + err.message, 'error');
+      if (showToast) showToast((isZh ? '请求异常: ' : 'Request error: ') + err.message, 'error');
     }
   };
 
@@ -206,22 +206,22 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
     }
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(''), 2000);
-    if (showToast) showToast('已复制到剪贴板', 'success');
+    if (showToast) showToast(isZh ? '已复制到剪贴板' : 'Copied to clipboard', 'success');
   };
 
   const handleOpenTest = (skill) => {
     setTestModalSkill(skill);
     setTestOutput(null);
     if (skill.id === 'git-workflow') {
-      setTestPrompt('请分析当前暂存区的改动，并按照 Conventional Commits 格式撰写一条严谨的 feat 提交说明。');
+      setTestPrompt(isZh ? '请分析当前暂存区的改动，并按照 Conventional Commits 格式撰写一条严谨的 feat 提交说明。' : 'Analyze git staged changes and draft a Conventional Commits feat message.');
     } else if (skill.id === 'test-driven-development') {
-      setTestPrompt('为字符串反转函数设计失败测试用例，覆盖空串、中文字符与 Emoji 边界。');
+      setTestPrompt(isZh ? '为字符串反转函数设计失败测试用例，覆盖空串、中文字符与 Emoji 边界。' : 'Design failing test cases for a string reverse function covering empty strings and unicode.');
     } else if (skill.id === 'browser-automation') {
-      setTestPrompt(`打开 ${origin} 并截图确认页面核心标题正常渲染。`);
+      setTestPrompt(isZh ? `打开 ${origin} 并截图确认页面核心标题正常渲染。` : `Open ${origin} and verify title renders properly.`);
     } else if (skill.id === 'security-audit') {
-      setTestPrompt('扫描项目中所有 SQL 查询代码，检查是否存在未做参数化绑定的字符串拼接注入漏洞。');
+      setTestPrompt(isZh ? '扫描项目中所有 SQL 查询代码，检查是否存在未做参数化绑定的字符串拼接注入漏洞。' : 'Scan SQL queries in project to inspect parameter binding vulnerabilities.');
     } else {
-      setTestPrompt('按照该技能的规范执行一次标准作业步骤。');
+      setTestPrompt(isZh ? '按照该技能的规范执行一次标准作业步骤。' : 'Execute standard SOP steps according to skill spec.');
     }
     setTestModalSkill(skill);
   };
@@ -246,7 +246,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
         ],
         verdict: `✓ 已按照 ${testModalSkill.name} 标准作业程序（SOP）成功模拟执行，输入：“${testPrompt}” 符合规范契约。`
       });
-      if (showToast) showToast('技能演练模拟执行成功', 'success');
+      if (showToast) showToast(isZh ? '技能演练模拟执行成功' : 'Skill rehearsal simulated successfully', 'success');
     }, 400);
   };
 
@@ -1089,7 +1089,7 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
                   <input
                     type="text"
                     required
-                    placeholder="如: api-designer"
+                    placeholder={isZh ? "如: api-designer" : "e.g. api-designer"}
                     value={newSkill.id}
                     onChange={(e) => setNewSkill({ ...newSkill, id: e.target.value })}
                     className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
@@ -1132,7 +1132,7 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
                   </label>
                   <input
                     type="text"
-                    placeholder="如: run_command, view_file"
+                    placeholder={isZh ? "如: run_command, view_file" : "e.g. run_command, view_file"}
                     value={newSkill.tools}
                     onChange={(e) => setNewSkill({ ...newSkill, tools: e.target.value })}
                     className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono"
@@ -1162,14 +1162,14 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
                   rows="5"
                   placeholder={`---
 name: ${newSkill.id || 'my-skill'}
-description: 描述内容
+description: ${isZh ? '描述内容' : 'Skill description'}
 allowed-tools:
   - run_command
 ---
 
-# 技能执行指引
-1. 第一步...
-2. 第二步...`}
+# ${isZh ? '技能执行指引' : 'Skill Execution Instructions'}
+1. ${isZh ? '第一步...' : 'Step 1...'}
+2. ${isZh ? '第二步...' : 'Step 2...'}`}
                   value={newSkill.manifest}
                   onChange={(e) => setNewSkill({ ...newSkill, manifest: e.target.value })}
                   className="w-full px-3 py-2 font-mono text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-900 text-gray-100"

@@ -9,13 +9,21 @@ import {
   Eye,
   EyeOff,
   CheckCircle2,
-  Sparkles,
   Zap,
   ArrowLeft,
-  ShieldCheck
+  Globe
 } from 'lucide-react';
 
-export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackHome }) {
+export default function AuthPage({
+  initialTab = 'login',
+  onLoginSuccess,
+  onBackHome,
+  lang = 'zh',
+  setLang,
+  toggleLang,
+  t
+}) {
+  const isZh = lang === 'zh';
   const [activeTab, setActiveTab] = useState(initialTab); // 'login' | 'register'
 
   // Login form state
@@ -91,10 +99,10 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
         localStorage.setItem('airoute_user', JSON.stringify(data.data.user));
         onLoginSuccess(data.data.token, data.data.user);
       } else {
-        setError(data.error || '登录失败，请核对用户名/邮箱与密码');
+        setError(data.error || (isZh ? '登录失败，请核对用户名/邮箱与密码' : 'Login failed, please check username/email and password'));
       }
     } catch (err) {
-      setError('网络请求失败，请确保服务正常运行: ' + err.message);
+      setError((isZh ? '网络请求失败，请确保服务正常运行: ' : 'Network request failed: ') + err.message);
     } finally {
       setLoading(false);
     }
@@ -103,7 +111,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
   // Send Email Verification Code
   const handleSendCode = async () => {
     if (!regEmail.trim()) {
-      setError('请先填写有效的电子邮箱');
+      setError(isZh ? '请先填写有效的电子邮箱' : 'Please enter a valid email address');
       return;
     }
     setError('');
@@ -118,10 +126,10 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        setSuccessMsg(data.message || '验证码已发送至邮箱');
+        setSuccessMsg(data.message || (isZh ? '验证码已发送至邮箱' : 'Verification code sent to email'));
         if (data.dev_code) {
           setRegCode(data.dev_code);
-          setSuccessMsg(`验证码已发送！已自动为您填入: ${data.dev_code}`);
+          setSuccessMsg(isZh ? `验证码已发送！已自动为您填入: ${data.dev_code}` : `Code sent! Auto-filled: ${data.dev_code}`);
         }
         setCodeCountdown(60);
         const timer = setInterval(() => {
@@ -134,10 +142,10 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
           });
         }, 1000);
       } else {
-        setError(data.error || '发送验证码失败');
+        setError(data.error || (isZh ? '发送验证码失败' : 'Failed to send verification code'));
       }
     } catch (err) {
-      setError('请求异常: ' + err.message);
+      setError((isZh ? '请求异常: ' : 'Request error: ') + err.message);
     } finally {
       setSendingCode(false);
     }
@@ -172,10 +180,10 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
         localStorage.setItem('airoute_user', JSON.stringify(data.data.user));
         onLoginSuccess(data.data.token, data.data.user);
       } else {
-        setError(data.error || '注册失败，请检查填写内容');
+        setError(data.error || (isZh ? '注册失败，请检查填写内容' : 'Registration failed, please check inputs'));
       }
     } catch (err) {
-      setError('网络请求失败: ' + err.message);
+      setError((isZh ? '网络请求失败: ' : 'Network request failed: ') + err.message);
     } finally {
       setLoading(false);
     }
@@ -190,10 +198,10 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
       if (res.ok && data.auth_url) {
         window.location.href = data.auth_url;
       } else {
-        setError(data.error || `企业未配置 ${provider.toUpperCase()} 登录通道`);
+        setError(data.error || (isZh ? `企业未配置 ${provider.toUpperCase()} 登录通道` : `${provider.toUpperCase()} SSO login is not configured`));
       }
     } catch (err) {
-      setError('OAuth 异常: ' + err.message);
+      setError((isZh ? 'OAuth 异常: ' : 'OAuth error: ') + err.message);
     }
   };
 
@@ -206,14 +214,27 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
           className="inline-flex items-center space-x-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition py-2 px-3 rounded-xl hover:bg-white/80 cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>返回产品门户</span>
+          <span>{isZh ? '返回产品门户' : 'Back to Portal'}</span>
         </button>
 
-        <div className="flex items-center space-x-2">
-          <div className="w-7 h-7 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-sm shadow-indigo-500/30">
-            <Zap className="w-4 h-4 fill-white" />
+        <div className="flex items-center space-x-3">
+          {toggleLang && (
+            <button
+              onClick={toggleLang}
+              type="button"
+              className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-white/90 border border-slate-200 text-slate-700 hover:text-indigo-600 hover:border-indigo-300 shadow-xs transition cursor-pointer"
+            >
+              <Globe className="w-3.5 h-3.5 text-indigo-600" />
+              <span>{isZh ? 'EN' : '中'}</span>
+            </button>
+          )}
+
+          <div className="flex items-center space-x-2">
+            <div className="w-7 h-7 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-sm shadow-indigo-500/30">
+              <Zap className="w-4 h-4 fill-white" />
+            </div>
+            <span className="font-bold text-sm text-slate-900 tracking-tight">Airoute</span>
           </div>
-          <span className="font-bold text-sm text-slate-900 tracking-tight">AI 路由器</span>
         </div>
       </div>
 
@@ -223,7 +244,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
           {/* Header */}
           <div className="text-center space-y-1.5">
             <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-              {activeTab === 'login' ? '欢迎回来' : '账号注册'}
+              {activeTab === 'login' ? (isZh ? '欢迎回来' : 'Welcome Back') : (isZh ? '账号注册' : 'Create Account')}
             </h2>
           </div>
 
@@ -239,7 +260,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                账号登录
+                {isZh ? '账号登录' : 'Sign In'}
               </button>
               <button
                 type="button"
@@ -250,7 +271,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                新用户注册
+                {isZh ? '新用户注册' : 'Register'}
               </button>
             </div>
           )}
@@ -274,7 +295,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  用户名 / 绑定邮箱
+                  {isZh ? '用户名 / 绑定邮箱' : 'Username / Email'}
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -285,14 +306,16 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
                     required
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder="输入用户名或登录邮箱"
+                    placeholder={isZh ? "输入用户名或登录邮箱" : "Enter username or email"}
                     className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white transition"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">登录密码</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  {isZh ? '登录密码' : 'Password'}
+                </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                     <Lock className="w-4 h-4" />
@@ -302,7 +325,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="输入账户密码"
+                    placeholder={isZh ? "输入账户密码" : "Enter account password"}
                     className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-10 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white transition font-mono"
                   />
                   <button
@@ -324,7 +347,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
                   <RefreshCw className="w-4 h-4 animate-spin" />
                 ) : (
                   <>
-                    <span>登录工作台</span>
+                    <span>{isZh ? '登录工作台' : 'Sign In to Console'}</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
@@ -337,7 +360,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
             <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  登录用户名 *
+                  {isZh ? '登录用户名 *' : 'Username *'}
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -348,7 +371,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
                     required
                     value={regUsername}
                     onChange={(e) => setRegUsername(e.target.value)}
-                    placeholder="至少 3 个字符 (字母、数字)"
+                    placeholder={isZh ? "至少 3 个字符 (字母、数字)" : "At least 3 characters (letters, numbers)"}
                     className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white transition"
                   />
                 </div>
@@ -356,7 +379,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  电子邮箱 *
+                  {isZh ? '电子邮箱 *' : 'Email Address *'}
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -376,7 +399,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
               {sysConfig.require_email_verification && (
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    邮箱验证码 *
+                    {isZh ? '邮箱验证码 *' : 'Verification Code *'}
                   </label>
                   <div className="flex space-x-2">
                     <input
@@ -385,7 +408,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
                       maxLength={6}
                       value={regCode}
                       onChange={(e) => setRegCode(e.target.value)}
-                      placeholder="6 位数字验证码"
+                      placeholder={isZh ? "6 位数字验证码" : "6-digit code"}
                       className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-xs font-mono text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white transition tracking-widest text-center"
                     />
                     <button
@@ -397,9 +420,9 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
                       {sendingCode ? (
                         <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                       ) : codeCountdown > 0 ? (
-                        `${codeCountdown}s 后重发`
+                        isZh ? `${codeCountdown}s 后重发` : `Resend in ${codeCountdown}s`
                       ) : (
-                        '获取验证码'
+                        isZh ? '获取验证码' : 'Get Code'
                       )}
                     </button>
                   </div>
@@ -408,7 +431,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  设置密码 *
+                  {isZh ? '设置密码 *' : 'Set Password *'}
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -419,7 +442,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
                     required
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
-                    placeholder="至少 6 个字符"
+                    placeholder={isZh ? "至少 6 个字符" : "At least 6 characters"}
                     className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-10 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white transition font-mono"
                   />
                   <button
@@ -441,7 +464,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
                   <RefreshCw className="w-4 h-4 animate-spin" />
                 ) : (
                   <>
-                    <span>完成注册并进入工作台</span>
+                    <span>{isZh ? '完成注册并进入工作台' : 'Complete Registration & Enter Console'}</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
@@ -454,7 +477,9 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
             <div className="pt-2">
               <div className="relative flex py-2 items-center">
                 <div className="flex-grow border-t border-slate-200"></div>
-                <span className="flex-shrink mx-3 text-[11px] text-slate-400 font-medium">企业第三方单点登录</span>
+                <span className="flex-shrink mx-3 text-[11px] text-slate-400 font-medium">
+                  {isZh ? '企业第三方单点登录' : 'Enterprise SSO Login'}
+                </span>
                 <div className="flex-grow border-t border-slate-200"></div>
               </div>
 
@@ -468,7 +493,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
                     <svg className="w-4 h-4 text-slate-800" fill="currentColor" viewBox="0 0 24 24">
                       <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
                     </svg>
-                    <span>GitHub 登录</span>
+                    <span>{isZh ? 'GitHub 登录' : 'GitHub SSO'}</span>
                   </button>
                 )}
 
@@ -484,7 +509,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
                       <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
                       <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                     </svg>
-                    <span>Google 登录</span>
+                    <span>{isZh ? 'Google 登录' : 'Google SSO'}</span>
                   </button>
                 )}
               </div>
@@ -495,7 +520,7 @@ export default function AuthPage({ initialTab = 'login', onLoginSuccess, onBackH
 
       {/* Footer copyright */}
       <div className="max-w-md w-full mx-auto text-center text-xs text-slate-400">
-        © {new Date().getFullYear()} Airoute · 极简高性能 AI 路由器
+        © {new Date().getFullYear()} Airoute · {isZh ? '极简高性能 AI 路由器' : 'Minimalist High-Performance AI Router'}
       </div>
     </div>
   );

@@ -108,7 +108,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
   const handleRedeem = async (e) => {
     if (e) e.preventDefault();
     if (!redeemCode.trim()) {
-      showToast('请输入兑换码', 'warning');
+      showToast(isZh ? '请输入兑换码' : 'Please enter gift card code', 'warning');
       return;
     }
     setRedeeming(true);
@@ -120,15 +120,15 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(data.message || '兑换成功', 'success');
+        showToast(data.message || (isZh ? '兑换成功' : 'Redeemed successfully'), 'success');
         setRedeemCode('');
         fetchWallet();
         if (isAdmin) fetchRedemptions();
       } else {
-        showToast(data.error || '兑换失败', 'error');
+        showToast(data.error || (isZh ? '兑换失败' : 'Redemption failed'), 'error');
       }
     } catch (err) {
-      showToast('网络请求异常: ' + err.message, 'error');
+      showToast((isZh ? '网络请求异常: ' : 'Network error: ') + err.message, 'error');
     } finally {
       setRedeeming(false);
     }
@@ -137,7 +137,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
   const handleRecharge = async () => {
     const finalAmount = customAmount ? parseFloat(customAmount) : rechargeAmount;
     if (isNaN(finalAmount) || finalAmount <= 0) {
-      showToast('请输入有效的充值金额', 'warning');
+      showToast(isZh ? '请输入有效的充值金额' : 'Please enter a valid amount', 'warning');
       return;
     }
 
@@ -151,10 +151,10 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
         });
         const data = await res.json();
         if (res.ok && data.code === 0) {
-          showToast(data.message || '充值成功！额度已实时到账', 'success');
+          showToast(data.message || (isZh ? '充值成功！额度已实时到账' : 'Recharge successful! Balance credited'), 'success');
           fetchWallet();
         } else {
-          showToast(data.error || '充值处理失败', 'error');
+          showToast(data.error || (isZh ? '充值处理失败' : 'Recharge failed'), 'error');
         }
       } else {
         // Stripe Checkout
@@ -167,7 +167,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
         if (res.ok && data.code === 0 && data.checkout_url) {
           if (data.mode === 'sandbox_simulation') {
             if (isAdmin || walletData?.is_admin) {
-              showToast('Stripe 生产密钥未配置，已转入管理员沙箱测试通道', 'info');
+              showToast(isZh ? 'Stripe 生产密钥未配置，已转入管理员沙箱测试通道' : 'Stripe secret not configured, redirected to admin sandbox', 'info');
               const simRes = await adminFetch('/api/v1/user/wallet/recharge/sandbox', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -175,21 +175,21 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
               });
               const simData = await simRes.json();
               if (simRes.ok && simData.code === 0) {
-                showToast(`[测试沙箱] 模拟充值成功！已入账 ¥${finalAmount.toFixed(2)}`, 'success');
+                showToast(isZh ? `[测试沙箱] 模拟充值成功！已入账 ¥${finalAmount.toFixed(2)}` : `[Sandbox] Simulated top-up successful! Credited ¥${finalAmount.toFixed(2)}`, 'success');
                 fetchWallet();
               }
             } else {
-              showToast('企业未配置在线支付通道，请使用兑换码充值或联系管理员', 'warning');
+              showToast(isZh ? '企业未配置在线支付通道，请使用兑换码充值或联系管理员' : 'Online payment not configured, please use gift card or contact admin', 'warning');
             }
           } else {
             window.location.href = data.checkout_url;
           }
         } else {
-          showToast(data.error || '创建 Stripe 支付会话失败', 'error');
+          showToast(data.error || (isZh ? '创建 Stripe 支付会话失败' : 'Failed to create Stripe checkout session'), 'error');
         }
       }
     } catch (err) {
-      showToast('充值请求异常: ' + err.message, 'error');
+      showToast((isZh ? '充值请求异常: ' : 'Recharge error: ') + err.message, 'error');
     } finally {
       setRecharging(false);
     }
@@ -198,7 +198,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
   const handleGenerateRedemptions = async (e) => {
     if (e) e.preventDefault();
     if (genAmount <= 0) {
-      showToast('请输入有效的单卡金额', 'warning');
+      showToast(isZh ? '请输入有效的单卡金额' : 'Please enter a valid amount per card', 'warning');
       return;
     }
     setGenerating(true);
@@ -209,45 +209,45 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
         body: JSON.stringify({
           count: parseInt(genCount, 10) || 1,
           amount: parseFloat(genAmount),
-          name: genName.trim() || '额度兑换卡'
+          name: genName.trim() || (isZh ? '额度兑换卡' : 'Gift Card')
         })
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(data.message || '成功生成兑换卡', 'success');
+        showToast(data.message || (isZh ? '成功生成兑换卡' : 'Gift cards generated successfully'), 'success');
         setShowGenModal(false);
         fetchRedemptions();
       } else {
-        showToast(data.error || '生成失败', 'error');
+        showToast(data.error || (isZh ? '生成失败' : 'Generation failed'), 'error');
       }
     } catch (err) {
-      showToast('请求异常: ' + err.message, 'error');
+      showToast((isZh ? '请求异常: ' : 'Request error: ') + err.message, 'error');
     } finally {
       setGenerating(false);
     }
   };
 
   const handleDeleteRedemption = async (id) => {
-    if (!window.confirm('确认删除该兑换卡记录吗？已删除后将不可兑换。')) return;
+    if (!window.confirm(isZh ? '确认删除该兑换卡记录吗？已删除后将不可兑换。' : 'Confirm delete this gift card? It cannot be redeemed once deleted.')) return;
     try {
       const res = await adminFetch(`/api/v1/admin/redemptions/${id}`, {
         method: 'DELETE'
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast('兑换卡已删除', 'success');
+        showToast(isZh ? '兑换卡已删除' : 'Gift card deleted', 'success');
         fetchRedemptions();
       } else {
-        showToast(data.error || '删除失败', 'error');
+        showToast(data.error || (isZh ? '删除失败' : 'Failed to delete card'), 'error');
       }
     } catch (err) {
-      showToast('删除请求异常: ' + err.message, 'error');
+      showToast((isZh ? '删除请求异常: ' : 'Delete error: ') + err.message, 'error');
     }
   };
 
-  const copyText = (txt, label = '内容') => {
+  const copyText = (txt, label = isZh ? '内容' : 'Content') => {
     navigator.clipboard.writeText(txt);
-    showToast(`已复制 ${label} 到剪贴板`, 'success');
+    showToast(isZh ? `已复制 ${label} 到剪贴板` : `Copied ${label} to clipboard`, 'success');
   };
 
   return (

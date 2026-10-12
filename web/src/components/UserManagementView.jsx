@@ -78,10 +78,10 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
       if (res.ok && data.code === 0) {
         setUsers(data.data || []);
       } else {
-        if (showToast) showToast(data.error || '获取用户列表失败', 'error');
+        if (showToast) showToast(data.error || (isZh ? '获取用户列表失败' : 'Failed to fetch user list'), 'error');
       }
     } catch (err) {
-      if (showToast) showToast('请求异常: ' + err.message, 'error');
+      if (showToast) showToast((isZh ? '请求异常: ' : 'Request error: ') + err.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -114,19 +114,19 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
     if (e && e.preventDefault) e.preventDefault();
     setAddModalError('');
     if (!newUsername.trim()) {
-      setAddModalError('请输入登录用户名');
+      setAddModalError(isZh ? '请输入登录用户名' : 'Please enter username');
       return;
     }
     if (newUsername.trim().length < 3) {
-      setAddModalError('用户名长度至少需要 3 个字符');
+      setAddModalError(isZh ? '用户名长度至少需要 3 个字符' : 'Username must be at least 3 characters');
       return;
     }
     if (!newPassword.trim()) {
-      setAddModalError('请输入初始登录密码');
+      setAddModalError(isZh ? '请输入初始登录密码' : 'Please enter password');
       return;
     }
     if (newPassword.length < 6) {
-      setAddModalError('密码长度至少需要 6 个字符');
+      setAddModalError(isZh ? '密码长度至少需要 6 个字符' : 'Password must be at least 6 characters');
       return;
     }
 
@@ -147,7 +147,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        if (showToast) showToast(`用户 [${newUsername}] 创建成功，已自动生成 API 密钥`, 'success');
+        if (showToast) showToast(isZh ? `用户 [${newUsername}] 创建成功，已自动生成 API 密钥` : `User [${newUsername}] created successfully with API key`, 'success');
         setShowAddModal(false);
         setNewUsername('');
         setNewEmail('');
@@ -159,12 +159,12 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
         setAddModalError('');
         fetchUsers();
       } else {
-        const errMsg = data.error || '创建账号失败';
+        const errMsg = data.error || (isZh ? '创建账号失败' : 'Failed to create user account');
         setAddModalError(errMsg);
         if (showToast) showToast(errMsg, 'error');
       }
     } catch (err) {
-      const errMsg = '网络异常: ' + err.message;
+      const errMsg = (isZh ? '网络异常: ' : 'Network error: ') + err.message;
       setAddModalError(errMsg);
       if (showToast) showToast(errMsg, 'error');
     } finally {
@@ -174,12 +174,12 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
 
   const handleToggleStatus = async (user) => {
     if (user.username === 'admin') {
-      showToast('系统主管理员账号 (admin) 不允许被锁定', 'warning');
+      showToast(isZh ? '系统主管理员账号 (admin) 不允许被锁定' : 'System admin account cannot be locked', 'warning');
       return;
     }
     const newStatus = user.status === 'locked' ? 'active' : 'locked';
-    const actionName = newStatus === 'locked' ? '锁定' : '解锁';
-    if (!window.confirm(`确认要${actionName}用户 [${user.username}] 吗？${newStatus === 'locked' ? '锁定后将无法登录或调用 API。' : ''}`)) {
+    const actionName = newStatus === 'locked' ? (isZh ? '锁定' : 'lock') : (isZh ? '解锁' : 'unlock');
+    if (!window.confirm(isZh ? `确认要${actionName}用户 [${user.username}] 吗？${newStatus === 'locked' ? '锁定后将无法登录或调用 API。' : ''}` : `Confirm ${actionName} user [${user.username}]?`)) {
       return;
     }
 
@@ -191,13 +191,13 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(data.message || `用户已成功${actionName}`, 'success');
+        showToast(data.message || (isZh ? `用户已成功${actionName}` : `User status updated to ${newStatus}`), 'success');
         fetchUsers();
       } else {
-        showToast(data.error || `${actionName}失败`, 'error');
+        showToast(data.error || (isZh ? `${actionName}失败` : 'Status update failed'), 'error');
       }
     } catch (err) {
-      showToast('请求异常: ' + err.message, 'error');
+      showToast((isZh ? '请求异常: ' : 'Request error: ') + err.message, 'error');
     }
   };
 
@@ -207,7 +207,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
     if (!quotaTargetUser) return;
     const val = parseFloat(quotaValue);
     if (isNaN(val)) {
-      setQuotaModalError('请输入有效数字');
+      setQuotaModalError(isZh ? '请输入有效数字' : 'Please enter a valid number');
       return;
     }
 
@@ -221,14 +221,14 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(data.message || '额度调整成功', 'success');
+        showToast(data.message || (isZh ? '额度调整成功' : 'Balance updated successfully'), 'success');
         setQuotaTargetUser(null);
         fetchUsers();
       } else {
-        setQuotaModalError(data.error || '额度调整失败');
+        setQuotaModalError(data.error || (isZh ? '额度调整失败' : 'Failed to adjust balance'));
       }
     } catch (err) {
-      setQuotaModalError('请求异常: ' + err.message);
+      setQuotaModalError((isZh ? '请求异常: ' : 'Request error: ') + err.message);
     } finally {
       setAdjustingQuota(false);
     }
@@ -243,28 +243,28 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(`已成功将用户 [${user.username}] 分组调整为 [${newGroup}]`, 'success');
+        showToast(isZh ? `已成功将用户 [${user.username}] 分组调整为 [${newGroup}]` : `User [${user.username}] tier changed to [${newGroup}]`, 'success');
         fetchUsers();
       } else {
-        showToast(data.error || '调整分组失败', 'error');
+        showToast(data.error || (isZh ? '调整分组失败' : 'Failed to change tier'), 'error');
       }
     } catch (err) {
-      showToast('请求异常: ' + err.message, 'error');
+      showToast((isZh ? '请求异常: ' : 'Request error: ') + err.message, 'error');
     }
   };
 
   const handleUpdateRole = async (user, newRole) => {
     if (!adminFetch) return;
     if (user.username === 'admin') {
-      showToast('系统内置超级管理员 (admin) 不允许修改角色', 'warning');
+      showToast(isZh ? '系统内置超级管理员 (admin) 不允许修改角色' : 'Cannot change role of system admin', 'warning');
       return;
     }
     if (adminUser && user.username === adminUser.username && newRole !== 'admin') {
-      showToast('不能将当前登录的管理员账号降级为普通用户', 'warning');
+      showToast(isZh ? '不能将当前登录的管理员账号降级为普通用户' : 'Cannot demote current logged-in user', 'warning');
       return;
     }
-    const roleLabel = newRole === 'admin' ? '超级管理员' : '普通用户';
-    if (!window.confirm(`确认将用户 [${user.username}] 的角色更改为【${roleLabel}】吗？`)) {
+    const roleLabel = newRole === 'admin' ? (isZh ? '超级管理员' : 'Administrator') : (isZh ? '普通用户' : 'Regular User');
+    if (!window.confirm(isZh ? `确认将用户 [${user.username}] 的角色更改为【${roleLabel}】吗？` : `Confirm changing user [${user.username}] role to [${roleLabel}]?`)) {
       return;
     }
 
@@ -276,13 +276,13 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(data.message || `用户 [${user.username}] 已切换为【${roleLabel}】`, 'success');
+        showToast(data.message || (isZh ? `用户 [${user.username}] 已切换为【${roleLabel}】` : `User [${user.username}] role updated to [${roleLabel}]`), 'success');
         fetchUsers();
       } else {
-        showToast(data.error || '修改角色失败', 'error');
+        showToast(data.error || (isZh ? '修改角色失败' : 'Failed to change role'), 'error');
       }
     } catch (err) {
-      showToast('请求异常: ' + err.message, 'error');
+      showToast((isZh ? '请求异常: ' : 'Request error: ') + err.message, 'error');
     }
   };
 
@@ -291,11 +291,11 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
     setResetModalError('');
     if (!resetTargetUser) return;
     if (!resetPassword.trim()) {
-      setResetModalError('请输入新密码');
+      setResetModalError(isZh ? '请输入新密码' : 'Please enter new password');
       return;
     }
     if (resetPassword.length < 6) {
-      setResetModalError('新密码长度至少需要 6 个字符');
+      setResetModalError(isZh ? '新密码长度至少需要 6 个字符' : 'Password must be at least 6 characters');
       return;
     }
 
@@ -308,14 +308,14 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(`账号 [${resetTargetUser.username}] 密码已成功重置`, 'success');
+        showToast(isZh ? `账号 [${resetTargetUser.username}] 密码已成功重置` : `Password for [${resetTargetUser.username}] reset successfully`, 'success');
         setResetTargetUser(null);
         setResetPassword('');
       } else {
-        setResetModalError(data.error || '重置密码失败');
+        setResetModalError(data.error || (isZh ? '重置密码失败' : 'Failed to reset password'));
       }
     } catch (err) {
-      setResetModalError('请求异常: ' + err.message);
+      setResetModalError((isZh ? '请求异常: ' : 'Request error: ') + err.message);
     } finally {
       setResetting(false);
     }
@@ -323,14 +323,14 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
 
   const handleDeleteUser = async (targetUsername) => {
     if (targetUsername === 'admin') {
-      showToast('系统默认主管理员账号 (admin) 不允许删除', 'warning');
+      showToast(isZh ? '系统默认主管理员账号 (admin) 不允许删除' : 'System default admin cannot be deleted', 'warning');
       return;
     }
     if (adminUser && targetUsername === adminUser.username) {
-      showToast('无法删除当前正在登录的账号', 'warning');
+      showToast(isZh ? '无法删除当前正在登录的账号' : 'Cannot delete currently logged in account', 'warning');
       return;
     }
-    if (!window.confirm(`确定要删除用户 [${targetUsername}] 吗？`)) {
+    if (!window.confirm(isZh ? `确定要删除用户 [${targetUsername}] 吗？` : `Are you sure you want to delete user [${targetUsername}]?`)) {
       return;
     }
 
@@ -340,13 +340,13 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(`账号 [${targetUsername}] 已成功删除`, 'success');
+        showToast(isZh ? `账号 [${targetUsername}] 已成功删除` : `User [${targetUsername}] deleted successfully`, 'success');
         fetchUsers();
       } else {
-        showToast(data.error || '删除账号失败', 'error');
+        showToast(data.error || (isZh ? '删除账号失败' : 'Failed to delete user'), 'error');
       }
     } catch (err) {
-      showToast('请求异常: ' + err.message, 'error');
+      showToast((isZh ? '请求异常: ' : 'Request error: ') + err.message, 'error');
     }
   };
 
@@ -520,7 +520,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
               ) : filteredUsers.length === 0 ? (
                 <tr>
                   <td colSpan="7" className="py-12 text-center text-slate-400">
-                    未找到匹配的用户账号
+                    {isZh ? '未找到匹配的用户账号' : 'No matching user accounts found'}
                   </td>
                 </tr>
               ) : (

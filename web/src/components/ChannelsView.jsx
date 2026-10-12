@@ -355,7 +355,7 @@ export default function ChannelsView({
                                 : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
                             }`}
                           >
-                            {channelLatencies[ch.id].success ? `🟢 ${channelLatencies[ch.id].latency_ms}ms` : '🔴 连通异常'}
+                            {channelLatencies[ch.id].success ? `🟢 ${channelLatencies[ch.id].latency_ms}ms` : (isZh ? '🔴 连通异常' : '🔴 Unreachable')}
                           </span>
                         )}
                       </div>
@@ -383,7 +383,7 @@ export default function ChannelsView({
                         <button
                           onClick={() => copyToClipboard(ch.base_url)}
                           className="text-slate-400 hover:text-indigo-500 transition p-1 cursor-pointer"
-                          title="复制 Base URL"
+                          title={isZh ? "复制 Base URL" : "Copy Base URL"}
                         >
                           <Copy className="w-3 h-3" />
                         </button>
@@ -393,7 +393,7 @@ export default function ChannelsView({
                       <div className="flex flex-wrap gap-1">
                         {!ch.protocols || ch.protocols.length === 0 ? (
                           <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px] text-slate-600 dark:text-slate-300 font-medium">
-                            全功能直通
+                            {isZh ? '全功能直通' : 'Full Pass-through'}
                           </span>
                         ) : (
                           ch.protocols.map((p) => {
@@ -401,7 +401,7 @@ export default function ChannelsView({
                             let colorClass =
                               'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700';
                             if (p === 'openai_chat' || p === 'chat') {
-                              label = '💬 对话';
+                              label = isZh ? '💬 对话' : '💬 Chat';
                               colorClass =
                                 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800';
                             } else if (p === 'openai_response' || p === 'responses' || p === 'response') {
@@ -409,7 +409,7 @@ export default function ChannelsView({
                               colorClass =
                                 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800';
                             } else if (p === 'openai_text' || p === 'completion') {
-                              label = '📝 补全';
+                              label = isZh ? '📝 补全' : '📝 Completion';
                               colorClass =
                                 'bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800';
                             } else if (p === 'anthropic_messages' || p === 'messages') {
@@ -417,7 +417,7 @@ export default function ChannelsView({
                               colorClass =
                                 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800';
                             } else if (p === 'images' || p === 'image_generation') {
-                              label = '🎨 生图';
+                              label = isZh ? '🎨 生图' : '🎨 Images';
                               colorClass =
                                 'bg-pink-50 dark:bg-pink-950/50 text-pink-700 dark:text-pink-300 border border-pink-200 dark:border-pink-800';
                             } else if (p === 'audio_speech' || p === 'tts') {
@@ -429,15 +429,15 @@ export default function ChannelsView({
                               colorClass =
                                 'bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800';
                             } else if (p === 'videos' || p === 'video_generation') {
-                              label = '🎬 视频';
+                              label = isZh ? '🎬 视频' : '🎬 Videos';
                               colorClass =
                                 'bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800';
                             } else if (p === 'embeddings' || p === 'embedding') {
-                              label = '🧠 向量';
+                              label = isZh ? '🧠 向量' : '🧠 Embeddings';
                               colorClass =
                                 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800';
                             } else if (p === 'rerank' || p === 'reranker') {
-                              label = '🎯 重排';
+                              label = isZh ? '🎯 重排' : '🎯 Rerank';
                               colorClass =
                                 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800';
                             }
@@ -453,7 +453,7 @@ export default function ChannelsView({
                     <td className="py-4 px-5">
                       <div className="flex flex-wrap gap-1 max-w-xs">
                         {!ch.models || ch.models.length === 0 ? (
-                          <span className="text-xs text-slate-400">未同步模型</span>
+                          <span className="text-xs text-slate-400">{isZh ? '未同步模型' : 'No models synced'}</span>
                         ) : (
                           ch.models.slice(0, 3).map((m) => (
                             <span
@@ -469,7 +469,7 @@ export default function ChannelsView({
                             className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-mono"
                             title={ch.models.slice(3).join(', ')}
                           >
-                            +{ch.models.length - 3} 更多
+                            +{ch.models.length - 3} {isZh ? '更多' : 'more'}
                           </span>
                         )}
                         {ch.model_mapping &&
@@ -478,7 +478,7 @@ export default function ChannelsView({
                             <span
                               key={k}
                               className="px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 text-[11px] font-mono border border-emerald-200 dark:border-emerald-800"
-                              title={`别名映射: ${k} -> ${v}`}
+                              title={isZh ? `别名映射: ${k} -> ${v}` : `Alias mapping: ${k} -> ${v}`}
                             >
                               🔗 {k} → {v}
                             </span>
