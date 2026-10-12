@@ -15,6 +15,7 @@ import {
   Play,
   RotateCcw
 } from 'lucide-react';
+import useModalA11y from '../hooks/useModalA11y';
 
 export default function VisualTopologyModal({
   isOpen,
@@ -26,6 +27,8 @@ export default function VisualTopologyModal({
   lang = 'zh',
   t
 }) {
+  useModalA11y(isOpen, onClose);
+
   const isZh = lang === 'zh';
   const [simulatedFailure, setSimulatedFailure] = useState(false);
   const [selectedRouteModel, setSelectedRouteModel] = useState('deepseek-v3');
@@ -38,7 +41,12 @@ export default function VisualTopologyModal({
   const drChannel = activeChannels[2] || { name: isZh ? '官方直连备灾通道' : 'Official Direct DR Channel', type: 'openai', priority: 3, breaker_status: 'CLOSED' };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in">
+    <div
+      className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="bg-white dark:bg-[#111726] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 max-w-4xl w-full shadow-2xl relative max-h-[92vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-6">

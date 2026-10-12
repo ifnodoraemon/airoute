@@ -63,9 +63,8 @@ import Toast from './components/Toast';
 import QuickStartModal from './components/QuickStartModal';
 import LogDetailModal from './components/LogDetailModal';
 import CurlExportModal from './components/CurlExportModal';
-import ModelChipManager from './components/ModelChipManager';
-import ModelMappingEditor from './components/ModelMappingEditor';
-import CapabilitiesSelector from './components/CapabilitiesSelector';
+import ChannelModal from './components/ChannelModal';
+import KeyModal from './components/KeyModal';
 import LandingPage from './components/LandingPage';
 import AuthPage from './components/AuthPage';
 import LoginModal from './components/LoginModal';
@@ -87,7 +86,7 @@ import DocsView from './components/DocsView';
 import OnboardingModal from './components/OnboardingModal';
 import VisualTopologyModal from './components/VisualTopologyModal';
 import { translations, I18nContext } from './i18n';
-import { getGatewayOrigin, getGatewayBaseUrl, setPublicGatewayUrl } from './config';
+import { getGatewayOrigin, getGatewayBaseUrl, setPublicGatewayUrl, copyToClipboard as crossOriginCopy } from './config';
 
 // Audit-log pagination: server-side page size, kept in one place for the
 // fetch limit, the offset stepping, and the page-number math in LogsView.
@@ -336,6 +335,15 @@ export default function App() {
       if (res.ok && data.code === 0 && data.data) {
         setAdminUser(data.data);
         setStoredAuth(tok, data.data);
+      } else if (res.status === 401) {
+        setAdminToken('');
+        setAdminUser(null);
+        clearStoredAuth();
+        if (viewMode === 'console') {
+          setViewMode('landing');
+          setShowLoginModal(true);
+          showToast(isZh ? '登录凭证已过期，请重新登录' : 'Session expired, please sign in again', 'warning');
+        }
       }
     } catch (e) {}
   };
@@ -1283,8 +1291,8 @@ export default function App() {
   };
 
   // Copy text helper
-  const copyToClipboard = (txt) => {
-    navigator.clipboard.writeText(txt);
+  const copyToClipboard = async (txt) => {
+    await crossOriginCopy(txt);
     setCopiedKey(txt);
     showToast(isZh ? '已成功复制到剪贴板！' : 'Copied to clipboard!', 'success');
     setTimeout(() => setCopiedKey(''), 2500);
@@ -1463,8 +1471,7 @@ export default function App() {
           apiKey={activeQuickKey}
           onClose={() => setActiveQuickKey(null)}
           onCopy={(txt) => {
-            navigator.clipboard.writeText(txt);
-            showToast(isZh ? '调用代码已复制到剪贴板！' : 'Integration code copied to clipboard!', 'success');
+            copyToClipboard(txt);
           }}
           lang={lang}
           t={t}
@@ -1477,8 +1484,7 @@ export default function App() {
           log={activeLogDetail}
           onClose={() => setActiveLogDetail(null)}
           onCopy={(txt) => {
-            navigator.clipboard.writeText(txt);
-            showToast(isZh ? '已复制到剪贴板！' : 'Copied to clipboard!', 'success');
+            copyToClipboard(txt);
           }}
           onFilterBySession={(sid) => {
             setSessionFilter(sid);
@@ -1498,8 +1504,7 @@ export default function App() {
           curlCmd={curlExportCmd}
           onClose={() => setCurlExportCmd('')}
           onCopy={(txt) => {
-            navigator.clipboard.writeText(txt);
-            showToast(isZh ? 'cURL 命令已复制到剪贴板！' : 'cURL command copied to clipboard!', 'success');
+            copyToClipboard(txt);
           }}
           lang={lang}
           t={t}
@@ -2263,8 +2268,7 @@ export default function App() {
             <SkillHubView
               adminFetch={adminFetch}
               onCopy={(txt) => {
-                navigator.clipboard.writeText(txt);
-                showToast(isZh ? '已复制到剪贴板！' : 'Copied to clipboard!', 'success');
+                copyToClipboard(txt);
               }}
               showToast={showToast}
               lang={lang}
@@ -2279,8 +2283,7 @@ export default function App() {
               adminToken={adminToken}
               keys={keys}
               onCopy={(txt) => {
-                navigator.clipboard.writeText(txt);
-                showToast(isZh ? '已复制到剪贴板！' : 'Copied to clipboard!', 'success');
+                copyToClipboard(txt);
               }}
               showToast={showToast}
               lang={lang}
@@ -2351,473 +2354,34 @@ export default function App() {
       </main>
 
       {/* Modal: New Provider with Smart Auto-Probe */}
-      {showChannelModal && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in">
-          <form onSubmit={handleCreateChannel} className="bg-white dark:bg-[#111726] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-xl w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
-              <div>
-                <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 tracking-tight">
-                  {editingChannelId ? (isZh ? '编辑服务商' : 'Edit Upstream Provider') : (isZh ? '接入服务商' : 'Connect New Provider')}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowChannelModal(false)}
-                className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Probe Notification */}
-            {probeAlert && (
-              <div
-                className={`p-3 rounded-xl text-xs font-medium border ${
-                  probeAlert.type === 'success'
-                    ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                    : probeAlert.type === 'warning'
-                    ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-                    : 'bg-rose-50 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800'
-                }`}
-              >
-                {probeAlert.text}
-              </div>
-            )}
-
-            <div className="space-y-3.5 text-xs">
-              {/* Field 0: 1-Click Provider Quick Presets */}
-              {!editingChannelId && (
-                <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-slate-700 dark:text-slate-300 text-[11px] flex items-center space-x-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
-                      <span>{isZh ? '快捷预设服务商 (点击一键自动填入):' : 'Quick Presets (1-click autofill):'}</span>
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {[
-                      { key: 'deepseek', label: 'DeepSeek', badge: isZh ? '官方' : 'Official' },
-                      { key: 'gpustack', label: 'GPUStack', badge: isZh ? '私有集群' : 'Cluster' },
-                      { key: 'zhipu', label: '智谱 GLM', badge: isZh ? '国产主流' : 'GLM' },
-                      { key: 'doubao', label: '火山豆包', badge: isZh ? '多模态/视频' : 'Multimodal' },
-                      { key: 'moonshot', label: '月之暗面 Kimi', badge: isZh ? '长文本' : 'Kimi' },
-                      { key: 'openai', label: 'OpenAI', badge: isZh ? '全协议' : 'Full Suite' },
-                      { key: 'anthropic', label: 'Claude', badge: 'Anthropic' },
-                      { key: 'gemini', label: 'Google Gemini', badge: isZh ? '多模态' : 'Multimodal' },
-                      { key: 'ollama', label: 'Ollama', badge: isZh ? '本地开源' : 'Local' },
-                      { key: 'vllm', label: 'vLLM', badge: isZh ? '自建集群' : 'vLLM' },
-                    ].map(p => (
-                      <button
-                        key={p.key}
-                        type="button"
-                        onClick={() => applyPreset(p.key)}
-                        className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 dark:hover:border-indigo-700 text-xs font-medium transition flex items-center space-x-1 cursor-pointer shadow-2xs"
-                      >
-                        <span>{p.label}</span>
-                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">({p.badge})</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Field 1: Name */}
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  {isZh ? '服务商名称' : 'Provider Name'} <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  required
-                  value={newChannel.name}
-                  onChange={(e) => setNewChannel({ ...newChannel, name: e.target.value })}
-                  placeholder="gpustack-primary"
-                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 text-xs"
-                />
-              </div>
-
-              {/* Field 2: Base URL + Test Ping */}
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  {isZh ? '服务商 Base URL' : 'Provider Base URL'} <span className="text-rose-500">*</span>
-                </label>
-                <div className="flex space-x-2">
-                  <input
-                    required
-                    value={newChannel.base_url}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      const lower = val.toLowerCase();
-                      const updates = { base_url: val };
-                      if (!newChannel.name || newChannel.name === 'gpustack-primary') {
-                        if (lower.includes('deepseek')) updates.name = 'deepseek-provider';
-                        else if (lower.includes('anthropic')) updates.name = 'claude-provider';
-                        else if (lower.includes('openai')) updates.name = 'openai-provider';
-                        else if (lower.includes('gemini') || lower.includes('googleapis')) updates.name = 'gemini-provider';
-                        else if (lower.includes('ollama') || lower.includes('11434')) updates.name = 'ollama-local';
-                        else if (lower.includes('gpustack')) updates.name = 'gpustack-cluster';
-                        else if (lower.includes('zhipu') || lower.includes('bigmodel')) updates.name = 'zhipu-glm';
-                        else if (lower.includes('doubao') || lower.includes('volces')) updates.name = 'doubao-provider';
-                        else if (lower.includes('moonshot') || lower.includes('kimi')) updates.name = 'kimi-provider';
-                      }
-                      if (lower.includes('anthropic')) updates.type = 'anthropic';
-                      else if (lower.includes('deepseek')) updates.type = 'deepseek';
-                      else if (lower.includes('gemini') || lower.includes('googleapis')) updates.type = 'gemini';
-                      else if (lower.includes('ollama') || lower.includes('11434')) updates.type = 'ollama';
-                      else if (lower.includes('gpustack')) updates.type = 'gpustack';
-                      setNewChannel(prev => ({ ...prev, ...updates }));
-                    }}
-                    placeholder={
-                      newChannel.type === 'ollama' ? (isZh ? '例如: http://<宿主机IP或容器服务名>:11434/v1' : 'e.g. http://<host-ip-or-container>:11434/v1') :
-                      newChannel.type === 'vllm' ? (isZh ? '例如: http://<宿主机IP或集群域名>:8000/v1' : 'e.g. http://<host-ip-or-cluster>:8000/v1') :
-                      newChannel.type === 'gpustack' ? (isZh ? '例如: http://<GPUStack服务IP或集群域名>/v1-openai' : 'e.g. http://<gpustack-ip-or-domain>/v1-openai') :
-                      (isZh ? 'https://api.deepseek.com 或私有网关端点' : 'https://api.deepseek.com or private gateway endpoint')
-                    }
-                    className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-xs"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleProbeChannel}
-                    disabled={probing}
-                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 shadow-2xs transition disabled:opacity-50 shrink-0 cursor-pointer"
-                  >
-                    {probing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-                    <span>{probing ? (isZh ? '连通中...' : 'Probing...') : (isZh ? '测试连通性' : 'Test Ping')}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Field 3: API Key */}
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  API Key
-                </label>
-                <div className="relative">
-                  <input
-                    type={showApiKeyPlain ? 'text' : 'password'}
-                    value={newChannel.api_key}
-                    onChange={(e) => setNewChannel({ ...newChannel, api_key: e.target.value })}
-                    placeholder={isZh ? '留空或填 none 表示免密' : 'Leave empty or none for no auth'}
-                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl pl-3 pr-10 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-xs"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowApiKeyPlain(!showApiKeyPlain)}
-                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
-                    title={showApiKeyPlain ? (isZh ? '隐藏密钥' : 'Hide Key') : (isZh ? '显示明文' : 'Show Plaintext')}
-                  >
-                    {showApiKeyPlain ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Field 4: Models */}
-              <ModelChipManager
-                models={newChannel.models_str}
-                onChange={(list) => setNewChannel(prev => ({ ...prev, models_str: list.join(', ') }))}
-                lang={lang}
-              />
-
-              {/* Collapsible Advanced Settings */}
-              <details className="group border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 bg-slate-50/60 dark:bg-slate-900/40">
-                <summary className="font-semibold text-slate-700 dark:text-slate-300 cursor-pointer flex items-center justify-between select-none">
-                  <span>{isZh ? '高级设置' : 'Advanced Settings'}</span>
-                  <span className="text-slate-400 group-open:rotate-180 transition-transform text-xs">▼</span>
-                </summary>
-
-                <div className="pt-3 space-y-3.5 border-t border-slate-200/60 dark:border-slate-800 mt-2.5">
-                  <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">{isZh ? '服务引擎类型' : 'Engine Type'}</label>
-                    <select
-                      value={newChannel.type}
-                      onChange={(e) => setNewChannel({ ...newChannel, type: e.target.value })}
-                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 text-xs"
-                    >
-                      <option value="gpustack">GPUStack</option>
-                      <option value="deepseek">DeepSeek</option>
-                      <option value="openai">{isZh ? 'OpenAI (及所有兼容服务商)' : 'OpenAI (and compatible)'}</option>
-                      <option value="anthropic">Claude / Anthropic</option>
-                      <option value="gemini">Gemini</option>
-                      <option value="vllm">vLLM</option>
-                      <option value="sglang">SGLang</option>
-                      <option value="ollama">Ollama</option>
-                      <option value="sub2api">Sub2API</option>
-                      <option value="custom">Custom</option>
-                    </select>
-                  </div>
-
-                  <ModelMappingEditor
-                    mappingStr={newChannel.mapping_str}
-                    onChange={(val) => setNewChannel(prev => ({ ...prev, mapping_str: val }))}
-                    lang={lang}
-                  />
-
-                  <CapabilitiesSelector
-                    protocols={newChannel.protocols}
-                    onToggle={toggleProtocol}
-                    onSetProtocols={(list) => setNewChannel(prev => ({ ...prev, protocols: list }))}
-                    lang={lang}
-                  />
-
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-[11px] text-slate-500 mb-1">{isZh ? '优先级 (1最先)' : 'Priority (1 highest)'}</label>
-                      <input
-                        type="number"
-                        value={newChannel.priority}
-                        onChange={(e) => setNewChannel({ ...newChannel, priority: parseInt(e.target.value) || 1 })}
-                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 font-mono text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-slate-500 mb-1">{isZh ? '负载权重' : 'Weight'}</label>
-                      <input
-                        type="number"
-                        value={newChannel.weight}
-                        onChange={(e) => setNewChannel({ ...newChannel, weight: parseInt(e.target.value) || 10 })}
-                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 font-mono text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-slate-500 mb-1">{isZh ? '超时时间 (秒)' : 'Timeout (s)'}</label>
-                      <input
-                        type="number"
-                        value={newChannel.timeout_seconds || 60}
-                        onChange={(e) => setNewChannel({ ...newChannel, timeout_seconds: parseInt(e.target.value) || 60 })}
-                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 font-mono text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </details>
-            </div>
-
-            <div className="flex justify-end space-x-3 pt-4 border-t border-slate-100 dark:border-slate-800/80">
-              <button
-                type="button"
-                onClick={() => setShowChannelModal(false)}
-                className="px-4 py-2 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 font-medium transition cursor-pointer"
-              >
-                {isZh ? '取消' : 'Cancel'}
-              </button>
-              <button
-                type="button"
-                onClick={handleCreateChannel}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition cursor-pointer"
-              >
-                {editingChannelId ? (isZh ? '保存配置' : 'Save Changes') : (isZh ? '确认接入' : 'Connect Provider')}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+      <ChannelModal
+        isOpen={showChannelModal}
+        onClose={() => setShowChannelModal(false)}
+        editingChannelId={editingChannelId}
+        newChannel={newChannel}
+        setNewChannel={setNewChannel}
+        probeAlert={probeAlert}
+        probing={probing}
+        applyPreset={applyPreset}
+        handleProbeChannel={handleProbeChannel}
+        toggleProtocol={toggleProtocol}
+        onSubmit={handleCreateChannel}
+        lang={lang}
+        t={t}
+      />
 
       {/* Modal: New API Key */}
-      {showKeyModal && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in">
-          <form onSubmit={handleCreateKey} className="bg-white dark:bg-[#111726] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
-              <div>
-                <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 tracking-tight">{isZh ? '新建 API 密钥' : 'Create API Key'}</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowKeyModal(false)}
-                className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  {isZh ? '密钥名称' : 'Key Name / Description'} <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  value={newKey.tenant_id}
-                  onChange={(e) => setNewKey({ ...newKey, tenant_id: e.target.value })}
-                  placeholder={isZh ? '如 个人开发 / Cursor / Claude Code' : 'e.g. Cursor, Claude Code, Dev Team'}
-                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 text-xs">
-                  {isZh ? '计费分组 (Pricing Group)' : 'Pricing Group'}
-                </label>
-                {adminUser?.role === 'admin' ? (
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {pricingGroups.map(g => (
-                        <button
-                          key={g}
-                          type="button"
-                          onClick={() => setNewKey({ ...newKey, group_name: g })}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition cursor-pointer ${
-                            (newKey.group_name || 'default') === g
-                              ? 'bg-indigo-600 text-white border-indigo-600 font-semibold shadow-xs'
-                              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
-                          }`}
-                        >
-                          {g === 'default' ? (isZh ? '默认组 (default)' : 'Default (default)') : g === 'vip' ? (isZh ? 'VIP组 (vip)' : 'VIP (vip)') : g === 'enterprise' ? (isZh ? '企业组 (enterprise)' : 'Enterprise (enterprise)') : `${g} ${isZh ? '组' : 'Group'}`}
-                        </button>
-                      ))}
-                    </div>
-                    <input
-                      type="text"
-                      placeholder={isZh ? '或输入自定义计费分组标识' : 'or enter custom pricing group ID'}
-                      value={newKey.group_name || ''}
-                      onChange={(e) => setNewKey({ ...newKey, group_name: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '') })}
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 text-xs"
-                    />
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {adminUser?.group_name && adminUser.group_name !== 'default' ? (
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setNewKey({ ...newKey, group_name: 'default' })}
-                          className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
-                            (newKey.group_name || 'default') === 'default'
-                              ? 'bg-indigo-50/70 dark:bg-indigo-950/40 border-indigo-500 text-indigo-950 dark:text-indigo-200 ring-1 ring-indigo-500'
-                              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
-                          }`}
-                        >
-                          <div className="text-xs font-bold">{isZh ? '默认基础组 (default)' : 'Default Group (default)'}</div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{isZh ? '标准定价，适合常规调用或测试环境' : 'Standard rate, ideal for general dev and testing'}</div>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setNewKey({ ...newKey, group_name: adminUser.group_name })}
-                          className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
-                            newKey.group_name === adminUser.group_name
-                              ? 'bg-amber-50/70 dark:bg-amber-950/40 border-amber-500 text-amber-950 dark:text-amber-200 ring-1 ring-amber-500'
-                              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
-                          }`}
-                        >
-                          <div className="text-xs font-bold text-amber-600 dark:text-amber-400">
-                            {adminUser.group_name.toUpperCase()} {isZh ? '专属保障组' : 'Tier Group'}
-                          </div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{isZh ? '享受您账号签约的特权与优惠费率' : 'Enjoy your account negotiated discount rates'}</div>
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                        <div>
-                          <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">{isZh ? '默认计费组 (Standard)' : 'Default Group (Standard)'}</div>
-                          <div className="text-[11px] text-slate-400 mt-0.5">{isZh ? '该密钥调用将按通用标准费率结算扣费' : 'Usage will be billed under general standard rates'}</div>
-                        </div>
-                        <span className="px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                          {isZh ? '标准费率' : 'Standard'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="font-semibold text-slate-700 dark:text-slate-300">{isZh ? 'API 密钥' : 'API Key'}</label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const rand = 'sk-airoute-' + Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 6);
-                      setNewKey(prev => ({ ...prev, key: rand }));
-                    }}
-                    className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 cursor-pointer"
-                  >
-                    <span>{isZh ? '随机生成' : 'Generate'}</span>
-                  </button>
-                </div>
-                <input
-                  value={newKey.key}
-                  onChange={(e) => setNewKey({ ...newKey, key: e.target.value })}
-                  placeholder={isZh ? '留空自动生成' : 'Leave empty to auto-generate'}
-                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-xs"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="font-semibold text-slate-700 dark:text-slate-300">{isZh ? '额度限制 (CNY, 0 为不限)' : 'Quota Limit (CNY, 0 for unlimited)'}</label>
-                  <div className="flex items-center space-x-1.5 text-[11px]">
-                    {[
-                      { label: isZh ? '不限' : 'Unlimited', val: 0 },
-                      { label: '¥10', val: 10 },
-                      { label: '¥50', val: 50 },
-                      { label: '¥100', val: 100 },
-                    ].map(p => (
-                      <button
-                        key={p.label}
-                        type="button"
-                        onClick={() => setNewKey(prev => ({ ...prev, budget: p.val }))}
-                        className="text-indigo-600 dark:text-indigo-400 hover:underline px-1 cursor-pointer"
-                      >
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={newKey.budget ?? 0}
-                  onChange={(e) => setNewKey({ ...newKey, budget: parseFloat(e.target.value) || 0 })}
-                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-xs"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="font-semibold text-slate-700 dark:text-slate-300">{isZh ? '速率限制 (RPM, 0 为不限)' : 'Rate Limit (RPM, 0 for unlimited)'}</label>
-                  <div className="flex items-center space-x-1.5 text-[11px]">
-                    {[
-                      { label: isZh ? '不限' : 'Unlimited', val: 0 },
-                      { label: '60', val: 60 },
-                      { label: '120', val: 120 },
-                      { label: '600', val: 600 },
-                    ].map(p => (
-                      <button
-                        key={p.label}
-                        type="button"
-                        onClick={() => setNewKey(prev => ({ ...prev, rpm: p.val }))}
-                        className="text-indigo-600 dark:text-indigo-400 hover:underline px-1 cursor-pointer"
-                      >
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <input
-                  type="number"
-                  value={newKey.rpm}
-                  onChange={(e) => setNewKey({ ...newKey, rpm: parseInt(e.target.value) || 0 })}
-                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end space-x-3 pt-4 border-t border-slate-100 dark:border-slate-800/80">
-              <button
-                type="button"
-                onClick={() => setShowKeyModal(false)}
-                className="px-4 py-2 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 font-medium transition cursor-pointer"
-              >
-                {isZh ? '取消' : 'Cancel'}
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition cursor-pointer"
-              >
-                {isZh ? '确认创建' : 'Create Key'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+      <KeyModal
+        isOpen={showKeyModal}
+        onClose={() => setShowKeyModal(false)}
+        newKey={newKey}
+        setNewKey={setNewKey}
+        pricingGroups={pricingGroups}
+        adminUser={adminUser}
+        onSubmit={handleCreateKey}
+        lang={lang}
+        t={t}
+      />
 
       {/* Account & Security Modal */}
       <AccountManageModal

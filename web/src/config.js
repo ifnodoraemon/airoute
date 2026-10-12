@@ -47,3 +47,6 @@ export function resolveGatewayUrl(path) {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   return origin ? `${origin}${cleanPath}` : cleanPath;
 }
+
+export { copyToClipboard } from './utils/clipboard';
+

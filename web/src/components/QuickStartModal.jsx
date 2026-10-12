@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { X, Copy, Check, Terminal, Code, Cpu, Sparkles, BookOpen } from 'lucide-react';
 import { getGatewayOrigin } from '../config';
+import useModalA11y from '../hooks/useModalA11y';
 
 export default function QuickStartModal({ apiKey, onClose, onCopy, lang = 'zh', t }) {
+  useModalA11y(!!apiKey, onClose);
+
   if (!apiKey) return null;
 
   const isZh = lang === 'zh';
@@ -134,7 +137,12 @@ export ANTHROPIC_API_KEY="${keyStr}"
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="bg-white dark:bg-[#111726] border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Modal Header */}
         <div className="p-6 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">

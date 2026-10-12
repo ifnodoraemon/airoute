@@ -27,7 +27,7 @@ import {
   DollarSign,
   Plus
 } from 'lucide-react';
-import { getGatewayOrigin } from '../config';
+import { getGatewayOrigin, copyToClipboard as crossOriginCopy } from '../config';
 
 export default function PlaygroundView({
   keys = [],
@@ -157,8 +157,8 @@ export default function PlaygroundView({
     }
   }, [chatModels, playModel, arenaModelB]);
 
-  const copyToClipboard = (txt, label = '') => {
-    navigator.clipboard.writeText(txt);
+  const copyToClipboard = async (txt, label = '') => {
+    await crossOriginCopy(txt);
     if (showToast) showToast(isZh ? `${label || '内容'} 已复制到剪贴板！` : `${label || 'Content'} copied to clipboard!`, 'success');
   };
 

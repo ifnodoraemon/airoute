@@ -17,6 +17,8 @@ import {
   Sparkles,
   DollarSign
 } from 'lucide-react';
+import { copyToClipboard } from '../config';
+import useModalA11y from '../hooks/useModalA11y';
 
 export default function WalletManagementView({ adminUser, adminFetch, showToast, onUserUpdated, onBalanceUpdate, lang = 'zh', t }) {
   const isZh = lang === 'zh';
@@ -46,6 +48,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
   // Admin Redemption Cards
   const [redemptions, setRedemptions] = useState([]);
   const [showGenModal, setShowGenModal] = useState(false);
+  useModalA11y(showGenModal, () => setShowGenModal(false));
   const [genCount, setGenCount] = useState(5);
   const [genAmount, setGenAmount] = useState(50);
   const [genName, setGenName] = useState(() => (isZh ? '额度兑换卡' : 'Gift Card'));
@@ -245,8 +248,8 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
     }
   };
 
-  const copyText = (txt, label = isZh ? '内容' : 'Content') => {
-    navigator.clipboard.writeText(txt);
+  const copyText = async (txt, label = isZh ? '内容' : 'Content') => {
+    await copyToClipboard(txt);
     showToast(isZh ? `已复制 ${label} 到剪贴板` : `Copied ${label} to clipboard`, 'success');
   };
 
@@ -669,7 +672,12 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
 
       {/* MODAL: Generate Redemption Cards */}
       {showGenModal && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in">
+        <div
+          className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowGenModal(false);
+          }}
+        >
           <div className="bg-white border border-slate-200 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center space-x-2">

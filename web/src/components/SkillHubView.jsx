@@ -33,7 +33,8 @@ import {
   Folder,
   FolderTree
 } from 'lucide-react';
-import { getGatewayOrigin } from '../config';
+import { getGatewayOrigin, copyToClipboard } from '../config';
+import useModalA11y from '../hooks/useModalA11y';
 
 export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh', t }) {
   const isZh = lang === 'zh';
@@ -56,6 +57,11 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
   const [testOutput, setTestOutput] = useState(null);
   const [testingSkill, setTestingSkill] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+
+  useModalA11y(clientGuideModalOpen, () => setClientGuideModalOpen(false));
+  useModalA11y(!!manifestSkill, () => setManifestSkill(null));
+  useModalA11y(!!testModalSkill, () => setTestModalSkill(null));
+  useModalA11y(createModalOpen, () => setCreateModalOpen(false));
 
   // New Skill Form
   const [newSkill, setNewSkill] = useState({
@@ -198,11 +204,11 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
     }
   };
 
-  const handleCopyText = (text, key) => {
+  const handleCopyText = async (text, key) => {
     if (onCopy) {
       onCopy(text);
     } else {
-      navigator.clipboard.writeText(text);
+      await copyToClipboard(text);
     }
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(''), 2000);
@@ -483,7 +489,12 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
 
       {/* 客户端接入指南弹窗 (Claude Code / OpenCode / Codex / Cursor) */}
       {clientGuideModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setClientGuideModalOpen(false);
+          }}
+        >
           <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
@@ -718,7 +729,12 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
 
       {/* 技能详情 / SKILL.md / ZIP 归档包与元数据弹窗 */}
       {manifestSkill && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setManifestSkill(null);
+          }}
+        >
           <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-3xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             {/* 模态框头部 */}
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
@@ -978,7 +994,12 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
 
       {/* 模拟演练弹窗 */}
       {testModalSkill && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setTestModalSkill(null);
+          }}
+        >
           <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
@@ -1058,7 +1079,12 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
 
       {/* 新建自定义技能模态框 */}
       {createModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setCreateModalOpen(false);
+          }}
+        >
           <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">

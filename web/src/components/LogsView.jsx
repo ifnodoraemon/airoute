@@ -12,6 +12,7 @@ import {
   AlertCircle,
   FileSpreadsheet
 } from 'lucide-react';
+import { copyToClipboard } from '../config';
 
 // Same-day rows show time only; older days get a compact date prefix.
 const formatLogTime = (iso) => {
@@ -73,9 +74,9 @@ export default function LogsView({
     return () => clearInterval(timer);
   }, [autoRefreshInterval, fetchLogs]);
 
-  const copyWithFeedback = (text, type = 'Trace ID') => {
+  const copyWithFeedback = async (text, type = 'Trace ID') => {
     if (!text) return;
-    navigator.clipboard.writeText(text);
+    await copyToClipboard(text);
     setCopiedId(text);
     setTimeout(() => setCopiedId(''), 2000);
     if (showToast) showToast(isZh ? `${type} 已复制到剪贴板` : `${type} copied to clipboard`, 'success');
@@ -451,7 +452,7 @@ export default function LogsView({
       {/* Logs Table Card */}
       <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-3xl overflow-hidden shadow-xs flex flex-col">
         <div className="overflow-auto max-h-[calc(100vh-380px)]">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[950px]">
             <thead>
               <tr className="text-slate-500 dark:text-slate-400 text-xs uppercase">
                 <th className="py-2.5 px-3 w-10 text-center sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">

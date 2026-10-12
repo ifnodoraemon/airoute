@@ -27,6 +27,7 @@ import {
   ChevronUp
 } from 'lucide-react';
 import ModelRouteModal, { getChannelModels } from './ModelRouteModal';
+import { copyToClipboard as crossOriginCopy } from '../config';
 
 export default function ModelRoutesManager({
   adminFetch,
@@ -192,8 +193,8 @@ export default function ModelRoutesManager({
     }
   };
 
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text) => {
+    await crossOriginCopy(text);
     setCopiedModel(text);
     setTimeout(() => setCopiedModel(''), 2000);
   };

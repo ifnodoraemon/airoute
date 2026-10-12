@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { X, Copy, Check, Activity, Clock, Zap, Server, Key, AlertCircle, Shield, Trash2 } from 'lucide-react';
+import useModalA11y from '../hooks/useModalA11y';
 
 export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession, onDeleteLog, lang = 'zh', t }) {
+  useModalA11y(!!log, onClose);
+
   if (!log) return null;
 
   const isZh = lang === 'zh';
@@ -16,7 +19,12 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
   const isSuccess = log.status_code >= 200 && log.status_code < 300;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="bg-white dark:bg-[#111726] border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
         {/* Header */}
         <div className="p-6 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">

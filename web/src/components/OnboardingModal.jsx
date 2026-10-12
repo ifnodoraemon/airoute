@@ -17,6 +17,8 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { getGatewayOrigin } from '../config';
+import useModalA11y from '../hooks/useModalA11y';
+import { copyToClipboard as crossOriginCopy } from '../utils/clipboard';
 
 export default function OnboardingModal({
   isOpen,
@@ -28,6 +30,8 @@ export default function OnboardingModal({
   lang = 'zh',
   t
 }) {
+  useModalA11y(isOpen, onClose);
+
   const isZh = lang === 'zh';
   const [step, setStep] = useState(1);
   const [selectedKey, setSelectedKey] = useState(() => (keys.length > 0 ? keys[0].key : 'sk-airoute-demo-key'));
@@ -42,8 +46,8 @@ export default function OnboardingModal({
 
   const origin = getGatewayOrigin();
 
-  const copyToClipboard = (text, key) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text, key) => {
+    await crossOriginCopy(text);
     setCopiedKey(key || 'snippet');
     setTimeout(() => setCopiedKey(''), 2000);
     if (showToast) showToast(isZh ? '已复制到剪贴板！' : 'Copied to clipboard!', 'success');
@@ -166,7 +170,12 @@ print(message.content[0].text)
 `;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="bg-white dark:bg-[#111726] border border-slate-200 dark:border-slate-800 rounded-3xl max-w-2xl w-full p-6 sm:p-7 shadow-2xl relative space-y-6">
         {/* Header */}
         <div className="flex items-start justify-between">

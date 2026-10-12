@@ -15,7 +15,7 @@ import {
   ShieldAlert,
   Zap
 } from 'lucide-react';
-import { getGatewayOrigin } from '../config';
+import { getGatewayOrigin, copyToClipboard } from '../config';
 
 export default function KeysView({
   keys = [],
@@ -161,7 +161,7 @@ export default function KeysView({
   };
 
   // Copy cURL sample snippet
-  const copyCurlSnippet = (keyStr) => {
+  const copyCurlSnippet = async (keyStr) => {
     const origin = getGatewayOrigin();
     const curl = `curl ${origin}/v1/chat/completions \\
   -H "Content-Type: application/json" \\
@@ -170,7 +170,7 @@ export default function KeysView({
     "model": "deepseek-v4-flash",
     "messages": [{"role": "user", "content": "Hello Airoute!"}]
   }'`;
-    navigator.clipboard.writeText(curl);
+    await copyToClipboard(curl);
     if (showToast) showToast(isZh ? 'cURL 调用示例已复制到剪贴板' : 'cURL example copied to clipboard', 'success');
   };
 
@@ -345,7 +345,8 @@ export default function KeysView({
           )}
 
           <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-3xl overflow-hidden shadow-xs">
-            <table className="w-full text-left border-collapse">
+            <div className="overflow-x-auto w-full">
+              <table className="w-full text-left border-collapse min-w-[850px]">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs uppercase bg-slate-50/80 dark:bg-slate-900/80">
                   <th className="py-3.5 px-4 w-10 text-center">
@@ -534,6 +535,7 @@ export default function KeysView({
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       )}

@@ -11,7 +11,7 @@ import {
   Sparkles,
   Check
 } from 'lucide-react';
-import { getGatewayOrigin } from '../config';
+import { getGatewayOrigin, copyToClipboard as crossOriginCopy } from '../config';
 
 export default function DocsView({ showToast, lang = 'zh', t }) {
   const isZh = lang === 'zh';
@@ -21,8 +21,8 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
   const docOrigin = getGatewayOrigin();
   const docBaseUrl = `${docOrigin}/v1`;
 
-  const copyToClipboard = (text, key) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text, key) => {
+    await crossOriginCopy(text);
     setCopiedKey(key || 'code');
     setTimeout(() => setCopiedKey(''), 2200);
     if (showToast) {

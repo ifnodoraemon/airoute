@@ -31,7 +31,8 @@ import {
   Lock,
   Boxes
 } from 'lucide-react';
-import { getGatewayOrigin, resolveGatewayUrl } from '../config';
+import { getGatewayOrigin, resolveGatewayUrl, copyToClipboard } from '../config';
+import useModalA11y from '../hooks/useModalA11y';
 
 const TOOL_TEMPLATES = {
   // 网关原生安全与审计
@@ -287,6 +288,10 @@ export default function McpIntegrationView({ adminFetch, adminToken, keys = [], 
   const [probeResult, setProbeResult] = useState(null);
   const [probeLatency, setProbeLatency] = useState(null);
   const [lastSentPayload, setLastSentPayload] = useState(null);
+
+  useModalA11y(configModalOpen, () => setConfigModalOpen(false));
+  useModalA11y(addServerModalOpen, () => setAddServerModalOpen(false));
+  useModalA11y(probeModalOpen, () => setProbeModalOpen(false));
 
   const origin = getGatewayOrigin();
   const sseUrl = resolveGatewayUrl(mcpSettings?.sse_endpoint || '/mcp/sse');
@@ -587,11 +592,11 @@ export default function McpIntegrationView({ adminFetch, adminToken, keys = [], 
     return `curl -X POST "${messagesUrl}" \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer ${token}" \\\n  -d '${JSON.stringify(payload)}'`;
   };
 
-  const handleCopyText = (text, key) => {
+  const handleCopyText = async (text, key) => {
     if (onCopy) {
       onCopy(text);
     } else {
-      navigator.clipboard.writeText(text);
+      await copyToClipboard(text);
     }
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(''), 2000);
@@ -1001,7 +1006,12 @@ curl -X POST "${messagesUrl}" \\
 
       {/* 客户端集成配置弹窗 */}
       {configModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setConfigModalOpen(false);
+          }}
+        >
           <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
@@ -1144,7 +1154,12 @@ curl -X POST "${messagesUrl}" \\
 
       {/* 注册自定义 MCP 服务模态框 */}
       {addServerModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setAddServerModalOpen(false);
+          }}
+        >
           <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
@@ -1293,7 +1308,12 @@ curl -X POST "${messagesUrl}" \\
 
       {/* 在线 JSON-RPC 2.0 协议探针控制台 */}
       {probeModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setProbeModalOpen(false);
+          }}
+        >
           <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-5xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">

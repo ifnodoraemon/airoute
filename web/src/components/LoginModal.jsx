@@ -14,8 +14,11 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { resolveGatewayUrl } from '../config';
+import useModalA11y from '../hooks/useModalA11y';
 
 export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh', t }) {
+  useModalA11y(isOpen, onClose);
+
   if (!isOpen) return null;
 
   const isZh = lang === 'zh';
@@ -184,7 +187,12 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in">
+    <div
+      className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">

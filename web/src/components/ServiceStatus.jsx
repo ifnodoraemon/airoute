@@ -19,6 +19,7 @@ import {
   Copy,
   Check
 } from 'lucide-react';
+import { copyToClipboard as crossOriginCopy } from '../config';
 import { getGatewayOrigin } from '../config';
 
 export default function ServiceStatus({
@@ -95,8 +96,8 @@ export default function ServiceStatus({
     if (showToast) showToast(isZh ? '服务状态已实时刷新' : 'Service status refreshed', 'info');
   };
 
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text) => {
+    await crossOriginCopy(text);
     setCopiedModel(text);
     if (showToast) showToast(isZh ? `已复制模型名称: ${text}` : `Copied model ID: ${text}`, 'success');
     setTimeout(() => setCopiedModel(''), 2000);

@@ -12,7 +12,8 @@ import {
   Server,
   Sparkles
 } from 'lucide-react';
-import { getGatewayBaseUrl } from '../config';
+import { getGatewayBaseUrl, copyToClipboard } from '../config';
+import useModalA11y from '../hooks/useModalA11y';
 
 export default function AccountManageModal({
   isOpen,
@@ -25,6 +26,8 @@ export default function AccountManageModal({
   lang = 'zh',
   t
 }) {
+  useModalA11y(isOpen, onClose);
+
   if (!isOpen) return null;
   const isZh = lang === 'zh';
 
@@ -43,8 +46,8 @@ export default function AccountManageModal({
   const isAdmin = adminUser?.role === 'admin';
   const apiBaseUrl = getGatewayBaseUrl();
 
-  const handleCopyBaseUrl = () => {
-    navigator.clipboard.writeText(apiBaseUrl);
+  const handleCopyBaseUrl = async () => {
+    await copyToClipboard(apiBaseUrl);
     setCopiedBaseUrl(true);
     showToast(isZh ? '已复制网关 API Base URL 到剪贴板' : 'Gateway API Base URL copied to clipboard', 'success');
     setTimeout(() => setCopiedBaseUrl(false), 2000);
@@ -96,7 +99,12 @@ export default function AccountManageModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+    <div
+      className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-150">
         {/* Modal Header */}
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">

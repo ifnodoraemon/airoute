@@ -13,6 +13,7 @@ import {
   Moon,
   Edit3
 } from 'lucide-react';
+import useModalA11y from '../hooks/useModalA11y';
 
 export const getChannelModels = (ch) => {
   if (!ch) return [];
@@ -55,6 +56,8 @@ export default function ModelRouteModal({
   lang = 'zh',
   t
 }) {
+  useModalA11y(isOpen, onClose);
+
   if (!isOpen) return null;
 
   const isZh = lang === 'zh';
@@ -256,7 +259,12 @@ export default function ModelRouteModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in">
+    <div
+      className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="bg-white border border-slate-200 rounded-3xl p-6 max-w-xl w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-3 shrink-0">

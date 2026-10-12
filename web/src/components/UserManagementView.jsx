@@ -21,6 +21,7 @@ import {
   Tag,
   Coins
 } from 'lucide-react';
+import useModalA11y from '../hooks/useModalA11y';
 
 export default function UserManagementView({ adminUser, adminFetch, showToast, lang = 'zh', t }) {
   const isZh = lang === 'zh';
@@ -53,6 +54,10 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
   const [resetPassword, setResetPassword] = useState('');
   const [resetting, setResetting] = useState(false);
   const [resetModalError, setResetModalError] = useState('');
+
+  useModalA11y(showAddModal, () => setShowAddModal(false));
+  useModalA11y(!!quotaTargetUser, () => setQuotaTargetUser(null));
+  useModalA11y(!!resetTargetUser, () => setResetTargetUser(null));
 
   // Password visibility
   const [showNewPassPlain, setShowNewPassPlain] = useState(false);
@@ -686,7 +691,12 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
 
       {/* MODAL 1: Create New User */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in">
+        <div
+          className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowAddModal(false);
+          }}
+        >
           <div className="bg-white border border-slate-200 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center space-x-2">
@@ -857,7 +867,12 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
 
       {/* MODAL 2: Adjust Quota / Balance */}
       {quotaTargetUser && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in">
+        <div
+          className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setQuotaTargetUser(null);
+          }}
+        >
           <div className="bg-white border border-slate-200 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center space-x-2">
@@ -969,7 +984,12 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
 
       {/* MODAL 3: Reset Password */}
       {resetTargetUser && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in">
+        <div
+          className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setResetTargetUser(null);
+          }}
+        >
           <div className="bg-white border border-slate-200 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center space-x-2">

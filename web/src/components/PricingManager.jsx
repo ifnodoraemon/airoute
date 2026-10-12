@@ -17,6 +17,7 @@ import {
   Zap,
   Info
 } from 'lucide-react';
+import useModalA11y from '../hooks/useModalA11y';
 
 function formatDaysLabel(days, isZh = true) {
   if (!days || days.length === 0 || days.length === 7) return '';
@@ -132,6 +133,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
   const [prices, setPrices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  useModalA11y(showModal, () => setShowModal(false));
   const [editingPrice, setEditingPrice] = useState(null);
   const [serverTime, setServerTime] = useState('');
   const [serverWeekday, setServerWeekday] = useState('');
@@ -182,7 +184,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
         }
       }
     } catch (err) {
-      showToast('网络请求异常: ' + err.message, 'error');
+      showToast((isZh ? '网络请求异常: ' : 'Network request error: ') + err.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -784,7 +786,12 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
 
       {/* 3. Flexible Multi-Slot Edit / Add Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in">
+        <div
+          className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowModal(false);
+          }}
+        >
           <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
               <div>

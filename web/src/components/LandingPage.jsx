@@ -15,7 +15,7 @@ import {
   Video,
   Globe
 } from 'lucide-react';
-import { getGatewayOrigin } from '../config';
+import { getGatewayOrigin, copyToClipboard } from '../config';
 
 export default function LandingPage({
   isLoggedIn,
@@ -38,8 +38,8 @@ export default function LandingPage({
 
   const origin = getGatewayOrigin();
 
-  const copyCode = (text, key) => {
-    navigator.clipboard.writeText(text);
+  const copyCode = async (text, key) => {
+    await copyToClipboard(text);
     setCopiedSnippet(key);
     setTimeout(() => setCopiedSnippet(''), 2500);
   };
