@@ -144,22 +144,24 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
               <div className="flex items-center justify-between">
                 <h4 className="font-bold text-sm text-indigo-900 dark:text-indigo-200 flex items-center space-x-2">
                   <Shield className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                  <span>1. 首字前无感容灾兜底 (Pre-Token Fallback)</span>
+                  <span>{isZh ? '1. 首字前无感容灾兜底 (Pre-Token Fallback)' : '1. Pre-Token Zero-Perception Failover'}</span>
                 </h4>
                 <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-semibold">
                   Zero-Perception Failover
                 </span>
               </div>
               <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
-                遭遇上游 429 (并发限流)、500/502/503 (服务端异常) 或网络连接超时，首字分块发出前毫秒内切换到备份 Provider，客户端完全无感，连接不中断，零错误率。
+                {isZh
+                  ? '遭遇上游 429 (并发限流)、500/502/503 (服务端异常) 或网络连接超时，首字分块发出前毫秒内切换到备份 Provider，客户端完全无感，连接不中断，零错误率。'
+                  : 'When encountering upstream 429 rate limits, 500/502/503 errors, or timeouts, the gateway automatically switches to a backup provider within milliseconds before the first chunk is emitted, keeping connections uninterrupted with 0% error rate.'}
               </p>
               <div className="bg-white dark:bg-[#0b0f19] p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-900/50 text-xs space-y-2">
-                <span className="font-semibold text-slate-800 dark:text-slate-200 block">容灾工作流时序:</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200 block">{isZh ? '容灾工作流时序:' : 'Failover Workflow Sequence:'}</span>
                 <div className="font-mono text-[11px] text-slate-600 dark:text-slate-400 space-y-1">
-                  <div>[客户端请求] ➔ Airoute ➔ 首选渠道 A (Primary Provider)</div>
-                  <div className="text-amber-600 dark:text-amber-400">↳ 发生 429 Rate Limit / 500 错误 (未输出首字 chunk)</div>
-                  <div className="text-emerald-600 dark:text-emerald-400">↳ 网关拦截异常并在 15ms 内重定向至备份渠道 B (Backup Provider)</div>
-                  <div>↳ 客户端正常接收首字分块及完整 SSE 数据流，业务层调用成功率稳定保持 100%</div>
+                  <div>{isZh ? '[客户端请求] ➔ Airoute ➔ 首选渠道 A (Primary Provider)' : '[Client Request] ➔ Airoute ➔ Primary Provider A'}</div>
+                  <div className="text-amber-600 dark:text-amber-400">{isZh ? '↳ 发生 429 Rate Limit / 500 错误 (未输出首字 chunk)' : '↳ Upstream 429 Rate Limit / 500 error (before first chunk)'}</div>
+                  <div className="text-emerald-600 dark:text-emerald-400">{isZh ? '↳ 网关拦截异常并在 15ms 内重定向至备份渠道 B (Backup Provider)' : '↳ Gateway intercepts failure & reroutes to Backup Provider B within 15ms'}</div>
+                  <div>{isZh ? '↳ 客户端正常接收首字分块及完整 SSE 数据流，业务层调用成功率稳定保持 100%' : '↳ Client receives first token chunk & full SSE stream, maintaining 100% SLA'}</div>
                 </div>
               </div>
             </div>
@@ -169,44 +171,46 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
               <div className="flex items-center justify-between">
                 <h4 className="font-bold text-sm text-emerald-900 dark:text-emerald-200 flex items-center space-x-2">
                   <Cpu className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>2. 智能探测 & 全双工协议转换 (Full-Duplex Protocol Matrix)</span>
+                  <span>{isZh ? '2. 智能探测 & 全双工协议转换 (Full-Duplex Protocol Matrix)' : '2. Smart Probing & Full-Duplex Protocol Matrix'}</span>
                 </h4>
                 <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 font-semibold">
                   Bi-Directional Translation
                 </span>
               </div>
               <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
-                原生支持 OpenAI、Claude Messages、Gemini 与主流推理协议，并实现全双工流式实时转译。客户端使用任何主流 SDK 均可自由互通！
+                {isZh
+                  ? '原生支持 OpenAI、Claude Messages、Gemini 与主流推理协议，并实现全双工流式实时转译。客户端使用任何主流 SDK 均可自由互通！'
+                  : 'Natively supports OpenAI, Claude Messages, Gemini, and major inference formats with full-duplex real-time translation across any SDK.'}
               </p>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-emerald-200/60 dark:border-emerald-800/60 text-slate-500 dark:text-slate-400">
-                      <th className="py-2 px-3 font-semibold">下游客户端调用协议</th>
-                      <th className="py-2 px-3 font-semibold">网关接入端点</th>
-                      <th className="py-2 px-3 font-semibold">支持的上游后端提供商</th>
+                      <th className="py-2 px-3 font-semibold">{isZh ? '下游客户端调用协议' : 'Client Inbound Protocol'}</th>
+                      <th className="py-2 px-3 font-semibold">{isZh ? '网关接入端点' : 'Gateway Endpoint'}</th>
+                      <th className="py-2 px-3 font-semibold">{isZh ? '支持的上游后端提供商' : 'Supported Upstream Providers'}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-emerald-100 dark:divide-emerald-900/40 text-[11px]">
                     <tr>
                       <td className="py-2 px-3 font-mono text-indigo-600 dark:text-indigo-400 font-semibold">OpenAI Chat</td>
                       <td className="py-2 px-3 font-mono">/v1/chat/completions</td>
-                      <td className="py-2 px-3">OpenAI, DeepSeek, Claude, Gemini 及主流推理集群</td>
+                      <td className="py-2 px-3">{isZh ? 'OpenAI, DeepSeek, Claude, Gemini 及主流推理集群' : 'OpenAI, DeepSeek, Claude, Gemini & inference clusters'}</td>
                     </tr>
                     <tr>
                       <td className="py-2 px-3 font-mono text-indigo-600 dark:text-indigo-400 font-semibold">OpenAI Responses</td>
                       <td className="py-2 px-3 font-mono">/v1/responses</td>
-                      <td className="py-2 px-3">新代智能体协议，支持全格式转译与流式推导</td>
+                      <td className="py-2 px-3">{isZh ? '新代智能体协议，支持全格式转译与流式推导' : 'Agentic protocol: full translation & streaming support'}</td>
                     </tr>
                     <tr>
                       <td className="py-2 px-3 font-mono text-indigo-600 dark:text-indigo-400 font-semibold">Claude Messages</td>
                       <td className="py-2 px-3 font-mono">/v1/messages</td>
-                      <td className="py-2 px-3">Anthropic 官方、OpenAI 格式上游、主流私有推理集群</td>
+                      <td className="py-2 px-3">{isZh ? 'Anthropic 官方、OpenAI 格式上游、主流私有推理集群' : 'Official Anthropic, OpenAI upstream, private GPU stacks'}</td>
                     </tr>
                     <tr>
                       <td className="py-2 px-3 font-mono text-indigo-600 dark:text-indigo-400 font-semibold">Google Gemini</td>
                       <td className="py-2 px-3 font-mono">/v1beta/models/*</td>
-                      <td className="py-2 px-3">Gemini 官方、OpenAI 格式上游全双工转译</td>
+                      <td className="py-2 px-3">{isZh ? 'Gemini 官方、OpenAI 格式上游全双工转译' : 'Official Gemini, OpenAI format full-duplex translation'}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -218,31 +222,33 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
               <div className="flex items-center justify-between">
                 <h4 className="font-bold text-sm text-purple-900 dark:text-purple-200 flex items-center space-x-2">
                   <Layers className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                  <span>3. 全模态统一管道 (Unified Pipeline)</span>
+                  <span>{isZh ? '3. 全模态统一管道 (Unified Pipeline)' : '3. Unified Multimodal Pipeline'}</span>
                 </h4>
                 <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-semibold">
                   Unified Pipeline
                 </span>
               </div>
               <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
-                Chat 对话、AI 生图 (DALL-E / Flux)、语音合成 (TTS)、Whisper 语音转录与翻译、视频生成均采用统一调度分发，高内聚低耦合，共享熔断、鉴权与计量基础设施。
+                {isZh
+                  ? 'Chat 对话、AI 生图 (DALL-E / Flux)、语音合成 (TTS)、Whisper 语音转录与翻译、视频生成均采用统一调度分发，高内聚低耦合，共享熔断、鉴权与计量基础设施。'
+                  : 'Chat completions, AI image generation, TTS, Whisper speech-to-text, and video generation are unified under shared auth, metering, and circuit-breaker infrastructure.'}
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-center">
                 <div className="p-2.5 rounded-xl bg-white dark:bg-[#0b0f19] border border-purple-100 dark:border-purple-900/50">
-                  <span className="text-xs font-bold text-purple-700 dark:text-purple-300">💬 文本/对话</span>
-                  <p className="text-[10px] text-slate-400 mt-0.5">SSE 零拷贝流式</p>
+                  <span className="text-xs font-bold text-purple-700 dark:text-purple-300">{isZh ? '💬 文本/对话' : '💬 Text / Chat'}</span>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{isZh ? 'SSE 零拷贝流式' : 'SSE Zero-Copy Stream'}</p>
                 </div>
                 <div className="p-2.5 rounded-xl bg-white dark:bg-[#0b0f19] border border-purple-100 dark:border-purple-900/50">
-                  <span className="text-xs font-bold text-pink-700 dark:text-pink-300">🎨 图像生成</span>
+                  <span className="text-xs font-bold text-pink-700 dark:text-pink-300">{isZh ? '🎨 图像生成' : '🎨 Image Gen'}</span>
                   <p className="text-[10px] text-slate-400 mt-0.5">/v1/images/generations</p>
                 </div>
                 <div className="p-2.5 rounded-xl bg-white dark:bg-[#0b0f19] border border-purple-100 dark:border-purple-900/50">
-                  <span className="text-xs font-bold text-cyan-700 dark:text-cyan-300">🔊 语音 TTS/STT</span>
-                  <p className="text-[10px] text-slate-400 mt-0.5">音频二进制直通流</p>
+                  <span className="text-xs font-bold text-cyan-700 dark:text-cyan-300">{isZh ? '🔊 语音 TTS/STT' : '🔊 Audio TTS/STT'}</span>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{isZh ? '音频二进制直通流' : 'Binary Audio Streaming'}</p>
                 </div>
                 <div className="p-2.5 rounded-xl bg-white dark:bg-[#0b0f19] border border-purple-100 dark:border-purple-900/50">
-                  <span className="text-xs font-bold text-teal-700 dark:text-teal-300">🎬 视频生成</span>
-                  <p className="text-[10px] text-slate-400 mt-0.5">异步任务与轮询</p>
+                  <span className="text-xs font-bold text-teal-700 dark:text-teal-300">{isZh ? '🎬 视频生成' : '🎬 Video Gen'}</span>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{isZh ? '异步任务与轮询' : 'Async Tasks & Polling'}</p>
                 </div>
               </div>
             </div>
@@ -251,10 +257,12 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
             <div className="p-5 rounded-2xl bg-sky-50/50 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-800/60 space-y-2">
               <h4 className="font-bold text-sm text-sky-900 dark:text-sky-200 flex items-center space-x-2">
                 <Server className="w-4 h-4 text-sky-600 dark:text-sky-400" />
-                <span>4. Zero-DB 热路径与双节点双活高可用架构</span>
+                <span>{isZh ? '4. Zero-DB 热路径与双节点双活高可用架构' : '4. Zero-DB Fast Path & Active-Active HA Architecture'}</span>
               </h4>
               <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
-                数据面读操作 100% 内存无锁运行，无任何数据库 IO 延迟；控制面配置变更通过 WAL 模式原子写入并毫秒级广播至内存。前置 Nginx 对 2 个网关副本进行加权轮询，实现节点故障秒级隔离与 99.99% 高可用。
+                {isZh
+                  ? '数据面读操作 100% 内存无锁运行，无任何数据库 IO 延迟；控制面配置变更通过 WAL 模式原子写入并毫秒级广播至内存。前置 Nginx 对 2 个网关副本进行加权轮询，实现节点故障秒级隔离与 99.99% 高可用。'
+                  : 'Data-plane reads run 100% in-memory with zero DB latency; control-plane updates sync atomically via WAL and broadcast in milliseconds. Dual active-active nodes with Nginx load balancing provide 99.99% uptime.'}
               </p>
             </div>
           </div>
@@ -263,8 +271,8 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
         {docsSection === 'quickstart' && (
           <div className="space-y-4">
             <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Python OpenAI SDK 接入指南</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">将官方 OpenAI SDK 的 base_url 直接指向 Airoute 网关入口即可（自适应当前访问域名与端口）。</p>
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{isZh ? 'Python OpenAI SDK 接入指南' : 'Python OpenAI SDK Integration'}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{isZh ? '将官方 OpenAI SDK 的 base_url 直接指向 Airoute 网关入口即可（自适应当前访问域名与端口）。' : 'Point base_url of the official OpenAI SDK directly to your Airoute gateway endpoint.'}</p>
             </div>
 
             <div className="relative group">
@@ -291,22 +299,24 @@ for chunk in response:
                 className="absolute top-3 right-3 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] font-mono flex items-center space-x-1"
               >
                 {copiedKey === 'py' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                <span>{copiedKey === 'py' ? '已复制' : '复制'}</span>
+                <span>{copiedKey === 'py' ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制' : 'Copy')}</span>
               </button>
             </div>
 
             <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs text-amber-900 dark:text-amber-200 space-y-1">
               <span className="font-bold flex items-center space-x-1">
                 <Sparkles className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                <span>DeepSeek-R1 / OpenAI o1 思维链透明透传:</span>
+                <span>{isZh ? 'DeepSeek-R1 / OpenAI o1 思维链透明透传:' : 'DeepSeek-R1 & OpenAI o1 Reasoning Stream Pass-through:'}</span>
               </span>
               <p className="leading-relaxed">
-                网关在流式与非流式模式下均原生支持 <code>reasoning_content</code> 字段的零拷贝透传。前端应用或 NextChat / LobeChat 可直接原生渲染展开思维链推导卡片。
+                {isZh
+                  ? '网关在流式与非流式模式下均原生支持 reasoning_content 字段的零拷贝透传。前端应用或 NextChat / LobeChat 可直接原生渲染展开思维链推导卡片。'
+                  : 'Natively passes through reasoning_content in streaming and non-streaming modes with zero copy overhead. Client apps like NextChat or LobeChat render reasoning chains out of the box.'}
               </p>
             </div>
 
             <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
-              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-2">cURL 极速调试命令:</h4>
+              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-2">{isZh ? 'cURL 极速调试命令:' : 'Quick cURL Test Command:'}</h4>
               <div className="relative group">
                 <pre className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-mono text-slate-700 dark:text-slate-300 overflow-x-auto">
 {`curl -X POST "${docBaseUrl}/chat/completions" \\
@@ -319,7 +329,7 @@ for chunk in response:
                   className="absolute top-2 right-2 px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded text-[11px] font-mono flex items-center space-x-1"
                 >
                   {copiedKey === 'curl' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedKey === 'curl' ? '已复制' : '复制'}</span>
+                  <span>{copiedKey === 'curl' ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制' : 'Copy')}</span>
                 </button>
               </div>
             </div>
@@ -329,8 +339,8 @@ for chunk in response:
         {docsSection === 'claude' && (
           <div className="space-y-4">
             <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Anthropic Claude Messages API 接入</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">原生支持 Claude Code、Cursor、Cline 等工具直接使用 Anthropic 原生协议调用任何异构下游！</p>
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{isZh ? 'Anthropic Claude Messages API 接入' : 'Anthropic Claude Messages API Integration'}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{isZh ? '原生支持 Claude Code、Cursor、Cline 等工具直接使用 Anthropic 原生协议调用任何异构下游！' : 'Natively enables tools like Claude Code, Cursor, and Cline to call any heterogeneous downstream provider using Anthropic protocol!'}</p>
             </div>
 
             <div className="relative group">
@@ -356,19 +366,21 @@ print(message.content[0].text)`}
                 className="absolute top-3 right-3 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] font-mono flex items-center space-x-1"
               >
                 {copiedKey === 'claude' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                <span>{copiedKey === 'claude' ? '已复制' : '复制'}</span>
+                <span>{copiedKey === 'claude' ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制' : 'Copy')}</span>
               </button>
             </div>
 
             <div className="p-4 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 rounded-xl text-xs text-indigo-900 dark:text-indigo-200 space-y-1">
-              <span className="font-bold">💡 全双工协议转换特性:</span>
+              <span className="font-bold">{isZh ? '💡 全双工协议转换特性:' : '💡 Full-Duplex Protocol Translation:'}</span>
               <p>
-                即使您的下游供应商是仅支持 OpenAI 协议的私有集群，客户端通过 Anthropic SDK 请求时，网关也会在内存零拷贝将 Claude Messages 双向转换为 OpenAI Completions 并在返回时转回 Anthropic 格式。
+                {isZh
+                  ? '即使您的下游供应商是仅支持 OpenAI 协议的私有集群，客户端通过 Anthropic SDK 请求时，网关也会在内存零拷贝将 Claude Messages 双向转换为 OpenAI Completions 并在返回时转回 Anthropic 格式。'
+                  : 'Even if your downstream provider only supports OpenAI protocol, the gateway bidirectionally translates Claude Messages to OpenAI Completions and formats the response back with zero latency.'}
               </p>
             </div>
 
             <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
-              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">Anthropic Token 预估计算 (/v1/messages/count_tokens):</h4>
+              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">{isZh ? 'Anthropic Token 预估计算 (/v1/messages/count_tokens):' : 'Anthropic Token Counting (/v1/messages/count_tokens):'}</h4>
               <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl text-xs font-mono overflow-x-auto">
 {`curl -X POST "${docOrigin}/v1/messages/count_tokens" \\
   -H "x-api-key: sk-airoute-xxxx" \\
@@ -376,7 +388,7 @@ print(message.content[0].text)`}
   -H "Content-Type: application/json" \\
   -d '{"model": "claude-3-7-sonnet", "messages": [{"role": "user", "content": "Hello world"}]}'
 
-# 响应示例:
+# Response Example:
 # {"input_tokens": 12}`}
               </pre>
             </div>
@@ -386,13 +398,13 @@ print(message.content[0].text)`}
         {docsSection === 'multimodal' && (
           <div className="space-y-4">
             <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">多模态 API 接口规范</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">生图、语音合成 TTS、语音识别 STT、语音翻译、视频生成与轮询均通过统一熔断与分发管道提供。</p>
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{isZh ? '多模态 API 接口规范' : 'Multimodal API Specifications'}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{isZh ? '生图、语音合成 TTS、语音识别 STT、语音翻译、视频生成与轮询均通过统一熔断与分发管道提供。' : 'Image generation, TTS, Whisper STT, and video generation/polling are served via a unified routing & circuit-breaker pipeline.'}</p>
             </div>
 
             <div className="space-y-3 text-xs">
               <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
-                <span className="font-bold text-pink-600 dark:text-pink-400">🎨 1. AI 图像生成 (/v1/images/generations)</span>
+                <span className="font-bold text-pink-600 dark:text-pink-400">{isZh ? '🎨 1. AI 图像生成 (/v1/images/generations)' : '🎨 1. AI Image Generation (/v1/images/generations)'}</span>
                 <pre className="mt-1 font-mono text-slate-700 dark:text-slate-300">
 {`POST /v1/images/generations
 {"model": "flux-1-schnell", "prompt": "cyberpunk city, 8k", "size": "1024x1024"}`}
@@ -400,16 +412,16 @@ print(message.content[0].text)`}
               </div>
 
               <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
-                <span className="font-bold text-cyan-600 dark:text-cyan-400">🔊 2. 语音合成 TTS (/v1/audio/speech)</span>
+                <span className="font-bold text-cyan-600 dark:text-cyan-400">{isZh ? '🔊 2. 语音合成 TTS (/v1/audio/speech)' : '🔊 2. Text-to-Speech (/v1/audio/speech)'}</span>
                 <pre className="mt-1 font-mono text-slate-700 dark:text-slate-300">
 {`POST /v1/audio/speech
-{"model": "tts-1", "input": "你好世界", "voice": "alloy", "response_format": "mp3"}
-(返回二进制流式音频流，零内存占用直连客户端)`}
+{"model": "tts-1", "input": "Hello world", "voice": "alloy", "response_format": "mp3"}
+${isZh ? '(返回二进制流式音频流，零内存占用直连客户端)' : '(Returns binary audio stream directly to client with zero buffering)'}`}
                 </pre>
               </div>
 
               <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
-                <span className="font-bold text-teal-600 dark:text-teal-400">🎙️ 3. Whisper 语音转录 (/v1/audio/transcriptions)</span>
+                <span className="font-bold text-teal-600 dark:text-teal-400">{isZh ? '🎙️ 3. Whisper 语音转录 (/v1/audio/transcriptions)' : '🎙️ 3. Whisper Speech Transcription (/v1/audio/transcriptions)'}</span>
                 <pre className="mt-1 font-mono text-slate-700 dark:text-slate-300">
 {`POST /v1/audio/transcriptions (multipart/form-data)
 file=@recording.mp3; model=whisper-large-v3-turbo`}
@@ -417,7 +429,7 @@ file=@recording.mp3; model=whisper-large-v3-turbo`}
               </div>
 
               <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
-                <span className="font-bold text-purple-600 dark:text-purple-400">🎬 4. 视频生成与轮询 (/v1/videos/generations & /v1/videos/tasks/:id)</span>
+                <span className="font-bold text-purple-600 dark:text-purple-400">{isZh ? '🎬 4. 视频生成与轮询 (/v1/videos/generations & /v1/videos/tasks/:id)' : '🎬 4. Video Generation & Polling (/v1/videos/generations & /v1/videos/tasks/:id)'}</span>
                 <pre className="mt-1 font-mono text-slate-700 dark:text-slate-300">
 {`POST /v1/videos/generations -> 返回 {"task_id": "task_xxx", "status": "PENDING"}
 GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
@@ -425,10 +437,10 @@ GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
               </div>
 
               <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">🧠 5. 文本向量化 Embeddings (/v1/embeddings)</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">{isZh ? '🧠 5. 文本向量化 Embeddings (/v1/embeddings)' : '🧠 5. Text Embeddings (/v1/embeddings)'}</span>
                 <pre className="mt-1 font-mono text-slate-700 dark:text-slate-300">
 {`POST /v1/embeddings
-{"model": "text-embedding-3-small", "input": "企业级超高性能大模型网关"}`}
+{"model": "text-embedding-3-small", "input": "enterprise high performance ai gateway"}`}
                 </pre>
               </div>
             </div>
@@ -438,8 +450,8 @@ GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
         {docsSection === 'cascading' && (
           <div className="space-y-4">
             <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">级联模型别名与通配映射</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">不设任何斜杠深度限制，支持多组织层级命名与任意前缀重写。</p>
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{isZh ? '级联模型别名与通配映射' : 'Cascading Model Aliases & Wildcard Rewriting'}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{isZh ? '不设任何斜杠深度限制，支持多组织层级命名与任意前缀重写。' : 'No slash depth limits, supporting multi-org hierarchies and arbitrary prefix rewriting.'}</p>
             </div>
 
             <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs space-y-3">

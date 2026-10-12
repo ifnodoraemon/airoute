@@ -78,17 +78,17 @@ export default function LogsView({
     navigator.clipboard.writeText(text);
     setCopiedId(text);
     setTimeout(() => setCopiedId(''), 2000);
-    if (showToast) showToast(`${type} 已复制到剪贴板`, 'success');
+    if (showToast) showToast(isZh ? `${type} 已复制到剪贴板` : `${type} copied to clipboard`, 'success');
   };
 
   // Export filtered logs to CSV
   const handleExportCSV = () => {
     if (!filteredLogs || filteredLogs.length === 0) {
-      if (showToast) showToast('当前没有可导出的日志记录', 'warning');
+      if (showToast) showToast(isZh ? '当前没有可导出的日志记录' : 'No logs available for export', 'warning');
       return;
     }
 
-    const headers = [
+    const headers = isZh ? [
       'ID',
       '请求时间',
       'Trace ID',
@@ -106,6 +106,24 @@ export default function LogsView({
       '首字时延(ms)',
       'HTTP状态码',
       '异常说明'
+    ] : [
+      'ID',
+      'Request Time',
+      'Trace ID',
+      'Session ID',
+      'Chat ID',
+      'Model',
+      'Channel Provider',
+      'Tenant/Key',
+      'Prompt Tokens',
+      'Completion Tokens',
+      'Total Tokens',
+      'Cost',
+      'Cached Tokens',
+      'Duration (ms)',
+      'TTFT (ms)',
+      'HTTP Status',
+      'Error Message'
     ];
 
     const rows = filteredLogs.map((l) => [
@@ -139,7 +157,7 @@ export default function LogsView({
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    if (showToast) showToast(`成功导出 ${filteredLogs.length} 条审计日志`, 'success');
+    if (showToast) showToast(isZh ? `成功导出 ${filteredLogs.length} 条审计日志` : `Successfully exported ${filteredLogs.length} audit logs`, 'success');
   };
 
   // Apply in-memory status filter
@@ -150,6 +168,15 @@ export default function LogsView({
     }
     if (statusFilter === 'error') {
       return code >= 400 || !!log.error_message;
+    }
+    if (statusFilter === 'fast') {
+      return (log.duration_ms || 0) < 500 && code < 400;
+    }
+    if (statusFilter === 'slow') {
+      return (log.duration_ms || 0) >= 2000;
+    }
+    if (statusFilter === 'cached') {
+      return (log.cached_tokens || 0) > 0;
     }
     return true;
   });
@@ -347,7 +374,7 @@ export default function LogsView({
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
-                {isZh ? '仅成功 (2xx)' : 'Success (2xx)'}
+                {isZh ? '仅成功' : 'Success'}
               </button>
               <button
                 onClick={() => setStatusFilter('error')}
@@ -357,7 +384,40 @@ export default function LogsView({
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
-                {isZh ? '仅异常 (4xx/5xx)' : 'Errors (4xx/5xx)'}
+                {isZh ? '仅异常' : 'Errors'}
+              </button>
+              <button
+                onClick={() => setStatusFilter('fast')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
+                  statusFilter === 'fast'
+                    ? 'bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-400 shadow-2xs font-semibold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+                title={isZh ? '耗时 < 500ms 的极速请求' : 'Fast requests < 500ms'}
+              >
+                {isZh ? '⚡ 极速 (<500ms)' : '⚡ Fast (<500ms)'}
+              </button>
+              <button
+                onClick={() => setStatusFilter('slow')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
+                  statusFilter === 'slow'
+                    ? 'bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-2xs font-semibold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+                title={isZh ? '耗时 ≥ 2000ms 的长请求' : 'Slow requests ≥ 2000ms'}
+              >
+                {isZh ? '⏳ 慢请求 (≥2s)' : '⏳ Slow (≥2s)'}
+              </button>
+              <button
+                onClick={() => setStatusFilter('cached')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
+                  statusFilter === 'cached'
+                    ? 'bg-white dark:bg-slate-800 text-purple-600 dark:text-purple-400 shadow-2xs font-semibold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+                title={isZh ? '命中 KV Prompt 缓存的请求' : 'KV Prompt cache hits'}
+              >
+                {isZh ? '💾 命中缓存' : '💾 Cache Hit'}
               </button>
             </div>
           </div>
@@ -444,7 +504,7 @@ export default function LogsView({
                       />
                     </td>
                     <td className="py-2.5 px-4 text-slate-500 dark:text-slate-400 font-sans whitespace-nowrap" title={log.created_at}>
-                      {log.created_at ? formatLogTime(log.created_at) : '刚刚'}
+                      {log.created_at ? formatLogTime(log.created_at) : (isZh ? '刚刚' : 'Just now')}
                     </td>
                     <td className="py-2.5 px-4 font-mono text-xs">
                       <div className="flex items-center space-x-1.5">
@@ -462,7 +522,7 @@ export default function LogsView({
                                 copyWithFeedback(log.trace_id, 'Trace ID');
                               }}
                               className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-slate-600 transition"
-                              title="复制 Trace ID"
+                              title={isZh ? "复制 Trace ID" : "Copy Trace ID"}
                             >
                               {copiedId === log.trace_id ? (
                                 <Check className="w-3 h-3 text-emerald-500" />
@@ -475,10 +535,10 @@ export default function LogsView({
                                 e.stopPropagation();
                                 setSessionFilter(log.trace_id);
                                 fetchLogs({ sessionFilter: log.trace_id });
-                                if (showToast) showToast(`已筛选 Trace: ${log.trace_id}`, 'info');
+                                if (showToast) showToast(isZh ? `已筛选 Trace: ${log.trace_id}` : `Filtered Trace: ${log.trace_id}`, 'info');
                               }}
                               className="p-1 hover:bg-purple-50 dark:hover:bg-purple-900/50 rounded text-purple-600 dark:text-purple-400 transition"
-                              title="按 Trace ID 快速过滤"
+                              title={isZh ? "按 Trace ID 快速过滤" : "Quick filter by Trace ID"}
                             >
                               <Search className="w-3 h-3" />
                             </button>
@@ -489,17 +549,17 @@ export default function LogsView({
                         <div className="flex items-center space-x-1 mt-0.5">
                           <span
                             className="text-[10px] text-slate-400 truncate max-w-[120px]"
-                            title={`会话: ${log.session_id}`}
+                            title={isZh ? `会话: ${log.session_id}` : `Session: ${log.session_id}`}
                           >
-                            会话: {log.session_id}
+                            {isZh ? '会话:' : 'Session:'} {log.session_id}
                           </span>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              copyWithFeedback(log.session_id, '会话 ID');
+                              copyWithFeedback(log.session_id, isZh ? '会话 ID' : 'Session ID');
                             }}
                             className="text-slate-400 hover:text-slate-600"
-                            title="复制会话 ID"
+                            title={isZh ? "复制会话 ID" : "Copy Session ID"}
                           >
                             <Copy className="w-2.5 h-2.5" />
                           </button>
@@ -508,9 +568,9 @@ export default function LogsView({
                       {log.chat_id && (
                         <span
                           className="block text-[10px] text-sky-500 dark:text-sky-400 truncate max-w-[130px]"
-                          title={`对话: ${log.chat_id}`}
+                          title={isZh ? `对话: ${log.chat_id}` : `Chat: ${log.chat_id}`}
                         >
-                          对话: {log.chat_id}
+                          {isZh ? '对话:' : 'Chat:'} {log.chat_id}
                         </span>
                       )}
                     </td>

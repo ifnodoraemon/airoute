@@ -51,24 +51,24 @@ export default function KeysView({
     const g = (group || 'default').toLowerCase();
     if (g === 'vip') {
       return {
-        label: '⭐ VIP 组',
+        label: isZh ? '⭐ VIP 组' : '⭐ VIP Group',
         className: 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/60'
       };
     }
     if (g === 'enterprise') {
       return {
-        label: '👑 企业组',
+        label: isZh ? '👑 企业组' : '👑 Enterprise Group',
         className: 'bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-800/60'
       };
     }
     if (g === 'default') {
       return {
-        label: '默认组',
+        label: isZh ? '默认组' : 'Default Group',
         className: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
       };
     }
     return {
-      label: `${group} 组`,
+      label: isZh ? `${group} 组` : `${group} Group`,
       className: 'bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-300 border-sky-200 dark:border-sky-800/60'
     };
   };
@@ -80,7 +80,13 @@ export default function KeysView({
       if (currentKeyGroup) set.add(currentKeyGroup);
       return Array.from(set).map(g => ({
         id: g,
-        label: g === 'default' ? '默认组 (default)' : g === 'vip' ? 'VIP 组 (vip)' : g === 'enterprise' ? '企业组 (enterprise)' : `${g} 组`
+        label: g === 'default'
+          ? (isZh ? '默认组 (default)' : 'Default (default)')
+          : g === 'vip'
+          ? (isZh ? 'VIP 组 (vip)' : 'VIP Group (vip)')
+          : g === 'enterprise'
+          ? (isZh ? '企业组 (enterprise)' : 'Enterprise (enterprise)')
+          : (isZh ? `${g} 组` : `${g} Group`)
       }));
     }
     if (userGuaranteedGroup) {
@@ -88,11 +94,13 @@ export default function KeysView({
       if (currentKeyGroup) set.add(currentKeyGroup);
       return Array.from(set).map(g => ({
         id: g,
-        label: g === 'default' ? '默认标准组 (default)' : `${g} 组 (账号专属)`
+        label: g === 'default'
+          ? (isZh ? '默认标准组 (default)' : 'Standard Default (default)')
+          : (isZh ? `${g} 组 (账号专属)` : `${g} Group (Dedicated)`)
       }));
     }
     return [
-      { id: currentKeyGroup || 'default', label: currentKeyGroup && currentKeyGroup !== 'default' ? `${currentKeyGroup} 组` : '默认组' }
+      { id: currentKeyGroup || 'default', label: currentKeyGroup && currentKeyGroup !== 'default' ? (isZh ? `${currentKeyGroup} 组` : `${currentKeyGroup} Group`) : (isZh ? '默认组' : 'Default Group') }
     ];
   };
 
@@ -119,20 +127,24 @@ export default function KeysView({
   // Export keys to CSV
   const handleExportKeysCSV = () => {
     if (filteredKeys.length === 0) {
-      if (showToast) showToast('当前没有可导出的密钥', 'warning');
+      if (showToast) showToast(isZh ? '当前没有可导出的密钥' : 'No keys available for export', 'warning');
       return;
     }
-    const headers = ['ID', '密钥别名', 'API Key', '计费分组', '已用额度(元)', '预算上限(元)', '授权模型', '速率限制(RPM)', '状态', '创建时间'];
+    const headers = isZh ? [
+      'ID', '密钥别名', 'API Key', '计费分组', '已用额度(元)', '预算上限(元)', '授权模型', '速率限制(RPM)', '状态', '创建时间'
+    ] : [
+      'ID', 'Alias', 'API Key', 'Billing Group', 'Used Cost', 'Budget Cap', 'Allowed Models', 'Rate Limit (RPM)', 'Status', 'Created At'
+    ];
     const rows = filteredKeys.map(k => [
       k.id,
       `"${k.tenant_id || ''}"`,
       `"${k.key || ''}"`,
       `"${k.group_name || 'default'}"`,
       (k.used_cost || 0).toFixed(4),
-      k.budget > 0 ? k.budget.toFixed(2) : '不限',
+      k.budget > 0 ? k.budget.toFixed(2) : (isZh ? '不限' : 'Unlimited'),
       `"${(k.allowed_models || []).join(';') || '*'}"`,
-      k.rpm || '不限',
-      k.status === 'disabled' ? '已停用' : '正常',
+      k.rpm || (isZh ? '不限' : 'Unlimited'),
+      k.status === 'disabled' ? (isZh ? '已停用' : 'Disabled') : (isZh ? '正常' : 'Active'),
       `"${k.created_at || ''}"`
     ]);
     const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
@@ -145,7 +157,7 @@ export default function KeysView({
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    if (showToast) showToast(`成功导出 ${filteredKeys.length} 个密钥数据`, 'success');
+    if (showToast) showToast(isZh ? `成功导出 ${filteredKeys.length} 个密钥数据` : `Successfully exported ${filteredKeys.length} keys`, 'success');
   };
 
   // Copy cURL sample snippet
@@ -159,7 +171,7 @@ export default function KeysView({
     "messages": [{"role": "user", "content": "Hello Airoute!"}]
   }'`;
     navigator.clipboard.writeText(curl);
-    if (showToast) showToast('cURL 调用示例已复制到剪贴板', 'success');
+    if (showToast) showToast(isZh ? 'cURL 调用示例已复制到剪贴板' : 'cURL example copied to clipboard', 'success');
   };
 
   const activeCount = keys.filter(k => k.status !== 'disabled').length;
@@ -401,7 +413,7 @@ export default function KeysView({
                         <button
                           onClick={() => copyToClipboard(k.key)}
                           className="p-1 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 transition cursor-pointer"
-                          title="复制完整 API Key"
+                          title={isZh ? "复制完整 API Key" : "Copy full API Key"}
                         >
                           {copiedKey === k.key ? (
                             <Check className="w-3.5 h-3.5 text-emerald-500" />
@@ -417,7 +429,7 @@ export default function KeysView({
                           value={k.group_name || 'default'}
                           onChange={(e) => handleUpdateKeyGroup && handleUpdateKeyGroup(k.id, e.target.value)}
                           className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-2xs hover:border-slate-300 dark:hover:border-slate-600 transition"
-                          title="切换该密钥的扣费分组"
+                          title={isZh ? "切换该密钥的扣费分组" : "Change billing group"}
                         >
                           {getGroupOptions(k.group_name).map(opt => (
                             <option key={opt.id} value={opt.id}>

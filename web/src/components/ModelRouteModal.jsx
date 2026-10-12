@@ -130,7 +130,7 @@ export default function ModelRouteModal({
     if (!targetChannel) return;
 
     if (providers.some(p => p.channel_id === chId)) {
-      showToast('该服务商渠道已绑定在此模型中', 'warning');
+      showToast(isZh ? '该服务商渠道已绑定在此模型中' : 'This channel provider is already bound to this model', 'warning');
       return;
     }
 

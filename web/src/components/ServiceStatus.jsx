@@ -311,15 +311,21 @@ export default function ServiceStatus({
             )}
           </div>
           <div>
-            <h2 className="text-lg font-bold tracking-tight">
-              {anyTripped
-                ? (t ? t.statusDegraded : '部分模型服务响应延迟偏高或触发熔断降级')
-                : (t ? t.statusAllOperational : '所有核心模型与网关节点运行正常')}
-            </h2>
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <h2 className="text-lg font-bold tracking-tight">
+                {anyTripped
+                  ? (t ? t.statusDegraded : (isZh ? '部分模型服务响应延迟偏高或触发熔断降级' : 'Partial service degradation or circuit breaker tripped'))
+                  : (t ? t.statusAllOperational : (isZh ? '所有核心模型与网关节点运行正常' : 'All systems and models operational'))}
+              </h2>
+              <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-white/40 dark:bg-black/20 border border-current/20 backdrop-blur-xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>{isZh ? '99.99% 双活集群' : '99.99% Active-Active'}</span>
+              </span>
+            </div>
             <p className="text-xs opacity-80 mt-0.5">
-              {t ? t.statusSubtitle : '实时可用性、响应耗时与最近 30 天服务 SLA 运行看板'}
+              {t ? t.statusSubtitle : (isZh ? '实时可用性、响应耗时与最近 30 天服务 SLA 运行看板' : 'Real-time uptime, response latency, and 30-day SLA telemetry')}
               <span className="ml-2 font-mono text-[11px] opacity-75">
-                (更新于 {lastUpdated.toLocaleTimeString()})
+                ({isZh ? '更新于 ' : 'Updated at '}{lastUpdated.toLocaleTimeString()})
               </span>
             </p>
           </div>

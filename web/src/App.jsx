@@ -929,6 +929,12 @@ export default function App() {
   // Handle Channel/Provider Creation & Editing
   const handleCreateChannel = async (e) => {
     e.preventDefault();
+    const cleanUrl = (newChannel.base_url || '').trim();
+    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      showToast(isZh ? '接口地址必须以 http:// 或 https:// 开头' : 'Base URL must start with http:// or https://', 'warning');
+      return;
+    }
+
     const modelMapping = {};
     if (newChannel.mapping_str && newChannel.mapping_str.trim()) {
       const parts = newChannel.mapping_str.split(',');
@@ -942,6 +948,8 @@ export default function App() {
 
     const payload = {
       ...newChannel,
+      name: (newChannel.name || '').trim(),
+      base_url: cleanUrl,
       models: newChannel.models_str.split(',').map(s => s.trim()).filter(Boolean),
       model_mapping: modelMapping,
     };
@@ -1538,7 +1546,7 @@ export default function App() {
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             className="hidden md:flex p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-            title={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
+            title={sidebarCollapsed ? (isZh ? '展开侧边栏' : 'Expand sidebar') : (isZh ? '收起侧边栏' : 'Collapse sidebar')}
           >
             {sidebarCollapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
           </button>
@@ -1765,7 +1773,7 @@ export default function App() {
                   >
                     <div className="flex items-center space-x-2.5">
                       <Cpu className="w-4 h-4 text-indigo-500" />
-                      <span>{t.navMcp || 'MCP 广场'}</span>
+                      <span>{t.navMcp || (isZh ? 'MCP 广场' : 'MCP Hub')}</span>
                     </div>
                   </button>
                 </div>
@@ -1933,7 +1941,7 @@ export default function App() {
               {currentTab === 'wallet' && (adminUser?.role === 'admin' ? (isZh ? '卡密与充值管理' : 'Wallet & Credits') : (t.navWallet || (isZh ? '我的钱包' : 'My Wallet')))}
               {currentTab === 'logs' && t.navLogs}
               {currentTab === 'skills' && (t.navSkills || 'Skill Hub')}
-              {currentTab === 'mcp' && (t.navMcp || 'MCP 广场')}
+              {currentTab === 'mcp' && (t.navMcp || (isZh ? 'MCP 广场' : 'MCP Hub'))}
               {currentTab === 'users' && (t.navUsers || (isZh ? '用户管理' : 'User Management'))}
               {currentTab === 'playground' && t.navPlayground}
               {currentTab === 'docs' && t.navDocs}

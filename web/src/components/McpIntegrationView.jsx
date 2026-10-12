@@ -202,6 +202,17 @@ const getToolInfo = (toolName) => {
   };
 };
 
+const getGroupLabel = (group, isZh) => {
+  if (group === '网关原生安全审计') return isZh ? '网关原生安全审计' : 'Gateway Security & Compliance';
+  if (group === '网关原生运维') return isZh ? '网关原生运维' : 'Gateway Native Ops';
+  if (group === '网关原生增强') return isZh ? '网关原生增强' : 'Gateway Native Augmentation';
+  if (group === 'Puppeteer 浏览器渲染') return isZh ? 'Puppeteer 浏览器渲染' : 'Puppeteer Browser Automation';
+  if (group === '数据库与持久存储') return isZh ? '数据库与持久存储' : 'Databases & Storage';
+  if (group === '认知与深度推理') return isZh ? '认知与深度推理' : 'Cognitive & Deep Reasoning';
+  if (group === '扩展与自定义服务工具') return isZh ? '扩展与自定义服务工具' : 'Extended & Custom Tools';
+  return group;
+};
+
 const getDefaultArgsForTool = (toolName) => {
   return getToolInfo(toolName).defaultArgs;
 };
@@ -326,12 +337,12 @@ export default function McpIntegrationView({ adminFetch, adminToken, keys = [], 
       const data = await res.json();
       if (res.ok && data.code === 0) {
         setMcpSettings(prev => ({ ...prev, mcp_enabled: nextState }));
-        if (showToast) showToast(`MCP 协议网关服务已${nextState ? '启用' : '关闭'}`, 'success');
+        if (showToast) showToast(isZh ? `MCP 协议网关服务已${nextState ? '启用' : '关闭'}` : `MCP gateway service ${nextState ? 'enabled' : 'disabled'}`, 'success');
       } else {
-        if (showToast) showToast(data.error || '切换失败', 'error');
+        if (showToast) showToast(data.error || (isZh ? '切换失败' : 'Failed to toggle service'), 'error');
       }
     } catch (err) {
-      if (showToast) showToast('请求异常: ' + err.message, 'error');
+      if (showToast) showToast((isZh ? '请求异常: ' : 'Request error: ') + err.message, 'error');
     } finally {
       setTogglingGlobal(false);
     }
@@ -349,13 +360,13 @@ export default function McpIntegrationView({ adminFetch, adminToken, keys = [], 
       const data = await res.json();
       if (res.ok && data.code === 0) {
         setServers(prev => prev.map(s => s.id === serverId ? { ...s, enabled: !currentEnabled } : s));
-        if (showToast) showToast(`MCP 服务 [${serverId}] 已${!currentEnabled ? '开启' : '关闭'}`, 'success');
+        if (showToast) showToast(isZh ? `MCP 服务 [${serverId}] 已${!currentEnabled ? '开启' : '关闭'}` : `MCP service [${serverId}] ${!currentEnabled ? 'enabled' : 'disabled'}`, 'success');
         fetchServersAndSettings();
       } else {
-        if (showToast) showToast(data.error || '切换服务状态失败', 'error');
+        if (showToast) showToast(data.error || (isZh ? '切换服务状态失败' : 'Failed to toggle server state'), 'error');
       }
     } catch (err) {
-      if (showToast) showToast('请求异常: ' + err.message, 'error');
+      if (showToast) showToast((isZh ? '请求异常: ' : 'Request error: ') + err.message, 'error');
     } finally {
       setTogglingServer(prev => ({ ...prev, [serverId]: false }));
     }
@@ -363,7 +374,7 @@ export default function McpIntegrationView({ adminFetch, adminToken, keys = [], 
 
   const handleDeleteServer = async (serverId) => {
     if (!adminFetch) return;
-    if (!window.confirm(`确定要移除自定义 MCP 服务 [${serverId}] 吗？`)) return;
+    if (!window.confirm(isZh ? `确定要移除自定义 MCP 服务 [${serverId}] 吗？` : `Are you sure you want to remove MCP service [${serverId}]?`)) return;
     try {
       const res = await adminFetch(`/api/v1/admin/mcp/servers/${serverId}`, {
         method: 'DELETE'
@@ -371,13 +382,13 @@ export default function McpIntegrationView({ adminFetch, adminToken, keys = [], 
       const data = await res.json();
       if (res.ok && data.code === 0) {
         setServers(prev => prev.filter(s => s.id !== serverId));
-        if (showToast) showToast(`MCP 服务 [${serverId}] 已成功移除`, 'success');
+        if (showToast) showToast(isZh ? `MCP 服务 [${serverId}] 已成功移除` : `MCP service [${serverId}] removed successfully`, 'success');
         fetchServersAndSettings();
       } else {
-        if (showToast) showToast(data.error || '删除失败', 'error');
+        if (showToast) showToast(data.error || (isZh ? '删除失败' : 'Failed to delete service'), 'error');
       }
     } catch (err) {
-      if (showToast) showToast('请求异常: ' + err.message, 'error');
+      if (showToast) showToast((isZh ? '请求异常: ' : 'Request error: ') + err.message, 'error');
     }
   };
 
@@ -385,7 +396,7 @@ export default function McpIntegrationView({ adminFetch, adminToken, keys = [], 
     e.preventDefault();
     if (!adminFetch) return;
     if (!newServer.name || !newServer.endpoint) {
-      if (showToast) showToast('请填写服务名称与 Endpoint', 'error');
+      if (showToast) showToast(isZh ? '请填写服务名称与 Endpoint' : 'Please fill in service name and Endpoint', 'error');
       return;
     }
 
@@ -404,7 +415,7 @@ export default function McpIntegrationView({ adminFetch, adminToken, keys = [], 
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        if (showToast) showToast('新 MCP 服务已成功注册到广场', 'success');
+        if (showToast) showToast(isZh ? '新 MCP 服务已成功注册到广场' : 'New MCP service registered successfully', 'success');
         setAddServerModalOpen(false);
         setNewServer({
           id: '',
@@ -423,10 +434,10 @@ export default function McpIntegrationView({ adminFetch, adminToken, keys = [], 
         });
         fetchServersAndSettings();
       } else {
-        if (showToast) showToast(data.error || '创建 MCP 服务失败', 'error');
+        if (showToast) showToast(data.error || (isZh ? '创建 MCP 服务失败' : 'Failed to create MCP service'), 'error');
       }
     } catch (err) {
-      if (showToast) showToast('请求异常: ' + err.message, 'error');
+      if (showToast) showToast((isZh ? '请求异常: ' : 'Request error: ') + err.message, 'error');
     }
   };
 
@@ -511,7 +522,7 @@ export default function McpIntegrationView({ adminFetch, adminToken, keys = [], 
         try {
           parsedArgs = JSON.parse(probeToolArgs);
         } catch (e) {
-          if (showToast) showToast('工具参数 JSON 语法错误: ' + e.message, 'error');
+          if (showToast) showToast((isZh ? '工具参数 JSON 语法错误: ' : 'Tool argument JSON syntax error: ') + e.message, 'error');
           setProbeRunning(false);
           return;
         }
@@ -548,7 +559,7 @@ export default function McpIntegrationView({ adminFetch, adminToken, keys = [], 
       setProbeResult({
         jsonrpc: "2.0",
         id: "error",
-        error: { code: -32603, message: "探针请求失败: " + err.message }
+        error: { code: -32603, message: (isZh ? "探针请求失败: " : "Probe request failed: ") + err.message }
       });
     } finally {
       setProbeRunning(false);
@@ -584,7 +595,7 @@ export default function McpIntegrationView({ adminFetch, adminToken, keys = [], 
     }
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(''), 2000);
-    if (showToast) showToast('内容已复制到剪贴板', 'success');
+    if (showToast) showToast(isZh ? '内容已复制到剪贴板' : 'Copied to clipboard', 'success');
   };
 
   const categories = [
@@ -1166,7 +1177,7 @@ curl -X POST "${messagesUrl}" \\
                   <input
                     type="text"
                     required
-                    placeholder="如: docker-mcp"
+                    placeholder={isZh ? "如: docker-mcp" : "e.g. docker-mcp"}
                     value={newServer.id}
                     onChange={(e) => setNewServer({ ...newServer, id: e.target.value })}
                     className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
@@ -1253,7 +1264,7 @@ curl -X POST "${messagesUrl}" \\
                 </label>
                 <input
                   type="text"
-                  placeholder="如: docker_ps, docker_logs, docker_restart"
+                  placeholder={isZh ? "如: docker_ps, docker_logs, docker_restart" : "e.g. docker_ps, docker_logs, docker_restart"}
                   value={newServer.tools}
                   onChange={(e) => setNewServer({ ...newServer, tools: e.target.value })}
                   className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono"
@@ -1439,7 +1450,7 @@ curl -X POST "${messagesUrl}" \\
                           return acc;
                         }, {})
                       ).map(([grp, toolList]) => (
-                        <optgroup key={grp} label={grp}>
+                        <optgroup key={grp} label={getGroupLabel(grp, isZh)}>
                           {toolList.map(t => (
                             <option key={t.name} value={t.name}>
                               {t.label}

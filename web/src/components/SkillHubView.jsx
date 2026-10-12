@@ -240,11 +240,13 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
         sop_stage: 'L3_EXECUTION_COMPLETED',
         tools_called: testModalSkill.tools,
         trace: [
-          `[L1] 匹配技能触发词，加载元数据 (${testModalSkill.id})`,
-          `[L2] 解析并激活 SKILL.md 执行指引与前置约束`,
-          `[L3] 智能体使用宿主/MCP 工具集 [${(testModalSkill.tools || []).join(', ')}] 完成验证`
+          isZh ? `[L1] 匹配技能触发词，加载元数据 (${testModalSkill.id})` : `[L1] Match trigger keyword, load metadata (${testModalSkill.id})`,
+          isZh ? `[L2] 解析并激活 SKILL.md 执行指引与前置约束` : `[L2] Parse & activate SKILL.md SOP guidelines & constraints`,
+          isZh ? `[L3] 智能体使用宿主/MCP 工具集 [${(testModalSkill.tools || []).join(', ')}] 完成验证` : `[L3] Agent completes verification with host/MCP tools [${(testModalSkill.tools || []).join(', ')}]`
         ],
-        verdict: `✓ 已按照 ${testModalSkill.name} 标准作业程序（SOP）成功模拟执行，输入：“${testPrompt}” 符合规范契约。`
+        verdict: isZh
+          ? `✓ 已按照 ${testModalSkill.name} 标准作业程序（SOP）成功模拟执行，输入：“${testPrompt}” 符合规范契约。`
+          : `✓ Successfully rehearsed following ${testModalSkill.name} SOP. Input: "${testPrompt}" conforms to specification contract.`
       });
       if (showToast) showToast(isZh ? '技能演练模拟执行成功' : 'Skill rehearsal simulated successfully', 'success');
     }, 400);

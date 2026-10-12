@@ -48,7 +48,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
   const [showGenModal, setShowGenModal] = useState(false);
   const [genCount, setGenCount] = useState(5);
   const [genAmount, setGenAmount] = useState(50);
-  const [genName, setGenName] = useState('额度兑换卡');
+  const [genName, setGenName] = useState(() => (isZh ? '额度兑换卡' : 'Gift Card'));
   const [generating, setGenerating] = useState(false);
 
   const fetchWallet = async () => {
