@@ -334,11 +334,11 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
             {(sysConfig.oauth_github_enabled || sysConfig.oauth_google_enabled) && (
               <div className="pt-2">
                 <div className="relative flex py-2 items-center">
-                  <div className="flex-grow border-t border-slate-200"></div>
-                  <span className="flex-shrink mx-3 text-[10px] text-slate-400 uppercase font-semibold">
+                  <div className="grow border-t border-slate-200"></div>
+                  <span className="shrink mx-3 text-[10px] text-slate-400 uppercase font-semibold">
                     {isZh ? '快速三方登录' : 'Social Sign-in'}
                   </span>
-                  <div className="flex-grow border-t border-slate-200"></div>
+                  <div className="grow border-t border-slate-200"></div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2.5 mt-2">
@@ -473,7 +473,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
+                className="w-full py-2.5 bg-linear-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
               >
                 {loading ? (
                   <>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   MessageSquare,
   Image as ImageIcon,
@@ -138,12 +138,12 @@ export default function PlaygroundView({
   const [imgModel, setImgModel] = useState(imgModels[0] || '');
   const [imgPrompt, setImgPrompt] = useState(isZh ? '极简未来数据中心机房，幽蓝光纤与量子矩阵，8k 渲染' : 'Minimalist futuristic data center, cyan optical fiber and quantum matrix, 8k render');
   const [imgSize, setImgSize] = useState('1024x1024');
-  const [imgQuality, setImgQuality] = useState('standard');
+  const [imgQuality] = useState('standard');
   const [imgResult, setImgResult] = useState(null);
 
   const [ttsModel, setTtsModel] = useState(ttsModels[0] || '');
   const [ttsVoice, setTtsVoice] = useState('alloy');
-  const [ttsSpeed, setTtsSpeed] = useState(1.0);
+  const [ttsSpeed] = useState(1.0);
   const [ttsInput, setTtsInput] = useState(isZh ? '欢迎使用 Airoute 企业级大模型与多模态网关系统。' : 'Welcome to Airoute enterprise LLM and multimodal gateway system.');
   const [ttsAudioUrl, setTtsAudioUrl] = useState(null);
 
@@ -467,7 +467,7 @@ Execute the following mission with precision, maintainability, and zero speculat
               onClick={() => setPlayMode('arena')}
               className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center space-x-1 transition cursor-pointer ${
                 playMode === 'arena'
-                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-xs'
+                  ? 'bg-linear-to-r from-indigo-600 to-purple-600 text-white shadow-xs'
                   : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
               }`}
             >
@@ -638,7 +638,7 @@ Execute the following mission with precision, maintainability, and zero speculat
                     id="streamCheck"
                     checked={playStream}
                     onChange={(e) => setPlayStream(e.target.checked)}
-                    className="rounded border-slate-300 text-indigo-600 focus:ring-0 cursor-pointer"
+                    className="rounded-sm border-slate-300 text-indigo-600 focus:ring-0 cursor-pointer"
                   />
                   <label htmlFor="streamCheck" className="text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
                     {isZh ? '开启 SSE 流式输出 (Streaming)' : 'Enable SSE Streaming'}
@@ -972,7 +972,7 @@ Execute the following mission with precision, maintainability, and zero speculat
                   disabled={playLoading}
                   className={`px-5 py-2.5 text-white rounded-xl text-xs font-bold shadow-xs transition flex items-center space-x-1.5 cursor-pointer shrink-0 ${
                     playMode === 'arena'
-                      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700'
+                      ? 'bg-linear-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700'
                       : 'bg-indigo-600 hover:bg-indigo-700'
                   }`}
                 >

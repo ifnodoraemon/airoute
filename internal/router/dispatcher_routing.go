@@ -66,8 +66,6 @@ func (d *Dispatcher) GetChannelsForModelAndProtocolWithContext(ctx context.Conte
 	sort.Ints(priorities)
 
 	var result []*model.ChannelConfig
-	d.wrrMu.Lock()
-	defer d.wrrMu.Unlock()
 
 	for groupIdx, p := range priorities {
 		group := priorityGroups[p]
@@ -76,13 +74,18 @@ func (d *Dispatcher) GetChannelsForModelAndProtocolWithContext(ctx context.Conte
 			continue
 		}
 
-		var selector ChannelSelectorStrategy
 		if groupIdx == 0 && sessionID != "" {
-			selector = &SessionAffinitySelector{}
+			// Lock-free execution of session affinity (including Redis lookup)
+			selector := &SessionAffinitySelector{cb: d.circuitBreaker}
+			result = append(result, selector.Select(ctx, group, modelName, sessionID)...)
 		} else {
-			selector = NewSWRRSelector(d.wrrWeights)
+			// Acquire wrrMu ONLY when calculating in-memory SWRR weights
+			d.wrrMu.Lock()
+			selector := NewSWRRSelector(d.wrrWeights)
+			selected := selector.Select(ctx, group, modelName, sessionID)
+			d.wrrMu.Unlock()
+			result = append(result, selected...)
 		}
-		result = append(result, selector.Select(ctx, group, modelName, sessionID)...)
 	}
 
 	return result

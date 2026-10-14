@@ -77,20 +77,34 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		effectiveKey := *matchedKey
 
-		// Check associated user account status and wallet quota balance
+		// 1. Key status check (pure in-memory)
+		if effectiveKey.Status != "" && effectiveKey.Status != "active" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error": gin.H{
+					"message": "The API key has been revoked or disabled.",
+					"type":    "invalid_request_error",
+					"code":    "api_key_revoked",
+				},
+			})
+			return
+		}
+
+		// 2. Key budget check (fast in-memory check first)
+		if effectiveKey.Budget > 0 && effectiveKey.UsedCost >= effectiveKey.Budget {
+			c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
+				"error": gin.H{
+					"message": "This API key has exceeded its assigned quota budget limit.",
+					"type":    "key_budget_exceeded",
+					"code":    "key_budget_exceeded",
+				},
+			})
+			return
+		}
+
+		// 3. Authoritative storage key check if database repository is available
 		repo := storage.GetGlobalRepository()
 		if repo != nil {
-			var user *storage.UserRecord
-			if effectiveKey.UserID > 0 {
-				user, _ = repo.GetUserByID(effectiveKey.UserID)
-			}
-			if user == nil && effectiveKey.TenantID != "" {
-				user, _ = repo.GetUserByUsername(effectiveKey.TenantID)
-			}
-
-			// Key budget and status check
-			keyRec, _ := repo.GetAPIKeyByKey(effectiveKey.Key)
-			if keyRec != nil {
+			if keyRec, _ := repo.GetAPIKeyByKey(effectiveKey.Key); keyRec != nil {
 				if keyRec.Status != "" && keyRec.Status != "active" {
 					c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 						"error": gin.H{
@@ -118,35 +132,56 @@ func AuthMiddleware() gin.HandlerFunc {
 				if keyRec.GroupName != "" {
 					effectiveKey.GroupName = keyRec.GroupName
 				}
+				if keyRec.UserID > 0 {
+					effectiveKey.UserID = keyRec.UserID
+				}
+			}
+		}
+
+		// 4. User account status & wallet balance check
+		userStatus := effectiveKey.UserStatus
+		userRole := effectiveKey.UserRole
+		userBalance := effectiveKey.UserBalance
+		userID := effectiveKey.UserID
+
+		// Fallback to storage only if memory snapshot was not populated
+		if userStatus == "" && effectiveKey.UserID > 0 && repo != nil {
+			if u, _ := repo.GetUserByID(effectiveKey.UserID); u != nil {
+				userStatus = u.Status
+				userRole = u.Role
+				userBalance = u.Balance
+			}
+		}
+
+		if userStatus != "" {
+			// Account lock check
+			if strings.EqualFold(userStatus, "locked") {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+					"error": gin.H{
+						"message": "User account is locked. Please contact administrator.",
+						"type":    "account_locked",
+						"code":    "account_locked",
+					},
+				})
+				return
 			}
 
-			if user != nil {
-				// 1. Account lock check
-				if strings.EqualFold(user.Status, "locked") {
-					c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+			// Wallet balance check (admin accounts have unlimited quota)
+			if !strings.EqualFold(userRole, "admin") {
+				if userBalance <= 0 {
+					c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
 						"error": gin.H{
-							"message": "User account is locked. Please contact administrator.",
-							"type":    "account_locked",
-							"code":    "account_locked",
+							"message": "You have exceeded your current balance/quota (insufficient_quota). Please recharge your wallet at the console.",
+							"type":    "insufficient_quota",
+							"code":    "insufficient_quota",
 						},
 					})
 					return
 				}
 
-				// 2. Wallet balance check (admin accounts have unlimited quota)
-				if !strings.EqualFold(user.Role, "admin") {
-					if user.Balance <= 0 {
-						c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
-							"error": gin.H{
-								"message": "You have exceeded your current balance/quota (insufficient_quota). Please recharge your wallet at the console.",
-								"type":    "insufficient_quota",
-								"code":    "insufficient_quota",
-							},
-						})
-						return
-					}
-					// Pre-flight in-flight reservation to prevent concurrent overdraft storm
-					if !globalQuotaTracker.TryAcquire(user.ID, user.Balance) {
+				// Pre-flight in-flight reservation to prevent concurrent overdraft storm
+				if userID > 0 {
+					if !globalQuotaTracker.TryAcquire(userID, userBalance) {
 						c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
 							"error": gin.H{
 								"message": "Concurrent requests exceed available wallet balance reserve. Please wait for pending requests to finish or recharge.",
@@ -156,14 +191,8 @@ func AuthMiddleware() gin.HandlerFunc {
 						})
 						return
 					}
-					defer globalQuotaTracker.Release(user.ID)
+					defer globalQuotaTracker.Release(userID)
 				}
-
-				// Inherit user's group only if key does not have an explicit database group
-				if (effectiveKey.GroupName == "" || (keyRec == nil && effectiveKey.GroupName == "default")) && user.GroupName != "" {
-					effectiveKey.GroupName = user.GroupName
-				}
-				c.Set(ContextKeyUserRecord, user)
 			}
 		}
 

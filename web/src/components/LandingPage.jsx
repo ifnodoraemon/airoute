@@ -120,10 +120,10 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200/80">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-sky-500 flex items-center justify-center text-white shadow-sm font-black text-lg">
+            <div className="w-9 h-9 rounded-xl bg-linear-to-tr from-indigo-600 to-sky-500 flex items-center justify-center text-white shadow-sm font-black text-lg">
               ⚡
             </div>
-            <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-indigo-700 via-purple-700 to-sky-600 bg-clip-text text-transparent">
+            <span className="font-extrabold text-lg tracking-tight bg-linear-to-r from-indigo-700 via-purple-700 to-sky-600 bg-clip-text text-transparent">
               {isZh ? 'AI 路由器' : 'Airoute'}
             </span>
           </div>
@@ -159,7 +159,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
             {isLoggedIn ? (
               <button
                 onClick={onEnterConsole}
-                className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
+                className="px-4 py-2 bg-linear-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
               >
                 <Server className="w-3.5 h-3.5" />
                 <span>{isZh ? '进入工作台 →' : 'Console →'}</span>
@@ -178,7 +178,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
       </header>
 
       {/* Hero Section */}
-      <section className="relative pt-20 pb-24 px-6 overflow-hidden bg-gradient-to-b from-indigo-50/50 via-white to-slate-50 border-b border-slate-200/60">
+      <section className="relative pt-20 pb-24 px-6 overflow-hidden bg-linear-to-b from-indigo-50/50 via-white to-slate-50 border-b border-slate-200/60">
         <div className="max-w-4xl mx-auto text-center space-y-8">
           <div
             onClick={onViewStatus}
@@ -196,14 +196,14 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
             {isZh ? (
               <>
                 2026 旗舰大模型与多模态<br />
-                <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-sky-600 bg-clip-text text-transparent">
+                <span className="bg-linear-to-r from-indigo-600 via-purple-600 to-sky-600 bg-clip-text text-transparent">
                   统一调度与高性能接入网关
                 </span>
               </>
             ) : (
               <>
                 Next-Gen LLM & Multimodal<br />
-                <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-sky-600 bg-clip-text text-transparent">
+                <span className="bg-linear-to-r from-indigo-600 via-purple-600 to-sky-600 bg-clip-text text-transparent">
                   Unified AI Router & Gateway
                 </span>
               </>
@@ -410,9 +410,9 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
           </h2>
           <p className="text-sm text-slate-500">
             {isZh ? (
-              <>仅需调整 <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-indigo-600 font-semibold">base_url</code> 与密钥，即刻享受高可用调度与分流</>
+              <>仅需调整 <code className="px-1.5 py-0.5 rounded-sm bg-slate-100 font-mono text-indigo-600 font-semibold">base_url</code> 与密钥，即刻享受高可用调度与分流</>
             ) : (
-              <>Simply configure <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-indigo-600 font-semibold">base_url</code> and API Key for instant high-availability routing</>
+              <>Simply configure <code className="px-1.5 py-0.5 rounded-sm bg-slate-100 font-mono text-indigo-600 font-semibold">base_url</code> and API Key for instant high-availability routing</>
             )}
           </p>
         </div>

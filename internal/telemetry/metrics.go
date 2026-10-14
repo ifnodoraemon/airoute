@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -73,17 +74,24 @@ func (m *Metrics) RecordRequestWithModel(modelName string, success bool, dur tim
 		}
 	}
 	if modelName != "" {
+		cleanModel := strings.TrimSpace(modelName)
+		if len(cleanModel) > 64 {
+			cleanModel = cleanModel[:64]
+		}
 		if m.modelRequests == nil {
 			m.modelRequests = make(map[string]map[string]uint64)
+		}
+		if _, exists := m.modelRequests[cleanModel]; !exists && len(m.modelRequests) >= 500 {
+			cleanModel = "_unrecognized"
 		}
 		statusKey := "failed"
 		if success {
 			statusKey = "success"
 		}
-		if m.modelRequests[modelName] == nil {
-			m.modelRequests[modelName] = make(map[string]uint64)
+		if m.modelRequests[cleanModel] == nil {
+			m.modelRequests[cleanModel] = make(map[string]uint64)
 		}
-		m.modelRequests[modelName][statusKey]++
+		m.modelRequests[cleanModel][statusKey]++
 	}
 	m.mu.Unlock()
 }

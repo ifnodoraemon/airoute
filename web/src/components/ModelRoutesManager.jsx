@@ -378,7 +378,7 @@ export default function ModelRoutesManager({
                   <th className="py-3 px-3 w-10 text-center">
                     <input
                       type="checkbox"
-                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      className="rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                       checked={filteredRoutes.length > 0 && selectedModels.length === filteredRoutes.length}
                       onChange={(e) => {
                         if (e.target.checked) {
@@ -409,7 +409,7 @@ export default function ModelRoutesManager({
                         <td className="py-3.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
-                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            className="rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                             checked={selectedModels.includes(route.model)}
                             onChange={(e) => {
                               e.stopPropagation();
@@ -434,7 +434,7 @@ export default function ModelRoutesManager({
                             >
                               {copiedModel === route.model ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
                             </button>
-                            <span className={`text-[10px] px-1.5 py-0.2 rounded border ${badge.color}`}>
+                            <span className={`text-[10px] px-1.5 py-0.2 rounded-sm border ${badge.color}`}>
                               {badge.label}
                             </span>
                           </div>
@@ -502,7 +502,7 @@ export default function ModelRoutesManager({
                                 ¥{price.prompt_price.toFixed(1)}/¥{price.completion_price.toFixed(1)}
                               </span>
                               {price.off_peak_enabled !== false && (
-                                <span className="bg-indigo-50 border border-indigo-200 text-indigo-700 px-1.5 py-0.2 rounded font-medium text-[10px]">
+                                <span className="bg-indigo-50 border border-indigo-200 text-indigo-700 px-1.5 py-0.2 rounded-sm font-medium text-[10px]">
                                   🌙 {isZh ? '闲时优惠' : 'Off-peak'}
                                 </span>
                               )}
@@ -591,7 +591,7 @@ export default function ModelRoutesManager({
                                               {probe.latency_ms} ms ({probe.status})
                                             </span>
                                           ) : (
-                                            <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200 text-[10px]">
+                                            <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-sm border border-emerald-200 text-[10px]">
                                               {isZh ? '正常就绪' : 'Ready'}
                                             </span>
                                           )}

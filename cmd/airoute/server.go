@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -66,6 +67,26 @@ func runServer(args []string) {
 	dataSource := *dbPath
 	if dbEnv := os.Getenv("DATABASE_URL"); dbEnv != "" {
 		dataSource = dbEnv
+	}
+
+	// Security and deployment warnings on startup
+	isRelease := os.Getenv("GIN_MODE") == "release" || cfg.Server.LogLevel == "warn" || cfg.Server.LogLevel == "error"
+	adminSecret := os.Getenv("GATEWAY_ADMIN_SECRET")
+	if adminSecret == "" {
+		adminSecret = os.Getenv("JWT_SECRET")
+	}
+	if isRelease {
+		if adminSecret == "" || adminSecret == "airoute-secret-key-change-me" {
+			telemetry.Logger.Warn("SECURITY WARNING: Using default or empty GATEWAY_ADMIN_SECRET in production release mode! Set a strong secret via GATEWAY_ADMIN_SECRET environment variable.")
+		}
+		if os.Getenv("STRIPE_WEBHOOK_SECRET") == "" {
+			telemetry.Logger.Warn("SECURITY WARNING: STRIPE_WEBHOOK_SECRET is unset in production release mode. Stripe payment webhooks will be rejected.")
+		}
+	}
+	if !strings.HasPrefix(dataSource, "postgres://") && !strings.HasPrefix(dataSource, "postgresql://") {
+		if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+			telemetry.Logger.Warn("STORAGE WARNING: Running in Kubernetes with SQLite file storage. For multi-replica deployments (replicas > 1), configure PostgreSQL via DATABASE_URL to avoid database lock contention.")
+		}
 	}
 
 	// Initialize Storage Layer (SQLite or Distributed PostgreSQL)

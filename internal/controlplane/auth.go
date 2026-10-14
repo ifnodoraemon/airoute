@@ -59,8 +59,6 @@ func (h *AdminHandler) AdminAuthMiddleware() gin.HandlerFunc {
 		var token string
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			token = strings.TrimPrefix(authHeader, "Bearer ")
-		} else if qToken := c.Query("token"); qToken != "" {
-			token = qToken
 		} else if xToken := c.GetHeader("x-admin-token"); xToken != "" {
 			token = xToken
 		}

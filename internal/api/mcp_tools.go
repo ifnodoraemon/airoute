@@ -1,17 +1,21 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-// executeUtilityAndMockTools executes utilities (math, time) and sandboxed/mock MCP integrations (Puppeteer, Database, GitHub).
-func (h *MCPHandler) executeUtilityAndMockTools(_ context.Context, name string, args map[string]interface{}) (string, bool, bool) {
+// executeBuiltinUtilityTools executes real in-process utilities (math, time, local database reflection, reasoning).
+func (h *MCPHandler) executeBuiltinUtilityTools(ctx context.Context, name string, args map[string]interface{}) (string, bool, bool) {
 	switch name {
 	case "nano_get_current_time":
 		cst := time.FixedZone("CST", 8*3600)
@@ -50,92 +54,159 @@ func (h *MCPHandler) executeUtilityAndMockTools(_ context.Context, name string, 
 		b, _ := json.MarshalIndent(res, "", "  ")
 		return string(b), false, true
 
-	case "puppeteer_navigate":
-		targetURL, _ := args["url"].(string)
-		if targetURL == "" {
-			targetURL = "https://example.com"
-		}
-		res := gin.H{
-			"status":          200,
-			"url":             targetURL,
-			"title":           "Airoute Sandbox Rendering Page",
-			"rendered_bytes":  4820,
-			"dom_interactive": "128ms",
-			"captured_at":     time.Now().Format("2006-01-02 15:04:05"),
-			"message":         "页面已成功通过 Puppeteer 无头沙箱安全加载与解析",
-		}
-		b, _ := json.MarshalIndent(res, "", "  ")
-		return string(b), false, true
-
-	case "puppeteer_screenshot":
-		nameArg, _ := args["name"].(string)
-		if nameArg == "" {
-			nameArg = "preview_shot"
-		}
-		res := gin.H{
-			"status":       "captured",
-			"name":         nameArg,
-			"format":       "image/png",
-			"dimensions":   "1920x1080",
-			"size_bytes":   348920,
-			"storage_path": "memory://puppeteer/screenshots/" + nameArg + ".png",
-			"captured_at":  time.Now().Format("2006-01-02 15:04:05"),
-		}
-		b, _ := json.MarshalIndent(res, "", "  ")
-		return string(b), false, true
-
-	case "puppeteer_click", "puppeteer_evaluate":
-		res := gin.H{
-			"status":      "success",
-			"tool":        name,
-			"executed_at": time.Now().Format("2006-01-02 15:04:05"),
-			"message":     "Puppeteer DOM 事件已在沙箱环境中安全触发",
-		}
-		b, _ := json.MarshalIndent(res, "", "  ")
-		return string(b), false, true
-
 	case "read_query":
-		query, _ := args["query"].(string)
-		if strings.TrimSpace(query) == "" {
-			query = "SELECT * FROM public.models LIMIT 5;"
+		if h.repo == nil || h.repo.GetDB() == nil {
+			return "Database repository not initialized", true, true
 		}
+		query, _ := args["query"].(string)
+		query = strings.TrimSpace(query)
+		if query == "" {
+			return "Error: parameter 'query' is required", true, true
+		}
+
+		// Security enforcement: only allow read-only queries (SELECT, EXPLAIN)
+		upperQ := strings.ToUpper(query)
+		disallowed := []string{"INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "TRUNCATE", "REPLACE", "EXEC", "GRANT"}
+		for _, kw := range disallowed {
+			if strings.HasPrefix(upperQ, kw+" ") || strings.Contains(upperQ, " "+kw+" ") {
+				return fmt.Sprintf("Security violation: query contains disallowed mutating keyword '%s'", kw), true, true
+			}
+		}
+
+		db := h.repo.GetDB()
+		rows, err := db.Query(query)
+		if err != nil {
+			return fmt.Sprintf("Query execution failed: %v", err), true, true
+		}
+		defer rows.Close()
+
+		cols, err := rows.Columns()
+		if err != nil {
+			return fmt.Sprintf("Failed to fetch column metadata: %v", err), true, true
+		}
+
+		var resultRows [][]interface{}
+		for rows.Next() {
+			vals := make([]interface{}, len(cols))
+			valPtrs := make([]interface{}, len(cols))
+			for i := range vals {
+				valPtrs[i] = &vals[i]
+			}
+			if err := rows.Scan(valPtrs...); err != nil {
+				return fmt.Sprintf("Row scan error: %v", err), true, true
+			}
+			rowList := make([]interface{}, len(cols))
+			for i, v := range vals {
+				if b, ok := v.([]byte); ok {
+					rowList[i] = string(b)
+				} else {
+					rowList[i] = v
+				}
+			}
+			resultRows = append(resultRows, rowList)
+			if len(resultRows) >= 100 { // Safety limit
+				break
+			}
+		}
+
 		res := gin.H{
 			"query":          query,
-			"row_count":      2,
-			"columns":        []string{"id", "model_name", "status", "latency_ms"},
-			"rows": [][]interface{}{
-				{1, "deepseek-chat", "operational", 45},
-				{2, "deepseek-reasoner", "operational", 80},
-			},
-			"security_audit": "PASSED (Read-only query without mutation detected)",
-			"duration_ms":    12,
+			"columns":        cols,
+			"rows":           resultRows,
+			"row_count":      len(resultRows),
+			"security_audit": "PASSED (Read-only query validated)",
 		}
 		b, _ := json.MarshalIndent(res, "", "  ")
 		return string(b), false, true
 
 	case "list_tables":
+		if h.repo == nil || h.repo.GetDB() == nil {
+			return "Database repository not initialized", true, true
+		}
+		db := h.repo.GetDB()
+		var query string
+		if db.Dialect() == "postgres" {
+			query = "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;"
+		} else {
+			query = "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name;"
+		}
+
+		rows, err := db.Query(query)
+		if err != nil {
+			return fmt.Sprintf("Failed to list tables: %v", err), true, true
+		}
+		defer rows.Close()
+
+		var tables []string
+		for rows.Next() {
+			var tbl string
+			if err := rows.Scan(&tbl); err == nil {
+				tables = append(tables, tbl)
+			}
+		}
+
 		res := gin.H{
-			"schema": "public",
-			"tables": []string{"channels", "api_keys", "usage_logs", "skills", "mcp_servers", "users"},
-			"status": "connected",
+			"dialect": db.Dialect(),
+			"tables":  tables,
+			"status":  "connected",
 		}
 		b, _ := json.MarshalIndent(res, "", "  ")
 		return string(b), false, true
 
 	case "describe_table":
+		if h.repo == nil || h.repo.GetDB() == nil {
+			return "Database repository not initialized", true, true
+		}
 		tableName, _ := args["table_name"].(string)
 		if tableName == "" {
-			tableName = "channels"
+			return "Error: parameter 'table_name' is required", true, true
 		}
+
+		db := h.repo.GetDB()
+		type colMeta struct {
+			Name     string `json:"name"`
+			Type     string `json:"type"`
+			Nullable bool   `json:"nullable"`
+		}
+		var cols []colMeta
+
+		if db.Dialect() == "postgres" {
+			rows, err := db.Query(`SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = ? ORDER BY ordinal_position`, tableName)
+			if err == nil {
+				defer rows.Close()
+				for rows.Next() {
+					var c colMeta
+					var isNullStr string
+					if err := rows.Scan(&c.Name, &c.Type, &isNullStr); err == nil {
+						c.Nullable = strings.EqualFold(isNullStr, "YES")
+						cols = append(cols, c)
+					}
+				}
+			}
+		} else {
+			rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", tableName))
+			if err == nil {
+				defer rows.Close()
+				for rows.Next() {
+					var cid int
+					var name, colType string
+					var notNull int
+					var dfltValue interface{}
+					var pk int
+					if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err == nil {
+						cols = append(cols, colMeta{
+							Name:     name,
+							Type:     colType,
+							Nullable: notNull == 0,
+						})
+					}
+				}
+			}
+		}
+
 		res := gin.H{
-			"table": tableName,
-			"columns": []gin.H{
-				{"name": "id", "type": "bigint", "nullable": false},
-				{"name": "name", "type": "varchar(255)", "nullable": false},
-				{"name": "type", "type": "varchar(64)", "nullable": false},
-				{"name": "status", "type": "varchar(32)", "nullable": false},
-			},
-			"primary_key": "id",
+			"table":   tableName,
+			"columns": cols,
 		}
 		b, _ := json.MarshalIndent(res, "", "  ")
 		return string(b), false, true
@@ -145,28 +216,16 @@ func (h *MCPHandler) executeUtilityAndMockTools(_ context.Context, name string, 
 		thoughtNum, _ := args["thoughtNumber"].(float64)
 		totalThoughts, _ := args["totalThoughts"].(float64)
 		if thought == "" {
-			thought = "分析系统吞吐与负载拓扑并制定优化策略"
+			return "Error: parameter 'thought' is required", true, true
 		}
-		if totalThoughts == 0 {
-			totalThoughts = 3
+		if totalThoughts <= 0 {
+			totalThoughts = 1
 		}
 		res := gin.H{
 			"thought":            thought,
 			"thought_number":     int(thoughtNum),
 			"total_thoughts":     int(totalThoughts),
 			"verification_state": "VALIDATED",
-			"confidence":         0.96,
-			"next_recommended":   "基于推理链结论调度对应模型与工具链",
-		}
-		b, _ := json.MarshalIndent(res, "", "  ")
-		return string(b), false, true
-
-	case "search_repositories", "create_issue", "get_file_contents", "create_pull_request":
-		res := gin.H{
-			"tool":        name,
-			"status":      "ok",
-			"executed_at": time.Now().Format("2006-01-02 15:04:05"),
-			"message":     fmt.Sprintf("GitHub MCP 服务已完成对 [%s] 的合规代理与执行", name),
 		}
 		b, _ := json.MarshalIndent(res, "", "  ")
 		return string(b), false, true
@@ -175,27 +234,132 @@ func (h *MCPHandler) executeUtilityAndMockTools(_ context.Context, name string, 
 	return "", false, false
 }
 
-// executeDynamicMCPTool dispatches execution to configured MCP servers from storage.
-func (h *MCPHandler) executeDynamicMCPTool(name string, args map[string]interface{}) (string, bool) {
+
+// executeDynamicMCPTool dispatches execution to configured external MCP servers from storage via real JSON-RPC 2.0.
+func (h *MCPHandler) executeDynamicMCPTool(ctx context.Context, name string, args map[string]interface{}) (string, bool) {
 	if h.repo != nil {
 		servers, _ := h.repo.ListMCPServers()
 		for _, srv := range servers {
+			if !srv.Enabled {
+				continue
+			}
 			for _, t := range srv.Tools {
 				if t == name {
-					res := gin.H{
-						"tool":        name,
-						"server_id":   srv.ID,
-						"server_name": srv.Name,
-						"status":      "executed",
-						"executed_at": time.Now().Format("2006-01-02 15:04:05"),
-						"message":     fmt.Sprintf("工具 [%s] 已在 [%s] MCP 沙箱代理环境中安全执行", name, srv.Name),
-						"arguments":   args,
+					endpoint := srv.Endpoint
+					if endpoint == "" {
+						return fmt.Sprintf("MCP server '%s' has no endpoint configured", srv.Name), true
 					}
-					b, _ := json.MarshalIndent(res, "", "  ")
-					return string(b), false
+
+					// Forward to real HTTP / SSE MCP server via JSON-RPC 2.0
+					if strings.HasPrefix(endpoint, "http://") || strings.HasPrefix(endpoint, "https://") {
+						return forwardJSONRPCToolCall(ctx, endpoint, name, args)
+					}
+
+					// Real stdio CLI execution if installed
+					if srv.Transport == "stdio" {
+						parts := strings.Fields(endpoint)
+						if len(parts) > 0 {
+							if _, lookErr := exec.LookPath(parts[0]); lookErr == nil {
+								return executeStdioMCPTool(ctx, parts, name, args)
+							}
+							return fmt.Sprintf("MCP server '%s' requires local runtime '%s' which is not installed", srv.Name, parts[0]), true
+						}
+					}
+
+					return fmt.Sprintf("MCP server '%s' uses unsupported transport '%s'", srv.Name, srv.Transport), true
 				}
 			}
 		}
 	}
 	return fmt.Sprintf("Unknown tool '%s'", name), true
+}
+
+// forwardJSONRPCToolCall transmits a standard tools/call JSON-RPC 2.0 request to an external MCP endpoint.
+func forwardJSONRPCToolCall(ctx context.Context, endpoint, toolName string, args map[string]interface{}) (string, bool) {
+	rpcReq := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      time.Now().UnixNano(),
+		"method":  "tools/call",
+		"params": map[string]interface{}{
+			"name":      toolName,
+			"arguments": args,
+		},
+	}
+	bodyBytes, err := json.Marshal(rpcReq)
+	if err != nil {
+		return fmt.Sprintf("Failed to serialize MCP request: %v", err), true
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return fmt.Sprintf("Failed to initialize HTTP request to '%s': %v", endpoint, err), true
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return fmt.Sprintf("Upstream MCP server '%s' connection failed: %v", endpoint, err), true
+	}
+	defer resp.Body.Close()
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Sprintf("Failed reading response from upstream MCP server: %v", err), true
+	}
+
+	if resp.StatusCode >= 400 {
+		return fmt.Sprintf("Upstream MCP server returned HTTP %d: %s", resp.StatusCode, string(respBytes)), true
+	}
+
+	var rpcResp struct {
+		JSONRPC string          `json:"jsonrpc"`
+		Result  json.RawMessage `json:"result"`
+		Error   *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(respBytes, &rpcResp); err == nil {
+		if rpcResp.Error != nil {
+			return fmt.Sprintf("MCP execution error (code %d): %s", rpcResp.Error.Code, rpcResp.Error.Message), true
+		}
+		if len(rpcResp.Result) > 0 {
+			return string(rpcResp.Result), false
+		}
+	}
+
+	return string(respBytes), false
+}
+
+// executeStdioMCPTool executes a tool on a local stdio MCP server process.
+func executeStdioMCPTool(ctx context.Context, cmdParts []string, toolName string, args map[string]interface{}) (string, bool) {
+	rpcReq := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      time.Now().UnixNano(),
+		"method":  "tools/call",
+		"params": map[string]interface{}{
+			"name":      toolName,
+			"arguments": args,
+		},
+	}
+	reqBytes, _ := json.Marshal(rpcReq)
+	reqBytes = append(reqBytes, '\n')
+
+	cmd := exec.CommandContext(ctx, cmdParts[0], cmdParts[1:]...)
+	cmd.Stdin = bytes.NewReader(reqBytes)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Sprintf("Stdio process execution error: %v, stderr: %s", err, stderr.String()), true
+	}
+
+	outStr := strings.TrimSpace(stdout.String())
+	if outStr == "" {
+		return "Stdio process completed with empty output", false
+	}
+	return outStr, false
 }

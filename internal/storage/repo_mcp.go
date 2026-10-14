@@ -127,8 +127,15 @@ func (r *Repository) SetMCPServerEnabled(id string, enabled bool) error {
 	return err
 }
 
+// UpdateMCPServerStatus updates the health/connection status of an MCP server.
+func (r *Repository) UpdateMCPServerStatus(id, status string) error {
+	_, err := r.db.Exec(`UPDATE system_mcp_servers SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, status, id)
+	return err
+}
+
 // DeleteMCPServer removes an MCP server.
 func (r *Repository) DeleteMCPServer(id string) error {
 	_, err := r.db.Exec(`DELETE FROM system_mcp_servers WHERE id = ?`, id)
 	return err
 }
+

@@ -299,7 +299,7 @@ export default function ServiceStatus({
       >
         <div className="flex items-center space-x-4">
           <div
-            className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner shrink-0 ${
+            className={`w-12 h-12 rounded-2xl flex items-center justify-center inset-shadow-sm shrink-0 ${
               anyTripped
                 ? 'bg-amber-500 text-white animate-pulse'
                 : 'bg-emerald-500 text-white'
@@ -807,12 +807,12 @@ export default function ServiceStatus({
             className="flex items-center space-x-3 cursor-pointer group transition duration-150 hover:opacity-90"
             title={lang === 'zh' ? '点击返回门户首页' : 'Return to Home'}
           >
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-sky-500 flex items-center justify-center text-white shadow-sm font-black text-lg">
+            <div className="w-9 h-9 rounded-xl bg-linear-to-tr from-indigo-600 to-sky-500 flex items-center justify-center text-white shadow-sm font-black text-lg">
               ⚡
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="font-extrabold text-base tracking-tight bg-gradient-to-r from-indigo-700 via-purple-700 to-sky-600 bg-clip-text text-transparent">
+                <span className="font-extrabold text-base tracking-tight bg-linear-to-r from-indigo-700 via-purple-700 to-sky-600 bg-clip-text text-transparent">
                   Airoute
                 </span>
                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -845,7 +845,7 @@ export default function ServiceStatus({
             {isLoggedIn ? (
               <button
                 onClick={onEnterConsole}
-                className="px-4 py-1.5 bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center space-x-1.5 transition cursor-pointer"
+                className="px-4 py-1.5 bg-linear-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center space-x-1.5 transition cursor-pointer"
               >
                 <Server className="w-3.5 h-3.5" />
                 <span>{lang === 'zh' ? '进入工作台 →' : 'Console →'}</span>

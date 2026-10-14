@@ -248,7 +248,7 @@ export default function AiCopilot({
     return (
       <button
         onClick={onToggle}
-        className="fixed bottom-6 right-6 z-40 flex items-center space-x-2 px-4 py-2.5 rounded-full bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 text-white shadow-xl shadow-indigo-500/25 hover:shadow-indigo-500/40 transition-all duration-300 group cursor-pointer border border-white/20 animate-in fade-in"
+        className="fixed bottom-6 right-6 z-40 flex items-center space-x-2 px-4 py-2.5 rounded-full bg-linear-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 text-white shadow-xl shadow-indigo-500/25 hover:shadow-indigo-500/40 transition-all duration-300 group cursor-pointer border border-white/20 animate-in fade-in"
         title="Airoute AI Copilot (Cmd + J)"
       >
         <div className="relative">
@@ -257,7 +257,7 @@ export default function AiCopilot({
         <span className="text-xs font-bold tracking-tight">
           {isZh ? 'AI 智能副驾驶' : 'AI Copilot'}
         </span>
-        <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono font-semibold bg-white/20 text-white/90 rounded border border-white/20">
+        <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono font-semibold bg-white/20 text-white/90 rounded-sm border border-white/20">
           ⌘J
         </kbd>
       </button>
@@ -273,9 +273,9 @@ export default function AiCopilot({
       } overflow-hidden animate-in zoom-in-95`}
     >
       {/* Header */}
-      <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-indigo-50/80 via-white to-purple-50/80 dark:from-slate-900 dark:via-[#111726] dark:to-purple-950/20">
+      <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-linear-to-r from-indigo-50/80 via-white to-purple-50/80 dark:from-slate-900 dark:via-[#111726] dark:to-purple-950/20">
         <div className="flex items-center space-x-2.5">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+          <div className="w-8 h-8 rounded-xl bg-linear-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
             <Sparkles className="w-4 h-4 text-amber-300" />
           </div>
           <div>

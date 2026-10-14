@@ -3,6 +3,7 @@ package router
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -89,6 +90,10 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 		start := time.Now()
 		httpResp, err := provider.SharedDefaultHTTPClient.Do(httpReq)
 		if err != nil {
+			if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
+				d.circuitBreaker.AbortCanary(ch.Name)
+				return nil, ctx.Err()
+			}
 			lastErr = err
 			attempted = append(attempted, d.recordChannelFailure(ch.Name, err, i+1))
 			continue
@@ -154,6 +159,10 @@ func (d *Dispatcher) DispatchEmbedding(ctx context.Context, req *model.Embedding
 		resp, err = embedProv.Embed(ctx, req, ch)
 
 		if err != nil {
+			if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
+				d.circuitBreaker.AbortCanary(ch.Name)
+				return nil, ctx.Err()
+			}
 			lastErr = err
 			attempted = append(attempted, d.recordChannelFailure(ch.Name, err, i+1))
 			continue
@@ -204,6 +213,10 @@ func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankReques
 
 		resp, err := rerankProv.Rerank(ctx, req, ch)
 		if err != nil {
+			if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
+				d.circuitBreaker.AbortCanary(ch.Name)
+				return nil, ctx.Err()
+			}
 			lastErr = err
 			attempted = append(attempted, d.recordChannelFailure(ch.Name, err, i+1))
 			continue

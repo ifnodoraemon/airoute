@@ -35,7 +35,7 @@ func (p *GeminiProvider) Type() model.ProviderType {
 }
 
 // buildGeminiURL creates Google endpoint URL.
-func buildGeminiURL(baseURL, modelName string, stream bool, apiKey string) string {
+func buildGeminiURL(baseURL, modelName string, stream bool) string {
 	if baseURL == "" {
 		baseURL = "https://generativelanguage.googleapis.com"
 	}
@@ -46,12 +46,7 @@ func buildGeminiURL(baseURL, modelName string, stream bool, apiKey string) strin
 		action = "streamGenerateContent?alt=sse"
 	}
 
-	sep := "?"
-	if strings.Contains(action, "?") {
-		sep = "&"
-	}
-
-	return fmt.Sprintf("%s/v1beta/models/%s:%s%skey=%s", baseURL, modelName, action, sep, apiKey)
+	return fmt.Sprintf("%s/v1beta/models/%s:%s", baseURL, modelName, action)
 }
 
 // ChatComplete executes a non-streaming Gemini call and converts to OpenAI format.
@@ -63,7 +58,7 @@ func (p *GeminiProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 	}
 
 	targetModel := channel.GetUpstreamModel(req.Model)
-	targetURL := buildGeminiURL(channel.BaseURL, targetModel, false, channel.APIKey)
+	targetURL := buildGeminiURL(channel.BaseURL, targetModel, false)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(payloadBytes))
 	if err != nil {

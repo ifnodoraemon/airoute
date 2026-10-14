@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import {
   Activity,
   Zap,
@@ -60,34 +60,45 @@ import {
   Split
 } from 'lucide-react';
 import Toast from './components/Toast';
-import QuickStartModal from './components/QuickStartModal';
-import LogDetailModal from './components/LogDetailModal';
-import CurlExportModal from './components/CurlExportModal';
-import ChannelModal from './components/ChannelModal';
-import KeyModal from './components/KeyModal';
-import LandingPage from './components/LandingPage';
-import AuthPage from './components/AuthPage';
-import LoginModal from './components/LoginModal';
-import CommandPalette from './components/CommandPalette';
-import AccountManageModal from './components/AccountManageModal';
-import ModelRoutesManager from './components/ModelRoutesManager';
-import ServiceStatus from './components/ServiceStatus';
-import PricingManager from './components/PricingManager';
-import SkillHubView from './components/SkillHubView';
-import McpIntegrationView from './components/McpIntegrationView';
-import UserManagementView from './components/UserManagementView';
-import WalletManagementView from './components/WalletManagementView';
-import ChannelsView from './components/ChannelsView';
-import KeysView from './components/KeysView';
-import LogsView from './components/LogsView';
-import DashboardView from './components/DashboardView';
-import PlaygroundView from './components/PlaygroundView';
-import DocsView from './components/DocsView';
-import OnboardingModal from './components/OnboardingModal';
-import VisualTopologyModal from './components/VisualTopologyModal';
-import AiCopilot from './components/AiCopilot';
+
+// Lazy loaded views and heavy modals for code splitting and fast initial bundle loading
+const QuickStartModal = lazy(() => import('./components/QuickStartModal'));
+const LogDetailModal = lazy(() => import('./components/LogDetailModal'));
+const CurlExportModal = lazy(() => import('./components/CurlExportModal'));
+const ChannelModal = lazy(() => import('./components/ChannelModal'));
+const KeyModal = lazy(() => import('./components/KeyModal'));
+const LandingPage = lazy(() => import('./components/LandingPage'));
+const AuthPage = lazy(() => import('./components/AuthPage'));
+const LoginModal = lazy(() => import('./components/LoginModal'));
+const CommandPalette = lazy(() => import('./components/CommandPalette'));
+const AccountManageModal = lazy(() => import('./components/AccountManageModal'));
+const ModelRoutesManager = lazy(() => import('./components/ModelRoutesManager'));
+const ServiceStatus = lazy(() => import('./components/ServiceStatus'));
+const PricingManager = lazy(() => import('./components/PricingManager'));
+const SkillHubView = lazy(() => import('./components/SkillHubView'));
+const McpIntegrationView = lazy(() => import('./components/McpIntegrationView'));
+const UserManagementView = lazy(() => import('./components/UserManagementView'));
+const WalletManagementView = lazy(() => import('./components/WalletManagementView'));
+const ChannelsView = lazy(() => import('./components/ChannelsView'));
+const KeysView = lazy(() => import('./components/KeysView'));
+const LogsView = lazy(() => import('./components/LogsView'));
+const DashboardView = lazy(() => import('./components/DashboardView'));
+const PlaygroundView = lazy(() => import('./components/PlaygroundView'));
+const DocsView = lazy(() => import('./components/DocsView'));
+const OnboardingModal = lazy(() => import('./components/OnboardingModal'));
+const VisualTopologyModal = lazy(() => import('./components/VisualTopologyModal'));
+const AiCopilot = lazy(() => import('./components/AiCopilot'));
+
+function ViewLoader() {
+  return (
+    <div className="flex flex-col items-center justify-center p-16 text-slate-400">
+      <div className="w-7 h-7 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+      <span className="text-xs font-medium tracking-wide">Loading module...</span>
+    </div>
+  );
+}
 import { translations, I18nContext } from './i18n';
-import { getGatewayOrigin, getGatewayBaseUrl, setPublicGatewayUrl, copyToClipboard as crossOriginCopy } from './config';
+import { getGatewayOrigin, setPublicGatewayUrl, copyToClipboard as crossOriginCopy } from './config';
 
 // Audit-log pagination: server-side page size, kept in one place for the
 // fetch limit, the offset stepping, and the page-number math in LogsView.
@@ -353,7 +364,6 @@ export default function App() {
   const [activeQuickKey, setActiveQuickKey] = useState(null);
   const [activeLogDetail, setActiveLogDetail] = useState(null);
   const [curlExportCmd, setCurlExportCmd] = useState('');
-  const [showApiKeyPlain, setShowApiKeyPlain] = useState(false);
   const [batchTesting, setBatchTesting] = useState(false);
   const [channelLatencies, setChannelLatencies] = useState({});
 
@@ -1320,57 +1330,59 @@ export default function App() {
       <I18nContext.Provider value={{ lang, setLang, toggleLang, t }}>
         <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-indigo-500 selection:text-white">
           <Toast toast={toast} onClose={() => setToast(prev => ({ ...prev, show: false }))} />
-          <LandingPage
-            isLoggedIn={!!adminToken}
-            adminUser={adminUser}
-            lang={lang}
-            setLang={setLang}
-            toggleLang={toggleLang}
-            t={t}
-            onOpenLogin={() => {
-              setAuthTab('login');
-              setViewMode('auth');
-            }}
-            onEnterConsole={() => {
-              if (adminToken) {
-                setViewMode('console');
-              } else {
+          <Suspense fallback={<ViewLoader />}>
+            <LandingPage
+              isLoggedIn={!!adminToken}
+              adminUser={adminUser}
+              lang={lang}
+              setLang={setLang}
+              toggleLang={toggleLang}
+              t={t}
+              onOpenLogin={() => {
                 setAuthTab('login');
                 setViewMode('auth');
-              }
-            }}
-            onViewDocs={() => {
-              setCurrentTab('docs');
-              if (adminToken) {
+              }}
+              onEnterConsole={() => {
+                if (adminToken) {
+                  setViewMode('console');
+                } else {
+                  setAuthTab('login');
+                  setViewMode('auth');
+                }
+              }}
+              onViewDocs={() => {
+                setCurrentTab('docs');
+                if (adminToken) {
+                  setViewMode('console');
+                } else {
+                  setAuthTab('login');
+                  setViewMode('auth');
+                }
+              }}
+              onViewStatus={() => setViewMode('status')}
+              stats={stats}
+              channelsCount={channels.length}
+              modelsCount={models.length}
+            />
+            <LoginModal
+              isOpen={showLoginModal}
+              onClose={() => setShowLoginModal(false)}
+              lang={lang}
+              t={t}
+              onLoginSuccess={(token, user) => {
+                setStoredAuth(token, user);
+                setAdminToken(token);
+                setAdminUser(user);
+                const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
+                setCurrentTab(defTab);
+                setShowLoginModal(false);
                 setViewMode('console');
-              } else {
-                setAuthTab('login');
-                setViewMode('auth');
-              }
-            }}
-            onViewStatus={() => setViewMode('status')}
-            stats={stats}
-            channelsCount={channels.length}
-            modelsCount={models.length}
-          />
-          <LoginModal
-            isOpen={showLoginModal}
-            onClose={() => setShowLoginModal(false)}
-            lang={lang}
-            t={t}
-            onLoginSuccess={(token, user) => {
-              setStoredAuth(token, user);
-              setAdminToken(token);
-              setAdminUser(user);
-              const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
-              setCurrentTab(defTab);
-              setShowLoginModal(false);
-              setViewMode('console');
-              showToast(isZh ? `欢迎回来，${user.username}！` : `Welcome back, ${user.username}!`, 'success');
-              fetchData(token);
-              fetchLogs({}, token);
-            }}
-          />
+                showToast(isZh ? `欢迎回来，${user.username}！` : `Welcome back, ${user.username}!`, 'success');
+                fetchData(token);
+                fetchLogs({}, token);
+              }}
+            />
+          </Suspense>
         </div>
       </I18nContext.Provider>
     );
@@ -1381,25 +1393,27 @@ export default function App() {
       <I18nContext.Provider value={{ lang, setLang, toggleLang, t }}>
         <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-indigo-500 selection:text-white">
           <Toast toast={toast} onClose={() => setToast(prev => ({ ...prev, show: false }))} />
-          <AuthPage
-            initialTab={authTab}
-            lang={lang}
-            setLang={setLang}
-            toggleLang={toggleLang}
-            t={t}
-            onLoginSuccess={(token, user) => {
-              setStoredAuth(token, user);
-              setAdminToken(token);
-              setAdminUser(user);
-              const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
-              setCurrentTab(defTab);
-              setViewMode('console');
-              showToast(isZh ? `欢迎回来，${user.username}！` : `Welcome back, ${user.username}!`, 'success');
-              fetchData(token);
-              fetchLogs({}, token);
-            }}
-            onBackHome={() => setViewMode('landing')}
-          />
+          <Suspense fallback={<ViewLoader />}>
+            <AuthPage
+              initialTab={authTab}
+              lang={lang}
+              setLang={setLang}
+              toggleLang={toggleLang}
+              t={t}
+              onLoginSuccess={(token, user) => {
+                setStoredAuth(token, user);
+                setAdminToken(token);
+                setAdminUser(user);
+                const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
+                setCurrentTab(defTab);
+                setViewMode('console');
+                showToast(isZh ? `欢迎回来，${user.username}！` : `Welcome back, ${user.username}!`, 'success');
+                fetchData(token);
+                fetchLogs({}, token);
+              }}
+              onBackHome={() => setViewMode('landing')}
+            />
+          </Suspense>
         </div>
       </I18nContext.Provider>
     );
@@ -1410,52 +1424,54 @@ export default function App() {
       <I18nContext.Provider value={{ lang, setLang, toggleLang, t }}>
         <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-indigo-500 selection:text-white">
           <Toast toast={toast} onClose={() => setToast(prev => ({ ...prev, show: false }))} />
-          <ServiceStatus
-            isStandalone={true}
-            onBackHome={() => setViewMode('landing')}
-            onEnterConsole={() => {
-              if (adminToken) {
-                setViewMode('console');
-              } else {
+          <Suspense fallback={<ViewLoader />}>
+            <ServiceStatus
+              isStandalone={true}
+              onBackHome={() => setViewMode('landing')}
+              onEnterConsole={() => {
+                if (adminToken) {
+                  setViewMode('console');
+                } else {
+                  setAuthTab('login');
+                  setViewMode('auth');
+                }
+              }}
+              onOpenLogin={() => {
                 setAuthTab('login');
                 setViewMode('auth');
-              }
-            }}
-            onOpenLogin={() => {
-              setAuthTab('login');
-              setViewMode('auth');
-            }}
-            isLoggedIn={!!adminToken}
-            lang={lang}
-            setLang={setLang}
-            t={t}
-            modelRoutes={modelRoutes}
-            channels={channels}
-            onRefresh={fetchData}
-            probeLatencies={channelLatencies}
-            adminFetch={adminFetch}
-            showToast={showToast}
-            onBatchProbe={handleBatchPing}
-            batchTesting={batchTesting}
-          />
-          <LoginModal
-            isOpen={showLoginModal}
-            onClose={() => setShowLoginModal(false)}
-            lang={lang}
-            t={t}
-            onLoginSuccess={(token, user) => {
-              setStoredAuth(token, user);
-              setAdminToken(token);
-              setAdminUser(user);
-              const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
-              setCurrentTab(defTab);
-              setShowLoginModal(false);
-              setViewMode('console');
-              showToast(isZh ? `欢迎回来，${user.username}！` : `Welcome back, ${user.username}!`, 'success');
-              fetchData(token);
-              fetchLogs({}, token);
-            }}
-          />
+              }}
+              isLoggedIn={!!adminToken}
+              lang={lang}
+              setLang={setLang}
+              t={t}
+              modelRoutes={modelRoutes}
+              channels={channels}
+              onRefresh={fetchData}
+              probeLatencies={channelLatencies}
+              adminFetch={adminFetch}
+              showToast={showToast}
+              onBatchProbe={handleBatchPing}
+              batchTesting={batchTesting}
+            />
+            <LoginModal
+              isOpen={showLoginModal}
+              onClose={() => setShowLoginModal(false)}
+              lang={lang}
+              t={t}
+              onLoginSuccess={(token, user) => {
+                setStoredAuth(token, user);
+                setAdminToken(token);
+                setAdminUser(user);
+                const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
+                setCurrentTab(defTab);
+                setShowLoginModal(false);
+                setViewMode('console');
+                showToast(isZh ? `欢迎回来，${user.username}！` : `Welcome back, ${user.username}!`, 'success');
+                fetchData(token);
+                fetchLogs({}, token);
+              }}
+            />
+          </Suspense>
         </div>
       </I18nContext.Provider>
     );
@@ -1540,7 +1556,7 @@ export default function App() {
             className="flex items-center space-x-3 cursor-pointer group transition duration-150 hover:opacity-90"
             title={lang === 'zh' ? '点击返回门户首页' : 'Return to product portal'}
           >
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-sky-400 flex items-center justify-center shadow-lg shadow-indigo-500/25 text-white shrink-0 group-hover:shadow-indigo-500/40 transition">
+            <div className="w-10 h-10 rounded-2xl bg-linear-to-tr from-indigo-600 via-indigo-500 to-sky-400 flex items-center justify-center shadow-lg shadow-indigo-500/25 text-white shrink-0 group-hover:shadow-indigo-500/40 transition">
               <Zap className="w-5 h-5 fill-white text-white" />
             </div>
             {!sidebarCollapsed && (
@@ -1575,7 +1591,7 @@ export default function App() {
               <Search className="w-3.5 h-3.5 text-slate-400" />
               <span>{isZh ? '快速检索 / 指令' : 'Quick Search / Command'}</span>
             </div>
-            <kbd className="text-[10px] bg-white border border-slate-200 rounded px-1.5 py-0.5 font-mono font-semibold text-slate-400">
+            <kbd className="text-[10px] bg-white border border-slate-200 rounded-sm px-1.5 py-0.5 font-mono font-semibold text-slate-400">
               ⌘K
             </kbd>
           </button>
@@ -1966,7 +1982,7 @@ export default function App() {
             >
               <Search className="w-3.5 h-3.5 text-slate-400" />
               <span>{isZh ? '快速搜索指令或模型...' : 'Quick search commands or models...'}</span>
-              <kbd className="text-[10px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-1.5 py-0.5 font-mono font-semibold text-slate-400">
+              <kbd className="text-[10px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm px-1.5 py-0.5 font-mono font-semibold text-slate-400">
                 ⌘K
               </kbd>
             </button>
@@ -1986,7 +2002,7 @@ export default function App() {
             {/* Guided Onboarding Trigger */}
             <button
               onClick={() => setShowOnboardingModal(true)}
-              className="text-xs px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white font-semibold flex items-center space-x-1.5 transition shadow-xs cursor-pointer"
+              className="text-xs px-2.5 py-1.5 rounded-xl bg-linear-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white font-semibold flex items-center space-x-1.5 transition shadow-xs cursor-pointer"
               title={isZh ? '打开开发者极速上手指引向导' : 'Open Developer Guided Onboarding'}
             >
               <Sparkles className="w-3.5 h-3.5" />
@@ -2033,7 +2049,7 @@ export default function App() {
                   >
                     <User className="w-3.5 h-3.5 text-indigo-600" />
                     <span>{adminUser?.username || 'admin'}</span>
-                    <span className="text-[10px] text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded font-mono font-bold">
+                    <span className="text-[10px] text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded-sm font-mono font-bold">
                       {isZh ? '管理员' : 'Admin'}
                     </span>
                   </button>
@@ -2135,378 +2151,382 @@ export default function App() {
             </div>
           )}
 
-          {/* 1. ENTERPRISE BUSINESS & TELEMETRY DASHBOARD */}
-          {currentTab === 'dashboard' && (
-            <DashboardView
-              stats={stats}
-              channels={channels}
-              logs={logs}
-              channelLatencies={channelLatencies}
-              testingId={testingId}
-              batchTesting={batchTesting}
-              handleBatchTest={handleBatchTest}
-              handleTestChannel={handleTestChannel}
-              fetchData={fetchData}
-              fetchLogs={fetchLogs}
-              showToast={showToast}
-              setCurrentTab={setCurrentTab}
-              setShowChannelModal={setShowChannelModal}
-              setActiveLogDetail={setActiveLogDetail}
-              adminUser={adminUser}
-              onOpenTopology={() => setShowTopologyModal(true)}
-              lang={lang}
-              t={t}
-            />
-          )}
+          <Suspense fallback={<ViewLoader />}>
+            {/* 1. ENTERPRISE BUSINESS & TELEMETRY DASHBOARD */}
+            {currentTab === 'dashboard' && (
+              <DashboardView
+                stats={stats}
+                channels={channels}
+                logs={logs}
+                channelLatencies={channelLatencies}
+                testingId={testingId}
+                batchTesting={batchTesting}
+                handleBatchTest={handleBatchTest}
+                handleTestChannel={handleTestChannel}
+                fetchData={fetchData}
+                fetchLogs={fetchLogs}
+                showToast={showToast}
+                setCurrentTab={setCurrentTab}
+                setShowChannelModal={setShowChannelModal}
+                setActiveLogDetail={setActiveLogDetail}
+                adminUser={adminUser}
+                onOpenTopology={() => setShowTopologyModal(true)}
+                lang={lang}
+                t={t}
+              />
+            )}
 
-          {/* 1.5. MODEL ROUTES TAB */}
-          {currentTab === 'models' && (
-            <ModelRoutesManager
-              adminFetch={adminFetch}
-              showToast={showToast}
-              lang={lang}
-              t={t}
-              onNavigateToPlayground={(m, modality) => {
-                setPlayModel(m);
-                if (modality && modality !== 'chat') {
-                  setPlayModality(modality);
-                } else {
-                  setPlayModality('chat');
-                }
-                setCurrentTab('playground');
-              }}
-            />
-          )}
+            {/* 1.5. MODEL ROUTES TAB */}
+            {currentTab === 'models' && (
+              <ModelRoutesManager
+                adminFetch={adminFetch}
+                showToast={showToast}
+                lang={lang}
+                t={t}
+                onNavigateToPlayground={(m, modality) => {
+                  setPlayModel(m);
+                  if (modality && modality !== 'chat') {
+                    setPlayModality(modality);
+                  } else {
+                    setPlayModality('chat');
+                  }
+                  setCurrentTab('playground');
+                }}
+              />
+            )}
 
-          {/* 1.6. MODEL PRICING & RATES TAB */}
-          {currentTab === 'pricing' && (
-            <PricingManager
-              adminFetch={adminFetch}
-              showToast={showToast}
-              stats={stats}
-              isAdmin={adminUser?.role === 'admin'}
-              lang={lang}
-              t={t}
-            />
-          )}
+            {/* 1.6. MODEL PRICING & RATES TAB */}
+            {currentTab === 'pricing' && (
+              <PricingManager
+                adminFetch={adminFetch}
+                showToast={showToast}
+                stats={stats}
+                isAdmin={adminUser?.role === 'admin'}
+                lang={lang}
+                t={t}
+              />
+            )}
 
-          {/* 2. CHANNELS / PROVIDERS TAB */}
-          {currentTab === 'channels' && (
-            <ChannelsView
-              channels={channels}
-              batchTesting={batchTesting}
-              handleBatchPing={handleBatchPing}
-              setEditingChannelId={setEditingChannelId}
-              setNewChannel={setNewChannel}
-              setProbeAlert={setProbeAlert}
-              setShowChannelModal={setShowChannelModal}
-              selectedChannelIds={selectedChannelIds}
-              setSelectedChannelIds={setSelectedChannelIds}
-              handleBatchStatusChannels={handleBatchStatusChannels}
-              handleBatchDeleteChannels={handleBatchDeleteChannels}
-              channelLatencies={channelLatencies}
-              copyToClipboard={copyToClipboard}
-              handleTestChannel={handleTestChannel}
-              testingId={testingId}
-              handleEditChannel={handleEditChannel}
-              handleDeleteChannel={handleDeleteChannel}
-              lang={lang}
-              t={t}
-            />
-          )}
+            {/* 2. CHANNELS / PROVIDERS TAB */}
+            {currentTab === 'channels' && (
+              <ChannelsView
+                channels={channels}
+                batchTesting={batchTesting}
+                handleBatchPing={handleBatchPing}
+                setEditingChannelId={setEditingChannelId}
+                setNewChannel={setNewChannel}
+                setProbeAlert={setProbeAlert}
+                setShowChannelModal={setShowChannelModal}
+                selectedChannelIds={selectedChannelIds}
+                setSelectedChannelIds={setSelectedChannelIds}
+                handleBatchStatusChannels={handleBatchStatusChannels}
+                handleBatchDeleteChannels={handleBatchDeleteChannels}
+                channelLatencies={channelLatencies}
+                copyToClipboard={copyToClipboard}
+                handleTestChannel={handleTestChannel}
+                testingId={testingId}
+                handleEditChannel={handleEditChannel}
+                handleDeleteChannel={handleDeleteChannel}
+                lang={lang}
+                t={t}
+              />
+            )}
 
-          {/* 3. API KEYS TAB */}
-          {currentTab === 'keys' && (
-            <KeysView
-              keys={keys}
-              handleOpenCreateKey={handleOpenCreateKey}
-              selectedKeyIds={selectedKeyIds}
-              setSelectedKeyIds={setSelectedKeyIds}
-              handleBatchStatusKeys={handleBatchStatusKeys}
-              handleBatchDeleteKeys={handleBatchDeleteKeys}
-              copyToClipboard={copyToClipboard}
-              copiedKey={copiedKey}
-              handleToggleKeyStatus={handleToggleKeyStatus}
-              setActiveQuickKey={setActiveQuickKey}
-              handleDeleteKey={handleDeleteKey}
-              handleUpdateKeyGroup={handleUpdateKeyGroup}
-              adminUser={adminUser}
-              pricingGroups={pricingGroups}
-              onNavigateToPricing={() => setCurrentTab('pricing')}
-              lang={lang}
-              t={t}
-            />
-          )}
+            {/* 3. API KEYS TAB */}
+            {currentTab === 'keys' && (
+              <KeysView
+                keys={keys}
+                handleOpenCreateKey={handleOpenCreateKey}
+                selectedKeyIds={selectedKeyIds}
+                setSelectedKeyIds={setSelectedKeyIds}
+                handleBatchStatusKeys={handleBatchStatusKeys}
+                handleBatchDeleteKeys={handleBatchDeleteKeys}
+                copyToClipboard={copyToClipboard}
+                copiedKey={copiedKey}
+                handleToggleKeyStatus={handleToggleKeyStatus}
+                setActiveQuickKey={setActiveQuickKey}
+                handleDeleteKey={handleDeleteKey}
+                handleUpdateKeyGroup={handleUpdateKeyGroup}
+                adminUser={adminUser}
+                pricingGroups={pricingGroups}
+                onNavigateToPricing={() => setCurrentTab('pricing')}
+                lang={lang}
+                t={t}
+              />
+            )}
 
-          {/* 4. AUDIT LOGS TAB */}
-          {currentTab === 'logs' && (
-            <LogsView
-              sessionFilter={sessionFilter}
-              setSessionFilter={setSessionFilter}
-              logFilter={logFilter}
-              setLogFilter={setLogFilter}
-              fetchLogs={fetchLogs}
-              logLoading={logLoading}
-              handleClearLogs={handleClearLogs}
-              timeRange={timeRange}
-              setTimeRange={setTimeRange}
-              customStartTime={customStartTime}
-              setCustomStartTime={setCustomStartTime}
-              customEndTime={customEndTime}
-              setCustomEndTime={setCustomEndTime}
-              selectedLogIds={selectedLogIds}
-              setSelectedLogIds={setSelectedLogIds}
-              handleBatchDeleteLogs={handleBatchDeleteLogs}
-              filteredLogs={filteredLogs}
-              logsLength={logs.length}
-              logOffset={logOffset}
-              logPageSize={LOG_PAGE_SIZE}
-              onLogPageChange={handleLogPageChange}
-              setActiveLogDetail={setActiveLogDetail}
-              showToast={showToast}
-              handleDeleteSingleLog={handleDeleteSingleLog}
-              lang={lang}
-              t={t}
-            />
-          )}
+            {/* 4. AUDIT LOGS TAB */}
+            {currentTab === 'logs' && (
+              <LogsView
+                sessionFilter={sessionFilter}
+                setSessionFilter={setSessionFilter}
+                logFilter={logFilter}
+                setLogFilter={setLogFilter}
+                fetchLogs={fetchLogs}
+                logLoading={logLoading}
+                handleClearLogs={handleClearLogs}
+                timeRange={timeRange}
+                setTimeRange={setTimeRange}
+                customStartTime={customStartTime}
+                setCustomStartTime={setCustomStartTime}
+                customEndTime={customEndTime}
+                setCustomEndTime={setCustomEndTime}
+                selectedLogIds={selectedLogIds}
+                setSelectedLogIds={setSelectedLogIds}
+                handleBatchDeleteLogs={handleBatchDeleteLogs}
+                filteredLogs={filteredLogs}
+                logsLength={logs.length}
+                logOffset={logOffset}
+                logPageSize={LOG_PAGE_SIZE}
+                onLogPageChange={handleLogPageChange}
+                setActiveLogDetail={setActiveLogDetail}
+                showToast={showToast}
+                handleDeleteSingleLog={handleDeleteSingleLog}
+                lang={lang}
+                t={t}
+              />
+            )}
 
-          {/* 5. SKILL HUB TAB */}
-          {currentTab === 'skills' && (
-            <SkillHubView
-              adminFetch={adminFetch}
-              onCopy={(txt) => {
-                copyToClipboard(txt);
-              }}
-              showToast={showToast}
-              lang={lang}
-              t={t}
-            />
-          )}
+            {/* 5. SKILL HUB TAB */}
+            {currentTab === 'skills' && (
+              <SkillHubView
+                adminFetch={adminFetch}
+                onCopy={(txt) => {
+                  copyToClipboard(txt);
+                }}
+                showToast={showToast}
+                lang={lang}
+                t={t}
+              />
+            )}
 
-          {/* 6. MCP HUB TAB */}
-          {currentTab === 'mcp' && (
-            <McpIntegrationView
-              adminFetch={adminFetch}
-              adminToken={adminToken}
-              keys={keys}
-              onCopy={(txt) => {
-                copyToClipboard(txt);
-              }}
-              showToast={showToast}
-              lang={lang}
-              t={t}
-            />
-          )}
+            {/* 6. MCP HUB TAB */}
+            {currentTab === 'mcp' && (
+              <McpIntegrationView
+                adminFetch={adminFetch}
+                adminToken={adminToken}
+                keys={keys}
+                onCopy={(txt) => {
+                  copyToClipboard(txt);
+                }}
+                showToast={showToast}
+                lang={lang}
+                t={t}
+              />
+            )}
 
-          {/* 6. USER MANAGEMENT TAB */}
-          {currentTab === 'users' && (
-            <UserManagementView
-              adminUser={adminUser}
-              adminToken={adminToken}
-              adminFetch={adminFetch}
-              showToast={showToast}
-              lang={lang}
-              t={t}
-            />
-          )}
+            {/* 6. USER MANAGEMENT TAB */}
+            {currentTab === 'users' && (
+              <UserManagementView
+                adminUser={adminUser}
+                adminToken={adminToken}
+                adminFetch={adminFetch}
+                showToast={showToast}
+                lang={lang}
+                t={t}
+              />
+            )}
 
-          {/* 7. WALLET MANAGEMENT TAB */}
-          {currentTab === 'wallet' && (
-            <WalletManagementView
-              adminUser={adminUser}
-              adminToken={adminToken}
-              adminFetch={adminFetch}
-              showToast={showToast}
-              onUserUpdated={(updatedUser) => {
-                setAdminUser(prev => {
-                  const merged = prev ? { ...prev, ...updatedUser } : updatedUser;
-                  localStorage.setItem('airoute_user', JSON.stringify(merged));
-                  return merged;
-                });
-                fetchUserProfile();
-              }}
-              onBalanceUpdate={(newBal) => {
-                setAdminUser(prev => {
-                  const merged = prev ? { ...prev, balance: newBal } : prev;
-                  localStorage.setItem('airoute_user', JSON.stringify(merged));
-                  return merged;
-                });
-                fetchUserProfile();
-              }}
-              lang={lang}
-              t={t}
-            />
-          )}
+            {/* 7. WALLET MANAGEMENT TAB */}
+            {currentTab === 'wallet' && (
+              <WalletManagementView
+                adminUser={adminUser}
+                adminToken={adminToken}
+                adminFetch={adminFetch}
+                showToast={showToast}
+                onUserUpdated={(updatedUser) => {
+                  setAdminUser(prev => {
+                    const merged = prev ? { ...prev, ...updatedUser } : updatedUser;
+                    localStorage.setItem('airoute_user', JSON.stringify(merged));
+                    return merged;
+                  });
+                  fetchUserProfile();
+                }}
+                onBalanceUpdate={(newBal) => {
+                  setAdminUser(prev => {
+                    const merged = prev ? { ...prev, balance: newBal } : prev;
+                    localStorage.setItem('airoute_user', JSON.stringify(merged));
+                    return merged;
+                  });
+                  fetchUserProfile();
+                }}
+                lang={lang}
+                t={t}
+              />
+            )}
 
-          {/* 5. MULTIMODAL PLAYGROUND TAB */}
-          {currentTab === 'playground' && (
-            <PlaygroundView
-              keys={keys}
-              models={models}
-              modelRoutes={modelRoutes}
-              adminFetch={adminFetch}
-              showToast={showToast}
-              initialModel={playModel}
-              initialModality={playModality}
-              lang={lang}
-              t={t}
-            />
-          )}
+            {/* 5. MULTIMODAL PLAYGROUND TAB */}
+            {currentTab === 'playground' && (
+              <PlaygroundView
+                keys={keys}
+                models={models}
+                modelRoutes={modelRoutes}
+                adminFetch={adminFetch}
+                showToast={showToast}
+                initialModel={playModel}
+                initialModality={playModality}
+                lang={lang}
+                t={t}
+              />
+            )}
 
-          {/* 6. DOCS TAB */}
-          {currentTab === 'docs' && (
-            <DocsView showToast={showToast} lang={lang} t={t} />
-          )}
+            {/* 6. DOCS TAB */}
+            {currentTab === 'docs' && (
+              <DocsView showToast={showToast} lang={lang} t={t} />
+            )}
+          </Suspense>
         </div>
       </main>
 
-      {/* Modal: New Provider with Smart Auto-Probe */}
-      <ChannelModal
-        isOpen={showChannelModal}
-        onClose={() => setShowChannelModal(false)}
-        editingChannelId={editingChannelId}
-        newChannel={newChannel}
-        setNewChannel={setNewChannel}
-        probeAlert={probeAlert}
-        probing={probing}
-        applyPreset={applyPreset}
-        handleProbeChannel={handleProbeChannel}
-        toggleProtocol={toggleProtocol}
-        onSubmit={handleCreateChannel}
-        lang={lang}
-        t={t}
-      />
+      <Suspense fallback={null}>
+        {/* Modal: New Provider with Smart Auto-Probe */}
+        <ChannelModal
+          isOpen={showChannelModal}
+          onClose={() => setShowChannelModal(false)}
+          editingChannelId={editingChannelId}
+          newChannel={newChannel}
+          setNewChannel={setNewChannel}
+          probeAlert={probeAlert}
+          probing={probing}
+          applyPreset={applyPreset}
+          handleProbeChannel={handleProbeChannel}
+          toggleProtocol={toggleProtocol}
+          onSubmit={handleCreateChannel}
+          lang={lang}
+          t={t}
+        />
 
-      {/* Modal: New API Key */}
-      <KeyModal
-        isOpen={showKeyModal}
-        onClose={() => setShowKeyModal(false)}
-        newKey={newKey}
-        setNewKey={setNewKey}
-        pricingGroups={pricingGroups}
-        adminUser={adminUser}
-        onSubmit={handleCreateKey}
-        lang={lang}
-        t={t}
-      />
+        {/* Modal: New API Key */}
+        <KeyModal
+          isOpen={showKeyModal}
+          onClose={() => setShowKeyModal(false)}
+          newKey={newKey}
+          setNewKey={setNewKey}
+          pricingGroups={pricingGroups}
+          adminUser={adminUser}
+          onSubmit={handleCreateKey}
+          lang={lang}
+          t={t}
+        />
 
-      {/* Account & Security Modal */}
-      <AccountManageModal
-        isOpen={showAccountModal}
-        onClose={() => setShowAccountModal(false)}
-        adminUser={adminUser}
-        adminToken={adminToken}
-        adminFetch={adminFetch}
-        showToast={showToast}
-        lang={lang}
-        t={t}
-        onPasswordChanged={() => {
-          showToast(isZh ? '密码修改成功，请牢记新密码' : 'Password changed successfully', 'success');
-        }}
-      />
+        {/* Account & Security Modal */}
+        <AccountManageModal
+          isOpen={showAccountModal}
+          onClose={() => setShowAccountModal(false)}
+          adminUser={adminUser}
+          adminToken={adminToken}
+          adminFetch={adminFetch}
+          showToast={showToast}
+          lang={lang}
+          t={t}
+          onPasswordChanged={() => {
+            showToast(isZh ? '密码修改成功，请牢记新密码' : 'Password changed successfully', 'success');
+          }}
+        />
 
-      {/* Login Modal */}
-      <LoginModal
-        isOpen={showLoginModal}
-        onClose={() => setShowLoginModal(false)}
-        lang={lang}
-        t={t}
-        onLoginSuccess={(token, user) => {
-          setStoredAuth(token, user);
-          setAdminToken(token);
-          setAdminUser(user);
-          const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
-          setCurrentTab(defTab);
-          setShowLoginModal(false);
-          showToast(isZh ? `欢迎回来，${user.username}！` : `Welcome back, ${user.username}!`, 'success');
-          fetchData(token);
-          fetchLogs({}, token);
-        }}
-      />
+        {/* Login Modal */}
+        <LoginModal
+          isOpen={showLoginModal}
+          onClose={() => setShowLoginModal(false)}
+          lang={lang}
+          t={t}
+          onLoginSuccess={(token, user) => {
+            setStoredAuth(token, user);
+            setAdminToken(token);
+            setAdminUser(user);
+            const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
+            setCurrentTab(defTab);
+            setShowLoginModal(false);
+            showToast(isZh ? `欢迎回来，${user.username}！` : `Welcome back, ${user.username}!`, 'success');
+            fetchData(token);
+            fetchLogs({}, token);
+          }}
+        />
 
-      {/* 3-Step Guided Developer Onboarding Modal */}
-      <OnboardingModal
-        isOpen={showOnboardingModal}
-        onClose={() => setShowOnboardingModal(false)}
-        keys={keys}
-        models={models}
-        onNavigateToPlayground={(m) => {
-          setPlayModel(m);
-          setCurrentTab('playground');
-        }}
-        showToast={showToast}
-        lang={lang}
-        t={t}
-      />
+        {/* 3-Step Guided Developer Onboarding Modal */}
+        <OnboardingModal
+          isOpen={showOnboardingModal}
+          onClose={() => setShowOnboardingModal(false)}
+          keys={keys}
+          models={models}
+          onNavigateToPlayground={(m) => {
+            setPlayModel(m);
+            setCurrentTab('playground');
+          }}
+          showToast={showToast}
+          lang={lang}
+          t={t}
+        />
 
-      {/* Visual Routing Topology & Failover Modal */}
-      <VisualTopologyModal
-        isOpen={showTopologyModal}
-        onClose={() => setShowTopologyModal(false)}
-        channels={channels}
-        modelRoutes={modelRoutes}
-        onTestChannel={handleTestChannel}
-        showToast={showToast}
-        lang={lang}
-        t={t}
-      />
+        {/* Visual Routing Topology & Failover Modal */}
+        <VisualTopologyModal
+          isOpen={showTopologyModal}
+          onClose={() => setShowTopologyModal(false)}
+          channels={channels}
+          modelRoutes={modelRoutes}
+          onTestChannel={handleTestChannel}
+          showToast={showToast}
+          lang={lang}
+          t={t}
+        />
 
-      {/* Global Command Palette (Cmd+K) */}
-      <CommandPalette
-        isOpen={showCommandPalette}
-        onClose={() => setShowCommandPalette(false)}
-        currentTab={currentTab}
-        setCurrentTab={setCurrentTab}
-        setViewMode={setViewMode}
-        models={models}
-        channels={channels}
-        keys={keys}
-        adminUser={adminUser}
-        onOpenNewKey={() => setShowKeyModal(true)}
-        onOpenNewChannel={() => {
-          setEditingChannelId(null);
-          setNewChannel({
-            name: '',
-            type: 'gpustack',
-            base_url: '',
-            api_key: '',
-            priority: 1,
-            weight: 10,
-            timeout_seconds: 60,
-            models_str: '',
-            mapping_str: '',
-            protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings', 'rerank', 'images'],
-          });
-          setProbeAlert(null);
-          setShowChannelModal(true);
-        }}
-        toggleLang={toggleLang}
-        lang={lang}
-        onLogout={handleLogout}
-        showToast={showToast}
-        onOpenCopilotWithQuery={(q) => {
-          setShowAiCopilot(true);
-        }}
-      />
+        {/* Global Command Palette (Cmd+K) */}
+        <CommandPalette
+          isOpen={showCommandPalette}
+          onClose={() => setShowCommandPalette(false)}
+          currentTab={currentTab}
+          setCurrentTab={setCurrentTab}
+          setViewMode={setViewMode}
+          models={models}
+          channels={channels}
+          keys={keys}
+          adminUser={adminUser}
+          onOpenNewKey={() => setShowKeyModal(true)}
+          onOpenNewChannel={() => {
+            setEditingChannelId(null);
+            setNewChannel({
+              name: '',
+              type: 'gpustack',
+              base_url: '',
+              api_key: '',
+              priority: 1,
+              weight: 10,
+              timeout_seconds: 60,
+              models_str: '',
+              mapping_str: '',
+              protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings', 'rerank', 'images'],
+            });
+            setProbeAlert(null);
+            setShowChannelModal(true);
+          }}
+          toggleLang={toggleLang}
+          lang={lang}
+          onLogout={handleLogout}
+          showToast={showToast}
+          onOpenCopilotWithQuery={(q) => {
+            setShowAiCopilot(true);
+          }}
+        />
 
-      {/* Airoute AI Copilot (Cmd+J / Floating Omnibar) */}
-      <AiCopilot
-        isOpen={showAiCopilot}
-        onClose={() => setShowAiCopilot(false)}
-        onToggle={() => setShowAiCopilot(prev => !prev)}
-        setCurrentTab={setCurrentTab}
-        setViewMode={setViewMode}
-        models={models}
-        channels={channels}
-        keys={keys}
-        logs={logs}
-        modelRoutes={modelRoutes}
-        stats={stats}
-        lang={lang}
-        t={t}
-        showToast={showToast}
-        adminUser={adminUser}
-      />
+        {/* Airoute AI Copilot (Cmd+J / Floating Omnibar) */}
+        <AiCopilot
+          isOpen={showAiCopilot}
+          onClose={() => setShowAiCopilot(false)}
+          onToggle={() => setShowAiCopilot(prev => !prev)}
+          setCurrentTab={setCurrentTab}
+          setViewMode={setViewMode}
+          models={models}
+          channels={channels}
+          keys={keys}
+          logs={logs}
+          modelRoutes={modelRoutes}
+          stats={stats}
+          lang={lang}
+          t={t}
+          showToast={showToast}
+          adminUser={adminUser}
+        />
+      </Suspense>
     </div>
     </I18nContext.Provider>
   );

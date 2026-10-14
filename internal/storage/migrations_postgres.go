@@ -138,6 +138,7 @@ func (db *DB) migratePostgres() error {
 					purpose VARCHAR(64) DEFAULT 'register',
 					expires_at TIMESTAMPTZ NOT NULL,
 					used INT DEFAULT 0,
+					attempts INT DEFAULT 0,
 					created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 				);
 
@@ -316,6 +317,14 @@ func (db *DB) migratePostgres() error {
 				);
 				`)
 				return err
+			},
+		},
+		{
+			Version: 9,
+			Name:    "add_attempts_to_verification_codes",
+			Up: func(db *DB) error {
+				_, _ = db.DB.Exec("ALTER TABLE verification_codes ADD COLUMN IF NOT EXISTS attempts INT DEFAULT 0;")
+				return nil
 			},
 		},
 	}

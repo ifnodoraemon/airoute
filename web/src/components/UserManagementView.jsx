@@ -388,7 +388,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
               setNewPassword(generateSecurePassword());
               setShowAddModal(true);
             }}
-            className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm hover:shadow transition cursor-pointer"
+            className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm hover:shadow-sm transition cursor-pointer"
           >
             <UserPlus className="w-4 h-4" />
             <span>{isZh ? '新建用户' : 'New User'}</span>
@@ -606,7 +606,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
                               setQuotaValue('50');
                               setQuotaModalError('');
                             }}
-                            className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-600 transition"
+                            className="p-1 hover:bg-slate-100 rounded-sm text-slate-400 hover:text-indigo-600 transition"
                             title={isZh ? '调整用户额度' : 'Adjust balance'}
                           >
                             <Coins className="w-3.5 h-3.5" />

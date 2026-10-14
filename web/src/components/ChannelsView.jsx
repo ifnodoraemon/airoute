@@ -282,7 +282,7 @@ export default function ChannelsView({
                   <th className="py-3.5 px-4 w-10 text-center">
                     <input
                       type="checkbox"
-                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      className="rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                       checked={filteredChannels.length > 0 && selectedChannelIds.length === filteredChannels.length}
                       onChange={(e) => {
                         if (e.target.checked) {
@@ -309,7 +309,7 @@ export default function ChannelsView({
                     <td className="py-4 px-4 text-center">
                       <input
                         type="checkbox"
-                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        className="rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                         checked={selectedChannelIds.includes(ch.id)}
                         onChange={(e) => {
                           e.stopPropagation();
@@ -337,7 +337,7 @@ export default function ChannelsView({
                       <div className="flex items-center space-x-1.5 mt-1">
                         {ch.breaker_status && (
                           <span
-                            className={`inline-block text-[10px] px-2 py-0.5 rounded font-mono font-medium ${
+                            className={`inline-block text-[10px] px-2 py-0.5 rounded-sm font-mono font-medium ${
                               ch.breaker_status === 'OPEN'
                                 ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300'
                                 : ch.breaker_status === 'HALF-OPEN'
@@ -350,7 +350,7 @@ export default function ChannelsView({
                         )}
                         {channelLatencies[ch.id] && (
                           <span
-                            className={`text-[10px] px-2 py-0.5 rounded font-mono font-medium ${
+                            className={`text-[10px] px-2 py-0.5 rounded-sm font-mono font-medium ${
                               channelLatencies[ch.id].success
                                 ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
                                 : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
@@ -393,7 +393,7 @@ export default function ChannelsView({
                     <td className="py-4 px-5">
                       <div className="flex flex-wrap gap-1">
                         {!ch.protocols || ch.protocols.length === 0 ? (
-                          <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px] text-slate-600 dark:text-slate-300 font-medium">
+                          <span className="px-2 py-0.5 rounded-sm bg-slate-100 dark:bg-slate-800 text-[11px] text-slate-600 dark:text-slate-300 font-medium">
                             {isZh ? '全功能直通' : 'Full Pass-through'}
                           </span>
                         ) : (
@@ -443,7 +443,7 @@ export default function ChannelsView({
                                 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800';
                             }
                             return (
-                              <span key={p} className={`px-2 py-0.5 rounded text-[11px] font-medium ${colorClass}`}>
+                              <span key={p} className={`px-2 py-0.5 rounded-sm text-[11px] font-medium ${colorClass}`}>
                                 {label}
                               </span>
                             );
@@ -459,7 +459,7 @@ export default function ChannelsView({
                           ch.models.slice(0, 3).map((m) => (
                             <span
                               key={m}
-                              className="px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 text-xs font-mono border border-indigo-100 dark:border-indigo-800"
+                              className="px-2 py-0.5 rounded-sm bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 text-xs font-mono border border-indigo-100 dark:border-indigo-800"
                             >
                               {m}
                             </span>
@@ -467,7 +467,7 @@ export default function ChannelsView({
                         )}
                         {ch.models && ch.models.length > 3 && (
                           <span
-                            className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-mono"
+                            className="px-2 py-0.5 rounded-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-mono"
                             title={ch.models.slice(3).join(', ')}
                           >
                             +{ch.models.length - 3} {isZh ? '更多' : 'more'}
@@ -478,7 +478,7 @@ export default function ChannelsView({
                           Object.entries(ch.model_mapping).map(([k, v]) => (
                             <span
                               key={k}
-                              className="px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 text-[11px] font-mono border border-emerald-200 dark:border-emerald-800"
+                              className="px-2 py-0.5 rounded-sm bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 text-[11px] font-mono border border-emerald-200 dark:border-emerald-800"
                               title={isZh ? `别名映射: ${k} -> ${v}` : `Alias mapping: ${k} -> ${v}`}
                             >
                               🔗 {k} → {v}
@@ -487,10 +487,10 @@ export default function ChannelsView({
                       </div>
                     </td>
                     <td className="py-4 px-5 text-slate-700 dark:text-slate-300 font-mono text-xs">
-                      <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
+                      <span className="px-2 py-0.5 rounded-sm bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
                         {isZh ? '优先级' : 'Priority'}: {ch.priority}
                       </span>
-                      <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 ml-1">
+                      <span className="px-2 py-0.5 rounded-sm bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 ml-1">
                         {isZh ? '权重' : 'Weight'}: {ch.weight}
                       </span>
                     </td>

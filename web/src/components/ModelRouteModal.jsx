@@ -69,7 +69,7 @@ export default function ModelRouteModal({
   const [promptPrice, setPromptPrice] = useState(modelRoute?.prompt_price ?? 2.0);
   const [completionPrice, setCompletionPrice] = useState(modelRoute?.completion_price ?? 8.0);
   const [cacheReadPrice, setCacheReadPrice] = useState(modelRoute?.cache_read_price ?? 0.2);
-  const [currency, setCurrency] = useState(modelRoute?.currency || 'CNY');
+  const [currency] = useState(modelRoute?.currency || 'CNY');
   const [offPeakEnabled, setOffPeakEnabled] = useState(modelRoute?.off_peak_enabled !== false);
 
   // Bound upstream providers
@@ -380,7 +380,7 @@ export default function ModelRouteModal({
                       <div className="min-w-0 flex-1 space-y-1.5">
                         <div className="flex items-center space-x-2">
                           <span className="font-semibold text-slate-800 truncate">{p.channel_name}</span>
-                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-sm bg-slate-100 text-slate-500">
                             {p.channel_type}
                           </span>
                           {pModels.length > 0 && (
@@ -453,13 +453,13 @@ export default function ModelRouteModal({
                         {pChannel && (
                           <>
                             {(pChannel.status === 'inactive' || pChannel.status === 'disabled') && (
-                              <div className="mt-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 flex items-center space-x-1">
+                              <div className="mt-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-sm px-2 py-0.5 flex items-center space-x-1">
                                 <span>⚠️</span>
                                 <span>{isZh ? '该服务商渠道当前处于停用状态' : 'This upstream provider is currently inactive'}</span>
                               </div>
                             )}
                             {pModels.length > 0 && !pModels.includes('*') && p.mapped_model && !pModels.includes(p.mapped_model) && (
-                              <div className="mt-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 flex items-center space-x-1">
+                              <div className="mt-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-sm px-2 py-0.5 flex items-center space-x-1">
                                 <span>⚠️</span>
                                 <span>{isZh ? `渠道模型库中未声明「${p.mapped_model}」，请确认远端真实支持` : `Model "${p.mapped_model}" is not in channel catalog; verify remote availability`}</span>
                               </div>

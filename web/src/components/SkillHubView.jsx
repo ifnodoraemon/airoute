@@ -390,7 +390,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
                           <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
                             {skill.name}
                           </h3>
-                          <span className="px-1.5 py-0.2 text-[10px] font-mono rounded bg-gray-100 dark:bg-gray-750 text-gray-500">
+                          <span className="px-1.5 py-0.2 text-[10px] font-mono rounded-sm bg-gray-100 dark:bg-gray-750 text-gray-500">
                             v{skill.version || '1.0.0'}
                           </span>
                         </div>
@@ -403,11 +403,11 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
                     <button
                       onClick={() => handleToggleSkill(skill.id, skill.enabled)}
                       disabled={isToggling}
-                      className={`relative inline-flex h-4.5 w-8 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${skill.enabled ? 'bg-amber-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+                      className={`relative inline-flex h-4.5 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${skill.enabled ? 'bg-amber-600' : 'bg-gray-300 dark:bg-gray-600'}`}
                       title={skill.enabled ? (isZh ? '点击禁用' : 'Click to disable') : (isZh ? '点击启用' : 'Click to enable')}
                     >
                       <span
-                        className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${skill.enabled ? 'translate-x-3.5' : 'translate-x-0'}`}
+                        className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${skill.enabled ? 'translate-x-3.5' : 'translate-x-0'}`}
                       />
                     </button>
                   </div>
@@ -424,7 +424,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
                       {skill.tools.slice(0, 5).map(t => (
                         <span
                           key={t}
-                          className="px-1.5 py-0.5 font-mono text-[10px] bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-300 rounded border border-gray-200/80 dark:border-gray-750"
+                          className="px-1.5 py-0.5 font-mono text-[10px] bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-300 rounded-sm border border-gray-200/80 dark:border-gray-750"
                         >
                           {t}
                         </span>
@@ -442,7 +442,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
                     <a
                       href={`/api/v1/skills/${skill.id}/download`}
                       download={`${skill.id}.zip`}
-                      className="px-2 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 rounded transition-colors inline-flex items-center gap-1 border border-emerald-200 dark:border-emerald-800/80"
+                      className="px-2 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 rounded-sm transition-colors inline-flex items-center gap-1 border border-emerald-200 dark:border-emerald-800/80"
                       title={isZh ? '直接下载 .zip 压缩包' : 'Direct download .zip archive'}
                     >
                       <DownloadCloud className="w-3.5 h-3.5" />
@@ -450,21 +450,21 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
                     </a>
                     <button
                       onClick={() => { setManifestSkill(skill); setManifestTab('skill_md'); }}
-                      className="px-2 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-750 rounded transition-colors inline-flex items-center gap-1 border border-gray-200 dark:border-gray-700"
+                      className="px-2 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-750 rounded-sm transition-colors inline-flex items-center gap-1 border border-gray-200 dark:border-gray-700"
                     >
                       <FileText className="w-3.5 h-3.5" />
                       {isZh ? '查看 SOP' : 'View SOP'}
                     </button>
                     <button
                       onClick={() => { setSelectedSkillForGuide(skill); setClientGuideModalOpen(true); }}
-                      className="px-2 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded transition-colors inline-flex items-center gap-1"
+                      className="px-2 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-sm transition-colors inline-flex items-center gap-1"
                     >
                       <Terminal className="w-3.5 h-3.5" />
                       {isZh ? '接入' : 'Connect'}
                     </button>
                     <button
                       onClick={() => handleOpenTest(skill)}
-                      className="px-2 py-1 text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded transition-colors inline-flex items-center gap-1"
+                      className="px-2 py-1 text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-sm transition-colors inline-flex items-center gap-1"
                     >
                       <Play className="w-3 h-3" />
                       {isZh ? '演练' : 'Test'}
@@ -474,7 +474,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
                   {isCustom && (
                     <button
                       onClick={() => handleDeleteSkill(skill.id)}
-                      className="p-1 text-gray-400 hover:text-rose-500 rounded transition-colors"
+                      className="p-1 text-gray-400 hover:text-rose-500 rounded-sm transition-colors"
                       title={isZh ? '删除自定义技能' : 'Delete custom skill'}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -498,7 +498,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
           <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-gradient-to-br from-amber-500 to-orange-600 text-white rounded-lg">
+                <div className="p-2 bg-linear-to-br from-amber-500 to-orange-600 text-white rounded-lg">
                   <Terminal className="w-5 h-5" />
                 </div>
                 <div>
@@ -533,7 +533,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
                     <a
                       href={`/api/v1/skills/${currentId}/download`}
                       download={`${currentId}.zip`}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded transition-colors"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-sm transition-colors"
                     >
                       <DownloadCloud className="w-3.5 h-3.5" />
                       {isZh ? `一键下载 ${currentId}.zip` : `Download ${currentId}.zip`}
@@ -541,9 +541,9 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
                   </div>
                   <p>
                     {isZh ? (
-                      <>技能遵循 <strong>agentskills.io</strong> 开放标准以标准 ZIP 压缩包分发。<code className="font-mono bg-white/70 dark:bg-gray-800 px-1 py-0.5 rounded">SKILL.md</code> 内部保持纯净的 SOP 规范与规则契约，不掺杂任何特定客户端安装脚本。工具由本机系统环境或 MCP 协议广场提供，<strong>零网络下载等待</strong>。</>
+                      <>技能遵循 <strong>agentskills.io</strong> 开放标准以标准 ZIP 压缩包分发。<code className="font-mono bg-white/70 dark:bg-gray-800 px-1 py-0.5 rounded-sm">SKILL.md</code> 内部保持纯净的 SOP 规范与规则契约，不掺杂任何特定客户端安装脚本。工具由本机系统环境或 MCP 协议广场提供，<strong>零网络下载等待</strong>。</>
                     ) : (
-                      <>Skills follow open <strong>agentskills.io</strong> standard distributed as ZIP archives. <code className="font-mono bg-white/70 dark:bg-gray-800 px-1 py-0.5 rounded">SKILL.md</code> maintains pure SOP contracts without vendor lock-in. Tools are provided locally or via MCP protocol, <strong>with zero wait</strong>.</>
+                      <>Skills follow open <strong>agentskills.io</strong> standard distributed as ZIP archives. <code className="font-mono bg-white/70 dark:bg-gray-800 px-1 py-0.5 rounded-sm">SKILL.md</code> maintains pure SOP contracts without vendor lock-in. Tools are provided locally or via MCP protocol, <strong>with zero wait</strong>.</>
                     )}
                   </p>
                 </div>
@@ -586,7 +586,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
                             {isZh ? '复制一键命令' : 'Copy Command'}
                           </button>
                         </div>
-                        <pre className="p-2.5 bg-gray-900 text-gray-100 rounded font-mono text-[11px] overflow-x-auto">
+                        <pre className="p-2.5 bg-gray-900 text-gray-100 rounded-sm font-mono text-[11px] overflow-x-auto">
 {`# ${isZh ? '一键下载解压标准包' : 'Quick download & unpack'} (${currentId}.zip)
 mkdir -p .claude/skills
 curl -sL ${origin}/api/v1/skills/${currentId}/download -o ${currentId}.zip
@@ -599,7 +599,7 @@ rm -f ${currentId}.zip`}
                         <div className="font-semibold text-gray-800 dark:text-gray-200">
                           {isZh ? '步骤 2：启动 Claude Code，智能体将自动索引并渐进式激活该技能' : 'Step 2: Launch Claude Code; agent will auto-index and activate skill'}
                         </div>
-                        <pre className="p-2.5 bg-gray-900 text-gray-100 rounded font-mono text-[11px]">
+                        <pre className="p-2.5 bg-gray-900 text-gray-100 rounded-sm font-mono text-[11px]">
 {`claude
 # ${isZh ? '直接在对话中提出需求，Claude Code 会自动读取 .claude/skills/' + currentId + '/SKILL.md 标准流程执行！' : 'Prompt directly in chat; Claude Code auto-activates .claude/skills/' + currentId + '/SKILL.md!'}`}
                         </pre>
@@ -620,7 +620,7 @@ rm -f ${currentId}.zip`}
                             {isZh ? '复制一键命令' : 'Copy Command'}
                           </button>
                         </div>
-                        <pre className="p-2.5 bg-gray-900 text-gray-100 rounded font-mono text-[11px] overflow-x-auto">
+                        <pre className="p-2.5 bg-gray-900 text-gray-100 rounded-sm font-mono text-[11px] overflow-x-auto">
 {`# ${isZh ? '一键下载解压标准包' : 'Quick download & unpack'} (${currentId}.zip)
 mkdir -p .opencode/skills
 curl -sL ${origin}/api/v1/skills/${currentId}/download -o ${currentId}.zip
@@ -633,7 +633,7 @@ rm -f ${currentId}.zip`}
                         <div className="font-semibold text-gray-800 dark:text-gray-200">
                           {isZh ? '步骤 2：启动 OpenCode' : 'Step 2: Launch OpenCode'}
                         </div>
-                        <pre className="p-2.5 bg-gray-900 text-gray-100 rounded font-mono text-[11px]">
+                        <pre className="p-2.5 bg-gray-900 text-gray-100 rounded-sm font-mono text-[11px]">
 {`opencode
 # ${isZh ? 'OpenCode 原生兼容 agentskills.io 开放标准，遇到触发词自动载入 SOP 并调用工具' : 'OpenCode natively adheres to agentskills.io, auto-loading SOP on keyword triggers'}`}
                         </pre>
@@ -698,7 +698,7 @@ print(response.choices[0].message.content)`}
                             {isZh ? '复制一键命令' : 'Copy Command'}
                           </button>
                         </div>
-                        <pre className="p-2.5 bg-gray-900 text-gray-100 rounded font-mono text-[11px] overflow-x-auto">
+                        <pre className="p-2.5 bg-gray-900 text-gray-100 rounded-sm font-mono text-[11px] overflow-x-auto">
 {`# ${isZh ? '方案 A: 解压至 Cursor 技能目录' : 'Option A: Unpack to Cursor skills directory'}
 mkdir -p .cursor/skills
 curl -sL ${origin}/api/v1/skills/${currentId}/download -o ${currentId}.zip
@@ -745,7 +745,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
                 <div>
                   <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
                     {manifestSkill.name}
-                    <span className="text-xs font-mono font-normal text-amber-600 bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800">
+                    <span className="text-xs font-mono font-normal text-amber-600 bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.5 rounded-sm border border-amber-200 dark:border-amber-800">
                       {manifestSkill.id}
                     </span>
                   </h3>
@@ -846,7 +846,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
             {manifestTab === 'bundle_tree' && (
               <div className="space-y-4">
                 {/* 存储后端与加速说明 */}
-                <div className="p-3 bg-gradient-to-r from-gray-50 to-slate-100 dark:from-gray-900 dark:to-gray-850 rounded-xl border border-gray-200 dark:border-gray-800 flex items-start justify-between gap-3 text-xs">
+                <div className="p-3 bg-linear-to-r from-gray-50 to-slate-100 dark:from-gray-900 dark:to-gray-850 rounded-xl border border-gray-200 dark:border-gray-800 flex items-start justify-between gap-3 text-xs">
                   <div className="space-y-1">
                     <div className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
                       {storageStatus?.driver === 's3' ? (
@@ -867,7 +867,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
                         : (isZh ? '归档包由网关本地磁盘存储提供流式下载与持久化。配置 STORAGE_DRIVER=s3 可无缝切换至 RustFS 对象存储。' : 'Archive packages are streamed directly from gateway local disk. Set STORAGE_DRIVER=s3 to switch to RustFS.')}
                     </p>
                   </div>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
+                  <span className="px-2 py-0.5 rounded-sm text-[10px] font-mono font-medium bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
                     S3 Key: skills/{manifestSkill.id}.zip
                   </span>
                 </div>
@@ -921,7 +921,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
                       {isZh ? '复制命令' : 'Copy Command'}
                     </button>
                   </div>
-                  <pre className="p-2 bg-gray-900 text-gray-200 rounded font-mono text-[11px] overflow-x-auto">
+                  <pre className="p-2 bg-gray-900 text-gray-200 rounded-sm font-mono text-[11px] overflow-x-auto">
 {`curl -sL ${origin}/api/v1/skills/${manifestSkill.id}/download -o ${manifestSkill.id}.zip
 unzip -q -o ${manifestSkill.id}.zip -d skills/`}
                   </pre>
@@ -1003,7 +1003,7 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
           <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-gradient-to-br from-amber-500 to-orange-600 text-white rounded-lg">
+                <div className="p-2 bg-linear-to-br from-amber-500 to-orange-600 text-white rounded-lg">
                   <Play className="w-5 h-5" />
                 </div>
                 <div>
@@ -1088,7 +1088,7 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
           <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-gradient-to-br from-amber-500 to-orange-600 text-white rounded-lg">
+                <div className="p-2 bg-linear-to-br from-amber-500 to-orange-600 text-white rounded-lg">
                   <Plus className="w-5 h-5" />
                 </div>
                 <div>

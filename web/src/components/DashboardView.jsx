@@ -414,10 +414,10 @@ export default function DashboardView({
       </div>
 
       {/* AI Telemetry & FinOps Insights Panel */}
-      <div className="bg-gradient-to-r from-indigo-50/70 via-purple-50/40 to-slate-50/60 dark:from-indigo-950/20 dark:via-purple-950/20 dark:to-slate-900/40 border border-indigo-200/60 dark:border-indigo-800/60 rounded-3xl p-5 shadow-xs">
+      <div className="bg-linear-to-r from-indigo-50/70 via-purple-50/40 to-slate-50/60 dark:from-indigo-950/20 dark:via-purple-950/20 dark:to-slate-900/40 border border-indigo-200/60 dark:border-indigo-800/60 rounded-3xl p-5 shadow-xs">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
           <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-xs">
+            <div className="w-8 h-8 rounded-xl bg-linear-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-xs">
               <Sparkles className="w-4 h-4 text-amber-300" />
             </div>
             <div>
@@ -576,7 +576,7 @@ export default function DashboardView({
         <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-3xl p-5 shadow-xs hover:border-cyan-400 dark:hover:border-cyan-600 transition group">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-cyan-600 dark:text-cyan-400 uppercase tracking-wider">{isZh ? '缓存节省资金' : 'Cache Savings'}</span>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800">
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-sm bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800">
               ROI
             </span>
           </div>
@@ -731,12 +731,12 @@ export default function DashboardView({
               const heightPct = Math.max(8, Math.min(100, Math.round((val / maxMetricVal) * 100)));
               
               const barColor = chartMetric === 'requests'
-                ? 'bg-gradient-to-t from-indigo-600/70 to-indigo-400/80'
+                ? 'bg-linear-to-t from-indigo-600/70 to-indigo-400/80'
                 : chartMetric === 'tokens'
-                ? 'bg-gradient-to-t from-sky-600/70 to-sky-400/80'
+                ? 'bg-linear-to-t from-sky-600/70 to-sky-400/80'
                 : chartMetric === 'latency'
-                ? 'bg-gradient-to-t from-amber-600/70 to-amber-400/80'
-                : 'bg-gradient-to-t from-rose-600/70 to-rose-400/80';
+                ? 'bg-linear-to-t from-amber-600/70 to-amber-400/80'
+                : 'bg-linear-to-t from-rose-600/70 to-rose-400/80';
 
               return (
                 <div
@@ -975,10 +975,10 @@ export default function DashboardView({
                 style={{ width: `${errorBudget.remainingBudgetPct}%` }}
                 className={`h-full rounded-full transition-all duration-500 ${
                   errorBudget.remainingBudgetPct > 60
-                    ? 'bg-gradient-to-r from-emerald-500 to-indigo-500'
+                    ? 'bg-linear-to-r from-emerald-500 to-indigo-500'
                     : errorBudget.remainingBudgetPct > 20
-                    ? 'bg-gradient-to-r from-amber-500 to-amber-600'
-                    : 'bg-gradient-to-r from-rose-500 to-rose-600'
+                    ? 'bg-linear-to-r from-amber-500 to-amber-600'
+                    : 'bg-linear-to-r from-rose-500 to-rose-600'
                 }`}
               />
             </div>
@@ -1015,7 +1015,7 @@ export default function DashboardView({
                   </div>
                   <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
                     <div
-                      className="bg-gradient-to-r from-indigo-500 to-purple-500 h-full rounded-full transition-all duration-500"
+                      className="bg-linear-to-r from-indigo-500 to-purple-500 h-full rounded-full transition-all duration-500"
                       style={{ width: `${Math.max(6, m.percent)}%` }}
                     />
                   </div>

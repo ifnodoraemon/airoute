@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -65,6 +66,10 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		streamChan, err := prov.ChatCompleteStream(attemptCtx, req, ch)
 		if err != nil {
 			attemptCancel()
+			if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
+				d.circuitBreaker.AbortCanary(ch.Name)
+				return nil, ctx.Err()
+			}
 			d.circuitBreaker.RecordFailure(ch.Name)
 			lastErr = err
 			attempted = append(attempted, ch.Name)
@@ -81,6 +86,10 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		case firstEvent, ok := <-streamChan:
 			if !ok {
 				attemptCancel()
+				if ctx.Err() == context.Canceled {
+					d.circuitBreaker.AbortCanary(ch.Name)
+					return nil, ctx.Err()
+				}
 				d.circuitBreaker.RecordFailure(ch.Name)
 				lastErr = fmt.Errorf("channel %s closed stream without events", ch.Name)
 				attempted = append(attempted, ch.Name)
@@ -90,6 +99,10 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 
 			if firstEvent.Err != nil {
 				attemptCancel()
+				if ctx.Err() == context.Canceled || errors.Is(firstEvent.Err, context.Canceled) {
+					d.circuitBreaker.AbortCanary(ch.Name)
+					return nil, ctx.Err()
+				}
 				d.circuitBreaker.RecordFailure(ch.Name)
 				lastErr = firstEvent.Err
 				attempted = append(attempted, ch.Name)
@@ -129,6 +142,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 
 		case <-ctx.Done():
 			attemptCancel()
+			d.circuitBreaker.AbortCanary(ch.Name)
 			return nil, ctx.Err()
 		}
 	}

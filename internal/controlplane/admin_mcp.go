@@ -1,7 +1,9 @@
 package controlplane
 
 import (
+	"fmt"
 	"net/http"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -204,7 +206,7 @@ func (h *AdminHandler) DeleteMCPServer(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "MCP 服务已删除"})
 }
 
-// ProbeMCPServer tests connectivity to an MCP Server.
+// ProbeMCPServer tests connectivity to an MCP Server with genuine network probes.
 func (h *AdminHandler) ProbeMCPServer(c *gin.Context) {
 	id := c.Param("id")
 	srv, err := h.repo.GetMCPServer(id)
@@ -215,22 +217,81 @@ func (h *AdminHandler) ProbeMCPServer(c *gin.Context) {
 
 	baseURL := h.resolvePublicBaseURL(c)
 	endpoint := srv.Endpoint
-	if srv.ID == "airoute-gateway" || strings.HasPrefix(endpoint, "/") || strings.Contains(endpoint, "/mcp") {
+	isLocalGateway := srv.ID == "airoute-gateway" || strings.HasPrefix(endpoint, "/") || strings.Contains(endpoint, "/mcp")
+
+	var status string
+	var latencyMs int64
+	var probeErr string
+
+	if isLocalGateway {
 		endpoint = baseURL + "/mcp/sse"
+		status = "online"
+		latencyMs = 1
+	} else if strings.HasPrefix(endpoint, "http://") || strings.HasPrefix(endpoint, "https://") {
+		start := time.Now()
+		probeClient := &http.Client{
+			Timeout: 5 * time.Second,
+		}
+		probeReq, reqErr := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, endpoint, nil)
+		if reqErr != nil {
+			status = "offline"
+			probeErr = reqErr.Error()
+		} else {
+			probeReq.Header.Set("User-Agent", "Airoute-MCP-Probe/1.0")
+			probeReq.Header.Set("Accept", "text/event-stream, application/json, */*")
+			resp, doErr := probeClient.Do(probeReq)
+			latencyMs = time.Since(start).Milliseconds()
+			if doErr != nil {
+				status = "offline"
+				probeErr = doErr.Error()
+			} else {
+				resp.Body.Close()
+				if resp.StatusCode < 500 {
+					status = "online"
+				} else {
+					status = "offline"
+					probeErr = fmt.Sprintf("HTTP status %d", resp.StatusCode)
+				}
+			}
+		}
+	} else if srv.Transport == "stdio" {
+		// Verify local runtime binary for stdio command
+		parts := strings.Fields(endpoint)
+		if len(parts) > 0 {
+			if _, lookErr := exec.LookPath(parts[0]); lookErr == nil {
+				status = "online"
+			} else {
+				status = "configured"
+				probeErr = fmt.Sprintf("Command '%s' not found in PATH", parts[0])
+			}
+		} else {
+			status = "configured"
+		}
+		latencyMs = 0
+	} else {
+		status = "configured"
+		latencyMs = 0
 	}
 
-	latencyMs := 8 + (time.Now().UnixNano()%12000000)/1000000
+	// Update status in storage
+	_ = h.repo.UpdateMCPServerStatus(srv.ID, status)
+
+	res := gin.H{
+		"id":          srv.ID,
+		"name":        srv.Name,
+		"endpoint":    endpoint,
+		"status":      status,
+		"latency_ms":  latencyMs,
+		"transport":   srv.Transport,
+		"tools_count": len(srv.Tools),
+		"checked_at":  time.Now().Format("2006-01-02 15:04:05"),
+	}
+	if probeErr != "" {
+		res["probe_error"] = probeErr
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
-		"data": gin.H{
-			"id":          srv.ID,
-			"name":        srv.Name,
-			"endpoint":    endpoint,
-			"status":      "online",
-			"latency_ms":  latencyMs,
-			"transport":   srv.Transport,
-			"tools_count": len(srv.Tools),
-			"checked_at":  time.Now().Format("2006-01-02 15:04:05"),
-		},
+		"data": res,
 	})
 }

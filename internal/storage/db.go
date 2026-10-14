@@ -53,7 +53,12 @@ func (db *DB) Rebind(query string) string {
 	s = strings.ReplaceAll(s, "datetime(created_at) >=", "created_at >=")
 	s = strings.ReplaceAll(s, "datetime(created_at) <=", "created_at <=")
 	s = strings.ReplaceAll(s, " LIKE ", " ILIKE ")
-	s = strings.ReplaceAll(s, "INSERT OR IGNORE INTO", "INSERT INTO")
+	if strings.Contains(s, "INSERT OR IGNORE INTO") {
+		s = strings.ReplaceAll(s, "INSERT OR IGNORE INTO", "INSERT INTO")
+		if !strings.Contains(strings.ToUpper(s), "ON CONFLICT") {
+			s = s + " ON CONFLICT DO NOTHING"
+		}
+	}
 	return s
 }
 

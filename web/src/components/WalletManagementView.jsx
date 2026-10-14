@@ -289,7 +289,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
           {/* Summary Stat Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {/* Balance Card */}
-            <div className="bg-gradient-to-br from-indigo-900 via-indigo-800 to-slate-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden flex flex-col justify-between">
+            <div className="bg-linear-to-br from-indigo-900 via-indigo-800 to-slate-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden flex flex-col justify-between">
               <div className="absolute right-0 top-0 w-36 h-36 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none"></div>
               <div>
                 <div className="flex items-center justify-between text-indigo-200 text-xs font-medium">
@@ -377,7 +377,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                   <button
                     type="submit"
                     disabled={redeeming}
-                    className="w-full py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
+                    className="w-full py-2 bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
                   >
                     {redeeming ? (
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -623,7 +623,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                           <span>{r.code}</span>
                           <button
                             onClick={() => copyText(r.code, isZh ? '卡密' : 'Card Code')}
-                            className="p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                            className="p-1 hover:bg-slate-200 rounded-sm text-slate-400 hover:text-slate-600 transition cursor-pointer"
                             title={isZh ? '复制卡密' : 'Copy code'}
                           >
                             <Copy className="w-3.5 h-3.5" />

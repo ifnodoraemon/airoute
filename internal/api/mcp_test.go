@@ -109,7 +109,7 @@ func TestMCPSecurityAndUtilityTools(t *testing.T) {
 	})
 
 	t.Run("nano_calc_eval via utility tools", func(t *testing.T) {
-		out, isErr, handled := handler.executeUtilityAndMockTools(ctx, "nano_calc_eval", map[string]interface{}{
+		out, isErr, handled := handler.executeBuiltinUtilityTools(ctx, "nano_calc_eval", map[string]interface{}{
 			"expression": "100 / 4 + 5",
 		})
 		if !handled || isErr {

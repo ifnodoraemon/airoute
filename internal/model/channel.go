@@ -191,9 +191,14 @@ type APIKeyConfig struct {
 	RPM              int      `yaml:"rpm" json:"rpm"`                                                 // Requests per minute limit (0 = unlimited)
 	TPM              int      `yaml:"tpm" json:"tpm"`                                                 // Tokens per minute limit (0 = unlimited)
 	Budget           float64  `yaml:"budget" json:"budget"`                                           // total dollar or token budget
+	UsedCost         float64  `yaml:"used_cost" json:"used_cost"`
+	Status           string   `yaml:"status" json:"status"`
 	GroupName        string   `yaml:"group_name" json:"group_name"`                                   // pricing group e.g. default, vip
 	UserID           int64    `yaml:"user_id" json:"user_id"`                                         // owner user id
 	FormatValidation string   `yaml:"format_validation,omitempty" json:"format_validation,omitempty"` // "off" | "lenient" | "strict"
+	UserStatus       string   `yaml:"user_status,omitempty" json:"user_status,omitempty"`
+	UserRole         string   `yaml:"user_role,omitempty" json:"user_role,omitempty"`
+	UserBalance      float64  `yaml:"user_balance,omitempty" json:"user_balance,omitempty"`
 }
 
 

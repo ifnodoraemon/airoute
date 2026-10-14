@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Copy, Check, Activity, Clock, Zap, Server, Key, AlertCircle, Shield, Trash2, Sparkles, ArrowRight } from 'lucide-react';
+import { X, Copy, Check, Activity, Key, AlertCircle, Trash2, Sparkles, ArrowRight } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
 
 export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession, onDeleteLog, onNavigate, lang = 'zh', t }) {
@@ -190,7 +190,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
                         setCopied(true);
                         setTimeout(() => setCopied(false), 2000);
                       }}
-                      className="p-1 hover:bg-white dark:hover:bg-slate-800 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer"
+                      className="p-1 hover:bg-white dark:hover:bg-slate-800 rounded-sm text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer"
                       title={isZh ? '复制 Trace ID' : 'Copy Trace ID'}
                     >
                       <Copy className="w-3 h-3" />
@@ -223,7 +223,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
                       setCopied(true);
                       setTimeout(() => setCopied(false), 2000);
                     }}
-                    className="p-1 hover:bg-white dark:hover:bg-slate-800 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer"
+                    className="p-1 hover:bg-white dark:hover:bg-slate-800 rounded-sm text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer"
                     title={isZh ? '复制对话 ID' : 'Copy Chat ID'}
                   >
                     <Copy className="w-3 h-3" />
@@ -244,7 +244,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
                       setCopied(true);
                       setTimeout(() => setCopied(false), 2000);
                     }}
-                    className="p-1 hover:bg-white dark:hover:bg-slate-800 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer"
+                    className="p-1 hover:bg-white dark:hover:bg-slate-800 rounded-sm text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer"
                     title={isZh ? '复制会话 ID' : 'Copy Session ID'}
                   >
                     <Copy className="w-3 h-3" />

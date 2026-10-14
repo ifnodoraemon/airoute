@@ -810,11 +810,11 @@ curl -X POST "${messagesUrl}" \\
             <button
               onClick={handleToggleGlobalMcp}
               disabled={togglingGlobal}
-              className={`relative inline-flex h-4.5 w-8 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${mcpSettings.mcp_enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+              className={`relative inline-flex h-4.5 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${mcpSettings.mcp_enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'}`}
               title={mcpSettings.mcp_enabled ? (isZh ? '点击关闭 MCP' : 'Click to disable MCP') : (isZh ? '点击开启 MCP' : 'Click to enable MCP')}
             >
               <span
-                className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${mcpSettings.mcp_enabled ? 'translate-x-3.5' : 'translate-x-0'}`}
+                className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${mcpSettings.mcp_enabled ? 'translate-x-3.5' : 'translate-x-0'}`}
               />
             </button>
             <span className={`text-[11px] font-medium ${mcpSettings.mcp_enabled ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400'}`}>
@@ -840,7 +840,7 @@ curl -X POST "${messagesUrl}" \\
         {/* SSE 端点展示与复制 */}
         <div className="flex items-center gap-1.5 text-xs text-gray-500 shrink-0">
           <span className="text-gray-400 text-[11px]">{isZh ? 'SSE 端点:' : 'SSE Endpoint:'}</span>
-          <code className="px-1.5 py-0.5 rounded font-mono text-[11px] bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200/80 dark:border-gray-800">
+          <code className="px-1.5 py-0.5 rounded-sm font-mono text-[11px] bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200/80 dark:border-gray-800">
             /mcp/sse
           </code>
           <button
@@ -923,7 +923,7 @@ curl -X POST "${messagesUrl}" \\
                           <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
                             {server.name}
                           </h3>
-                          <span className={`px-1.5 py-0.2 text-[10px] font-mono font-semibold rounded ${server.transport === 'sse' ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-300' : 'bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-300'}`}>
+                          <span className={`px-1.5 py-0.2 text-[10px] font-mono font-semibold rounded-sm ${server.transport === 'sse' ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-300' : 'bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-300'}`}>
                             {server.transport.toUpperCase()}
                           </span>
                         </div>
@@ -936,11 +936,11 @@ curl -X POST "${messagesUrl}" \\
                     <button
                       onClick={() => handleToggleServer(server.id, server.enabled)}
                       disabled={isToggling}
-                      className={`relative inline-flex h-4.5 w-8 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${server.enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+                      className={`relative inline-flex h-4.5 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${server.enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'}`}
                       title={server.enabled ? (isZh ? '点击停用' : 'Click to disable') : (isZh ? '点击启用' : 'Click to enable')}
                     >
                       <span
-                        className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${server.enabled ? 'translate-x-3.5' : 'translate-x-0'}`}
+                        className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${server.enabled ? 'translate-x-3.5' : 'translate-x-0'}`}
                       />
                     </button>
                   </div>
@@ -957,7 +957,7 @@ curl -X POST "${messagesUrl}" \\
                       {server.tools.slice(0, 3).map(t => (
                         <span
                           key={t}
-                          className="px-1.5 py-0.5 font-mono text-[10px] bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-300 rounded border border-gray-200/80 dark:border-gray-750"
+                          className="px-1.5 py-0.5 font-mono text-[10px] bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-300 rounded-sm border border-gray-200/80 dark:border-gray-750"
                         >
                           {t}
                         </span>
@@ -974,14 +974,14 @@ curl -X POST "${messagesUrl}" \\
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => handleOpenProbe(server)}
-                      className="px-2 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded transition-colors inline-flex items-center gap-1"
+                      className="px-2 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-sm transition-colors inline-flex items-center gap-1"
                     >
                       <Radio className="w-3.5 h-3.5" />
                       {isZh ? '调试探针' : 'Probe'}
                     </button>
                     <button
                       onClick={() => { setSelectedServerForConfig(server); setConfigModalOpen(true); }}
-                      className="px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-750 rounded transition-colors inline-flex items-center gap-1 border border-gray-200 dark:border-gray-700"
+                      className="px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-750 rounded-sm transition-colors inline-flex items-center gap-1 border border-gray-200 dark:border-gray-700"
                     >
                       <Terminal className="w-3.5 h-3.5" />
                       {isZh ? '配置' : 'Config'}
@@ -991,7 +991,7 @@ curl -X POST "${messagesUrl}" \\
                   {isCustom && (
                     <button
                       onClick={() => handleDeleteServer(server.id)}
-                      className="p-1 text-gray-400 hover:text-rose-500 rounded transition-colors"
+                      className="p-1 text-gray-400 hover:text-rose-500 rounded-sm transition-colors"
                       title={isZh ? '移除自定义 MCP 服务' : 'Remove custom MCP server'}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -1056,7 +1056,7 @@ curl -X POST "${messagesUrl}" \\
                     onChange={(e) => {
                       if (e.target.value) setConfigToken(e.target.value);
                     }}
-                    className="px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-855 text-gray-700 dark:text-gray-200"
+                    className="px-2 py-1 text-xs rounded-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-855 text-gray-700 dark:text-gray-200"
                     defaultValue=""
                   >
                     <option value="" disabled>{isZh ? '选择已发行 Key...' : 'Select issued key...'}</option>
@@ -1072,7 +1072,7 @@ curl -X POST "${messagesUrl}" \\
                   value={configToken}
                   onChange={(e) => setConfigToken(e.target.value)}
                   placeholder="YOUR_AIROUTE_KEY"
-                  className="px-2.5 py-1 text-xs font-mono rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-850 text-gray-900 dark:text-white min-w-[200px]"
+                  className="px-2.5 py-1 text-xs font-mono rounded-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-850 text-gray-900 dark:text-white min-w-[200px]"
                 />
               </div>
             </div>
@@ -1114,7 +1114,7 @@ curl -X POST "${messagesUrl}" \\
                                  activeConfigClient === 'python' ? getPythonSnippet() : getCurlSnippet();
                     handleCopyText(code, 'client-config');
                   }}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                 >
                   {copiedKey === 'client-config' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                   <span>{copiedKey === 'client-config' ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制配置' : 'Copy Config')}</span>
@@ -1133,7 +1133,7 @@ curl -X POST "${messagesUrl}" \\
             </div>
 
             <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/50 rounded-lg text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
               <div>
                 <strong>{isZh ? '安全最佳实践：' : 'Security Best Practice: '}</strong>
                 {isZh ? '所有客户端均通过 Airoute 统一协议代理连接，无需直接暴露内部数据库或私有服务凭据。网关会自动执行参数脱敏与 SQL 注入审计。' : 'All clients connect via the unified Airoute protocol proxy without exposing database or private server credentials. Gateway auto-executes redaction and SQL injection auditing.'}
@@ -1163,7 +1163,7 @@ curl -X POST "${messagesUrl}" \\
           <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-lg">
+                <div className="p-2 bg-linear-to-br from-indigo-500 to-purple-600 text-white rounded-lg">
                   <Plus className="w-5 h-5" />
                 </div>
                 <div>
@@ -1317,7 +1317,7 @@ curl -X POST "${messagesUrl}" \\
           <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-5xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-lg">
+                <div className="p-2 bg-linear-to-br from-indigo-500 to-purple-600 text-white rounded-lg">
                   <Radio className="w-5 h-5" />
                 </div>
                 <div>
@@ -1346,9 +1346,9 @@ curl -X POST "${messagesUrl}" \\
               </div>
               <p className="text-[11px] leading-relaxed text-indigo-700/80 dark:text-indigo-300/80">
                 {isZh ? (
-                  <><b>标准交互流:</b> 客户端首先发起 <code className="font-mono bg-indigo-100 dark:bg-indigo-900/60 px-1 py-0.5 rounded">GET /mcp/sse</code> 建立长连接握手；随后将左侧的 <b>JSON-RPC 2.0 请求报文</b> 通过 <code className="font-mono bg-indigo-100 dark:bg-indigo-900/60 px-1 py-0.5 rounded">POST /mcp/messages</code> 投递至网关。网关安全审计并调度工具后，将右侧的 <b>响应结果</b> 实时返回给客户端。</>
+                  <><b>标准交互流:</b> 客户端首先发起 <code className="font-mono bg-indigo-100 dark:bg-indigo-900/60 px-1 py-0.5 rounded-sm">GET /mcp/sse</code> 建立长连接握手；随后将左侧的 <b>JSON-RPC 2.0 请求报文</b> 通过 <code className="font-mono bg-indigo-100 dark:bg-indigo-900/60 px-1 py-0.5 rounded-sm">POST /mcp/messages</code> 投递至网关。网关安全审计并调度工具后，将右侧的 <b>响应结果</b> 实时返回给客户端。</>
                 ) : (
-                  <><b>Standard Flow:</b> Clients initiate <code className="font-mono bg-indigo-100 dark:bg-indigo-900/60 px-1 py-0.5 rounded">GET /mcp/sse</code> handshake, then send <b>JSON-RPC 2.0 request</b> via <code className="font-mono bg-indigo-100 dark:bg-indigo-900/60 px-1 py-0.5 rounded">POST /mcp/messages</code>. Gateway audits security and dispatches tools, returning <b>responses</b> in real-time.</>
+                  <><b>Standard Flow:</b> Clients initiate <code className="font-mono bg-indigo-100 dark:bg-indigo-900/60 px-1 py-0.5 rounded-sm">GET /mcp/sse</code> handshake, then send <b>JSON-RPC 2.0 request</b> via <code className="font-mono bg-indigo-100 dark:bg-indigo-900/60 px-1 py-0.5 rounded-sm">POST /mcp/messages</code>. Gateway audits security and dispatches tools, returning <b>responses</b> in real-time.</>
                 )}
               </p>
             </div>
@@ -1372,7 +1372,7 @@ curl -X POST "${messagesUrl}" \\
                       onChange={(e) => {
                         if (e.target.value) setProbeToken(e.target.value);
                       }}
-                      className="px-2 py-1 text-[11px] rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200"
+                      className="px-2 py-1 text-[11px] rounded-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200"
                       defaultValue=""
                     >
                       <option value="" disabled>{isZh ? '选择网关已发行 Key...' : 'Select issued key...'}</option>
@@ -1579,21 +1579,21 @@ curl -X POST "${messagesUrl}" \\
                         <button
                           type="button"
                           onClick={() => setRequestViewTab('wire')}
-                          className={`px-1.5 py-0.5 rounded ${requestViewTab === 'wire' ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-300 shadow-2xs font-medium' : 'text-gray-500 hover:text-gray-800'}`}
+                          className={`px-1.5 py-0.5 rounded-sm ${requestViewTab === 'wire' ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-300 shadow-2xs font-medium' : 'text-gray-500 hover:text-gray-800'}`}
                         >
                           {isZh ? 'HTTP报文' : 'Wire'}
                         </button>
                         <button
                           type="button"
                           onClick={() => setRequestViewTab('json')}
-                          className={`px-1.5 py-0.5 rounded ${requestViewTab === 'json' ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-300 shadow-2xs font-medium' : 'text-gray-500 hover:text-gray-800'}`}
+                          className={`px-1.5 py-0.5 rounded-sm ${requestViewTab === 'json' ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-300 shadow-2xs font-medium' : 'text-gray-500 hover:text-gray-800'}`}
                         >
                           JSON-RPC
                         </button>
                         <button
                           type="button"
                           onClick={() => setRequestViewTab('curl')}
-                          className={`px-1.5 py-0.5 rounded ${requestViewTab === 'curl' ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-300 shadow-2xs font-medium' : 'text-gray-500 hover:text-gray-800'}`}
+                          className={`px-1.5 py-0.5 rounded-sm ${requestViewTab === 'curl' ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-300 shadow-2xs font-medium' : 'text-gray-500 hover:text-gray-800'}`}
                         >
                           cURL
                         </button>
@@ -1613,7 +1613,7 @@ curl -X POST "${messagesUrl}" \\
                       {isZh ? '复制请求' : 'Copy Request'}
                     </button>
                   </div>
-                  <div className="bg-gray-900 text-gray-100 p-3.5 rounded-xl font-mono text-xs overflow-x-auto min-h-[170px] max-h-64 border border-gray-800 shadow-inner">
+                  <div className="bg-gray-900 text-gray-100 p-3.5 rounded-xl font-mono text-xs overflow-x-auto min-h-[170px] max-h-64 border border-gray-800 inset-shadow-sm">
                     <pre className="whitespace-pre-wrap leading-relaxed">
                       {requestViewTab === 'wire' && getWireRequestText()}
                       {requestViewTab === 'json' && JSON.stringify(lastSentPayload || getCurrentRpcPayload(), null, 2)}
@@ -1644,7 +1644,7 @@ curl -X POST "${messagesUrl}" \\
                       </button>
                     )}
                   </div>
-                  <div className="bg-gray-900 text-gray-100 p-3.5 rounded-xl font-mono text-xs overflow-x-auto min-h-[170px] max-h-64 border border-gray-800 shadow-inner flex flex-col justify-start">
+                  <div className="bg-gray-900 text-gray-100 p-3.5 rounded-xl font-mono text-xs overflow-x-auto min-h-[170px] max-h-64 border border-gray-800 inset-shadow-sm flex flex-col justify-start">
                     {probeResult ? (
                       <pre className="whitespace-pre-wrap leading-relaxed">{JSON.stringify(probeResult, null, 2)}</pre>
                     ) : (

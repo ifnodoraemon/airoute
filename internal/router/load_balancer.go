@@ -16,7 +16,9 @@ type ChannelSelectorStrategy interface {
 }
 
 // SessionAffinitySelector routes requests using sticky session affinity (Redis cache pin or Consistent Hashing).
-type SessionAffinitySelector struct{}
+type SessionAffinitySelector struct {
+	cb *CircuitBreaker
+}
 
 // Select implements ChannelSelectorStrategy with session affinity.
 func (s *SessionAffinitySelector) Select(ctx context.Context, group []*model.ChannelConfig, modelName, sessionID string) []*model.ChannelConfig {
@@ -32,22 +34,40 @@ func (s *SessionAffinitySelector) Select(ctx context.Context, group []*model.Cha
 		if pinnedName, err := client.GetSessionChannel(ctx, modelName, sessionID); err == nil && pinnedName != "" {
 			for i, ch := range group {
 				if ch.Name == pinnedName {
-					chosen = ch
-					chosenIdx = i
+					// Verify pinned channel is healthy and not tripped
+					if s.cb == nil || s.cb.CanExecute(ch.Name) {
+						chosen = ch
+						chosenIdx = i
+					}
 					break
 				}
 			}
 		}
 	}
 
-	// If not in Redis, compute Consistent Hash via FNV-1a
+	// If not in Redis or pinned channel was tripped, compute Consistent Hash via FNV-1a
 	if chosen == nil {
 		h := fnv.New32a()
 		_, _ = h.Write([]byte(sessionID))
 		_, _ = h.Write([]byte(":"))
 		_, _ = h.Write([]byte(modelName))
-		chosenIdx = int(h.Sum32() % uint32(len(group)))
-		chosen = group[chosenIdx]
+		startIdx := int(h.Sum32() % uint32(len(group)))
+
+		// Find first healthy channel
+		for i := 0; i < len(group); i++ {
+			idx := (startIdx + i) % len(group)
+			candidate := group[idx]
+			if s.cb == nil || s.cb.CanExecute(candidate.Name) {
+				chosen = candidate
+				chosenIdx = idx
+				break
+			}
+		}
+
+		if chosen == nil {
+			chosen = group[startIdx]
+			chosenIdx = startIdx
+		}
 
 		// Persist pin in Redis (30-minute TTL)
 		if client := distributed.GetClient(); client != nil && client.IsActive() {

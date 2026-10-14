@@ -207,17 +207,45 @@ func (r *Repository) CountActiveKeys() int {
 	return count
 }
 
-// ToModelAPIKeys converts database APIKeyRecords to Data Plane model.APIKeyConfigs.
+// ToModelAPIKeys converts database APIKeyRecords to Data Plane model.APIKeyConfigs with full in-memory quota snapshots.
 func (r *Repository) ToModelAPIKeys() ([]model.APIKeyConfig, error) {
 	records, err := r.ListAPIKeys()
 	if err != nil {
 		return nil, err
 	}
+
+	userMap := make(map[int64]*UserRecord)
+	userByName := make(map[string]*UserRecord)
+	if users, err := r.ListUsers(); err == nil {
+		for _, u := range users {
+			userMap[u.ID] = u
+			userByName[strings.ToLower(u.Username)] = u
+		}
+	}
+
 	var res []model.APIKeyConfig
 	for _, rec := range records {
 		if rec.Status != "active" {
 			continue
 		}
+
+		var user *UserRecord
+		if rec.UserID > 0 {
+			user = userMap[rec.UserID]
+		}
+		if user == nil && rec.TenantID != "" {
+			user = userByName[strings.ToLower(rec.TenantID)]
+		}
+
+		userStatus := ""
+		userRole := ""
+		userBalance := 0.0
+		if user != nil {
+			userStatus = user.Status
+			userRole = user.Role
+			userBalance = user.Balance
+		}
+
 		res = append(res, model.APIKeyConfig{
 			Key:              rec.Key,
 			TenantID:         rec.TenantID,
@@ -225,9 +253,14 @@ func (r *Repository) ToModelAPIKeys() ([]model.APIKeyConfig, error) {
 			RPM:              rec.RPM,
 			TPM:              rec.TPM,
 			Budget:           rec.Budget,
+			UsedCost:         rec.UsedCost,
+			Status:           rec.Status,
 			GroupName:        rec.GroupName,
 			UserID:           rec.UserID,
 			FormatValidation: rec.FormatValidation,
+			UserStatus:       userStatus,
+			UserRole:         userRole,
+			UserBalance:      userBalance,
 		})
 	}
 	return res, nil

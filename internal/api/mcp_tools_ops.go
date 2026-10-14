@@ -15,6 +15,22 @@ func (h *MCPHandler) executeOpsTools(ctx context.Context, name string, args map[
 	switch name {
 	case "airoute_cluster_status", "nano_check_status":
 		if h.repo != nil {
+			if h.repo.CountActiveKeys() > 0 {
+				apiKey, _ := ctx.Value(contextKeyCallerKey).(string)
+				if apiKey == "" {
+					if k, ok := args["api_key"].(string); ok && k != "" {
+						apiKey = k
+					}
+				}
+				if apiKey == "" {
+					return "Error: Authentication required to inspect cluster status.", true, true
+				}
+				rec, err := h.repo.GetAPIKeyByKey(apiKey)
+				if err != nil || rec == nil || rec.Status != "active" {
+					return "Error: Invalid or inactive API key.", true, true
+				}
+			}
+
 			channels, err := h.repo.ListChannels()
 			if err == nil {
 				type ChanStatus struct {
@@ -117,8 +133,8 @@ func (h *MCPHandler) executeOpsTools(ctx context.Context, name string, args map[
 		sessionID, _ := args["session_id"].(string)
 
 		// Tenant isolation & access control:
-		if callerKeyRec == nil && sessionID == "" && h.repo.CountActiveKeys() > 0 {
-			return "Error: Authentication required to query global logs. Unauthenticated queries must specify a 'session_id'.", true, true
+		if h.repo.CountActiveKeys() > 0 && callerKeyRec == nil {
+			return "Error: Authentication required to query global logs. Please provide a valid API key.", true, true
 		}
 
 		limit := 10

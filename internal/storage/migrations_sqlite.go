@@ -182,6 +182,7 @@ func (db *DB) migrate() error {
 					purpose TEXT DEFAULT 'register',
 					expires_at DATETIME NOT NULL,
 					used INTEGER DEFAULT 0,
+					attempts INTEGER DEFAULT 0,
 					created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 				);
 
@@ -352,6 +353,14 @@ func (db *DB) migrate() error {
 				);
 				`)
 				return err
+			},
+		},
+		{
+			Version: 9,
+			Name:    "add_attempts_to_verification_codes",
+			Up: func(db *DB) error {
+				ensureSQLiteColumn(db.DB, "verification_codes", "attempts", "INTEGER DEFAULT 0")
+				return nil
 			},
 		},
 	}

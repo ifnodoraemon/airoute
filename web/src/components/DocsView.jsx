@@ -9,7 +9,8 @@ import {
   Server,
   Copy,
   Sparkles,
-  Check
+  Check,
+  Cpu
 } from 'lucide-react';
 import { getGatewayOrigin, copyToClipboard as crossOriginCopy } from '../config';
 
@@ -395,7 +396,7 @@ for chunk in response:
               </pre>
               <button
                 onClick={() => copyToClipboard(`from openai import OpenAI\n\nclient = OpenAI(\n    base_url="${docBaseUrl}",\n    api_key="sk-airoute-xxxx",\n)\n\nresponse = client.chat.completions.create(\n    model="deepseek-v3",\n    messages=[{"role": "user", "content": "你好！"}],\n    stream=True,\n)\n\nfor chunk in response:\n    content = chunk.choices[0].delta.content or ""\n    print(content, end="", flush=True)`, 'py')}
-                className="absolute top-3 right-3 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] font-mono flex items-center space-x-1"
+                className="absolute top-3 right-3 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-sm text-[11px] font-mono flex items-center space-x-1"
               >
                 {copiedKey === 'py' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                 <span>{copiedKey === 'py' ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制' : 'Copy')}</span>
@@ -425,7 +426,7 @@ for chunk in response:
                 </pre>
                 <button
                   onClick={() => copyToClipboard(`curl -X POST "${docBaseUrl}/chat/completions" \\\n  -H "Authorization: Bearer sk-airoute-xxxx" \\\n  -H "Content-Type: application/json" \\\n  -d '{"model": "deepseek-v3", "messages": [{"role": "user", "content": "Ping"}], "stream": true}'`, 'curl')}
-                  className="absolute top-2 right-2 px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded text-[11px] font-mono flex items-center space-x-1"
+                  className="absolute top-2 right-2 px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-sm text-[11px] font-mono flex items-center space-x-1"
                 >
                   {copiedKey === 'curl' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                   <span>{copiedKey === 'curl' ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制' : 'Copy')}</span>
@@ -462,7 +463,7 @@ print(message.content[0].text)`}
               </pre>
               <button
                 onClick={() => copyToClipboard(`import anthropic\n\nclient = anthropic.Anthropic(\n    base_url="${docOrigin}",\n    api_key="sk-airoute-xxxx",\n)\n\nmessage = client.messages.create(\n    model="claude-3-7-sonnet",\n    max_tokens=1024,\n    messages=[\n        {"role": "user", "content": "请介绍量子计算的核心原理。"}\n    ]\n)\nprint(message.content[0].text)`, 'claude')}
-                className="absolute top-3 right-3 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] font-mono flex items-center space-x-1"
+                className="absolute top-3 right-3 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-sm text-[11px] font-mono flex items-center space-x-1"
               >
                 {copiedKey === 'claude' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                 <span>{copiedKey === 'claude' ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制' : 'Copy')}</span>

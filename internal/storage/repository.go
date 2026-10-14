@@ -2,6 +2,8 @@ package storage
 
 import (
 	"fmt"
+	"sync"
+	"time"
 )
 
 // StatsOverview aggregates system stats for the dashboard.
@@ -21,7 +23,10 @@ type StatsOverview struct {
 
 // Repository manages persistence for channels, keys, logs, pricing, users, and plugins.
 type Repository struct {
-	db *DB
+	db           *DB
+	statsCache   *StatsOverview
+	statsCacheAt time.Time
+	statsMu      sync.RWMutex
 }
 
 var globalRepo *Repository
@@ -59,8 +64,16 @@ func (r *Repository) Dialect() string {
 	return r.db.Dialect()
 }
 
-// GetStatsOverview queries summary metrics.
+// GetStatsOverview queries summary metrics with a 5-second in-memory cache to prevent full-table scan bottlenecks.
 func (r *Repository) GetStatsOverview() (*StatsOverview, error) {
+	r.statsMu.RLock()
+	if r.statsCache != nil && time.Since(r.statsCacheAt) < 5*time.Second {
+		cached := *r.statsCache
+		r.statsMu.RUnlock()
+		return &cached, nil
+	}
+	r.statsMu.RUnlock()
+
 	stats := &StatsOverview{}
 
 	row := r.db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(total_tokens), 0), COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0), COALESCE(SUM(cached_tokens), 0), COALESCE(SUM(cost), 0.0), COALESCE(AVG(ttft_ms), 0), COALESCE(AVG(duration_ms), 0) FROM usage_logs`)
@@ -76,6 +89,11 @@ func (r *Repository) GetStatsOverview() (*StatsOverview, error) {
 
 	_ = r.db.QueryRow(`SELECT COUNT(*) FROM channels WHERE status='active'`).Scan(&stats.ActiveChannels)
 	_ = r.db.QueryRow(`SELECT COUNT(*) FROM api_keys WHERE status='active'`).Scan(&stats.ActiveKeys)
+
+	r.statsMu.Lock()
+	r.statsCache = stats
+	r.statsCacheAt = time.Now()
+	r.statsMu.Unlock()
 
 	return stats, nil
 }

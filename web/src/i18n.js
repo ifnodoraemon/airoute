@@ -1,7 +1,7 @@
 // Internationalization (i18n) Dictionary & Context for Airoute
 // Clean, professional, product-first terminology for both Chinese and English
 
-import React, { createContext, useContext } from 'react';
+import React, { createContext } from 'react';
 
 export const translations = {
   zh: {
@@ -576,5 +576,3 @@ export const I18nContext = createContext({
   toggleLang: () => {},
   t: translations.zh,
 });
-
-export const useI18n = () => useContext(I18nContext);

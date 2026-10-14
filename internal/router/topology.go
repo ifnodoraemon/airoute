@@ -1,6 +1,7 @@
 package router
 
 import (
+	"bytes"
 	"encoding/json"
 	"math"
 	"sort"
@@ -172,11 +173,18 @@ func InferModality(modelName string) string {
 
 // RewriteJSONModel substitutes the "model" field in a JSON payload with newModel, preserving all other keys.
 func RewriteJSONModel(body []byte, newModel string) []byte {
+	if len(body) == 0 || newModel == "" {
+		return body
+	}
+	if !bytes.Contains(body, []byte(`"model"`)) {
+		return body
+	}
 	var m map[string]any
 	if err := json.Unmarshal(body, &m); err != nil {
 		return body
 	}
-	if _, ok := m["model"]; !ok {
+	currModel, ok := m["model"].(string)
+	if !ok || currModel == newModel {
 		return body
 	}
 	m["model"] = newModel

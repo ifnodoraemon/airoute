@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -205,6 +206,18 @@ func getAPIKeyConfig(c *gin.Context) *model.APIKeyConfig {
 	return nil
 }
 
+var sensitivePattern = regexp.MustCompile(`(?i)(key|token|secret|password|api[-_]?key)=([a-zA-Z0-9_\-\.]+)`)
+
+// sanitizeErrorMessage strips sensitive tokens/keys and credentials from error strings before returning to clients.
+func sanitizeErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	msg = sensitivePattern.ReplaceAllString(msg, "$1=REDACTED")
+	return msg
+}
+
 // respondUpstreamDispatchError uniformly formats and audits upstream routing failures.
 func respondUpstreamDispatchError(c *gin.Context, sessionID, modelName string, dur time.Duration, err error) {
 	noUpstream := strings.Contains(err.Error(), "no upstream provider available")
@@ -213,6 +226,7 @@ func respondUpstreamDispatchError(c *gin.Context, sessionID, modelName string, d
 		RespondOpenAIError(c, http.StatusNotFound, fmt.Sprintf("The model '%s' does not exist or has no active upstream providers configured.", modelName), "invalid_request_error", "model_not_found")
 	} else {
 		recordFailedRequest(c, sessionID, modelName, dur, http.StatusBadGateway)
-		RespondOpenAIError(c, http.StatusBadGateway, err.Error(), "gateway_error", "upstream_failure")
+		safeErr := sanitizeErrorMessage(err)
+		RespondOpenAIError(c, http.StatusBadGateway, safeErr, "gateway_error", "upstream_failure")
 	}
 }

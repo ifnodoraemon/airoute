@@ -458,7 +458,7 @@ export default function LogsView({
                 <th className="py-2.5 px-3 w-10 text-center sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
                   <input
                     type="checkbox"
-                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    className="rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                     checked={displayedLogs.length > 0 && selectedLogIds.length === displayedLogs.length}
                     onChange={(e) => {
                       if (e.target.checked) {
@@ -492,7 +492,7 @@ export default function LogsView({
                     <td className="py-2.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
-                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        className="rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                         checked={selectedLogIds.includes(log.id)}
                         onChange={(e) => {
                           e.stopPropagation();
@@ -522,7 +522,7 @@ export default function LogsView({
                                 e.stopPropagation();
                                 copyWithFeedback(log.trace_id, 'Trace ID');
                               }}
-                              className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-slate-600 transition"
+                              className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-sm text-slate-400 hover:text-slate-600 transition"
                               title={isZh ? "复制 Trace ID" : "Copy Trace ID"}
                             >
                               {copiedId === log.trace_id ? (
@@ -538,7 +538,7 @@ export default function LogsView({
                                 fetchLogs({ sessionFilter: log.trace_id });
                                 if (showToast) showToast(isZh ? `已筛选 Trace: ${log.trace_id}` : `Filtered Trace: ${log.trace_id}`, 'info');
                               }}
-                              className="p-1 hover:bg-purple-50 dark:hover:bg-purple-900/50 rounded text-purple-600 dark:text-purple-400 transition"
+                              className="p-1 hover:bg-purple-50 dark:hover:bg-purple-900/50 rounded-sm text-purple-600 dark:text-purple-400 transition"
                               title={isZh ? "按 Trace ID 快速过滤" : "Quick filter by Trace ID"}
                             >
                               <Search className="w-3 h-3" />
@@ -586,7 +586,7 @@ export default function LogsView({
                     <td className="py-2.5 px-4 text-slate-700 dark:text-slate-300 font-sans">
                       {log.channel ? (
                         <span
-                          className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-700 font-mono text-[11px] truncate max-w-[120px] inline-block align-middle"
+                          className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-sm border border-slate-200 dark:border-slate-700 font-mono text-[11px] truncate max-w-[120px] inline-block align-middle"
                           title={log.channel}
                         >
                           {log.channel}
@@ -620,7 +620,7 @@ export default function LogsView({
                         </span>
                         {log.is_off_peak && (
                           <span
-                            className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200"
+                            className="px-1.5 py-0.2 rounded-sm text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200"
                             title={`Off-peak ${(log.off_peak_discount || 0.5) * 100}%`}
                           >
                             🌙 {isZh ? `闲时 ${Math.round((log.off_peak_discount || 0.5) * 10)}折` : `Off-peak ${Math.round((1 - (log.off_peak_discount || 0.5)) * 100)}% off`}

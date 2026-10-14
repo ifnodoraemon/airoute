@@ -206,7 +206,7 @@ export default function AuthPage({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/30 to-slate-100 flex flex-col justify-between py-10 px-4 sm:px-6 lg:px-8 selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-linear-to-br from-slate-50 via-indigo-50/30 to-slate-100 flex flex-col justify-between py-10 px-4 sm:px-6 lg:px-8 selection:bg-indigo-500 selection:text-white">
       {/* Top Bar with Brand & Back */}
       <div className="max-w-md w-full mx-auto flex items-center justify-between">
         <button
@@ -476,11 +476,11 @@ export default function AuthPage({
           {(sysConfig.oauth_github_enabled || sysConfig.oauth_google_enabled) && (
             <div className="pt-2">
               <div className="relative flex py-2 items-center">
-                <div className="flex-grow border-t border-slate-200"></div>
-                <span className="flex-shrink mx-3 text-[11px] text-slate-400 font-medium">
+                <div className="grow border-t border-slate-200"></div>
+                <span className="shrink mx-3 text-[11px] text-slate-400 font-medium">
                   {isZh ? '企业第三方单点登录' : 'Enterprise SSO Login'}
                 </span>
-                <div className="flex-grow border-t border-slate-200"></div>
+                <div className="grow border-t border-slate-200"></div>
               </div>
 
               <div className="grid grid-cols-2 gap-3 mt-3">

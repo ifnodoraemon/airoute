@@ -23,7 +23,7 @@ func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 	}
 
 	targetModel := channel.GetUpstreamModel(req.Model)
-	targetURL := buildGeminiURL(channel.BaseURL, targetModel, true, channel.APIKey)
+	targetURL := buildGeminiURL(channel.BaseURL, targetModel, true)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(payloadBytes))
 	if err != nil {

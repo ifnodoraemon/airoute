@@ -10,6 +10,7 @@ import (
 
 	"github.com/ifnodoraemon/airoute/internal/distributed"
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -163,11 +164,16 @@ func (al *AsyncLogger) worker() {
 }
 
 // redisStreamWorker continuously reads and batches log records from Redis Streams,
-// persisting them to database in bulk with automatic consumer-group acknowledgement.
+// persisting them to database in bulk with automatic consumer-group acknowledgement,
+// PEL recovery on startup, exponential backoff retries, and AutoClaim for orphaned messages.
 func (al *AsyncLogger) redisStreamWorker(client *distributed.Client) {
 	defer al.wg.Done()
 
-	consumerID := fmt.Sprintf("worker-%d-%x", os.Getpid(), time.Now().UnixNano()%1000000)
+	hostname, err := os.Hostname()
+	if err != nil || hostname == "" {
+		hostname = "worker"
+	}
+	consumerID := fmt.Sprintf("%s-%d", hostname, os.Getpid())
 	ctx := context.Background()
 
 	_ = client.EnsureConsumerGroup(ctx, RedisLogStreamKey, RedisLogGroup)
@@ -177,25 +183,10 @@ func (al *AsyncLogger) redisStreamWorker(client *distributed.Client) {
 		"consumer", consumerID,
 	)
 
-	trimCounter := 0
-
-	for {
-		select {
-		case <-al.stopCh:
-			return
-		default:
-		}
-
-		msgs, err := client.ReadGroupLogs(ctx, RedisLogStreamKey, RedisLogGroup, consumerID, int64(al.batchSize), al.flushTimer)
-		if err != nil {
-			time.Sleep(200 * time.Millisecond)
-			continue
-		}
-
+	processStreamMessages := func(msgs []redis.XMessage) {
 		if len(msgs) == 0 {
-			continue
+			return
 		}
-
 		ackIDs := make([]string, 0, len(msgs))
 		var streamBatch []*UsageLogRecord
 		for _, msg := range msgs {
@@ -211,25 +202,75 @@ func (al *AsyncLogger) redisStreamWorker(client *distributed.Client) {
 		}
 
 		if len(streamBatch) > 0 {
-			err := al.repo.BatchRecordUsageLogs(streamBatch)
-			if err != nil {
-				telemetry.Logger.Error("failed to batch write logs from Redis stream, delaying ack for retry",
-					"error", err.Error(),
+			var writeErr error
+			for attempt := 1; attempt <= 3; attempt++ {
+				writeErr = al.repo.BatchRecordUsageLogs(streamBatch)
+				if writeErr == nil {
+					break
+				}
+				time.Sleep(time.Duration(attempt*100) * time.Millisecond)
+			}
+			if writeErr != nil {
+				telemetry.Logger.Error("failed to batch write logs from Redis stream after retries, keeping in PEL for recovery",
+					"error", writeErr.Error(),
 					"count", len(streamBatch),
 				)
-				time.Sleep(300 * time.Millisecond)
-				continue
+				return // Keep unacknowledged in PEL
 			}
 		}
 
 		if len(ackIDs) > 0 {
 			_ = client.AckLogs(ctx, RedisLogStreamKey, RedisLogGroup, ackIDs...)
 		}
+	}
 
-		trimCounter++
-		if trimCounter >= 100 {
-			trimCounter = 0
-			_ = client.TrimStream(ctx, RedisLogStreamKey, 50000)
+	// 1. Startup: process any unacknowledged messages in our PEL from previous restart
+	for {
+		pendingMsgs, err := client.ReadPendingPEL(ctx, RedisLogStreamKey, RedisLogGroup, consumerID, int64(al.batchSize))
+		if err != nil || len(pendingMsgs) == 0 {
+			break
+		}
+		telemetry.Logger.Info("re-processing unacknowledged PEL messages on startup", "count", len(pendingMsgs))
+		processStreamMessages(pendingMsgs)
+	}
+
+	trimCounter := 0
+	claimTicker := time.NewTicker(30 * time.Second)
+	defer claimTicker.Stop()
+	claimStart := "0-0"
+
+	for {
+		select {
+		case <-al.stopCh:
+			return
+
+		case <-claimTicker.C:
+			// Reclaim messages from dead or unresponsive consumers in group
+			claimedMsgs, nextStart, err := client.AutoClaimLogs(ctx, RedisLogStreamKey, RedisLogGroup, consumerID, 30*time.Second, claimStart, int64(al.batchSize))
+			if err == nil {
+				claimStart = nextStart
+				if len(claimedMsgs) > 0 {
+					telemetry.Logger.Info("reclaimed orphaned PEL messages from dead consumers", "count", len(claimedMsgs))
+					processStreamMessages(claimedMsgs)
+				}
+			}
+
+		default:
+			msgs, err := client.ReadGroupLogs(ctx, RedisLogStreamKey, RedisLogGroup, consumerID, int64(al.batchSize), al.flushTimer)
+			if err != nil {
+				time.Sleep(200 * time.Millisecond)
+				continue
+			}
+
+			if len(msgs) > 0 {
+				processStreamMessages(msgs)
+			}
+
+			trimCounter++
+			if trimCounter >= 100 {
+				trimCounter = 0
+				_ = client.TrimStream(ctx, RedisLogStreamKey, 50000)
+			}
 		}
 	}
 }

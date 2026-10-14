@@ -5,6 +5,12 @@ import (
 	"strings"
 )
 
+var prometheusLabelReplacer = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`)
+
+func escapePrometheusLabel(v string) string {
+	return prometheusLabelReplacer.Replace(v)
+}
+
 // ToPrometheusFormat exports all metrics in standard Prometheus exposition text format.
 func (m *Metrics) ToPrometheusFormat() string {
 	m.mu.RLock()
@@ -99,8 +105,10 @@ func (m *Metrics) ToPrometheusFormat() string {
 		sb.WriteString("# HELP airoute_model_requests_total Total number of requests partitioned by model and status\n")
 		sb.WriteString("# TYPE airoute_model_requests_total counter\n")
 		for mod, stats := range modelMap {
+			escMod := escapePrometheusLabel(mod)
 			for st, cnt := range stats {
-				sb.WriteString(fmt.Sprintf("airoute_model_requests_total{model=\"%s\",status=\"%s\"} %d\n", mod, st, cnt))
+				escSt := escapePrometheusLabel(st)
+				sb.WriteString(fmt.Sprintf("airoute_model_requests_total{model=\"%s\",status=\"%s\"} %d\n", escMod, escSt, cnt))
 			}
 		}
 	}

@@ -115,6 +115,31 @@ func (rl *RateLimiter) getBucket(key string, rpm int) *tokenBucket {
 	return b
 }
 
+func init() {
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		for range ticker.C {
+			GlobalRateLimiter.CleanupIdle(15 * time.Minute)
+		}
+	}()
+}
+
+// CleanupIdle purges buckets that have not been accessed within maxIdle duration.
+func (rl *RateLimiter) CleanupIdle(maxIdle time.Duration) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	for k, b := range rl.buckets {
+		b.mu.Lock()
+		idle := now.Sub(b.lastUpdate)
+		b.mu.Unlock()
+		if idle > maxIdle {
+			delete(rl.buckets, k)
+		}
+	}
+}
+
 // RateLimitMiddleware enforces RPM rate limits per API key.
 // Priority:
 // 1. Enterprise Redis Distributed Sliding Window (if REDIS_URL is configured and reachable)

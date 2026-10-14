@@ -6,6 +6,8 @@ metadata:
   labels:
     app: airoute
 spec:
+  # Multi-replica deployments require centralized storage (PostgreSQL) and distributed Redis
+  # For single-pod standalone SQLite mode, set replicas: 1 and mount airoute-pvc
   replicas: 3
   selector:
     matchLabels:
@@ -19,7 +21,27 @@ spec:
       - name: gateway
         image: ghcr.io/ifnodoraemon/airoute:latest
         imagePullPolicy: IfNotPresent
-        command: ["/app/airoute", "-config", "/etc/airoute/config.yaml", "-db", "/data/gateway.db"]
+        command: ["/app/airoute", "-config", "/etc/airoute/config.yaml"]
+        env:
+        - name: GIN_MODE
+          value: "release"
+        - name: GATEWAY_PORT
+          value: "8080"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: airoute-secret
+              key: database-url
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: airoute-config
+              key: redis-url
+        - name: GATEWAY_ADMIN_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: airoute-secret
+              key: admin-secret
         ports:
         - containerPort: 8080
           name: http
@@ -43,14 +65,9 @@ spec:
           initialDelaySeconds: 2
           periodSeconds: 5
         volumeMounts:
-        - name: data-vol
-          mountPath: /data
         - name: config-vol
           mountPath: /etc/airoute
       volumes:
-      - name: data-vol
-        persistentVolumeClaim:
-          claimName: airoute-pvc
       - name: config-vol
         configMap:
           name: airoute-config
@@ -66,3 +83,26 @@ spec:
   ports:
   - port: 8080
     targetPort: 8080
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: airoute-config
+  namespace: default
+data:
+  redis-url: "redis://redis-svc.default.svc.cluster.local:6379/0"
+  config.yaml: |
+    server:
+      port: 8080
+      log_level: info
+      redis_url: "redis://redis-svc.default.svc.cluster.local:6379/0"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: airoute-secret
+  namespace: default
+type: Opaque
+stringData:
+  database-url: "postgres://airoute:change_me_strong_password@postgres-svc.default.svc.cluster.local:5432/airoute?sslmode=disable"
+  admin-secret: "change_me_super_secret_production_key_32bytes"

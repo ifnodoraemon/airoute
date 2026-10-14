@@ -352,7 +352,7 @@ export default function KeysView({
                   <th className="py-3.5 px-4 w-10 text-center">
                     <input
                       type="checkbox"
-                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      className="rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                       checked={filteredKeys.length > 0 && selectedKeyIds.length === filteredKeys.length}
                       onChange={(e) => {
                         if (e.target.checked) {
@@ -393,7 +393,7 @@ export default function KeysView({
                     <td className="py-3.5 px-4 text-center">
                       <input
                         type="checkbox"
-                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        className="rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                         checked={selectedKeyIds.includes(k.id)}
                         onChange={(e) => {
                           e.stopPropagation();
@@ -461,7 +461,7 @@ export default function KeysView({
                           {isZh ? '全部允许' : 'All Allowed'}
                         </span>
                       ) : (
-                        <span className="font-mono text-[11px] bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                        <span className="font-mono text-[11px] bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-sm border border-slate-200 dark:border-slate-700">
                           {k.allowed_models.join(', ')}
                         </span>
                       )}

@@ -31,9 +31,14 @@ export default function VisualTopologyModal({
 
   const isZh = lang === 'zh';
   const [simulatedFailure, setSimulatedFailure] = useState(false);
-  const [selectedRouteModel, setSelectedRouteModel] = useState('deepseek-v3');
 
   if (!isOpen) return null;
+
+  // Derive the displayed model from real route data instead of a hardcoded name.
+  const routedModels = (modelRoutes || []).map(r => r.model).filter(Boolean);
+  const previewModel = routedModels.length
+    ? (routedModels.length === 1 ? routedModels[0] : `${routedModels[0]} +${routedModels.length - 1}`)
+    : (isZh ? '未配置模型路由' : 'No model routes');
 
   const activeChannels = channels.filter(c => c.status === 'active');
   const primaryChannel = activeChannels[0] || { name: isZh ? 'GPUStack 本地私有集群' : 'GPUStack Private Cluster', type: 'gpustack', priority: 1, breaker_status: 'CLOSED' };
@@ -51,7 +56,7 @@ export default function VisualTopologyModal({
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-6">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-emerald-500 text-white flex items-center justify-center shadow-lg shadow-indigo-500/20 shrink-0">
+            <div className="w-10 h-10 rounded-2xl bg-linear-to-tr from-indigo-600 to-emerald-500 text-white flex items-center justify-center shadow-lg shadow-indigo-500/20 shrink-0">
               <Layers className="w-5 h-5 fill-white text-white" />
             </div>
             <div>
@@ -182,7 +187,7 @@ export default function VisualTopologyModal({
         <div className="mt-4 p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3">
           <h4 className="font-bold text-xs text-slate-800 dark:text-slate-200 flex items-center justify-between">
             <span>{isZh ? '当前选路与容灾排队顺序 (Fallback Execution Queue)' : 'Fallback Execution Queue & Dispatch Status'}</span>
-            <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-mono">Model: {selectedRouteModel}</span>
+            <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-mono">Model: {previewModel}</span>
           </h4>
 
           <div className="space-y-2">
@@ -197,7 +202,7 @@ export default function VisualTopologyModal({
                   1
                 </span>
                 <span className="font-semibold text-slate-800 dark:text-slate-200">{primaryChannel.name}</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-mono text-slate-500">
+                <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-slate-100 dark:bg-slate-700 font-mono text-slate-500">
                   {primaryChannel.type}
                 </span>
               </div>
@@ -227,7 +232,7 @@ export default function VisualTopologyModal({
                   2
                 </span>
                 <span className="font-semibold text-slate-800 dark:text-slate-200">{backupChannel.name}</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-mono text-slate-500">
+                <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-slate-100 dark:bg-slate-700 font-mono text-slate-500">
                   {backupChannel.type}
                 </span>
               </div>
@@ -250,7 +255,7 @@ export default function VisualTopologyModal({
                   3
                 </span>
                 <span className="font-semibold text-slate-800 dark:text-slate-200">{drChannel.name}</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-mono text-slate-500">
+                <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-slate-100 dark:bg-slate-700 font-mono text-slate-500">
                   {drChannel.type}
                 </span>
               </div>

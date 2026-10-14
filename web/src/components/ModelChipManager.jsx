@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Tag, Plus, X, Trash2, List, Grid, Search, Sparkles } from 'lucide-react';
+import { Tag, Plus, X, Trash2, List, Grid, Search } from 'lucide-react';
 
 export default function ModelChipManager({ models = [], onChange, lang = 'zh' }) {
   const isZh = lang === 'zh';

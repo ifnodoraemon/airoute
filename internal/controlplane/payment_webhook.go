@@ -94,6 +94,12 @@ func (h *AdminHandler) StripeWebhook(c *gin.Context) {
 		return
 	}
 
+	// In production, refuse to process webhooks if secret is not configured
+	if gin.Mode() == gin.ReleaseMode && webhookSecret == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "生产环境未配置 STRIPE_WEBHOOK_SECRET，拒绝接收未经签名的 Webhook 请求"})
+		return
+	}
+
 	// Verify webhook signature in production or whenever secret/signature header is present
 	if webhookSecret != "" || sigHeader != "" || gin.Mode() != gin.TestMode {
 		if err := VerifyStripeWebhookSignature(body, sigHeader, webhookSecret, 5*time.Minute); err != nil {
@@ -119,6 +125,11 @@ func (h *AdminHandler) StripeWebhook(c *gin.Context) {
 	}
 
 	if event.Type == "checkout.session.completed" {
+		// Only complete order when payment_status is 'paid' (avoid unpaid asynchronous payment methods)
+		if event.Data.Object.PaymentStatus != "" && event.Data.Object.PaymentStatus != "paid" {
+			c.JSON(http.StatusOK, gin.H{"received": true, "status": event.Data.Object.PaymentStatus})
+			return
+		}
 		orderNo := event.Data.Object.ClientReferenceID
 		if orderNo != "" {
 			_, err := h.repo.CompleteRechargeOrder(orderNo)

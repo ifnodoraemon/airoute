@@ -199,7 +199,7 @@ export default function CommandPalette({
                     onClose();
                     onOpenCopilotWithQuery(query.trim());
                   }}
-                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-medium flex items-center space-x-1.5 shadow-md shadow-indigo-600/20 cursor-pointer text-xs"
+                  className="px-3.5 py-2 rounded-xl bg-linear-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-medium flex items-center space-x-1.5 shadow-md shadow-indigo-600/20 cursor-pointer text-xs"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-amber-300" />
                   <span>{isZh ? `向 AI 智能副驾驶询问: "${query}"` : `Ask AI Copilot: "${query}"`}</span>
@@ -229,7 +229,7 @@ export default function CommandPalette({
                     <div
                       className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 border ${
                         item.isAi
-                          ? 'bg-gradient-to-tr from-indigo-600 to-purple-600 text-white border-purple-500 shadow-xs'
+                          ? 'bg-linear-to-tr from-indigo-600 to-purple-600 text-white border-purple-500 shadow-xs'
                           : (isSelected
                               ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
                               : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200/80 dark:border-slate-700')

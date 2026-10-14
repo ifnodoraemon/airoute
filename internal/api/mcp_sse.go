@@ -94,6 +94,13 @@ func (h *MCPHandler) HandleMCPSSE(c *gin.Context) {
 	}
 
 	callerKey := extractMCPKey(c)
+	if _, authErr := h.authenticateCaller(callerKey); authErr != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Authentication required for MCP SSE connection: " + authErr.Error(),
+		})
+		return
+	}
+
 	sessionID := genSessionID()
 	sess := &mcpSession{ch: make(chan []byte, 32), apiKey: callerKey}
 	h.sessions.Store(sessionID, sess)

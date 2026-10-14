@@ -33,6 +33,21 @@ type mcpContextKey string
 
 const contextKeyCallerKey mcpContextKey = "mcp_caller_key"
 
+// authenticateCaller verifies that the caller has a valid active API key when keys are active.
+func (h *MCPHandler) authenticateCaller(key string) (*storage.APIKeyRecord, error) {
+	if h.repo == nil || h.repo.CountActiveKeys() == 0 {
+		return nil, nil // Open mode when no keys are configured
+	}
+	if key == "" {
+		return nil, fmt.Errorf("API key required for MCP access")
+	}
+	rec, err := h.repo.GetAPIKeyByKey(key)
+	if err != nil || rec == nil || rec.Status != "active" {
+		return nil, fmt.Errorf("invalid or inactive API key")
+	}
+	return rec, nil
+}
+
 // HandleMCPMessages handles POST /mcp/messages (JSON-RPC 2.0 over HTTP).
 func (h *MCPHandler) HandleMCPMessages(c *gin.Context) {
 	body, err := io.ReadAll(c.Request.Body)
@@ -62,6 +77,13 @@ func (h *MCPHandler) HandleMCPMessages(c *gin.Context) {
 
 	reqCtx := c.Request.Context()
 	if callerKey != "" {
+		if _, authErr := h.authenticateCaller(callerKey); authErr != nil {
+			c.JSON(http.StatusUnauthorized, mcpResponse{
+				JSONRPC: "2.0",
+				Error:   &mcpError{Code: -32000, Message: "Unauthorized: " + authErr.Error()},
+			})
+			return
+		}
 		reqCtx = context.WithValue(reqCtx, contextKeyCallerKey, callerKey)
 	}
 
@@ -261,9 +283,9 @@ func (h *MCPHandler) executeTool(ctx context.Context, name string, args map[stri
 	if res, isErr, handled := h.executeRoutingTools(ctx, name, args); handled {
 		return res, isErr
 	}
-	if res, isErr, handled := h.executeUtilityAndMockTools(ctx, name, args); handled {
+	if res, isErr, handled := h.executeBuiltinUtilityTools(ctx, name, args); handled {
 		return res, isErr
 	}
-	return h.executeDynamicMCPTool(name, args)
+	return h.executeDynamicMCPTool(ctx, name, args)
 }
 

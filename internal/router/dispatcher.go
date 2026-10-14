@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -61,11 +62,25 @@ func (d *Dispatcher) RegisterProvider(p provider.Provider) {
 	d.providers[p.Type()] = p
 }
 
-// UpdateChannels updates channel configurations dynamically.
+// UpdateChannels updates channel configurations dynamically and prunes obsolete weights.
 func (d *Dispatcher) UpdateChannels(channels []model.ChannelConfig) {
 	d.mu.Lock()
-	defer d.mu.Unlock()
 	d.channels = channels
+	d.mu.Unlock()
+
+	activeNames := make(map[string]bool)
+	for _, ch := range channels {
+		activeNames[ch.Name] = true
+	}
+
+	d.wrrMu.Lock()
+	for k := range d.wrrWeights {
+		parts := strings.Split(k, ":")
+		if len(parts) == 2 && !activeNames[parts[1]] {
+			delete(d.wrrWeights, k)
+		}
+	}
+	d.wrrMu.Unlock()
 }
 
 // SetModelFallbacks updates the cross-model fallback mapping.
@@ -158,6 +173,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 			}
 			resp.Channel = d.recordChannelSuccess(ctx, attempted, ch.Name, time.Since(start), promptTokens, compTokens)
 			return resp, nil
+		}
+
+		if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
+			d.circuitBreaker.AbortCanary(ch.Name)
+			return nil, ctx.Err()
 		}
 
 		lastErr = err

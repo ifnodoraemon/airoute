@@ -1,11 +1,31 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  transition: background-color 0.2s ease, color 0.2s ease;
+/* Explicit sources (auto-detection is kept; dist/ is excluded so the committed
+   build output is never scanned back into the stylesheet). */
+@source "../index.html";
+@source "../src";
+@source not "../dist";
+
+/* Tailwind v4 dark mode via the `.dark` class on <html> (v3 `darkMode: 'class'`). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  /* Tailwind v4 changed the default border/divide color to currentColor.
+     Restore the v3 behaviour (slate-200) so width-only `border` utilities keep
+     their original subtle look. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-slate-200);
+  }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
 }
 
 /* Custom scrollbars */
@@ -29,10 +49,4 @@ body {
 }
 .dark ::-webkit-scrollbar-thumb:hover {
   background: #475569;
-}
-
-/* Glassmorphism helpers */
-.glass-panel {
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
 }

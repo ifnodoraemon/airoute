@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/config"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
@@ -86,6 +87,17 @@ func (h *AdminHandler) SendVerificationCode(c *gin.Context) {
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 	if !strings.Contains(email, "@") || !strings.Contains(email, ".") {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "邮箱格式不正确"})
+		return
+	}
+
+	// Rate limiting: max 5 sends per minute per IP, max 1 send per minute per email
+	clientIP := c.ClientIP()
+	if !middleware.GlobalRateLimiter.GetBucket("vcode:ip:"+clientIP, 5).Allow() {
+		c.JSON(http.StatusTooManyRequests, gin.H{"code": 429, "error": "验证码发送过于频繁，请稍后再试"})
+		return
+	}
+	if !middleware.GlobalRateLimiter.GetBucket("vcode:email:"+email, 1).Allow() {
+		c.JSON(http.StatusTooManyRequests, gin.H{"code": 429, "error": "该邮箱发送验证码过于频繁，请1分钟后再试"})
 		return
 	}
 

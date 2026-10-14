@@ -603,7 +603,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                     <th className="py-3 px-4 w-10 text-center">
                       <input
                         type="checkbox"
-                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        className="rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                         checked={filteredPrices.length > 0 && selectedKeys.length === filteredPrices.length}
                         onChange={(e) => {
                           if (e.target.checked) {
@@ -658,7 +658,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                         <td className="py-4 px-4 text-center" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
-                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            className="rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                             checked={selectedKeys.includes(itemKey)}
                             onChange={(e) => {
                               e.stopPropagation();
@@ -1092,7 +1092,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                           type="checkbox"
                           checked={formData.weekend_all_day}
                           onChange={(e) => setFormData({ ...formData, weekend_all_day: e.target.checked })}
-                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          className="rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500"
                         />
                         <span className="font-medium">{isZh ? '周六与周日全天享受优惠折扣' : 'All-day discount on Saturdays and Sundays'}</span>
                       </label>
