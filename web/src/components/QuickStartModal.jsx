@@ -208,11 +208,11 @@ for chunk in llm.stream(messages):
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-white dark:bg-[#111726] border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-white dark:bg-[#111726] border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Modal Header */}
         <div className="p-6 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
@@ -226,7 +226,7 @@ for chunk in llm.stream(messages):
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
+            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
           >
             <X className="w-5 h-5" />
           </button>
@@ -237,7 +237,7 @@ for chunk in llm.stream(messages):
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setActiveTab('cursor')}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 cursor-pointer ${
+              className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${
                 activeTab === 'cursor'
                   ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
@@ -248,7 +248,7 @@ for chunk in llm.stream(messages):
             </button>
             <button
               onClick={() => setActiveTab('claude')}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 cursor-pointer ${
+              className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${
                 activeTab === 'claude'
                   ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
@@ -259,7 +259,7 @@ for chunk in llm.stream(messages):
             </button>
             <button
               onClick={() => setActiveTab('langchain')}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 cursor-pointer ${
+              className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${
                 activeTab === 'langchain'
                   ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
@@ -270,7 +270,7 @@ for chunk in llm.stream(messages):
             </button>
             <button
               onClick={() => setActiveTab('python')}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 cursor-pointer ${
+              className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${
                 activeTab === 'python'
                   ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
@@ -281,7 +281,7 @@ for chunk in llm.stream(messages):
             </button>
             <button
               onClick={() => setActiveTab('node')}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 cursor-pointer ${
+              className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${
                 activeTab === 'node'
                   ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
@@ -292,7 +292,7 @@ for chunk in llm.stream(messages):
             </button>
             <button
               onClick={() => setActiveTab('curl')}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 cursor-pointer ${
+              className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${
                 activeTab === 'curl'
                   ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
@@ -303,7 +303,7 @@ for chunk in llm.stream(messages):
             </button>
             <button
               onClick={() => setActiveTab('client')}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 cursor-pointer ${
+              className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${
                 activeTab === 'client'
                   ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
@@ -315,7 +315,7 @@ for chunk in llm.stream(messages):
 
           <button
             onClick={handleCopy}
-            className="px-3.5 py-1.5 text-xs rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium flex items-center space-x-1.5 transition shadow-sm"
+            className="px-3.5 py-1.5 text-xs rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium flex items-center space-x-1.5 transition shadow-sm"
           >
             {copiedTab === activeTab ? (
               <>
@@ -340,7 +340,7 @@ for chunk in llm.stream(messages):
         <div className="p-4 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-end text-xs">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-medium transition cursor-pointer"
+            className="px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg font-medium transition cursor-pointer"
           >
             {isZh ? '关闭' : 'Close'}
           </button>

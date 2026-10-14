@@ -232,88 +232,91 @@ export default function ModelRoutesManager({
   const allModelNames = modelRoutes.map(r => r.model);
 
   return (
-    <div className="space-y-4">
-      {/* 1. Clean Top Header */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center space-x-2.5">
-            <h2 className="text-lg font-bold text-slate-900 tracking-tight">{isZh ? '模型路由与分发' : 'Model Routes & Dispatch'}</h2>
-          </div>
-
-          <div className="flex items-center space-x-2 shrink-0">
-            <button
-              onClick={handleOpenCreate}
-              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center space-x-1.5 transition cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>{isZh ? '新建模型路由' : 'New Model Route'}</span>
-            </button>
-            <button
-              onClick={fetchModelRoutes}
-              disabled={loading}
-              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 border border-slate-200 transition flex items-center space-x-1.5 cursor-pointer"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-              <span>{isZh ? '刷新' : 'Refresh'}</span>
-            </button>
-          </div>
+    <div className="space-y-8">
+      {/* 1. Header (Directly on canvas) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
+            {isZh ? '模型路由与分发' : 'Model Routes & Dispatch'}
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            {isZh ? '配置各模型的上游服务商权重绑定、故障平滑降级与定价策略' : 'Configure provider weights, fallback chains, and pricing rates for AI models'}
+          </p>
         </div>
 
-        {/* Search & Modality Bar */}
-        <div className="mt-4 pt-3.5 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
-          <div className="flex items-center space-x-1 overflow-x-auto pb-1 max-w-full">
-            {[
-              { id: 'all', label: isZh ? '全部模态' : 'All' },
-              { id: 'chat', label: isZh ? '对话' : 'Chat' },
-              { id: 'images', label: isZh ? '生图' : 'Images' },
-              { id: 'videos', label: isZh ? '视频' : 'Video' },
-              { id: 'audio_speech', label: isZh ? '语音' : 'Audio' },
-              { id: 'embeddings', label: isZh ? '向量' : 'Embedding' }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setSelectedModality(tab.id)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
-                  selectedModality === tab.id
-                    ? 'bg-indigo-600 text-white shadow-2xs'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+        <div className="flex items-center space-x-2 shrink-0">
+          <button
+            onClick={fetchModelRoutes}
+            disabled={loading}
+            className="px-3.5 py-2 bg-white dark:bg-[#0F1420] hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-medium border border-slate-200/80 dark:border-slate-800 transition flex items-center space-x-1.5 cursor-pointer shadow-sm disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${loading ? 'animate-spin' : ''}`} />
+            <span>{isZh ? '刷新' : 'Refresh'}</span>
+          </button>
+          <button
+            onClick={handleOpenCreate}
+            className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>{isZh ? '新建模型路由' : 'New Model Route'}</span>
+          </button>
+        </div>
+      </div>
 
-          <div className="relative w-full md:w-64 shrink-0">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={isZh ? '搜索模型或服务商...' : 'Search model or provider...'}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
-            />
-          </div>
+      {/* Search & Modality Bar (Directly on canvas) */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+        <div className="inline-flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200/80 dark:border-slate-800 overflow-x-auto max-w-full">
+          {[
+            { id: 'all', label: isZh ? '全部模态' : 'All' },
+            { id: 'chat', label: isZh ? '对话' : 'Chat' },
+            { id: 'images', label: isZh ? '生图' : 'Images' },
+            { id: 'videos', label: isZh ? '视频' : 'Video' },
+            { id: 'audio_speech', label: isZh ? '语音' : 'Audio' },
+            { id: 'embeddings', label: isZh ? '向量' : 'Embedding' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setSelectedModality(tab.id)}
+              className={`px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap transition cursor-pointer ${
+                selectedModality === tab.id
+                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-semibold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="relative w-full md:w-64 shrink-0">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={isZh ? '搜索模型或服务商...' : 'Search model or provider...'}
+            className="w-full bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-indigo-500 shadow-sm transition"
+          />
         </div>
       </div>
 
       {/* Batch Action Bar */}
       {selectedModels.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-indigo-50 border border-indigo-200 px-5 py-3 rounded-2xl animate-in fade-in gap-3">
-          <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-900">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800/60 px-5 py-3 rounded-xl animate-in fade-in gap-3">
+          <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-900 dark:text-indigo-200">
             <span>{isZh ? `已选中 ${selectedModels.length} 个模型路由` : `Selected ${selectedModels.length} routes`}</span>
           </div>
           <div className="flex items-center space-x-2">
             <button
               onClick={handleBatchDeleteRoutes}
-              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl shadow-xs transition flex items-center space-x-1 cursor-pointer"
+              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium rounded-lg shadow-sm transition flex items-center space-x-1 cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>{isZh ? '批量删除' : 'Batch Delete'}</span>
             </button>
             <button
               onClick={() => setSelectedModels([])}
-              className="px-3 py-1.5 bg-white text-slate-700 border border-slate-200 text-xs font-medium rounded-xl hover:bg-slate-50 transition cursor-pointer"
+              className="px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-medium rounded-lg hover:bg-slate-50 transition cursor-pointer"
             >
               {isZh ? '取消选择' : 'Deselect All'}
             </button>
@@ -323,27 +326,27 @@ export default function ModelRoutesManager({
 
       {/* AI Topology Resilience & Failover Audit */}
       {modelRoutes.length > 0 && (
-        <div className={`p-4 rounded-2xl border text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+        <div className={`p-4 rounded-xl border text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
           spofRoutes.length > 0
-            ? 'bg-amber-50/70 border-amber-200/80 text-amber-900'
-            : 'bg-emerald-50/70 border-emerald-200/80 text-emerald-900'
+            ? 'bg-amber-50/60 dark:bg-amber-950/20 border-amber-200/80 dark:border-amber-900/40 text-amber-900 dark:text-amber-200'
+            : 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-900/40 text-emerald-900 dark:text-emerald-200'
         }`}>
           <div className="flex items-center space-x-2.5">
-            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-              spofRoutes.length > 0 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+              spofRoutes.length > 0 ? 'bg-amber-100/80 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' : 'bg-emerald-100/80 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
             }`}>
-              <Sparkles className="w-4 h-4" />
+              <Shield className="w-4 h-4" />
             </div>
             <div>
-              <div className="flex items-center space-x-2 font-bold">
+              <div className="flex items-center space-x-2 font-semibold">
                 <span>{isZh ? 'AI 拓扑容灾健康度诊断' : 'AI Topology Resilience Audit'}</span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] ${
-                  spofRoutes.length > 0 ? 'bg-amber-200/80 text-amber-800' : 'bg-emerald-200/80 text-emerald-800'
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                  spofRoutes.length > 0 ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200' : 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200'
                 }`}>
                   {spofRoutes.length > 0 ? (isZh ? `${spofRoutes.length} 个模型存在单点风险` : `${spofRoutes.length} SPOF Risks`) : (isZh ? '高可用架构完善' : 'Resilient Architecture')}
                 </span>
               </div>
-              <p className="text-[11px] opacity-80 mt-0.5">
+              <p className="text-xs opacity-80 mt-0.5">
                 {spofRoutes.length > 0
                   ? (isZh
                       ? `检测到部分模型（如 ${spofRoutes.slice(0, 3).map(r => r.model).join(', ')}）仅绑定了单一提供商。建议开启自动故障转移并挂载备用渠道。`
@@ -355,7 +358,7 @@ export default function ModelRoutesManager({
           {spofRoutes.length > 0 && (
             <button
               onClick={() => setActiveEditRoute(spofRoutes[0])}
-              className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shrink-0 cursor-pointer shadow-2xs transition"
+              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium text-xs shrink-0 cursor-pointer shadow-sm transition"
             >
               {isZh ? `立即配置 [${spofRoutes[0].model}] 容灾` : `Fix [${spofRoutes[0].model}] Failover`}
             </button>
@@ -364,21 +367,21 @@ export default function ModelRoutesManager({
       )}
 
       {/* 2. Model Routes Table (Clean Master-Detail Layout) */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-xs">
+      <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl overflow-hidden shadow-sm">
         {filteredRoutes.length === 0 ? (
-          <div className="p-10 text-center flex flex-col items-center justify-center space-y-2">
-            <Cpu className="w-10 h-10 text-slate-300" />
-            <h4 className="font-semibold text-xs text-slate-800">{isZh ? '暂无模型路由' : 'No Model Routes'}</h4>
+          <div className="p-12 text-center flex flex-col items-center justify-center space-y-2">
+            <Cpu className="w-10 h-10 text-slate-300 dark:text-slate-600" />
+            <h4 className="font-medium text-xs text-slate-700 dark:text-slate-300">{isZh ? '暂无模型路由' : 'No Model Routes'}</h4>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-slate-200 text-slate-500 bg-slate-50/80">
-                  <th className="py-3 px-3 w-10 text-center">
+                <tr className="border-b border-slate-100 dark:border-slate-800/80 text-slate-500 dark:text-slate-400 bg-slate-50/60 dark:bg-slate-900/40 uppercase">
+                  <th className="py-4 px-6 w-10 text-center">
                     <input
                       type="checkbox"
-                      className="rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                       checked={filteredRoutes.length > 0 && selectedModels.length === filteredRoutes.length}
                       onChange={(e) => {
                         if (e.target.checked) {
@@ -389,14 +392,14 @@ export default function ModelRoutesManager({
                       }}
                     />
                   </th>
-                  <th className="py-3 px-5 font-semibold">{isZh ? '模型标识' : 'Model ID'}</th>
-                  <th className="py-3 px-4 font-semibold">{isZh ? '上游服务商 (权重)' : 'Upstream Channels (Weight)'}</th>
-                  <th className="py-3 px-4 font-semibold">{isZh ? '容灾降级' : 'Failover Target'}</th>
-                  <th className="py-3 px-4 font-semibold">{isZh ? '费率 (输入/输出)' : 'Rates (Prompt/Comp)'}</th>
-                  <th className="py-3 px-5 text-right font-semibold">{isZh ? '操作' : 'Actions'}</th>
+                  <th className="py-4 px-6 font-semibold">{isZh ? '模型标识' : 'Model ID'}</th>
+                  <th className="py-4 px-6 font-semibold">{isZh ? '上游服务商 (权重)' : 'Upstream Channels (Weight)'}</th>
+                  <th className="py-4 px-6 font-semibold">{isZh ? '容灾降级' : 'Failover Target'}</th>
+                  <th className="py-4 px-6 font-semibold">{isZh ? '费率 (输入/输出)' : 'Rates (Prompt/Comp)'}</th>
+                  <th className="py-4 px-6 text-right font-semibold">{isZh ? '操作' : 'Actions'}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
                 {filteredRoutes.map((route) => {
                   const badge = getModalityBadge(route.modality);
                   const isExpanded = expandedModel === route.model;
@@ -405,11 +408,11 @@ export default function ModelRoutesManager({
 
                   return (
                     <React.Fragment key={route.model}>
-                      <tr className="hover:bg-slate-50/60 transition group">
-                        <td className="py-3.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                      <tr className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition group">
+                        <td className="py-4 px-6 text-center" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
-                            className="rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                             checked={selectedModels.includes(route.model)}
                             onChange={(e) => {
                               e.stopPropagation();
@@ -422,26 +425,26 @@ export default function ModelRoutesManager({
                           />
                         </td>
                         {/* Model name */}
-                        <td className="py-3.5 px-5 font-bold text-slate-900 font-sans">
+                        <td className="py-4 px-6 font-medium text-slate-900 dark:text-slate-100">
                           <div className="flex items-center space-x-1.5">
-                            <span className="font-mono text-xs text-slate-800 font-bold">
+                            <span className="font-mono text-xs text-slate-900 dark:text-white font-semibold">
                               {route.model}
                             </span>
                             <button
                               onClick={() => copyToClipboard(route.model)}
-                              className="text-slate-400 hover:text-slate-600 transition cursor-pointer p-0.5"
+                              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer p-0.5 rounded"
                               title={isZh ? "复制模型标识" : "Copy model ID"}
                             >
-                              {copiedModel === route.model ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                              {copiedModel === route.model ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                             </button>
-                            <span className={`text-[10px] px-1.5 py-0.2 rounded-sm border ${badge.color}`}>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${badge.color}`}>
                               {badge.label}
                             </span>
                           </div>
                         </td>
 
                         {/* Providers & Weights */}
-                        <td className="py-3.5 px-4">
+                        <td className="py-4 px-6">
                           <div className="flex flex-wrap items-center gap-1.5">
                             {(route.providers || []).map((p) => {
                               const ch = allChannels.find(c => c.id === p.channel_id);
@@ -463,47 +466,47 @@ export default function ModelRoutesManager({
                                   key={p.channel_id}
                                   className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-md border text-[11px] font-medium ${
                                     warnMsg
-                                      ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-2xs'
-                                      : 'bg-slate-100 border-slate-200 text-slate-700'
+                                      ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200'
+                                      : 'bg-slate-100 dark:bg-slate-800 border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-300'
                                   }`}
-                                  title={warnMsg ? `⚠️ ${warnMsg}` : p.mapped_model ? `${isZh ? '上游模型: ' : 'Upstream: '}${p.mapped_model}` : ''}
+                                  title={warnMsg ? warnMsg : p.mapped_model ? `${isZh ? '上游模型: ' : 'Upstream: '}${p.mapped_model}` : ''}
                                 >
-                                  {warnMsg && <span className="text-amber-500 font-bold">⚠️</span>}
+                                  {warnMsg && <ShieldAlert className="w-3 h-3 text-amber-500 shrink-0" />}
                                   <span>{p.channel_name}</span>
-                                  <strong className={`${warnMsg ? 'text-amber-700' : 'text-indigo-600'} font-mono font-bold`}>
+                                  <strong className={`${warnMsg ? 'text-amber-700 dark:text-amber-300' : 'text-indigo-600 dark:text-indigo-400'} font-mono tabular-nums font-semibold`}>
                                     {p.weight_percent ? `${p.weight_percent}%` : `${isZh ? '权重' : 'w:'}${p.weight}`}
                                   </strong>
                                 </span>
                               );
                             })}
                             {(route.providers || []).length === 0 && (
-                              <span className="text-rose-500 text-[11px]">{isZh ? '未绑定上游' : 'No Upstream'}</span>
+                              <span className="text-rose-500 text-[11px] font-medium">{isZh ? '未绑定上游' : 'No Upstream'}</span>
                             )}
                           </div>
                         </td>
 
                         {/* Fallback */}
-                        <td className="py-3.5 px-4 font-mono text-xs">
+                        <td className="py-4 px-6 font-mono text-xs">
                           {route.fallback_model ? (
-                            <span className="inline-flex items-center space-x-1 text-sky-700 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-lg text-[11px] font-medium">
-                              <Shield className="w-3 h-3 text-sky-600" />
+                            <span className="inline-flex items-center space-x-1 text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 px-2 py-0.5 rounded-md text-[11px] font-medium">
+                              <Shield className="w-3 h-3 text-sky-600 dark:text-sky-400" />
                               <span>{isZh ? '降级: ' : 'Fallback: '}{route.fallback_model}</span>
                             </span>
                           ) : (
-                            <span className="text-slate-400 text-[11px]">{isZh ? '直通返回' : 'Direct Return'}</span>
+                            <span className="text-slate-400 text-[11px] font-sans">{isZh ? '直通返回' : 'Direct Return'}</span>
                           )}
                         </td>
 
                         {/* Pricing */}
-                        <td className="py-3.5 px-4 font-sans text-xs">
+                        <td className="py-4 px-6 text-xs">
                           {price ? (
                             <div className="flex items-center space-x-1.5 text-[11px]">
-                              <span className="text-slate-700 font-mono">
+                              <span className="text-slate-700 dark:text-slate-300 font-mono tabular-nums">
                                 ¥{price.prompt_price.toFixed(1)}/¥{price.completion_price.toFixed(1)}
                               </span>
                               {price.off_peak_enabled !== false && (
-                                <span className="bg-indigo-50 border border-indigo-200 text-indigo-700 px-1.5 py-0.2 rounded-sm font-medium text-[10px]">
-                                  🌙 {isZh ? '闲时优惠' : 'Off-peak'}
+                                <span className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded font-medium text-[10px]">
+                                  {isZh ? '闲时优惠' : 'Off-peak'}
                                 </span>
                               )}
                             </div>
@@ -513,23 +516,23 @@ export default function ModelRoutesManager({
                         </td>
 
                         {/* Actions */}
-                        <td className="py-3.5 px-5 text-right space-x-1.5 font-sans">
+                        <td className="py-4 px-6 text-right space-x-1.5">
                           <button
                             onClick={() => handleOpenEdit(route)}
-                            className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium transition cursor-pointer"
+                            className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-xs font-medium transition cursor-pointer"
                           >
                             {isZh ? '配置分发' : 'Configure'}
                           </button>
                           <button
                             onClick={() => setExpandedModel(isExpanded ? null : route.model)}
-                            className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer inline-flex items-center"
+                            className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer inline-flex items-center align-middle"
                             title={isExpanded ? (isZh ? '收起详情' : 'Collapse') : (isZh ? '展开服务商明细' : 'Expand Details')}
                           >
                             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                           </button>
                           <button
                             onClick={() => handleDeleteRoute(route.model)}
-                            className="p-1 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer inline-flex items-center"
+                            className="p-1 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/50 text-slate-400 hover:text-rose-600 transition cursor-pointer inline-flex items-center align-middle"
                             title={isZh ? '删除路由' : 'Delete Route'}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -539,10 +542,10 @@ export default function ModelRoutesManager({
 
                       {/* Expandable Provider Topology Detail Row */}
                       {isExpanded && (
-                        <tr className="bg-slate-50/70 border-b border-slate-200">
-                          <td colSpan="6" className="p-4 pl-8 space-y-3">
+                        <tr className="bg-slate-50/50 dark:bg-slate-900/30 border-b border-slate-100 dark:border-slate-800/80">
+                          <td colSpan="6" className="py-4 px-8 space-y-3">
                             <div className="flex items-center justify-between text-xs">
-                              <span className="font-semibold text-slate-800">
+                              <span className="font-semibold text-slate-800 dark:text-slate-200">
                                 {isZh
                                   ? `上游服务商明细与实时连通性探测 (${route.providers?.length || 0})`
                                   : `Upstream Providers & Health Probing (${route.providers?.length || 0})`}
@@ -550,48 +553,48 @@ export default function ModelRoutesManager({
                               <button
                                 onClick={() => handleProbeRoute(route.model)}
                                 disabled={probingModel === route.model}
-                                className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-xs font-medium text-slate-700 flex items-center space-x-1 transition cursor-pointer"
+                                className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs font-medium text-slate-700 dark:text-slate-200 flex items-center space-x-1 transition cursor-pointer shadow-sm"
                               >
                                 <Zap className={`w-3 h-3 text-amber-500 ${probingModel === route.model ? 'animate-pulse' : ''}`} />
                                 <span>{probingModel === route.model ? (isZh ? '探测中...' : 'Probing...') : (isZh ? '测试所有下游延迟' : 'Test Downstream Latency')}</span>
                               </button>
                             </div>
 
-                            <div className="border border-slate-200 rounded-xl overflow-hidden bg-white text-xs">
+                            <div className="border border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-[#0F1420] text-xs shadow-sm">
                               <table className="w-full text-left">
-                                <thead className="bg-slate-50 text-slate-500 text-[11px] border-b border-slate-200">
+                                <thead className="bg-slate-50/70 dark:bg-slate-900/70 text-slate-500 dark:text-slate-400 text-[11px] border-b border-slate-100 dark:border-slate-800">
                                   <tr>
-                                    <th className="py-2 px-4 font-semibold">{isZh ? '服务商名称' : 'Provider Name'}</th>
-                                    <th className="py-2 px-4 font-semibold">{isZh ? '服务引擎' : 'Engine'}</th>
-                                    <th className="py-2 px-4 font-semibold">{isZh ? '分流权重' : 'Weight'}</th>
-                                    <th className="py-2 px-4 font-semibold">{isZh ? '远端模型映射' : 'Remote Model'}</th>
-                                    <th className="py-2 px-4 font-semibold text-right">{isZh ? '健康状态 / 探测延迟' : 'Health / Latency'}</th>
+                                    <th className="py-2.5 px-4 font-semibold">{isZh ? '服务商名称' : 'Provider Name'}</th>
+                                    <th className="py-2.5 px-4 font-semibold">{isZh ? '服务引擎' : 'Engine'}</th>
+                                    <th className="py-2.5 px-4 font-semibold">{isZh ? '分流权重' : 'Weight'}</th>
+                                    <th className="py-2.5 px-4 font-semibold">{isZh ? '远端模型映射' : 'Remote Model'}</th>
+                                    <th className="py-2.5 px-4 font-semibold text-right">{isZh ? '健康状态 / 探测延迟' : 'Health / Latency'}</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono text-[11px]">
                                   {(route.providers || []).map((p) => {
                                     const probe = probes.find(pr => pr.channel_id === p.channel_id);
                                     return (
-                                      <tr key={p.channel_id} className="hover:bg-slate-50/50">
-                                        <td className="py-2 px-4 font-sans font-semibold text-slate-800">
+                                      <tr key={p.channel_id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                                        <td className="py-2.5 px-4 font-sans font-medium text-slate-800 dark:text-slate-200">
                                           {p.channel_name}
                                         </td>
-                                        <td className="py-2 px-4 text-slate-500">
+                                        <td className="py-2.5 px-4 text-slate-500 dark:text-slate-400">
                                           {p.channel_type}
                                         </td>
-                                        <td className="py-2 px-4 text-indigo-600 font-bold">
+                                        <td className="py-2.5 px-4 text-indigo-600 dark:text-indigo-400 font-semibold tabular-nums">
                                           {p.weight_percent ? `${p.weight_percent}%` : `${isZh ? '权重: ' : 'Weight: '}${p.weight}`}
                                         </td>
-                                        <td className="py-2 px-4 text-slate-600">
+                                        <td className="py-2.5 px-4 text-slate-600 dark:text-slate-300">
                                           {p.mapped_model || route.model}
                                         </td>
-                                        <td className="py-2 px-4 text-right font-sans">
+                                        <td className="py-2.5 px-4 text-right font-sans">
                                           {probe ? (
-                                            <span className={`font-mono font-semibold ${probe.status === 'healthy' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                            <span className={`font-mono tabular-nums font-semibold ${probe.status === 'healthy' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                               {probe.latency_ms} ms ({probe.status})
                                             </span>
                                           ) : (
-                                            <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-sm border border-emerald-200 text-[10px]">
+                                            <span className="text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 text-[10px] font-medium">
                                               {isZh ? '正常就绪' : 'Ready'}
                                             </span>
                                           )}

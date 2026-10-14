@@ -489,54 +489,55 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
 
   return (
     <div className="space-y-6 animate-in fade-in">
-      {/* 1. Header */}
-      <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900 tracking-tight">
-              {isZh ? '模型定价' : 'Model Pricing'}
-            </h2>
-          </div>
+      {/* 1. Header (Directly on canvas) */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+            {isZh ? '模型定价' : 'Model Pricing'}
+          </h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            {isZh ? '配置与管理各模型、协议的按量计费与分组费率规则' : 'Configure token pricing and rate rules across models and tiers'}
+          </p>
+        </div>
 
-          <div className="flex items-center space-x-2 shrink-0">
-            {isAdmin && (
-              <button
-                onClick={handleOpenAdd}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-semibold shadow-xs flex items-center space-x-1.5 transition cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>{isZh ? '新建定价规则' : 'New Pricing Rule'}</span>
-              </button>
-            )}
+        <div className="flex items-center space-x-2 shrink-0">
+          {isAdmin && (
             <button
-              onClick={fetchPrices}
-              disabled={loading}
-              className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-2xl transition cursor-pointer"
-              title={isZh ? '刷新费率' : 'Refresh'}
+              onClick={handleOpenAdd}
+              className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
             >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-indigo-600' : ''}`} />
+              <Plus className="w-3.5 h-3.5" />
+              <span>{isZh ? '新建定价规则' : 'New Pricing Rule'}</span>
             </button>
-          </div>
+          )}
+          <button
+            onClick={fetchPrices}
+            disabled={loading}
+            className="p-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-lg transition cursor-pointer shadow-sm"
+            title={isZh ? '刷新费率' : 'Refresh'}
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-indigo-600' : ''}`} />
+          </button>
         </div>
       </div>
 
       {/* Batch Action Bar (Admin only) */}
       {isAdmin && selectedKeys.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-indigo-50 border border-indigo-200 px-5 py-3 rounded-2xl animate-in fade-in gap-3">
-          <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-900">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 px-5 py-3 rounded-xl animate-in fade-in gap-3">
+          <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-900 dark:text-indigo-200">
             <span>{isZh ? `已选中 ${selectedKeys.length} 个模型定价规则` : `${selectedKeys.length} pricing rule(s) selected`}</span>
           </div>
           <div className="flex items-center space-x-2">
             <button
               onClick={handleBatchDelete}
-              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold shadow-xs transition flex items-center space-x-1 cursor-pointer"
+              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-medium shadow-sm transition flex items-center space-x-1 cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>{isZh ? '批量删除' : 'Delete Selected'}</span>
             </button>
             <button
               onClick={() => setSelectedKeys([])}
-              className="px-3 py-1.5 bg-white text-slate-700 border border-slate-200 text-xs font-medium rounded-xl hover:bg-slate-50 transition cursor-pointer"
+              className="px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition cursor-pointer"
             >
               {isZh ? '取消选择' : 'Deselect'}
             </button>
@@ -545,7 +546,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
       )}
 
       {/* 2. Rates Table (High Whitespace & Clean) */}
-      <div className="bg-white border border-slate-200/80 rounded-3xl shadow-xs overflow-hidden">
+      <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl shadow-sm overflow-hidden">
         {/* Group Filter Tabs */}
         <div className="flex flex-wrap items-center gap-2 px-6 pt-5 pb-3 border-b border-slate-100">
           <span className="text-xs text-slate-400 font-medium mr-1">{isZh ? '价格分组:' : 'Price Group:'}</span>
@@ -568,14 +569,14 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
               <button
                 key={tab.id}
                 onClick={() => { setGroupFilter(tab.id); setSelectedKeys([]); }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center space-x-1.5 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer flex items-center space-x-1.5 ${
                   isActive
-                    ? 'bg-indigo-600 text-white shadow-2xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80 hover:text-slate-900'
+                    ? 'bg-slate-900 dark:bg-indigo-600 text-white shadow-sm'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200/80 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
                 <span>{tab.label}</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-indigo-700/80 text-indigo-100' : 'bg-slate-200 text-slate-500'}`}>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-slate-800 dark:bg-indigo-700/80 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'}`}>
                   {count}
                 </span>
               </button>
@@ -792,10 +793,10 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
             if (e.target === e.currentTarget) setShowModal(false);
           }}
         >
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
-            <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+          <div className="bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 sm:p-8 max-w-xl w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-3 flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-slate-900 text-base">
+                <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-base">
                   {editingPrice 
                     ? (isZh ? `编辑 [${editingPrice.model}] 定价` : `Edit [${editingPrice.model}] Pricing`) 
                     : (isZh ? '新建模型定价与分时规则' : 'New Pricing & Off-Peak Rule')}
@@ -803,14 +804,14 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
               </div>
               <button
                 onClick={() => setShowModal(false)}
-                className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {formError && (
-              <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-700 flex items-center space-x-2">
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-lg text-xs text-rose-700 dark:text-rose-300 flex items-center space-x-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{formError}</span>
               </div>
@@ -819,7 +820,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
             <form onSubmit={handleSave} className="space-y-4 text-xs">
               {/* Field 1: Model Identifier */}
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
                   {isZh ? '模型名称 (Model)' : 'Model ID'} <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -830,7 +831,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                   placeholder={isZh ? '如 deepseek-chat 或点击下方一键选择' : 'e.g. deepseek-chat or select below'}
                   value={formData.model}
                   onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-indigo-500 disabled:opacity-60 text-xs"
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500 disabled:opacity-60 text-xs"
                 />
                 <datalist id="unpriced-models-datalist">
                   {unpricedModels.map(m => (
@@ -841,12 +842,12 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
 
               {/* Field: User Group Tier */}
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
                   {isZh ? '适用用户组 (Group Tier)' : 'Target Group Tier'} <span className="text-rose-500">*</span>
                 </label>
                 {editingPrice ? (
                   <div className="flex items-center space-x-2 py-1">
-                    <span className={`px-2.5 py-1 rounded-xl text-xs font-semibold border ${getGroupBadge(formData.group_name).className}`}>
+                    <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${getGroupBadge(formData.group_name).className}`}>
                       {getGroupBadge(formData.group_name).label} ({formData.group_name})
                     </span>
                   </div>
@@ -858,10 +859,10 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                           key={g}
                           type="button"
                           onClick={() => setFormData({ ...formData, group_name: g })}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition cursor-pointer ${
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
                             formData.group_name === g
-                              ? 'bg-indigo-600 text-white border-indigo-600 font-semibold shadow-2xs'
-                              : 'bg-white hover:bg-indigo-50/60 border-slate-200 text-slate-700'
+                              ? 'bg-slate-900 dark:bg-indigo-600 text-white border-slate-900 dark:border-indigo-600 font-semibold shadow-sm'
+                              : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
                           }`}
                         >
                           {g === 'default' 
@@ -973,7 +974,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                       <button
                         type="button"
                         onClick={handleAddSlot}
-                        className="inline-flex items-center space-x-1 px-3 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-2xs transition cursor-pointer"
+                        className="inline-flex items-center space-x-1 px-3 py-1 rounded-lg bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white text-xs font-medium shadow-sm transition cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>{isZh ? '添加时间段' : 'Add Time Window'}</span>
@@ -983,10 +984,10 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                     {/* Slots List */}
                     <div className="space-y-2.5">
                       {formData.slots.map((slot, index) => (
-                        <div key={slot.id || index} className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2.5">
+                        <div key={slot.id || index} className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5">
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                             <div className="flex items-center space-x-2 flex-1">
-                              <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold flex items-center justify-center shrink-0">
+                              <span className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold flex items-center justify-center shrink-0">
                                 {index + 1}
                               </span>
                               <input
@@ -994,7 +995,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                                 placeholder={isZh ? '时段名称 (选填)' : 'Slot name (optional)'}
                                 value={slot.name}
                                 onChange={(e) => handleUpdateSlot(slot.id, 'name', e.target.value)}
-                                className="w-28 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
+                                className="w-28 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
                               />
                             </div>
 
@@ -1004,7 +1005,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                                 placeholder="00:00"
                                 value={slot.start}
                                 onChange={(e) => handleUpdateSlot(slot.id, 'start', e.target.value)}
-                                className="w-18 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-mono text-center text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
+                                className="w-18 px-2 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-mono text-center text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
                               />
                               <span className="text-slate-400 text-xs">{isZh ? '至' : 'to'}</span>
                               <input
@@ -1012,7 +1013,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                                 placeholder="08:30"
                                 value={slot.end}
                                 onChange={(e) => handleUpdateSlot(slot.id, 'end', e.target.value)}
-                                className="w-18 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg font-mono text-center text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
+                                className="w-18 px-2 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-mono text-center text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
                               />
                             </div>
 
@@ -1020,7 +1021,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                               <select
                                 value={slot.discount}
                                 onChange={(e) => handleUpdateSlot(slot.id, 'discount', parseFloat(e.target.value))}
-                                className="px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:outline-none focus:border-indigo-500"
+                                className="px-2 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
                               >
                                 <option value="0.1">{isZh ? '1 折 (10%)' : '90% Off (10%)'}</option>
                                 <option value="0.2">{isZh ? '2 折 (20%)' : '80% Off (20%)'}</option>
@@ -1038,7 +1039,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveSlot(slot.id)}
-                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition cursor-pointer"
                                   title={isZh ? '删除该时段' : 'Delete slot'}
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -1048,7 +1049,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                           </div>
 
                           {/* Zero-burden Weekday Selector */}
-                          <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 text-xs">
+                          <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 dark:border-slate-800 text-xs">
                             <span className="text-slate-400 text-[11px]">{isZh ? '生效周期:' : 'Active on:'}</span>
                             <div className="flex items-center space-x-1">
                               {[
@@ -1068,8 +1069,8 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                                     onClick={() => toggleSlotDay(slot.id, val)}
                                     className={`w-6 h-6 rounded-md text-[11px] font-medium transition cursor-pointer flex items-center justify-center ${
                                       isActive
-                                        ? 'bg-indigo-600 text-white font-semibold shadow-2xs'
-                                        : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                                        ? 'bg-slate-900 dark:bg-indigo-600 text-white font-semibold shadow-sm'
+                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
                                     }`}
                                     title={isZh ? `周${label}` : `Day ${val}`}
                                   >
@@ -1077,7 +1078,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                                   </button>
                                 );
                               })}
-                              <span className="text-[11px] text-indigo-600 font-medium ml-1.5">
+                              <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-medium ml-1.5">
                                 {formatDaysLabel(slot.days, isZh) || (isZh ? '每天' : 'Everyday')}
                               </span>
                             </div>
@@ -1087,12 +1088,12 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                     </div>
 
                     <div className="pt-1">
-                      <label className="flex items-center space-x-2 text-slate-700 cursor-pointer">
+                      <label className="flex items-center space-x-2 text-slate-700 dark:text-slate-300 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={formData.weekend_all_day}
                           onChange={(e) => setFormData({ ...formData, weekend_all_day: e.target.checked })}
-                          className="rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                          className="rounded-sm border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500"
                         />
                         <span className="font-medium">{isZh ? '周六与周日全天享受优惠折扣' : 'All-day discount on Saturdays and Sundays'}</span>
                       </label>
@@ -1106,14 +1107,14 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition font-medium cursor-pointer"
+                  className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition font-medium cursor-pointer"
                 >
                   {isZh ? '取消' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition shadow-sm flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-2 rounded-lg bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white font-medium transition shadow-sm flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
                 >
                   {saving ? (
                     <>

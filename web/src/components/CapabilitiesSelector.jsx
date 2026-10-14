@@ -72,9 +72,9 @@ export default function CapabilitiesSelector({ protocols = [], onToggle, onSetPr
               key={cap.id}
               type="button"
               onClick={() => onToggle(cap.id)}
-              className={`p-2.5 rounded-2xl border text-left transition flex flex-col justify-between ${
+              className={`p-2.5 rounded-lg border text-left transition flex flex-col justify-between ${
                 isChecked
-                  ? 'bg-indigo-50/70 dark:bg-indigo-950/50 border-indigo-300 dark:border-indigo-700 text-indigo-950 dark:text-indigo-200 shadow-2xs'
+                  ? 'bg-indigo-50/70 dark:bg-indigo-950/50 border-indigo-300 dark:border-indigo-700 text-indigo-950 dark:text-indigo-200 shadow-sm'
                   : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500 hover:border-slate-300 dark:hover:border-slate-700 opacity-60 hover:opacity-90'
               }`}
             >

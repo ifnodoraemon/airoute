@@ -160,7 +160,7 @@ export default function CommandPalette({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-xl bg-white dark:bg-[#111726] rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[75vh] animate-in zoom-in-95 duration-150"
+        className="w-full max-w-xl bg-white dark:bg-[#111726] rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[75vh] animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >
@@ -199,7 +199,7 @@ export default function CommandPalette({
                     onClose();
                     onOpenCopilotWithQuery(query.trim());
                   }}
-                  className="px-3.5 py-2 rounded-xl bg-linear-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-medium flex items-center space-x-1.5 shadow-md shadow-indigo-600/20 cursor-pointer text-xs"
+                  className="px-3.5 py-2 rounded-lg bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white font-medium flex items-center space-x-1.5 shadow-sm cursor-pointer text-xs"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-amber-300" />
                   <span>{isZh ? `向 AI 智能副驾驶询问: "${query}"` : `Ask AI Copilot: "${query}"`}</span>
@@ -215,7 +215,7 @@ export default function CommandPalette({
                   key={item.id}
                   onClick={item.action}
                   onMouseEnter={() => setSelectedIndex(idx)}
-                  className={`flex items-center justify-between px-3.5 py-2.5 rounded-2xl cursor-pointer text-xs transition ${
+                  className={`flex items-center justify-between px-3.5 py-2 rounded-lg cursor-pointer text-xs transition ${
                     item.isAi
                       ? (isSelected
                           ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-900 dark:text-purple-200 font-semibold border border-purple-200/60 dark:border-purple-800'
@@ -227,11 +227,11 @@ export default function CommandPalette({
                 >
                   <div className="flex items-center space-x-3 min-w-0">
                     <div
-                      className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 border ${
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border ${
                         item.isAi
-                          ? 'bg-linear-to-tr from-indigo-600 to-purple-600 text-white border-purple-500 shadow-xs'
+                          ? 'bg-slate-900 dark:bg-indigo-600 text-white border-slate-900 shadow-sm'
                           : (isSelected
-                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                              ? 'bg-slate-900 dark:bg-indigo-600 text-white border-slate-900 shadow-sm'
                               : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200/80 dark:border-slate-700')
                       }`}
                     >

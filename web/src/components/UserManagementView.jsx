@@ -398,7 +398,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
 
       {/* 2. Stat Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 rounded-2xl bg-white border border-slate-100 shadow-xs flex items-center justify-between">
+        <div className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center justify-between">
           <div>
             <div className="text-xs font-semibold text-slate-400">{isZh ? '总注册用户' : 'Total Users'}</div>
             <div className="text-2xl font-black text-slate-900 mt-1">{totalUsers}</div>
@@ -408,7 +408,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
           </div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-white border border-slate-100 shadow-xs flex items-center justify-between">
+        <div className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center justify-between">
           <div>
             <div className="text-xs font-semibold text-slate-400">{isZh ? '超级管理员' : 'Administrators'}</div>
             <div className="text-2xl font-black text-purple-700 mt-1">{adminCount}</div>
@@ -418,7 +418,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
           </div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-white border border-slate-100 shadow-xs flex items-center justify-between">
+        <div className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center justify-between">
           <div>
             <div className="text-xs font-semibold text-slate-400">{isZh ? '普通用户' : 'Regular Users'}</div>
             <div className="text-2xl font-black text-emerald-700 mt-1">{regularCount}</div>
@@ -428,7 +428,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
           </div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-white border border-slate-100 shadow-xs flex items-center justify-between">
+        <div className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center justify-between">
           <div>
             <div className="text-xs font-semibold text-slate-400">{isZh ? '已锁定账号' : 'Locked Accounts'}</div>
             <div className="text-2xl font-black text-rose-700 mt-1">{lockedCount}</div>
@@ -440,7 +440,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
       </div>
 
       {/* 3. Search and Filters */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
         <div className="flex items-center space-x-3 flex-1 max-w-md">
           <div className="relative w-full">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -460,7 +460,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
               onClick={() => setRoleFilter('all')}
               className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
                 roleFilter === 'all'
-                  ? 'bg-white text-slate-900 shadow-xs'
+                  ? 'bg-white text-slate-900 shadow-sm'
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
@@ -470,7 +470,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
               onClick={() => setRoleFilter('admin')}
               className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
                 roleFilter === 'admin'
-                  ? 'bg-white text-purple-700 shadow-xs'
+                  ? 'bg-white text-purple-700 shadow-sm'
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
@@ -480,7 +480,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
               onClick={() => setRoleFilter('user')}
               className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
                 roleFilter === 'user'
-                  ? 'bg-white text-emerald-700 shadow-xs'
+                  ? 'bg-white text-emerald-700 shadow-sm'
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
@@ -500,7 +500,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
       </div>
 
       {/* 4. Table */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
@@ -697,8 +697,8 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
             if (e.target === e.currentTarget) setShowAddModal(false);
           }}
         >
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center space-x-2">
                 <UserPlus className="w-5 h-5 text-indigo-600" />
                 <h3 className="font-bold text-base text-slate-900">{isZh ? '创建新用户账号' : 'Create User Account'}</h3>
@@ -873,8 +873,8 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
             if (e.target === e.currentTarget) setQuotaTargetUser(null);
           }}
         >
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center space-x-2">
                 <Coins className="w-5 h-5 text-indigo-600" />
                 <h3 className="font-bold text-base text-slate-900">{isZh ? '调整用户可用额度' : 'Adjust User Quota / Balance'}</h3>
@@ -904,7 +904,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
                   type="button"
                   onClick={() => setQuotaMode('delta')}
                   className={`py-1.5 rounded-lg transition ${
-                    quotaMode === 'delta' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'
+                    quotaMode === 'delta' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'
                   }`}
                 >
                   {isZh ? '增减额度 (+/-)' : 'Add/Deduct (+/-)'}
@@ -913,7 +913,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
                   type="button"
                   onClick={() => setQuotaMode('exact')}
                   className={`py-1.5 rounded-lg transition ${
-                    quotaMode === 'exact' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'
+                    quotaMode === 'exact' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'
                   }`}
                 >
                   {isZh ? '设定确切余额' : 'Set Exact Balance'}
@@ -990,8 +990,8 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
             if (e.target === e.currentTarget) setResetTargetUser(null);
           }}
         >
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center space-x-2">
                 <Key className="w-5 h-5 text-indigo-600" />
                 <h3 className="font-bold text-base text-slate-900">{isZh ? '重置用户密码' : 'Reset User Password'}</h3>

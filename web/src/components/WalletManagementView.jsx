@@ -257,13 +257,13 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
     <div className="space-y-6">
       {/* Header Tabs for Admin */}
       {isAdmin && (
-        <div className="flex items-center space-x-2 border-b border-slate-200 pb-3">
+        <div className="flex items-center space-x-2 border-b border-slate-200 dark:border-slate-800 pb-3">
           <button
             onClick={() => setActiveTab('wallet')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 cursor-pointer ${
+            className={`px-4 py-2 rounded-lg text-xs font-medium transition flex items-center space-x-2 cursor-pointer ${
               activeTab === 'wallet'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                ? 'bg-slate-900 dark:bg-indigo-600 text-white shadow-sm'
+                : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
             }`}
           >
             <Wallet className="w-4 h-4" />
@@ -271,10 +271,10 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
           </button>
           <button
             onClick={() => setActiveTab('redemptions')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 cursor-pointer ${
+            className={`px-4 py-2 rounded-lg text-xs font-medium transition flex items-center space-x-2 cursor-pointer ${
               activeTab === 'redemptions'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                ? 'bg-slate-900 dark:bg-indigo-600 text-white shadow-sm'
+                : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
             }`}
           >
             <Gift className="w-4 h-4" />
@@ -289,7 +289,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
           {/* Summary Stat Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {/* Balance Card */}
-            <div className="bg-linear-to-br from-indigo-900 via-indigo-800 to-slate-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden flex flex-col justify-between">
+            <div className="bg-gradient-to-br from-indigo-900 via-indigo-800 to-slate-900 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden flex flex-col justify-between">
               <div className="absolute right-0 top-0 w-36 h-36 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none"></div>
               <div>
                 <div className="flex items-center justify-between text-indigo-200 text-xs font-medium">
@@ -314,7 +314,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                       </span>
                     </span>
                   ) : (
-                    <span className="text-4xl font-black tracking-tight text-white font-mono">
+                    <span className="text-4xl font-black tracking-tight text-white font-mono tabular-nums">
                       ¥ {Number(walletData.balance || 0).toFixed(2)}
                     </span>
                   )}
@@ -327,14 +327,14 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
             </div>
 
             {/* Pricing Group Tier Card */}
-            <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs flex flex-col justify-between">
+            <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
               <div>
-                <div className="text-xs font-semibold text-slate-500 flex items-center space-x-2">
+                <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center space-x-2">
                   <Sparkles className="w-4 h-4 text-amber-500" />
                   <span>{isZh ? '账号保障等级 (Account Tier)' : 'Account Tier'}</span>
                 </div>
                 <div className="mt-3">
-                  <span className="inline-flex items-center px-3 py-1 rounded-xl text-sm font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                  <span className="inline-flex items-center px-3 py-1 rounded-lg text-sm font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
                     {walletData.group_name === 'default'
                       ? (isZh ? '默认分组 (Standard)' : 'Default (Standard)')
                       : `${walletData.group_name.toUpperCase()} ${isZh ? '专属保障' : 'Tier'}`}
@@ -345,13 +345,13 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                 </div>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                 <span>{isZh ? '账户状态:' : 'Status:'}</span>
                 <span
-                  className={`font-semibold px-2 py-0.5 rounded-md ${
+                  className={`font-medium px-2 py-0.5 rounded-md text-[11px] ${
                     walletData.status === 'locked'
-                      ? 'bg-rose-100 text-rose-700'
-                      : 'bg-emerald-100 text-emerald-700'
+                      ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                      : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
                   }`}
                 >
                   {walletData.status === 'locked' ? (isZh ? '已锁定' : 'Locked') : (isZh ? '正常活跃' : 'Active')}
@@ -360,10 +360,10 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
             </div>
 
             {/* Quick Redeem Card */}
-            <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs flex flex-col justify-between">
+            <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
               <div>
-                <div className="text-xs font-semibold text-slate-500 flex items-center space-x-2">
-                  <Gift className="w-4 h-4 text-purple-500" />
+                <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center space-x-2">
+                  <Gift className="w-4 h-4 text-indigo-500" />
                   <span>{isZh ? '兑换码快速充值' : 'Redeem Gift Card'}</span>
                 </div>
                 <form onSubmit={handleRedeem} className="mt-3 space-y-2.5">
@@ -372,12 +372,12 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                     value={redeemCode}
                     onChange={(e) => setRedeemCode(e.target.value)}
                     placeholder={isZh ? '输入卡号 CARD-XXXX-XXXX' : 'Enter code CARD-XXXX-XXXX'}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white uppercase"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-800 uppercase"
                   />
                   <button
                     type="submit"
                     disabled={redeeming}
-                    className="w-full py-2 bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
+                    className="w-full py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition flex items-center justify-center space-x-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
                   >
                     {redeeming ? (
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -394,21 +394,21 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
           </div>
 
           {/* Recharge Section */}
-          <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+          <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-6 shadow-sm space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600">
-                  <CreditCard className="w-5 h-5" />
+                <div className="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-300">
+                  <CreditCard className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-slate-900">{isZh ? '钱包余额在线充值' : 'Online Balance Top-up'}</h3>
+                  <h3 className="font-semibold text-base text-slate-900 dark:text-slate-100">{isZh ? '钱包余额在线充值' : 'Online Balance Top-up'}</h3>
                 </div>
               </div>
             </div>
 
             {/* Select Amount */}
             <div className="space-y-3">
-              <label className="block text-xs font-bold text-slate-700">{isZh ? '选择充值金额 (CNY)' : 'Select Recharge Amount (CNY)'}</label>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">{isZh ? '选择充值金额 (CNY)' : 'Select Recharge Amount (CNY)'}</label>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                 {[10, 30, 50, 100, 200].map((amt) => (
                   <button
@@ -418,21 +418,21 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                       setRechargeAmount(amt);
                       setCustomAmount('');
                     }}
-                    className={`py-3 rounded-2xl border text-sm font-bold transition cursor-pointer flex flex-col items-center justify-center ${
+                    className={`py-3 rounded-lg border text-sm font-semibold transition cursor-pointer flex flex-col items-center justify-center ${
                       rechargeAmount === amt && !customAmount
-                        ? 'bg-indigo-50 border-indigo-500 text-indigo-700 shadow-sm'
-                        : 'bg-slate-50/70 hover:bg-slate-100 border-slate-200 text-slate-700'
+                        ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-500 text-indigo-700 dark:text-indigo-300 shadow-sm'
+                        : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
                     }`}
                   >
-                    <span>¥ {amt}</span>
+                    <span className="font-mono tabular-nums">¥ {amt}</span>
                   </button>
                 ))}
               </div>
 
               <div className="flex items-center space-x-3 pt-1">
-                <span className="text-xs text-slate-500">{isZh ? '或自定义金额:' : 'Or custom amount:'}</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">{isZh ? '或自定义金额:' : 'Or custom amount:'}</span>
                 <div className="relative w-40">
-                  <span className="absolute left-3 top-2 text-xs text-slate-400">¥</span>
+                  <span className="absolute left-3 top-2 text-xs text-slate-400 font-mono">¥</span>
                   <input
                     type="number"
                     min="1"
@@ -440,7 +440,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                     value={customAmount}
                     onChange={(e) => setCustomAmount(e.target.value)}
                     placeholder={isZh ? '输入金额' : 'Enter amount'}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-7 pr-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg pl-7 pr-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-800"
                   />
                 </div>
               </div>
@@ -448,26 +448,26 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
 
             {/* Select Channel */}
             <div className="space-y-3 pt-2">
-              <label className="block text-xs font-bold text-slate-700">{isZh ? '选择支付通道' : 'Select Payment Gateway'}</label>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">{isZh ? '选择支付通道' : 'Select Payment Gateway'}</label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <button
                   type="button"
                   onClick={() => setRechargeMethod('stripe')}
-                  className={`p-4 rounded-2xl border text-left transition cursor-pointer flex items-start space-x-3 ${
+                  className={`p-4 rounded-lg border text-left transition cursor-pointer flex items-start space-x-3 ${
                     rechargeMethod === 'stripe'
-                      ? 'bg-indigo-50/70 border-indigo-500 shadow-sm'
-                      : 'bg-slate-50/60 border-slate-200 hover:bg-slate-100'
+                      ? 'bg-indigo-50/70 dark:bg-indigo-950/40 border-indigo-500 shadow-sm'
+                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
                   }`}
                 >
-                  <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 flex items-center justify-center shrink-0">
                     <CreditCard className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="font-bold text-xs text-slate-900 flex items-center space-x-2">
+                    <div className="font-semibold text-xs text-slate-900 dark:text-slate-100 flex items-center space-x-2">
                       <span>{isZh ? 'Stripe 国际信用卡 / 企业网银' : 'Stripe Cards & Global Pay'}</span>
-                      <span className="text-[10px] px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded-full font-semibold">{isZh ? '官方渠道' : 'Official'}</span>
+                      <span className="text-[10px] px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-200 rounded-md font-medium">{isZh ? '官方渠道' : 'Official'}</span>
                     </div>
-                    <div className="text-[11px] text-slate-500 mt-1">{isZh ? '支持 Visa, MasterCard, 微信/支付宝跨境结算' : 'Supports Visa, MasterCard, Alipay/WeChat cross-border'}</div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{isZh ? '支持 Visa, MasterCard, 微信/支付宝跨境结算' : 'Supports Visa, MasterCard, Alipay/WeChat cross-border'}</div>
                   </div>
                 </button>
 
@@ -475,21 +475,21 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                   <button
                     type="button"
                     onClick={() => setRechargeMethod('sandbox')}
-                    className={`p-4 rounded-2xl border text-left transition cursor-pointer flex items-start space-x-3 ${
+                    className={`p-4 rounded-lg border text-left transition cursor-pointer flex items-start space-x-3 ${
                       rechargeMethod === 'sandbox'
-                        ? 'bg-amber-50/70 border-amber-500 shadow-sm'
-                        : 'bg-slate-50/60 border-slate-200 hover:bg-slate-100'
+                        ? 'bg-amber-50/70 dark:bg-amber-950/40 border-amber-500 shadow-sm'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
                     }`}
                   >
-                    <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                    <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
                       <Zap className="w-4 h-4" />
                     </div>
                     <div>
-                      <div className="font-bold text-xs text-slate-900 flex items-center space-x-2">
+                      <div className="font-semibold text-xs text-slate-900 dark:text-slate-100 flex items-center space-x-2">
                         <span>{isZh ? '管理员沙箱测试通道' : 'Admin Sandbox Simulation'}</span>
-                        <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full font-semibold">{isZh ? '仅开发/管理' : 'Dev/Admin'}</span>
+                        <span className="text-[10px] px-2 py-0.5 bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 rounded-md font-medium">{isZh ? '仅开发/管理' : 'Dev/Admin'}</span>
                       </div>
-                      <div className="text-[11px] text-slate-500 mt-1">{isZh ? '仅超级管理员可在测试环境中用于快速联调额度' : 'Super admins only for simulated testing in local/dev'}</div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{isZh ? '仅超级管理员可在测试环境中用于快速联调额度' : 'Super admins only for simulated testing in local/dev'}</div>
                     </div>
                   </button>
                 )}
@@ -502,7 +502,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                 type="button"
                 onClick={handleRecharge}
                 disabled={recharging}
-                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-2 shadow-md hover:shadow-lg disabled:opacity-50 cursor-pointer"
+                className="px-5 py-2.5 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition flex items-center space-x-2 shadow-sm disabled:opacity-50 cursor-pointer"
               >
                 {recharging ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
@@ -517,7 +517,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
           </div>
 
           {/* Recharge History Table */}
-          <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs space-y-4">
+          <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-6 shadow-sm space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="font-bold text-sm text-slate-900 flex items-center space-x-2">
                 <Clock className="w-4 h-4 text-slate-400" />
@@ -578,22 +578,22 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
       {/* TAB 2: Admin Redemption Cards Management */}
       {isAdmin && activeTab === 'redemptions' && (
         <div className="space-y-6">
-          <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-6 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
               <div>
-                <h3 className="font-bold text-base text-slate-900">{isZh ? '额度兑换卡批次管理' : 'Gift Cards Batch Management'}</h3>
+                <h3 className="font-semibold text-base text-slate-900 dark:text-slate-100">{isZh ? '额度兑换卡批次管理' : 'Gift Cards Batch Management'}</h3>
               </div>
               <div className="flex items-center space-x-2">
                 <button
                   onClick={fetchRedemptions}
-                  className="p-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600 transition cursor-pointer"
+                  className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition cursor-pointer"
                   title={isZh ? '刷新列表' : 'Refresh list'}
                 >
                   <RefreshCw className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setShowGenModal(true)}
-                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm cursor-pointer"
+                  className="px-3.5 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition flex items-center space-x-1.5 shadow-sm cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                   <span>{isZh ? '批量生成兑换卡' : 'Generate Gift Cards'}</span>
@@ -604,8 +604,8 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
             {/* Redemptions Table */}
             {redemptions.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-600">
-                  <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold border-b border-slate-200">
+                <table className="w-full text-left text-xs text-slate-600 dark:text-slate-400">
+                  <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 uppercase text-[10px] font-semibold border-b border-slate-200 dark:border-slate-800">
                     <tr>
                       <th className="py-2.5 px-3">{isZh ? '兑换卡密 (Code)' : 'Card Code'}</th>
                       <th className="py-2.5 px-3">{isZh ? '名称' : 'Name'}</th>
@@ -616,40 +616,40 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                       <th className="py-2.5 px-3 text-right">{isZh ? '操作' : 'Actions'}</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
                     {redemptions.map((r) => (
-                      <tr key={r.id} className="hover:bg-slate-50/70">
-                        <td className="py-2.5 px-3 font-mono font-bold text-indigo-600 flex items-center space-x-2">
+                      <tr key={r.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                        <td className="py-2.5 px-3 font-mono font-semibold text-indigo-600 dark:text-indigo-400 flex items-center space-x-2">
                           <span>{r.code}</span>
                           <button
                             onClick={() => copyText(r.code, isZh ? '卡密' : 'Card Code')}
-                            className="p-1 hover:bg-slate-200 rounded-sm text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                            className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition cursor-pointer"
                             title={isZh ? '复制卡密' : 'Copy code'}
                           >
                             <Copy className="w-3.5 h-3.5" />
                           </button>
                         </td>
-                        <td className="py-2.5 px-3 text-slate-900 font-medium">{r.name || (isZh ? '额度兑换卡' : 'Gift Card')}</td>
-                        <td className="py-2.5 px-3 font-bold text-slate-900">¥ {Number(r.amount).toFixed(2)}</td>
+                        <td className="py-2.5 px-3 text-slate-900 dark:text-slate-100 font-medium">{r.name || (isZh ? '额度兑换卡' : 'Gift Card')}</td>
+                        <td className="py-2.5 px-3 font-semibold font-mono tabular-nums text-slate-900 dark:text-slate-100">¥ {Number(r.amount).toFixed(2)}</td>
                         <td className="py-2.5 px-3">
                           <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
                               r.status === 'active'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-slate-100 text-slate-600'
+                                ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                             }`}
                           >
                             {r.status === 'active' ? (isZh ? '未使用 (可用)' : 'Unused (Available)') : (isZh ? '已兑换使用' : 'Redeemed')}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 font-medium text-slate-700">{r.used_by || '-'}</td>
-                        <td className="py-2.5 px-3 text-slate-400">
+                        <td className="py-2.5 px-3 font-medium text-slate-700 dark:text-slate-300">{r.used_by || '-'}</td>
+                        <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px]">
                           {r.used_at ? new Date(r.used_at).toLocaleString(isZh ? 'zh-CN' : 'en-US') : '-'}
                         </td>
                         <td className="py-2.5 px-3 text-right">
                           <button
                             onClick={() => handleDeleteRedemption(r.id)}
-                            className="p-1.5 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                            className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition cursor-pointer"
                             title={isZh ? '删除兑换卡' : 'Delete card'}
                           >
                             <Trash2 className="w-4 h-4" />
@@ -678,15 +678,15 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
             if (e.target === e.currentTarget) setShowGenModal(false);
           }}
         >
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center space-x-2">
-                <Gift className="w-5 h-5 text-indigo-600" />
-                <h3 className="font-bold text-base text-slate-900">{isZh ? '批量生成额度兑换卡' : 'Batch Generate Gift Cards'}</h3>
+                <Gift className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                <h3 className="font-semibold text-base text-slate-900 dark:text-slate-100">{isZh ? '批量生成额度兑换卡' : 'Batch Generate Gift Cards'}</h3>
               </div>
               <button
                 onClick={() => setShowGenModal(false)}
-                className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600"
+                className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
               >
                 ✕
               </button>
@@ -694,18 +694,18 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
 
             <form onSubmit={handleGenerateRedemptions} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">{isZh ? '兑换卡名称' : 'Card Name'}</label>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">{isZh ? '兑换卡名称' : 'Card Name'}</label>
                 <input
                   type="text"
                   value={genName}
                   onChange={(e) => setGenName(e.target.value)}
                   placeholder={isZh ? '例如: 2026 新年礼品卡' : 'e.g. 2026 Promo Gift Card'}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-800"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">{isZh ? '单张充值面额 (CNY)' : 'Amount per Card (CNY)'}</label>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">{isZh ? '单张充值面额 (CNY)' : 'Amount per Card (CNY)'}</label>
                 <input
                   type="number"
                   min="0.1"
@@ -714,12 +714,12 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                   value={genAmount}
                   onChange={(e) => setGenAmount(e.target.value)}
                   placeholder="50"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white font-mono"
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-800 font-mono tabular-nums"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">{isZh ? '生成数量 (张)' : 'Quantity'}</label>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">{isZh ? '生成数量 (张)' : 'Quantity'}</label>
                 <input
                   type="number"
                   min="1"
@@ -728,7 +728,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                   value={genCount}
                   onChange={(e) => setGenCount(e.target.value)}
                   placeholder="5"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white font-mono"
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-800 font-mono tabular-nums"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">{isZh ? '一次最多可生成 100 张随机加密卡密。' : 'Up to 100 encrypted gift codes can be generated per batch.'}</p>
               </div>
@@ -737,14 +737,14 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                 <button
                   type="button"
                   onClick={() => setShowGenModal(false)}
-                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-medium cursor-pointer"
+                  className="px-4 py-2 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-medium cursor-pointer"
                 >
                   {isZh ? '取消' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
                   disabled={generating}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition flex items-center space-x-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
                 >
                   {generating ? (
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />

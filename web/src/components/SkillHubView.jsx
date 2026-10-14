@@ -307,14 +307,14 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
         <div className="flex items-center gap-2">
           <button
             onClick={() => { setSelectedSkillForGuide(null); setClientGuideModalOpen(true); }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-750 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-2xs"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-750 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
           >
             <BookOpen className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
             {isZh ? '客户端接入指南' : 'Client Guide'}
           </button>
           <button
             onClick={() => setCreateModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors shadow-2xs"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors shadow-sm"
           >
             <Plus className="w-3.5 h-3.5" />
             {isZh ? '新建技能' : 'New Skill'}
@@ -323,7 +323,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
       </div>
 
       {/* 搜索与分类导航 */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white dark:bg-gray-800/80 p-2.5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-2xs">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white dark:bg-gray-800/80 p-2.5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
         <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
           {categories.map(cat => {
             const Icon = cat.icon;
@@ -332,7 +332,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg whitespace-nowrap transition-all ${active ? 'bg-amber-600 text-white shadow-2xs' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60'}`}
+                className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg whitespace-nowrap transition-all ${active ? 'bg-amber-600 text-white shadow-sm' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60'}`}
               >
                 <Icon className="w-3.5 h-3.5" />
                 <span>{cat.label}</span>
@@ -373,7 +373,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
             return (
               <div
                 key={skill.id}
-                className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-150 ${skill.enabled ? 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-2xs hover:shadow-xs' : 'border-gray-200/60 dark:border-gray-800/60 bg-gray-50/60 dark:bg-gray-850/40 opacity-75'}`}
+                className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-150 ${skill.enabled ? 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-sm hover:shadow-md' : 'border-gray-200/60 dark:border-gray-800/60 bg-gray-50/60 dark:bg-gray-850/40 opacity-75'}`}
               >
                 <div>
                   {/* 头部：图标、名称与启停开关 */}
@@ -758,7 +758,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
                 <a
                   href={`/api/v1/skills/${manifestSkill.id}/download`}
                   download={`${manifestSkill.id}.zip`}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors shadow-2xs"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors shadow-sm"
                   title={isZh ? '下载包含 SKILL.md 与脚本的 agentskills.io 标准 ZIP 压缩包' : 'Download standard ZIP package containing SKILL.md and scripts'}
                 >
                   <DownloadCloud className="w-3.5 h-3.5" />
@@ -787,7 +787,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
                   onClick={() => setManifestTab('skill_md')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                     manifestTab === 'skill_md'
-                      ? 'bg-amber-600 text-white shadow-xs'
+                      ? 'bg-amber-600 text-white shadow-sm'
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
                   }`}
                 >
@@ -798,7 +798,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
                   onClick={() => setManifestTab('bundle_tree')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                     manifestTab === 'bundle_tree'
-                      ? 'bg-amber-600 text-white shadow-xs'
+                      ? 'bg-amber-600 text-white shadow-sm'
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
                   }`}
                 >
@@ -809,7 +809,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
                   onClick={() => setManifestTab('metadata')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                     manifestTab === 'metadata'
-                      ? 'bg-amber-600 text-white shadow-xs'
+                      ? 'bg-amber-600 text-white shadow-sm'
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
                   }`}
                 >

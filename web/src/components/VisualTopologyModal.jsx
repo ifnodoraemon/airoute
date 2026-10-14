@@ -52,12 +52,12 @@ export default function VisualTopologyModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-white dark:bg-[#111726] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 max-w-4xl w-full shadow-2xl relative max-h-[92vh] overflow-y-auto">
+      <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-6 sm:p-8 max-w-4xl w-full shadow-2xl relative max-h-[92vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-6">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-linear-to-tr from-indigo-600 to-emerald-500 text-white flex items-center justify-center shadow-lg shadow-indigo-500/20 shrink-0">
-              <Layers className="w-5 h-5 fill-white text-white" />
+            <div className="w-10 h-10 rounded-xl bg-slate-900 dark:bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+              <Layers className="w-5 h-5 text-white" />
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight flex items-center space-x-2">
@@ -224,7 +224,7 @@ export default function VisualTopologyModal({
             {/* Priority 2 */}
             <div className={`p-3 rounded-xl border flex items-center justify-between text-xs transition ${
               simulatedFailure
-                ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-800 shadow-xs'
+                ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-800 shadow-sm'
                 : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
             }`}>
               <div className="flex items-center space-x-2.5">

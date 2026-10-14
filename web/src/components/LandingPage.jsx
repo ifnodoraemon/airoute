@@ -182,7 +182,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
         <div className="max-w-4xl mx-auto text-center space-y-8">
           <div
             onClick={onViewStatus}
-            className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-white border border-slate-200 shadow-xs text-xs font-semibold text-slate-700 hover:border-indigo-400 hover:shadow-sm cursor-pointer transition"
+            className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-white border border-slate-200 shadow-sm text-xs font-semibold text-slate-700 hover:border-indigo-400 hover:shadow-md cursor-pointer transition"
           >
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             <span>{isZh ? '高可用集群运行中' : 'Cluster Running Healthy'}</span>
@@ -228,7 +228,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
             {isLoggedIn ? (
               <button
                 onClick={onEnterConsole}
-                className="w-full sm:w-auto px-7 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-sm font-bold shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2 cursor-pointer"
+                className="w-full sm:w-auto px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-medium shadow-sm transition flex items-center justify-center space-x-2 cursor-pointer"
               >
                 <Server className="w-4 h-4" />
                 <span>{isZh ? '进入工作台' : 'Enter Console'}</span>
@@ -237,7 +237,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
             ) : (
               <button
                 onClick={onOpenLogin}
-                className="w-full sm:w-auto px-7 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-sm font-bold shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2 cursor-pointer"
+                className="w-full sm:w-auto px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-medium shadow-sm transition flex items-center justify-center space-x-2 cursor-pointer"
               >
                 <Key className="w-4 h-4" />
                 <span>{isZh ? '进入企业控制台' : 'Enter Admin Console'}</span>
@@ -247,7 +247,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
 
             <button
               onClick={onViewDocs}
-              className="w-full sm:w-auto px-7 py-3.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-2xl text-sm font-semibold shadow-xs transition flex items-center justify-center space-x-2 cursor-pointer"
+              className="w-full sm:w-auto px-6 py-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-sm font-medium shadow-sm transition flex items-center justify-center space-x-2 cursor-pointer"
             >
               <Code className="w-4 h-4 text-indigo-600" />
               <span>{isZh ? '查阅接入指南' : 'View Documentation'}</span>
@@ -265,8 +265,8 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs hover:border-indigo-400 transition space-y-3">
-            <div className="w-11 h-11 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm hover:border-indigo-400 transition space-y-3">
+            <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
               <Shield className="w-5 h-5" />
             </div>
             <h3 className="font-bold text-base text-slate-900">
@@ -279,8 +279,8 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
             </p>
           </div>
 
-          <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs hover:border-emerald-400 transition space-y-3">
-            <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm hover:border-emerald-400 transition space-y-3">
+            <div className="w-10 h-10 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
               <Cpu className="w-5 h-5" />
             </div>
             <h3 className="font-bold text-base text-slate-900">
@@ -293,8 +293,8 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
             </p>
           </div>
 
-          <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs hover:border-purple-400 transition space-y-3">
-            <div className="w-11 h-11 rounded-2xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600">
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm hover:border-purple-400 transition space-y-3">
+            <div className="w-10 h-10 rounded-lg bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600">
               <Layers className="w-5 h-5" />
             </div>
             <h3 className="font-bold text-base text-slate-900">
@@ -307,9 +307,9 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
             </p>
           </div>
 
-          <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs hover:border-sky-400 transition space-y-3">
-            <div className="w-11 h-11 rounded-2xl bg-sky-50 border border-sky-100 flex items-center justify-center text-sky-600">
-              <Server className="w-5 h-6" />
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm hover:border-sky-400 transition space-y-3">
+            <div className="w-10 h-10 rounded-lg bg-sky-50 border border-sky-100 flex items-center justify-center text-sky-600">
+              <Server className="w-5 h-5" />
             </div>
             <h3 className="font-bold text-base text-slate-900">
               {isZh ? '多活热备与故障自愈' : 'Active-Active Resilience'}
@@ -333,8 +333,8 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* 1. Chat */}
-          <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs space-y-4 hover:border-indigo-400 transition">
-            <div className="w-11 h-11 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4 hover:border-indigo-400 transition">
+            <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
               <MessageSquare className="w-5 h-5" />
             </div>
             <h4 className="font-bold text-base text-slate-900">{isZh ? '文本与深度推理' : 'Text & Reasoning'}</h4>
@@ -349,8 +349,8 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
           </div>
 
           {/* 2. Image */}
-          <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs space-y-4 hover:border-amber-400 transition">
-            <div className="w-11 h-11 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4 hover:border-amber-400 transition">
+            <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
               <ImageIcon className="w-5 h-5" />
             </div>
             <h4 className="font-bold text-base text-slate-900">{isZh ? '超清生图与视觉' : 'Image & Vision'}</h4>
@@ -365,8 +365,8 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
           </div>
 
           {/* 3. Audio */}
-          <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs space-y-4 hover:border-teal-400 transition">
-            <div className="w-11 h-11 rounded-2xl bg-teal-50 border border-teal-100 flex items-center justify-center text-teal-600">
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4 hover:border-teal-400 transition">
+            <div className="w-10 h-10 rounded-lg bg-teal-50 border border-teal-100 flex items-center justify-center text-teal-600">
               <Volume2 className="w-5 h-5" />
             </div>
             <h4 className="font-bold text-base text-slate-900">{isZh ? '实时语音与转写' : 'Audio & Speech'}</h4>
@@ -381,8 +381,8 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
           </div>
 
           {/* 4. Video */}
-          <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs space-y-4 hover:border-purple-400 transition">
-            <div className="w-11 h-11 rounded-2xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600">
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4 hover:border-purple-400 transition">
+            <div className="w-10 h-10 rounded-lg bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600">
               <Video className="w-5 h-5" />
             </div>
             <h4 className="font-bold text-base text-slate-900">{isZh ? '影视级视频生成' : 'Cinematic Video'}</h4>
@@ -418,7 +418,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
         </div>
 
         {/* Tabbed Code Box */}
-        <div className="bg-white border border-slate-200/90 rounded-3xl overflow-hidden shadow-sm">
+        <div className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-sm">
           <div className="flex flex-wrap items-center justify-between border-b border-slate-200 bg-slate-50/80 px-4 py-2 gap-2">
             <div className="flex flex-wrap items-center gap-1.5">
               {[
@@ -431,9 +431,9 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                 <button
                   key={t.id}
                   onClick={() => setActiveSnippetTab(t.id)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
                     activeSnippetTab === t.id
-                      ? 'bg-white text-indigo-600 shadow-xs border border-slate-200/80'
+                      ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/80'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
@@ -451,7 +451,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                 else if (activeSnippetTab === 'session') code = sessionSnippet;
                 copyCode(code, activeSnippetTab);
               }}
-              className="px-3.5 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 text-xs text-slate-700 font-semibold flex items-center space-x-1.5 transition shadow-2xs cursor-pointer"
+              className="px-3.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:border-indigo-400 text-xs text-slate-700 font-medium flex items-center space-x-1.5 transition shadow-sm cursor-pointer"
             >
               {copiedSnippet === activeSnippetTab ? (
                 <>
@@ -493,7 +493,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
         </div>
 
         {/* Pricing Matrix Table */}
-        <div className="bg-white border border-slate-200/90 rounded-3xl overflow-hidden shadow-sm">
+        <div className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-sm">
           <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h3 className="font-bold text-sm text-slate-900">
               {isZh ? '主流模型费率对照表 (Rates per 1M Tokens)' : 'Benchmark Model Rates (per 1M Tokens)'}

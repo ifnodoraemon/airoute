@@ -27,18 +27,18 @@ export default function KeyModal({
     >
       <form
         onSubmit={onSubmit}
-        className="bg-white dark:bg-[#111726] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-150"
+        className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-150"
       >
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
           <div>
-            <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 tracking-tight">
+            <h3 className="font-semibold text-base text-slate-900 dark:text-white tracking-tight">
               {isZh ? '新建 API 密钥' : 'Create API Key'}
             </h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
+            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -70,9 +70,9 @@ export default function KeyModal({
                       key={g}
                       type="button"
                       onClick={() => setNewKey({ ...newKey, group_name: g })}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition cursor-pointer ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
                         (newKey.group_name || 'default') === g
-                          ? 'bg-indigo-600 text-white border-indigo-600 font-semibold shadow-xs'
+                          ? 'bg-slate-900 dark:bg-indigo-600 text-white border-slate-900 dark:border-indigo-600 font-semibold shadow-sm'
                           : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
                       }`}
                     >
@@ -241,7 +241,7 @@ export default function KeyModal({
           </button>
           <button
             type="submit"
-            className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition cursor-pointer"
+            className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium shadow-sm transition cursor-pointer"
           >
             {isZh ? '确认创建' : 'Create Key'}
           </button>

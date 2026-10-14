@@ -421,7 +421,7 @@ Execute the following mission with precision, maintainability, and zero speculat
   return (
     <div className="space-y-4 animate-in fade-in duration-200">
       {/* 1. Modality Selector Bar */}
-      <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-1.5 shadow-xs flex flex-wrap items-center justify-between gap-2">
+      <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-1.5 shadow-sm flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
           {[
             { id: 'chat', label: isZh ? 'Chat 对话' : 'Chat', icon: MessageSquare, activeColor: 'bg-indigo-600 text-white' },
@@ -437,9 +437,9 @@ Execute the following mission with precision, maintainability, and zero speculat
               <button
                 key={tab.id}
                 onClick={() => setPlayModality(tab.id)}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
                   playModality === tab.id
-                    ? `${tab.activeColor} shadow-xs`
+                    ? `${tab.activeColor} shadow-sm`
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100'
                 }`}
               >
@@ -452,12 +452,12 @@ Execute the following mission with precision, maintainability, and zero speculat
 
         {/* Arena Mode Switch (Only for Chat) */}
         {playModality === 'chat' && (
-          <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl">
+          <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-lg">
             <button
               onClick={() => setPlayMode('single')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
                 playMode === 'single'
-                  ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                  ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
                   : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
               }`}
             >
@@ -465,9 +465,9 @@ Execute the following mission with precision, maintainability, and zero speculat
             </button>
             <button
               onClick={() => setPlayMode('arena')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center space-x-1 transition cursor-pointer ${
+              className={`px-2.5 py-1 rounded-md text-xs font-medium flex items-center space-x-1 transition cursor-pointer ${
                 playMode === 'arena'
-                  ? 'bg-linear-to-r from-indigo-600 to-purple-600 text-white shadow-xs'
+                  ? 'bg-slate-900 dark:bg-indigo-600 text-white shadow-sm'
                   : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
               }`}
             >
@@ -481,7 +481,7 @@ Execute the following mission with precision, maintainability, and zero speculat
       {/* 2. Main Playground Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Parameter Controls */}
-        <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-6 space-y-4 shadow-xs h-fit">
+        <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-6 space-y-4 shadow-sm h-fit">
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
             <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm flex items-center space-x-2">
               <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
@@ -690,7 +690,7 @@ Execute the following mission with precision, maintainability, and zero speculat
               <button
                 onClick={handleGenerateImage}
                 disabled={playLoading}
-                className="w-full py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold shadow-xs transition flex items-center justify-center space-x-1.5 cursor-pointer"
+                className="w-full py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-lg text-xs font-medium shadow-sm transition flex items-center justify-center space-x-1.5 cursor-pointer"
               >
                 {playLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                 <span>{playLoading ? (isZh ? '渲染生成中...' : 'Rendering...') : (isZh ? '生成图像' : 'Generate Image')}</span>
@@ -742,7 +742,7 @@ Execute the following mission with precision, maintainability, and zero speculat
               <button
                 onClick={handleGenerateTTS}
                 disabled={playLoading}
-                className="w-full py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-xs transition flex items-center justify-center space-x-1.5 cursor-pointer"
+                className="w-full py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-xs font-medium shadow-sm transition flex items-center justify-center space-x-1.5 cursor-pointer"
               >
                 {playLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Volume2 className="w-3.5 h-3.5" />}
                 <span>{playLoading ? (isZh ? '合成中...' : 'Synthesizing...') : (isZh ? '生成语音' : 'Synthesize Speech')}</span>
@@ -776,7 +776,7 @@ Execute the following mission with precision, maintainability, and zero speculat
         </div>
 
         {/* Right Columns: Interactive Chat View / Arena View */}
-        <div className="lg:col-span-2 bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-6 flex flex-col h-[700px] shadow-xs">
+        <div className="lg:col-span-2 bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-6 flex flex-col h-[700px] shadow-sm">
           {/* Header Action Bar */}
           <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-3 text-xs">
             <div className="flex items-center space-x-2">
@@ -835,7 +835,7 @@ Execute the following mission with precision, maintainability, and zero speculat
                         className={`max-w-[85%] rounded-2xl p-3.5 text-xs leading-relaxed ${
                           msg.role === 'user'
                             ? 'bg-indigo-600 text-white'
-                            : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700 shadow-xs'
+                            : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700 shadow-sm'
                         }`}
                       >
                         <div className="whitespace-pre-wrap">{msg.content}</div>
@@ -861,7 +861,7 @@ Execute the following mission with precision, maintainability, and zero speculat
                       <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono mb-1">
                         {playModel} {isZh ? '(响应输出)' : '(Response)'}
                       </div>
-                      <div className="max-w-[90%] rounded-2xl p-3.5 text-xs bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700 shadow-xs whitespace-pre-wrap leading-relaxed">
+                      <div className="max-w-[90%] rounded-2xl p-3.5 text-xs bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700 shadow-sm whitespace-pre-wrap leading-relaxed">
                         {playOutput}
                       </div>
                     </div>
@@ -970,11 +970,7 @@ Execute the following mission with precision, maintainability, and zero speculat
                 <button
                   onClick={handleRunChat}
                   disabled={playLoading}
-                  className={`px-5 py-2.5 text-white rounded-xl text-xs font-bold shadow-xs transition flex items-center space-x-1.5 cursor-pointer shrink-0 ${
-                    playMode === 'arena'
-                      ? 'bg-linear-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700'
-                      : 'bg-indigo-600 hover:bg-indigo-700'
-                  }`}
+                  className="px-5 py-2.5 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium shadow-sm transition flex items-center space-x-1.5 cursor-pointer shrink-0"
                 >
                   {playLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                   <span>{playLoading ? (isZh ? '流式推导中...' : 'Generating...') : (playMode === 'arena' ? (isZh ? '并发对决测试' : 'Run Arena Test') : (isZh ? '发送请求' : 'Send'))}</span>
@@ -1000,7 +996,7 @@ Execute the following mission with precision, maintainability, and zero speculat
                     download="airoute-image.png"
                     target="_blank"
                     rel="noreferrer"
-                    className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white text-xs font-bold rounded-xl flex items-center space-x-1.5 transition shadow-xs cursor-pointer"
+                    className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white text-xs font-medium rounded-lg flex items-center space-x-1.5 transition shadow-sm cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>{isZh ? '下载高清原图' : 'Download High-Res'}</span>
@@ -1019,8 +1015,8 @@ Execute the following mission with precision, maintainability, and zero speculat
           {playModality === 'audio_speech' && (
             <div className="flex-1 flex flex-col items-center justify-center p-4 space-y-4">
               {ttsAudioUrl ? (
-                <div className="w-full max-w-md p-6 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl flex flex-col items-center space-y-4 shadow-xs">
-                  <div className="w-12 h-12 rounded-2xl bg-cyan-50 dark:bg-cyan-950/60 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shadow-xs">
+                <div className="w-full max-w-md p-6 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl flex flex-col items-center space-y-4 shadow-sm">
+                  <div className="w-12 h-12 rounded-2xl bg-cyan-50 dark:bg-cyan-950/60 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shadow-sm">
                     <Volume2 className="w-6 h-6" />
                   </div>
                   <span className="font-bold text-xs text-slate-800 dark:text-slate-200">

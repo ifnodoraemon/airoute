@@ -265,7 +265,7 @@ export default function ModelRouteModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-white border border-slate-200 rounded-3xl p-6 max-w-xl w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 max-w-xl w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-3 shrink-0">
           <div className="flex items-center space-x-2.5">
@@ -339,7 +339,7 @@ export default function ModelRouteModal({
                         onClick={() => handleSelectCandidateModel(c)}
                         className={`px-2 py-1 rounded-lg border text-[11px] font-mono transition cursor-pointer flex items-center space-x-1 ${
                           isSelected
-                            ? 'bg-indigo-600 text-white border-indigo-600 font-semibold shadow-2xs'
+                            ? 'bg-indigo-600 text-white border-indigo-600 font-semibold shadow-sm'
                             : 'bg-white hover:bg-indigo-50 border-slate-200 text-slate-700 hover:text-indigo-700 hover:border-indigo-200'
                         }`}
                       >
@@ -567,7 +567,7 @@ export default function ModelRouteModal({
                     type="button"
                     onClick={handleAddChannel}
                     disabled={!selectedChannelToAdd}
-                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl font-semibold shadow-xs flex items-center justify-center space-x-1 transition shrink-0 cursor-pointer"
+                    className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-lg font-medium shadow-sm flex items-center justify-center space-x-1 transition shrink-0 cursor-pointer text-xs"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>{isZh ? '添加' : 'Add'}</span>
@@ -677,7 +677,7 @@ export default function ModelRouteModal({
             <button
               type="submit"
               disabled={saving}
-              className="px-5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold shadow-xs transition flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
+              className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-medium shadow-sm transition flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer text-xs"
             >
               {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
               <span>{isNew ? (isZh ? '创建模型' : 'Create Route') : (isZh ? '保存' : 'Save')}</span>

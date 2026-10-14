@@ -771,21 +771,21 @@ curl -X POST "${messagesUrl}" \\
         <div className="flex items-center gap-2">
           <button
             onClick={() => handleOpenProbe(null)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-750 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-2xs"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-750 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
           >
             <Radio className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
             {isZh ? '协议探针' : 'Protocol Probe'}
           </button>
           <button
             onClick={() => { setSelectedServerForConfig(null); setConfigModalOpen(true); }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-750 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-2xs"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-750 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
           >
             <FileCode className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
             {isZh ? '客户端配置' : 'Client Config'}
           </button>
           <button
             onClick={() => setAddServerModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-2xs"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-sm"
           >
             <Plus className="w-3.5 h-3.5" />
             {isZh ? '接入新服务' : 'Add Server'}
@@ -802,7 +802,7 @@ curl -X POST "${messagesUrl}" \\
       </div>
 
       {/* 核心指标与主控简报 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-2xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-sm">
         <div className="flex items-center gap-4 flex-wrap text-xs">
           {/* 总控开关 */}
           <div className="flex items-center gap-2 pr-4 border-r border-gray-200 dark:border-gray-750">
@@ -854,7 +854,7 @@ curl -X POST "${messagesUrl}" \\
       </div>
 
       {/* 搜索与分类导航 */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white dark:bg-gray-800/80 p-2.5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-2xs">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white dark:bg-gray-800/80 p-2.5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
         <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
           {categories.map(cat => {
             const Icon = cat.icon;
@@ -863,7 +863,7 @@ curl -X POST "${messagesUrl}" \\
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg whitespace-nowrap transition-all ${active ? 'bg-indigo-600 text-white shadow-2xs' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60'}`}
+                className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg whitespace-nowrap transition-all ${active ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60'}`}
               >
                 <Icon className="w-3.5 h-3.5" />
                 <span>{cat.name}</span>
@@ -904,7 +904,7 @@ curl -X POST "${messagesUrl}" \\
             return (
               <div
                 key={server.id}
-                className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-150 ${server.enabled ? 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-2xs hover:shadow-xs' : 'border-gray-200/60 dark:border-gray-800/60 bg-gray-50/60 dark:bg-gray-850/40 opacity-75'}`}
+                className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-150 ${server.enabled ? 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-sm hover:shadow-md' : 'border-gray-200/60 dark:border-gray-800/60 bg-gray-50/60 dark:bg-gray-850/40 opacity-75'}`}
               >
                 <div>
                   {/* 卡片头部 */}
@@ -1579,21 +1579,21 @@ curl -X POST "${messagesUrl}" \\
                         <button
                           type="button"
                           onClick={() => setRequestViewTab('wire')}
-                          className={`px-1.5 py-0.5 rounded-sm ${requestViewTab === 'wire' ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-300 shadow-2xs font-medium' : 'text-gray-500 hover:text-gray-800'}`}
+                          className={`px-1.5 py-0.5 rounded-sm ${requestViewTab === 'wire' ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-300 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-800'}`}
                         >
                           {isZh ? 'HTTP报文' : 'Wire'}
                         </button>
                         <button
                           type="button"
                           onClick={() => setRequestViewTab('json')}
-                          className={`px-1.5 py-0.5 rounded-sm ${requestViewTab === 'json' ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-300 shadow-2xs font-medium' : 'text-gray-500 hover:text-gray-800'}`}
+                          className={`px-1.5 py-0.5 rounded-sm ${requestViewTab === 'json' ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-300 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-800'}`}
                         >
                           JSON-RPC
                         </button>
                         <button
                           type="button"
                           onClick={() => setRequestViewTab('curl')}
-                          className={`px-1.5 py-0.5 rounded-sm ${requestViewTab === 'curl' ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-300 shadow-2xs font-medium' : 'text-gray-500 hover:text-gray-800'}`}
+                          className={`px-1.5 py-0.5 rounded-sm ${requestViewTab === 'curl' ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-300 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-800'}`}
                         >
                           cURL
                         </button>

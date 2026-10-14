@@ -34,7 +34,7 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
       {/* Category sidebar */}
-      <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-3xl p-4 space-y-1 shadow-xs h-fit">
+      <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-3 space-y-1 shadow-sm h-fit">
         <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-3 mb-2 block">
           {isZh ? '接入与规范文档' : 'Documentation & Specs'}
         </span>
@@ -137,7 +137,7 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
       </div>
 
       {/* Doc Content */}
-      <div className="md:col-span-3 bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-3xl p-6 shadow-xs space-y-6">
+      <div className="md:col-span-3 bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-8 shadow-sm space-y-6">
         {docsSection === 'architecture' && (
           <div className="space-y-6">
             <div className="border-b border-slate-100 dark:border-slate-800 pb-3">

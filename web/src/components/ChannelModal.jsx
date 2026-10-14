@@ -28,52 +28,56 @@ export default function ChannelModal({
 
   return (
     <div
-      className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in"
+      className="fixed inset-0 z-50 overflow-hidden bg-slate-900/40 backdrop-blur-sm animate-in fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <form
         onSubmit={onSubmit}
-        className="bg-white dark:bg-[#111726] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-xl w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto"
+        className="fixed inset-y-0 right-0 w-full max-w-xl bg-white dark:bg-[#0F1420] border-l border-slate-200/70 dark:border-slate-800/80 shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-200"
       >
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
+        <div className="p-6 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
           <div>
-            <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 tracking-tight">
+            <h3 className="font-semibold text-base text-slate-900 dark:text-white tracking-tight">
               {editingChannelId ? (isZh ? '编辑服务商' : 'Edit Upstream Provider') : (isZh ? '接入服务商' : 'Connect New Provider')}
             </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              {isZh ? '配置上游模型服务商端点、鉴权密钥与协议映射' : 'Configure upstream endpoint, authentication credentials, and protocol mappings'}
+            </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
+            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Probe Notification */}
-        {probeAlert && (
-          <div
-            className={`p-3 rounded-xl text-xs font-medium border ${
-              probeAlert.type === 'success'
-                ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                : probeAlert.type === 'warning'
-                ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-                : 'bg-rose-50 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800'
-            }`}
-          >
-            {probeAlert.text}
-          </div>
-        )}
+        {/* Scrollable Body */}
+        <div className="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+          {/* Probe Notification */}
+          {probeAlert && (
+            <div
+              className={`p-3.5 rounded-lg text-xs font-medium border ${
+                probeAlert.type === 'success'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                  : probeAlert.type === 'warning'
+                  ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                  : 'bg-rose-50 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+              }`}
+            >
+              {probeAlert.text}
+            </div>
+          )}
 
-        <div className="space-y-3.5 text-xs">
           {/* Field 0: 1-Click Provider Quick Presets */}
           {!editingChannelId && (
-            <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 space-y-2">
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200/80 dark:border-slate-800/80 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="font-semibold text-slate-700 dark:text-slate-300 text-[11px] flex items-center space-x-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                <span className="font-medium text-slate-700 dark:text-slate-300 text-[11px] flex items-center space-x-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-slate-400" />
                   <span>{isZh ? '快捷预设服务商 (点击一键自动填入):' : 'Quick Presets (1-click autofill):'}</span>
                 </span>
               </div>
@@ -81,8 +85,8 @@ export default function ChannelModal({
                 {[
                   { key: 'deepseek', label: 'DeepSeek', badge: isZh ? '官方' : 'Official' },
                   { key: 'gpustack', label: 'GPUStack', badge: isZh ? '私有集群' : 'Cluster' },
-                  { key: 'zhipu', label: '智谱 GLM', badge: isZh ? '国产主流' : 'GLM' },
-                  { key: 'doubao', label: '火山豆包', badge: isZh ? '多模态/视频' : 'Multimodal' },
+                  { key: 'zhipu', label: '智谱 GLM', badge: isZh ? '主流' : 'GLM' },
+                  { key: 'doubao', label: '火山豆包', badge: isZh ? '多模态' : 'Multimodal' },
                   { key: 'moonshot', label: '月之暗面 Kimi', badge: isZh ? '长文本' : 'Kimi' },
                   { key: 'openai', label: 'OpenAI', badge: isZh ? '全协议' : 'Full Suite' },
                   { key: 'anthropic', label: 'Claude', badge: 'Anthropic' },
@@ -94,7 +98,7 @@ export default function ChannelModal({
                     key={p.key}
                     type="button"
                     onClick={() => applyPreset(p.key)}
-                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 dark:hover:border-indigo-700 text-xs font-medium transition flex items-center space-x-1 cursor-pointer shadow-2xs"
+                    className="px-2.5 py-1 rounded-md border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium transition flex items-center space-x-1 cursor-pointer shadow-sm"
                   >
                     <span>{p.label}</span>
                     <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">({p.badge})</span>
@@ -106,7 +110,7 @@ export default function ChannelModal({
 
           {/* Field 1: Name */}
           <div>
-            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+            <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
               {isZh ? '服务商名称' : 'Provider Name'} <span className="text-rose-500">*</span>
             </label>
             <input
@@ -114,13 +118,13 @@ export default function ChannelModal({
               value={newChannel.name}
               onChange={(e) => setNewChannel({ ...newChannel, name: e.target.value })}
               placeholder="gpustack-primary"
-              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 text-xs"
+              className="w-full bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-lg px-3 py-2 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-indigo-500 text-xs shadow-sm transition"
             />
           </div>
 
           {/* Field 2: Base URL + Test Ping */}
           <div>
-            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+            <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
               {isZh ? '服务商 Base URL' : 'Provider Base URL'} <span className="text-rose-500">*</span>
             </label>
             <div className="flex space-x-2">
@@ -155,13 +159,13 @@ export default function ChannelModal({
                   newChannel.type === 'gpustack' ? (isZh ? '例如: http://<GPUStack服务IP或集群域名>/v1-openai' : 'e.g. http://<gpustack-ip-or-domain>/v1-openai') :
                   (isZh ? 'https://api.deepseek.com 或私有网关端点' : 'https://api.deepseek.com or private gateway endpoint')
                 }
-                className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-xs"
+                className="flex-1 bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-lg px-3 py-2 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-indigo-500 font-mono text-xs shadow-sm transition"
               />
               <button
                 type="button"
                 onClick={handleProbeChannel}
                 disabled={probing}
-                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 shadow-2xs transition disabled:opacity-50 shrink-0 cursor-pointer"
+                className="px-3.5 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium flex items-center space-x-1.5 shadow-sm transition disabled:opacity-50 shrink-0 cursor-pointer"
               >
                 {probing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
                 <span>{probing ? (isZh ? '连通中...' : 'Probing...') : (isZh ? '测试连通性' : 'Test Ping')}</span>
@@ -171,7 +175,7 @@ export default function ChannelModal({
 
           {/* Field 3: API Key */}
           <div>
-            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+            <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
               API Key
             </label>
             <div className="relative">
@@ -180,7 +184,7 @@ export default function ChannelModal({
                 value={newChannel.api_key}
                 onChange={(e) => setNewChannel({ ...newChannel, api_key: e.target.value })}
                 placeholder={isZh ? '留空或填 none 表示免密' : 'Leave empty or none for no auth'}
-                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl pl-3 pr-10 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-xs"
+                className="w-full bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-lg pl-3 pr-10 py-2 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-indigo-500 font-mono text-xs shadow-sm transition"
               />
               <button
                 type="button"
@@ -201,19 +205,19 @@ export default function ChannelModal({
           />
 
           {/* Collapsible Advanced Settings */}
-          <details className="group border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 bg-slate-50/60 dark:bg-slate-900/40">
-            <summary className="font-semibold text-slate-700 dark:text-slate-300 cursor-pointer flex items-center justify-between select-none">
+          <details className="group border border-slate-200/80 dark:border-slate-800 rounded-xl p-3.5 bg-slate-50/50 dark:bg-slate-900/40">
+            <summary className="font-medium text-slate-700 dark:text-slate-300 cursor-pointer flex items-center justify-between select-none">
               <span>{isZh ? '高级设置' : 'Advanced Settings'}</span>
               <span className="text-slate-400 group-open:rotate-180 transition-transform text-xs">▼</span>
             </summary>
 
             <div className="pt-3 space-y-3.5 border-t border-slate-200/60 dark:border-slate-800 mt-2.5">
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">{isZh ? '服务引擎类型' : 'Engine Type'}</label>
+                <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">{isZh ? '服务引擎类型' : 'Engine Type'}</label>
                 <select
                   value={newChannel.type}
                   onChange={(e) => setNewChannel({ ...newChannel, type: e.target.value })}
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 text-xs"
+                  className="w-full bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 text-xs shadow-sm"
                 >
                   <option value="gpustack">GPUStack</option>
                   <option value="deepseek">DeepSeek</option>
@@ -248,7 +252,7 @@ export default function ChannelModal({
                     type="number"
                     value={newChannel.priority}
                     onChange={(e) => setNewChannel({ ...newChannel, priority: parseInt(e.target.value) || 1 })}
-                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 font-mono text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 font-mono text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 shadow-sm"
                   />
                 </div>
                 <div>
@@ -257,7 +261,7 @@ export default function ChannelModal({
                     type="number"
                     value={newChannel.weight}
                     onChange={(e) => setNewChannel({ ...newChannel, weight: parseInt(e.target.value) || 10 })}
-                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 font-mono text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 font-mono text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 shadow-sm"
                   />
                 </div>
                 <div>
@@ -266,7 +270,7 @@ export default function ChannelModal({
                     type="number"
                     value={newChannel.timeout_seconds || 60}
                     onChange={(e) => setNewChannel({ ...newChannel, timeout_seconds: parseInt(e.target.value) || 60 })}
-                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 font-mono text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 font-mono text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 shadow-sm"
                   />
                 </div>
               </div>
@@ -274,7 +278,8 @@ export default function ChannelModal({
           </details>
         </div>
 
-        <div className="flex justify-end space-x-3 pt-4 border-t border-slate-100 dark:border-slate-800/80">
+        {/* Sticky Footer */}
+        <div className="p-4 bg-slate-50/70 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-end space-x-3 mt-auto">
           <button
             type="button"
             onClick={onClose}
@@ -284,7 +289,7 @@ export default function ChannelModal({
           </button>
           <button
             type="submit"
-            className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition cursor-pointer"
+            className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium shadow-sm transition cursor-pointer"
           >
             {editingChannelId ? (isZh ? '保存配置' : 'Save Changes') : (isZh ? '确认接入' : 'Connect Provider')}
           </button>

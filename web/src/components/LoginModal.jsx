@@ -193,15 +193,15 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <div className="flex items-center space-x-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 font-bold text-lg">
-              ✨
+            <div className="w-9 h-9 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700">
+              <Key className="w-4 h-4 text-slate-700" />
             </div>
             <div>
-              <h3 className="font-bold text-base text-slate-900 tracking-tight">
+              <h3 className="font-semibold text-base text-slate-900 tracking-tight">
                 {isZh ? 'Airoute 统一门户' : 'Airoute Portal'}
               </h3>
               <p className="text-[11px] text-slate-500">{isZh ? '统一身份验证与额度管理' : 'Unified Auth & Quota Management'}</p>
@@ -209,7 +209,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition cursor-pointer"
+            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -217,7 +217,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
 
         {/* Tab Switcher */}
         {sysConfig.allow_registration ? (
-          <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-2xl text-xs font-bold">
+          <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-lg text-xs font-semibold">
             <button
               type="button"
               onClick={() => {
@@ -225,9 +225,9 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
                 setError('');
                 setSuccessMsg('');
               }}
-              className={`py-2 rounded-xl transition cursor-pointer ${
+              className={`py-2 rounded-md transition cursor-pointer ${
                 activeTab === 'login'
-                  ? 'bg-white text-indigo-600 shadow-xs'
+                  ? 'bg-white text-slate-900 shadow-sm'
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
@@ -240,9 +240,9 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
                 setError('');
                 setSuccessMsg('');
               }}
-              className={`py-2 rounded-xl transition cursor-pointer flex items-center justify-center ${
+              className={`py-2 rounded-md transition cursor-pointer flex items-center justify-center ${
                 activeTab === 'register'
-                  ? 'bg-white text-indigo-600 shadow-xs'
+                  ? 'bg-white text-slate-900 shadow-sm'
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >

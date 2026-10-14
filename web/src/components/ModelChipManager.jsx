@@ -103,7 +103,7 @@ export default function ModelChipManager({ models = [], onChange, lang = 'zh' })
       ) : (
         <div className="space-y-2">
           {/* Tag Container */}
-          <div className="min-h-[76px] max-h-40 overflow-y-auto p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-wrap gap-1.5 items-start content-start">
+          <div className="min-h-[76px] max-h-40 overflow-y-auto p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-wrap gap-1.5 items-start content-start">
             {modelList.length === 0 ? (
               <div className="w-full py-4 text-center text-xs text-slate-400 flex flex-col items-center justify-center space-y-1">
                 <span>{isZh ? '暂无模型' : 'No models'}</span>
@@ -112,7 +112,7 @@ export default function ModelChipManager({ models = [], onChange, lang = 'zh' })
               filteredList.map((m) => (
                 <span
                   key={m}
-                  className="group inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700/80 text-xs font-mono text-slate-800 dark:text-slate-200 shadow-2xs hover:border-indigo-400 transition"
+                  className="group inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700/80 text-xs font-mono text-slate-800 dark:text-slate-200 shadow-sm hover:border-indigo-400 transition"
                 >
                   <span>{m}</span>
                   <button

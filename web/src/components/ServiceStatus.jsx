@@ -291,7 +291,7 @@ export default function ServiceStatus({
     <div className="space-y-6">
       {/* 1. Global System Status Banner */}
       <div
-        className={`p-6 rounded-3xl border shadow-xs transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
+        className={`p-6 rounded-2xl border shadow-sm transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
           anyTripped
             ? 'bg-amber-500/10 border-amber-500/30 text-amber-900'
             : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-950'
@@ -299,33 +299,33 @@ export default function ServiceStatus({
       >
         <div className="flex items-center space-x-4">
           <div
-            className={`w-12 h-12 rounded-2xl flex items-center justify-center inset-shadow-sm shrink-0 ${
+            className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
               anyTripped
                 ? 'bg-amber-500 text-white animate-pulse'
                 : 'bg-emerald-500 text-white'
             }`}
           >
             {anyTripped ? (
-              <AlertTriangle className="w-6 h-6" />
+              <AlertTriangle className="w-5 h-5" />
             ) : (
-              <CheckCircle2 className="w-6 h-6" />
+              <CheckCircle2 className="w-5 h-5" />
             )}
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2 mb-1">
-              <h2 className="text-lg font-bold tracking-tight">
+              <h2 className="text-base font-semibold tracking-tight">
                 {anyTripped
                   ? (t ? t.statusDegraded : (isZh ? '部分模型服务响应延迟偏高或触发熔断降级' : 'Partial service degradation or circuit breaker tripped'))
                   : (t ? t.statusAllOperational : (isZh ? '所有核心模型与网关节点运行正常' : 'All systems and models operational'))}
               </h2>
-              <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-white/40 dark:bg-black/20 border border-current/20 backdrop-blur-xs">
+              <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-white/40 dark:bg-black/20 border border-current/20 backdrop-blur-sm">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>{isZh ? '99.99% 双活集群' : '99.99% Active-Active'}</span>
               </span>
             </div>
             <p className="text-xs opacity-80 mt-0.5">
               {t ? t.statusSubtitle : (isZh ? '实时可用性、响应耗时与最近 30 天服务 SLA 运行看板' : 'Real-time uptime, response latency, and 30-day SLA telemetry')}
-              <span className="ml-2 font-mono text-[11px] opacity-75">
+              <span className="ml-2 font-mono tabular-nums text-[11px] opacity-75">
                 ({isZh ? '更新于 ' : 'Updated at '}{lastUpdated.toLocaleTimeString()})
               </span>
             </p>
@@ -336,9 +336,9 @@ export default function ServiceStatus({
           {/* Auto Refresh Toggle Badge */}
           <button
             onClick={() => setAutoRefresh(!autoRefresh)}
-            className={`flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border transition cursor-pointer ${
+            className={`flex items-center space-x-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition cursor-pointer ${
               autoRefresh
-                ? 'bg-white/90 border-slate-200/80 text-slate-700 shadow-2xs hover:bg-slate-50'
+                ? 'bg-white/90 border-slate-200/80 text-slate-700 shadow-sm hover:bg-slate-50'
                 : 'bg-slate-100 border-slate-300 text-slate-400'
             }`}
             title={autoRefresh ? (isZh ? '点击暂停自动刷新' : 'Click to pause auto refresh') : (isZh ? '点击恢复 30 秒自动刷新' : 'Click to resume 30s auto refresh')}
@@ -361,7 +361,7 @@ export default function ServiceStatus({
           <button
             onClick={handleManualRefresh}
             disabled={loading}
-            className="p-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 transition shadow-2xs flex items-center space-x-1 text-xs font-medium cursor-pointer disabled:opacity-50"
+            className="p-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 transition shadow-sm flex items-center space-x-1 text-xs font-medium cursor-pointer disabled:opacity-50"
             title={t ? t.statusRefresh : (isZh ? '刷新状态' : 'Refresh status')}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-indigo-600' : ''}`} />
@@ -372,7 +372,7 @@ export default function ServiceStatus({
 
       {/* 2. Top SLA Key Performance Indicators (KPI Cards) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3">
+        <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-sm flex flex-col justify-between space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-500">{isZh ? '30 天服务可用率' : '30-Day SLA Uptime'}</span>
             <span className="p-1 rounded-lg bg-emerald-50 text-emerald-600">
@@ -380,12 +380,12 @@ export default function ServiceStatus({
             </span>
           </div>
           <div>
-            <span className="text-2xl font-extrabold text-slate-900 font-mono tracking-tight">99.99%</span>
+            <span className="text-2xl font-bold text-slate-900 font-mono tabular-nums tracking-tight">99.99%</span>
             <span className="text-xs text-emerald-600 font-medium ml-2">{isZh ? 'SLA 达标' : 'SLA Met'}</span>
           </div>
         </div>
 
-        <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3">
+        <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-sm flex flex-col justify-between space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-500">{isZh ? '首字无感容灾率' : 'Zero-Downtime Failover'}</span>
             <span className="p-1 rounded-lg bg-indigo-50 text-indigo-600">
@@ -393,12 +393,12 @@ export default function ServiceStatus({
             </span>
           </div>
           <div>
-            <span className="text-2xl font-extrabold text-indigo-700 font-mono tracking-tight">100%</span>
+            <span className="text-2xl font-bold text-indigo-700 font-mono tabular-nums tracking-tight">100%</span>
             <span className="text-xs text-indigo-600 font-medium ml-2">{isZh ? '毫秒漂移' : 'Sub-50ms MTTR'}</span>
           </div>
         </div>
 
-        <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3">
+        <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-sm flex flex-col justify-between space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-500">{isZh ? '统一治理模型数' : 'Active Model Routes'}</span>
             <span className="p-1 rounded-lg bg-purple-50 text-purple-600">
@@ -406,12 +406,12 @@ export default function ServiceStatus({
             </span>
           </div>
           <div>
-            <span className="text-2xl font-extrabold text-purple-700 font-mono tracking-tight">{rawModels.length}</span>
+            <span className="text-2xl font-bold text-purple-700 font-mono tabular-nums tracking-tight">{rawModels.length}</span>
             <span className="text-xs text-slate-500 ml-1.5 font-sans">{isZh ? '个在线大模型' : 'Online LLMs'}</span>
           </div>
         </div>
 
-        <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3">
+        <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-sm flex flex-col justify-between space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-500">{isZh ? '集群拓扑状态' : 'Cluster Topology'}</span>
             <span className="p-1 rounded-lg bg-sky-50 text-sky-600">
@@ -426,11 +426,11 @@ export default function ServiceStatus({
       </div>
 
       {/* 3. Cluster High-Availability Topology */}
-      <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs space-y-4">
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
           <div className="flex items-center space-x-3.5">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 shrink-0">
-              <Network className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 shrink-0">
+              <Network className="w-4 h-4" />
             </div>
             <div className="flex items-center space-x-2">
               <h3 className="font-bold text-base text-slate-900">
@@ -531,7 +531,7 @@ export default function ServiceStatus({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={isZh ? '搜索模型名称...' : 'Search model ID...'}
-                className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-2xs w-48 sm:w-56"
+                className="pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-sm w-48 sm:w-56"
               />
               {searchQuery && (
                 <button
@@ -543,7 +543,7 @@ export default function ServiceStatus({
               )}
             </div>
 
-            <span className="text-xs text-slate-500 font-mono hidden sm:inline">
+            <span className="text-xs text-slate-500 font-mono tabular-nums hidden sm:inline">
               {isZh ? `显示 ${displayModels.length} / ${rawModels.length}` : `Showing ${displayModels.length} / ${rawModels.length}`}
             </span>
           </div>
@@ -555,14 +555,14 @@ export default function ServiceStatus({
             <button
               key={tab.id}
               onClick={() => setSelectedModality(tab.id)}
-              className={`px-3 py-1.5 rounded-xl font-medium transition cursor-pointer shrink-0 flex items-center space-x-1.5 ${
+              className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer shrink-0 flex items-center space-x-1.5 ${
                 selectedModality === tab.id
-                  ? 'bg-indigo-600 text-white font-semibold shadow-2xs'
+                  ? 'bg-slate-900 text-white font-medium shadow-sm'
                   : 'bg-white border border-slate-200/80 text-slate-600 hover:bg-slate-50'
               }`}
             >
               <span>{tab.label}</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono tabular-nums ${
                 selectedModality === tab.id
                   ? 'bg-white/20 text-white'
                   : 'bg-slate-100 text-slate-500'
@@ -575,12 +575,12 @@ export default function ServiceStatus({
 
         {/* Models Grid */}
         {loading && displayModels.length === 0 ? (
-          <div className="bg-white border border-slate-200/80 rounded-3xl p-12 text-center text-slate-400 text-xs flex flex-col items-center justify-center space-y-2">
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-12 text-center text-slate-400 text-xs flex flex-col items-center justify-center space-y-2">
             <RefreshCw className="w-5 h-5 text-indigo-500 animate-spin" />
             <p>{isZh ? '正在获取实时模型可用性状态...' : 'Fetching live model health telemetry...'}</p>
           </div>
         ) : displayModels.length === 0 ? (
-          <div className="bg-white border border-slate-200/80 rounded-3xl p-12 text-center text-slate-400 text-xs space-y-2">
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-12 text-center text-slate-400 text-xs space-y-2">
             <Filter className="w-8 h-8 text-slate-300 mx-auto" />
             <p>{isZh ? '未找到符合条件的大模型服务' : 'No matching models found'}</p>
             {(searchQuery || selectedModality !== 'all') && (
@@ -602,7 +602,7 @@ export default function ServiceStatus({
               return (
                 <div
                   key={mr.model}
-                  className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-xs hover:border-indigo-400/40 transition space-y-4"
+                  className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm hover:border-indigo-400/40 transition space-y-4"
                 >
                   {/* Model Header */}
                   <div className="flex items-start justify-between">
@@ -710,7 +710,7 @@ export default function ServiceStatus({
 
       {/* 6. Upstream Provider Channels Status */}
       {channels.length > 0 && (
-        <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs space-y-4">
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2">
             <div className="flex items-center space-x-2">
               <Layers className="w-4 h-4 text-indigo-500" />
@@ -723,7 +723,7 @@ export default function ServiceStatus({
               <button
                 onClick={onBatchProbe}
                 disabled={batchTesting}
-                className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50 self-start sm:self-auto"
+                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-medium transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50 self-start sm:self-auto"
               >
                 <Activity className={`w-3.5 h-3.5 ${batchTesting ? 'animate-spin' : ''}`} />
                 <span>{batchTesting ? (isZh ? '正在并发探活...' : 'Probing in parallel...') : (isZh ? '一键探测全部渠道' : 'Probe All Channels')}</span>
@@ -807,15 +807,15 @@ export default function ServiceStatus({
             className="flex items-center space-x-3 cursor-pointer group transition duration-150 hover:opacity-90"
             title={lang === 'zh' ? '点击返回门户首页' : 'Return to Home'}
           >
-            <div className="w-9 h-9 rounded-xl bg-linear-to-tr from-indigo-600 to-sky-500 flex items-center justify-center text-white shadow-sm font-black text-lg">
-              ⚡
+            <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center text-white shadow-sm font-semibold text-sm">
+              AR
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="font-extrabold text-base tracking-tight bg-linear-to-r from-indigo-700 via-purple-700 to-sky-600 bg-clip-text text-transparent">
+                <span className="font-semibold text-base tracking-tight text-slate-900">
                   Airoute
                 </span>
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                   {t ? t.statusOperationalBadge : (isZh ? '运行正常' : 'Operational')}
                 </span>
               </div>
@@ -829,7 +829,7 @@ export default function ServiceStatus({
             {setLang && (
               <button
                 onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
-                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition cursor-pointer"
+                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition cursor-pointer"
               >
                 {lang === 'zh' ? 'EN' : '中'}
               </button>
@@ -837,7 +837,7 @@ export default function ServiceStatus({
 
             <button
               onClick={onBackHome}
-              className="px-3.5 py-1.5 rounded-xl border border-slate-200/80 hover:bg-slate-100 text-slate-700 text-xs font-medium transition cursor-pointer"
+              className="px-3.5 py-1.5 rounded-lg border border-slate-200/80 hover:bg-slate-100 text-slate-700 text-xs font-medium transition cursor-pointer"
             >
               {lang === 'zh' ? '← 返回首页' : '← Home'}
             </button>
@@ -845,7 +845,7 @@ export default function ServiceStatus({
             {isLoggedIn ? (
               <button
                 onClick={onEnterConsole}
-                className="px-4 py-1.5 bg-linear-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center space-x-1.5 transition cursor-pointer"
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-medium shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
               >
                 <Server className="w-3.5 h-3.5" />
                 <span>{lang === 'zh' ? '进入工作台 →' : 'Console →'}</span>
@@ -853,7 +853,7 @@ export default function ServiceStatus({
             ) : (
               <button
                 onClick={onOpenLogin}
-                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center space-x-1.5 transition cursor-pointer"
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-medium shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
               >
                 <span>{lang === 'zh' ? '登录 / 注册' : 'Login / Register'}</span>
               </button>

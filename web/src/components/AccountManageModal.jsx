@@ -100,12 +100,12 @@ export default function AccountManageModal({
 
   return (
     <div
-      className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150"
+      className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-150">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-150">
         {/* Modal Header */}
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center space-x-3">
@@ -199,7 +199,7 @@ export default function AccountManageModal({
               </div>
 
               {/* Wallet Balance Banner */}
-              <div className="p-4 rounded-2xl bg-slate-900 text-white flex items-center justify-between shadow-xs">
+              <div className="p-4 rounded-xl bg-slate-900 text-white flex items-center justify-between shadow-sm">
                 <div className="flex items-center space-x-3">
                   <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-emerald-400">
                     <Wallet className="w-5 h-5" />

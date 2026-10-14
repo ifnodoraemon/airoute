@@ -268,19 +268,19 @@ export default function AiCopilot({
     <div
       className={`fixed z-50 transition-all duration-300 ease-out flex flex-col ${
         isExpanded
-          ? 'inset-4 sm:inset-10 bg-white dark:bg-[#111726] rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800'
-          : 'bottom-6 right-6 w-full max-w-md h-[600px] max-h-[85vh] bg-white dark:bg-[#111726] rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800'
+          ? 'inset-4 sm:inset-10 bg-white dark:bg-[#111726] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800'
+          : 'bottom-6 right-6 w-full max-w-md h-[600px] max-h-[85vh] bg-white dark:bg-[#111726] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800'
       } overflow-hidden animate-in zoom-in-95`}
     >
       {/* Header */}
-      <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-linear-to-r from-indigo-50/80 via-white to-purple-50/80 dark:from-slate-900 dark:via-[#111726] dark:to-purple-950/20">
+      <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-[#111726]">
         <div className="flex items-center space-x-2.5">
-          <div className="w-8 h-8 rounded-xl bg-linear-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+          <div className="w-8 h-8 rounded-lg bg-slate-900 dark:bg-indigo-600 flex items-center justify-center text-white shadow-sm">
             <Sparkles className="w-4 h-4 text-amber-300" />
           </div>
           <div>
             <div className="flex items-center space-x-1.5">
-              <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">
+              <h3 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
                 {isZh ? 'Airoute AI 智能副驾驶' : 'Airoute AI Copilot'}
               </h3>
               <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">
@@ -392,7 +392,7 @@ export default function AiCopilot({
           <button
             key={qa.id}
             onClick={() => handleSend(qa.prompt)}
-            className="px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 border border-slate-200/80 dark:border-slate-700 whitespace-nowrap transition cursor-pointer font-medium shadow-2xs"
+            className="px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 border border-slate-200/80 dark:border-slate-700 whitespace-nowrap transition cursor-pointer font-medium shadow-sm"
           >
             {qa.label}
           </button>

@@ -92,146 +92,139 @@ export default function ChannelsView({
 
   return (
     <div className="space-y-6">
-      {/* Top Header Card */}
-      <div className="bg-white dark:bg-[#111726] p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-4">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      {/* 1. Header (Directly on canvas) */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-200/60 dark:border-emerald-800/60 shadow-xs">
-              <Server className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
-                  {isZh ? '上游模型服务商管理' : 'Upstream Channel Providers'}
-                </h3>
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                  {channels.length} {isZh ? '个节点' : 'nodes'} · {activeChannels.length} {isZh ? '正常' : 'active'}
-                </span>
-                {openBreakers.length > 0 && (
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 animate-pulse">
-                    ⚠️ {openBreakers.length} {isZh ? '个熔断中' : 'tripped'}
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                {isZh
-                  ? '管理 GPUStack 集群、商业大模型厂商上游凭证、健康体检与熔断负载权重'
-                  : 'Manage GPUStack clusters, model provider credentials, health checks, and circuit-breaker weights'}
-              </p>
-            </div>
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
+              {isZh ? '服务商管理' : 'Channel Providers'}
+            </h2>
+            <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+              {channels.length} {isZh ? '个节点' : 'nodes'}
+            </span>
+            {openBreakers.length > 0 && (
+              <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200/60 dark:border-rose-900/40">
+                {openBreakers.length} {isZh ? '个熔断' : 'tripped'}
+              </span>
+            )}
           </div>
-
-          <div className="flex items-center space-x-2.5">
-            <button
-              onClick={handleBatchPing}
-              disabled={batchTesting || channels.length === 0}
-              className="px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-xs font-semibold shadow-xs flex items-center space-x-1.5 transition disabled:opacity-50 cursor-pointer"
-            >
-              <Activity className={`w-3.5 h-3.5 ${batchTesting ? 'animate-spin' : ''}`} />
-              <span>{batchTesting ? (isZh ? '巡检中...' : 'Probing...') : (isZh ? '全量健康体检' : 'Probe All Health')}</span>
-            </button>
-            <button
-              onClick={openNewChannelModal}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>{isZh ? '接入服务商' : 'Add Channel'}</span>
-            </button>
-          </div>
+          <p className="text-xs text-slate-400 mt-1">
+            {isZh
+              ? '管理 GPUStack、商业厂商大模型上游凭证与负载权重'
+              : 'Manage provider credentials, health checks, and circuit-breaker weights'}
+          </p>
         </div>
 
-        {/* Filter Bar */}
-        <div className="flex flex-wrap items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800/80 gap-3 text-xs">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={isZh ? '搜索服务商名称 / 引擎 / 地址 / 模型...' : 'Search provider name, engine, URL, models...'}
-              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
-            />
-          </div>
+        <div className="flex items-center space-x-2.5">
+          <button
+            onClick={handleBatchPing}
+            disabled={batchTesting || channels.length === 0}
+            className="px-3.5 py-2 bg-white dark:bg-[#0F1420] hover:bg-slate-50 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 border border-slate-200/70 dark:border-slate-800/80 rounded-lg text-xs font-medium shadow-sm flex items-center space-x-1.5 transition disabled:opacity-50 cursor-pointer"
+          >
+            <Activity className={`w-3.5 h-3.5 text-slate-400 ${batchTesting ? 'animate-spin text-indigo-500' : ''}`} />
+            <span>{batchTesting ? (isZh ? '巡检中...' : 'Probing...') : (isZh ? '全量体检' : 'Probe All Health')}</span>
+          </button>
+          <button
+            onClick={openNewChannelModal}
+            className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>{isZh ? '接入服务商' : 'Add Channel'}</span>
+          </button>
+        </div>
+      </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Engine Type Filter */}
-            <select
-              value={engineFilter}
-              onChange={(e) => setEngineFilter(e.target.value)}
-              className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-200 font-semibold focus:outline-none cursor-pointer"
+      {/* 2. Filter Bar (Directly on canvas, no card) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={isZh ? '搜索服务商名称 / 引擎 / 地址 / 模型...' : 'Search provider name, engine, URL, models...'}
+            className="w-full bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-800 dark:text-slate-100 shadow-sm focus:outline-none focus:border-indigo-500"
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Engine Type Filter */}
+          <select
+            value={engineFilter}
+            onChange={(e) => setEngineFilter(e.target.value)}
+            className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-lg px-3 py-2 text-xs text-slate-700 dark:text-slate-200 font-medium shadow-sm focus:outline-none cursor-pointer"
+          >
+            <option value="all">{isZh ? '全部引擎' : 'All Engines'}</option>
+            <option value="gpustack">GPUStack</option>
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic Claude</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="sub2api">Sub2API</option>
+          </select>
+
+          {/* Status Filter */}
+          <div className="inline-flex bg-slate-100 dark:bg-slate-800/60 p-0.5 rounded-lg border border-slate-200/60 dark:border-slate-800/60">
+            <button
+              onClick={() => setStatusFilter('all')}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
+                statusFilter === 'all'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm font-semibold'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
             >
-              <option value="all">{isZh ? '全部引擎' : 'All Engines'}</option>
-              <option value="gpustack">GPUStack</option>
-              <option value="openai">OpenAI</option>
-              <option value="anthropic">Anthropic Claude</option>
-              <option value="gemini">Google Gemini</option>
-              <option value="sub2api">Sub2API</option>
-            </select>
-
-            {/* Status Filter */}
-            <div className="inline-flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/80 dark:border-slate-800">
+              {isZh ? '全部' : 'All'}
+            </button>
+            <button
+              onClick={() => setStatusFilter('active')}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
+                statusFilter === 'active'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm font-semibold'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              {isZh ? '正常' : 'Active'}
+            </button>
+            <button
+              onClick={() => setStatusFilter('disabled')}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
+                statusFilter === 'disabled'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm font-semibold'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              {isZh ? '停用' : 'Disabled'}
+            </button>
+            {openBreakers.length > 0 && (
               <button
-                onClick={() => setStatusFilter('all')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
-                  statusFilter === 'all'
-                    ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-2xs font-semibold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                onClick={() => setStatusFilter('breaker_open')}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
+                  statusFilter === 'breaker_open'
+                    ? 'bg-rose-50 text-rose-700 shadow-sm font-semibold'
+                    : 'text-rose-600 hover:text-rose-800'
                 }`}
               >
-                {isZh ? '全部' : 'All'}
+                {isZh ? `熔断 (${openBreakers.length})` : `Tripped (${openBreakers.length})`}
               </button>
-              <button
-                onClick={() => setStatusFilter('active')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
-                  statusFilter === 'active'
-                    ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-2xs font-semibold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-              >
-                {isZh ? '正常' : 'Active'}
-              </button>
-              <button
-                onClick={() => setStatusFilter('disabled')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
-                  statusFilter === 'disabled'
-                    ? 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 shadow-2xs font-semibold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-              >
-                {isZh ? '停用' : 'Disabled'}
-              </button>
-              {openBreakers.length > 0 && (
-                <button
-                  onClick={() => setStatusFilter('breaker_open')}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
-                    statusFilter === 'breaker_open'
-                      ? 'bg-rose-50 text-rose-700 shadow-2xs font-bold'
-                      : 'text-rose-600 hover:text-rose-800'
-                  }`}
-                >
-                  {isZh ? `熔断 (${openBreakers.length})` : `Tripped (${openBreakers.length})`}
-                </button>
-              )}
-            </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Channels Table Content */}
+      {/* 3. Channels Table Content */}
       {channels.length === 0 ? (
-        <div className="bg-white dark:bg-[#111726] border border-dashed border-slate-300 dark:border-slate-800 rounded-3xl p-12 text-center flex flex-col items-center justify-center space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800/80 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-sm">
+        <div className="bg-white dark:bg-[#0F1420] border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center flex flex-col items-center justify-center space-y-3">
+          <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800/80 flex items-center justify-center text-slate-400 shadow-sm">
             <Server className="w-6 h-6" />
           </div>
-          <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100">{isZh ? '暂无模型服务商' : 'No Upstream Providers'}</h4>
-          <p className="text-xs text-slate-500 max-w-sm">
+          <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-100">{isZh ? '暂无模型服务商' : 'No Upstream Providers'}</h4>
+          <p className="text-xs text-slate-400 max-w-sm">
             {isZh
               ? '接入服务商以挂载算力端点，支持 GPUStack、阿里云百炼、火山方舟、OpenAI 等任意兼容接口。'
               : 'Connect upstream providers to mount compute endpoints, supporting GPUStack, Volcengine, OpenAI, and compatible APIs.'}
           </p>
           <button
             onClick={openNewChannelModal}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
+            className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 text-white rounded-lg text-xs font-medium shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>{isZh ? '接入服务商' : 'Add Channel'}</span>
@@ -240,49 +233,49 @@ export default function ChannelsView({
       ) : (
         <div className="space-y-3">
           {selectedChannelIds.length > 0 && (
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 px-5 py-3 rounded-2xl animate-in fade-in gap-3">
-              <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-900 dark:text-indigo-200">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 px-5 py-3 rounded-xl animate-in fade-in gap-3">
+              <div className="flex items-center space-x-2 text-xs font-medium text-slate-800 dark:text-slate-200">
                 <span>{isZh ? `已选中 ${selectedChannelIds.length} 个服务商` : `Selected ${selectedChannelIds.length} channels`}</span>
               </div>
               <div className="flex items-center space-x-2">
                 <button
                   onClick={() => handleBatchStatusChannels('active')}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer"
+                  className="px-3 py-1.5 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 text-white text-xs font-medium rounded-lg shadow-sm transition cursor-pointer"
                 >
                   {isZh ? '批量启用' : 'Batch Enable'}
                 </button>
                 <button
                   onClick={() => handleBatchStatusChannels('disabled')}
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer"
+                  className="px-3 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 text-xs font-medium rounded-lg shadow-sm transition cursor-pointer"
                 >
                   {isZh ? '批量停用' : 'Batch Disable'}
                 </button>
                 <button
                   onClick={handleBatchDeleteChannels}
-                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl shadow-xs transition flex items-center space-x-1 cursor-pointer"
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium rounded-lg shadow-sm transition flex items-center space-x-1 cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>{isZh ? '批量注销' : 'Batch Delete'}</span>
+                  <span>{isZh ? '批量删除' : 'Batch Delete'}</span>
                 </button>
                 <button
                   onClick={() => setSelectedChannelIds([])}
-                  className="px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-medium rounded-xl hover:bg-slate-50 transition cursor-pointer"
+                  className="px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-medium rounded-lg hover:bg-slate-50 transition cursor-pointer"
                 >
-                  {isZh ? '取消选择' : 'Deselect All'}
+                  {isZh ? '取消' : 'Cancel'}
                 </button>
               </div>
             </div>
           )}
 
-          <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-3xl overflow-hidden shadow-xs">
+          <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl overflow-hidden shadow-sm">
             <div className="overflow-x-auto w-full">
               <table className="w-full text-left border-collapse min-w-[850px]">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs uppercase bg-slate-50/80 dark:bg-slate-900/80">
-                  <th className="py-3.5 px-4 w-10 text-center">
+                <tr className="border-b border-slate-100 dark:border-slate-800/80 text-slate-400 text-xs font-medium">
+                  <th className="py-3 px-4 w-10 text-center">
                     <input
                       type="checkbox"
-                      className="rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      className="rounded border-slate-300 text-slate-900 focus:ring-slate-500 cursor-pointer"
                       checked={filteredChannels.length > 0 && selectedChannelIds.length === filteredChannels.length}
                       onChange={(e) => {
                         if (e.target.checked) {
@@ -293,23 +286,23 @@ export default function ChannelsView({
                       }}
                     />
                   </th>
-                  <th className="py-3.5 px-5 font-semibold">{isZh ? '服务商名称 & 健康状态' : 'Provider & Breaker Health'}</th>
-                  <th className="py-3.5 px-5 font-semibold">{isZh ? '服务引擎' : 'Engine'}</th>
-                  <th className="py-3.5 px-5 font-semibold">{isZh ? '上游 Base URL' : 'Base URL'}</th>
-                  <th className="py-3.5 px-5 font-semibold">{isZh ? '开放功能模态' : 'Protocols & Modalities'}</th>
-                  <th className="py-3.5 px-5 font-semibold">{isZh ? '挂载模型与映射' : 'Models & Mappings'}</th>
-                  <th className="py-3.5 px-5 font-semibold">{isZh ? '优先级 / 权重' : 'Priority / Weight'}</th>
-                  <th className="py-3.5 px-5 font-semibold">{isZh ? '启停状态' : 'Status'}</th>
-                  <th className="py-3.5 px-5 text-right font-semibold">{isZh ? '操作' : 'Actions'}</th>
+                  <th className="py-3 px-6">{isZh ? '服务商名称' : 'Provider Name'}</th>
+                  <th className="py-3 px-6">{isZh ? '服务引擎' : 'Engine'}</th>
+                  <th className="py-3 px-6">{isZh ? 'Base URL' : 'Base URL'}</th>
+                  <th className="py-3 px-6">{isZh ? '功能模态' : 'Modalities'}</th>
+                  <th className="py-3 px-6">{isZh ? '支持模型' : 'Models'}</th>
+                  <th className="py-3 px-6">{isZh ? '优先级 / 权重' : 'Priority / Weight'}</th>
+                  <th className="py-3 px-6">{isZh ? '状态' : 'Status'}</th>
+                  <th className="py-3 px-6 text-right">{isZh ? '操作' : 'Actions'}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-sm">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70 text-xs">
                 {filteredChannels.map((ch) => (
-                  <tr key={ch.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition">
+                  <tr key={ch.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition">
                     <td className="py-4 px-4 text-center">
                       <input
                         type="checkbox"
-                        className="rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        className="rounded border-slate-300 text-slate-900 focus:ring-slate-500 cursor-pointer"
                         checked={selectedChannelIds.includes(ch.id)}
                         onChange={(e) => {
                           e.stopPropagation();
@@ -321,218 +314,144 @@ export default function ChannelsView({
                         }}
                       />
                     </td>
-                    <td className="py-4 px-5 font-medium text-slate-900 dark:text-slate-100">
+                    <td className="py-4 px-6 font-medium text-slate-900 dark:text-slate-100">
                       <div className="flex items-center space-x-2">
-                        <span
-                          className={`w-2.5 h-2.5 rounded-full ${
-                            ch.breaker_status === 'OPEN'
-                              ? 'bg-rose-500 animate-ping'
-                              : ch.status === 'active'
-                              ? 'bg-emerald-500'
-                              : 'bg-slate-400'
-                          }`}
-                        ></span>
-                        <span className="font-semibold text-xs">{ch.name}</span>
+                        <span className="font-medium text-xs text-slate-900 dark:text-white">{ch.name}</span>
                       </div>
-                      <div className="flex items-center space-x-1.5 mt-1">
+                      <div className="flex items-center space-x-2 mt-1">
                         {ch.breaker_status && (
-                          <span
-                            className={`inline-block text-[10px] px-2 py-0.5 rounded-sm font-mono font-medium ${
-                              ch.breaker_status === 'OPEN'
-                                ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300'
-                                : ch.breaker_status === 'HALF-OPEN'
-                                ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
-                                : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
-                            }`}
-                          >
-                            Breaker: {ch.breaker_status}
+                          <span className="inline-flex items-center space-x-1 text-[11px] font-mono text-slate-400">
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                ch.breaker_status === 'OPEN'
+                                  ? 'bg-rose-500'
+                                  : ch.breaker_status === 'HALF-OPEN'
+                                  ? 'bg-amber-500 animate-pulse'
+                                  : 'bg-emerald-500'
+                              }`}
+                            />
+                            <span>{ch.breaker_status}</span>
                           </span>
                         )}
                         {channelLatencies[ch.id] && (
-                          <span
-                            className={`text-[10px] px-2 py-0.5 rounded-sm font-mono font-medium ${
-                              channelLatencies[ch.id].success
-                                ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                                : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
-                            }`}
-                          >
-                            {channelLatencies[ch.id].success ? `🟢 ${channelLatencies[ch.id].latency_ms}ms` : (isZh ? '🔴 连通异常' : '🔴 Unreachable')}
+                          <span className="text-[11px] font-mono tabular-nums text-slate-400">
+                            {channelLatencies[ch.id].success ? `${channelLatencies[ch.id].latency_ms}ms` : (isZh ? '超时' : 'Timeout')}
                           </span>
                         )}
                       </div>
                     </td>
-                    <td className="py-4 px-5">
-                      <span
-                        className={`px-2.5 py-1 rounded-lg text-xs font-mono font-medium border ${
-                          ch.type === 'gemini'
-                            ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
-                            : ch.type === 'anthropic'
-                            ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-                            : ch.type === 'gpustack'
-                            ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                            : ch.type === 'sub2api'
-                            ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
-                            : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
-                        }`}
-                      >
+                    <td className="py-4 px-6">
+                      <span className="px-2 py-0.5 rounded text-xs font-mono text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80">
                         {ch.type}
                       </span>
                     </td>
-                    <td className="py-4 px-5 text-slate-600 dark:text-slate-400 font-mono text-xs max-w-xs">
+                    <td className="py-4 px-6 text-slate-500 font-mono text-xs max-w-xs">
                       <div className="flex items-center space-x-1.5">
                         <span className="truncate">{ch.base_url}</span>
                         <button
                           onClick={() => copyToClipboard(ch.base_url)}
-                          className="text-slate-400 hover:text-indigo-500 transition p-1 cursor-pointer"
+                          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition p-0.5 cursor-pointer"
                           title={isZh ? "复制 Base URL" : "Copy Base URL"}
                         >
                           <Copy className="w-3 h-3" />
                         </button>
                       </div>
                     </td>
-                    <td className="py-4 px-5">
-                      <div className="flex flex-wrap gap-1">
+                    <td className="py-4 px-6">
+                      <div className="flex flex-wrap gap-1 max-w-xs">
                         {!ch.protocols || ch.protocols.length === 0 ? (
-                          <span className="px-2 py-0.5 rounded-sm bg-slate-100 dark:bg-slate-800 text-[11px] text-slate-600 dark:text-slate-300 font-medium">
-                            {isZh ? '全功能直通' : 'Full Pass-through'}
+                          <span className="text-slate-400 text-xs font-mono">
+                            {isZh ? '全功能' : 'All'}
                           </span>
                         ) : (
-                          ch.protocols.map((p) => {
+                          ch.protocols.slice(0, 3).map((p) => {
                             let label = p;
-                            let colorClass =
-                              'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700';
-                            if (p === 'openai_chat' || p === 'chat') {
-                              label = isZh ? '💬 对话' : '💬 Chat';
-                              colorClass =
-                                'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800';
-                            } else if (p === 'openai_response' || p === 'responses' || p === 'response') {
-                              label = '⚡ Responses';
-                              colorClass =
-                                'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800';
-                            } else if (p === 'openai_text' || p === 'completion') {
-                              label = isZh ? '📝 补全' : '📝 Completion';
-                              colorClass =
-                                'bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800';
-                            } else if (p === 'anthropic_messages' || p === 'messages') {
-                              label = '🧠 Claude';
-                              colorClass =
-                                'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800';
-                            } else if (p === 'images' || p === 'image_generation') {
-                              label = isZh ? '🎨 生图' : '🎨 Images';
-                              colorClass =
-                                'bg-pink-50 dark:bg-pink-950/50 text-pink-700 dark:text-pink-300 border border-pink-200 dark:border-pink-800';
-                            } else if (p === 'audio_speech' || p === 'tts') {
-                              label = '🔊 TTS';
-                              colorClass =
-                                'bg-cyan-50 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800';
-                            } else if (p === 'audio_transcription' || p === 'stt') {
-                              label = '🎙️ STT';
-                              colorClass =
-                                'bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800';
-                            } else if (p === 'videos' || p === 'video_generation') {
-                              label = isZh ? '🎬 视频' : '🎬 Videos';
-                              colorClass =
-                                'bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800';
-                            } else if (p === 'embeddings' || p === 'embedding') {
-                              label = isZh ? '🧠 向量' : '🧠 Embeddings';
-                              colorClass =
-                                'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800';
-                            } else if (p === 'rerank' || p === 'reranker') {
-                              label = isZh ? '🎯 重排' : '🎯 Rerank';
-                              colorClass =
-                                'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800';
-                            }
+                            if (p === 'openai_chat' || p === 'chat') label = isZh ? '对话' : 'Chat';
+                            else if (p === 'openai_response' || p === 'responses' || p === 'response') label = 'Response';
+                            else if (p === 'openai_text' || p === 'completion') label = isZh ? '补全' : 'Completion';
+                            else if (p === 'anthropic_messages' || p === 'messages') label = 'Messages';
+                            else if (p === 'images' || p === 'image_generation') label = isZh ? '生图' : 'Images';
+                            else if (p === 'audio_speech' || p === 'tts') label = 'TTS';
+                            else if (p === 'audio_transcription' || p === 'stt') label = 'STT';
+                            else if (p === 'videos' || p === 'video_generation') label = isZh ? '视频' : 'Videos';
+                            else if (p === 'embeddings' || p === 'embedding') label = isZh ? '向量' : 'Embeddings';
+                            else if (p === 'rerank' || p === 'reranker') label = isZh ? '重排' : 'Rerank';
                             return (
-                              <span key={p} className={`px-2 py-0.5 rounded-sm text-[11px] font-medium ${colorClass}`}>
+                              <span key={p} className="px-1.5 py-0.5 rounded text-[11px] font-mono text-slate-500 bg-slate-100 dark:bg-slate-800/60">
                                 {label}
                               </span>
                             );
                           })
                         )}
+                        {ch.protocols && ch.protocols.length > 3 && (
+                          <span className="text-[11px] font-mono text-slate-400">
+                            +{ch.protocols.length - 3}
+                          </span>
+                        )}
                       </div>
                     </td>
-                    <td className="py-4 px-5">
+                    <td className="py-4 px-6">
                       <div className="flex flex-wrap gap-1 max-w-xs">
                         {!ch.models || ch.models.length === 0 ? (
-                          <span className="text-xs text-slate-400">{isZh ? '未同步模型' : 'No models synced'}</span>
+                          <span className="text-xs text-slate-400">-</span>
                         ) : (
-                          ch.models.slice(0, 3).map((m) => (
+                          ch.models.slice(0, 2).map((m) => (
                             <span
                               key={m}
-                              className="px-2 py-0.5 rounded-sm bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 text-xs font-mono border border-indigo-100 dark:border-indigo-800"
+                              className="px-1.5 py-0.5 rounded text-[11px] font-mono text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/60"
                             >
                               {m}
                             </span>
                           ))
                         )}
-                        {ch.models && ch.models.length > 3 && (
+                        {ch.models && ch.models.length > 2 && (
                           <span
-                            className="px-2 py-0.5 rounded-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-mono"
-                            title={ch.models.slice(3).join(', ')}
+                            className="px-1.5 py-0.5 rounded text-[11px] font-mono text-slate-400"
+                            title={ch.models.slice(2).join(', ')}
                           >
-                            +{ch.models.length - 3} {isZh ? '更多' : 'more'}
+                            +{ch.models.length - 2}
                           </span>
                         )}
-                        {ch.model_mapping &&
-                          Object.keys(ch.model_mapping).length > 0 &&
-                          Object.entries(ch.model_mapping).map(([k, v]) => (
-                            <span
-                              key={k}
-                              className="px-2 py-0.5 rounded-sm bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 text-[11px] font-mono border border-emerald-200 dark:border-emerald-800"
-                              title={isZh ? `别名映射: ${k} -> ${v}` : `Alias mapping: ${k} -> ${v}`}
-                            >
-                              🔗 {k} → {v}
-                            </span>
-                          ))}
                       </div>
                     </td>
-                    <td className="py-4 px-5 text-slate-700 dark:text-slate-300 font-mono text-xs">
-                      <span className="px-2 py-0.5 rounded-sm bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
-                        {isZh ? '优先级' : 'Priority'}: {ch.priority}
-                      </span>
-                      <span className="px-2 py-0.5 rounded-sm bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 ml-1">
-                        {isZh ? '权重' : 'Weight'}: {ch.weight}
-                      </span>
+                    <td className="py-4 px-6 text-slate-600 dark:text-slate-400 font-mono text-xs tabular-nums">
+                      {ch.priority} / {ch.weight}
                     </td>
-                    <td className="py-4 px-5">
+                    <td className="py-4 px-6">
                       <button
                         onClick={() => toggleSingleStatus(ch)}
-                        className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border transition cursor-pointer ${
-                          ch.status === 'active'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                            : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
-                        }`}
-                        title={isZh ? '点击直接切换启用/停用' : 'Toggle active status'}
+                        className="inline-flex items-center space-x-1.5 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 transition cursor-pointer"
+                        title={isZh ? '点击切换状态' : 'Toggle status'}
                       >
-                        {ch.status === 'active' ? (isZh ? '🟢 生效中' : '🟢 Active') : (isZh ? '⚪ 已停用' : '⚪ Disabled')}
+                        <span className={`w-1.5 h-1.5 rounded-full ${ch.status === 'active' ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                        <span>{ch.status === 'active' ? (isZh ? '正常' : 'Active') : (isZh ? '停用' : 'Disabled')}</span>
                       </button>
                     </td>
-                    <td className="py-4 px-5 text-right space-x-1.5">
+                    <td className="py-4 px-6 text-right space-x-2">
                       <button
                         onClick={() => handleTestChannel(ch)}
                         disabled={testingId === ch.id}
-                        className="text-xs px-2.5 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 font-medium transition inline-flex items-center space-x-1 cursor-pointer"
-                        title={isZh ? '上游连通性与时延测试' : 'Test connectivity & latency'}
+                        className="text-xs px-2.5 py-1 rounded-md bg-white dark:bg-[#0F1420] text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 border border-slate-200/70 dark:border-slate-800/80 font-medium transition inline-flex items-center space-x-1 cursor-pointer shadow-sm"
+                        title={isZh ? '连通性测试' : 'Ping test'}
                       >
                         {testingId === ch.id ? (
-                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          <RefreshCw className="w-3 h-3 animate-spin text-slate-400" />
                         ) : (
-                          <Play className="w-3 h-3" />
+                          <Play className="w-3 h-3 text-slate-400" />
                         )}
                         <span>Ping</span>
                       </button>
                       <button
                         onClick={() => handleEditChannel(ch)}
-                        className="text-xs px-2.5 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/60 border border-amber-200 dark:border-amber-800 font-medium transition inline-flex items-center space-x-1 cursor-pointer"
+                        className="text-xs px-2.5 py-1 rounded-md bg-white dark:bg-[#0F1420] text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 border border-slate-200/70 dark:border-slate-800/80 font-medium transition cursor-pointer shadow-sm"
                       >
-                        <Edit3 className="w-3 h-3" />
-                        <span>{isZh ? '编辑' : 'Edit'}</span>
+                        {isZh ? '编辑' : 'Edit'}
                       </button>
                       <button
                         onClick={() => handleDeleteChannel(ch.id)}
-                        className="text-xs px-2.5 py-1.5 text-rose-600 dark:text-rose-400 hover:text-rose-800 dark:hover:text-rose-300 transition font-medium cursor-pointer"
+                        className="text-xs px-2 py-1 text-slate-400 hover:text-rose-600 transition font-medium cursor-pointer"
                       >
-                        {isZh ? '注销' : 'Delete'}
+                        {isZh ? '删除' : 'Delete'}
                       </button>
                     </td>
                   </tr>
@@ -544,7 +463,7 @@ export default function ChannelsView({
                       {(searchQuery || engineFilter !== 'all' || statusFilter !== 'all') && (
                         <button
                           onClick={() => { setSearchQuery(''); setEngineFilter('all'); setStatusFilter('all'); }}
-                          className="ml-2 text-indigo-600 hover:underline font-semibold"
+                          className="ml-2 text-slate-900 dark:text-white hover:underline font-semibold"
                         >
                           {isZh ? '清除筛选' : 'Clear Filters'}
                         </button>

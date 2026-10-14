@@ -222,7 +222,7 @@ export default function AuthPage({
             <button
               onClick={toggleLang}
               type="button"
-              className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-white/90 border border-slate-200 text-slate-700 hover:text-indigo-600 hover:border-indigo-300 shadow-xs transition cursor-pointer"
+              className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white/90 border border-slate-200 text-slate-700 hover:text-indigo-600 hover:border-indigo-300 shadow-sm transition cursor-pointer"
             >
               <Globe className="w-3.5 h-3.5 text-indigo-600" />
               <span>{isZh ? 'EN' : '中'}</span>
@@ -230,33 +230,33 @@ export default function AuthPage({
           )}
 
           <div className="flex items-center space-x-2">
-            <div className="w-7 h-7 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-sm shadow-indigo-500/30">
+            <div className="w-7 h-7 rounded-lg bg-slate-900 flex items-center justify-center text-white shadow-sm">
               <Zap className="w-4 h-4 fill-white" />
             </div>
-            <span className="font-bold text-sm text-slate-900 tracking-tight">Airoute</span>
+            <span className="font-semibold text-sm text-slate-900 tracking-tight">Airoute</span>
           </div>
         </div>
       </div>
 
       {/* Main Card Container */}
       <div className="max-w-md w-full mx-auto my-auto">
-        <div className="bg-white/95 backdrop-blur-xl border border-slate-200/90 rounded-3xl p-8 shadow-xl shadow-slate-200/50 space-y-6">
+        <div className="bg-white/95 backdrop-blur-xl border border-slate-200/90 rounded-2xl p-8 shadow-xl shadow-slate-200/50 space-y-6">
           {/* Header */}
           <div className="text-center space-y-1.5">
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
               {activeTab === 'login' ? (isZh ? '欢迎回来' : 'Welcome Back') : (isZh ? '账号注册' : 'Create Account')}
             </h2>
           </div>
 
           {/* Tab Switcher */}
           {sysConfig.allow_registration && (
-            <div className="flex p-1 bg-slate-100/90 rounded-2xl">
+            <div className="flex p-1 bg-slate-100/90 rounded-lg">
               <button
                 type="button"
                 onClick={() => setActiveTab('login')}
-                className={`flex-1 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${
+                className={`flex-1 py-2 text-xs font-semibold rounded-md transition cursor-pointer ${
                   activeTab === 'login'
-                    ? 'bg-white text-indigo-700 shadow-xs'
+                    ? 'bg-white text-slate-900 shadow-sm'
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
@@ -265,9 +265,9 @@ export default function AuthPage({
               <button
                 type="button"
                 onClick={() => setActiveTab('register')}
-                className={`flex-1 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${
+                className={`flex-1 py-2 text-xs font-semibold rounded-md transition cursor-pointer ${
                   activeTab === 'register'
-                    ? 'bg-white text-indigo-700 shadow-xs'
+                    ? 'bg-white text-slate-900 shadow-sm'
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >

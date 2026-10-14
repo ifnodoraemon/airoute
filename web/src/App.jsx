@@ -117,7 +117,7 @@ export default function App() {
   };
 
   // Theme State (Dark / Light)
-  const [theme, setTheme] = useState(() => localStorage.getItem('airoute_theme') || 'dark');
+  const [theme, setTheme] = useState(() => localStorage.getItem('airoute_theme') || 'light');
 
   const toggleTheme = () => {
     setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
@@ -1479,7 +1479,7 @@ export default function App() {
 
   return (
     <I18nContext.Provider value={{ lang, setLang, toggleLang, t }}>
-      <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-[#0b0f19] text-slate-800 dark:text-slate-100 font-sans selection:bg-indigo-500 selection:text-white transition-colors duration-200">
+      <div className="flex h-screen overflow-hidden bg-[#FAFAFA] dark:bg-[#0A0D14] text-slate-800 dark:text-slate-100 font-sans selection:bg-indigo-500 selection:text-white transition-colors duration-200">
       {/* Toast Notification */}
       <Toast toast={toast} onClose={() => setToast(prev => ({ ...prev, show: false }))} />
 
@@ -1538,103 +1538,104 @@ export default function App() {
       {mobileMenuOpen && (
         <div
           onClick={() => setMobileMenuOpen(false)}
-          className="fixed inset-0 bg-slate-900/60 z-30 md:hidden backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 bg-slate-900/60 z-30 md:hidden backdrop-blur-sm animate-in fade-in"
         />
       )}
 
       {/* Sidebar */}
       <aside
-        className={`bg-white/95 dark:bg-[#111726]/95 border-r border-slate-200/80 dark:border-slate-800/80 flex flex-col backdrop-blur-xl shadow-xs shrink-0 transition-all duration-200 z-30 ${
-          sidebarCollapsed ? 'w-20' : 'w-64'
+        className={`bg-white dark:bg-[#0F1420] border-r border-slate-200/70 dark:border-slate-800/80 flex flex-col shrink-0 transition-all duration-200 z-30 ${
+          sidebarCollapsed ? 'w-16' : 'w-56'
         } ${
-          mobileMenuOpen ? 'fixed inset-y-0 left-0 w-64 shadow-2xl flex' : 'hidden md:flex'
+          mobileMenuOpen ? 'fixed inset-y-0 left-0 w-56 shadow-2xl flex' : 'hidden md:flex'
         }`}
       >
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+        <div className="h-16 px-4 border-b border-slate-100 dark:border-slate-800/70 flex items-center justify-between">
           <div
             onClick={() => setViewMode('landing')}
-            className="flex items-center space-x-3 cursor-pointer group transition duration-150 hover:opacity-90"
+            className={`flex items-center ${sidebarCollapsed ? 'justify-center w-full' : 'space-x-2.5'} cursor-pointer group transition hover:opacity-90`}
             title={lang === 'zh' ? '点击返回门户首页' : 'Return to product portal'}
           >
-            <div className="w-10 h-10 rounded-2xl bg-linear-to-tr from-indigo-600 via-indigo-500 to-sky-400 flex items-center justify-center shadow-lg shadow-indigo-500/25 text-white shrink-0 group-hover:shadow-indigo-500/40 transition">
-              <Zap className="w-5 h-5 fill-white text-white" />
+            <div className="w-8 h-8 rounded-lg bg-slate-900 dark:bg-indigo-600 flex items-center justify-center text-white shrink-0 shadow-sm">
+              <Zap className="w-4 h-4 fill-white text-white" />
             </div>
             {!sidebarCollapsed && (
-              <div>
-                <h1 className="font-bold text-base text-slate-900 dark:text-slate-100 tracking-tight group-hover:text-indigo-600 transition">
+              <div className="min-w-0">
+                <h1 className="font-semibold text-sm text-slate-900 dark:text-slate-100 tracking-tight leading-none">
                   Airoute
                 </h1>
-                <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold tracking-wide block">
-                  {t.brandSubtitle}
+                <span className="text-[10px] text-slate-400 font-mono tracking-tight block mt-1">
+                  AI Gateway
                 </span>
               </div>
             )}
           </div>
 
-          <button
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="hidden md:flex p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-            title={sidebarCollapsed ? (isZh ? '展开侧边栏' : 'Expand sidebar') : (isZh ? '收起侧边栏' : 'Collapse sidebar')}
-          >
-            {sidebarCollapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
-          </button>
+          {!sidebarCollapsed && (
+            <button
+              onClick={() => setSidebarCollapsed(true)}
+              className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              title={isZh ? '收起侧边栏' : 'Collapse sidebar'}
+            >
+              <PanelLeftClose className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
-        {/* Command Palette Trigger */}
-        <div className="px-4 py-2.5 border-b border-slate-100">
-          <button
-            onClick={() => setShowCommandPalette(true)}
-            className="w-full flex items-center justify-between px-3 py-2 bg-slate-100/80 hover:bg-slate-200/70 border border-slate-200/80 rounded-xl text-xs text-slate-500 hover:text-slate-800 transition cursor-pointer"
-            title={isZh ? '快捷搜索 / 指令面板 (⌘K)' : 'Command Palette (⌘K)'}
-          >
-            <div className="flex items-center space-x-2">
-              <Search className="w-3.5 h-3.5 text-slate-400" />
-              <span>{isZh ? '快速检索 / 指令' : 'Quick Search / Command'}</span>
-            </div>
-            <kbd className="text-[10px] bg-white border border-slate-200 rounded-sm px-1.5 py-0.5 font-mono font-semibold text-slate-400">
-              ⌘K
-            </kbd>
-          </button>
-        </div>
+        {sidebarCollapsed && (
+          <div className="p-2 border-b border-slate-100 dark:border-slate-800/70 flex justify-center">
+            <button
+              onClick={() => setSidebarCollapsed(false)}
+              className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              title={isZh ? '展开侧边栏' : 'Expand sidebar'}
+            >
+              <PanelLeft className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
-        <nav className="flex-1 p-3 space-y-4 overflow-y-auto">
+        <nav className="flex-1 p-2 space-y-4 overflow-y-auto">
           {adminUser?.role === 'admin' ? (
             /* Admin Grouped Enterprise Navigation */
             <div className="space-y-4">
               {/* Group 1: 监控与分析 */}
               <div>
-                <span className="px-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase block mb-1">
-                  {isZh ? '监控与分析' : 'Monitoring & Analytics'}
-                </span>
-                <div className="space-y-1">
+                {!sidebarCollapsed && (
+                  <span className="px-2.5 text-[10px] font-semibold tracking-wider text-slate-400 uppercase block mb-1">
+                    {isZh ? '监控与分析' : 'Monitoring'}
+                  </span>
+                )}
+                <div className="space-y-0.5">
                   <button
                     onClick={() => setCurrentTab('dashboard')}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                    title={t.navDashboard}
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                       currentTab === 'dashboard'
-                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
-                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                        ? 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-white font-semibold'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
                     <div className="flex items-center space-x-2.5">
-                      <BarChart3 className="w-4 h-4 text-indigo-500" />
-                      <span>{t.navDashboard}</span>
+                      <BarChart3 className={`w-4 h-4 shrink-0 ${currentTab === 'dashboard' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`} />
+                      {!sidebarCollapsed && <span>{t.navDashboard}</span>}
                     </div>
                   </button>
 
                   <button
                     onClick={() => setCurrentTab('logs')}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                    title={t.navLogs}
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                       currentTab === 'logs'
-                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
-                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                        ? 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-white font-semibold'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
                     <div className="flex items-center space-x-2.5">
-                      <History className="w-4 h-4 text-sky-500" />
-                      <span>{t.navLogs}</span>
+                      <History className={`w-4 h-4 shrink-0 ${currentTab === 'logs' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`} />
+                      {!sidebarCollapsed && <span>{t.navLogs}</span>}
                     </div>
-                    {logs.length > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md font-mono bg-slate-100 text-slate-500">
+                    {!sidebarCollapsed && logs.length > 0 && (
+                      <span className="text-xs font-mono text-slate-400">
                         {logs.length}
                       </span>
                     )}
@@ -1644,24 +1645,27 @@ export default function App() {
 
               {/* Group 2: 模型网关与调度 */}
               <div>
-                <span className="px-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase block mb-1">
-                  {isZh ? '模型网关与调度' : 'Gateway & Routing'}
-                </span>
-                <div className="space-y-1">
+                {!sidebarCollapsed && (
+                  <span className="px-2.5 text-[10px] font-semibold tracking-wider text-slate-400 uppercase block mb-1">
+                    {isZh ? '模型网关与调度' : 'Gateway'}
+                  </span>
+                )}
+                <div className="space-y-0.5">
                   <button
                     onClick={() => setCurrentTab('models')}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                    title={t.navModels}
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                       currentTab === 'models'
-                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
-                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                        ? 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-white font-semibold'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
                     <div className="flex items-center space-x-2.5">
-                      <Cpu className="w-4 h-4 text-pink-500" />
-                      <span>{t.navModels}</span>
+                      <Cpu className={`w-4 h-4 shrink-0 ${currentTab === 'models' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`} />
+                      {!sidebarCollapsed && <span>{t.navModels}</span>}
                     </div>
-                    {models.length > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md font-mono bg-slate-100 text-slate-500">
+                    {!sidebarCollapsed && models.length > 0 && (
+                      <span className="text-xs font-mono text-slate-400">
                         {models.length}
                       </span>
                     )}
@@ -1669,18 +1673,19 @@ export default function App() {
 
                   <button
                     onClick={() => setCurrentTab('channels')}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                    title={t.navChannels}
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                       currentTab === 'channels'
-                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
-                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                        ? 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-white font-semibold'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
                     <div className="flex items-center space-x-2.5">
-                      <Server className="w-4 h-4 text-emerald-500" />
-                      <span>{t.navChannels}</span>
+                      <Server className={`w-4 h-4 shrink-0 ${currentTab === 'channels' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`} />
+                      {!sidebarCollapsed && <span>{t.navChannels}</span>}
                     </div>
-                    {channels.length > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md font-mono bg-slate-100 text-slate-500">
+                    {!sidebarCollapsed && channels.length > 0 && (
+                      <span className="text-xs font-mono text-slate-400">
                         {channels.length}
                       </span>
                     )}
@@ -1688,15 +1693,16 @@ export default function App() {
 
                   <button
                     onClick={() => setCurrentTab('pricing')}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                    title={t.navPricing}
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                       currentTab === 'pricing'
-                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
-                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                        ? 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-white font-semibold'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
                     <div className="flex items-center space-x-2.5">
-                      <DollarSign className="w-4 h-4 text-emerald-600" />
-                      <span>{t.navPricing}</span>
+                      <DollarSign className={`w-4 h-4 shrink-0 ${currentTab === 'pricing' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`} />
+                      {!sidebarCollapsed && <span>{t.navPricing}</span>}
                     </div>
                   </button>
                 </div>
@@ -1704,24 +1710,27 @@ export default function App() {
 
               {/* Group 3: 访问控制与资产 */}
               <div>
-                <span className="px-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase block mb-1">
-                  {isZh ? '安全与身份资产' : 'Security & Identity'}
-                </span>
-                <div className="space-y-1">
+                {!sidebarCollapsed && (
+                  <span className="px-2.5 text-[10px] font-semibold tracking-wider text-slate-400 uppercase block mb-1">
+                    {isZh ? '安全与资产' : 'Security'}
+                  </span>
+                )}
+                <div className="space-y-0.5">
                   <button
                     onClick={() => setCurrentTab('keys')}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                    title={t.navKeys}
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                       currentTab === 'keys'
-                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
-                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                        ? 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-white font-semibold'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
                     <div className="flex items-center space-x-2.5">
-                      <Key className="w-4 h-4 text-amber-500" />
-                      <span>{t.navKeys}</span>
+                      <Key className={`w-4 h-4 shrink-0 ${currentTab === 'keys' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`} />
+                      {!sidebarCollapsed && <span>{t.navKeys}</span>}
                     </div>
-                    {keys.length > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md font-mono bg-slate-100 text-slate-500">
+                    {!sidebarCollapsed && keys.length > 0 && (
+                      <span className="text-xs font-mono text-slate-400">
                         {keys.length}
                       </span>
                     )}
@@ -1729,79 +1738,86 @@ export default function App() {
 
                   <button
                     onClick={() => setCurrentTab('users')}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                    title={t.navUsers || (isZh ? '用户管理' : 'User Management')}
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                       currentTab === 'users'
-                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
-                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                        ? 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-white font-semibold'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
                     <div className="flex items-center space-x-2.5">
-                      <ShieldCheck className="w-4 h-4 text-indigo-600" />
-                      <span>{t.navUsers}</span>
+                      <ShieldCheck className={`w-4 h-4 shrink-0 ${currentTab === 'users' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`} />
+                      {!sidebarCollapsed && <span>{t.navUsers || (isZh ? '用户管理' : 'Users')}</span>}
                     </div>
                   </button>
 
                   <button
                     onClick={() => setCurrentTab('wallet')}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                    title={isZh ? '卡密与充值' : 'Wallet & Credits'}
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                       currentTab === 'wallet'
-                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
-                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                        ? 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-white font-semibold'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
                     <div className="flex items-center space-x-2.5">
-                      <Wallet className="w-4 h-4 text-teal-600" />
-                      <span>{isZh ? '卡密与充值' : 'Wallet & Credits'}</span>
+                      <Wallet className={`w-4 h-4 shrink-0 ${currentTab === 'wallet' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`} />
+                      {!sidebarCollapsed && <span>{isZh ? '卡密与充值' : 'Wallet & Credits'}</span>}
                     </div>
                   </button>
                 </div>
               </div>
 
-              {/* Group 4: 演练与扩展 */}
+              {/* Group 4: 演练与协议生态 */}
               <div>
-                <span className="px-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase block mb-1">
-                  {isZh ? '演练与协议生态' : 'Playground & Ecosystem'}
-                </span>
-                <div className="space-y-1">
+                {!sidebarCollapsed && (
+                  <span className="px-2.5 text-[10px] font-semibold tracking-wider text-slate-400 uppercase block mb-1">
+                    {isZh ? '演练与生态' : 'Ecosystem'}
+                  </span>
+                )}
+                <div className="space-y-0.5">
                   <button
                     onClick={() => setCurrentTab('playground')}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                    title={t.navPlayground}
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                       currentTab === 'playground'
-                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
-                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                        ? 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-white font-semibold'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
                     <div className="flex items-center space-x-2.5">
-                      <Terminal className="w-4 h-4 text-purple-500" />
-                      <span>{t.navPlayground}</span>
+                      <Terminal className={`w-4 h-4 shrink-0 ${currentTab === 'playground' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`} />
+                      {!sidebarCollapsed && <span>{t.navPlayground}</span>}
                     </div>
                   </button>
 
                   <button
                     onClick={() => setCurrentTab('skills')}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                    title={t.navSkills || 'Skill Hub'}
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                       currentTab === 'skills'
-                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
-                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                        ? 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-white font-semibold'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
                     <div className="flex items-center space-x-2.5">
-                      <Sparkles className="w-4 h-4 text-amber-500" />
-                      <span>{t.navSkills || 'Skill Hub'}</span>
+                      <Sparkles className={`w-4 h-4 shrink-0 ${currentTab === 'skills' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`} />
+                      {!sidebarCollapsed && <span>{t.navSkills || 'Skill Hub'}</span>}
                     </div>
                   </button>
 
                   <button
                     onClick={() => setCurrentTab('mcp')}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                    title={t.navMcp || (isZh ? 'MCP 广场' : 'MCP Hub')}
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                       currentTab === 'mcp'
-                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
-                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                        ? 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-white font-semibold'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
                     <div className="flex items-center space-x-2.5">
-                      <Cpu className="w-4 h-4 text-indigo-500" />
-                      <span>{t.navMcp || (isZh ? 'MCP 广场' : 'MCP Hub')}</span>
+                      <Cpu className={`w-4 h-4 shrink-0 ${currentTab === 'mcp' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`} />
+                      {!sidebarCollapsed && <span>{t.navMcp || (isZh ? 'MCP 广场' : 'MCP Hub')}</span>}
                     </div>
                   </button>
                 </div>
@@ -1811,38 +1827,42 @@ export default function App() {
             /* Regular User Navigation */
             <div className="space-y-4">
               <div>
-                <span className="px-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase block mb-1">
-                  {isZh ? '资产与凭据' : 'Assets & Credentials'}
-                </span>
-                <div className="space-y-1">
+                {!sidebarCollapsed && (
+                  <span className="px-2.5 text-[10px] font-semibold tracking-wider text-slate-400 uppercase block mb-1">
+                    {isZh ? '资产与凭据' : 'Assets'}
+                  </span>
+                )}
+                <div className="space-y-0.5">
                   <button
                     onClick={() => setCurrentTab('wallet')}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                    title={t.navWallet || (isZh ? '我的钱包' : 'My Wallet')}
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                       currentTab === 'wallet'
-                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
-                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                        ? 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-white font-semibold'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
                     <div className="flex items-center space-x-2.5">
-                      <Wallet className="w-4 h-4 text-emerald-600" />
-                      <span>{t.navWallet || (isZh ? '我的钱包' : 'My Wallet')}</span>
+                      <Wallet className={`w-4 h-4 shrink-0 ${currentTab === 'wallet' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`} />
+                      {!sidebarCollapsed && <span>{t.navWallet || (isZh ? '我的钱包' : 'My Wallet')}</span>}
                     </div>
                   </button>
 
                   <button
                     onClick={() => setCurrentTab('keys')}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                    title={t.navKeys}
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                       currentTab === 'keys'
-                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
-                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                        ? 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-white font-semibold'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
                     <div className="flex items-center space-x-2.5">
-                      <Key className="w-4 h-4 text-amber-500" />
-                      <span>{t.navKeys}</span>
+                      <Key className={`w-4 h-4 shrink-0 ${currentTab === 'keys' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`} />
+                      {!sidebarCollapsed && <span>{t.navKeys}</span>}
                     </div>
-                    {keys.length > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md font-mono bg-slate-100 text-slate-500">
+                    {!sidebarCollapsed && keys.length > 0 && (
+                      <span className="text-xs font-mono text-slate-400">
                         {keys.length}
                       </span>
                     )}
@@ -1851,49 +1871,54 @@ export default function App() {
               </div>
 
               <div>
-                <span className="px-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase block mb-1">
-                  {isZh ? '演练与使用' : 'Playground & Usage'}
-                </span>
-                <div className="space-y-1">
+                {!sidebarCollapsed && (
+                  <span className="px-2.5 text-[10px] font-semibold tracking-wider text-slate-400 uppercase block mb-1">
+                    {isZh ? '演练与使用' : 'Usage'}
+                  </span>
+                )}
+                <div className="space-y-0.5">
                   <button
                     onClick={() => setCurrentTab('playground')}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                    title={t.navPlayground}
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                       currentTab === 'playground'
-                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
-                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                        ? 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-white font-semibold'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
                     <div className="flex items-center space-x-2.5">
-                      <Terminal className="w-4 h-4 text-purple-500" />
-                      <span>{t.navPlayground}</span>
+                      <Terminal className={`w-4 h-4 shrink-0 ${currentTab === 'playground' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`} />
+                      {!sidebarCollapsed && <span>{t.navPlayground}</span>}
                     </div>
                   </button>
 
                   <button
                     onClick={() => setCurrentTab('pricing')}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                    title={t.navPricing}
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                       currentTab === 'pricing'
-                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
-                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                        ? 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-white font-semibold'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
                     <div className="flex items-center space-x-2.5">
-                      <DollarSign className="w-4 h-4 text-emerald-500" />
-                      <span>{t.navPricing}</span>
+                      <DollarSign className={`w-4 h-4 shrink-0 ${currentTab === 'pricing' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`} />
+                      {!sidebarCollapsed && <span>{t.navPricing}</span>}
                     </div>
                   </button>
 
                   <button
                     onClick={() => setCurrentTab('logs')}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                    title={t.navLogs}
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                       currentTab === 'logs'
-                        ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 shadow-xs font-bold'
-                        : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 border-transparent'
+                        ? 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-white font-semibold'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
                     <div className="flex items-center space-x-2.5">
-                      <History className="w-4 h-4 text-sky-500" />
-                      <span>{t.navLogs}</span>
+                      <History className={`w-4 h-4 shrink-0 ${currentTab === 'logs' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`} />
+                      {!sidebarCollapsed && <span>{t.navLogs}</span>}
                     </div>
                   </button>
                 </div>
@@ -1901,7 +1926,7 @@ export default function App() {
             </div>
           )}
 
-          <div className="pt-3 mt-2 border-t border-slate-100">
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800/70">
             <button
               onClick={() => {
                 setViewMode('landing');
@@ -1910,183 +1935,136 @@ export default function App() {
                   if (el) el.scrollIntoView({ behavior: 'smooth' });
                 }, 100);
               }}
-              className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl border border-slate-200/70 bg-slate-50/50 hover:bg-indigo-50/50 hover:border-indigo-200 text-xs font-semibold text-slate-600 hover:text-indigo-600 transition cursor-pointer group"
-              title={isZh ? '前往门户首页查阅交互式开发文档' : 'Go to portal to view interactive developer documentation'}
+              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/40 transition cursor-pointer group`}
+              title={isZh ? '查阅开发文档' : 'Documentation'}
             >
               <div className="flex items-center space-x-2.5">
-                <BookOpen className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-500" />
-                <span>{t.navViewDocs || (isZh ? '开发文档 ↗' : 'API Docs ↗')}</span>
+                <BookOpen className="w-4 h-4 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200" />
+                {!sidebarCollapsed && <span>{t.navViewDocs || (isZh ? '开发文档 ↗' : 'Docs ↗')}</span>}
               </div>
-              <ExternalLink className="w-3 h-3 opacity-50 group-hover:opacity-100" />
+              {!sidebarCollapsed && <ExternalLink className="w-3 h-3 opacity-40 group-hover:opacity-80" />}
             </button>
           </div>
         </nav>
 
         {/* Sidebar bottom status */}
-        <div className="p-4 border-t border-slate-100 text-xs text-slate-500 flex flex-col space-y-2 bg-slate-50/60">
-          <div className="flex items-center justify-between">
-            <button
-              type="button"
-              onClick={() => setViewMode('status')}
-              className="flex items-center space-x-1.5 text-emerald-600 hover:text-emerald-700 font-medium text-xs cursor-pointer hover:underline"
-              title={isZh ? '查看公开对外服务健康状态页面' : 'View public service status page'}
-            >
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>{t.statusOperationalBadge}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('status')}
-              className="text-[11px] text-indigo-600 hover:text-indigo-800 hover:underline font-medium cursor-pointer"
-              title={isZh ? '查看公开对外服务健康状态页面' : 'View public service status page'}
-            >
-              {isZh ? '对外状态页 ↗' : 'Public Status ↗'}
-            </button>
-          </div>
+        <div className="p-3 border-t border-slate-100 dark:border-slate-800/70 text-xs">
+          <button
+            type="button"
+            onClick={() => setViewMode('status')}
+            className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-2'} text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition cursor-pointer`}
+            title={isZh ? '查看公开服务状态' : 'Public Status'}
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+            {!sidebarCollapsed && <span className="text-[11px] font-mono">{t.statusOperationalBadge}</span>}
+          </button>
         </div>
       </aside>
 
       {/* Main Container */}
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         {/* Top Header */}
-        <header className="h-16 bg-white/90 dark:bg-[#111726]/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between px-4 sm:px-8 sticky top-0 z-20 shadow-xs">
+        <header className="h-16 bg-[#FAFAFA]/85 dark:bg-[#0A0D14]/85 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800/60 flex items-center justify-between px-8 lg:px-12 sticky top-0 z-20">
           <div className="flex items-center space-x-3">
             {/* Mobile Hamburger Toggle */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 rounded-xl text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              className="md:hidden p-2 rounded-lg text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
               title={isZh ? '打开导航栏' : 'Toggle navigation menu'}
             >
               <Menu className="w-5 h-5" />
             </button>
 
-            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 tracking-tight">
-              {currentTab === 'dashboard' && t.navDashboard}
-              {currentTab === 'models' && t.navModels}
-              {currentTab === 'pricing' && t.navPricing}
-              {currentTab === 'channels' && t.navChannels}
-              {currentTab === 'keys' && t.navKeys}
-              {currentTab === 'wallet' && (adminUser?.role === 'admin' ? (isZh ? '卡密与充值管理' : 'Wallet & Credits') : (t.navWallet || (isZh ? '我的钱包' : 'My Wallet')))}
-              {currentTab === 'logs' && t.navLogs}
-              {currentTab === 'skills' && (t.navSkills || 'Skill Hub')}
-              {currentTab === 'mcp' && (t.navMcp || (isZh ? 'MCP 广场' : 'MCP Hub'))}
-              {currentTab === 'users' && (t.navUsers || (isZh ? '用户管理' : 'User Management'))}
-              {currentTab === 'playground' && t.navPlayground}
-              {currentTab === 'docs' && t.navDocs}
-            </h2>
+            {/* Clean Breadcrumb */}
+            <div className="flex items-center space-x-2 text-xs">
+              <span className="text-slate-400 font-normal">
+                {adminUser?.role === 'admin'
+                  ? ['dashboard', 'logs'].includes(currentTab)
+                    ? (isZh ? '监控与分析' : 'Monitoring')
+                    : ['models', 'channels', 'pricing'].includes(currentTab)
+                    ? (isZh ? '模型网关与调度' : 'Gateway')
+                    : ['keys', 'users', 'wallet'].includes(currentTab)
+                    ? (isZh ? '安全与资产' : 'Security')
+                    : (isZh ? '演练与生态' : 'Ecosystem')
+                  : ['wallet', 'keys'].includes(currentTab)
+                  ? (isZh ? '资产与凭据' : 'Assets')
+                  : (isZh ? '演练与使用' : 'Usage')}
+              </span>
+              <span className="text-slate-300 dark:text-slate-700">/</span>
+              <span className="font-semibold text-slate-900 dark:text-slate-100">
+                {currentTab === 'dashboard' && t.navDashboard}
+                {currentTab === 'models' && t.navModels}
+                {currentTab === 'pricing' && t.navPricing}
+                {currentTab === 'channels' && t.navChannels}
+                {currentTab === 'keys' && t.navKeys}
+                {currentTab === 'wallet' && (adminUser?.role === 'admin' ? (isZh ? '卡密与充值' : 'Wallet & Credits') : (t.navWallet || (isZh ? '我的钱包' : 'My Wallet')))}
+                {currentTab === 'logs' && t.navLogs}
+                {currentTab === 'skills' && (t.navSkills || 'Skill Hub')}
+                {currentTab === 'mcp' && (t.navMcp || (isZh ? 'MCP 广场' : 'MCP Hub'))}
+                {currentTab === 'users' && (t.navUsers || (isZh ? '用户管理' : 'User Management'))}
+                {currentTab === 'playground' && t.navPlayground}
+                {currentTab === 'docs' && t.navDocs}
+              </span>
+            </div>
+          </div>
 
+          <div className="flex items-center space-x-2.5">
+            {/* Command Palette Trigger */}
             <button
               onClick={() => setShowCommandPalette(true)}
-              className="hidden lg:flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200/80 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition cursor-pointer shadow-2xs ml-3"
+              className="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-white dark:bg-[#0F1420] hover:bg-slate-50 dark:hover:bg-slate-800/80 border border-slate-200/70 dark:border-slate-800/80 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition cursor-pointer shadow-sm"
               title={isZh ? '全局快捷检索与指令面板 (⌘K)' : 'Command Palette (⌘K)'}
             >
               <Search className="w-3.5 h-3.5 text-slate-400" />
-              <span>{isZh ? '快速搜索指令或模型...' : 'Quick search commands or models...'}</span>
-              <kbd className="text-[10px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-sm px-1.5 py-0.5 font-mono font-semibold text-slate-400">
+              <span>{isZh ? '快速搜索...' : 'Search...'}</span>
+              <kbd className="text-[10px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-1.5 py-0.5 font-mono text-slate-400">
                 ⌘K
               </kbd>
             </button>
-          </div>
 
-          <div className="flex items-center space-x-2 sm:space-x-2.5">
             {/* Visual Topology Modal Trigger */}
             <button
               onClick={() => setShowTopologyModal(true)}
-              className="hidden sm:flex text-xs px-2.5 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-semibold items-center space-x-1.5 transition border border-indigo-200 dark:border-indigo-800 shadow-2xs cursor-pointer"
+              className="hidden sm:flex text-xs px-3 py-1.5 rounded-lg bg-white dark:bg-[#0F1420] hover:bg-slate-50 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 font-medium items-center space-x-1.5 transition border border-slate-200/70 dark:border-slate-800/80 shadow-sm cursor-pointer"
               title={isZh ? '查看可视化路由拓扑与容灾流程' : 'View Visual Routing Topology & Failover'}
             >
-              <Layers className="w-3.5 h-3.5" />
+              <Layers className="w-3.5 h-3.5 text-slate-400" />
               <span>{isZh ? '容灾拓扑' : 'Topology'}</span>
-            </button>
-
-            {/* Guided Onboarding Trigger */}
-            <button
-              onClick={() => setShowOnboardingModal(true)}
-              className="text-xs px-2.5 py-1.5 rounded-xl bg-linear-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white font-semibold flex items-center space-x-1.5 transition shadow-xs cursor-pointer"
-              title={isZh ? '打开开发者极速上手指引向导' : 'Open Developer Guided Onboarding'}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{isZh ? '新手向导' : 'Onboarding'}</span>
             </button>
 
             {/* Theme Toggle Button */}
             <button
               onClick={toggleTheme}
-              className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition border border-slate-200 dark:border-slate-700 shadow-2xs cursor-pointer"
+              className="p-2 rounded-lg bg-white dark:bg-[#0F1420] hover:bg-slate-50 dark:hover:bg-slate-800/80 text-slate-600 dark:text-slate-300 transition border border-slate-200/70 dark:border-slate-800/80 shadow-sm cursor-pointer"
               title={theme === 'dark' ? (isZh ? '切换为浅色模式' : 'Switch to Light Mode') : (isZh ? '切换为深色模式' : 'Switch to Dark Mode')}
             >
-              {theme === 'dark' ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-indigo-600" />}
+              {theme === 'dark' ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-slate-500" />}
             </button>
 
             {/* Language Switcher Pill */}
             <button
               onClick={toggleLang}
-              className="text-xs px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold flex items-center space-x-1 transition border border-slate-200 dark:border-slate-700 shadow-2xs cursor-pointer"
+              className="text-xs px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#0F1420] hover:bg-slate-50 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 font-medium flex items-center space-x-1 transition border border-slate-200/70 dark:border-slate-800/80 shadow-sm cursor-pointer"
               title={lang === 'zh' ? 'Switch to English' : '切换为简体中文'}
             >
-              <Globe className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <Globe className="w-3.5 h-3.5 text-slate-400" />
               <span>{t.langToggle}</span>
             </button>
 
-            <a
-              href="https://github.com/ifnodoraemon/airoute"
-              target="_blank"
-              rel="noreferrer"
-              className="hidden md:flex text-xs px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-medium items-center space-x-1.5 transition"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span>GitHub</span>
-            </a>
-
             {/* Account info & actions */}
-            <div className="flex items-center space-x-2 sm:space-x-2.5 pl-2 border-l border-slate-200 dark:border-slate-800">
-              {adminUser?.role === 'admin' ? (
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => setShowAccountModal(true)}
-                    className="flex items-center space-x-1.5 text-xs text-slate-700 font-medium px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 transition cursor-pointer"
-                    title={isZh ? '账号设置与个人中心' : 'Account Settings'}
-                  >
-                    <User className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>{adminUser?.username || 'admin'}</span>
-                    <span className="text-[10px] text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded-sm font-mono font-bold">
-                      {isZh ? '管理员' : 'Admin'}
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => setCurrentTab('wallet')}
-                    className="px-2.5 py-1 text-xs font-semibold text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition cursor-pointer"
-                    title={isZh ? '卡密生成与充值中心' : 'Redeem Cards & Wallet'}
-                  >
-                    {isZh ? '卡密中心' : 'Redeem Center'}
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center space-x-2">
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200">
-                    {adminUser?.group_name ? `${adminUser.group_name} ${isZh ? '组' : 'Tier'}` : (isZh ? '默认组' : 'Default Tier')}
-                  </span>
-                  <button
-                    onClick={() => setCurrentTab('wallet')}
-                    className="flex items-center space-x-1.5 text-xs text-emerald-800 font-bold px-2.5 py-1 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition cursor-pointer"
-                    title={isZh ? '点击管理钱包与充值' : 'Manage Wallet & Top-up'}
-                  >
-                    <Coins className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>¥{Number(adminUser?.balance || 0).toFixed(2)}</span>
-                  </button>
-                  <button
-                    onClick={() => setShowAccountModal(true)}
-                    className="flex items-center space-x-1.5 text-xs text-slate-700 hover:text-slate-900 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl font-medium transition cursor-pointer"
-                    title={isZh ? '账号设置与个人中心' : 'Account Settings'}
-                  >
-                    <User className="w-3.5 h-3.5 text-slate-500" />
-                    <span>{adminUser?.username}</span>
-                  </button>
-                </div>
-              )}
+            <div className="flex items-center space-x-2 pl-2 border-l border-slate-200 dark:border-slate-800">
+              <button
+                onClick={() => setShowAccountModal(true)}
+                className="flex items-center space-x-1.5 text-xs text-slate-700 dark:text-slate-300 font-medium px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#0F1420] hover:bg-slate-50 dark:hover:bg-slate-800/80 border border-slate-200/70 dark:border-slate-800/80 shadow-sm transition cursor-pointer"
+                title={isZh ? '账号设置' : 'Account Settings'}
+              >
+                <User className="w-3.5 h-3.5 text-slate-400" />
+                <span>{adminUser?.username || 'admin'}</span>
+              </button>
+
               <button
                 onClick={handleLogout}
-                className="p-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 transition cursor-pointer"
+                className="p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition cursor-pointer"
                 title={isZh ? '退出登录' : 'Logout'}
               >
                 <LogOut className="w-3.5 h-3.5" />
@@ -2095,26 +2073,26 @@ export default function App() {
           </div>
         </header>
 
-        <div className="p-8 max-w-7xl w-full mx-auto space-y-6">
+        <div className="px-8 lg:px-14 py-10 max-w-6xl w-full mx-auto space-y-10">
           {/* Default Password Security Warning Banner for Admins */}
           {adminUser && adminUser.role === 'admin' && adminUser.is_default_password && (
-            <div className="bg-rose-50 border border-rose-200 rounded-3xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs animate-in fade-in">
+            <div className="bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-900/40 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm animate-in fade-in">
               <div className="flex items-center space-x-3.5">
-                <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300 flex items-center justify-center shrink-0">
                   <ShieldAlert className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-rose-900">
+                  <h4 className="text-sm font-semibold text-rose-900 dark:text-rose-200">
                     {isZh ? '安全风险预警：当前管理员账号使用默认初始密码' : 'Security Alert: Admin account is using default initial password'}
                   </h4>
-                  <p className="text-xs text-rose-700 mt-0.5">
+                  <p className="text-xs text-rose-700 dark:text-rose-300/80 mt-0.5">
                     {isZh ? '为保障网关控制台与算力资产安全，强烈建议您立即修改初始密码，避免未授权访问风险。' : 'To protect gateway security and compute assets, please change default password immediately.'}
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setShowAccountModal(true)}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition shrink-0 cursor-pointer flex items-center space-x-1.5"
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-medium transition shrink-0 cursor-pointer flex items-center space-x-1.5"
               >
                 <Lock className="w-3.5 h-3.5" />
                 <span>{isZh ? '立即修改密码' : 'Change Password'}</span>
@@ -2124,16 +2102,16 @@ export default function App() {
 
           {/* Low Balance Warning Banner for Regular Users */}
           {adminUser && adminUser.role !== 'admin' && Number(adminUser.balance || 0) < 5 && (
-            <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-3xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs animate-in fade-in">
+            <div className="bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/40 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm animate-in fade-in">
               <div className="flex items-center space-x-3.5">
-                <div className="w-10 h-10 rounded-2xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
                   <AlertCircle className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-amber-900 dark:text-amber-200">
+                  <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-200">
                     {Number(adminUser.balance || 0) <= 0 ? (isZh ? '钱包额度已耗尽 (余额不足)' : 'Wallet Balance Depleted') : (isZh ? '钱包余额偏低预警' : 'Low Wallet Balance Alert')}
                   </h4>
-                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                  <p className="text-xs text-amber-700 dark:text-amber-300/80 mt-0.5">
                     {isZh 
                       ? `当前可用额度为 ¥${Number(adminUser.balance || 0).toFixed(4)}。为避免生产 API 接口调用中断，请及时充值或兑换卡密。`
                       : `Current balance is ¥${Number(adminUser.balance || 0).toFixed(4)}. Please top up or redeem cards to prevent API interruption.`}
@@ -2143,7 +2121,7 @@ export default function App() {
               <div className="flex items-center space-x-2 shrink-0">
                 <button
                   onClick={() => setCurrentTab('wallet')}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer"
+                  className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white text-xs font-medium rounded-lg shadow-sm transition cursor-pointer"
                 >
                   {isZh ? '前往充值 / 兑换卡密 →' : 'Top up / Redeem Card →'}
                 </button>
