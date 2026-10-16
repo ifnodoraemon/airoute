@@ -6,15 +6,13 @@ import useModalA11y from '../hooks/useModalA11y';
 export default function QuickStartModal({ apiKey, onClose, onCopy, lang = 'zh', t }) {
   useModalA11y(!!apiKey, onClose);
 
-  if (!apiKey) return null;
-
   const isZh = lang === 'zh';
   const [activeTab, setActiveTab] = useState('cursor');
   const [copiedTab, setCopiedTab] = useState('');
 
   const origin = getGatewayOrigin();
   const baseUrl = origin ? `${origin}/v1` : '/v1';
-  const keyStr = apiKey.key || 'sk-airoute-xxxx';
+  const keyStr = apiKey?.key || 'sk-airoute-xxxx';
 
   const pythonCode = `from openai import OpenAI
 
@@ -200,6 +198,8 @@ for chunk in llm.stream(messages):
     setCopiedTab(activeTab);
     setTimeout(() => setCopiedTab(''), 2000);
   };
+
+  if (!apiKey) return null;
 
   return (
     <div

@@ -20,8 +20,6 @@ import useModalA11y from '../hooks/useModalA11y';
 export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh', t }) {
   useModalA11y(isOpen, onClose);
 
-  if (!isOpen) return null;
-
   const isZh = lang === 'zh';
   const [activeTab, setActiveTab] = useState('login'); // 'login' or 'register'
 
@@ -186,6 +184,8 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
     }
     setError(isZh ? `企业 OAuth 登录需在服务端环境配置 ${provider.toUpperCase()}_CLIENT_ID 与密钥。当前请使用企业账号密码登录。` : `Enterprise OAuth requires ${provider.toUpperCase()}_CLIENT_ID configured on server. Please use credentials login.`);
   };
+
+  if (!isOpen) return null;
 
   return (
     <div

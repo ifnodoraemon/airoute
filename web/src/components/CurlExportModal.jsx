@@ -5,8 +5,6 @@ import useModalA11y from '../hooks/useModalA11y';
 export default function CurlExportModal({ curlCmd, onClose, onCopy, lang = 'zh', t }) {
   useModalA11y(!!curlCmd, onClose);
 
-  if (!curlCmd) return null;
-
   const isZh = lang === 'zh';
   const [copied, setCopied] = useState(false);
 
@@ -15,6 +13,8 @@ export default function CurlExportModal({ curlCmd, onClose, onCopy, lang = 'zh',
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  if (!curlCmd) return null;
 
   return (
     <div

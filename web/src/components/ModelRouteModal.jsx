@@ -58,8 +58,6 @@ export default function ModelRouteModal({
 }) {
   useModalA11y(isOpen, onClose);
 
-  if (!isOpen) return null;
-
   const isZh = lang === 'zh';
   const isNew = !modelRoute || modelRoute.isNew;
   const [modelName, setModelName] = useState(modelRoute?.model || '');
@@ -257,6 +255,8 @@ export default function ModelRouteModal({
       setSaving(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div

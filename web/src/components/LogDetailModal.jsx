@@ -5,20 +5,20 @@ import useModalA11y from '../hooks/useModalA11y';
 export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession, onDeleteLog, onNavigate, lang = 'zh', t }) {
   useModalA11y(!!log, onClose);
 
-  if (!log) return null;
-
   const isZh = lang === 'zh';
   const [copied, setCopied] = useState(false);
 
   const handleCopyRaw = () => {
+    if (!log) return;
     onCopy(JSON.stringify(log, null, 2));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const isSuccess = log.status_code >= 200 && log.status_code < 300;
+  const isSuccess = log ? log.status_code >= 200 && log.status_code < 300 : false;
 
   const rca = (() => {
+    if (!log) return null;
     const code = log.status_code || 200;
     const isErr = code >= 400 || !!log.error_message;
     const errStr = (log.error_message || '').toLowerCase();
@@ -101,6 +101,8 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
       actionTab: 'channels'
     };
   })();
+
+  if (!log) return null;
 
   return (
     <div

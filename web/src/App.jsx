@@ -253,6 +253,7 @@ export default function App() {
   const [adminUser, setAdminUser] = useState(() => getStoredUser());
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
+  const [accountModalTab, setAccountModalTab] = useState('profile');
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
   const [showTopologyModal, setShowTopologyModal] = useState(false);
@@ -2085,7 +2086,7 @@ export default function App() {
             {/* Account info & actions */}
             <div className="flex items-center space-x-2 pl-2 border-l border-slate-200 dark:border-slate-800">
               <button
-                onClick={() => setShowAccountModal(true)}
+                onClick={() => { setAccountModalTab('profile'); setShowAccountModal(true); }}
                 className="flex items-center space-x-1.5 text-xs text-slate-700 dark:text-slate-300 font-medium px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#0F1420] hover:bg-slate-50 dark:hover:bg-slate-800/80 border border-slate-200/70 dark:border-slate-800/80 shadow-sm transition cursor-pointer"
                 title={isZh ? '账号设置' : 'Account Settings'}
               >
@@ -2122,7 +2123,7 @@ export default function App() {
                 </div>
               </div>
               <button
-                onClick={() => setShowAccountModal(true)}
+                onClick={() => { setAccountModalTab('password'); setShowAccountModal(true); }}
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-medium transition shrink-0 cursor-pointer flex items-center space-x-1.5"
               >
                 <Lock className="w-3.5 h-3.5" />
@@ -2439,6 +2440,7 @@ export default function App() {
         {/* Account & Security Modal */}
         <AccountManageModal
           isOpen={showAccountModal}
+          initialTab={accountModalTab}
           onClose={() => setShowAccountModal(false)}
           adminUser={adminUser}
           adminToken={adminToken}

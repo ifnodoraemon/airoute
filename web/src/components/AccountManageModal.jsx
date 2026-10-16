@@ -23,15 +23,15 @@ export default function AccountManageModal({
   adminFetch,
   showToast,
   onPasswordChanged,
+  initialTab = 'profile',
   lang = 'zh',
   t
 }) {
   useModalA11y(isOpen, onClose);
 
-  if (!isOpen) return null;
   const isZh = lang === 'zh';
 
-  const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'password'
+  const [activeTab, setActiveTab] = useState(initialTab || 'profile'); // 'profile' | 'password'
 
   // Change password state
   const [oldPassword, setOldPassword] = useState('');
@@ -42,6 +42,17 @@ export default function AccountManageModal({
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [copiedBaseUrl, setCopiedBaseUrl] = useState(false);
+
+  // Sync tab and reset error on open
+  React.useEffect(() => {
+    if (isOpen) {
+      setActiveTab(initialTab || 'profile');
+      setErrorMsg('');
+      setOldPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    }
+  }, [isOpen, initialTab]);
 
   const isAdmin = adminUser?.role === 'admin';
   const apiBaseUrl = getGatewayBaseUrl();
@@ -97,6 +108,8 @@ export default function AccountManageModal({
       setLoading(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div
