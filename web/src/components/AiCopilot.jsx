@@ -32,7 +32,8 @@ import {
   Code,
   Clock,
   Database,
-  HelpCircle
+  HelpCircle,
+  GripVertical
 } from 'lucide-react';
 import { getGatewayOrigin, copyToClipboard as crossOriginCopy } from '../config';
 import MarkdownRenderer from './MarkdownRenderer';
@@ -79,6 +80,205 @@ export default function AiCopilot({
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const abortControllerRef = useRef(null);
+
+  // Floating trigger button draggable state
+  const [btnPos, setBtnPos] = useState(() => {
+    try {
+      const saved = localStorage.getItem('airoute_copilot_btn_pos');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
+          return parsed;
+        }
+      }
+    } catch (e) {}
+    return null;
+  });
+
+  const [isBtnDragging, setIsBtnDragging] = useState(false);
+  const btnDragRef = useRef({
+    startX: 0,
+    startY: 0,
+    initialX: 0,
+    initialY: 0,
+    hasMoved: false
+  });
+  const justDraggedBtnRef = useRef(false);
+  const btnRef = useRef(null);
+
+  // Modal window draggable state (when not expanded)
+  const [modalPos, setModalPos] = useState(null);
+  const modalDragRef = useRef({
+    startX: 0,
+    startY: 0,
+    initialX: 0,
+    initialY: 0,
+    hasMoved: false
+  });
+  const modalRef = useRef(null);
+
+  // Initialize and ensure safe button position on window resize
+  useEffect(() => {
+    const computeSafeDefault = () => {
+      const w = typeof window !== 'undefined' ? window.innerWidth : 1200;
+      const h = typeof window !== 'undefined' ? window.innerHeight : 800;
+      // Default: 96px from bottom (safely clears table pagination bar), 24px from right
+      return {
+        x: Math.max(16, w - 190),
+        y: Math.max(16, h - 96)
+      };
+    };
+
+    setBtnPos(prev => {
+      if (!prev) return computeSafeDefault();
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      return {
+        x: Math.min(Math.max(16, prev.x), Math.max(16, w - 180)),
+        y: Math.min(Math.max(16, prev.y), Math.max(16, h - 56))
+      };
+    });
+
+    const handleResize = () => {
+      setBtnPos(prev => {
+        if (!prev) return computeSafeDefault();
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        return {
+          x: Math.min(Math.max(16, prev.x), Math.max(16, w - 180)),
+          y: Math.min(Math.max(16, prev.y), Math.max(16, h - 56))
+        };
+      });
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const handleBtnPointerDown = (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+
+    const currentX = btnPos?.x ?? (window.innerWidth - 190);
+    const currentY = btnPos?.y ?? (window.innerHeight - 96);
+
+    btnDragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initialX: currentX,
+      initialY: currentY,
+      hasMoved: false
+    };
+
+    const handlePointerMove = (moveEvent) => {
+      const dx = moveEvent.clientX - btnDragRef.current.startX;
+      const dy = moveEvent.clientY - btnDragRef.current.startY;
+
+      if (!btnDragRef.current.hasMoved && Math.hypot(dx, dy) > 4) {
+        btnDragRef.current.hasMoved = true;
+        setIsBtnDragging(true);
+      }
+
+      if (btnDragRef.current.hasMoved) {
+        const btnW = btnRef.current ? btnRef.current.offsetWidth : 160;
+        const btnH = btnRef.current ? btnRef.current.offsetHeight : 44;
+        const maxX = Math.max(12, window.innerWidth - btnW - 12);
+        const maxY = Math.max(12, window.innerHeight - btnH - 12);
+
+        const newX = Math.min(maxX, Math.max(12, btnDragRef.current.initialX + dx));
+        const newY = Math.min(maxY, Math.max(12, btnDragRef.current.initialY + dy));
+
+        setBtnPos({ x: newX, y: newY });
+      }
+    };
+
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+
+      if (btnDragRef.current.hasMoved) {
+        setIsBtnDragging(false);
+        justDraggedBtnRef.current = true;
+        setTimeout(() => {
+          justDraggedBtnRef.current = false;
+        }, 120);
+
+        setBtnPos(currentPos => {
+          if (currentPos) {
+            try {
+              localStorage.setItem('airoute_copilot_btn_pos', JSON.stringify(currentPos));
+            } catch (err) {}
+          }
+          return currentPos;
+        });
+      }
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+  };
+
+  const handleBtnClick = (e) => {
+    if (justDraggedBtnRef.current || btnDragRef.current.hasMoved) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    onToggle();
+  };
+
+  const handleModalHeaderPointerDown = (e) => {
+    if (isExpanded) return;
+    if (e.target.closest('button, select, input')) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
+
+    const rect = modalRef.current?.getBoundingClientRect();
+    const currentX = rect ? rect.left : (window.innerWidth - 440);
+    const currentY = rect ? rect.top : (window.innerHeight - 660);
+
+    modalDragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initialX: currentX,
+      initialY: currentY,
+      hasMoved: false
+    };
+
+    const handlePointerMove = (moveEvent) => {
+      const dx = moveEvent.clientX - modalDragRef.current.startX;
+      const dy = moveEvent.clientY - modalDragRef.current.startY;
+
+      if (!modalDragRef.current.hasMoved && Math.hypot(dx, dy) > 4) {
+        modalDragRef.current.hasMoved = true;
+      }
+
+      if (modalDragRef.current.hasMoved) {
+        const modalW = modalRef.current ? modalRef.current.offsetWidth : 420;
+        const modalH = modalRef.current ? modalRef.current.offsetHeight : 640;
+        const maxX = Math.max(12, window.innerWidth - modalW - 12);
+        const maxY = Math.max(12, window.innerHeight - modalH - 12);
+
+        const newX = Math.min(maxX, Math.max(12, modalDragRef.current.initialX + dx));
+        const newY = Math.min(maxY, Math.max(12, modalDragRef.current.initialY + dy));
+
+        setModalPos({ x: newX, y: newY });
+      }
+    };
+
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+  };
+
 
   const origin = getGatewayOrigin();
   const baseUrl = origin ? `${origin}/v1` : '/v1';
@@ -624,12 +824,23 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
   };
 
   if (!isOpen) {
+    const style = btnPos
+      ? { left: `${btnPos.x}px`, top: `${btnPos.y}px` }
+      : { right: '24px', bottom: '96px' };
+
     return (
       <button
-        onClick={onToggle}
-        className="fixed bottom-6 right-6 z-40 flex items-center space-x-2 px-4 py-2.5 rounded-full bg-linear-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 text-white shadow-xl shadow-indigo-500/25 hover:shadow-indigo-500/40 transition-all duration-300 group cursor-pointer border border-white/20 animate-in fade-in"
-        title="Airoute AI Copilot (Cmd + J)"
+        ref={btnRef}
+        type="button"
+        onPointerDown={handleBtnPointerDown}
+        onClick={handleBtnClick}
+        style={style}
+        className={`fixed z-40 flex items-center space-x-2 px-3.5 py-2.5 rounded-full bg-linear-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 text-white shadow-xl shadow-indigo-500/25 hover:shadow-indigo-500/40 border border-white/20 select-none touch-none ${
+          isBtnDragging ? 'cursor-grabbing scale-105 opacity-90 shadow-2xl' : 'cursor-grab hover:scale-[1.02] transition-transform transition-shadow duration-200'
+        }`}
+        title={isZh ? 'Airoute AI 智能副驾驶 (按住可拖动位置，点击打开，快捷键 Cmd+J)' : 'Airoute AI Copilot (Drag to move, click to open, Cmd+J)'}
       >
+        <GripVertical className="w-3.5 h-3.5 text-white/50 -ml-1 mr-0.5 shrink-0" />
         <div className="relative">
           <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
         </div>
@@ -645,14 +856,22 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
 
   return (
     <div
+      ref={modalRef}
+      style={!isExpanded && modalPos ? { left: `${modalPos.x}px`, top: `${modalPos.y}px`, bottom: 'auto', right: 'auto' } : undefined}
       className={`fixed z-50 transition-all duration-300 ease-out flex flex-col ${
         isExpanded
           ? 'inset-4 sm:inset-10 bg-white dark:bg-[#0F1420] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800'
-          : 'bottom-6 right-6 w-full max-w-[420px] h-[640px] max-h-[88vh] bg-white dark:bg-[#0F1420] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800'
+          : `${modalPos ? '' : 'bottom-6 right-6'} w-full max-w-[420px] h-[640px] max-h-[88vh] bg-white dark:bg-[#0F1420] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800`
       } overflow-hidden animate-in zoom-in-95`}
     >
-      {/* 头部控制栏 */}
-      <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between bg-white dark:bg-[#0F1420]">
+      {/* 头部控制栏 (可按住拖动) */}
+      <div
+        onPointerDown={handleModalHeaderPointerDown}
+        className={`px-4 py-3 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between bg-white dark:bg-[#0F1420] ${
+          isExpanded ? '' : 'cursor-grab active:cursor-grabbing select-none'
+        }`}
+        title={isExpanded ? '' : (isZh ? '按住此处可拖动窗口位置' : 'Drag header to move window')}
+      >
         <div className="flex items-center space-x-2.5 min-w-0">
           <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-sm shrink-0">
             <Sparkles className="w-4 h-4 text-amber-300" />
