@@ -894,26 +894,35 @@ Execute the following mission with precision, maintainability, and zero speculat
                     </div>
                   ))}
 
-                  {/* Reasoning Content & Assistant Live Delta */}
-                  {playReasoningOutput && (
-                    <div className="p-3.5 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 rounded-2xl text-xs text-amber-950 dark:text-amber-200">
-                      <div className="font-bold flex items-center space-x-1.5 text-amber-800 dark:text-amber-400 mb-1">
-                        <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-                        <span>{isZh ? '深度思维链 (Reasoning Content):' : 'Reasoning Process:'}</span>
-                      </div>
-                      <div className="whitespace-pre-wrap text-[11px] font-mono leading-relaxed">
-                        {playReasoningOutput}
-                      </div>
-                    </div>
-                  )}
-
-                  {playOutput && (
+                  {/* Live Streaming Assistant Message (Unified Bubble) */}
+                  {(playLoading || playOutput || playReasoningOutput) && (
                     <div className="flex flex-col items-start w-full">
-                      <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono mb-1">
-                        {playModel} {isZh ? '(响应输出)' : '(Response)'}
+                      <div className="text-[10px] text-slate-400 font-mono mb-1 flex items-center space-x-1.5">
+                        <span>{playModel} (Assistant)</span>
+                        {playLoading && <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />}
                       </div>
-                      <div className="max-w-[90%] w-full rounded-2xl p-3.5 text-xs bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700 shadow-sm leading-relaxed">
-                        <MarkdownRenderer content={playOutput} />
+                      <div className="max-w-[85%] w-full rounded-2xl p-3.5 text-xs bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700 shadow-sm leading-relaxed">
+                        {playReasoningOutput && (
+                          <div className="mb-2.5 p-2.5 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 rounded-xl text-xs text-amber-950 dark:text-amber-200">
+                            <div className="font-bold flex items-center space-x-1.5 text-amber-800 dark:text-amber-400 mb-1">
+                              <Sparkles className="w-3 h-3 text-amber-500 animate-pulse" />
+                              <span>{isZh ? '深度思维链' : 'Reasoning Process'}</span>
+                            </div>
+                            <div className="whitespace-pre-wrap text-[11px] font-mono leading-relaxed opacity-85">
+                              {playReasoningOutput}
+                            </div>
+                          </div>
+                        )}
+                        {playOutput ? (
+                          <MarkdownRenderer content={playOutput} />
+                        ) : (
+                          playLoading && !playReasoningOutput && (
+                            <div className="flex items-center space-x-2 text-slate-400 py-1 font-mono text-[11px]">
+                              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
+                              <span>{isZh ? '正在思考与组织响应...' : 'Thinking and generating response...'}</span>
+                            </div>
+                          )
+                        )}
                       </div>
                     </div>
                   )}
