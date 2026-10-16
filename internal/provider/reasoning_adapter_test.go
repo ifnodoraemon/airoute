@@ -15,7 +15,7 @@ func TestSeparateReasoningInResponse(t *testing.T) {
 		expectedReas  string
 	}{
 		{
-			name:         "GPUStack style without leading think tag",
+			name:         "GPUStack style with ending think tag",
 			inputContent: "我们需要思考...一句话回答。</think>中国的首都是北京。",
 			inputReason:  "",
 			expectedCont: "中国的首都是北京。",
@@ -79,17 +79,15 @@ func TestSeparateReasoningInResponse(t *testing.T) {
 	}
 }
 
-func TestReasoningStreamAdapter(t *testing.T) {
-	t.Run("DeepSeek v4.1 reasoning stream with cross-chunk think end", func(t *testing.T) {
-		adapter := NewReasoningStreamAdapter("deepseek-v4.1-flash", nil)
+func TestReasoningStreamAdapter_PureTagDriven(t *testing.T) {
+	t.Run("Standard <think>...</think> stream", func(t *testing.T) {
+		adapter := NewReasoningStreamAdapter()
 
-		// Simulate chunks from GPUStack
 		chunks := []string{
-			"我们需要",
-			"回答用户中文问题：“9.11和9.8哪个大？”",
-			"这是思考尾声。</", // partial </think> across boundary
-			"think>按数值比较：",
-			"9.8 比 9.11 大。",
+			"<th",
+			"ink>正在深入分析...",
+			"完成分析。</th",
+			"ink>最终结论如下：42",
 		}
 
 		var collectedReasoning string
@@ -106,8 +104,7 @@ func TestReasoningStreamAdapter(t *testing.T) {
 				},
 			}
 
-			processed := adapter.ProcessChunk(rawChunk)
-			for _, pc := range processed {
+			for _, pc := range adapter.ProcessChunk(rawChunk) {
 				if pc.Choices[0].Delta.ReasoningContent != "" {
 					collectedReasoning += pc.Choices[0].Delta.ReasoningContent
 				}
@@ -117,16 +114,16 @@ func TestReasoningStreamAdapter(t *testing.T) {
 			}
 		}
 
-		if collectedReasoning != "我们需要回答用户中文问题：“9.11和9.8哪个大？”这是思考尾声。" {
+		if collectedReasoning != "正在深入分析...完成分析。" {
 			t.Errorf("collectedReasoning mismatch: got %q", collectedReasoning)
 		}
-		if collectedContent != "按数值比较：9.8 比 9.11 大。" {
+		if collectedContent != "最终结论如下：42" {
 			t.Errorf("collectedContent mismatch: got %q", collectedContent)
 		}
 	})
 
-	t.Run("Normal model non-reasoning stream", func(t *testing.T) {
-		adapter := NewReasoningStreamAdapter("gpt-4o", nil)
+	t.Run("Normal stream without think tags is pure passthrough", func(t *testing.T) {
+		adapter := NewReasoningStreamAdapter()
 
 		chunks := []string{"Hello", ", ", "world", "!"}
 		var collectedReasoning string
@@ -156,8 +153,8 @@ func TestReasoningStreamAdapter(t *testing.T) {
 		}
 	})
 
-	t.Run("Upstream already emitting reasoning_content passthrough", func(t *testing.T) {
-		adapter := NewReasoningStreamAdapter("deepseek-r1", nil)
+	t.Run("Upstream already emitting reasoning_content is untouched", func(t *testing.T) {
+		adapter := NewReasoningStreamAdapter()
 
 		rawChunk := &model.ChatCompletionChunk{
 			Choices: []model.ChunkChoice{

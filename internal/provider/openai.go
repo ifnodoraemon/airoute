@@ -140,7 +140,7 @@ func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 	}
 
 	eventChan := make(chan *model.StreamEvent, 64)
-	reasoningAdapter := NewReasoningStreamAdapter(req.Model, channel)
+	reasoningAdapter := NewReasoningStreamAdapter()
 
 	go func() {
 		defer resp.Body.Close()

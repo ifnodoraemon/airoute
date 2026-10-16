@@ -306,7 +306,15 @@ Execute the following mission with precision, maintainability, and zero speculat
                     }
                     if (delta?.content) {
                       fullContent += delta.content;
-                      setOutput(fullContent);
+                      if (!fullReasoning && fullContent.includes('</think>')) {
+                        const parts = fullContent.split('</think>');
+                        fullReasoning = parts[0].replace(/^<think>/, '').trim();
+                        fullContent = parts[1].replace(/^\n+/, '');
+                        setReasoning(fullReasoning);
+                        setOutput(fullContent);
+                      } else {
+                        setOutput(fullContent);
+                      }
                     }
                   } catch (e) {}
                 }

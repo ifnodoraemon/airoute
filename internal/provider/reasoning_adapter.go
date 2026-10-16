@@ -11,26 +11,10 @@ const (
 	ThinkTagEnd   = "</think>"
 )
 
-// IsReasoningModel determines if a model is known to generate thinking/reasoning traces.
-func IsReasoningModel(modelName string) bool {
-	lower := strings.ToLower(modelName)
-	return strings.Contains(lower, "r1") ||
-		strings.Contains(lower, "v4.1") ||
-		strings.Contains(lower, "v4-1") ||
-		strings.Contains(lower, "dsv4.1") ||
-		strings.Contains(lower, "dsv4-1") ||
-		strings.Contains(lower, "reasoner") ||
-		strings.Contains(lower, "reasoning") ||
-		strings.Contains(lower, "thinking") ||
-		strings.Contains(lower, "qwq") ||
-		strings.Contains(lower, "o1") ||
-		strings.Contains(lower, "o3") ||
-		strings.Contains(lower, "o4")
-}
-
 // SeparateReasoningInResponse inspects non-streaming ChatCompletionResponse.
 // If message.ReasoningContent is empty, but message.Content contains </think> (or begins with <think>),
 // it cleanly separates the thinking trace into ReasoningContent and keeps only the final answer in Content.
+// Completely model-agnostic: driven purely by standard thinking tags.
 func SeparateReasoningInResponse(resp *model.ChatCompletionResponse) {
 	if resp == nil {
 		return
@@ -63,34 +47,23 @@ func SeparateReasoningInResponse(resp *model.ChatCompletionResponse) {
 	}
 }
 
-// ReasoningStreamAdapter adapts a stream of ChatCompletionChunk objects so that
-// thinking tokens are emitted in chunk.Delta.ReasoningContent and the final response
-// is emitted in chunk.Delta.Content.
+// ReasoningStreamAdapter adapts a stream of ChatCompletionChunk objects based purely on
+// <think> and </think> tags. Zero hardcoded model names.
 type ReasoningStreamAdapter struct {
-	modelName        string
-	isReasoningModel bool
-	inThinking       bool
-	sawReasoning     bool
-	passedThinkEnd   bool
-	started          bool
-	buffer           string // Holds partial </think> across chunk boundaries
+	inThinking     bool
+	sawReasoning   bool
+	passedThinkEnd bool
+	buffer         string // Holds partial tags (<think> or </think>) across chunk boundaries
 }
 
-// NewReasoningStreamAdapter creates a new stream processor for the requested model and channel.
-func NewReasoningStreamAdapter(modelName string, channel *model.ChannelConfig) *ReasoningStreamAdapter {
-	isReasoning := IsReasoningModel(modelName)
-
-	return &ReasoningStreamAdapter{
-		modelName:        modelName,
-		isReasoningModel: isReasoning,
-		inThinking:       isReasoning,
-	}
+// NewReasoningStreamAdapter creates a new tag-driven stream processor.
+func NewReasoningStreamAdapter() *ReasoningStreamAdapter {
+	return &ReasoningStreamAdapter{}
 }
 
 // ProcessChunk processes an incoming ChatCompletionChunk.
-// It returns a slice of chunks (0, 1, or 2 chunks) to send downstream.
-// When transitioning across </think>, it may split a single chunk into two:
-// one terminating the reasoning, and one starting the content.
+// If the stream contains <think> ... </think>, it routes thinking tokens to
+// chunk.Delta.ReasoningContent and answer tokens to chunk.Delta.Content.
 func (a *ReasoningStreamAdapter) ProcessChunk(chunk *model.ChatCompletionChunk) []*model.ChatCompletionChunk {
 	if chunk == nil || len(chunk.Choices) == 0 {
 		return []*model.ChatCompletionChunk{chunk}
@@ -107,31 +80,28 @@ func (a *ReasoningStreamAdapter) ProcessChunk(chunk *model.ChatCompletionChunk) 
 		return []*model.ChatCompletionChunk{chunk}
 	}
 
-	// If this chunk does not carry content (e.g. role-only, finish_reason, or usage), pass through
+	// If this chunk does not carry text content, pass through
 	if delta.Content == "" {
 		return []*model.ChatCompletionChunk{chunk}
 	}
 
 	rawText := delta.Content
 
-	// On the very first text token:
-	if !a.started {
-		a.started = true
-		// If text starts with <think>, force thinking mode even if model name didn't match
-		if strings.HasPrefix(strings.TrimSpace(rawText), ThinkTagStart) {
-			a.inThinking = true
-			rawText = strings.TrimPrefix(strings.TrimSpace(rawText), ThinkTagStart)
-		}
-	}
-
-	// If not in thinking mode:
+	// If not currently in thinking mode:
 	if !a.inThinking {
-		// Just in case a non-reasoning-flagged model suddenly emits <think> mid-stream
-		if strings.Contains(rawText, ThinkTagStart) {
+		// If we already passed </think>, all subsequent tokens are strictly content
+		if a.passedThinkEnd {
+			return []*model.ChatCompletionChunk{chunk}
+		}
+
+		combined := a.buffer + rawText
+		a.buffer = ""
+
+		// Check if combined contains <think>
+		if idx := strings.Index(combined, ThinkTagStart); idx != -1 {
 			a.inThinking = true
-			idx := strings.Index(rawText, ThinkTagStart)
-			contentBefore := rawText[:idx]
-			textAfter := rawText[idx+len(ThinkTagStart):]
+			contentBefore := combined[:idx]
+			textAfter := combined[idx+len(ThinkTagStart):]
 
 			var result []*model.ChatCompletionChunk
 			if contentBefore != "" {
@@ -141,25 +111,35 @@ func (a *ReasoningStreamAdapter) ProcessChunk(chunk *model.ChatCompletionChunk) 
 				result = append(result, c1)
 			}
 
+			// Process remainder in thinking mode
 			remainingChunks := a.processThinkingText(chunk, textAfter)
 			result = append(result, remainingChunks...)
 			return result
 		}
 
-		// Normal content pass through
-		return []*model.ChatCompletionChunk{chunk}
+		// Check if combined ends with a partial prefix of <think>
+		if suffixLen := matchTagPrefix(combined, ThinkTagStart); suffixLen > 0 {
+			a.buffer = combined[len(combined)-suffixLen:]
+			combined = combined[:len(combined)-suffixLen]
+		}
+
+		if combined == "" {
+			return nil
+		}
+
+		c := deepCopyChunk(chunk)
+		c.Choices[0].Delta.Content = combined
+		c.Choices[0].Delta.ReasoningContent = ""
+		return []*model.ChatCompletionChunk{c}
 	}
 
-	// We are currently in thinking mode!
+	// Currently in thinking mode
 	return a.processThinkingText(chunk, rawText)
 }
 
 func (a *ReasoningStreamAdapter) processThinkingText(baseChunk *model.ChatCompletionChunk, incomingText string) []*model.ChatCompletionChunk {
 	combined := a.buffer + incomingText
 	a.buffer = ""
-
-	// Strip leading <think> if any
-	combined = strings.TrimPrefix(combined, ThinkTagStart)
 
 	// Check if combined contains </think>
 	if idx := strings.Index(combined, ThinkTagEnd); idx != -1 {
@@ -191,16 +171,14 @@ func (a *ReasoningStreamAdapter) processThinkingText(baseChunk *model.ChatComple
 		return result
 	}
 
-	// Does combined end with a partial prefix of </think>?
-	// Check prefixes of "</think>" (lengths 1 to 7)
-	suffixLen := matchThinkEndPrefix(combined)
-	if suffixLen > 0 {
+	// Check if combined ends with a partial prefix of </think>
+	if suffixLen := matchTagPrefix(combined, ThinkTagEnd); suffixLen > 0 {
 		a.buffer = combined[len(combined)-suffixLen:]
 		combined = combined[:len(combined)-suffixLen]
 	}
 
 	if combined == "" {
-		return nil // All characters buffered for pending </think> match
+		return nil
 	}
 
 	c := deepCopyChunk(baseChunk)
@@ -231,10 +209,11 @@ func (a *ReasoningStreamAdapter) Flush(baseChunk *model.ChatCompletionChunk) []*
 	return []*model.ChatCompletionChunk{c}
 }
 
-func matchThinkEndPrefix(s string) int {
-	for l := 7; l >= 1; l-- {
+func matchTagPrefix(s string, tag string) int {
+	maxLen := len(tag) - 1
+	for l := maxLen; l >= 1; l-- {
 		if len(s) >= l {
-			prefix := ThinkTagEnd[:l]
+			prefix := tag[:l]
 			if strings.HasSuffix(s, prefix) {
 				return l
 			}
