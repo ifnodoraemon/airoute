@@ -187,7 +187,16 @@ export async function executeHarnessTool(toolName, args = {}, context = {}) {
     isZh = true
   } = context;
 
-  const safeArgs = typeof args === 'string' ? (JSON.parse(args || '{}')) : (args || {});
+  let safeArgs = {};
+  if (typeof args === 'string') {
+    try {
+      safeArgs = JSON.parse(args || '{}');
+    } catch {
+      safeArgs = {};
+    }
+  } else if (args && typeof args === 'object') {
+    safeArgs = args;
+  }
 
   try {
     switch (toolName) {

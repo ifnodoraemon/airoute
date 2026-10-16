@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Tag, Plus, X, Trash2, List, Grid, Search } from 'lucide-react';
 
 export default function ModelChipManager({ models = [], onChange, lang = 'zh' }) {
@@ -11,6 +11,22 @@ export default function ModelChipManager({ models = [], onChange, lang = 'zh' })
   const modelList = Array.isArray(models)
     ? models
     : (typeof models === 'string' ? models.split(',').map(s => s.trim()).filter(Boolean) : []);
+
+  const [rawText, setRawText] = useState(() => modelList.join('\n'));
+
+  // Sync rawText with modelList when not editing in text mode
+  useEffect(() => {
+    if (!isTextMode) {
+      setRawText(modelList.join('\n'));
+    }
+  }, [models, isTextMode]);
+
+  const toggleTextMode = () => {
+    if (!isTextMode) {
+      setRawText(modelList.join('\n'));
+    }
+    setIsTextMode(!isTextMode);
+  };
 
   const handleAdd = (valToAdd) => {
     const raw = (valToAdd !== undefined ? valToAdd : inputVal).trim();
@@ -40,7 +56,9 @@ export default function ModelChipManager({ models = [], onChange, lang = 'zh' })
   };
 
   const handleTextareaChange = (e) => {
-    const lines = e.target.value
+    const val = e.target.value;
+    setRawText(val);
+    const lines = val
       .split(/[\n,]+/)
       .map(s => s.trim())
       .filter(Boolean);
@@ -81,8 +99,8 @@ export default function ModelChipManager({ models = [], onChange, lang = 'zh' })
           )}
           <button
             type="button"
-            onClick={() => setIsTextMode(!isTextMode)}
-            className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1"
+            onClick={toggleTextMode}
+            className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 cursor-pointer"
           >
             {isTextMode ? <Grid className="w-3 h-3" /> : <List className="w-3 h-3" />}
             <span>{isTextMode ? (isZh ? '切换标签视图' : 'Chip View') : (isZh ? '批量文本编辑' : 'Bulk Edit')}</span>
@@ -94,7 +112,7 @@ export default function ModelChipManager({ models = [], onChange, lang = 'zh' })
         <div>
           <textarea
             rows={4}
-            value={modelList.join('\n')}
+            value={rawText}
             onChange={handleTextareaChange}
             placeholder={isZh ? '每行一个模型名称，或用逗号隔开...' : 'One model per line, or comma-separated...'}
             className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 leading-relaxed"
