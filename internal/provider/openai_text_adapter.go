@@ -112,6 +112,7 @@ func (p *OpenAIProvider) chatCompleteText(ctx context.Context, req *model.ChatCo
 			FinishReason: ch.FinishReason,
 		})
 	}
+	SeparateReasoningInResponse(&chatResp)
 	return &chatResp, nil
 }
 

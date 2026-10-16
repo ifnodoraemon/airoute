@@ -326,6 +326,15 @@ Execute the following mission with precision, maintainability, and zero speculat
           setOutput(fullContent);
         }
 
+        // Secondary fallback: if reasoning_content was missing, extract </think> tag
+        if (!fullReasoning && fullContent.includes('</think>')) {
+          const parts = fullContent.split('</think>');
+          fullReasoning = parts[0].replace(/^<think>/, '').trim();
+          fullContent = parts[1].replace(/^\n+/, '');
+          setReasoning(fullReasoning);
+          setOutput(fullContent);
+        }
+
         const totalMs = Date.now() - startTime;
         setDuration(totalMs);
         const estTokens = fullContent.length * 0.75;

@@ -93,6 +93,8 @@ func (p *OpenAIProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 	}
 	chatResp.Model = req.Model
 
+	SeparateReasoningInResponse(&chatResp)
+
 	return &chatResp, nil
 }
 
@@ -138,6 +140,7 @@ func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 	}
 
 	eventChan := make(chan *model.StreamEvent, 64)
+	reasoningAdapter := NewReasoningStreamAdapter(req.Model, channel)
 
 	go func() {
 		defer resp.Body.Close()
@@ -152,6 +155,8 @@ func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 				return false
 			}
 		}
+
+		var lastChunk *model.ChatCompletionChunk
 
 		for {
 			select {
@@ -180,6 +185,13 @@ func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 
 			dataContent := strings.TrimSpace(strings.TrimPrefix(lineStr, "data:"))
 			if dataContent == "[DONE]" {
+				if lastChunk != nil {
+					for _, flushedChunk := range reasoningAdapter.Flush(lastChunk) {
+						if !sendEvent(&model.StreamEvent{Chunk: flushedChunk}) {
+							return
+						}
+					}
+				}
 				sendEvent(&model.StreamEvent{IsDone: true})
 				return
 			}
@@ -194,11 +206,14 @@ func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 			}
 			chunk.Model = req.Model
 
-			if !sendEvent(&model.StreamEvent{
-				Chunk: &chunk,
-				Raw:   line,
-			}) {
-				return
+			processedChunks := reasoningAdapter.ProcessChunk(&chunk)
+			for _, pc := range processedChunks {
+				lastChunk = pc
+				if !sendEvent(&model.StreamEvent{
+					Chunk: pc,
+				}) {
+					return
+				}
 			}
 		}
 	}()

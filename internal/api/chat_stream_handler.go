@@ -144,14 +144,20 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 				}
 				if !firstTokenRecorded && len(event.Chunk.Choices) > 0 {
 					delta := event.Chunk.Choices[0].Delta
-					if delta.Content != "" || delta.Role != "" {
+					if delta.Content != "" || delta.Role != "" || delta.ReasoningContent != "" {
 						ttftDuration = time.Since(start)
 						telemetry.GlobalMetrics.RecordTTFT(ttftDuration)
 						firstTokenRecorded = true
 					}
 				}
-				if len(event.Chunk.Choices) > 0 && event.Chunk.Choices[0].Delta.Content != "" {
-					accumulatedCompChars += len(event.Chunk.Choices[0].Delta.Content)
+				if len(event.Chunk.Choices) > 0 {
+					delta := event.Chunk.Choices[0].Delta
+					if delta.Content != "" {
+						accumulatedCompChars += len(delta.Content)
+					}
+					if delta.ReasoningContent != "" {
+						accumulatedCompChars += len(delta.ReasoningContent)
+					}
 				}
 
 				if event.Chunk.Usage != nil {
