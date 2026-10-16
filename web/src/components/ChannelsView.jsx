@@ -14,7 +14,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   Cpu,
-  Layers
+  Layers,
+  Coins
 } from 'lucide-react';
 
 export default function ChannelsView({
@@ -35,6 +36,7 @@ export default function ChannelsView({
   testingId,
   handleEditChannel,
   handleDeleteChannel,
+  onNavigateToReconciliation,
   showToast,
   lang = 'zh',
   t
@@ -116,6 +118,15 @@ export default function ChannelsView({
         </div>
 
         <div className="flex items-center space-x-2.5">
+          {onNavigateToReconciliation && (
+            <button
+              onClick={onNavigateToReconciliation}
+              className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 rounded-lg text-xs font-medium shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
+            >
+              <Coins className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>{isZh ? '供应商整体对账' : 'Supplier Reconciliation'}</span>
+            </button>
+          )}
           <button
             onClick={handleBatchPing}
             disabled={batchTesting || channels.length === 0}
@@ -286,10 +297,10 @@ export default function ChannelsView({
                       }}
                     />
                   </th>
-                  <th className="py-3 px-6">{isZh ? '服务商名称' : 'Provider Name'}</th>
-                  <th className="py-3 px-6">{isZh ? '服务引擎' : 'Engine'}</th>
+                  <th className="py-3 px-6">{isZh ? '服务商' : 'Provider'}</th>
+                  <th className="py-3 px-6">{isZh ? '引擎' : 'Engine'}</th>
                   <th className="py-3 px-6">{isZh ? 'Base URL' : 'Base URL'}</th>
-                  <th className="py-3 px-6">{isZh ? '功能模态' : 'Modalities'}</th>
+                  <th className="py-3 px-6">{isZh ? '模态' : 'Modalities'}</th>
                   <th className="py-3 px-6">{isZh ? '支持模型' : 'Models'}</th>
                   <th className="py-3 px-6">{isZh ? '优先级 / 权重' : 'Priority / Weight'}</th>
                   <th className="py-3 px-6">{isZh ? '状态' : 'Status'}</th>

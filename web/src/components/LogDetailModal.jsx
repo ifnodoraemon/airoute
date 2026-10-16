@@ -273,10 +273,10 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
             </div>
             <div className="p-3.5 flex justify-between">
               <span className="text-slate-500 dark:text-slate-400 font-medium">{isZh ? 'Token 明细' : 'Token Breakdown'}</span>
-              <span className="text-slate-800 dark:text-slate-200 font-mono tabular-nums">
-                {isZh ? '输入: ' : 'Prompt: '}<strong className="text-slate-900 dark:text-white font-semibold">{log.prompt_tokens}</strong> · 
-                {isZh ? ' 输出: ' : ' Completion: '}<strong className="text-slate-900 dark:text-white font-semibold">{log.completion_tokens}</strong> · 
-                {isZh ? ' 合计: ' : ' Total: '}<strong className="text-slate-900 dark:text-white font-semibold">{log.total_tokens}</strong>
+              <span className="text-slate-800 dark:text-slate-200 font-mono tabular-nums text-xs">
+                {isZh ? '未缓存输入: ' : 'Uncached: '}<strong className="text-slate-900 dark:text-white font-semibold">{Math.max(0, (log.prompt_tokens || 0) - (log.cached_tokens || 0)).toLocaleString()}</strong> ·
+                {isZh ? ' 输出: ' : ' Output: '}<strong className="text-slate-900 dark:text-white font-semibold">{(log.completion_tokens || 0).toLocaleString()}</strong> ·
+                {isZh ? ' 缓存: ' : ' Cached: '}<strong className="text-amber-600 dark:text-amber-400 font-semibold">{(log.cached_tokens || 0).toLocaleString()}</strong>
               </span>
             </div>
             <div className="p-3.5 flex justify-between">

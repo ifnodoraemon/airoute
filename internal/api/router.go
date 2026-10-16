@@ -157,6 +157,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 					adminOnly.DELETE("/redemptions/:id", adminHandler.DeleteRedemption)
 
 					adminOnly.GET("/channels", adminHandler.ListChannels)
+					adminOnly.GET("/channels/reconciliation", adminHandler.GetSupplierReconciliation)
 					adminOnly.POST("/channels", adminHandler.CreateChannel)
 					adminOnly.PUT("/channels/:id", adminHandler.UpdateChannel)
 					adminOnly.DELETE("/channels/:id", adminHandler.DeleteChannel)

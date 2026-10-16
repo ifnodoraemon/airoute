@@ -228,7 +228,7 @@ export default function ChannelModal({
                   <option value="sglang">SGLang</option>
                   <option value="ollama">Ollama</option>
                   <option value="sub2api">Sub2API</option>
-                  <option value="custom">Custom</option>
+                  <option value="custom">{isZh ? '自定义兼容引擎 (Custom Engine)' : 'Custom / Compatible Engine'}</option>
                 </select>
               </div>
 

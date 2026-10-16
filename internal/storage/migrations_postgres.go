@@ -189,6 +189,8 @@ func (db *DB) migratePostgres() error {
 				CREATE INDEX IF NOT EXISTS idx_usage_key ON usage_logs(api_key);
 				CREATE INDEX IF NOT EXISTS idx_usage_tenant ON usage_logs(tenant_id);
 				CREATE INDEX IF NOT EXISTS idx_usage_model ON usage_logs(model);
+				CREATE INDEX IF NOT EXISTS idx_usage_channel ON usage_logs(channel);
+				CREATE INDEX IF NOT EXISTS idx_usage_channel_created ON usage_logs(channel, created_at);
 				CREATE INDEX IF NOT EXISTS idx_key_user_id ON api_keys(user_id);
 				CREATE INDEX IF NOT EXISTS idx_key_tenant_id ON api_keys(tenant_id);
 				CREATE INDEX IF NOT EXISTS idx_model_price_group ON model_prices(model, group_name);
@@ -325,6 +327,17 @@ func (db *DB) migratePostgres() error {
 			Up: func(db *DB) error {
 				_, _ = db.DB.Exec("ALTER TABLE verification_codes ADD COLUMN IF NOT EXISTS attempts INT DEFAULT 0;")
 				return nil
+			},
+		},
+		{
+			Version: 10,
+			Name:    "add_usage_logs_channel_indexes",
+			Up: func(db *DB) error {
+				_, err := db.DB.Exec(`
+					CREATE INDEX IF NOT EXISTS idx_usage_channel ON usage_logs(channel);
+					CREATE INDEX IF NOT EXISTS idx_usage_channel_created ON usage_logs(channel, created_at);
+				`)
+				return err
 			},
 		},
 	}

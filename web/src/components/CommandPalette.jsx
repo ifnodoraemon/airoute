@@ -20,7 +20,8 @@ import {
   Zap,
   CornerDownLeft,
   X,
-  Sparkles
+  Sparkles,
+  Coins
 } from 'lucide-react';
 
 export default function CommandPalette({
@@ -67,6 +68,7 @@ export default function CommandPalette({
       { id: 'nav-dashboard', category: catNav, label: isZh ? '用量与业务概览大盘' : 'Telemetry & SLA Cockpit', icon: BarChart3, action: () => { setCurrentTab('dashboard'); setViewMode('console'); onClose(); } },
       { id: 'nav-models', category: catNav, label: isZh ? '模型路由与拓扑' : 'Model Routes & Topo', icon: Cpu, action: () => { setCurrentTab('models'); setViewMode('console'); onClose(); } },
       { id: 'nav-channels', category: catNav, label: isZh ? '上游服务商接入与体检' : 'Upstream Channels & Health', icon: Server, action: () => { setCurrentTab('channels'); setViewMode('console'); onClose(); } },
+      { id: 'nav-reconciliation', category: catNav, label: isZh ? '供应商整体对账与结算' : 'Supplier Reconciliation & Settlement', icon: Coins, action: () => { setCurrentTab('reconciliation'); setViewMode('console'); onClose(); } },
       { id: 'nav-pricing', category: catNav, label: isZh ? '模型费率与阶梯定价' : 'Model Pricing & Rates', icon: DollarSign, action: () => { setCurrentTab('pricing'); setViewMode('console'); onClose(); } },
       { id: 'nav-users', category: catNav, label: isZh ? '组织架构与用户管理' : 'User Management', icon: ShieldCheck, action: () => { setCurrentTab('users'); setViewMode('console'); onClose(); } },
       { id: 'nav-skills', category: catNav, label: isZh ? 'Skill Hub 智能体技能中心' : 'Skill Hub', icon: Sparkles, action: () => { setCurrentTab('skills'); setViewMode('console'); onClose(); } },

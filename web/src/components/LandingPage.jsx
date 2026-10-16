@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Shield,
   Cpu,
@@ -35,6 +35,28 @@ export default function LandingPage({
   const isZh = lang === 'zh';
   const [copiedSnippet, setCopiedSnippet] = useState('');
   const [activeSnippetTab, setActiveSnippetTab] = useState('python');
+
+  const scrollToSection = (id) => {
+    const el = document.getElementById(id);
+    if (el) {
+      const headerOffset = 70;
+      const elementPosition = el.getBoundingClientRect().top;
+      const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: 'smooth'
+      });
+    }
+  };
+
+  useEffect(() => {
+    const hash = window.location.hash.replace(/^#\/?/, '').trim();
+    if (['features', 'multimodal', 'docs', 'pricing'].includes(hash)) {
+      setTimeout(() => {
+        scrollToSection(hash);
+      }, 150);
+    }
+  }, []);
 
   const origin = getGatewayOrigin();
 
@@ -119,7 +141,10 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
       {/* Top Navigation Bar */}
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200/80">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+          <div
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="flex items-center space-x-3 cursor-pointer select-none"
+          >
             <div className="w-9 h-9 rounded-xl bg-linear-to-tr from-indigo-600 to-sky-500 flex items-center justify-center text-white shadow-sm font-black text-lg">
               ⚡
             </div>
@@ -129,10 +154,46 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
           </div>
 
           <nav className="hidden md:flex items-center space-x-8 text-xs font-semibold text-slate-600">
-            <a href="#features" className="hover:text-indigo-600 transition">{isZh ? '核心特性' : 'Features'}</a>
-            <a href="#multimodal" className="hover:text-indigo-600 transition">{isZh ? '全模态矩阵' : 'Multimodal'}</a>
-            <a href="#docs" className="hover:text-indigo-600 transition">{isZh ? '接入指南' : 'Guides'}</a>
-            <a href="#pricing" className="hover:text-indigo-600 transition">{isZh ? '模型定价' : 'Pricing'}</a>
+            <a
+              href="#features"
+              onClick={(e) => {
+                e.preventDefault();
+                scrollToSection('features');
+              }}
+              className="hover:text-indigo-600 transition cursor-pointer"
+            >
+              {isZh ? '核心特性' : 'Features'}
+            </a>
+            <a
+              href="#multimodal"
+              onClick={(e) => {
+                e.preventDefault();
+                scrollToSection('multimodal');
+              }}
+              className="hover:text-indigo-600 transition cursor-pointer"
+            >
+              {isZh ? '全模态矩阵' : 'Multimodal'}
+            </a>
+            <a
+              href="#docs"
+              onClick={(e) => {
+                e.preventDefault();
+                scrollToSection('docs');
+              }}
+              className="hover:text-indigo-600 transition cursor-pointer"
+            >
+              {isZh ? '接入指南' : 'Guides'}
+            </a>
+            <a
+              href="#pricing"
+              onClick={(e) => {
+                e.preventDefault();
+                scrollToSection('pricing');
+              }}
+              className="hover:text-indigo-600 transition cursor-pointer"
+            >
+              {isZh ? '模型定价' : 'Pricing'}
+            </a>
           </nav>
 
           <div className="flex items-center space-x-3">
@@ -246,7 +307,13 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
             )}
 
             <button
-              onClick={onViewDocs}
+              onClick={() => {
+                if (onViewDocs) {
+                  onViewDocs();
+                } else {
+                  scrollToSection('docs');
+                }
+              }}
               className="w-full sm:w-auto px-6 py-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-sm font-medium shadow-sm transition flex items-center justify-center space-x-2 cursor-pointer"
             >
               <Code className="w-4 h-4 text-indigo-600" />

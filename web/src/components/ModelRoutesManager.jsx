@@ -3,6 +3,7 @@ import {
   Layers,
   Cpu,
   Shield,
+  ShieldAlert,
   Sliders,
   Sparkles,
   ArrowRight,
@@ -33,6 +34,7 @@ export default function ModelRoutesManager({
   adminFetch,
   showToast,
   onNavigateToPlayground,
+  setCurrentTab,
   lang = 'zh',
   t
 }) {
@@ -500,8 +502,16 @@ export default function ModelRoutesManager({
                         {/* Pricing */}
                         <td className="py-4 px-6 text-xs">
                           {price ? (
-                            <div className="flex items-center space-x-1.5 text-[11px]">
-                              <span className="text-slate-700 dark:text-slate-300 font-mono tabular-nums">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (setCurrentTab) setCurrentTab('pricing');
+                              }}
+                              className="flex items-center space-x-1.5 text-[11px] hover:text-indigo-600 dark:hover:text-indigo-400 transition cursor-pointer group text-left"
+                              title={isZh ? '已配置专属定价，点击前往【定价管理】查看与编辑' : 'Click to view pricing'}
+                            >
+                              <span className="text-slate-700 dark:text-slate-300 font-mono tabular-nums font-semibold group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
                                 ¥{price.prompt_price.toFixed(1)}/¥{price.completion_price.toFixed(1)}
                               </span>
                               {price.off_peak_enabled !== false && (
@@ -509,9 +519,22 @@ export default function ModelRoutesManager({
                                   {isZh ? '闲时优惠' : 'Off-peak'}
                                 </span>
                               )}
-                            </div>
+                              <ArrowRight className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 text-indigo-500 transition-opacity" />
+                            </button>
                           ) : (
-                            <span className="text-slate-400 text-[11px]">{isZh ? '基准计费' : 'Standard'}</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (setCurrentTab) setCurrentTab('pricing');
+                              }}
+                              className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800 cursor-pointer transition text-left"
+                              title={isZh ? '未配置专属费率，当前回退至系统基准定价 (¥2.0/¥8.0)。点击前往【定价管理】配置专属定价！' : 'No explicit price set, fallback to system default. Click to configure.'}
+                            >
+                              <ShieldAlert className="w-2.5 h-2.5 text-amber-500 shrink-0" />
+                              <span>{isZh ? '未配专属价(基准)' : 'No Pricing'}</span>
+                              <ArrowRight className="w-2 h-2 text-amber-600 ml-0.5" />
+                            </button>
                           )}
                         </td>
 

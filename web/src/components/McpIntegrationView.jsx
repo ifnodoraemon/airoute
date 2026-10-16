@@ -751,41 +751,41 @@ curl -X POST "${messagesUrl}" \\
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-8 animate-in fade-in duration-200">
       {/* 顶部标题与轻量操作栏 */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-gray-100 dark:border-gray-800">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-200/70 dark:border-slate-800/80">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-lg font-bold text-gray-900 dark:text-white">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
               {isZh ? 'Model Context Protocol (MCP) 广场' : 'Model Context Protocol (MCP) Hub'}
             </h1>
-            <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
+            <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60">
               JSON-RPC 2.0
             </span>
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            {isZh ? '连接外部系统与协议扩展，支持 SSE 与 Stdio 传输，提供统一鉴权、安全脱敏与客户端对接。' : 'Connect external tools and protocol servers via SSE & Stdio with unified auth, data redaction, and client integration.'}
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+            {isZh ? '连接外部系统与协议扩展，支持 SSE 与 Stdio 双向传输，提供统一鉴权、安全脱敏与客户端无缝对接。' : 'Connect external tools and protocol servers via SSE & Stdio with unified auth, data redaction, and client integration.'}
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <button
             onClick={() => handleOpenProbe(null)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-750 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors shadow-2xs"
           >
             <Radio className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
             {isZh ? '协议探针' : 'Protocol Probe'}
           </button>
           <button
             onClick={() => { setSelectedServerForConfig(null); setConfigModalOpen(true); }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-750 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors shadow-2xs"
           >
             <FileCode className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
             {isZh ? '客户端配置' : 'Client Config'}
           </button>
           <button
             onClick={() => setAddServerModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-sm"
+            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors shadow-xs"
           >
             <Plus className="w-3.5 h-3.5" />
             {isZh ? '接入新服务' : 'Add Server'}
@@ -793,7 +793,7 @@ curl -X POST "${messagesUrl}" \\
           <button
             onClick={fetchServersAndSettings}
             disabled={loading}
-            className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-lg border border-gray-200 dark:border-gray-750 bg-white dark:bg-gray-800 hover:bg-gray-50 transition-colors"
+            className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 transition-colors shadow-2xs"
             title={isZh ? '刷新服务状态' : 'Refresh Server Status'}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -801,61 +801,85 @@ curl -X POST "${messagesUrl}" \\
         </div>
       </div>
 
-      {/* 核心指标与主控简报 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-sm">
-        <div className="flex items-center gap-4 flex-wrap text-xs">
-          {/* 总控开关 */}
-          <div className="flex items-center gap-2 pr-4 border-r border-gray-200 dark:border-gray-750">
-            <span className="font-medium text-gray-700 dark:text-gray-200">{isZh ? '协议总闸:' : 'Master Switch:'}</span>
-            <button
-              onClick={handleToggleGlobalMcp}
-              disabled={togglingGlobal}
-              className={`relative inline-flex h-4.5 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${mcpSettings.mcp_enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'}`}
-              title={mcpSettings.mcp_enabled ? (isZh ? '点击关闭 MCP' : 'Click to disable MCP') : (isZh ? '点击开启 MCP' : 'Click to enable MCP')}
-            >
-              <span
-                className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${mcpSettings.mcp_enabled ? 'translate-x-3.5' : 'translate-x-0'}`}
-              />
-            </button>
-            <span className={`text-[11px] font-medium ${mcpSettings.mcp_enabled ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400'}`}>
-              {mcpSettings.mcp_enabled ? (isZh ? '已激活' : 'Active') : (isZh ? '已停用' : 'Disabled')}
-            </span>
+      {/* 核心指标与规格看板 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F1420] shadow-xs">
+        {/* 指标 1：协议总闸 */}
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60 flex items-center justify-center shrink-0 shadow-2xs">
+            <Cpu className="w-6 h-6" />
           </div>
-
-          {/* 活跃服务计数 */}
-          <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-300">
-            <span className="text-gray-400">{isZh ? '活跃服务:' : 'Active Servers:'}</span>
-            <span className="font-semibold text-gray-900 dark:text-white">{onlineServersCount}</span>
-            <span className="text-gray-400">/ {servers.length}</span>
-          </div>
-
-          {/* 聚合工具计数 */}
-          <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-300">
-            <span className="text-gray-400">{isZh ? '挂载工具:' : 'Mounted Tools:'}</span>
-            <span className="font-semibold text-gray-900 dark:text-white">{totalToolsCount}</span>
-            <span className="text-gray-400">{isZh ? '个' : ' tools'}</span>
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-medium text-slate-400">{isZh ? '协议总闸状态' : 'Master Switch'}</div>
+            <div className="flex items-center gap-2.5 mt-1">
+              <button
+                onClick={handleToggleGlobalMcp}
+                disabled={togglingGlobal}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${mcpSettings.mcp_enabled ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}
+                title={mcpSettings.mcp_enabled ? (isZh ? '点击关闭 MCP' : 'Click to disable MCP') : (isZh ? '点击开启 MCP' : 'Click to enable MCP')}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${mcpSettings.mcp_enabled ? 'translate-x-4' : 'translate-x-0'}`}
+                />
+              </button>
+              <span className={`text-xs font-semibold ${mcpSettings.mcp_enabled ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`}>
+                {mcpSettings.mcp_enabled ? (isZh ? '已激活运行' : 'Active') : (isZh ? '已全局停用' : 'Disabled')}
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* SSE 端点展示与复制 */}
-        <div className="flex items-center gap-1.5 text-xs text-gray-500 shrink-0">
-          <span className="text-gray-400 text-[11px]">{isZh ? 'SSE 端点:' : 'SSE Endpoint:'}</span>
-          <code className="px-1.5 py-0.5 rounded-sm font-mono text-[11px] bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200/80 dark:border-gray-800">
-            /mcp/sse
-          </code>
-          <button
-            onClick={() => handleCopyText(sseUrl, 'sse-endpoint')}
-            className="p-1 text-gray-400 hover:text-indigo-600 transition-colors"
-            title={isZh ? '复制完整端点 URL' : 'Copy Full Endpoint URL'}
-          >
-            {copiedKey === 'sse-endpoint' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-          </button>
+        {/* 指标 2：活跃服务 */}
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 flex items-center justify-center shrink-0 shadow-2xs">
+            <Server className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="text-xs font-medium text-slate-400">{isZh ? '在线 MCP 服务' : 'Active Servers'}</div>
+            <div className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">
+              {onlineServersCount} <span className="text-xs font-normal text-slate-400">/ {servers.length} {isZh ? '已配置' : 'configured'}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 指标 3：挂载工具 */}
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 border border-purple-200/60 dark:border-purple-800/60 flex items-center justify-center shrink-0 shadow-2xs">
+            <Layers className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="text-xs font-medium text-slate-400">{isZh ? '聚合工具总数' : 'Mounted Tools'}</div>
+            <div className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">
+              {totalToolsCount} <span className="text-xs font-normal text-slate-400">{isZh ? '个原子能力' : 'tools registered'}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 指标 4：统一 SSE 端点 */}
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center shrink-0 shadow-2xs">
+            <Globe className="w-6 h-6" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-medium text-slate-400">{isZh ? '网关统一 SSE 端点' : 'SSE Gateway Endpoint'}</div>
+            <div className="flex items-center gap-2 mt-1">
+              <code className="px-2 py-0.5 rounded-md font-mono text-xs bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-800 truncate">
+                /mcp/sse
+              </code>
+              <button
+                onClick={() => handleCopyText(sseUrl, 'sse-endpoint')}
+                className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                title={isZh ? '复制完整端点 URL' : 'Copy Full Endpoint URL'}
+              >
+                {copiedKey === 'sse-endpoint' ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* 搜索与分类导航 */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white dark:bg-gray-800/80 p-2.5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
-        <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-white dark:bg-[#0F1420] p-2.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none px-1">
           {categories.map(cat => {
             const Icon = cat.icon;
             const active = selectedCategory === cat.id;
@@ -863,7 +887,7 @@ curl -X POST "${messagesUrl}" \\
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg whitespace-nowrap transition-all ${active ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60'}`}
+                className={`flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-xl whitespace-nowrap transition-all ${active ? 'bg-indigo-600 text-white shadow-xs font-semibold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'}`}
               >
                 <Icon className="w-3.5 h-3.5" />
                 <span>{cat.name}</span>
@@ -872,31 +896,31 @@ curl -X POST "${messagesUrl}" \\
           })}
         </div>
 
-        <div className="relative min-w-[220px]">
-          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
+        <div className="relative min-w-[240px] px-1">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-2.5" />
           <input
             type="text"
-            placeholder={isZh ? '搜索 MCP 服务或工具...' : 'Search MCP servers or tools...'}
+            placeholder={isZh ? '搜索 MCP 服务或能力...' : 'Search MCP servers or tools...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-8 pr-3 py-1 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/60 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="w-full pl-9 pr-3.5 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs"
           />
         </div>
       </div>
 
       {/* MCP 服务卡片列表 */}
       {filteredServers.length === 0 ? (
-        <div className="p-10 text-center bg-white dark:bg-gray-800/50 rounded-xl border border-dashed border-gray-200 dark:border-gray-800">
-          <Cpu className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
-          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+        <div className="p-16 text-center bg-white dark:bg-[#0F1420] rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 shadow-2xs">
+          <Cpu className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
             {isZh ? '未找到匹配的 MCP 服务' : 'No matching MCP servers found'}
           </p>
-          <p className="text-xs text-gray-400 mt-1">
-            {isZh ? '可在上方切换分类筛选或点击「接入新服务」' : 'Switch category filters above or click "Add Server"'}
+          <p className="text-xs text-slate-400 mt-1.5">
+            {isZh ? '可在上方切换分类筛选，或点击右上角「接入新服务」进行自定义配置' : 'Switch category filters above or click "Add Server" to configure'}
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredServers.map(server => {
             const isToggling = !!togglingServer[server.id];
             const isCustom = server.id.startsWith('custom-');
@@ -904,30 +928,30 @@ curl -X POST "${messagesUrl}" \\
             return (
               <div
                 key={server.id}
-                className={`flex flex-col justify-between p-4 rounded-xl border transition-all duration-150 ${server.enabled ? 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/90 shadow-sm hover:shadow-md' : 'border-gray-200/60 dark:border-gray-800/60 bg-gray-50/60 dark:bg-gray-850/40 opacity-75'}`}
+                className={`flex flex-col justify-between p-6 rounded-2xl border transition-all duration-200 ${server.enabled ? 'border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F1420] shadow-xs hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700' : 'border-slate-200/50 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/30 opacity-70'}`}
               >
                 <div>
                   {/* 卡片头部 */}
-                  <div className="flex items-start justify-between gap-2.5 mb-2">
-                    <div className="flex items-center gap-2.5">
-                      <div className={`p-2 rounded-lg shrink-0 ${server.id === 'airoute-gateway' ? 'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-800/50' : 'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200/50 dark:border-gray-750'}`}>
-                        {server.category === 'ops' ? <Server className="w-4 h-4" /> :
-                         server.category === 'dev' ? <Code2 className="w-4 h-4" /> :
-                         server.category === 'search' ? <Globe className="w-4 h-4" /> :
-                         server.category === 'db' ? <Database className="w-4 h-4" /> :
-                         server.category === 'ai' ? <Sparkles className="w-4 h-4" /> :
-                         <Layers className="w-4 h-4" />}
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-2xs ${server.id === 'airoute-gateway' ? 'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-800/50' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700'}`}>
+                        {server.category === 'ops' ? <Server className="w-5 h-5" /> :
+                         server.category === 'dev' ? <Code2 className="w-5 h-5" /> :
+                         server.category === 'search' ? <Globe className="w-5 h-5" /> :
+                         server.category === 'db' ? <Database className="w-5 h-5" /> :
+                         server.category === 'ai' ? <Sparkles className="w-5 h-5" /> :
+                         <Layers className="w-5 h-5" />}
                       </div>
                       <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-semibold text-slate-900 dark:text-white truncate">
                             {server.name}
                           </h3>
-                          <span className={`px-1.5 py-0.2 text-[10px] font-mono font-semibold rounded-sm ${server.transport === 'sse' ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-300' : 'bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-300'}`}>
+                          <span className={`px-2 py-0.5 text-[10px] font-mono font-semibold rounded-md ${server.transport === 'sse' ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-300' : 'bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-300'}`}>
                             {server.transport.toUpperCase()}
                           </span>
                         </div>
-                        <div className="text-[11px] font-mono text-gray-400 truncate">
+                        <div className="text-[11px] font-mono text-slate-400 truncate mt-0.5">
                           {server.id}
                         </div>
                       </div>
@@ -936,52 +960,52 @@ curl -X POST "${messagesUrl}" \\
                     <button
                       onClick={() => handleToggleServer(server.id, server.enabled)}
                       disabled={isToggling}
-                      className={`relative inline-flex h-4.5 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${server.enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${server.enabled ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}
                       title={server.enabled ? (isZh ? '点击停用' : 'Click to disable') : (isZh ? '点击启用' : 'Click to enable')}
                     >
                       <span
-                        className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${server.enabled ? 'translate-x-3.5' : 'translate-x-0'}`}
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${server.enabled ? 'translate-x-4' : 'translate-x-0'}`}
                       />
                     </button>
                   </div>
 
                   {/* 描述文案 */}
-                  <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed line-clamp-2 mb-2.5">
+                  <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed line-clamp-2 mb-3.5 min-h-[38px]">
                     {server.description}
                   </p>
 
                   {/* 暴露的 Tools 标签组 */}
                   {server.tools && server.tools.length > 0 && (
-                    <div className="flex items-center gap-1.5 flex-wrap mb-3 text-[11px]">
-                      <span className="text-gray-400">{isZh ? '工具:' : 'Tools:'}</span>
+                    <div className="flex items-center gap-1.5 flex-wrap mb-4 text-[11px]">
+                      <span className="text-slate-400 text-xs">{isZh ? '能力:' : 'Tools:'}</span>
                       {server.tools.slice(0, 3).map(t => (
                         <span
                           key={t}
-                          className="px-1.5 py-0.5 font-mono text-[10px] bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-300 rounded-sm border border-gray-200/80 dark:border-gray-750"
+                          className="px-2 py-0.5 font-mono text-[10px] bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 rounded-lg border border-slate-200/80 dark:border-slate-750"
                         >
                           {t}
                         </span>
                       ))}
                       {server.tools.length > 3 && (
-                        <span className="text-gray-400 text-[10px]">+{server.tools.length - 3}</span>
+                        <span className="text-slate-400 text-[10px]">+{server.tools.length - 3}</span>
                       )}
                     </div>
                   )}
                 </div>
 
                 {/* 卡片底部操作栏 */}
-                <div className="pt-2.5 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-1.5">
-                  <div className="flex items-center gap-1.5">
+                <div className="pt-3.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleOpenProbe(server)}
-                      className="px-2 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-sm transition-colors inline-flex items-center gap-1"
+                      className="px-2.5 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-xl transition-colors inline-flex items-center gap-1.5"
                     >
                       <Radio className="w-3.5 h-3.5" />
                       {isZh ? '调试探针' : 'Probe'}
                     </button>
                     <button
                       onClick={() => { setSelectedServerForConfig(server); setConfigModalOpen(true); }}
-                      className="px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-750 rounded-sm transition-colors inline-flex items-center gap-1 border border-gray-200 dark:border-gray-700"
+                      className="px-2.5 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-750 rounded-xl transition-colors inline-flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 shadow-2xs"
                     >
                       <Terminal className="w-3.5 h-3.5" />
                       {isZh ? '配置' : 'Config'}
@@ -991,7 +1015,7 @@ curl -X POST "${messagesUrl}" \\
                   {isCustom && (
                     <button
                       onClick={() => handleDeleteServer(server.id)}
-                      className="p-1 text-gray-400 hover:text-rose-500 rounded-sm transition-colors"
+                      className="p-1.5 text-slate-400 hover:text-rose-500 rounded-xl transition-colors"
                       title={isZh ? '移除自定义 MCP 服务' : 'Remove custom MCP server'}
                     >
                       <Trash2 className="w-3.5 h-3.5" />

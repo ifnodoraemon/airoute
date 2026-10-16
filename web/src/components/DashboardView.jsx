@@ -761,6 +761,16 @@ export default function DashboardView({
               })}
             </div>
           )}
+
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-xs">
+            <span className="text-slate-400 text-[11px]">{isZh ? '按周期核算各服务商调用与支出' : 'Reconcile upstream costs'}</span>
+            <button
+              onClick={() => setCurrentTab('reconciliation')}
+              className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 font-medium inline-flex items-center space-x-1 cursor-pointer"
+            >
+              <span>{isZh ? '进入供应商整体对账 →' : 'Supplier Reconciliation →'}</span>
+            </button>
+          </div>
         </div>
 
         {/* Panel 3: Enterprise SLA Target & Error Budget Gauge */}

@@ -3,6 +3,7 @@ import {
   X,
   Lock,
   User,
+  Key,
   Mail,
   AlertCircle,
   ArrowRight,

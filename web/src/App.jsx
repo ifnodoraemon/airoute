@@ -80,6 +80,7 @@ const McpIntegrationView = lazy(() => import('./components/McpIntegrationView'))
 const UserManagementView = lazy(() => import('./components/UserManagementView'));
 const WalletManagementView = lazy(() => import('./components/WalletManagementView'));
 const ChannelsView = lazy(() => import('./components/ChannelsView'));
+const SupplierReconciliationView = lazy(() => import('./components/SupplierReconciliationView'));
 const KeysView = lazy(() => import('./components/KeysView'));
 const LogsView = lazy(() => import('./components/LogsView'));
 const DashboardView = lazy(() => import('./components/DashboardView'));
@@ -149,7 +150,7 @@ export default function App() {
   };
 
   const ALL_CONSOLE_TABS = [
-    'dashboard', 'models', 'pricing', 'channels',
+    'dashboard', 'models', 'pricing', 'channels', 'reconciliation',
     'keys', 'wallet', 'logs', 'skills', 'mcp', 'users', 'playground', 'docs'
   ];
 
@@ -215,13 +216,21 @@ export default function App() {
       return { viewMode: 'auth', tab: defaultTab, authTab: 'register' };
     }
 
-    if (route === 'landing' || route === 'home') {
+    if (!route || route === 'landing' || route === 'home' || ['features', 'multimodal'].includes(route)) {
       return { viewMode: 'landing', tab: defaultTab, authTab: 'login' };
+    }
+
+    if (route === 'console') {
+      if (token) {
+        return { viewMode: 'console', tab: defaultTab, authTab: 'login' };
+      } else {
+        return { viewMode: 'auth', tab: defaultTab, authTab: 'login' };
+      }
     }
 
     if (ALL_CONSOLE_TABS.includes(route)) {
       if (token) {
-        const adminOnlyTabs = ['channels', 'users', 'skills', 'mcp', 'dashboard'];
+        const adminOnlyTabs = ['channels', 'reconciliation', 'users', 'skills', 'mcp', 'dashboard'];
         if (role !== 'admin' && adminOnlyTabs.includes(route)) {
           return { viewMode: 'console', tab: 'wallet', authTab: 'login' };
         }
@@ -231,9 +240,6 @@ export default function App() {
       }
     }
 
-    if (token) {
-      return { viewMode: 'console', tab: defaultTab, authTab: 'login' };
-    }
     return { viewMode: 'landing', tab: defaultTab, authTab: 'login' };
   };
 
@@ -251,6 +257,7 @@ export default function App() {
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
   const [showTopologyModal, setShowTopologyModal] = useState(false);
   const [showAiCopilot, setShowAiCopilot] = useState(false);
+  const [copilotInitialQuery, setCopilotInitialQuery] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [authTab, setAuthTab] = useState(() => initialRoute.authTab);
@@ -374,7 +381,10 @@ export default function App() {
     let targetHash = '';
     if (viewMode === 'landing') {
       if (window.location.hash && window.location.hash !== '#/' && window.location.hash !== '#/landing') {
-        targetHash = '#/';
+        const curHash = window.location.hash.replace(/^#\/?/, '').trim();
+        if (!['features', 'multimodal', 'docs', 'pricing'].includes(curHash)) {
+          targetHash = '#/';
+        }
       }
     } else if (viewMode === 'auth') {
       targetHash = authTab === 'register' ? '#/register' : '#/login';
@@ -434,6 +444,7 @@ export default function App() {
   const [customEndTime, setCustomEndTime] = useState('');
   const [sessionFilter, setSessionFilter] = useState('');
   const [pricingGroups, setPricingGroups] = useState(['default']);
+  const [prices, setPrices] = useState([]);
 
   // Modals & Forms
   const [showChannelModal, setShowChannelModal] = useState(false);
@@ -501,6 +512,7 @@ export default function App() {
       if (keyRes.code === 0) setKeys(keyRes.data || []);
       if (statsRes.code === 0) setStats(statsRes.data || {});
       if (pricingRes.code === 0 && Array.isArray(pricingRes.data)) {
+        setPrices(pricingRes.data);
         const grpSet = new Set(['default']);
         pricingRes.data.forEach(p => {
           if (p.group_name) grpSet.add(p.group_name.trim().toLowerCase());
@@ -1351,12 +1363,15 @@ export default function App() {
                 }
               }}
               onViewDocs={() => {
-                setCurrentTab('docs');
-                if (adminToken) {
-                  setViewMode('console');
-                } else {
-                  setAuthTab('login');
-                  setViewMode('auth');
+                const el = document.getElementById('docs');
+                if (el) {
+                  const headerOffset = 70;
+                  const elementPosition = el.getBoundingClientRect().top;
+                  const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+                  window.scrollTo({
+                    top: offsetPosition,
+                    behavior: 'smooth'
+                  });
                 }
               }}
               onViewStatus={() => setViewMode('status')}
@@ -1692,6 +1707,21 @@ export default function App() {
                   </button>
 
                   <button
+                    onClick={() => setCurrentTab('reconciliation')}
+                    title={t.navReconciliation}
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                      currentTab === 'reconciliation'
+                        ? 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-white font-semibold'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <Coins className={`w-4 h-4 shrink-0 ${currentTab === 'reconciliation' ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`} />
+                      {!sidebarCollapsed && <span>{t.navReconciliation}</span>}
+                    </div>
+                  </button>
+
+                  <button
                     onClick={() => setCurrentTab('pricing')}
                     title={t.navPricing}
                     className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
@@ -1964,7 +1994,7 @@ export default function App() {
       {/* Main Container */}
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         {/* Top Header */}
-        <header className="h-16 bg-[#FAFAFA]/85 dark:bg-[#0A0D14]/85 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800/60 flex items-center justify-between px-8 lg:px-12 sticky top-0 z-20">
+        <header className="h-16 bg-[#FAFAFA]/85 dark:bg-[#0A0D14]/85 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800/60 flex items-center justify-between px-4 sm:px-6 lg:px-8 xl:px-10 sticky top-0 z-20">
           <div className="flex items-center space-x-3">
             {/* Mobile Hamburger Toggle */}
             <button
@@ -1981,7 +2011,7 @@ export default function App() {
                 {adminUser?.role === 'admin'
                   ? ['dashboard', 'logs'].includes(currentTab)
                     ? (isZh ? '监控与分析' : 'Monitoring')
-                    : ['models', 'channels', 'pricing'].includes(currentTab)
+                    : ['models', 'channels', 'reconciliation', 'pricing'].includes(currentTab)
                     ? (isZh ? '模型网关与调度' : 'Gateway')
                     : ['keys', 'users', 'wallet'].includes(currentTab)
                     ? (isZh ? '安全与资产' : 'Security')
@@ -1996,6 +2026,7 @@ export default function App() {
                 {currentTab === 'models' && t.navModels}
                 {currentTab === 'pricing' && t.navPricing}
                 {currentTab === 'channels' && t.navChannels}
+                {currentTab === 'reconciliation' && (t.navReconciliation || (isZh ? '供应商对账' : 'Reconciliation'))}
                 {currentTab === 'keys' && t.navKeys}
                 {currentTab === 'wallet' && (adminUser?.role === 'admin' ? (isZh ? '卡密与充值' : 'Wallet & Credits') : (t.navWallet || (isZh ? '我的钱包' : 'My Wallet')))}
                 {currentTab === 'logs' && t.navLogs}
@@ -2073,7 +2104,7 @@ export default function App() {
           </div>
         </header>
 
-        <div className="px-8 lg:px-14 py-10 max-w-6xl w-full mx-auto space-y-10">
+        <div className="px-4 sm:px-6 lg:px-8 xl:px-10 py-7 max-w-[1536px] w-full mx-auto space-y-7">
           {/* Default Password Security Warning Banner for Admins */}
           {adminUser && adminUser.role === 'admin' && adminUser.is_default_password && (
             <div className="bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-900/40 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm animate-in fade-in">
@@ -2161,6 +2192,7 @@ export default function App() {
                 showToast={showToast}
                 lang={lang}
                 t={t}
+                setCurrentTab={setCurrentTab}
                 onNavigateToPlayground={(m, modality) => {
                   setPlayModel(m);
                   if (modality && modality !== 'chat') {
@@ -2182,6 +2214,8 @@ export default function App() {
                 isAdmin={adminUser?.role === 'admin'}
                 lang={lang}
                 t={t}
+                modelRoutes={modelRoutes}
+                setCurrentTab={setCurrentTab}
               />
             )}
 
@@ -2205,6 +2239,21 @@ export default function App() {
                 testingId={testingId}
                 handleEditChannel={handleEditChannel}
                 handleDeleteChannel={handleDeleteChannel}
+                onNavigateToReconciliation={() => setCurrentTab('reconciliation')}
+                lang={lang}
+                t={t}
+              />
+            )}
+
+            {/* 2.5. SUPPLIER RECONCILIATION TAB */}
+            {currentTab === 'reconciliation' && (
+              <SupplierReconciliationView
+                adminFetch={adminFetch}
+                showToast={showToast}
+                onNavigateToLogs={(channelName) => {
+                  setLogFilter(channelName);
+                  setCurrentTab('logs');
+                }}
                 lang={lang}
                 t={t}
               />
@@ -2482,6 +2531,7 @@ export default function App() {
           onLogout={handleLogout}
           showToast={showToast}
           onOpenCopilotWithQuery={(q) => {
+            setCopilotInitialQuery(q || '');
             setShowAiCopilot(true);
           }}
         />
@@ -2498,11 +2548,15 @@ export default function App() {
           keys={keys}
           logs={logs}
           modelRoutes={modelRoutes}
+          prices={prices}
           stats={stats}
           lang={lang}
           t={t}
           showToast={showToast}
           adminUser={adminUser}
+          adminFetch={adminFetch}
+          initialQuery={copilotInitialQuery}
+          onClearInitialQuery={() => setCopilotInitialQuery('')}
         />
       </Suspense>
     </div>

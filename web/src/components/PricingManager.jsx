@@ -15,7 +15,8 @@ import {
   CheckCircle2,
   Calendar,
   Zap,
-  Info
+  Info,
+  ArrowRight
 } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
 
@@ -128,7 +129,16 @@ function parseSlotsFromPrice(p, isZh = true) {
   ];
 }
 
-export default function PricingManager({ adminFetch, showToast, stats = {}, isAdmin = true, lang = 'zh', t }) {
+export default function PricingManager({
+  adminFetch,
+  showToast,
+  stats = {},
+  isAdmin = true,
+  lang = 'zh',
+  t,
+  modelRoutes = [],
+  setCurrentTab
+}) {
   const isZh = lang === 'zh';
   const [prices, setPrices] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -202,6 +212,19 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
     if (groupFilter === 'all') return prices;
     return prices.filter(p => (p.group_name || 'default') === groupFilter);
   }, [prices, groupFilter]);
+
+  const mountedRouteModels = React.useMemo(() => {
+    return new Set((modelRoutes || []).map(r => r.model));
+  }, [modelRoutes]);
+
+  const unroutedPrices = React.useMemo(() => {
+    return prices.filter(p => p.model !== '*' && !mountedRouteModels.has(p.model));
+  }, [prices, mountedRouteModels]);
+
+  const unpricedRoutes = React.useMemo(() => {
+    const pricedModels = new Set(prices.map(p => p.model));
+    return (modelRoutes || []).filter(r => !pricedModels.has(r.model) && !pricedModels.has('*'));
+  }, [modelRoutes, prices]);
 
   const unpricedModels = React.useMemo(() => {
     const curGroup = formData.group_name || 'default';
@@ -584,6 +607,51 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
           })}
         </div>
 
+        {/* Route <-> Pricing Matching Banners */}
+        {unpricedRoutes.length > 0 && (
+          <div className="mb-4 p-3 rounded-xl border border-amber-200/80 dark:border-amber-800/60 bg-amber-50/70 dark:bg-amber-950/30 flex items-center justify-between text-xs animate-in fade-in">
+            <div className="flex items-center space-x-2 text-amber-900 dark:text-amber-200 min-w-0">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span className="truncate">
+                {isZh
+                  ? `检测到有 ${unpricedRoutes.length} 个模型路由（如 ${unpricedRoutes.slice(0, 2).map(r => r.model).join('、')}${unpricedRoutes.length > 2 ? ' 等' : ''}）未配置专属定价规则，当前按系统基准价计费。`
+                  : `${unpricedRoutes.length} active model routes lack custom pricing rules and fallback to baseline rates.`}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setFormData(prev => ({ ...prev, model: unpricedRoutes[0].model }));
+                setEditingPrice(null);
+                setShowModal(true);
+              }}
+              className="px-2.5 py-1 text-xs font-semibold bg-amber-600 hover:bg-amber-500 text-white rounded-lg shadow-xs cursor-pointer transition shrink-0 ml-3"
+            >
+              {isZh ? `立即配置 (${unpricedRoutes[0].model})` : `Configure (${unpricedRoutes[0].model})`}
+            </button>
+          </div>
+        )}
+
+        {unroutedPrices.length > 0 && (
+          <div className="mb-4 p-3 rounded-xl border border-indigo-200/80 dark:border-indigo-800/60 bg-indigo-50/70 dark:bg-indigo-950/30 flex items-center justify-between text-xs animate-in fade-in">
+            <div className="flex items-center space-x-2 text-indigo-950 dark:text-indigo-200 min-w-0">
+              <Info className="w-4 h-4 text-indigo-600 shrink-0" />
+              <span className="truncate">
+                {isZh
+                  ? `提示：有 ${unroutedPrices.length} 个模型（如 ${unroutedPrices.slice(0, 2).map(p => p.model).join('、')}）配置了费率但尚未挂载任何上游路由渠道。`
+                  : `Notice: ${unroutedPrices.length} models have pricing configured but no upstream channel routes mounted.`}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCurrentTab && setCurrentTab('models')}
+              className="px-2.5 py-1 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-xs cursor-pointer transition shrink-0 ml-3"
+            >
+              {isZh ? '前往模型路由挂载' : 'Go to Model Routes'}
+            </button>
+          </div>
+        )}
+
         {loading && prices.length === 0 ? (
           <div className="p-12 text-center text-slate-400 text-xs flex items-center justify-center space-x-2">
             <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
@@ -599,7 +667,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-slate-100 text-slate-400 font-medium bg-slate-50/50">
+                <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 dark:text-slate-400 font-medium bg-slate-50/50 dark:bg-slate-900/50">
                   {isAdmin && (
                     <th className="py-3 px-4 w-10 text-center">
                       <input
@@ -626,7 +694,7 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                   {isAdmin && <th className="py-3 px-6 text-right">{isZh ? '操作' : 'Actions'}</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 text-slate-700 dark:text-slate-300">
                 {filteredPrices.map((p) => {
                   const itemKey = `${p.group_name || 'default'}::${p.model}`;
                   const isOff = p.is_currently_off_peak;
@@ -653,8 +721,10 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                     }];
                   }
 
+                  const isRouteMounted = p.model === '*' || mountedRouteModels.has(p.model) || (platformModels || []).includes(p.model);
+
                   return (
-                    <tr key={itemKey} className="hover:bg-slate-50/60 transition-colors">
+                    <tr key={itemKey} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                       {isAdmin && (
                         <td className="py-4 px-4 text-center" onClick={(e) => e.stopPropagation()}>
                           <input
@@ -672,8 +742,35 @@ export default function PricingManager({ adminFetch, showToast, stats = {}, isAd
                           />
                         </td>
                       )}
-                      <td className="py-4 px-6 font-mono font-bold text-slate-900">
-                        {p.model}
+                      <td className="py-4 px-6 font-mono font-bold text-slate-900 dark:text-slate-100">
+                        <div className="flex items-center space-x-2">
+                          <span>{p.model}</span>
+                          {p.model !== '*' && (
+                            isRouteMounted ? (
+                              <span
+                                className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-sans font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800"
+                                title={isZh ? '已挂载上游路由渠道，可正常调度调用' : 'Healthy upstream route active'}
+                              >
+                                <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500" />
+                                <span>{isZh ? '路由就绪' : 'Routed'}</span>
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (setCurrentTab) setCurrentTab('models');
+                                }}
+                                className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-sans font-medium bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800 cursor-pointer transition text-left"
+                                title={isZh ? '当前无可用上游渠道挂载此模型，客户端调用将返回 404！点击前往【模型路由】挂载服务商' : 'No upstream route configured. Click to configure route.'}
+                              >
+                                <AlertCircle className="w-2.5 h-2.5 text-amber-500 shrink-0" />
+                                <span>{isZh ? '未配路由' : 'Unrouted'}</span>
+                                <ArrowRight className="w-2 h-2 text-amber-600 ml-0.5" />
+                              </button>
+                            )
+                          )}
+                        </div>
                       </td>
 
                       <td className="py-4 px-4">
