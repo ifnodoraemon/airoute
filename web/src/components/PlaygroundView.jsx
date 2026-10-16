@@ -257,16 +257,21 @@ Execute the following mission with precision, maintainability, and zero speculat
         const key = getEffectiveApiKey();
         if (key) headers['Authorization'] = `Bearer ${key}`;
 
+        const chatPayload = {
+          model: targetModel,
+          messages: payloadMessages,
+          temperature,
+          stream: playStream
+        };
+        const parsedTokens = parseInt(maxTokens, 10);
+        if (!isNaN(parsedTokens) && parsedTokens > 0) {
+          chatPayload.max_tokens = parsedTokens;
+        }
+
         const res = await fetch('/v1/chat/completions', {
           method: 'POST',
           headers,
-          body: JSON.stringify({
-            model: targetModel,
-            messages: payloadMessages,
-            temperature,
-            max_tokens: maxTokens,
-            stream: playStream
-          })
+          body: JSON.stringify(chatPayload)
         });
 
         if (!res.ok) {
@@ -653,19 +658,75 @@ Execute the following mission with precision, maintainability, and zero speculat
                 </div>
 
                 <div>
-                  <div className="flex justify-between text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
                     <span>{isZh ? '最大生成 Token (Max Tokens)' : 'Max Tokens'}</span>
-                    <span className="font-mono text-indigo-600 dark:text-indigo-400">{maxTokens}</span>
+                    <div className="flex items-center space-x-1.5">
+                      <input
+                        type="number"
+                        min="1"
+                        max="1048576"
+                        step="256"
+                        placeholder={isZh ? '自动' : 'Auto'}
+                        value={maxTokens}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setMaxTokens(val === '' ? '' : Math.max(1, parseInt(val) || ''));
+                        }}
+                        className="w-20 px-2 py-0.5 text-right font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-indigo-500"
+                        title={isZh ? '输入任意正整数，留空表示不限制（自动按模型上限）' : 'Enter arbitrary number or leave empty for auto'}
+                      />
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {maxTokens ? '' : (isZh ? '(自动)' : '(Auto)')}
+                      </span>
+                    </div>
                   </div>
+
+                  {/* Preset Quick Selection Buttons */}
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {[
+                      { label: isZh ? '自动' : 'Auto', val: '' },
+                      { label: '2K', val: 2048 },
+                      { label: '4K', val: 4096 },
+                      { label: '8K', val: 8192 },
+                      { label: '16K', val: 16384 },
+                      { label: '32K', val: 32768 },
+                      { label: '64K', val: 65536 },
+                      { label: '128K', val: 131072 }
+                    ].map((p, i) => {
+                      const isActive = (p.val === '' && (maxTokens === '' || maxTokens === 0)) || (p.val !== '' && Number(maxTokens) === p.val);
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => setMaxTokens(p.val)}
+                          className={`px-2 py-0.5 text-[10px] font-mono rounded-md border transition cursor-pointer ${
+                            isActive
+                              ? 'bg-indigo-600 text-white border-indigo-600 font-bold shadow-xs'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'
+                          }`}
+                        >
+                          {p.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Dynamic slider up to 131072 */}
                   <input
                     type="range"
                     min="256"
-                    max="8192"
+                    max="131072"
                     step="256"
-                    value={maxTokens}
+                    value={maxTokens ? Math.min(131072, Math.max(256, Number(maxTokens))) : 2048}
                     onChange={(e) => setMaxTokens(parseInt(e.target.value))}
                     className="w-full accent-indigo-600 cursor-pointer"
                   />
+                  <div className="flex justify-between text-[9px] font-mono text-slate-400 mt-0.5">
+                    <span>256</span>
+                    <span>16K</span>
+                    <span>64K</span>
+                    <span>128K</span>
+                  </div>
                 </div>
 
                 <div className="flex items-center space-x-2 pt-1">

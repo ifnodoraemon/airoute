@@ -7,11 +7,41 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
 )
+
+var (
+	// Regex for vLLM / GPUStack style context limit errors:
+	// "maximum context length of 8192 tokens. You requested a total of 8618 tokens: 426 tokens from the input messages and 8192 tokens for the completion."
+	contextLimitRegex1 = regexp.MustCompile(`(?i)maximum context length of (\d+) tokens.*?(\d+) tokens from the input messages`)
+	// Regex for OpenAI style context limit errors:
+	// "maximum context length is 8192 tokens. However, your messages resulted in 426 tokens and you requested 8192 tokens for the completion"
+	contextLimitRegex2 = regexp.MustCompile(`(?i)maximum context length is (\d+) tokens.*?resulted in (\d+) tokens`)
+)
+
+func extractClampedMaxTokens(bodyBytes []byte) (int, bool) {
+	str := string(bodyBytes)
+	for _, re := range []*regexp.Regexp{contextLimitRegex1, contextLimitRegex2} {
+		matches := re.FindStringSubmatch(str)
+		if len(matches) >= 3 {
+			maxCtx, err1 := strconv.Atoi(matches[1])
+			inputTokens, err2 := strconv.Atoi(matches[2])
+			if err1 == nil && err2 == nil && maxCtx > inputTokens {
+				safeMax := maxCtx - inputTokens - 1
+				if safeMax > 16 {
+					return safeMax, true
+				}
+			}
+		}
+	}
+	return 0, false
+}
 
 // OpenAIProvider handles all OpenAI-compatible API endpoints (OpenAI, DeepSeek, vLLM, SGLang, Ollama).
 type OpenAIProvider struct {
@@ -84,6 +114,20 @@ func (p *OpenAIProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		// Auto-heal context length overflow if max_tokens exceeded upstream model context limit
+		if resp.StatusCode == http.StatusBadRequest && req.MaxTokens != nil {
+			if safeMax, ok := extractClampedMaxTokens(bodyBytes); ok {
+				slog.Warn("auto-clamping max_tokens to fit upstream context limit",
+					"upstream", channel.Name,
+					"model", req.Model,
+					"original_max_tokens", *req.MaxTokens,
+					"clamped_max_tokens", safeMax,
+				)
+				retryReq := *req
+				retryReq.MaxTokens = &safeMax
+				return p.ChatComplete(ctx, &retryReq, channel)
+			}
+		}
 		return nil, fmt.Errorf("upstream %s returned status %d: %s", channel.Name, resp.StatusCode, string(bodyBytes))
 	}
 
@@ -136,6 +180,21 @@ func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
+
+		// Auto-heal context length overflow if max_tokens exceeded upstream model context limit
+		if resp.StatusCode == http.StatusBadRequest && req.MaxTokens != nil {
+			if safeMax, ok := extractClampedMaxTokens(bodyBytes); ok {
+				slog.Warn("auto-clamping max_tokens in stream to fit upstream context limit",
+					"upstream", channel.Name,
+					"model", req.Model,
+					"original_max_tokens", *req.MaxTokens,
+					"clamped_max_tokens", safeMax,
+				)
+				retryReq := *req
+				retryReq.MaxTokens = &safeMax
+				return p.ChatCompleteStream(ctx, &retryReq, channel)
+			}
+		}
 		return nil, fmt.Errorf("upstream %s returned status %d: %s", channel.Name, resp.StatusCode, string(bodyBytes))
 	}
 

@@ -172,3 +172,24 @@ func TestReasoningStreamAdapter_PureTagDriven(t *testing.T) {
 		}
 	})
 }
+
+func TestExtractClampedMaxTokens(t *testing.T) {
+	gpuStackErr := []byte(`{"object":"error","message":"Requested token count exceeds the model's maximum context length of 8192 tokens. You requested a total of 8618 tokens: 426 tokens from the input messages and 8192 tokens for the completion. Please reduce the number of tokens in the input messages or the completion to fit within the limit.","type":"BadRequestError","param":null,"code":400}`)
+	clamped, ok := extractClampedMaxTokens(gpuStackErr)
+	if !ok {
+		t.Fatalf("expected extractClampedMaxTokens to match GPUStack error")
+	}
+	expected := 8192 - 426 - 1
+	if clamped != expected {
+		t.Fatalf("expected clamped %d, got %d", expected, clamped)
+	}
+
+	openAIErr := []byte(`This model's maximum context length is 8192 tokens. However, your messages resulted in 426 tokens and you requested 8192 tokens for the completion (8618 in total).`)
+	clamped2, ok2 := extractClampedMaxTokens(openAIErr)
+	if !ok2 {
+		t.Fatalf("expected extractClampedMaxTokens to match OpenAI error")
+	}
+	if clamped2 != expected {
+		t.Fatalf("expected clamped %d, got %d", expected, clamped2)
+	}
+}
