@@ -28,6 +28,7 @@ import {
   Plus
 } from 'lucide-react';
 import { getGatewayOrigin, copyToClipboard as crossOriginCopy } from '../config';
+import MarkdownRenderer from './MarkdownRenderer';
 
 export default function PlaygroundView({
   keys = [],
@@ -350,8 +351,12 @@ Execute the following mission with precision, maintainability, and zero speculat
         if (activeSec > 0.1) {
           setTPS((estTokens / activeSec).toFixed(1));
         }
+
+        return { content: fullContent, reasoning: fullReasoning };
       } catch (e) {
-        setOutput(`[Network Error] ${e.message}`);
+        const errMsg = `[Network Error] ${e.message}`;
+        setOutput(errMsg);
+        return { content: errMsg, reasoning: '' };
       }
     };
 
@@ -362,8 +367,22 @@ Execute the following mission with precision, maintainability, and zero speculat
       promises.push(runModelStream(arenaModelB, setArenaOutputB, setArenaReasoningB, setArenaTTFTB, setArenaDurationB, setArenaTokensPerSecB));
     }
 
-    await Promise.all(promises);
+    const results = await Promise.all(promises);
     setPlayLoading(false);
+
+    // If single model chat mode, commit completed response into conversational messages
+    if (playMode === 'single' && results[0]?.content) {
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: results[0].content,
+          reasoning: results[0].reasoning
+        }
+      ]);
+      setPlayOutput('');
+      setPlayReasoningOutput('');
+    }
   };
 
   // Image generation
@@ -855,7 +874,22 @@ Execute the following mission with precision, maintainability, and zero speculat
                             : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700 shadow-sm'
                         }`}
                       >
-                        <div className="whitespace-pre-wrap">{msg.content}</div>
+                        {msg.reasoning && (
+                          <div className="mb-2.5 p-2.5 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 rounded-xl text-xs text-amber-950 dark:text-amber-200">
+                            <div className="font-bold flex items-center space-x-1.5 text-amber-800 dark:text-amber-400 mb-1">
+                              <Sparkles className="w-3 h-3" />
+                              <span>{isZh ? '深度思维链' : 'Reasoning Process'}</span>
+                            </div>
+                            <div className="whitespace-pre-wrap text-[11px] font-mono leading-relaxed opacity-85">
+                              {msg.reasoning}
+                            </div>
+                          </div>
+                        )}
+                        {msg.role === 'user' ? (
+                          <div className="whitespace-pre-wrap">{msg.content}</div>
+                        ) : (
+                          <MarkdownRenderer content={msg.content} />
+                        )}
                       </div>
                     </div>
                   ))}
@@ -874,12 +908,12 @@ Execute the following mission with precision, maintainability, and zero speculat
                   )}
 
                   {playOutput && (
-                    <div className="flex flex-col items-start">
+                    <div className="flex flex-col items-start w-full">
                       <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono mb-1">
                         {playModel} {isZh ? '(响应输出)' : '(Response)'}
                       </div>
-                      <div className="max-w-[90%] rounded-2xl p-3.5 text-xs bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700 shadow-sm whitespace-pre-wrap leading-relaxed">
-                        {playOutput}
+                      <div className="max-w-[90%] w-full rounded-2xl p-3.5 text-xs bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700 shadow-sm leading-relaxed">
+                        <MarkdownRenderer content={playOutput} />
                       </div>
                     </div>
                   )}
@@ -903,8 +937,10 @@ Execute the following mission with precision, maintainability, and zero speculat
                         {playReasoningOutput}
                       </div>
                     )}
-                    <div className="text-xs text-slate-800 dark:text-slate-100 whitespace-pre-wrap leading-relaxed">
-                      {playOutput || (
+                    <div className="text-xs text-slate-800 dark:text-slate-100 leading-relaxed">
+                      {playOutput ? (
+                        <MarkdownRenderer content={playOutput} />
+                      ) : (
                         <div className="text-center py-24 text-slate-400 text-xs">
                           {isZh ? '等待发送评测指令...' : 'Awaiting prompt evaluation...'}
                         </div>
@@ -928,8 +964,10 @@ Execute the following mission with precision, maintainability, and zero speculat
                         {arenaReasoningB}
                       </div>
                     )}
-                    <div className="text-xs text-slate-800 dark:text-slate-100 whitespace-pre-wrap leading-relaxed">
-                      {arenaOutputB || (
+                    <div className="text-xs text-slate-800 dark:text-slate-100 leading-relaxed">
+                      {arenaOutputB ? (
+                        <MarkdownRenderer content={arenaOutputB} />
+                      ) : (
                         <div className="text-center py-24 text-slate-400 text-xs">
                           {isZh ? '等待发送评测指令...' : 'Awaiting prompt evaluation...'}
                         </div>
