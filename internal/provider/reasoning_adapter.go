@@ -16,9 +16,12 @@ func IsReasoningModel(modelName string) bool {
 	lower := strings.ToLower(modelName)
 	return strings.Contains(lower, "r1") ||
 		strings.Contains(lower, "v4.1") ||
-		strings.Contains(lower, "dsv4") ||
-		strings.Contains(lower, "reason") ||
-		strings.Contains(lower, "think") ||
+		strings.Contains(lower, "v4-1") ||
+		strings.Contains(lower, "dsv4.1") ||
+		strings.Contains(lower, "dsv4-1") ||
+		strings.Contains(lower, "reasoner") ||
+		strings.Contains(lower, "reasoning") ||
+		strings.Contains(lower, "thinking") ||
 		strings.Contains(lower, "qwq") ||
 		strings.Contains(lower, "o1") ||
 		strings.Contains(lower, "o3") ||
@@ -76,14 +79,6 @@ type ReasoningStreamAdapter struct {
 // NewReasoningStreamAdapter creates a new stream processor for the requested model and channel.
 func NewReasoningStreamAdapter(modelName string, channel *model.ChannelConfig) *ReasoningStreamAdapter {
 	isReasoning := IsReasoningModel(modelName)
-	if !isReasoning && channel != nil {
-		lowerType := strings.ToLower(string(channel.Type))
-		lowerName := strings.ToLower(channel.Name)
-		if (lowerType == "gpustack" || strings.Contains(lowerName, "gpustack")) &&
-			(strings.Contains(strings.ToLower(modelName), "deepseek") || strings.Contains(strings.ToLower(modelName), "glm")) {
-			isReasoning = true
-		}
-	}
 
 	return &ReasoningStreamAdapter{
 		modelName:        modelName,
