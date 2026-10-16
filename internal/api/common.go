@@ -152,6 +152,11 @@ func InitSSEStream(c *gin.Context) (http.Flusher, bool) {
 	c.Header("X-Accel-Buffering", "no")
 	c.Status(http.StatusOK)
 
+	// Remove WriteTimeout deadline for SSE streaming so long-running responses
+	// (> 180s) won't be terminated mid-stream by http.Server.WriteTimeout.
+	rc := http.NewResponseController(c.Writer)
+	_ = rc.SetWriteDeadline(time.Time{})
+
 	flusher, ok := c.Writer.(http.Flusher)
 	if ok {
 		flusher.Flush()

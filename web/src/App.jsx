@@ -1516,6 +1516,7 @@ export default function App() {
       {activeLogDetail && (
         <LogDetailModal
           log={activeLogDetail}
+          prices={prices}
           onClose={() => setActiveLogDetail(null)}
           onCopy={(txt) => {
             copyToClipboard(txt);

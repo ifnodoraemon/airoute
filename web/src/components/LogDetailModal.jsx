@@ -1,12 +1,35 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { X, Copy, Check, Activity, Key, AlertCircle, Trash2, Sparkles, ArrowRight } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
 
-export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession, onDeleteLog, onNavigate, lang = 'zh', t }) {
+export default function LogDetailModal({ log, prices: initialPrices = [], onClose, onCopy, onFilterBySession, onDeleteLog, onNavigate, lang = 'zh', t }) {
   useModalA11y(!!log, onClose);
 
   const isZh = lang === 'zh';
   const [copied, setCopied] = useState(false);
+  const [localPrices, setLocalPrices] = useState(initialPrices);
+
+  useEffect(() => {
+    if (initialPrices && initialPrices.length > 0) {
+      setLocalPrices(initialPrices);
+    } else {
+      fetch('/api/v1/admin/pricing', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('airoute_token') || ''}` }
+      })
+        .then(r => r.json())
+        .then(res => {
+          if (res && res.code === 0 && Array.isArray(res.data)) {
+            setLocalPrices(res.data);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [initialPrices]);
+
+  const matchedPrice = useMemo(() => {
+    if (!localPrices || !log?.model) return null;
+    return localPrices.find(p => p.model === log.model);
+  }, [localPrices, log?.model]);
 
   const handleCopyRaw = () => {
     if (!log) return;
@@ -301,19 +324,65 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
                 )}
               </div>
             </div>
-            <div className="p-3.5 flex justify-between">
-              <span className="text-slate-500 dark:text-slate-400 font-medium">{isZh ? '计费核算公式' : 'Billing Formula'}</span>
-              <span className="font-mono text-xs text-slate-700 dark:text-slate-300">
-                {log.cost > 0 ? (
-                  <>
-                    <span>({isZh ? '输入' : 'Prompt'} {log.prompt_tokens} + {isZh ? '输出' : 'Completion'} {log.completion_tokens}) × {isZh ? '单价' : 'Price'}</span>
-                    {log.is_off_peak && <span className="text-indigo-600 dark:text-indigo-400 font-medium"> × {isZh ? `闲时 ${Math.round((log.off_peak_discount || 0.5) * 10)}折` : 'Off-peak'}</span>}
-                    <span> = ¥{(log.cost || 0).toFixed(4)}</span>
-                  </>
-                ) : (
+            <div className="p-3.5 flex justify-between items-start gap-4">
+              <span className="text-slate-500 dark:text-slate-400 font-medium shrink-0">{isZh ? '计费核算公式' : 'Billing Formula'}</span>
+              <div className="text-right font-mono text-xs text-slate-700 dark:text-slate-300">
+                {log.cost > 0 ? (() => {
+                  const pTokens = log.prompt_tokens || 0;
+                  const cTokens = log.completion_tokens || 0;
+                  const cachedTokens = log.cached_tokens || 0;
+                  const uncachedPrompt = Math.max(0, pTokens - cachedTokens);
+
+                  if (matchedPrice) {
+                    const pPrice = matchedPrice.prompt_price ?? 0;
+                    const cPrice = matchedPrice.completion_price ?? 0;
+                    const cachePrice = matchedPrice.cache_read_price ?? 0;
+                    const fixedPrice = matchedPrice.fixed_price ?? 0;
+
+                    const parts = [];
+                    if (cachedTokens > 0) {
+                      parts.push(`${isZh ? '未缓存' : 'Uncached'} ${uncachedPrompt.toLocaleString()} × ¥${pPrice}/1M`);
+                      parts.push(`${isZh ? '缓存' : 'Cache'} ${cachedTokens.toLocaleString()} × ¥${cachePrice}/1M`);
+                    } else {
+                      parts.push(`${isZh ? '输入' : 'Prompt'} ${pTokens.toLocaleString()} × ¥${pPrice}/1M`);
+                    }
+                    parts.push(`${isZh ? '输出' : 'Completion'} ${cTokens.toLocaleString()} × ¥${cPrice}/1M`);
+                    if (fixedPrice > 0) {
+                      parts.push(`${isZh ? '固定' : 'Fixed'} ¥${fixedPrice}`);
+                    }
+
+                    const formulaBase = parts.join(' + ');
+
+                    return (
+                      <div className="flex flex-wrap items-center justify-end gap-1">
+                        <span>{log.is_off_peak ? `(${formulaBase})` : formulaBase}</span>
+                        {log.is_off_peak && (
+                          <span className="text-indigo-600 dark:text-indigo-400 font-medium">
+                            {' '}× {isZh ? `闲时 ${Math.round((log.off_peak_discount || 0.5) * 10)}折` : `Off-peak ${Math.round((1 - (log.off_peak_discount || 0.5)) * 100)}% off`}
+                          </span>
+                        )}
+                        <span className="font-semibold text-slate-900 dark:text-white"> = ¥{(log.cost || 0).toFixed(4)}</span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="flex flex-wrap items-center justify-end gap-1">
+                      <span>
+                        {isZh ? '输入' : 'Prompt'} {pTokens.toLocaleString()} Tokens (输入单价) + {isZh ? '输出' : 'Completion'} {cTokens.toLocaleString()} Tokens (输出单价)
+                      </span>
+                      {log.is_off_peak && (
+                        <span className="text-indigo-600 dark:text-indigo-400 font-medium">
+                          {' '}× {isZh ? `闲时 ${Math.round((log.off_peak_discount || 0.5) * 10)}折` : 'Off-peak'}
+                        </span>
+                      )}
+                      <span className="font-semibold text-slate-900 dark:text-white"> = ¥{(log.cost || 0).toFixed(4)}</span>
+                    </div>
+                  );
+                })() : (
                   <span className="text-slate-500 font-sans">{isZh ? '零费率模型或管理员豁免计费' : 'Zero-cost tier or admin billing exemption'}</span>
                 )}
-              </span>
+              </div>
             </div>
             <div className="p-3.5 flex justify-between">
               <span className="text-slate-500 dark:text-slate-400 font-medium">{isZh ? '客户端 IP' : 'Client IP'}</span>

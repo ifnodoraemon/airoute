@@ -7,8 +7,8 @@ server:
   host: "${GATEWAY_HOST:-0.0.0.0}"
   port: ${GATEWAY_PORT:-8080}
   public_url: "${PUBLIC_URL}"
-  read_timeout_sec: 180
-  write_timeout_sec: 180
+  read_timeout_sec: 600
+  write_timeout_sec: 600
   log_level: "info"
 
 # 数据库与分布式缓存连接 (由 .env DATABASE_URL / REDIS_URL 统管)
