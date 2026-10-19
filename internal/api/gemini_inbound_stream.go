@@ -91,6 +91,27 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 					geminiUpstreamChatID = event.Chunk.ID
 				}
 
+				// Usage may arrive on a frame with an empty choices array; capture it
+				// before the choice-specific handling so prompt tokens are not lost.
+				usageOnly := len(event.Chunk.Choices) == 0 && event.Chunk.Usage != nil
+				if event.Chunk.Usage != nil {
+					totalPromptTokens = event.Chunk.Usage.PromptTokens
+					totalCompTokens = event.Chunk.Usage.CompletionTokens
+				}
+				if usageOnly {
+					usageChunk := gin.H{
+						"usageMetadata": gin.H{
+							"promptTokenCount":     totalPromptTokens,
+							"candidatesTokenCount": totalCompTokens,
+							"totalTokenCount":      totalPromptTokens + totalCompTokens,
+						},
+					}
+					if b, err := json.Marshal(usageChunk); err == nil {
+						fmt.Fprintf(w, "data: %s\n\n", b)
+						flusher.Flush()
+					}
+				}
+
 				if len(event.Chunk.Choices) > 0 {
 					chunkChoice := event.Chunk.Choices[0]
 					var geminiParts []gin.H
@@ -144,8 +165,6 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 						}
 
 						if event.Chunk.Usage != nil {
-							totalPromptTokens = event.Chunk.Usage.PromptTokens
-							totalCompTokens = event.Chunk.Usage.CompletionTokens
 							chunkObj["usageMetadata"] = gin.H{
 								"promptTokenCount":     totalPromptTokens,
 								"candidatesTokenCount": totalCompTokens,

@@ -175,6 +175,15 @@ func (a *AnthropicAdapter) ToCanonical(ctx context.Context, input any) (*model.C
 		stop = req.StopSequences
 	}
 
+	// OpenAI-compatible upstreams only emit the final usage chunk when the
+	// request opts in via stream_options.include_usage. Without it, streaming
+	// logs end up with zero prompt/cached tokens even though the upstream knows
+	// the real numbers.
+	var streamOptions *model.StreamOptions
+	if req.Stream {
+		streamOptions = &model.StreamOptions{IncludeUsage: true}
+	}
+
 	return &model.ChatCompletionRequest{
 		Model:               req.Model,
 		Messages:            canonicalMsgs,
@@ -182,6 +191,7 @@ func (a *AnthropicAdapter) ToCanonical(ctx context.Context, input any) (*model.C
 		TopP:                req.TopP,
 		MaxTokens:           maxTokens,
 		Stream:              req.Stream,
+		StreamOptions:       streamOptions,
 		Tools:               canonicalTools,
 		ToolChoice:          convertAnthropicToolChoice(req.ToolChoice),
 		Stop:                stop,
@@ -218,7 +228,7 @@ func (a *AnthropicAdapter) FromCanonical(ctx context.Context, resp *model.ChatCo
 		return nil, fmt.Errorf("empty canonical response")
 	}
 
-	var contentBlocks []map[string]any
+	contentBlocks := make([]map[string]any, 0)
 	stopReason := "end_turn"
 
 	if len(resp.Choices) > 0 {
@@ -258,6 +268,13 @@ func (a *AnthropicAdapter) FromCanonical(ctx context.Context, resp *model.ChatCo
 				stopReason = "max_tokens"
 			}
 		}
+	}
+
+	if len(contentBlocks) == 0 {
+		contentBlocks = append(contentBlocks, map[string]any{
+			"type": "text",
+			"text": "",
+		})
 	}
 
 	inputTokens := 0

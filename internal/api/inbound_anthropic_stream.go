@@ -16,6 +16,14 @@ import (
 
 // handleAnthropicStream handles SSE streaming responses for Claude SDK clients.
 func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, req *AnthropicInboundRequest, canonicalReq *model.ChatCompletionRequest, sessionID string, start time.Time) {
+	// Ensure usage is requested from OpenAI-compatible upstreams regardless of
+	// how the canonical request was built.
+	if canonicalReq.StreamOptions == nil {
+		canonicalReq.StreamOptions = &model.StreamOptions{IncludeUsage: true}
+	} else {
+		canonicalReq.StreamOptions.IncludeUsage = true
+	}
+
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, canonicalReq)
 	if err != nil {
 		statusCode := http.StatusBadGateway
@@ -301,17 +309,18 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 						}
 					}
 
-					if event.Chunk.Usage != nil {
-						// Only trust upstream-reported usage; the provider mapping
-						// already folds Anthropic prompt-cache reads into these counts.
-						if event.Chunk.Usage.PromptTokens > 0 || event.Chunk.Usage.CompletionTokens > 0 {
-							usageSource = "upstream"
-							upstreamUsageSeen = true
-						}
-						totalPromptTokens = event.Chunk.Usage.PromptTokens
-						totalCompTokens = event.Chunk.Usage.CompletionTokens
-						totalCachedTokens = event.Chunk.Usage.GetCachedTokens()
+				}
+
+				// Usage can arrive on a frame whose choices array is empty, so it
+				// must be captured outside the choice-handling block.
+				if event.Chunk.Usage != nil {
+					if event.Chunk.Usage.PromptTokens > 0 || event.Chunk.Usage.CompletionTokens > 0 {
+						usageSource = "upstream"
+						upstreamUsageSeen = true
 					}
+					totalPromptTokens = event.Chunk.Usage.PromptTokens
+					totalCompTokens = event.Chunk.Usage.CompletionTokens
+					totalCachedTokens = event.Chunk.Usage.GetCachedTokens()
 				}
 			}
 		}

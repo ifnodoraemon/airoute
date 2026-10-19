@@ -27,12 +27,16 @@ func CaptureRequestSnapshot(c *gin.Context) {
 	}
 	raw, err := c.GetRawData()
 	if err != nil {
+		if len(raw) > 0 {
+			c.Request.Body = io.NopCloser(bytes.NewReader(raw))
+		}
 		return
 	}
-	if len(raw) > snapshotMaxBytes {
-		raw = raw[:snapshotMaxBytes]
+	snapshot := raw
+	if len(snapshot) > snapshotMaxBytes {
+		snapshot = snapshot[:snapshotMaxBytes]
 	}
-	c.Set(ContextKeyRequestSnapshot, string(raw))
+	c.Set(ContextKeyRequestSnapshot, string(snapshot))
 	c.Request.Body = io.NopCloser(bytes.NewReader(raw))
 }
 

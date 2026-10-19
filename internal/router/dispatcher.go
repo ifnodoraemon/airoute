@@ -211,11 +211,15 @@ func (d *Dispatcher) candidateChannelsForRequest(ctx context.Context, req *model
 	}
 	native := make([]*model.ChannelConfig, 0, len(channels))
 	for _, channel := range channels {
-		if channel.Type == model.ProviderAnthropic {
+		if channel.Type == model.ProviderAnthropic || channel.HasExplicitProtocol("anthropic_messages") {
 			native = append(native, channel)
 		}
 	}
-	return native
+	if len(native) > 0 {
+		return native
+	}
+	// Fall back to general channels capable of serving the model via protocol adaptation
+	return channels
 }
 
 // GetBreakerStatus returns the circuit breaker status of a channel.
