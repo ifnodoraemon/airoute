@@ -401,6 +401,14 @@ func (db *DB) migrate() error {
 			},
 		},
 		{
+			Version: 14,
+			Name:    "add_error_message_to_usage_logs",
+			Up: func(db *DB) error {
+				ensureSQLiteColumn(db.DB, "usage_logs", "error_message", "TEXT DEFAULT ''")
+				return nil
+			},
+		},
+		{
 			Version: 13,
 			Name:    "create_request_traces",
 			Up: func(db *DB) error {

@@ -15,16 +15,20 @@ import (
 // ListAPIKeys returns all API keys (scoped to current user if non-admin).
 func (h *AdminHandler) ListAPIKeys(c *gin.Context) {
 	if claims, ok := GetClaimsFromContext(c); ok && claims.Role != "admin" {
-		user, _ := h.repo.GetUserByUsername(claims.Username)
-		if user != nil {
-			keys, err := h.repo.ListAPIKeysByUser(user.ID)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
-			c.JSON(http.StatusOK, gin.H{"code": 0, "data": keys})
+		user, err := h.repo.GetUserByUsername(claims.Username)
+		if err != nil || user == nil {
+			// Never fall through to the global key list: an unresolvable account
+			// must fail closed instead of exposing other tenants' credentials.
+			c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "账户不存在或暂时无法验证，请重新登录"})
 			return
 		}
+		keys, err := h.repo.ListAPIKeysByUser(user.ID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "data": keys})
+		return
 	}
 
 	keys, err := h.repo.ListAPIKeys()

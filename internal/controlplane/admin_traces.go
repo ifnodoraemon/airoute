@@ -38,9 +38,11 @@ func (h *AdminHandler) ListRequestTraces(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"code": 0, "data": []any{}})
 			return
 		}
-		if filter.APIKey == "" {
-			// Scope the lookup to the first owned key unless the caller narrowed it.
-			filter.APIKey = keys[0].Key
+		// Scope to every key the user owns, using an IN clause so a user with
+		// multiple keys still sees their complete trace history.
+		filter.APIKeys = make([]string, 0, len(keys))
+		for _, k := range keys {
+			filter.APIKeys = append(filter.APIKeys, k.Key)
 		}
 	}
 

@@ -50,6 +50,7 @@ func (h *Handler) HandleEmbeddings(c *gin.Context) {
 		PromptTokens: resp.Usage.PromptTokens,
 		TotalTokens:  resp.Usage.TotalTokens,
 		Duration:     time.Since(start),
+		TTFT:         time.Since(start),
 		StatusCode:   http.StatusOK,
 	})
 

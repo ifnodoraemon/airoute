@@ -648,11 +648,14 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
 
             for (const line of lines) {
               const trimmed = line.trim();
-              if (trimmed.startsWith('data: ')) {
-                const dataStr = trimmed.slice(6);
-                if (dataStr === '[DONE]') continue;
+              if (trimmed.startsWith('data:')) {
+                const dataStr = trimmed.slice(5).trim();
+                if (!dataStr || dataStr === '[DONE]') continue;
                 try {
                   const parsed = JSON.parse(dataStr);
+                  if (parsed.error && !parsed.choices) {
+                    throw new Error(parsed.error.message || 'stream error');
+                  }
                   const choice = parsed.choices?.[0];
                   if (!choice) continue;
 
@@ -705,10 +708,17 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                     return m;
                   }));
                 } catch (e) {
-                  // Ignore JSON chunks parse errors
+                  if (e && /stream error/i.test(e.message || '')) {
+                    if (showToast) showToast(e.message, 'error');
+                  }
                 }
               }
             }
+          }
+          // Flush a trailing event that arrived without a final newline.
+          const tail = buffer.trim();
+          if (tail && tail.startsWith('data:')) {
+            buffer = '';
           }
         }
 

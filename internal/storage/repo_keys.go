@@ -51,6 +51,9 @@ func (r *Repository) ListAPIKeys() ([]*APIKeyRecord, error) {
 		}
 		list = append(list, &rec)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return list, nil
 }
 
@@ -74,6 +77,9 @@ func (r *Repository) ListAPIKeysByUser(userID int64) ([]*APIKeyRecord, error) {
 			_ = json.Unmarshal([]byte(allowedJSON), &rec.AllowedModels)
 		}
 		list = append(list, &rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return list, nil
 }

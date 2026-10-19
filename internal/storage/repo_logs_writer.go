@@ -29,6 +29,18 @@ func normalizeUsageLog(log *UsageLogRecord) {
 	log.APIKey = clampRunes(log.APIKey, 255)
 }
 
+// truncateError keeps persisted error strings bounded (2 KiB).
+func truncateError(msg string) string {
+	if len(msg) <= 2048 {
+		return msg
+	}
+	cut := 2048
+	for cut > 0 && (msg[cut]&0xC0) == 0x80 {
+		cut--
+	}
+	return msg[:cut]
+}
+
 // normalizeUsageSource clamps the usage provenance marker to a known value.
 func normalizeUsageSource(src string) string {
 	if src == "estimated" {
@@ -68,11 +80,11 @@ func (r *Repository) RecordUsageLog(log *UsageLogRecord) error {
 	usageSource := normalizeUsageSource(log.UsageSource)
 
 	if !log.CreatedAt.IsZero() {
-		_, err = tx.Exec(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, cost_nano, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, usage_source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, ToNano(log.Cost), isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, usageSource, log.CreatedAt.UTC().Format("2006-01-02 15:04:05"))
+		_, err = tx.Exec(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, cost_nano, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, usage_source, error_message, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, ToNano(log.Cost), isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, usageSource, truncateError(log.ErrorMessage), log.CreatedAt.UTC().Format("2006-01-02 15:04:05"))
 	} else {
-		_, err = tx.Exec(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, cost_nano, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, usage_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, ToNano(log.Cost), isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, usageSource)
+		_, err = tx.Exec(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, cost_nano, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, usage_source, error_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, ToNano(log.Cost), isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, usageSource, truncateError(log.ErrorMessage))
 	}
 	if err != nil {
 		return err
@@ -140,8 +152,8 @@ func (r *Repository) BatchRecordUsageLogs(logs []*UsageLogRecord) error {
 	keyTenantMap := make(map[string]string)
 	orphanTenantCostMap := make(map[string]float64)
 
-	insertWithTimeSQL := r.db.Rebind(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, cost_nano, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, usage_source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-	insertSQL := r.db.Rebind(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, cost_nano, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, usage_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	insertWithTimeSQL := r.db.Rebind(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, cost_nano, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, usage_source, error_message, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	insertSQL := r.db.Rebind(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, cost_nano, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, usage_source, error_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 
 	stmtWithTime, err := tx.Prepare(insertWithTimeSQL)
 	if err != nil {
@@ -178,9 +190,9 @@ func (r *Repository) BatchRecordUsageLogs(logs []*UsageLogRecord) error {
 		keyVal := log.APIKey
 		usageSource := normalizeUsageSource(log.UsageSource)
 		if !log.CreatedAt.IsZero() {
-			_, err = stmtWithTime.Exec(log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, ToNano(log.Cost), isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, usageSource, log.CreatedAt.UTC().Format("2006-01-02 15:04:05"))
+			_, err = stmtWithTime.Exec(log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, ToNano(log.Cost), isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, usageSource, truncateError(log.ErrorMessage), log.CreatedAt.UTC().Format("2006-01-02 15:04:05"))
 		} else {
-			_, err = stmt.Exec(log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, ToNano(log.Cost), isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, usageSource)
+			_, err = stmt.Exec(log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, ToNano(log.Cost), isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, usageSource, truncateError(log.ErrorMessage))
 		}
 		if err != nil {
 			return err

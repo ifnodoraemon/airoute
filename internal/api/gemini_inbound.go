@@ -181,6 +181,7 @@ func (h *Handler) handleGeminiUnary(c *gin.Context, reqCtx context.Context, cano
 		PromptTokens:     pTokens,
 		CompletionTokens: cTokens,
 		Duration:         dur,
+		TTFT:             dur,
 		StatusCode:       http.StatusOK,
 	})
 	c.JSON(http.StatusOK, geminiResp)

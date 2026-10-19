@@ -107,8 +107,19 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 			return
 		}
 	} else if isTestOrDev {
-		// Test/dev simulated authentication
+		// Simulated authentication is only reachable in test binaries or when
+		// ENABLE_SIMULATED_OAUTH=true is set explicitly. It must never be able to
+		// take over a privileged account, so the requested identity is only
+		// honoured for newly generated demo users.
 		if req.Username != "" {
+			existing, _ := h.repo.GetUserByUsername(req.Username)
+			if existing != nil {
+				c.JSON(http.StatusForbidden, gin.H{
+					"code":  403,
+					"error": "模拟登录不能接管已存在的账号，请使用标准密码或真实 OAuth 登录",
+				})
+				return
+			}
 			username = req.Username
 		} else {
 			username = fmt.Sprintf("%s_user_%d", provider, time.Now().Unix()%10000)
@@ -132,8 +143,11 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 		user, _ = h.repo.GetUserByUsername(email)
 	}
 
-	// Security: disallow demo/simulated OAuth to log in as administrator
-	if (req.Simulated || req.Code == "demo" || req.Code == "") && user != nil && strings.EqualFold(user.Role, "admin") {
+	// Security: disallow demo/simulated OAuth to log in as administrator. The
+	// check covers the test/dev branch too, not just requests explicitly marked
+	// as simulated.
+	simulatedPath := isTestOrDev && (clientID == "" || clientSecret == "" || req.Code == "" || req.Code == "demo" || req.Simulated)
+	if (simulatedPath || req.Simulated || req.Code == "demo" || req.Code == "") && user != nil && strings.EqualFold(user.Role, "admin") {
 		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "管理员账号不允许通过模拟演示登录，请使用标准密码登录"})
 		return
 	}

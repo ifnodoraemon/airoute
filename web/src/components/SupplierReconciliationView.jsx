@@ -1,3 +1,4 @@
+import { toCSV } from '../config';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   DollarSign,
@@ -135,10 +136,10 @@ export default function SupplierReconciliationView({
         ? s.uncached_prompt_tokens
         : Math.max(0, (s.prompt_tokens || 0) - (s.cached_tokens || 0));
       return [
-        `"${s.channel_name || ''}"`,
-        `"${s.channel_type || ''}"`,
-        `"${s.channel_status || ''}"`,
-        `"${s.base_url || ''}"`,
+        s.channel_name || '',
+        s.channel_type || '',
+        s.channel_status || '',
+        s.base_url || '',
         s.total_requests || 0,
         s.success_requests || 0,
         s.failed_requests || 0,
@@ -153,8 +154,8 @@ export default function SupplierReconciliationView({
       ];
     });
 
-    // CSV format with UTF-8 BOM so Excel opens cleanly
-    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    // RFC 4180 escaping + formula-injection guard via the shared helper
+    const csvContent = toCSV(headers, rows);
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

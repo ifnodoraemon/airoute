@@ -832,11 +832,9 @@ export default function LogsView({
                       >
                         {formatDuration(log.duration_ms ?? 0)}
                       </div>
-                      {log.ttft_ms > 0 && (
-                        <div className="text-[10px] text-slate-400 font-mono">
-                          TTFT: {formatDuration(log.ttft_ms)}
-                        </div>
-                      )}
+                      <div className="text-[10px] font-mono text-slate-400">
+                        TTFT: {(log.ttft_ms || 0) > 0 ? formatDuration(log.ttft_ms) : '-'}
+                      </div>
                     </td>
 
                     {/* 11. Status & Actions */}
@@ -852,6 +850,14 @@ export default function LogsView({
                       >
                         {log.status_code || 200}
                       </span>
+                      {log.error_message && (
+                        <span
+                          className="inline-block align-middle max-w-[150px] truncate text-[10px] text-amber-600 dark:text-amber-400"
+                          title={log.error_message}
+                        >
+                          {log.error_message}
+                        </span>
+                      )}
                       <span className="text-xs text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition font-medium">
                         {isZh ? '详情 →' : 'Detail →'}
                       </span>

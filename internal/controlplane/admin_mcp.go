@@ -228,10 +228,14 @@ func (h *AdminHandler) ProbeMCPServer(c *gin.Context) {
 		status = "online"
 		latencyMs = 1
 	} else if strings.HasPrefix(endpoint, "http://") || strings.HasPrefix(endpoint, "https://") {
-		start := time.Now()
-		probeClient := &http.Client{
-			Timeout: 5 * time.Second,
+		if err := validateProbeURL(endpoint); err != nil {
+			status = "offline"
+			probeErr = err.Error()
+			c.JSON(http.StatusOK, gin.H{"code": 0, "data": gin.H{"status": status, "latency_ms": latencyMs, "error": probeErr}})
+			return
 		}
+		start := time.Now()
+		probeClient := safeProbeClient(5 * time.Second)
 		probeReq, reqErr := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, endpoint, nil)
 		if reqErr != nil {
 			status = "offline"

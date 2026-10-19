@@ -25,9 +25,19 @@ func isEmailVerificationRequired() bool {
 func sendVerificationEmail(targetEmail, code, purpose string) error {
 	smtpHost := strings.TrimSpace(os.Getenv("SMTP_HOST"))
 	if smtpHost == "" {
-		telemetry.Logger.Info("email verification code generated (SMTP not configured, logged for audit)",
-			"email", targetEmail, "purpose", purpose, "code", code)
-		return nil
+		// Never log the verification code itself: aggregated logs are widely
+		// readable and the code is a full account-takeover factor. Tests and
+		// explicit local development rely on the code being returned in the
+		// response body instead.
+		if devCodeExposed() {
+			telemetry.Logger.Warn("email verification code generated without SMTP; returning it to the caller because dev mode is enabled",
+				"email", targetEmail, "purpose", purpose)
+			return nil
+		}
+		telemetry.Logger.Warn("email verification code generated but SMTP is not configured; verification cannot be delivered",
+			"email", targetEmail, "purpose", purpose,
+			"remediation", "configure SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS")
+		return fmt.Errorf("SMTP is not configured, verification email cannot be delivered")
 	}
 
 	smtpPort := strings.TrimSpace(os.Getenv("SMTP_PORT"))
@@ -128,8 +138,7 @@ func (h *AdminHandler) SendVerificationCode(c *gin.Context) {
 		return
 	}
 
-	// In automated test or development mode, return dev_code for testing convenience
-	isDevOrTest := strings.HasSuffix(os.Args[0], ".test") || strings.Contains(os.Args[0], "/_test/") || os.Getenv("ENV") == "development"
+	isDevOrTest := devCodeExposed()
 	resp := gin.H{
 		"code":    0,
 		"message": fmt.Sprintf("验证码已成功发送至邮箱 %s (10分钟内有效)", email),
@@ -138,4 +147,14 @@ func (h *AdminHandler) SendVerificationCode(c *gin.Context) {
 		resp["dev_code"] = code
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+// devCodeExposed reports whether the verification code may be returned in the
+// HTTP response. It is limited to test binaries and an explicit opt-in flag;
+// a generic ENV=development no longer qualifies.
+func devCodeExposed() bool {
+	if strings.HasSuffix(os.Args[0], ".test") || strings.Contains(os.Args[0], "/_test/") {
+		return true
+	}
+	return os.Getenv("AIROUTE_DEV_VERIFICATION_CODE") == "true"
 }

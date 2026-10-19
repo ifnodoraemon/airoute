@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -81,7 +82,10 @@ func (h *Handler) HandleMetrics(c *gin.Context) {
 }
 
 // HandlePublicStatus handles GET /api/v1/public/status for public status page.
+// Set GATEWAY_PUBLIC_STATUS=false to hide the model catalog from anonymous
+// visitors (the endpoint then reports only overall availability).
 func (h *Handler) HandlePublicStatus(c *gin.Context) {
+	exposeModels := !strings.EqualFold(os.Getenv("GATEWAY_PUBLIC_STATUS"), "false")
 	models := h.dispatcher.GetAllSupportedModels()
 	type publicModelStatus struct {
 		Model     string `json:"model"`
@@ -110,12 +114,14 @@ func (h *Handler) HandlePublicStatus(c *gin.Context) {
 
 		modality := router.InferModality(m)
 
-		modelStatuses = append(modelStatuses, publicModelStatus{
-			Model:     m,
-			Modality:  modality,
-			Status:    st,
-			LatencyMs: 0,
-		})
+		if exposeModels {
+			modelStatuses = append(modelStatuses, publicModelStatus{
+				Model:     m,
+				Modality:  modality,
+				Status:    st,
+				LatencyMs: 0,
+			})
+		}
 	}
 
 	overallStatus := "operational"

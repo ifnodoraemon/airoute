@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
 func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context, req LegacyCompletionRequest, chatReq model.ChatCompletionRequest, sessionID string, start time.Time) {
@@ -25,6 +26,8 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 	}
 
 	w := c.Writer
+	firstTokenRecorded := false
+	var ttftDuration time.Duration
 	respID := fmt.Sprintf("cmpl_%d", time.Now().UnixNano())
 	nowCreated := time.Now().Unix()
 
@@ -63,6 +66,11 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 				finishReason = event.Chunk.Choices[0].FinishReason
 			}
 			if deltaText != "" {
+				if !firstTokenRecorded {
+					ttftDuration = time.Since(start)
+					telemetry.GlobalMetrics.RecordTTFT(ttftDuration)
+					firstTokenRecorded = true
+				}
 				accumulatedChars += len(deltaText)
 			}
 			if event.Chunk.Usage != nil {
@@ -108,6 +116,7 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 		PromptTokens:     totalPromptTokens,
 		CompletionTokens: totalCompTokens,
 		Duration:         dur,
+		TTFT:             ttftDuration,
 		StatusCode:       http.StatusOK,
 	})
 }

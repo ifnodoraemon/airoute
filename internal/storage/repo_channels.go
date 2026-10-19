@@ -56,6 +56,9 @@ func (r *Repository) ListChannels() ([]*ChannelRecord, error) {
 		}
 		list = append(list, &rec)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return list, nil
 }
 

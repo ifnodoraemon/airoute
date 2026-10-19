@@ -31,6 +31,7 @@ type AuditRecordParams struct {
 	TTFT             time.Duration
 	StatusCode       int
 	UsageSource      string // "upstream" (default) or "estimated" when tokens are locally approximated
+	ErrorMessage     string // populated for failed requests so the audit log explains the failure
 	BillableUnits    int
 	SkipBilling      bool
 }
@@ -66,6 +67,12 @@ func RecordUsage(c *gin.Context, params AuditRecordParams) float64 {
 		totTokens = params.PromptTokens + params.CompletionTokens
 	}
 
+	// Feed actual consumption back into the per-minute token budget so the next
+	// requests from this key are gated by real usage rather than an estimate.
+	if cfg := getAPIKeyConfig(c); cfg != nil && cfg.TPM > 0 {
+		middleware.GlobalTokenQuota.Consume(cfg.Key, cfg.TPM, totTokens)
+	}
+
 	telemetry.GlobalMetrics.RecordRequestWithModel(
 		params.Model,
 		success,
@@ -94,10 +101,11 @@ func RecordUsage(c *gin.Context, params AuditRecordParams) float64 {
 			Cost:             cost,
 			IsOffPeak:        isOffPeak,
 			OffPeakDiscount:  offPeakDiscount,
-			DurationMs:       params.Duration.Milliseconds(),
-			TTFTMs:           params.TTFT.Milliseconds(),
+			DurationMs:       ceilMillis(params.Duration),
+			TTFTMs:           ceilMillis(params.TTFT),
 			StatusCode:       params.StatusCode,
 			UsageSource:      params.UsageSource,
+			ErrorMessage:     params.ErrorMessage,
 		})
 	}
 
@@ -209,6 +217,21 @@ func recordFailedRequest(c *gin.Context, sessionID, modelName string, dur time.D
 	})
 }
 
+// recordFailedRequestWithError also records why the request failed.
+func recordFailedRequestWithError(c *gin.Context, sessionID, modelName string, dur time.Duration, statusCode int, err error) {
+	msg := ""
+	if err != nil {
+		msg = err.Error()
+	}
+	RecordUsage(c, AuditRecordParams{
+		SessionID:    sessionID,
+		Model:        modelName,
+		Duration:     dur,
+		StatusCode:   statusCode,
+		ErrorMessage: msg,
+	})
+}
+
 // getAPIKeyConfig returns APIKeyConfig metadata bound to the context.
 func getAPIKeyConfig(c *gin.Context) *model.APIKeyConfig {
 	if c == nil {
@@ -265,12 +288,25 @@ func respondUpstreamDispatchError(c *gin.Context, sessionID, modelName string, d
 	noUpstream := strings.Contains(err.Error(), "no upstream provider available")
 	if noUpstream {
 		RecordTrace(c, modelName, "", http.StatusNotFound, err.Error(), "", dur)
-		recordFailedRequest(c, sessionID, modelName, dur, http.StatusNotFound)
+		recordFailedRequestWithError(c, sessionID, modelName, dur, http.StatusNotFound, err)
 		RespondOpenAIError(c, http.StatusNotFound, fmt.Sprintf("The model '%s' does not exist or has no active upstream providers configured.", modelName), "invalid_request_error", "model_not_found")
 	} else {
 		RecordTrace(c, modelName, "", http.StatusBadGateway, err.Error(), "", dur)
-		recordFailedRequest(c, sessionID, modelName, dur, http.StatusBadGateway)
+		recordFailedRequestWithError(c, sessionID, modelName, dur, http.StatusBadGateway, err)
 		safeErr := sanitizeErrorMessage(err)
 		RespondOpenAIError(c, http.StatusBadGateway, safeErr, "gateway_error", "upstream_failure")
 	}
+}
+
+// ceilMillis converts a duration to milliseconds, rounding up so that a
+// sub-millisecond exchange still shows as 1ms instead of a misleading 0.
+func ceilMillis(d time.Duration) int64 {
+	if d <= 0 {
+		return 0
+	}
+	ms := d.Milliseconds()
+	if ms == 0 {
+		return 1
+	}
+	return ms
 }

@@ -32,6 +32,7 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 	totalPromptTokens := 0
 	totalCompTokens := 0
 	firstTokenRecorded := false
+	var ttftDuration time.Duration
 	upstreamChannel := ""      // populated from the first stream event
 	geminiUpstreamChatID := "" // upstream response ID, captured from the first chunk
 
@@ -45,6 +46,7 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 			PromptTokens:     totalPromptTokens,
 			CompletionTokens: totalCompTokens,
 			Duration:         time.Since(start),
+			TTFT:             ttftDuration,
 			StatusCode:       http.StatusOK,
 		})
 	}
@@ -95,7 +97,8 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 
 					if chunkChoice.Delta.Content != "" {
 						if !firstTokenRecorded {
-							telemetry.GlobalMetrics.RecordTTFT(time.Since(start))
+							ttftDuration = time.Since(start)
+							telemetry.GlobalMetrics.RecordTTFT(ttftDuration)
 							firstTokenRecorded = true
 						}
 						totalCompTokens++

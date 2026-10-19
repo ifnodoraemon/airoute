@@ -45,6 +45,9 @@ func (r *Repository) ListSkills() ([]*SkillRecord, error) {
 		_ = json.Unmarshal([]byte(toolsStr), &s.Tools)
 		list = append(list, &s)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return list, nil
 }
 

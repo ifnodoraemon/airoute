@@ -91,6 +91,12 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 			TTFT:             ttftDuration,
 			StatusCode:       statusCode,
 			UsageSource:      usageSource,
+			ErrorMessage: func() string {
+				if streamError != nil {
+					return streamError.Error()
+				}
+				return ""
+			}(),
 		})
 	}
 	defer recordOnce.Do(recordStreamEnd)

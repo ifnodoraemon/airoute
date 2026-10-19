@@ -97,6 +97,9 @@ func (r *Repository) GetModelFallbacks() (map[string]string, error) {
 			m[src] = dst
 		}
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return m, nil
 }
 

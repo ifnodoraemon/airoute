@@ -51,6 +51,9 @@ func (r *Repository) ListMCPServers() ([]*MCPServerRecord, error) {
 		_ = json.Unmarshal([]byte(resourcesStr), &s.Resources)
 		list = append(list, &s)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return list, nil
 }
 

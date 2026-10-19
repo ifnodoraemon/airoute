@@ -33,7 +33,7 @@ func (h *AdminHandler) ProbeModelRoute(c *gin.Context) {
 	channels := h.dispatcher.GetChannelsForModel(req.Model)
 	results := make([]ProbeResultItem, len(channels))
 	var wg stdSync.WaitGroup
-	client := &http.Client{Timeout: 4 * time.Second}
+	client := safeProbeClient(4 * time.Second)
 
 	for i, ch := range channels {
 		wg.Add(1)

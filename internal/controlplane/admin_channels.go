@@ -64,14 +64,23 @@ func (h *AdminHandler) UpdateChannel(c *gin.Context) {
 	}
 	rec.ID = id
 
-	if err := h.repo.UpdateChannel(&rec); err != nil {
+	// Partial updates must not wipe credentials or routing data the caller did
+	// not send (previously an omitted api_key/base_url was stored as empty).
+	existing, err := h.repo.GetChannel(id)
+	if err != nil || existing == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "未找到指定渠道"})
+		return
+	}
+	mergeChannelUpdate(existing, &rec)
+
+	if err := h.repo.UpdateChannel(existing); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新渠道失败: " + err.Error()})
 		return
 	}
 
 	_ = h.sync.ReloadAndBroadcast(c.Request.Context(), "channel_updated")
 
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": rec, "message": "渠道配置已成功更新"})
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": existing, "message": "渠道配置已成功更新"})
 }
 
 // DeleteChannel removes a channel.
@@ -125,4 +134,42 @@ func (h *AdminHandler) BatchStatusChannels(c *gin.Context) {
 		action = "停用"
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": fmt.Sprintf("已批量%s %d 个服务商渠道", action, n)})
+}
+
+// mergeChannelUpdate copies only the fields the client actually provided onto the
+// existing channel record.
+func mergeChannelUpdate(existing, patch *storage.ChannelRecord) {
+	if patch.Name != "" {
+		existing.Name = patch.Name
+	}
+	if patch.Type != "" {
+		existing.Type = patch.Type
+	}
+	if patch.BaseURL != "" {
+		existing.BaseURL = patch.BaseURL
+	}
+	if patch.APIKey != "" {
+		existing.APIKey = patch.APIKey
+	}
+	if patch.Models != nil {
+		existing.Models = patch.Models
+	}
+	if patch.ModelMapping != nil {
+		existing.ModelMapping = patch.ModelMapping
+	}
+	if patch.Protocols != nil {
+		existing.Protocols = patch.Protocols
+	}
+	if patch.Priority != 0 {
+		existing.Priority = patch.Priority
+	}
+	if patch.Weight != 0 {
+		existing.Weight = patch.Weight
+	}
+	if patch.TimeoutSeconds != 0 {
+		existing.TimeoutSeconds = patch.TimeoutSeconds
+	}
+	if patch.Status != "" {
+		existing.Status = patch.Status
+	}
 }

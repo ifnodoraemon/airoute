@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
-	"github.com/ifnodoraemon/airoute/internal/provider"
 )
 
 // ProbeRequest contains connection parameters for probing downstream services.
@@ -41,7 +40,7 @@ type DownstreamProber struct {
 // NewDownstreamProber creates a DownstreamProber.
 func NewDownstreamProber(client *http.Client) *DownstreamProber {
 	if client == nil {
-		client = provider.SharedDefaultHTTPClient
+		client = safeProbeClient(15 * time.Second)
 	}
 	return &DownstreamProber{client: client}
 }

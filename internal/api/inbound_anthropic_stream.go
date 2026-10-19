@@ -47,12 +47,14 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 
 	msgID := fmt.Sprintf("msg_%d", time.Now().UnixNano())
 	firstTokenRecorded := false
+	var ttftDuration time.Duration
 	totalPromptTokens := 0
 	totalCompTokens := 0
 	totalCachedTokens := 0
 	accumulatedCompChars := 0
 	upstreamUsageSeen := false
 	usageSource := "upstream"
+	var streamError error
 
 	// finalizeCompletion falls back to a character-based estimate when the
 	// upstream stream never reported usage, instead of counting SSE deltas.
@@ -100,8 +102,15 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 			CompletionTokens: totalCompTokens,
 			CachedTokens:     totalCachedTokens,
 			Duration:         time.Since(start),
+			TTFT:             ttftDuration,
 			StatusCode:       http.StatusOK,
 			UsageSource:      usageSource,
+			ErrorMessage: func() string {
+				if streamError != nil {
+					return streamError.Error()
+				}
+				return ""
+			}(),
 		})
 	}
 	defer recordOnce.Do(recordStreamEnd)
@@ -191,6 +200,7 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 			}
 
 			if event.Err != nil {
+				streamError = event.Err
 				errBytes, _ := json.Marshal(gin.H{
 					"type": "error",
 					"error": gin.H{
@@ -227,7 +237,8 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 
 					if chunkDelta.Content != "" {
 						if !firstTokenRecorded {
-							telemetry.GlobalMetrics.RecordTTFT(time.Since(start))
+							ttftDuration = time.Since(start)
+							telemetry.GlobalMetrics.RecordTTFT(ttftDuration)
 							firstTokenRecorded = true
 						}
 						accumulatedCompChars += len(chunkDelta.Content)
@@ -317,6 +328,8 @@ func (h *Handler) handleNativeAnthropicStream(c *gin.Context, stream <-chan *mod
 	}
 	inputTokens, outputTokens := 0, 0
 	cachedReadTokens, cacheCreationTokens := 0, 0
+	var ttftDuration time.Duration
+	var firstContentSeen bool
 	chatID, channel, statusCode := "", first.Channel, http.StatusOK
 	defer func() {
 		// Anthropic input_tokens excludes prompt-cache reads/writes; the audit
@@ -331,6 +344,7 @@ func (h *Handler) handleNativeAnthropicStream(c *gin.Context, stream <-chan *mod
 			CompletionTokens: outputTokens,
 			CachedTokens:     cachedReadTokens,
 			Duration:         time.Since(start),
+			TTFT:             ttftDuration,
 			StatusCode:       statusCode,
 			UsageSource:      "upstream",
 		})
@@ -354,6 +368,11 @@ func (h *Handler) handleNativeAnthropicStream(c *gin.Context, stream <-chan *mod
 		}
 		var payload map[string]any
 		if json.Unmarshal(event.NativeAnthropicEvent, &payload) == nil {
+			if !firstContentSeen && (event.NativeAnthropicType == "content_block_delta" || event.NativeAnthropicType == "content_block_start") {
+				ttftDuration = time.Since(start)
+				telemetry.GlobalMetrics.RecordTTFT(ttftDuration)
+				firstContentSeen = true
+			}
 			if event.NativeAnthropicType == "message_start" {
 				if msg, ok := payload["message"].(map[string]any); ok {
 					chatID, _ = msg["id"].(string)

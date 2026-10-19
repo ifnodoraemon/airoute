@@ -125,6 +125,7 @@ func (h *Handler) handleChatUnary(c *gin.Context, reqCtx context.Context, req *m
 		CompletionTokens: cTokens,
 		CachedTokens:     cachedTokens,
 		Duration:         dur,
+		TTFT:             dur,
 		StatusCode:       http.StatusOK,
 	})
 	c.JSON(http.StatusOK, resp)

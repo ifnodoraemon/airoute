@@ -15,6 +15,15 @@ func (h *AdminHandler) saveRoutePricing(req *UpdateModelRouteRequest) error {
 		currency = "CNY"
 	}
 	var pPrice, cPrice, cachePrice, fPrice float64
+	existing, _ := h.repo.GetModelPrice(req.Model)
+	if existing != nil {
+		// Start from the stored prices so a partial update (e.g. only the fixed
+		// price) cannot silently reset prompt/completion prices to zero.
+		pPrice = existing.PromptPrice
+		cPrice = existing.CompletionPrice
+		cachePrice = existing.CacheReadPrice
+		fPrice = existing.FixedPrice
+	}
 	if req.PromptPrice != nil {
 		pPrice = *req.PromptPrice
 	}
@@ -27,7 +36,6 @@ func (h *AdminHandler) saveRoutePricing(req *UpdateModelRouteRequest) error {
 	if req.FixedPrice != nil {
 		fPrice = *req.FixedPrice
 	}
-	existing, _ := h.repo.GetModelPrice(req.Model)
 	offEnabled := true
 	offMode := "custom"
 	offSlots := ""

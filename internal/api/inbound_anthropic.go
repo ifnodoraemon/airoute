@@ -194,6 +194,7 @@ func (h *Handler) handleAnthropicUnary(c *gin.Context, reqCtx context.Context, r
 		CompletionTokens: outputTokens,
 		CachedTokens:     cachedTokens,
 		Duration:         time.Since(start),
+		TTFT:             time.Since(start),
 		StatusCode:       http.StatusOK,
 		UsageSource:      "upstream",
 	})

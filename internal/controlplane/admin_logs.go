@@ -59,6 +59,9 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 		if logs == nil {
 			logs = make([]*storage.UsageLogRecord, 0)
 		}
+		if !shouldRevealKey(c) {
+			maskUsageLogKeys(logs)
+		}
 		c.JSON(http.StatusOK, gin.H{"code": 0, "data": logs})
 		return
 	}
@@ -67,6 +70,12 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+	if logs == nil {
+		logs = make([]*storage.UsageLogRecord, 0)
+	}
+	if !shouldRevealKey(c) {
+		maskUsageLogKeys(logs)
 	}
 	if logs == nil {
 		logs = make([]*storage.UsageLogRecord, 0)
@@ -125,4 +134,35 @@ func (h *AdminHandler) ClearLogs(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "已清空所有调用日志"})
+}
+
+// shouldRevealKey reports whether the caller explicitly asked for unmasked keys.
+// Only super-admins may do so, and the decision is per request.
+func shouldRevealKey(c *gin.Context) bool {
+	if c.Query("reveal_key") != "true" && c.Query("reveal_key") != "1" {
+		return false
+	}
+	claims, ok := GetClaimsFromContext(c)
+	return ok && claims.Role == "admin"
+}
+
+// maskAPIKey renders a credential as prefix + last 4 characters so audit logs
+// never expose a complete key to the console or exported CSV.
+func maskAPIKey(key string) string {
+	if key == "" {
+		return ""
+	}
+	if len(key) <= 12 {
+		return "sk-***"
+	}
+	return key[:8] + "***" + key[len(key)-4:]
+}
+
+// maskUsageLogKeys masks every API key in a log page in place.
+func maskUsageLogKeys(logs []*storage.UsageLogRecord) {
+	for _, l := range logs {
+		if l != nil {
+			l.APIKey = maskAPIKey(l.APIKey)
+		}
+	}
 }

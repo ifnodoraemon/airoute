@@ -286,6 +286,45 @@ Execute the following mission with precision, maintainability, and zero speculat
           let done = false;
           let buffer = '';
 
+          const applyChunk = (parsed) => {
+            const delta = parsed.choices?.[0]?.delta;
+            if (delta?.reasoning_content) {
+              fullReasoning += delta.reasoning_content;
+              setReasoning(fullReasoning);
+            }
+            if (delta?.content) {
+              fullContent += delta.content;
+              if (!fullReasoning && fullContent.includes('</think>')) {
+                const parts = fullContent.split('</think>');
+                fullReasoning = parts[0].replace(/^ thinking/, '').trim();
+                fullContent = parts[1].replace(/^\n+/, '');
+                setReasoning(fullReasoning);
+                setOutput(fullContent);
+              } else {
+                setOutput(fullContent);
+              }
+            }
+          };
+
+          const handleLine = (line) => {
+            const trimmed = line.trim();
+            // Accept both "data: {...}" and "data:{...}".
+            if (!trimmed.startsWith('data:')) return;
+            const dataStr = trimmed.slice(5).trim();
+            if (!dataStr || dataStr === '[DONE]') return;
+            try {
+              const parsed = JSON.parse(dataStr);
+              if (parsed.error && !parsed.choices) {
+                throw new Error(parsed.error.message || 'stream error');
+              }
+              applyChunk(parsed);
+            } catch (e) {
+              if (e && /stream error/i.test(e.message || '')) {
+                if (showToast) showToast(e.message, 'error');
+              }
+            }
+          };
+
           while (!done) {
             const { value, done: readerDone } = await reader.read();
             done = readerDone;
@@ -297,36 +336,11 @@ Execute the following mission with precision, maintainability, and zero speculat
               buffer += decoder.decode(value, { stream: true });
               const lines = buffer.split('\n');
               buffer = lines.pop() || '';
-
-              for (const line of lines) {
-                const trimmed = line.trim();
-                if (trimmed.startsWith('data: ')) {
-                  const dataStr = trimmed.slice(6);
-                  if (dataStr === '[DONE]') continue;
-                  try {
-                    const parsed = JSON.parse(dataStr);
-                    const delta = parsed.choices?.[0]?.delta;
-                    if (delta?.reasoning_content) {
-                      fullReasoning += delta.reasoning_content;
-                      setReasoning(fullReasoning);
-                    }
-                    if (delta?.content) {
-                      fullContent += delta.content;
-                      if (!fullReasoning && fullContent.includes('</think>')) {
-                        const parts = fullContent.split('</think>');
-                        fullReasoning = parts[0].replace(/^<think>/, '').trim();
-                        fullContent = parts[1].replace(/^\n+/, '');
-                        setReasoning(fullReasoning);
-                        setOutput(fullContent);
-                      } else {
-                        setOutput(fullContent);
-                      }
-                    }
-                  } catch (e) {}
-                }
-              }
+              for (const line of lines) handleLine(line);
             }
           }
+          // Flush a trailing event that arrived without a final newline.
+          if (buffer.trim()) handleLine(buffer);
         } else {
           const data = await res.json();
           firstByteTime = Date.now();

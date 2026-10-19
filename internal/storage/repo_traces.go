@@ -2,6 +2,7 @@ package storage
 
 import (
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -38,6 +39,7 @@ type TraceFilter struct {
 	ChatID    string
 	SessionID string
 	APIKey    string
+	APIKeys   []string // when set, restricts results to these keys (tenant scoping)
 	Limit     int
 }
 
@@ -87,6 +89,14 @@ func (r *Repository) ListRequestTraces(f TraceFilter) ([]*RequestTraceRecord, er
 	if f.APIKey != "" {
 		query += ` AND api_key = ?`
 		args = append(args, f.APIKey)
+	}
+	if len(f.APIKeys) > 0 {
+		placeholders := make([]string, 0, len(f.APIKeys))
+		for _, k := range f.APIKeys {
+			placeholders = append(placeholders, "?")
+			args = append(args, k)
+		}
+		query += ` AND api_key IN (` + strings.Join(placeholders, ",") + `)`
 	}
 	query += ` ORDER BY id DESC LIMIT ?`
 	args = append(args, f.Limit)
