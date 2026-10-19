@@ -413,6 +413,74 @@ func (db *DB) migratePostgres() error {
 				return err
 			},
 		},
+		{
+			// Version 12 originally created the *_nano money columns and was
+			// applied to existing deployments. It was later edited in place to
+			// create *_units instead, so databases that had already recorded
+			// version 12 kept the *_nano columns and never received *_units —
+			// every api_keys read and usage_logs insert then failed with
+			// `column "budget_units" does not exist`.
+			//
+			// This migration is the forward-only repair: it guarantees the
+			// *_units columns exist and backfills them from the legacy *_nano
+			// columns when those are still present. It is idempotent and safe on
+			// fresh databases (which already have *_units from version 12).
+			Version: 15,
+			Name:    "repair_integer_money_units_columns",
+			Up: func(db *DB) error {
+				stmts := []string{
+					"ALTER TABLE users ADD COLUMN IF NOT EXISTS balance_units BIGINT DEFAULT 0;",
+					"ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS used_cost_units BIGINT DEFAULT 0;",
+					"ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS budget_units BIGINT DEFAULT 0;",
+					"ALTER TABLE usage_logs ADD COLUMN IF NOT EXISTS cost_units BIGINT DEFAULT 0;",
+					// Backfill from the legacy columns only when they exist. The
+					// float columns are the authoritative display source and are
+					// mirrored here so ledger reads stop returning zero.
+					`DO $$
+					BEGIN
+						IF EXISTS (SELECT 1 FROM information_schema.columns
+						           WHERE table_schema = current_schema()
+						             AND table_name = 'users' AND column_name = 'balance_nano') THEN
+							UPDATE users SET balance_units = balance_nano
+							 WHERE balance_units = 0 AND balance_nano <> 0;
+						END IF;
+
+						IF EXISTS (SELECT 1 FROM information_schema.columns
+						           WHERE table_schema = current_schema()
+						             AND table_name = 'api_keys' AND column_name = 'used_cost_nano') THEN
+							UPDATE api_keys
+							   SET used_cost_units = used_cost_nano
+							 WHERE used_cost_units = 0 AND used_cost_nano <> 0;
+						END IF;
+
+						IF EXISTS (SELECT 1 FROM information_schema.columns
+						           WHERE table_schema = current_schema()
+						             AND table_name = 'api_keys' AND column_name = 'budget_nano') THEN
+							UPDATE api_keys SET budget_units = budget_nano
+							 WHERE budget_units = 0 AND budget_nano <> 0;
+						END IF;
+
+						IF EXISTS (SELECT 1 FROM information_schema.columns
+						           WHERE table_schema = current_schema()
+						             AND table_name = 'usage_logs' AND column_name = 'cost_nano') THEN
+							UPDATE usage_logs SET cost_units = cost_nano
+							 WHERE cost_units = 0 AND cost_nano <> 0;
+						END IF;
+					END $$;`,
+					// Anything still at zero but with a non-zero float value is
+					// legacy data that predates both mirrors.
+					"UPDATE users SET balance_units = ROUND(balance * 1000000000)::BIGINT WHERE balance_units = 0 AND balance <> 0;",
+					"UPDATE api_keys SET used_cost_units = ROUND(used_cost * 1000000000)::BIGINT WHERE used_cost_units = 0 AND used_cost <> 0;",
+					"UPDATE api_keys SET budget_units = ROUND(budget * 1000000000)::BIGINT WHERE budget_units = 0 AND budget <> 0;",
+				}
+				for _, stmt := range stmts {
+					if _, err := db.DB.Exec(stmt); err != nil {
+						return err
+					}
+				}
+				return nil
+			},
+		},
 	}
 	return db.runMigrations(migrations)
 }

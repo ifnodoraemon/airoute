@@ -13,6 +13,13 @@ func ensureSQLiteColumn(db *sql.DB, table, col, colType string) {
 	}
 }
 
+// sqliteColumnExists reports whether a column is present on a table.
+func sqliteColumnExists(db *sql.DB, table, col string) bool {
+	var count int
+	_ = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM pragma_table_info('%s') WHERE name='%s';", table, col)).Scan(&count)
+	return count > 0
+}
+
 // migrate creates required tables if they don't exist for SQLite.
 func (db *DB) migrate() error {
 	migrations := []Migration{
@@ -435,6 +442,40 @@ func (db *DB) migrate() error {
 					CREATE INDEX IF NOT EXISTS idx_trace_created ON request_traces(created_at);
 				`)
 				return err
+			},
+		},
+		{
+			// Forward-only repair for the same defect as the PostgreSQL version 15
+			// migration: version 12 was edited in place from *_nano to *_units
+			// after it had already been applied, so upgraded databases kept the
+			// legacy columns and never received *_units.
+			Version: 15,
+			Name:    "repair_integer_money_units_columns",
+			Up: func(db *DB) error {
+				ensureSQLiteColumn(db.DB, "users", "balance_units", "INTEGER DEFAULT 0")
+				ensureSQLiteColumn(db.DB, "api_keys", "used_cost_units", "INTEGER DEFAULT 0")
+				ensureSQLiteColumn(db.DB, "api_keys", "budget_units", "INTEGER DEFAULT 0")
+				ensureSQLiteColumn(db.DB, "usage_logs", "cost_units", "INTEGER DEFAULT 0")
+
+				// Backfill from the legacy *_nano mirrors when present.
+				if sqliteColumnExists(db.DB, "users", "balance_nano") {
+					_, _ = db.DB.Exec(`UPDATE users SET balance_units = balance_nano WHERE balance_units = 0 AND balance_nano <> 0;`)
+				}
+				if sqliteColumnExists(db.DB, "api_keys", "used_cost_nano") {
+					_, _ = db.DB.Exec(`UPDATE api_keys SET used_cost_units = used_cost_nano WHERE used_cost_units = 0 AND used_cost_nano <> 0;`)
+				}
+				if sqliteColumnExists(db.DB, "api_keys", "budget_nano") {
+					_, _ = db.DB.Exec(`UPDATE api_keys SET budget_units = budget_nano WHERE budget_units = 0 AND budget_nano <> 0;`)
+				}
+				if sqliteColumnExists(db.DB, "usage_logs", "cost_nano") {
+					_, _ = db.DB.Exec(`UPDATE usage_logs SET cost_units = cost_nano WHERE cost_units = 0 AND cost_nano <> 0;`)
+				}
+
+				// Remaining legacy rows that predate both mirrors.
+				_, _ = db.DB.Exec(`UPDATE users SET balance_units = CAST(ROUND(balance * 1000000000) AS INTEGER) WHERE balance_units = 0 AND balance <> 0;`)
+				_, _ = db.DB.Exec(`UPDATE api_keys SET used_cost_units = CAST(ROUND(used_cost * 1000000000) AS INTEGER) WHERE used_cost_units = 0 AND used_cost <> 0;`)
+				_, _ = db.DB.Exec(`UPDATE api_keys SET budget_units = CAST(ROUND(budget * 1000000000) AS INTEGER) WHERE budget_units = 0 AND budget <> 0;`)
+				return nil
 			},
 		},
 	}
