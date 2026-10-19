@@ -85,6 +85,15 @@ func (h *MCPHandler) HandleMCPMessages(c *gin.Context) {
 			return
 		}
 		reqCtx = context.WithValue(reqCtx, contextKeyCallerKey, callerKey)
+	} else if h.repo != nil && h.repo.CountActiveKeys() > 0 {
+		// Once the gateway has issued API keys, MCP must not be reachable
+		// anonymously: tools/list would otherwise enumerate skills and remote
+		// MCP servers to unauthenticated callers.
+		c.JSON(http.StatusUnauthorized, mcpResponse{
+			JSONRPC: "2.0",
+			Error:   &mcpError{Code: -32000, Message: "Unauthorized: an API key is required for MCP access"},
+		})
+		return
 	}
 
 	res := h.ProcessRPC(reqCtx, &req)
@@ -288,4 +297,3 @@ func (h *MCPHandler) executeTool(ctx context.Context, name string, args map[stri
 	}
 	return h.executeDynamicMCPTool(ctx, name, args)
 }
-

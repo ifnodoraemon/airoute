@@ -18,7 +18,7 @@ import {
   Cpu,
   Layers
 } from 'lucide-react';
-import { copyToClipboard } from '../config';
+import { copyToClipboard, toCSV } from '../config';
 
 // Same-day rows show time only; older days get a compact date prefix.
 const formatLogTime = (iso) => {
@@ -220,13 +220,13 @@ export default function LogsView({
 
     const rows = displayedLogs.map((l) => [
       l.id,
-      `"${l.created_at || ''}"`,
-      `"${l.trace_id || ''}"`,
-      `"${l.session_id || ''}"`,
-      `"${l.chat_id || ''}"`,
-      `"${l.model || ''}"`,
-      `"${l.channel || ''}"`,
-      `"${l.tenant_id || ''}"`,
+      l.created_at || '',
+      l.trace_id || '',
+      l.session_id || '',
+      l.chat_id || '',
+      l.model || '',
+      l.channel || '',
+      l.tenant_id || '',
       getUncachedPrompt(l),
       l.completion_tokens || 0,
       l.cached_tokens || 0,
@@ -235,10 +235,10 @@ export default function LogsView({
       l.duration_ms || 0,
       l.ttft_ms || 0,
       l.status_code || 200,
-      `"${(l.error_message || '').replace(/"/g, '""')}"`
+      l.error_message || ''
     ]);
 
-    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+    const csvContent = toCSV(headers, rows);
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

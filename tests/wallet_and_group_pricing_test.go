@@ -129,6 +129,10 @@ func TestUserWallet_RedemptionAndRecharge(t *testing.T) {
 		Balance:      10.0,
 		GroupName:    "default",
 	})
+	// Admin tokens are validated against the users table, so seed the admin account.
+	if err := repo.CreateUser(&storage.UserRecord{Username: "admin", Role: "admin", Status: "active", Balance: 1000}); err != nil {
+		t.Fatalf("seed admin user failed: %v", err)
+	}
 
 	token, _ := controlplane.GenerateAdminToken("bob", "user", time.Hour)
 
@@ -719,4 +723,3 @@ func TestUser_SelfServiceChangePassword(t *testing.T) {
 		t.Fatalf("change password failed: %d %s", w.Code, w.Body.String())
 	}
 }
-

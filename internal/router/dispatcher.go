@@ -117,7 +117,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 	if req.Protocol != "" {
 		proto = req.Protocol
 	}
-	channels := d.ResolveCandidateChannels(ctx, req.Model, proto)
+	channels := d.candidateChannelsForRequest(ctx, req, proto)
 	if len(channels) == 0 {
 		if fb := d.GetModelFallback(req.Model); fb != "" && !strings.EqualFold(fb, req.Model) {
 			nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
@@ -202,6 +202,20 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 
 	telemetry.GlobalMetrics.RecordRequest(false, 0, 0, 0)
 	return nil, fmt.Errorf("all %d candidate channels failed for model %s. Last error: %w", len(channels), req.Model, lastErr)
+}
+
+func (d *Dispatcher) candidateChannelsForRequest(ctx context.Context, req *model.ChatCompletionRequest, proto string) []*model.ChannelConfig {
+	channels := d.ResolveCandidateChannels(ctx, req.Model, proto)
+	if !req.AnthropicNativeOnly {
+		return channels
+	}
+	native := make([]*model.ChannelConfig, 0, len(channels))
+	for _, channel := range channels {
+		if channel.Type == model.ProviderAnthropic {
+			native = append(native, channel)
+		}
+	}
+	return native
 }
 
 // GetBreakerStatus returns the circuit breaker status of a channel.

@@ -164,8 +164,13 @@ func (e *BillingEngine) IsOffPeak(p *storage.ModelPriceRecord, t time.Time) (boo
 	}
 
 	discount := p.OffPeakDiscount
-	if discount <= 0 || discount >= 1.0 {
+	if discount <= 0 {
+		// Legacy rows without an explicit discount keep the historical 50% default.
 		discount = 0.5
+	}
+	if discount > 1.0 {
+		// A discount factor above 1.0 would mean a surcharge; clamp to no discount.
+		discount = 1.0
 	}
 
 	localT := t.In(shanghaiLoc)

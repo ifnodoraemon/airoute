@@ -20,7 +20,8 @@ const (
 
 // AsyncLogger buffers and batches usage log records to prevent blocking the data plane.
 // It supports distributed Redis Streams queueing across multi-node clusters,
-// with graceful fallback to an ultra-fast in-memory buffered channel.
+// with a bounded in-memory buffer that applies backpressure instead of
+// silently dropping billing records when the database is unavailable.
 type AsyncLogger struct {
 	repo       *Repository
 	ch         chan *UsageLogRecord
@@ -69,7 +70,8 @@ func InitAsyncLogger(repo *Repository, bufferSize, batchSize int, flushInterval 
 	return al
 }
 
-// Record queues a usage log record asynchronously without blocking.
+// Record queues a usage log record asynchronously. When the local buffer is
+// full it waits for space so a database outage cannot silently lose billing.
 // In distributed mode, writes directly to Redis Streams for cluster-wide log aggregation;
 // gracefully falls back to local memory buffer if Redis is not configured or fails.
 func (al *AsyncLogger) Record(rec *UsageLogRecord) {
@@ -107,8 +109,8 @@ func (al *AsyncLogger) Record(rec *UsageLogRecord) {
 	}
 	select {
 	case al.ch <- rec:
-	default:
-		telemetry.Logger.Warn("async usage log buffer full, dropping log record to preserve data plane performance")
+	case <-al.stopCh:
+		telemetry.Logger.Error("usage log submitted after logger stopped", "trace_id", rec.TraceID)
 	}
 }
 
@@ -129,12 +131,16 @@ func (al *AsyncLogger) worker() {
 
 	var batch []*UsageLogRecord
 
-	flush := func() {
+	flush := func() bool {
 		if len(batch) == 0 {
-			return
+			return true
 		}
-		_ = al.repo.BatchRecordUsageLogs(batch)
+		if err := al.repo.BatchRecordUsageLogs(batch); err != nil {
+			telemetry.Logger.Error("failed to persist usage logs; retaining batch for retry", "error", err.Error(), "count", len(batch))
+			return false
+		}
 		batch = batch[:0]
+		return true
 	}
 
 	for {
@@ -155,7 +161,12 @@ func (al *AsyncLogger) worker() {
 				case rec := <-al.ch:
 					batch = append(batch, rec)
 				default:
-					flush()
+					for attempt := 0; attempt < 3 && !flush(); attempt++ {
+						time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
+					}
+					if len(batch) > 0 {
+						telemetry.Logger.Error("usage logs remain unpersisted at shutdown", "count", len(batch))
+					}
 					return
 				}
 			}

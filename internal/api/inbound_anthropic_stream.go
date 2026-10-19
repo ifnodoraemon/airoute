@@ -28,6 +28,16 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 		RespondAnthropicError(c, statusCode, err.Error(), errType)
 		return
 	}
+	firstEvent, open := <-streamChan
+	if !open || firstEvent == nil {
+		recordFailedRequest(c, sessionID, req.Model, time.Since(start), http.StatusBadGateway)
+		RespondAnthropicError(c, http.StatusBadGateway, "upstream stream closed before response", "api_error")
+		return
+	}
+	if len(firstEvent.NativeAnthropicEvent) > 0 {
+		h.handleNativeAnthropicStream(c, streamChan, firstEvent, req.Model, sessionID, start)
+		return
+	}
 
 	flusher, ok := InitSSEStream(c)
 	if !ok {
@@ -39,6 +49,25 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 	firstTokenRecorded := false
 	totalPromptTokens := 0
 	totalCompTokens := 0
+	totalCachedTokens := 0
+	accumulatedCompChars := 0
+	upstreamUsageSeen := false
+	usageSource := "upstream"
+
+	// finalizeCompletion falls back to a character-based estimate when the
+	// upstream stream never reported usage, instead of counting SSE deltas.
+	finalizeCompletion := func() {
+		if upstreamUsageSeen {
+			return
+		}
+		if accumulatedCompChars > 0 {
+			totalCompTokens = accumulatedCompChars / 3
+			if totalCompTokens < 1 {
+				totalCompTokens = 1
+			}
+		}
+		usageSource = "estimated"
+	}
 	upstreamChannel := ""         // populated from the first stream event
 	anthropicUpstreamChatID := "" // upstream response ID, captured from the first chunk
 	currentBlockIndex := 0
@@ -50,6 +79,18 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 	// upstream mid-stream failure, or downstream client disconnect.
 	var recordOnce sync.Once
 	recordStreamEnd := func() {
+		// Anthropic wire format requires input_tokens on every message. When the
+		// upstream stream omits usage, approximate the prompt from the request so
+		// the audit log does not show a misleading zero input count.
+		if totalPromptTokens == 0 {
+			if estimated := estimateCanonicalPromptTokens(canonicalReq); estimated > 0 {
+				totalPromptTokens = estimated
+				usageSource = "estimated"
+			}
+		}
+		if totalCompTokens == 0 {
+			usageSource = "estimated"
+		}
 		RecordUsage(c, AuditRecordParams{
 			SessionID:        sessionID,
 			ChatID:           anthropicUpstreamChatID,
@@ -57,8 +98,10 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 			Model:            req.Model,
 			PromptTokens:     totalPromptTokens,
 			CompletionTokens: totalCompTokens,
+			CachedTokens:     totalCachedTokens,
 			Duration:         time.Since(start),
 			StatusCode:       http.StatusOK,
+			UsageSource:      usageSource,
 		})
 	}
 	defer recordOnce.Do(recordStreamEnd)
@@ -97,13 +140,24 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 	flusher.Flush()
 
 	w := c.Writer
+	pending := firstEvent
 	for {
-		select {
-		case <-c.Request.Context().Done():
-			return
-		case event, open := <-streamChan:
+		var event *model.StreamEvent
+		var open bool
+		if pending != nil {
+			event, open = pending, true
+			pending = nil
+		} else {
+			select {
+			case <-c.Request.Context().Done():
+				return
+			case event, open = <-streamChan:
+			}
+		}
+		{
 			if !open {
 				// Stream finished
+				finalizeCompletion()
 				if textBlockOpened || toolBlockOpened {
 					fmt.Fprintf(w, "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":%d}\n\n", currentBlockIndex)
 				}
@@ -176,7 +230,7 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 							telemetry.GlobalMetrics.RecordTTFT(time.Since(start))
 							firstTokenRecorded = true
 						}
-						totalCompTokens++
+						accumulatedCompChars += len(chunkDelta.Content)
 
 						blockDelta := gin.H{
 							"type":  "content_block_delta",
@@ -237,11 +291,112 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 					}
 
 					if event.Chunk.Usage != nil {
+						// Only trust upstream-reported usage; the provider mapping
+						// already folds Anthropic prompt-cache reads into these counts.
+						if event.Chunk.Usage.PromptTokens > 0 || event.Chunk.Usage.CompletionTokens > 0 {
+							usageSource = "upstream"
+							upstreamUsageSeen = true
+						}
 						totalPromptTokens = event.Chunk.Usage.PromptTokens
 						totalCompTokens = event.Chunk.Usage.CompletionTokens
+						totalCachedTokens = event.Chunk.Usage.GetCachedTokens()
 					}
 				}
 			}
 		}
 	}
+}
+
+// Native Anthropic streams retain signed thinking blocks, block ordering, and
+// provider-specific SSE fields while still flowing through dispatcher fallback.
+func (h *Handler) handleNativeAnthropicStream(c *gin.Context, stream <-chan *model.StreamEvent, first *model.StreamEvent, modelName, sessionID string, start time.Time) {
+	flusher, ok := InitSSEStream(c)
+	if !ok {
+		RespondAnthropicError(c, http.StatusInternalServerError, "Streaming unsupported", "api_error")
+		return
+	}
+	inputTokens, outputTokens := 0, 0
+	cachedReadTokens, cacheCreationTokens := 0, 0
+	chatID, channel, statusCode := "", first.Channel, http.StatusOK
+	defer func() {
+		// Anthropic input_tokens excludes prompt-cache reads/writes; the audit
+		// record must report the full prompt and surface cache hits separately.
+		totalPrompt := inputTokens + cachedReadTokens + cacheCreationTokens
+		RecordUsage(c, AuditRecordParams{
+			SessionID:        sessionID,
+			ChatID:           chatID,
+			Channel:          channel,
+			Model:            modelName,
+			PromptTokens:     totalPrompt,
+			CompletionTokens: outputTokens,
+			CachedTokens:     cachedReadTokens,
+			Duration:         time.Since(start),
+			StatusCode:       statusCode,
+			UsageSource:      "upstream",
+		})
+	}()
+	write := func(event *model.StreamEvent) bool {
+		if event == nil {
+			return true
+		}
+		if event.Channel != "" {
+			channel = event.Channel
+		}
+		if event.Err != nil {
+			statusCode = http.StatusBadGateway
+			body, _ := json.Marshal(gin.H{"type": "error", "error": gin.H{"type": "stream_error", "message": sanitizeErrorMessage(event.Err)}})
+			fmt.Fprintf(c.Writer, "event: error\ndata: %s\n\n", body)
+			flusher.Flush()
+			return false
+		}
+		if len(event.NativeAnthropicEvent) == 0 {
+			return true
+		}
+		var payload map[string]any
+		if json.Unmarshal(event.NativeAnthropicEvent, &payload) == nil {
+			if event.NativeAnthropicType == "message_start" {
+				if msg, ok := payload["message"].(map[string]any); ok {
+					chatID, _ = msg["id"].(string)
+					msg["model"] = modelName
+					if usage, ok := msg["usage"].(map[string]any); ok {
+						inputTokens = intFromJSONNumber(usage["input_tokens"])
+						cachedReadTokens = intFromJSONNumber(usage["cache_read_input_tokens"])
+						cacheCreationTokens = intFromJSONNumber(usage["cache_creation_input_tokens"])
+					}
+				}
+			} else if event.NativeAnthropicType == "message_delta" {
+				if usage, ok := payload["usage"].(map[string]any); ok {
+					outputTokens = intFromJSONNumber(usage["output_tokens"])
+				}
+			}
+			event.NativeAnthropicEvent, _ = json.Marshal(payload)
+		}
+		fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", event.NativeAnthropicType, event.NativeAnthropicEvent)
+		flusher.Flush()
+		return true
+	}
+	if !write(first) {
+		return
+	}
+	for {
+		select {
+		case <-c.Request.Context().Done():
+			statusCode = http.StatusRequestTimeout
+			return
+		case event, open := <-stream:
+			if !open {
+				return
+			}
+			if !write(event) {
+				return
+			}
+		}
+	}
+}
+
+func intFromJSONNumber(value any) int {
+	if number, ok := value.(float64); ok {
+		return int(number)
+	}
+	return 0
 }

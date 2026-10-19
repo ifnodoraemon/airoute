@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -29,6 +30,9 @@ type AuditRecordParams struct {
 	Duration         time.Duration
 	TTFT             time.Duration
 	StatusCode       int
+	UsageSource      string // "upstream" (default) or "estimated" when tokens are locally approximated
+	BillableUnits    int
+	SkipBilling      bool
 }
 
 // RecordUsage executes the cross-cutting concern of calculating billing cost (with off-peak discount and cached tokens),
@@ -40,7 +44,7 @@ func RecordUsage(c *gin.Context, params AuditRecordParams) float64 {
 	keyGroup := getKeyGroup(c)
 	success := params.StatusCode >= 200 && params.StatusCode < 400
 
-	if success && billing.GlobalEngine != nil {
+	if success && !params.SkipBilling && billing.GlobalEngine != nil {
 		cost, savedCost, _, isOffPeak, offPeakDiscount = billing.GlobalEngine.CalculateCostDetailedWithGroup(
 			params.Model,
 			keyGroup,
@@ -49,6 +53,12 @@ func RecordUsage(c *gin.Context, params AuditRecordParams) float64 {
 			params.CachedTokens,
 			time.Now(),
 		)
+		if params.BillableUnits > 1 {
+			price := billing.GlobalEngine.GetPriceWithGroup(params.Model, keyGroup)
+			if price != nil {
+				cost += float64(params.BillableUnits-1) * price.FixedPrice
+			}
+		}
 	}
 
 	totTokens := params.TotalTokens
@@ -87,6 +97,7 @@ func RecordUsage(c *gin.Context, params AuditRecordParams) float64 {
 			DurationMs:       params.Duration.Milliseconds(),
 			TTFTMs:           params.TTFT.Milliseconds(),
 			StatusCode:       params.StatusCode,
+			UsageSource:      params.UsageSource,
 		})
 	}
 
@@ -212,6 +223,32 @@ func getAPIKeyConfig(c *gin.Context) *model.APIKeyConfig {
 }
 
 var sensitivePattern = regexp.MustCompile(`(?i)(key|token|secret|password|api[-_]?key)=([a-zA-Z0-9_\-\.]+)`)
+
+// estimateCanonicalPromptTokens approximates prompt tokens from the canonical
+// request when the upstream did not report usage. It is intentionally
+// conservative (roughly 3 bytes per token) and only used for audit display.
+func estimateCanonicalPromptTokens(req *model.ChatCompletionRequest) int {
+	if req == nil {
+		return 0
+	}
+	chars := 0
+	for _, m := range req.Messages {
+		chars += len(m.GetContentString())
+	}
+	for _, t := range req.Tools {
+		if b, err := json.Marshal(t); err == nil {
+			chars += len(b)
+		}
+	}
+	if chars == 0 {
+		return 0
+	}
+	tokens := chars / 3
+	if tokens < 1 {
+		tokens = 1
+	}
+	return tokens
+}
 
 // sanitizeErrorMessage strips sensitive tokens/keys and credentials from error strings before returning to clients.
 func sanitizeErrorMessage(err error) string {

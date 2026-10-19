@@ -104,5 +104,7 @@ metadata:
   namespace: default
 type: Opaque
 stringData:
-  database-url: "postgres://airoute:change_me_strong_password@postgres-svc.default.svc.cluster.local:5432/airoute?sslmode=disable"
-  admin-secret: "change_me_super_secret_production_key_32bytes"
+  # REQUIRED: replace both placeholders with strong random secrets before applying.
+  # The gateway refuses to start in release mode while these placeholders remain.
+  database-url: "postgres://airoute:REPLACE_WITH_STRONG_DB_PASSWORD@postgres-svc.default.svc.cluster.local:5432/airoute?sslmode=disable"
+  admin-secret: "REPLACE_WITH_STRONG_RANDOM_SECRET"

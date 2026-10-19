@@ -376,6 +376,14 @@ func (db *DB) migrate() error {
 				return err
 			},
 		},
+		{
+			Version: 11,
+			Name:    "add_usage_source_to_usage_logs",
+			Up: func(db *DB) error {
+				ensureSQLiteColumn(db.DB, "usage_logs", "usage_source", "TEXT DEFAULT 'upstream'")
+				return nil
+			},
+		},
 	}
 	return db.runMigrations(migrations)
 }

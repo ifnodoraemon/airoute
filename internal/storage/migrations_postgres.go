@@ -340,6 +340,14 @@ func (db *DB) migratePostgres() error {
 				return err
 			},
 		},
+		{
+			Version: 11,
+			Name:    "add_usage_source_to_usage_logs",
+			Up: func(db *DB) error {
+				_, err := db.DB.Exec("ALTER TABLE usage_logs ADD COLUMN IF NOT EXISTS usage_source VARCHAR(16) DEFAULT 'upstream';")
+				return err
+			},
+		},
 	}
 	return db.runMigrations(migrations)
 }

@@ -10,6 +10,15 @@ import (
 
 // convertOpenAIToAnthropic converts OpenAI ChatCompletionRequest to Anthropic format.
 func convertOpenAIToAnthropic(req *model.ChatCompletionRequest, channel *model.ChannelConfig) *AnthropicRequest {
+	if original := req.AnthropicOriginal; original != nil {
+		return &AnthropicRequest{
+			Model: channel.GetUpstreamModel(req.Model), Messages: convertNativeMessages(original.Messages),
+			System: original.System, MaxTokens: original.MaxTokens, Temperature: original.Temperature,
+			TopP: original.TopP, TopK: original.TopK, Stream: req.Stream, Tools: original.Tools,
+			ToolChoice: original.ToolChoice, StopSequences: original.StopSequences,
+			Thinking: original.Thinking, Metadata: original.Metadata,
+		}
+	}
 	var systemParts []string
 	var anthropicMsgs []AnthropicMessage
 
@@ -121,7 +130,7 @@ func convertOpenAIToAnthropic(req *model.ChatCompletionRequest, channel *model.C
 		}
 	}
 
-	var tools []AnthropicTool
+	var tools []any
 	for _, t := range req.Tools {
 		fnName, _ := t.Function["name"].(string)
 		fnDesc, _ := t.Function["description"].(string)
@@ -141,14 +150,39 @@ func convertOpenAIToAnthropic(req *model.ChatCompletionRequest, channel *model.C
 		maxTokens = *req.MaxTokens
 	}
 
-	return &AnthropicRequest{
-		Model:       channel.GetUpstreamModel(req.Model),
-		Messages:    anthropicMsgs,
-		System:      strings.Join(systemParts, "\n\n"),
-		MaxTokens:   maxTokens,
-		Temperature: req.Temperature,
-		TopP:        req.TopP,
-		Stream:      req.Stream,
-		Tools:       tools,
+	var stopSeqs []string
+	if req.Stop != nil {
+		switch s := req.Stop.(type) {
+		case string:
+			stopSeqs = []string{s}
+		case []string:
+			stopSeqs = s
+		case []any:
+			for _, item := range s {
+				if str, ok := item.(string); ok {
+					stopSeqs = append(stopSeqs, str)
+				}
+			}
+		}
 	}
+
+	return &AnthropicRequest{
+		Model:         channel.GetUpstreamModel(req.Model),
+		Messages:      anthropicMsgs,
+		System:        strings.Join(systemParts, "\n\n"),
+		MaxTokens:     maxTokens,
+		Temperature:   req.Temperature,
+		TopP:          req.TopP,
+		Stream:        req.Stream,
+		Tools:         tools,
+		StopSequences: stopSeqs,
+	}
+}
+
+func convertNativeMessages(messages []model.AnthropicInboundMessage) []AnthropicMessage {
+	result := make([]AnthropicMessage, 0, len(messages))
+	for _, message := range messages {
+		result = append(result, AnthropicMessage{Role: message.Role, Content: message.Content})
+	}
+	return result
 }

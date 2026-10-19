@@ -17,13 +17,39 @@ import {
 } from 'lucide-react';
 import { copyToClipboard as crossOriginCopy } from '../config';
 
-// 1. Syntax colorizer helper for code blocks
+function safeMarkdownUrl(value, image = false) {
+  const url = (value || '').trim();
+  if (image && /^data:image\/(png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/i.test(url)) return url;
+  if (url.startsWith('#')) return image ? null : url;
+  try {
+    const parsed = new URL(url, window.location.origin);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:' || (!image && parsed.protocol === 'mailto:')) return url;
+  } catch {
+    // Invalid URLs are rendered as text.
+  }
+  return null;
+}
+
+function highlightMatches(code, regex, classify) {
+  const nodes = [];
+  let offset = 0;
+  for (const match of code.matchAll(regex)) {
+    if (match.index > offset) nodes.push(code.slice(offset, match.index));
+    nodes.push(<span key={match.index} className={classify(match[0])}>{match[0]}</span>);
+    offset = match.index + match[0].length;
+  }
+  if (offset < code.length) nodes.push(code.slice(offset));
+  return nodes;
+}
+
+// 1. Syntax colorizer helper for code blocks. React escapes every code fragment.
 function renderHighlightedCode(code = '', lang = '') {
   const normalizedLang = (lang || '').toLowerCase().trim();
 
   // JSON syntax highlighting
   if (normalizedLang === 'json') {
-    const highlighted = code.replace(
+    return <span>{highlightMatches(
+      code,
       /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
       (match) => {
         let cls = 'text-amber-400'; // number
@@ -38,39 +64,34 @@ function renderHighlightedCode(code = '', lang = '') {
         } else if (/null/.test(match)) {
           cls = 'text-rose-400 font-bold'; // null
         }
-        return `<span class="${cls}">${match}</span>`;
+        return cls;
       }
-    );
-    return <span dangerouslySetInnerHTML={{ __html: highlighted }} />;
+    )}</span>;
   }
 
   // Shell / Bash / cURL syntax highlighting
   if (['bash', 'sh', 'shell', 'zsh', 'curl'].includes(normalizedLang)) {
     const lines = code.split('\n');
-    const highlighted = lines.map(line => {
+    return <span>{lines.map((line, index) => {
       const trimmed = line.trim();
       if (trimmed.startsWith('#')) {
-        return `<span class="text-slate-500 italic">${line}</span>`;
+        return <React.Fragment key={index}><span className="text-slate-500 italic">{line}</span>{index < lines.length - 1 && '\n'}</React.Fragment>;
       }
-      let l = line.replace(/(\$[A-Z0-9_]+|\${[A-Z0-9_]+})/g, '<span class="text-amber-400 font-semibold">$1</span>');
-      l = l.replace(/(^|\s)(--?[a-zA-Z0-9_-]+)/g, '$1<span class="text-sky-300 font-medium">$2</span>');
-      return l;
-    }).join('\n');
-    return <span dangerouslySetInnerHTML={{ __html: highlighted }} />;
+      return <React.Fragment key={index}>{highlightMatches(line, /(\$[A-Z0-9_]+|\${[A-Z0-9_]+}|--?[a-zA-Z0-9_-]+)/g, match => match.startsWith('-') ? 'text-sky-300 font-medium' : 'text-amber-400 font-semibold')}{index < lines.length - 1 && '\n'}</React.Fragment>;
+    })}</span>;
   }
 
   // Python syntax highlighting
   if (['python', 'py'].includes(normalizedLang)) {
     const keywords = /\b(def|class|import|from|as|return|if|elif|else|for|while|try|except|finally|with|in|is|not|and|or|lambda|yield|True|False|None|async|await)\b/g;
     const lines = code.split('\n');
-    const highlighted = lines.map(line => {
+    return <span>{lines.map((line, index) => {
       const trimmed = line.trim();
       if (trimmed.startsWith('#')) {
-        return `<span class="text-slate-500 italic">${line}</span>`;
+        return <React.Fragment key={index}><span className="text-slate-500 italic">{line}</span>{index < lines.length - 1 && '\n'}</React.Fragment>;
       }
-      return line.replace(keywords, '<span class="text-purple-400 font-bold">$1</span>');
-    }).join('\n');
-    return <span dangerouslySetInnerHTML={{ __html: highlighted }} />;
+      return <React.Fragment key={index}>{highlightMatches(line, keywords, () => 'text-purple-400 font-bold')}{index < lines.length - 1 && '\n'}</React.Fragment>;
+    })}</span>;
   }
 
   // Default plaintext code
@@ -111,11 +132,13 @@ export function RenderInline({ tokens = [] }) {
         );
 
       case 'link': {
-        const isHash = (token.href || '').startsWith('#');
+        const href = safeMarkdownUrl(token.href);
+        if (!href) return <span key={idx}><RenderInline tokens={token.tokens} /></span>;
+        const isHash = href.startsWith('#');
         return (
           <a
             key={idx}
-            href={token.href}
+            href={href}
             target={isHash ? '_self' : '_blank'}
             rel={isHash ? '' : 'noopener noreferrer'}
             className="inline-flex items-center gap-0.5 text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 font-medium underline underline-offset-2 decoration-indigo-400/50 hover:decoration-indigo-500 transition-colors"
@@ -133,11 +156,13 @@ export function RenderInline({ tokens = [] }) {
           </del>
         );
 
-      case 'image':
+      case 'image': {
+        const src = safeMarkdownUrl(token.href, true);
+        if (!src) return <span key={idx}>{token.text || ''}</span>;
         return (
           <span key={idx} className="inline-block my-1.5 max-w-full">
             <img
-              src={token.href}
+              src={src}
               alt={token.text || 'image'}
               className="rounded-xl border border-slate-200 dark:border-slate-800 max-h-60 object-contain shadow-xs"
             />
@@ -148,10 +173,11 @@ export function RenderInline({ tokens = [] }) {
             )}
           </span>
         );
+      }
 
       case 'html': {
         const raw = token.text || token.raw || '';
-        const kbdMatch = raw.match(/<kbd>([^<]+)<\/kbd>/i);
+        const kbdMatch = raw.match(/^<kbd>([^<]+)<\/kbd>$/i);
         if (kbdMatch) {
           return (
             <kbd
@@ -162,7 +188,7 @@ export function RenderInline({ tokens = [] }) {
             </kbd>
           );
         }
-        return <span key={idx} dangerouslySetInnerHTML={{ __html: raw }} />;
+        return <span key={idx}>{raw}</span>;
       }
 
       case 'escape':
@@ -540,8 +566,6 @@ function RenderBlockToken({ token }) {
 
 // 8. Main Markdown Renderer Component
 export default function MarkdownRenderer({ content = '' }) {
-  if (!content) return null;
-
   // Auto-close unclosed markdown code fences if streaming cut off in the middle
   const normalizedContent = useMemo(() => {
     let text = content;
@@ -551,6 +575,8 @@ export default function MarkdownRenderer({ content = '' }) {
     }
     return text;
   }, [content]);
+
+  if (!content) return null;
 
   let tokens = [];
   try {

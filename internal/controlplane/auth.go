@@ -75,9 +75,18 @@ func (h *AdminHandler) AdminAuthMiddleware() gin.HandlerFunc {
 		}
 
 		if h.repo != nil {
-			user, _ := h.repo.GetUserByUsername(claims.Username)
-			if user != nil && strings.EqualFold(user.Status, "locked") {
+			user, err := h.repo.GetUserByUsername(claims.Username)
+			if err != nil || user == nil {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "账户不存在或暂时无法验证，请重新登录"})
+				return
+			}
+			if strings.EqualFold(user.Status, "locked") {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": 403, "error": "该账户已被管理员锁定，无法继续访问"})
+				return
+			}
+			// A role change invalidates previously issued tokens immediately.
+			if user.Role != claims.Role {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "账户权限已变更，请重新登录"})
 				return
 			}
 		}

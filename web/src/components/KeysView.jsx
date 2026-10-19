@@ -15,7 +15,7 @@ import {
   ShieldAlert,
   Zap
 } from 'lucide-react';
-import { getGatewayOrigin, copyToClipboard } from '../config';
+import { getGatewayOrigin, copyToClipboard, toCSV } from '../config';
 
 export default function KeysView({
   keys = [],
@@ -137,17 +137,17 @@ export default function KeysView({
     ];
     const rows = filteredKeys.map(k => [
       k.id,
-      `"${k.tenant_id || ''}"`,
-      `"${k.key || ''}"`,
-      `"${k.group_name || 'default'}"`,
+      k.tenant_id || '',
+      k.key || '',
+      k.group_name || 'default',
       (k.used_cost || 0).toFixed(4),
       k.budget > 0 ? k.budget.toFixed(2) : (isZh ? '不限' : 'Unlimited'),
-      `"${(k.allowed_models || []).join(';') || '*'}"`,
+      (k.allowed_models || []).join(';') || '*',
       k.rpm || (isZh ? '不限' : 'Unlimited'),
       k.status === 'disabled' ? (isZh ? '已停用' : 'Disabled') : (isZh ? '正常' : 'Active'),
-      `"${k.created_at || ''}"`
+      k.created_at || ''
     ]);
-    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+    const csvContent = toCSV(headers, rows);
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

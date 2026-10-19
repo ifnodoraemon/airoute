@@ -203,6 +203,8 @@ func TestStorageStatusAndSkillDownloadCache(t *testing.T) {
 	defer db.Close()
 
 	repo := storage.NewRepository(db)
+	// Admin tokens are validated against the users table, so seed the admin account.
+	require.NoError(t, repo.CreateUser(&storage.UserRecord{Username: "admin", Role: "admin", Status: "active", Balance: 1000}))
 	dispatcher := router.NewDispatcher(nil)
 	synchronizer := controlplane.NewSynchronizer(repo, dispatcher)
 	adminHandler := controlplane.NewAdminHandler(repo, synchronizer, dispatcher)

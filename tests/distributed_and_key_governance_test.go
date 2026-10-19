@@ -39,6 +39,10 @@ func TestAPIKey_ActiveVsDisabled(t *testing.T) {
 	defer db.Close()
 
 	repo := storage.NewRepository(db)
+	// Admin tokens are validated against the users table, so seed the admin account.
+	if err := repo.CreateUser(&storage.UserRecord{Username: "admin", Role: "admin", Status: "active", Balance: 1000}); err != nil {
+		t.Fatalf("seed admin user failed: %v", err)
+	}
 	dispatcher := router.NewDispatcher(nil)
 	synchronizer := controlplane.NewSynchronizer(repo, dispatcher)
 	adminHandler := controlplane.NewAdminHandler(repo, synchronizer, dispatcher)

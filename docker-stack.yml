@@ -81,9 +81,9 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - GATEWAY_HOST=0.0.0.0
-      - DATABASE_URL=postgres://${DB_USER:-nanouser}:${DB_PASSWORD:-nanopassword}@nano-postgres:5432/${DB_NAME:-nanodb}?sslmode=disable
+      - DATABASE_URL=postgres://${DB_USER:-nanouser}:${DB_PASSWORD:?DB_PASSWORD must be set}@nano-postgres:5432/${DB_NAME:-nanodb}?sslmode=disable
       - REDIS_URL=redis://nano-redis:6379/0
-      - NANO_SECRET_KEY=${NANO_SECRET_KEY:-nano-swarm-enterprise-secret-key}
+      - NANO_SECRET_KEY=${NANO_SECRET_KEY:?NANO_SECRET_KEY must be set to a strong random value}
       - LOG_LEVEL=${LOG_LEVEL:-info}
     networks:
       - nano-swarm-net

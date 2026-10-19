@@ -85,10 +85,24 @@ func (h *AdminHandler) CreateAPIKey(c *gin.Context) {
 		}
 	}
 
-	if rec.Key == "" {
+	// Credentials are secrets: never accept a weak client-supplied value.
+	// Anything shorter than 16 chars or containing unexpected characters is
+	// replaced by a crypto/rand key generated here.
+	rec.Key = strings.TrimSpace(rec.Key)
+	if len(rec.Key) < 16 || !isWellFormedAPIKey(rec.Key) {
 		b := make([]byte, 16)
 		_, _ = rand.Read(b)
 		rec.Key = fmt.Sprintf("sk-airoute-%s", hex.EncodeToString(b))
+	}
+	// Usage counters are server-owned; ignore client-supplied accounting.
+	rec.UsedCost = 0
+	rec.UsedTokens = 0
+	if rec.Status == "" {
+		rec.Status = "active"
+	}
+	// Non-admins cannot self-elevate key state.
+	if claims, ok := GetClaimsFromContext(c); !ok || claims.Role != "admin" {
+		rec.Status = "active"
 	}
 	if rec.TenantID == "" {
 		rec.TenantID = "default-app"
@@ -146,14 +160,14 @@ func (h *AdminHandler) UpdateAPIKey(c *gin.Context) {
 	}
 
 	var req struct {
-		TenantID         *string   `json:"tenant_id"`
-		AllowedModels    []string  `json:"allowed_models"`
-		RPM              *int      `json:"rpm"`
-		TPM              *int      `json:"tpm"`
-		Budget           *float64  `json:"budget"`
-		Status           *string   `json:"status"`
-		FormatValidation *string   `json:"format_validation"`
-		GroupName        *string   `json:"group_name"`
+		TenantID         *string  `json:"tenant_id"`
+		AllowedModels    []string `json:"allowed_models"`
+		RPM              *int     `json:"rpm"`
+		TPM              *int     `json:"tpm"`
+		Budget           *float64 `json:"budget"`
+		Status           *string  `json:"status"`
+		FormatValidation *string  `json:"format_validation"`
+		GroupName        *string  `json:"group_name"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -238,4 +252,20 @@ func (h *AdminHandler) DeleteAPIKey(c *gin.Context) {
 	_ = h.sync.ReloadAndBroadcast(c.Request.Context(), "api_key_deleted")
 
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "API 密钥已成功删除"})
+}
+
+// isWellFormedAPIKey reports whether a client-supplied key looks like a real
+// secret (URL-safe characters only). Weak/short values are regenerated.
+func isWellFormedAPIKey(key string) bool {
+	for _, r := range key {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '-' || r == '_':
+		default:
+			return false
+		}
+	}
+	return true
 }

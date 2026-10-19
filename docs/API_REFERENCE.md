@@ -76,7 +76,7 @@ curl -X POST http://localhost:8080/v1/messages \
 ### 2.4 Anthropic Claude Token Counting
 - **Endpoint**: `POST /v1/messages/count_tokens`
 - **Supported Clients**: Anthropic SDKs (e.g. `client.messages.count_tokens(...)`), Agent token budget estimators.
-- **Protocol Adaptation**: Supports counting tokens for upstream Claude engines and estimates tokens for translated OpenAI/GPUStack upstreams.
+- **Accuracy**: Delegates counting to a native Anthropic upstream, including tools and image/document blocks. Returns `501` when no native Anthropic channel is configured; it does not claim a character-based estimate is an exact token count.
 
 #### Request Example:
 ```bash
@@ -107,7 +107,7 @@ curl -X POST http://localhost:8080/v1/messages/count_tokens \
   - `GET /v1beta/models`
   - `GET /v1beta/models/:model`
 - **Supported Clients**: Google GenAI SDK (`@google/genai`, `google-generativeai`), Gemini CLI, Vertex AI compatible tooling.
-- **Protocol Adaptation**: Full-duplex protocol conversion translating Gemini SDK calls into upstream format (Gemini upstream zero-copy, or adapted to OpenAI/DeepSeek/Claude models).
+- **Protocol Adaptation**: Full-duplex protocol conversion translating Gemini SDK calls into upstream format (Gemini upstream forwarding, or adapted to OpenAI/DeepSeek/Claude models).
 
 #### Request Example (countTokens):
 ```bash
@@ -128,7 +128,7 @@ curl -X POST http://localhost:8080/v1beta/models/gemini-4-argon:countTokens \
 
 ### 2.6 DeepSeek-R1 / Reasoning Models Transparency
 - **Transparent Field**: `reasoning_content` in Chat Completions chunk and message objects.
-- **Stream Transparency**: Streaming chunks carrying reasoning tokens (such as DeepSeek-R1 thinking traces or OpenAI o1/o3 reasoning chunks) are forwarded transparently with zero-copy overhead without stripping thinking blocks.
+- **Stream handling**: OpenAI-compatible reasoning deltas are normalized in memory. Native Anthropic streams preserve signed thinking blocks; cross-protocol reasoning behavior depends on the target API and is not byte-for-byte passthrough.
 
 ---
 
@@ -271,7 +271,7 @@ curl -X POST http://localhost:8080/v1/rerank \
     "model": "bge-reranker-large",
     "query": "What is high availability in enterprise LLM gateways?",
     "documents": [
-      "Airoute provides zero-copy streaming and pre-first-token fallback.",
+      "Airoute streams responses and can retry before the first content chunk.",
       "The weather today in Tokyo is sunny with blooming cherry blossoms.",
       "Distributed databases using Raft consensus ensure strong consistency."
     ],
@@ -289,7 +289,7 @@ curl -X POST http://localhost:8080/v1/rerank \
       "index": 0,
       "relevance_score": 0.9856,
       "document": {
-        "text": "Airoute provides zero-copy streaming and pre-first-token fallback."
+        "text": "Airoute streams responses and can retry before the first content chunk."
       }
     },
     {

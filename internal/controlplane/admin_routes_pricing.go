@@ -29,7 +29,7 @@ func (h *AdminHandler) saveRoutePricing(req *UpdateModelRouteRequest) error {
 	}
 	existing, _ := h.repo.GetModelPrice(req.Model)
 	offEnabled := true
-	offMode := "deepseek"
+	offMode := "custom"
 	offSlots := ""
 	weekendAll := true
 	offStart := "00:00"

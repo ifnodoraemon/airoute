@@ -71,17 +71,17 @@ func runServer(args []string) {
 
 	// Security and deployment warnings on startup
 	isRelease := os.Getenv("GIN_MODE") == "release" || cfg.Server.LogLevel == "warn" || cfg.Server.LogLevel == "error"
-	adminSecret := os.Getenv("GATEWAY_ADMIN_SECRET")
-	if adminSecret == "" {
-		adminSecret = os.Getenv("JWT_SECRET")
+	if issues := productionSecurityIssues(cfg); len(issues) > 0 {
+		for _, issue := range issues {
+			telemetry.Logger.Warn("SECURITY WARNING: "+issue, "remediation", "set GATEWAY_ADMIN_SECRET and GATEWAY_ADMIN_PASSWORD to strong random values")
+		}
+		if isRelease {
+			telemetry.Logger.Error("refusing to start: insecure default credentials detected in release mode; set GATEWAY_ADMIN_SECRET and GATEWAY_ADMIN_PASSWORD")
+			os.Exit(1)
+		}
 	}
-	if isRelease {
-		if adminSecret == "" || adminSecret == "airoute-secret-key-change-me" {
-			telemetry.Logger.Warn("SECURITY WARNING: Using default or empty GATEWAY_ADMIN_SECRET in production release mode! Set a strong secret via GATEWAY_ADMIN_SECRET environment variable.")
-		}
-		if os.Getenv("STRIPE_WEBHOOK_SECRET") == "" {
-			telemetry.Logger.Warn("SECURITY WARNING: STRIPE_WEBHOOK_SECRET is unset in production release mode. Stripe payment webhooks will be rejected.")
-		}
+	if isRelease && os.Getenv("STRIPE_WEBHOOK_SECRET") == "" {
+		telemetry.Logger.Warn("SECURITY WARNING: STRIPE_WEBHOOK_SECRET is unset in production release mode. Stripe payment webhooks will be rejected.")
 	}
 	if !strings.HasPrefix(dataSource, "postgres://") && !strings.HasPrefix(dataSource, "postgresql://") {
 		if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {

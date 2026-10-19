@@ -19,7 +19,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 	if req.Protocol != "" {
 		proto = req.Protocol
 	}
-	channels := d.ResolveCandidateChannels(ctx, req.Model, proto)
+	channels := d.candidateChannelsForRequest(ctx, req, proto)
 	if len(channels) == 0 {
 		if fb := d.GetModelFallback(req.Model); fb != "" && !strings.EqualFold(fb, req.Model) {
 			nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
@@ -82,69 +82,61 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		}
 
 		firstTokenTimeout := d.GetFirstTokenTimeout(ch, req.Model)
-		select {
-		case firstEvent, ok := <-streamChan:
-			if !ok {
-				attemptCancel()
-				if ctx.Err() == context.Canceled {
-					d.circuitBreaker.AbortCanary(ch.Name)
-					return nil, ctx.Err()
+		timer := time.NewTimer(firstTokenTimeout)
+		var preamble []*model.StreamEvent
+		var firstErr error
+		committed := false
+		for !committed && firstErr == nil {
+			select {
+			case event, ok := <-streamChan:
+				if !ok {
+					firstErr = fmt.Errorf("channel %s closed stream before a valid token", ch.Name)
+					break
 				}
-				d.circuitBreaker.RecordFailure(ch.Name)
-				lastErr = fmt.Errorf("channel %s closed stream without events", ch.Name)
-				attempted = append(attempted, ch.Name)
-				telemetry.GlobalMetrics.RecordFallback()
-				continue
-			}
-
-			if firstEvent.Err != nil {
-				attemptCancel()
-				if ctx.Err() == context.Canceled || errors.Is(firstEvent.Err, context.Canceled) {
-					d.circuitBreaker.AbortCanary(ch.Name)
-					return nil, ctx.Err()
+				if event == nil {
+					continue
 				}
-				d.circuitBreaker.RecordFailure(ch.Name)
-				lastErr = firstEvent.Err
-				attempted = append(attempted, ch.Name)
-				telemetry.GlobalMetrics.RecordFallback()
-				telemetry.Logger.Warn("channel failed before first valid token, falling back",
-					"channel", ch.Name,
-					"error", firstEvent.Err.Error(),
-				)
-				continue
+				if event.Err != nil {
+					firstErr = event.Err
+					break
+				}
+				// Role-only chunks and unparsed SSE frames are not evidence of a usable stream.
+				// Keep a bounded preamble so it can be sent if content follows.
+				if len(preamble) < 64 {
+					preamble = append(preamble, event)
+				}
+				if streamEventHasContent(event) || event.IsDone {
+					committed = true
+				}
+			case <-timer.C:
+				firstErr = fmt.Errorf("channel %s timed out waiting for first token (%v)", ch.Name, firstTokenTimeout)
+			case <-ctx.Done():
+				timer.Stop()
+				attemptCancel()
+				d.circuitBreaker.AbortCanary(ch.Name)
+				return nil, ctx.Err()
 			}
-
-			// First token healthy! Mark healthy in circuit breaker
-			d.circuitBreaker.RecordSuccess(ch.Name)
-			// Expose the full routing chain (e.g. "A→B") for audit logging.
-			trail := formatChannelTrail(ctx, attempted, ch.Name)
-			firstEvent.Channel = trail
-
-			// Wrap and return combined stream with leak-proof cancellation context
-			outChan := make(chan *model.StreamEvent, 64)
-			go pipeStreamEvents(ctx, outChan, firstEvent, streamChan, trail, attemptCancel)
-
-			return outChan, nil
-
-		case <-time.After(firstTokenTimeout):
+		}
+		timer.Stop()
+		if firstErr != nil {
 			attemptCancel()
-			// Drain remaining events in background so upstream sender unblocks
-			go func(c <-chan *model.StreamEvent) {
-				for range c {
-				}
-			}(streamChan)
+			if ctx.Err() == context.Canceled || errors.Is(firstErr, context.Canceled) {
+				d.circuitBreaker.AbortCanary(ch.Name)
+				return nil, ctx.Err()
+			}
 			d.circuitBreaker.RecordFailure(ch.Name)
-			lastErr = fmt.Errorf("channel %s timed out waiting for first token (%v)", ch.Name, firstTokenTimeout)
+			lastErr = firstErr
 			attempted = append(attempted, ch.Name)
 			telemetry.GlobalMetrics.RecordFallback()
-			telemetry.Logger.Warn("first token timeout, falling back", "channel", ch.Name, "timeout", firstTokenTimeout)
+			telemetry.Logger.Warn("channel failed before first valid token, falling back", "channel", ch.Name, "error", firstErr.Error())
 			continue
-
-		case <-ctx.Done():
-			attemptCancel()
-			d.circuitBreaker.AbortCanary(ch.Name)
-			return nil, ctx.Err()
 		}
+
+		d.circuitBreaker.RecordSuccess(ch.Name)
+		trail := formatChannelTrail(ctx, attempted, ch.Name)
+		outChan := make(chan *model.StreamEvent, 64)
+		go pipeStreamEvents(ctx, outChan, preamble, streamChan, trail, attemptCancel)
+		return outChan, nil
 	}
 
 	if fb := d.GetModelFallback(req.Model); fb != "" && !strings.EqualFold(fb, req.Model) {
@@ -167,13 +159,16 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 }
 
 // pipeStreamEvents pipes events from upstream stream channel to client channel with cancellation guard.
-func pipeStreamEvents(ctx context.Context, outChan chan<- *model.StreamEvent, first *model.StreamEvent, in <-chan *model.StreamEvent, trail string, cancel context.CancelFunc) {
+func pipeStreamEvents(ctx context.Context, outChan chan<- *model.StreamEvent, preamble []*model.StreamEvent, in <-chan *model.StreamEvent, trail string, cancel context.CancelFunc) {
 	defer cancel()
 	defer close(outChan)
-	select {
-	case outChan <- first:
-	case <-ctx.Done():
-		return
+	for _, event := range preamble {
+		event.Channel = trail
+		select {
+		case outChan <- event:
+		case <-ctx.Done():
+			return
+		}
 	}
 	for {
 		select {
@@ -183,6 +178,9 @@ func pipeStreamEvents(ctx context.Context, outChan chan<- *model.StreamEvent, fi
 			if !ok {
 				return
 			}
+			if event == nil {
+				continue
+			}
 			event.Channel = trail
 			select {
 			case outChan <- event:
@@ -191,6 +189,18 @@ func pipeStreamEvents(ctx context.Context, outChan chan<- *model.StreamEvent, fi
 			}
 		}
 	}
+}
+
+func streamEventHasContent(event *model.StreamEvent) bool {
+	if event == nil || event.Chunk == nil {
+		return event != nil && (event.NativeAnthropicType == "content_block_delta" || event.NativeAnthropicType == "content_block_start")
+	}
+	for _, choice := range event.Chunk.Choices {
+		if choice.Delta.Content != "" || choice.Delta.ReasoningContent != "" || len(choice.Delta.ToolCalls) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // GetFirstTokenTimeout determines the safe fallback window timeout for a channel and model.

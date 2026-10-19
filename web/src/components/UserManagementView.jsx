@@ -65,11 +65,13 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
 
   const generateSecurePassword = () => {
     const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$';
-    let pass = '';
+    const out = [];
+    const rnd = new Uint32Array(12);
+    crypto.getRandomValues(rnd);
     for (let i = 0; i < 12; i++) {
-      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+      out.push(chars.charAt(rnd[i] % chars.length));
     }
-    return pass;
+    return out.join('');
   };
 
   const [pricingGroups, setPricingGroups] = useState([]);

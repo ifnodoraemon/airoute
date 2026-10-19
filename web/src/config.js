@@ -50,3 +50,24 @@ export function resolveGatewayUrl(path) {
 
 export { copyToClipboard } from './utils/clipboard';
 
+
+// csvEscape implements RFC 4180 quoting and neutralises spreadsheet formula
+// injection for cells starting with =, +, -, @, tab or carriage return.
+export function csvEscape(value) {
+  let s = value === null || value === undefined ? '' : String(value);
+  if (/^[=+\-@\t\r]/.test(s)) {
+    s = "'" + s;
+  }
+  if (/[",\r\n]/.test(s)) {
+    s = '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+// toCSV builds a BOM-prefixed CSV document from a header row and data rows.
+export function toCSV(headers, rows) {
+  const lines = [headers.map(csvEscape).join(',')].concat(
+    rows.map((row) => row.map(csvEscape).join(','))
+  );
+  return '\uFEFF' + lines.join('\r\n');
+}

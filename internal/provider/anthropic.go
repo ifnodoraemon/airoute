@@ -57,6 +57,9 @@ func (p *AnthropicProvider) ChatComplete(ctx context.Context, req *model.ChatCom
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("x-api-key", channel.APIKey)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
+	if req.AnthropicBeta != "" {
+		httpReq.Header.Set("anthropic-beta", req.AnthropicBeta)
+	}
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
@@ -118,11 +121,10 @@ func (p *AnthropicProvider) ChatComplete(ctx context.Context, req *model.ChatCom
 				FinishReason: &finishReason,
 			},
 		},
-		Usage: &model.Usage{
-			PromptTokens:     anthropicResp.Usage.InputTokens,
-			CompletionTokens: anthropicResp.Usage.OutputTokens,
-			TotalTokens:      anthropicResp.Usage.InputTokens + anthropicResp.Usage.OutputTokens,
-		},
+		Usage: anthropicUsageToModel(&anthropicResp.Usage),
+	}
+	if req.AnthropicOriginal != nil {
+		openAIResp.NativeAnthropicResponse = bodyBytes
 	}
 
 	return openAIResp, nil

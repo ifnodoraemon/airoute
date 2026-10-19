@@ -120,11 +120,7 @@ func (p *GeminiProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 
 	var usage *model.Usage
 	if geminiResp.UsageMetadata != nil {
-		usage = &model.Usage{
-			PromptTokens:     geminiResp.UsageMetadata.PromptTokenCount,
-			CompletionTokens: geminiResp.UsageMetadata.CandidatesTokenCount,
-			TotalTokens:      geminiResp.UsageMetadata.TotalTokenCount,
-		}
+		usage = geminiUsageToModel(geminiResp.UsageMetadata)
 	}
 
 	return &model.ChatCompletionResponse{

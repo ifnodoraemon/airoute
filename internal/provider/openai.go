@@ -116,7 +116,7 @@ func (p *OpenAIProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 	if resp.StatusCode != http.StatusOK {
 		// Auto-heal context length overflow if max_tokens exceeded upstream model context limit
 		if resp.StatusCode == http.StatusBadRequest && req.MaxTokens != nil {
-			if safeMax, ok := extractClampedMaxTokens(bodyBytes); ok {
+			if safeMax, ok := extractClampedMaxTokens(bodyBytes); ok && safeMax < *req.MaxTokens {
 				slog.Warn("auto-clamping max_tokens to fit upstream context limit",
 					"upstream", channel.Name,
 					"model", req.Model,
@@ -183,7 +183,7 @@ func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 
 		// Auto-heal context length overflow if max_tokens exceeded upstream model context limit
 		if resp.StatusCode == http.StatusBadRequest && req.MaxTokens != nil {
-			if safeMax, ok := extractClampedMaxTokens(bodyBytes); ok {
+			if safeMax, ok := extractClampedMaxTokens(bodyBytes); ok && safeMax < *req.MaxTokens {
 				slog.Warn("auto-clamping max_tokens in stream to fit upstream context limit",
 					"upstream", channel.Name,
 					"model", req.Model,
@@ -279,4 +279,3 @@ func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 
 	return eventChan, nil
 }
-

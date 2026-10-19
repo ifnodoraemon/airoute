@@ -11,28 +11,10 @@ server:
   port: 8080
   read_timeout_sec: 120
   write_timeout_sec: 120
-  max_header_bytes: 1048576
+  redis_url: "${REDIS_URL}"
 
-database:
-  driver: "sqlite"
-  dsn: "airoute.db"
-  # For PostgreSQL:
-  # driver: "postgres"
-  # dsn: "postgres://user:password@localhost:5432/airoute?sslmode=disable"
-
-# High-Performance HTTP Connection Pool
-connection_pool:
-  max_idle_conns: 2048
-  max_idle_conns_per_host: 256
-  idle_conn_timeout_sec: 90
-  tls_handshake_timeout_sec: 10
-  disable_compression: false
-
-# Circuit Breaker & Safe Fallback Window
-circuit_breaker:
-  consecutive_failures: 3       # Trip breaker to OPEN after 3 consecutive failures
-  cooldown_seconds: 30          # Wait 30s in OPEN state before canary HALF-OPEN probe
-  half_open_probes: 2           # Successful canary probes needed to return to CLOSED
+# Database is selected by command-line -db for SQLite or DATABASE_URL for PostgreSQL.
+# HTTP transport and circuit-breaker limits are currently code defaults, not YAML keys.
 
 # Initial Channels (Can also be managed dynamically via Web UI / SQLite)
 channels:
@@ -93,15 +75,20 @@ api_keys:
 
 ## 2. Environment Variables
 
-All settings can be overridden via environment variables for cloud-native Docker / K8s deployments:
+The following environment variables are read by the server. YAML supports `${NAME}` and `${NAME:-default}` expansion.
 
 | Environment Variable | Default Value | Description |
 | :--- | :--- | :--- |
 | `GATEWAY_PORT` | `8080` | HTTP listen port |
 | `GATEWAY_CONFIG` | `configs/config.yaml` | Path to YAML configuration file |
-| `GATEWAY_DB_DRIVER` | `sqlite` | Database driver (`sqlite` or `postgres`) |
-| `GATEWAY_DB_DSN` | `airoute.db` | Database connection DSN or SQLite file path |
+| `DATABASE_URL` | unset | PostgreSQL connection URL; when unset, SQLite uses the `-db` path |
+| `GATEWAY_ADMIN_PASSWORD` | `admin123` outside Helm | Initial admin password; set a strong value before exposing the console |
+| `GATEWAY_ADMIN_SECRET` | random per process outside Helm | HMAC secret; use one stable shared value for multiple replicas |
+| `REDIS_URL` | unset | Optional Redis Streams logging queue |
+| `GATEWAY_FIRST_TOKEN_TIMEOUT` | 30 seconds (60 for reasoning model names) | Upper bound in seconds for the first content token, capped by channel timeout |
 | `GIN_MODE` | `release` | Web engine mode (`release` or `debug`) |
+
+Helm defaults to one SQLite pod with a ReadWriteOnce volume and creates a Kubernetes Secret for the admin password and signing secret. For multiple replicas, provide `database.existingSecret` with key `url` containing a PostgreSQL URL and set `persistence.enabled=false`; configure shared object storage if artifacts must be accessible from every pod. Helm refuses a multi-replica SQLite deployment. Retrieve the generated admin password with `kubectl get secret <fullname>-auth -o jsonpath='{.data.admin-password}' | base64 -d` (for the default `airoute` release, `<fullname>` is `airoute`). Keep the Secret across upgrades.
 
 ---
 
@@ -147,7 +134,10 @@ Airoute implements a Tri-State Circuit Breaker state machine:
 ### Safe Fallback Window
 When streaming requests fail:
 - If an upstream returns HTTP `429`, `500`, or network error **before the first token is emitted to the client**, the gateway seamlessly retries with the next healthy backup provider.
-- Zero error frames or disconnects are experienced by the client.
+- Failover is possible until a content token or tool call is emitted. Errors after that point are sent on the active stream.
+
+### Multimodal billing
+Images use the configured `fixed_price` per requested image (`n`, default 1). Audio and video creation use one configured fixed-price unit per successful request; video task polling is not billed. These are gateway prices, not live upstream invoices. A multimodal model with no positive fixed price is rejected with `pricing_not_configured`; set `GATEWAY_ALLOW_UNPRICED_MULTIMODAL=1` only when zero-cost forwarding is intentional.
 
 ---
 
@@ -181,4 +171,3 @@ api_keys:
     tenant_id: "qa-testing"
     format_validation: "strict"
 ```
-

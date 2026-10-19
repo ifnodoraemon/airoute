@@ -49,6 +49,7 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 
 	var recordOnce sync.Once
 	var streamError error
+	usageSource := "upstream"
 	recordStreamEnd := func() {
 		dur := time.Since(start)
 		statusCode := http.StatusOK
@@ -67,12 +68,14 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 				if totalPromptTokens < 1 {
 					totalPromptTokens = 1
 				}
+				usageSource = "estimated"
 			}
 			if totalCompTokens == 0 && accumulatedCompChars > 0 {
 				totalCompTokens = accumulatedCompChars / 3
 				if totalCompTokens < 1 {
 					totalCompTokens = 1
 				}
+				usageSource = "estimated"
 			}
 		}
 
@@ -87,6 +90,7 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 			Duration:         dur,
 			TTFT:             ttftDuration,
 			StatusCode:       statusCode,
+			UsageSource:      usageSource,
 		})
 	}
 	defer recordOnce.Do(recordStreamEnd)

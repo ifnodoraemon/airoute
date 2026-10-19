@@ -137,11 +137,7 @@ func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 
 			var usage *model.Usage
 			if geminiChunk.UsageMetadata != nil {
-				usage = &model.Usage{
-					PromptTokens:     geminiChunk.UsageMetadata.PromptTokenCount,
-					CompletionTokens: geminiChunk.UsageMetadata.CandidatesTokenCount,
-					TotalTokens:      geminiChunk.UsageMetadata.TotalTokenCount,
-				}
+				usage = geminiUsageToModel(geminiChunk.UsageMetadata)
 			}
 
 			chunk := &model.ChatCompletionChunk{

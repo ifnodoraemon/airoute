@@ -22,13 +22,14 @@ import (
 
 // UpstreamRequest represents a generic HTTP request across any modality.
 type UpstreamRequest struct {
-	Path        string            // e.g. "/v1/images/generations", "/v1/audio/speech"
-	Method      string            // "POST", "GET"
-	Headers     map[string]string // custom headers
-	Body        []byte            // serialized payload
-	ContentType string            // "application/json", "multipart/form-data"
-	Model       string            // requested model for routing
-	Protocol    string            // e.g. "images", "audio_speech", "videos"
+	Path          string            // e.g. "/v1/images/generations", "/v1/audio/speech"
+	Method        string            // "POST", "GET"
+	Headers       map[string]string // custom headers
+	Body          []byte            // serialized payload
+	ContentType   string            // "application/json", "multipart/form-data"
+	Model         string            // requested model for routing
+	Protocol      string            // e.g. "images", "audio_speech", "videos"
+	BillableUnits int               // fixed-price units; e.g. requested image count
 }
 
 // UpstreamResponse encapsulates a generic HTTP response across any modality.

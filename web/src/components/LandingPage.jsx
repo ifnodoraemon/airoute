@@ -248,7 +248,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             <span>{isZh ? '高可用集群运行中' : 'Cluster Running Healthy'}</span>
             <span className="text-slate-300">|</span>
-            <span className="text-emerald-600 font-mono">SLA 99.99%</span>
+            <span className="text-emerald-600 font-mono">状态可观测</span>
             <span className="text-slate-300">|</span>
             <span className="text-indigo-600 font-medium">{isZh ? '状态详情 →' : 'Details →'}</span>
           </div>
@@ -274,12 +274,12 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
           <p className="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
             {isZh ? (
               <>
-                单核万级吞吐 · 全协议流式转发 · 故障无感容灾 · 闲时与缓存降本 95%<br />
+                多协议接入 · 流式转发 · 首字前故障回退 · 用量与成本审计<br />
                 统一收口 OpenAI、Claude、Gemini、DeepSeek 与全模态生成管线。
               </>
             ) : (
               <>
-                10k+ RPS per core · Zero-latency stream relay · Seamless failover · Up to 95% cache discounts<br />
+                Multi-protocol access · Streaming relay · Pre-content failover · Usage and cost audit<br />
                 Unified aggregation for OpenAI, Claude, Gemini, DeepSeek, and multimodal pipelines.
               </>
             )}
@@ -355,8 +355,8 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
             </h3>
             <p className="text-xs text-slate-600 leading-relaxed">
               {isZh
-                ? '原生支持 OpenAI、Claude Messages、Gemini 与主流协议全双工转译，思维链深度思考内容零拷贝透传。'
-                : 'Native full-duplex translation across OpenAI, Claude Messages, and Gemini protocols with zero-copy reasoning tokens.'}
+                ? '支持 OpenAI、Claude Messages 和 Gemini 接入；原生 Anthropic 渠道保留签名思考块，跨协议转换按目标格式处理。'
+                : 'Supports OpenAI, Claude Messages, and Gemini clients. Native Anthropic routes preserve signed thinking blocks; cross-protocol conversion follows the target schema.'}
             </p>
           </div>
 
@@ -439,8 +439,8 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
             <h4 className="font-bold text-base text-slate-900">{isZh ? '实时语音与转写' : 'Audio & Speech'}</h4>
             <p className="text-xs text-slate-600 leading-relaxed">
               {isZh
-                ? '支持 16kHz mono Opus 压缩格式（体积立减 95%）；Whisper-Large-V3-Turbo 毫秒级语音转文字。'
-                : 'Supports 16kHz mono Opus audio compression (95% bandwidth reduction) and Whisper-Large-V3-Turbo fast transcription.'}
+                ? '支持语音合成与转录请求转发；实际格式、速度和模型能力由上游提供商决定。'
+                : 'Forwards speech generation and transcription requests; formats, latency, and model capabilities depend on the upstream provider.'}
             </p>
             <div className="pt-2 font-mono text-[11px] text-teal-600 font-semibold">
               POST /v1/audio/transcriptions

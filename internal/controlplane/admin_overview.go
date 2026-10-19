@@ -12,8 +12,34 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/distributed"
 )
 
-// GetStatsOverview returns dashboard overview metrics.
+// GetStatsOverview returns dashboard overview metrics. Super-admins see the
+// whole cluster; regular users only see aggregates for their own API keys.
 func (h *AdminHandler) GetStatsOverview(c *gin.Context) {
+	claims, ok := GetClaimsFromContext(c)
+	if ok && claims.Role != "admin" {
+		user, err := h.repo.GetUserByUsername(claims.Username)
+		if err != nil || user == nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "账户不存在或暂时无法验证，请重新登录"})
+			return
+		}
+		keys, err := h.repo.ListAPIKeysByUser(user.ID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		names := make([]string, 0, len(keys))
+		for _, k := range keys {
+			names = append(names, k.Key)
+		}
+		stats, err := h.repo.GetStatsOverviewForKeys(names)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "data": stats})
+		return
+	}
+
 	stats, err := h.repo.GetStatsOverview()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

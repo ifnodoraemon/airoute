@@ -17,6 +17,9 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 	// Global recovery
 	r.Use(gin.Recovery())
 
+	// Reject oversized request bodies before they can exhaust memory
+	r.Use(middleware.BodyLimit(middleware.ResolveMaxBodyBytes()))
+
 	// Distributed Trace Correlation & Structured Access Logging
 	r.Use(middleware.TraceMiddleware())
 	r.Use(middleware.AccessLogMiddleware())
@@ -30,6 +33,21 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 		c.Header("X-Content-Type-Options", "nosniff")
 		c.Header("X-Frame-Options", "SAMEORIGIN")
 		c.Header("X-XSS-Protection", "1; mode=block")
+		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+		c.Header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		// The console is a self-hosted SPA that loads Inter/JetBrains Mono from
+		// Google Fonts and keeps inline style attributes for themed components.
+		c.Header("Content-Security-Policy",
+			"default-src 'self'; "+
+				"script-src 'self'; "+
+				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "+
+				"font-src 'self' https://fonts.gstatic.com data:; "+
+				"img-src 'self' data: blob: https:; "+
+				"connect-src 'self'; "+
+				"base-uri 'self'; form-action 'self'; frame-ancestors 'self'")
+		if c.Request.TLS != nil {
+			c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
@@ -128,21 +146,23 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 
 				// Read-only inspection endpoints
 				protected.GET("/stats/overview", adminHandler.GetStatsOverview)
-				protected.GET("/system/middlewares", adminHandler.GetSystemMiddlewares)
 				protected.GET("/models", adminHandler.ListModels)
-				protected.GET("/models/routes", adminHandler.GetModelRoutes)
 				protected.GET("/pricing", adminHandler.GetPricingRates)
 				protected.GET("/skills", adminHandler.ListSkills)
 				protected.GET("/skills/:id/download", adminHandler.DownloadSkillZip)
-				protected.GET("/storage/status", adminHandler.GetStorageStatus)
 				protected.GET("/mcp/settings", adminHandler.GetMCPSettings)
-				protected.GET("/mcp/servers", adminHandler.ListMCPServers)
 				protected.GET("/logs", adminHandler.ListLogs)
 
 				// Protected super-admin operations
 				adminOnly := protected.Group("")
 				adminOnly.Use(adminHandler.RequireAdminRole())
 				{
+					// Admin-only infrastructure inspection (topology/storage/MCP secrets)
+					adminOnly.GET("/system/middlewares", adminHandler.GetSystemMiddlewares)
+					adminOnly.GET("/models/routes", adminHandler.GetModelRoutes)
+					adminOnly.GET("/storage/status", adminHandler.GetStorageStatus)
+					adminOnly.GET("/mcp/servers", adminHandler.ListMCPServers)
+
 					adminOnly.GET("/users", adminHandler.ListUsers)
 					adminOnly.POST("/users", adminHandler.CreateUser)
 					adminOnly.DELETE("/users/:username", adminHandler.DeleteUser)

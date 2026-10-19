@@ -149,13 +149,10 @@ export default function KeyModal({
               <label className="font-semibold text-slate-700 dark:text-slate-300">{isZh ? 'API 密钥' : 'API Key'}</label>
               <button
                 type="button"
-                onClick={() => {
-                  const rand = 'sk-airoute-' + Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 6);
-                  setNewKey(prev => ({ ...prev, key: rand }));
-                }}
+                onClick={() => setNewKey(prev => ({ ...prev, key: '' }))}
                 className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 cursor-pointer"
               >
-                <span>{isZh ? '随机生成' : 'Generate'}</span>
+                <span>{isZh ? '由服务端安全生成' : 'Generate server-side'}</span>
               </button>
             </div>
             <input

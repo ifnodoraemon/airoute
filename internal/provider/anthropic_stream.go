@@ -38,6 +38,9 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 	httpReq.Header.Set("Accept", "text/event-stream")
 	httpReq.Header.Set("x-api-key", channel.APIKey)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
+	if req.AnthropicBeta != "" {
+		httpReq.Header.Set("anthropic-beta", req.AnthropicBeta)
+	}
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
@@ -63,6 +66,8 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 		var currentEvent string
 		inputTokens := 0
 		outputTokens := 0
+		cacheReadTokens := 0
+		cacheCreationTokens := 0
 
 		sendEvent := func(ev *model.StreamEvent) bool {
 			select {
@@ -105,6 +110,19 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 				if err := json.Unmarshal([]byte(dataStr), &eventMap); err != nil {
 					continue
 				}
+				if req.AnthropicOriginal != nil {
+					if currentEvent == "error" {
+						sendEvent(&model.StreamEvent{Err: fmt.Errorf("upstream anthropic stream error: %s", dataStr)})
+						return
+					}
+					if !sendEvent(&model.StreamEvent{NativeAnthropicEvent: []byte(dataStr), NativeAnthropicType: currentEvent, IsDone: currentEvent == "message_stop"}) {
+						return
+					}
+					if currentEvent == "message_stop" {
+						return
+					}
+					continue
+				}
 
 				switch currentEvent {
 				case "message_start":
@@ -115,6 +133,12 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 						if u, ok := msgObj["usage"].(map[string]any); ok {
 							if in, ok := u["input_tokens"].(float64); ok {
 								inputTokens = int(in)
+							}
+							if cr, ok := u["cache_read_input_tokens"].(float64); ok {
+								cacheReadTokens = int(cr)
+							}
+							if cc, ok := u["cache_creation_input_tokens"].(float64); ok {
+								cacheCreationTokens = int(cc)
 							}
 						}
 					}
@@ -258,9 +282,15 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 							},
 						},
 						Usage: &model.Usage{
-							PromptTokens:     inputTokens,
+							PromptTokens:     inputTokens + cacheReadTokens + cacheCreationTokens,
 							CompletionTokens: outputTokens,
-							TotalTokens:      inputTokens + outputTokens,
+							TotalTokens:      inputTokens + cacheReadTokens + cacheCreationTokens + outputTokens,
+							PromptTokensDetails: func() *model.PromptTokensDetails {
+								if cacheReadTokens > 0 {
+									return &model.PromptTokensDetails{CachedTokens: cacheReadTokens}
+								}
+								return nil
+							}(),
 						},
 					}
 					if !sendEvent(&model.StreamEvent{Chunk: chunk}) {

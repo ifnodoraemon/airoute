@@ -447,7 +447,12 @@ Execute the following mission with precision, maintainability, and zero speculat
       if (res.ok) {
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
-        setTtsAudioUrl(url);
+        // Release the previous audio object URL to avoid leaking memory on
+        // every synthesis, and remember the current one for unmount cleanup.
+        setTtsAudioUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return url;
+        });
       } else {
         const err = await res.json().catch(() => ({}));
         if (showToast) showToast(isZh ? `TTS 失败: ${err.error?.message || '未知错误'}` : `TTS failed: ${err.error?.message || 'Unknown error'}`, 'error');

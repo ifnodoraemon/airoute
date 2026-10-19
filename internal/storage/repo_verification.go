@@ -49,21 +49,24 @@ func (r *Repository) VerifyCode(email, code, purpose string) bool {
 
 	if attempts >= 5 {
 		// Max failed attempts exceeded, invalidate code
-		_, _ = r.db.Exec(`UPDATE verification_codes SET used = 1 WHERE id = ?`, id)
+		_, _ = r.db.Exec(`UPDATE verification_codes SET used = 1 WHERE id = ? AND used = 0`, id)
 		return false
 	}
 
 	if realCode != code {
-		attempts++
-		if attempts >= 5 {
-			_, _ = r.db.Exec(`UPDATE verification_codes SET attempts = ?, used = 1 WHERE id = ?`, attempts, id)
-		} else {
-			_, _ = r.db.Exec(`UPDATE verification_codes SET attempts = ? WHERE id = ?`, attempts, id)
-		}
+		// Atomic increment prevents concurrent brute-force requests from
+		// losing updates or exceeding the attempt budget.
+		_, _ = r.db.Exec(`UPDATE verification_codes SET attempts = attempts + 1, used = CASE WHEN attempts + 1 >= 5 THEN 1 ELSE used END WHERE id = ? AND used = 0`, id)
 		return false
 	}
 
-	// Code successfully verified: mark as used
-	_, _ = r.db.Exec(`UPDATE verification_codes SET used = 1 WHERE id = ?`, id)
+	// Consume exactly once: a concurrent second request sees affected == 0.
+	res, err := r.db.Exec(`UPDATE verification_codes SET used = 1 WHERE id = ? AND used = 0`, id)
+	if err != nil {
+		return false
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		return false
+	}
 	return true
 }

@@ -35,13 +35,13 @@
 
 ### 2. 🔄 全双工协议自动转译 (Bidirectional Protocol Translation)
 - **纯补全下游自动适应**：当下游模型仅支持传统的 `/v1/completions` 接口时，网关透明地将入站的 Chat 请求与 SSE 流转译为补全 Prompt，并将响应包装回标准 Chat Choices 与 SSE Deltas。
-- **Claude 原生双向互转**：客户端可直接使用原生 Anthropic SDK 请求 `/v1/messages`，网关自动将请求转化为 OpenAI / Gemini 格式，并在返回时转换为 Claude Messages 协议。
+- **Claude Messages 接入**：原生 Anthropic 渠道保留签名思考块、缓存标记和 SSE 事件；普通文本与工具调用可转译到兼容渠道。需要原生语义的请求只路由到 Anthropic 渠道。
 - **Gemini 原生格式转译**：官方 Gemini Developer API 专用协议透明转译，支持多模态多轮会话。
 
 ### 3. 🎨 文本/图像/语音/视频全模态支持 (Unified Multimodal Pipeline)
 - **对话、智能体响应与补全**：`/v1/chat/completions`, `/v1/responses` (OpenAI 官方新代智能体协议), `/v1/completions`, `/v1/messages`
 - **AI 图像生成**：`/v1/images/generations`（DALL-E 3、Flux、SD3）
-- **语音合成 TTS**：`/v1/audio/speech`（流式二进制直连，零常驻内存）
+- **语音合成 TTS**：`/v1/audio/speech`（响应体流式转发）
 - **语音识别 STT**：`/v1/audio/transcriptions`（Whisper Multipart 流式转录）
 - **视频生成与轮询**：`/v1/videos/generations`, `/v1/videos/tasks/:id`（Sora / CogVideoX 异步任务轮询）
 - 所有模态均采用**软件工程 Strategy 统一管道 (`DispatchHTTP`)**，共享三态熔断与安全容灾。
@@ -51,14 +51,14 @@
 - **通配符前缀映射 (Prefix Wildcards)**：支持配置 `"yy/*": "*"` 或 `"org/dept/*": "*"`，自动完成前缀剥离与转发重写。
 - **自动渠道名称前缀匹配**：当请求模型形如 `<provider_name>/<upstream_model>` 时，网关自动定位该 Provider 并透明透传 `<upstream_model>`。
 
-### 5. ⚡ 极致性能与零延迟 (Extreme Performance)
-- **代理热路径零数据库查询 (Zero-DB Hot Path)**：路由表与密钥常驻内存读写锁结构，微秒级路由决策（$< 50\mu s$），0 次 SQL 查询。
-- **预热长连接池 (HTTP Transport Pool)**：预热 2048 个复用连接、单 Host 256 并发长连接、HTTP/2 多路复用，杜绝 TCP 握手开销。
-- **异步环形缓冲审计日志器 (AsyncLogger)**：10000 容量缓冲队列，500ms 批量异步持久化入库，慢磁盘 IO 绝不拖累转发延迟。
+### 5. ⚡ 转发与审计 (Forwarding & Audit)
+- **内存路由缓存**：渠道与密钥配置热加载到内存；计费及控制面仍可能访问数据库。
+- **连接复用**：HTTP Transport 最多保留 2048 个空闲连接，每个 Host 最多 512 个；连接按需建立，支持 HTTP/2。
+- **异步审计**：默认使用 10000 容量队列并定期批量入库；数据库写入失败会保留批次重试，队列满时对请求施加背压。
 
 ### 6. 🛡️ 极致高可用与容灾 (Extreme High Availability)
 - **三态智能熔断器 (Tri-State Circuit Breaker)**：每个 Provider 独立跟踪健康度。发生 3 次连续故障（500/429/超时）即刻熔断 30 秒，旁路死节点避免雪崩；冷却后自动进行半开探活与自愈。
-- **首字前无感容灾窗 (Safe Fallback Window)**：在首个有效 Token 或完整结果返回前遇到上游异常，毫秒级无缝漂移到下一个优先级 Provider，客户端业务完全无感知。
+- **首字前容灾窗 (Safe Fallback Window)**：首个内容分块或工具调用前发生上游错误时尝试备用渠道；切换耗时取决于上游和超时配置。
 - **集群 10 秒定期无锁自同步**：任意实例修改配置，多副本集群后台自动热重载，无需人工重启服务。
 
 ---
@@ -83,7 +83,7 @@ flowchart TD
         Dispatcher["统一分发管道与协议路由 (DispatchHTTP / DispatchStream)"]
         Breaker["三态熔断器 (Tri-State Circuit Breaker)"]
         Fallback["首字前无感容灾窗 (Safe Fallback Window)"]
-        Pool["预热长连接池 (2048 闲置连接复用)"]
+        Pool["按需建立的 HTTP 连接复用池"]
     end
     Node1 --- DataPlane
     Node2 --- DataPlane
@@ -133,15 +133,18 @@ make build
 
 ### 方式 B: Docker Compose 多副本高可用集群
 ```bash
-# 一键启动 2 副本 Gateway + Nginx 负载均衡器
+# 先从 .env.example 创建 .env，并填写管理员、PostgreSQL 与对象存储密钥及匹配的 DATABASE_URL
+# 然后启动 2 副本 Gateway + Nginx 负载均衡器
 docker compose up -d --build
 ```
 Nginx 会自动在 `http://localhost:8080` 暴露统一入口（宿主端口见 `docker-compose.yml` 的 `8080:80` 映射），并以 `least_conn` 算法向双节点分发流量，自动关闭 SSE 缓冲 (`proxy_buffering off`)。
 
 ### 方式 C: Kubernetes Helm Chart 部署
 ```bash
-# 使用 Helm 一键部署至 K8s
+# 默认单副本 SQLite；管理员密码和签名密钥由 Chart Secret 生成
 helm install airoute ./helm/airoute -n gateway --create-namespace
+# 查看生成的管理员密码（请妥善保管 Secret）
+kubectl get secret airoute-auth -n gateway -o jsonpath='{.data.admin-password}' | base64 -d
 ```
 
 ---

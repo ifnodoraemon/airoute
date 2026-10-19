@@ -1018,6 +1018,15 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                   </button>
                 )}
 
+                {/* 离线降级提示：本地模板不是实时遥测 */}
+                {!isUser && m.isFallback && (
+                  <div className="mb-3 rounded-xl border border-amber-300/80 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-[11px] leading-relaxed text-amber-900 dark:text-amber-200">
+                    {isZh
+                      ? '⚠️ 离线本地模板（非实时）：模型不可用，以下内容由静态诊断生成，未读取实时集群指标，请勿据此直接做运维决策。'
+                      : '⚠️ Offline template (not live): the model was unavailable, so this reply comes from a static diagnostic and does not reflect live cluster metrics.'}
+                  </div>
+                )}
+
                 {/* 深度思考过程 (Thinking Process) 折叠卡片 */}
                 {!isUser && m.reasoning && (
                   <div className="mb-3 rounded-xl border border-amber-200/80 dark:border-amber-800/60 bg-amber-50/70 dark:bg-amber-950/30 overflow-hidden">

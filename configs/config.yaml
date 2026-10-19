@@ -20,9 +20,10 @@ max_retries: 3
 default_timeout_seconds: 60
 
 # 管理员凭证配置 (由 .env GATEWAY_ADMIN_USER / GATEWAY_ADMIN_PASSWORD 统管)
+# 生产环境务必设置强口令；release 模式下检测到 admin123/空口令将拒绝启动。
 admin:
   username: "${GATEWAY_ADMIN_USER:-admin}"
-  password: "${GATEWAY_ADMIN_PASSWORD:-admin123}"
+  password: "${GATEWAY_ADMIN_PASSWORD}"
 
 # 认证与用户策略配置 (由 .env ALLOW_REGISTRATION / INITIAL_USER_BALANCE 统管)
 auth:

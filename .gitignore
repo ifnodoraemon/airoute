@@ -34,3 +34,6 @@ web/node_modules/
 *.swp
 *.swo
 .DS_Store
+
+# Generated test artifacts
+tests/data/

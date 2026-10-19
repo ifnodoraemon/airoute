@@ -302,6 +302,11 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                 {isZh ? '未缓存输入: ' : 'Uncached: '}<strong className="text-slate-900 dark:text-white font-semibold">{Math.max(0, (log.prompt_tokens || 0) - (log.cached_tokens || 0)).toLocaleString()}</strong> ·
                 {isZh ? ' 输出: ' : ' Output: '}<strong className="text-slate-900 dark:text-white font-semibold">{(log.completion_tokens || 0).toLocaleString()}</strong> ·
                 {isZh ? ' 缓存: ' : ' Cached: '}<strong className="text-amber-600 dark:text-amber-400 font-semibold">{(log.cached_tokens || 0).toLocaleString()}</strong>
+                {log.usage_source === 'estimated' && (
+                  <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 align-middle">
+                    {isZh ? '估算' : 'estimated'}
+                  </span>
+                )}
               </span>
             </div>
             <div className="p-3.5 flex justify-between">

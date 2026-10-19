@@ -132,7 +132,6 @@ func (h *Handler) HandlePublicStatus(c *gin.Context) {
 		"code": 0,
 		"data": gin.H{
 			"status":                     overallStatus,
-			"uptime_pct":                 99.99,
 			"public_url":                 baseURL,
 			"models":                     modelStatuses,
 			"models_count":               len(models),

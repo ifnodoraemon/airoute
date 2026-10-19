@@ -63,7 +63,7 @@ export default function VisualTopologyModal({
               <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight flex items-center space-x-2">
                 <span>{isZh ? '智能容灾拓扑与模型调度流向图' : 'Visual Routing & Failover Flow Topology'}</span>
                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-                  Pre-Token Fallback SLA 99.99%
+                  Pre-Token Fallback
                 </span>
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -118,8 +118,8 @@ export default function VisualTopologyModal({
               </div>
               <p className="text-[11px] leading-relaxed">
                 {isZh
-                  ? 'Airoute 数据面拦截异常并在首字输出前（15ms 内）自动旁路故障节点，流量无感切换至 Priority 2 备用提供商。客户端请求保持 100% 连通与不中断！'
-                  : 'Airoute intercepted the error before the first chunk (<15ms) and automatically bypassed the faulty node, shifting traffic smoothly to Priority 2. Zero client downtime!'}
+                  ? '若首个内容分块尚未发出，网关会尝试 Priority 2 备用渠道；切换耗时取决于上游响应和超时配置。'
+                  : 'If no content has been sent, the gateway tries the Priority 2 backup. Failover time depends on upstream response and configured timeouts.'}
               </p>
             </div>
           </div>

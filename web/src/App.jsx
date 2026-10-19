@@ -337,10 +337,49 @@ export default function App() {
     }
   };
 
+  // Authenticated fetch helper that also treats application-level failures as
+  // errors. Mutating flows must never report success for a rejected request.
+  const adminJSON = async (url, options = {}) => {
+    const res = await adminFetch(url, options);
+    let data = null;
+    try {
+      data = await res.json();
+    } catch (e) {
+      data = null;
+    }
+    if (!res.ok) {
+      throw new Error((data && (data.error || data.message)) || `HTTP ${res.status}`);
+    }
+    if (data && typeof data.code === 'number' && data.code !== 0) {
+      throw new Error(data.error || data.message || `Request failed with code ${data.code}`);
+    }
+    return data;
+  };
+
+  // Clear every piece of tenant-scoped data so a following session (or React
+  // DevTools) cannot observe the previous account's channels, keys or logs.
+  const resetWorkspaceState = () => {
+    setChannels([]);
+    setKeys([]);
+    setModels([]);
+    setModelRoutes([]);
+    setLogs([]);
+    setActiveQuickKey(null);
+    setActiveLogDetail(null);
+    setSelectedLogIds([]);
+    setSelectedKeyIds([]);
+    setSelectedChannelIds([]);
+    setEditingChannelId(null);
+    setShowChannelModal(false);
+    setShowKeyModal(false);
+    setCurlExportCmd('');
+  };
+
   const handleLogout = () => {
     setAdminToken('');
     setAdminUser(null);
     clearStoredAuth();
+    resetWorkspaceState();
     setViewMode('landing');
     showToast(isZh ? '已安全退出账号' : 'Successfully logged out', 'info');
   };
@@ -598,6 +637,7 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (!adminToken || viewMode !== 'console') return;
     fetchData();
     fetchLogs();
     const interval = setInterval(() => {
@@ -607,7 +647,9 @@ export default function App() {
       }
     }, 8000);
     return () => clearInterval(interval);
-  }, [currentTab, adminToken]);
+    // timeRange/sessionFilter are dependencies so the polling closure always
+    // reads the current filters instead of the ones present at mount time.
+  }, [currentTab, adminToken, viewMode, timeRange, sessionFilter]);
 
   useEffect(() => {
     if (currentTab === 'logs' || currentTab === 'dashboard') {
@@ -989,20 +1031,25 @@ export default function App() {
     delete payload.models_str;
     delete payload.mapping_str;
 
-    if (editingChannelId) {
-      await adminFetch(`/api/v1/admin/channels/${editingChannelId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      showToast(isZh ? 'Provider 更新成功，内存已热重载' : 'Provider updated successfully, memory hot-reloaded', 'success');
-    } else {
-      await adminFetch('/api/v1/admin/channels', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      showToast(isZh ? 'Provider 创建成功，内存已热重载' : 'Provider created successfully, memory hot-reloaded', 'success');
+    try {
+      if (editingChannelId) {
+        await adminJSON(`/api/v1/admin/channels/${editingChannelId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        showToast(isZh ? 'Provider 更新成功，内存已热重载' : 'Provider updated successfully, memory hot-reloaded', 'success');
+      } else {
+        await adminJSON('/api/v1/admin/channels', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        showToast(isZh ? 'Provider 创建成功，内存已热重载' : 'Provider created successfully, memory hot-reloaded', 'success');
+      }
+    } catch (err) {
+      showToast((isZh ? '保存 Provider 失败: ' : 'Failed to save provider: ') + err.message, 'error');
+      return;
     }
 
     setShowChannelModal(false);
@@ -1049,9 +1096,13 @@ export default function App() {
   // Handle Channel Deletion
   const handleDeleteChannel = async (id) => {
     if (!window.confirm(isZh ? '确认注销该模型提供商 (Provider)？' : 'Are you sure you want to remove this Provider?')) return;
-    await adminFetch(`/api/v1/admin/channels/${id}`, { method: 'DELETE' });
-    showToast(isZh ? 'Provider 已注销，内存已原子更新' : 'Provider removed, memory atomically updated', 'info');
-    fetchData();
+    try {
+      await adminJSON(`/api/v1/admin/channels/${id}`, { method: 'DELETE' });
+      showToast(isZh ? 'Provider 已注销，内存已原子更新' : 'Provider removed, memory atomically updated', 'info');
+      fetchData();
+    } catch (err) {
+      showToast((isZh ? '注销 Provider 失败: ' : 'Failed to remove provider: ') + err.message, 'error');
+    }
   };
 
   // Test Channel
@@ -1224,13 +1275,13 @@ export default function App() {
     }
   };
 
-  // Handle Key Modal Opening with Auto-Generated Credentials
+  // Handle Key Modal Opening. Credentials are always generated server-side
+  // with crypto/rand; the browser never invents an authentication secret.
   const handleOpenCreateKey = () => {
-    const rand = 'sk-airoute-' + Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 6);
     const tenantNum = (keys?.length || 0) + 1;
     setNewKey({
       tenant_id: isZh ? `密钥-${tenantNum}` : `Key-${tenantNum}`,
-      key: rand,
+      key: '',
       rpm: 0,
       budget: 0,
       allowed_models: [],
@@ -1288,9 +1339,13 @@ export default function App() {
   // Handle Key Deletion
   const handleDeleteKey = async (id) => {
     if (!window.confirm(isZh ? '确认注销该客户端访问密钥？' : 'Are you sure you want to revoke this API key?')) return;
-    await adminFetch(`/api/v1/admin/keys/${id}`, { method: 'DELETE' });
-    showToast(isZh ? '客户端访问密钥已注销' : 'Client API key revoked', 'info');
-    fetchData();
+    try {
+      await adminJSON(`/api/v1/admin/keys/${id}`, { method: 'DELETE' });
+      showToast(isZh ? '客户端访问密钥已注销' : 'Client API key revoked', 'info');
+      fetchData();
+    } catch (err) {
+      showToast((isZh ? '注销密钥失败: ' : 'Failed to revoke key: ') + err.message, 'error');
+    }
   };
 
   // Handle Key Status Toggle (Enable/Disable)
@@ -1298,7 +1353,7 @@ export default function App() {
     const nextStatus = k.status === 'disabled' ? 'active' : 'disabled';
     const actionText = nextStatus === 'active' ? (isZh ? '启用' : 'enable') : (isZh ? '禁用/停用' : 'disable');
     try {
-      await adminFetch(`/api/v1/admin/keys/${k.id}`, {
+      await adminJSON(`/api/v1/admin/keys/${k.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus }),
@@ -1386,6 +1441,7 @@ export default function App() {
               lang={lang}
               t={t}
               onLoginSuccess={(token, user) => {
+                resetWorkspaceState();
                 setStoredAuth(token, user);
                 setAdminToken(token);
                 setAdminUser(user);
@@ -1475,6 +1531,7 @@ export default function App() {
               lang={lang}
               t={t}
               onLoginSuccess={(token, user) => {
+                resetWorkspaceState();
                 setStoredAuth(token, user);
                 setAdminToken(token);
                 setAdminUser(user);

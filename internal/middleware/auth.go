@@ -181,7 +181,8 @@ func AuthMiddleware() gin.HandlerFunc {
 
 				// Pre-flight in-flight reservation to prevent concurrent overdraft storm
 				if userID > 0 {
-					if !globalQuotaTracker.TryAcquire(userID, userBalance) {
+					acquired, backend := globalQuotaTracker.TryAcquire(userID, userBalance)
+					if !acquired {
 						c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
 							"error": gin.H{
 								"message": "Concurrent requests exceed available wallet balance reserve. Please wait for pending requests to finish or recharge.",
@@ -191,7 +192,7 @@ func AuthMiddleware() gin.HandlerFunc {
 						})
 						return
 					}
-					defer globalQuotaTracker.Release(userID)
+					defer globalQuotaTracker.Release(userID, backend)
 				}
 			}
 		}
