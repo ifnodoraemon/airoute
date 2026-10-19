@@ -213,7 +213,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
               onClick={onViewStatus}
               className="flex text-xs px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium items-center space-x-1.5 transition border border-slate-200 cursor-pointer"
             >
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="w-2 h-2 rounded-full bg-slate-400"></span>
               <span>{isZh ? '服务状态' : 'Status'}</span>
             </button>
 
@@ -241,16 +241,22 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
       {/* Hero Section */}
       <section className="relative pt-20 pb-24 px-6 overflow-hidden bg-linear-to-b from-indigo-50/50 via-white to-slate-50 border-b border-slate-200/60">
         <div className="max-w-4xl mx-auto text-center space-y-8">
+          {/* This page has no live health probe, so the badge states configuration
+              facts plus an explicit unknown status instead of claiming the
+              cluster is running. */}
           <div
             onClick={onViewStatus}
-            className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-white border border-slate-200 shadow-sm text-xs font-semibold text-slate-700 hover:border-indigo-400 hover:shadow-md cursor-pointer transition"
+            title={isZh
+              ? '本页未进行健康探测，"状态未知"仅表示未在此处检测运行状况，实际状态请查看状态页'
+              : 'This page does not probe health. "Status unknown" means no check ran here; see the status page for live state.'}
+            className="inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-1 px-4 py-1.5 rounded-full bg-white border border-slate-200 shadow-sm text-xs font-semibold text-slate-700 hover:border-indigo-400 hover:shadow-md cursor-pointer transition"
           >
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>{isZh ? '高可用集群运行中' : 'Cluster Running Healthy'}</span>
+            <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+            <span>{isZh ? '统一网关 · 多提供商与降级路由' : 'Unified Gateway · Multi-Provider Routing'}</span>
             <span className="text-slate-300">|</span>
-            <span className="text-emerald-600 font-mono">状态可观测</span>
+            <span className="text-slate-500 font-mono">{isZh ? '运行状态未知' : 'Runtime status unknown'}</span>
             <span className="text-slate-300">|</span>
-            <span className="text-indigo-600 font-medium">{isZh ? '状态详情 →' : 'Details →'}</span>
+            <span className="text-indigo-600 font-medium">{isZh ? '查看状态详情 →' : 'View status →'}</span>
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-900 tracking-tight leading-tight">
@@ -410,7 +416,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                 ? '聚合 GPT-6、Claude Opus 5.5 与 DeepSeek-R1 全系列。基于会话哈希锁定同一 Provider，享受 90% Prompt 缓存优惠。'
                 : 'Aggregates GPT-6, Claude Opus 5.5, and DeepSeek-R1. Session affinity hash pins same provider for 90% prompt cache discounts.'}
             </p>
-            <div className="pt-2 font-mono text-[11px] text-indigo-600 font-semibold">
+            <div className="pt-2 font-mono text-xs text-indigo-600 font-semibold">
               POST /v1/chat/completions
             </div>
           </div>
@@ -426,7 +432,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                 ? '支持 FLUX.1-Pro 超清生图与视觉分析。支持 OSS/S3 预签名直传，二进制绕行 CDN，网关带宽消耗直降 99%。'
                 : 'Supports FLUX.1-Pro 2K/4K generation. Pre-signed OSS/S3 direct upload bypasses gateway bandwidth by 99%.'}
             </p>
-            <div className="pt-2 font-mono text-[11px] text-amber-600 font-semibold">
+            <div className="pt-2 font-mono text-xs text-amber-600 font-semibold">
               POST /v1/images/generations
             </div>
           </div>
@@ -442,7 +448,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                 ? '支持语音合成与转录请求转发；实际格式、速度和模型能力由上游提供商决定。'
                 : 'Forwards speech generation and transcription requests; formats, latency, and model capabilities depend on the upstream provider.'}
             </p>
-            <div className="pt-2 font-mono text-[11px] text-teal-600 font-semibold">
+            <div className="pt-2 font-mono text-xs text-teal-600 font-semibold">
               POST /v1/audio/transcriptions
             </div>
           </div>
@@ -458,7 +464,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                 ? '集成 Sora 2 影视级视频生成，原生支持异步任务分发、生命周期状态轮询与视频直链获取。'
                 : 'Integrates Sora 2 cinematic video generation, native async job queueing, state polling, and direct asset delivery.'}
             </p>
-            <div className="pt-2 font-mono text-[11px] text-purple-600 font-semibold">
+            <div className="pt-2 font-mono text-xs text-purple-600 font-semibold">
               POST /v1/videos/generations
             </div>
           </div>
@@ -570,7 +576,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/80 text-slate-400 uppercase tracking-wider text-[11px]">
+                <tr className="border-b border-slate-100 bg-slate-50/80 text-slate-500 uppercase tracking-wider text-xs">
                   <th className="py-3 px-5 font-semibold">{isZh ? '模型系列 (Series)' : 'Model Series'}</th>
                   <th className="py-3 px-4 font-semibold">{isZh ? '基准输入 (/1M)' : 'Base Input (/1M)'}</th>
                   <th className="py-3 px-4 font-semibold">{isZh ? '基准输出 (/1M)' : 'Base Output (/1M)'}</th>
@@ -588,9 +594,9 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                   </td>
                   <td className="py-3.5 px-4">¥12.00 ~ ¥25.00</td>
                   <td className="py-3.5 px-4">¥48.00 ~ ¥100.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-slate-400">{isZh ? '标准计费' : 'Standard'}</td>
+                  <td className="py-3.5 px-4 font-semibold text-slate-500">{isZh ? '标准计费' : 'Standard'}</td>
                   <td className="py-3.5 px-4 text-emerald-600 font-bold">¥6.00 ~ ¥12.50</td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-4 text-slate-500">-</td>
                 </tr>
 
                 {/* 2. Anthropic Claude 5.5 系列 */}
@@ -601,9 +607,9 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                   </td>
                   <td className="py-3.5 px-4">¥15.00 ~ ¥30.00</td>
                   <td className="py-3.5 px-4">¥75.00 ~ ¥150.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-slate-400">{isZh ? '标准计费' : 'Standard'}</td>
+                  <td className="py-3.5 px-4 font-semibold text-slate-500">{isZh ? '标准计费' : 'Standard'}</td>
                   <td className="py-3.5 px-4 text-emerald-600 font-bold">¥1.50 ~ ¥3.00</td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-4 text-slate-500">-</td>
                 </tr>
 
                 {/* 3. Google Gemini 系列 */}
@@ -614,9 +620,9 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                   </td>
                   <td className="py-3.5 px-4">¥1.00 ~ ¥18.00</td>
                   <td className="py-3.5 px-4">¥4.00 ~ ¥72.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-slate-400">{isZh ? '标准计费' : 'Standard'}</td>
+                  <td className="py-3.5 px-4 font-semibold text-slate-500">{isZh ? '标准计费' : 'Standard'}</td>
                   <td className="py-3.5 px-4 text-emerald-600 font-bold">¥0.25 ~ ¥4.50</td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-4 text-slate-500">-</td>
                 </tr>
 
                 {/* 4. DeepSeek 系列 */}
@@ -629,7 +635,7 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                   <td className="py-3.5 px-4">¥6.00 ~ ¥16.00</td>
                   <td className="py-3.5 px-4 font-semibold text-indigo-600">{isZh ? '¥0.75 / ¥2.00 (半价)' : '¥0.75 / ¥2.00 (50% Off)'}</td>
                   <td className="py-3.5 px-4 text-emerald-600 font-bold">¥0.35 ~ ¥1.00</td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-4 text-slate-500">-</td>
                 </tr>
 
                 {/* 5. 阿里通义千问 Qwen 系列 */}
@@ -640,9 +646,9 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                   </td>
                   <td className="py-3.5 px-4">¥3.50 ~ ¥5.00</td>
                   <td className="py-3.5 px-4">¥14.00 ~ ¥20.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-slate-400">{isZh ? '标准计费' : 'Standard'}</td>
+                  <td className="py-3.5 px-4 font-semibold text-slate-500">{isZh ? '标准计费' : 'Standard'}</td>
                   <td className="py-3.5 px-4 text-emerald-600 font-bold">¥0.85 ~ ¥1.25</td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-4 text-slate-500">-</td>
                 </tr>
 
                 {/* 6. 智谱 GLM 系列 */}
@@ -653,9 +659,9 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                   </td>
                   <td className="py-3.5 px-4">¥6.00</td>
                   <td className="py-3.5 px-4">¥24.00</td>
-                  <td className="py-3.5 px-4 font-semibold text-slate-400">{isZh ? '标准计费' : 'Standard'}</td>
+                  <td className="py-3.5 px-4 font-semibold text-slate-500">{isZh ? '标准计费' : 'Standard'}</td>
                   <td className="py-3.5 px-4 text-emerald-600 font-bold">¥1.50</td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-4 text-slate-500">-</td>
                 </tr>
 
                 {/* 7. FLUX 图像生成系列 */}
@@ -664,10 +670,10 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                     <span className="w-2 h-2 rounded-full bg-rose-500"></span>
                     <span>FLUX.1-Pro / FLUX.1-Schnell ({isZh ? '图像系列' : 'Image'})</span>
                   </td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-4 text-slate-500">-</td>
+                  <td className="py-3.5 px-4 text-slate-500">-</td>
                   <td className="py-3.5 px-4 font-semibold text-indigo-600">{isZh ? '¥0.10 / 张' : '¥0.10 / img'}</td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-4 text-slate-500">-</td>
                   <td className="py-3.5 px-4 font-bold text-slate-900">{isZh ? '¥0.05 ~ ¥0.15 / 张' : '¥0.05 ~ ¥0.15 / img'}</td>
                 </tr>
 
@@ -677,10 +683,10 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                     <span className="w-2 h-2 rounded-full bg-purple-600"></span>
                     <span>CogVideoX-5B / Kling 4.0 ({isZh ? '视频系列' : 'Video'})</span>
                   </td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-4 text-slate-500">-</td>
+                  <td className="py-3.5 px-4 text-slate-500">-</td>
                   <td className="py-3.5 px-4 font-semibold text-indigo-600">{isZh ? '¥0.50 / 次' : '¥0.50 / task'}</td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-4 text-slate-500">-</td>
                   <td className="py-3.5 px-4 font-bold text-slate-900">{isZh ? '¥0.80 / 次' : '¥0.80 / task'}</td>
                 </tr>
 
@@ -690,10 +696,10 @@ curl -X GET "${origin}/v1/videos/tasks/task_xxx" \\
                     <span className="w-2 h-2 rounded-full bg-cyan-600"></span>
                     <span>GPT Live Transcribe / Whisper-Large-V3</span>
                   </td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-4 text-slate-500">-</td>
+                  <td className="py-3.5 px-4 text-slate-500">-</td>
                   <td className="py-3.5 px-4 font-semibold text-indigo-600">{isZh ? '¥0.015 / 分钟' : '¥0.015 / min'}</td>
-                  <td className="py-3.5 px-4 text-slate-400">-</td>
+                  <td className="py-3.5 px-4 text-slate-500">-</td>
                   <td className="py-3.5 px-4 font-bold text-slate-900">{isZh ? '¥0.02 ~ ¥0.03 / 分钟' : '¥0.02 ~ ¥0.03 / min'}</td>
                 </tr>
               </tbody>

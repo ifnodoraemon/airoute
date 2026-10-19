@@ -38,6 +38,11 @@ type ModelProviderInfo struct {
 	Status           string   `json:"status"`
 	ConversionNeeded bool     `json:"conversion_needed"`
 	ConversionType   string   `json:"conversion_type"`
+	// SharedModelCount is how many models this channel serves. Weight and
+	// priority are channel-wide settings, so editing them for one model also
+	// changes every other model on the same channel; the console uses this to
+	// warn before saving.
+	SharedModelCount int `json:"shared_model_count"`
 }
 
 // GetModelRoutes aggregates channels and model fallback configurations into a model-centric view.
@@ -114,6 +119,7 @@ func (d *Dispatcher) GetModelRoutes() []*ModelRouteDetail {
 				Status:           ch.Status,
 				ConversionNeeded: convNeeded,
 				ConversionType:   convType,
+				SharedModelCount: len(ch.Models),
 			}
 			detail.Providers = append(detail.Providers, info)
 		}

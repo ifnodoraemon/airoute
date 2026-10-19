@@ -73,6 +73,12 @@ const LoginModal = lazy(() => import('./components/LoginModal'));
 const CommandPalette = lazy(() => import('./components/CommandPalette'));
 const AccountManageModal = lazy(() => import('./components/AccountManageModal'));
 const ModelRoutesManager = lazy(() => import('./components/ModelRoutesManager'));
+const TraceSnapshotModal = lazy(() => import('./components/TraceSnapshotModal'));
+
+// Placeholder kept in the adminToken state while the real credential lives in an
+// HttpOnly cookie. It only signals "there is a session"; it is never sent as a
+// bearer token (requests rely on the cookie via credentials: 'same-origin').
+const SESSION_MARKER = '__cookie_session__';
 const ServiceStatus = lazy(() => import('./components/ServiceStatus'));
 const PricingManager = lazy(() => import('./components/PricingManager'));
 const SkillHubView = lazy(() => import('./components/SkillHubView'));
@@ -100,6 +106,7 @@ function ViewLoader() {
 }
 import { translations, I18nContext } from './i18n';
 import { getGatewayOrigin, setPublicGatewayUrl, copyToClipboard as crossOriginCopy } from './config';
+import useUrlFilters from './hooks/useUrlFilters';
 
 // Audit-log pagination: server-side page size, kept in one place for the
 // fetch limit, the offset stepping, and the page-number math in LogsView.
@@ -296,6 +303,13 @@ export default function App() {
         if (data.code === 0 && data.data) {
           const user = data.data.user || data.data;
           setAdminUser(user);
+          // The session lives in an HttpOnly cookie, so there is no bearer token
+          // to keep in state. We still need a non-empty marker: adminToken gates
+          // the data polling loop and the isLoggedIn props, and it was
+          // initialised from localStorage — which setStoredAuth deliberately
+          // clears. Without this, every refresh restored the user but left the
+          // token empty, so the console looked logged out and stopped polling.
+          setAdminToken(SESSION_MARKER);
           setStoredAuth('', user);
         } else {
           setAdminToken('');
@@ -325,7 +339,10 @@ export default function App() {
   const adminFetch = async (url, options = {}) => {
     const headers = { ...(options.headers || {}) };
     const effectiveToken = options.token || adminToken;
-    if (effectiveToken) {
+    // SESSION_MARKER is only a "logged in" flag; the real credential is the
+    // HttpOnly cookie. Sending it as a bearer token would make the server
+    // validate it (and reject it) before falling back to the cookie.
+    if (effectiveToken && effectiveToken !== SESSION_MARKER) {
       headers['Authorization'] = `Bearer ${effectiveToken}`;
     }
     const csrf = readCSRFCookie();
@@ -402,8 +419,8 @@ export default function App() {
   };
 
   const fetchUserProfile = async () => {
-    const tok = adminToken || getStoredToken();
-    if (!tok) return;
+    const raw = adminToken || getStoredToken();
+    const tok = raw === SESSION_MARKER ? '' : raw;
     try {
       const res = await fetch('/api/v1/user/me', {
         headers: { 'Authorization': `Bearer ${tok}` }
@@ -474,10 +491,16 @@ export default function App() {
     };
   }, []);
 
-  // Automatically ensure regular user stays within permitted tabs
+  // Automatically ensure regular user stays within permitted tabs.
+  //
+  // 'models' is intentionally absent: the model-routes view is built entirely on
+  // admin-only endpoints (/admin/models/routes, /admin/channels), so a regular
+  // user landing there saw a page that could only fail with permission errors.
+  // 'pricing' stays (GET /admin/pricing is available to any authenticated key
+  // owner) but its write actions are hidden for non-admins.
   useEffect(() => {
     if (adminUser && adminUser.role !== 'admin') {
-      const allowedTabs = ['wallet', 'keys', 'playground', 'pricing', 'logs', 'docs', 'models'];
+      const allowedTabs = ['wallet', 'keys', 'playground', 'pricing', 'logs', 'docs'];
       if (!allowedTabs.includes(currentTab)) {
         setCurrentTab('wallet');
       }
@@ -490,17 +513,38 @@ export default function App() {
   const [models, setModels] = useState([]);
   const [modelRoutes, setModelRoutes] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [logTotal, setLogTotal] = useState(0);
   const [logOffset, setLogOffset] = useState(0);
   // Mirror of logOffset for the 8s polling interval: the interval closure
   // captures the fetchLogs of the render it was created in, so state reads
   // inside fetchLogs go stale — polls must fetch the page being *viewed*.
   const logOffsetRef = useRef(0);
   const [logLoading, setLogLoading] = useState(false);
-  const [logFilter, setLogFilter] = useState('');
-  const [timeRange, setTimeRange] = useState('all'); // 'all' | '1h' | 'today' | '7d' | 'custom'
-  const [customStartTime, setCustomStartTime] = useState('');
-  const [customEndTime, setCustomEndTime] = useState('');
-  const [sessionFilter, setSessionFilter] = useState('');
+  // Log filters are mirrored into the URL query string (`logs.*`) so a filtered
+  // audit view survives switching modules and can be shared as a link.
+  const [logFilters, setLogFilters] = useUrlFilters('logs', {
+    q: '',
+    range: 'all', // 'all' | '1h' | 'today' | '7d' | 'custom'
+    start: '',
+    end: '',
+    session: '',
+  });
+  const logFilter = logFilters.q;
+  const setLogFilter = (value) => setLogFilters({ q: value });
+  const timeRange = logFilters.range;
+  const setTimeRange = (value) => setLogFilters({ range: value });
+  const customStartTime = logFilters.start;
+  const setCustomStartTime = (value) => setLogFilters({ start: value });
+  const customEndTime = logFilters.end;
+  const setCustomEndTime = (value) => setLogFilters({ end: value });
+  const sessionFilter = logFilters.session;
+  const setSessionFilter = (value) => setLogFilters({ session: value });
+  // Mirror of the full filter object so fetchLogs' polling closure always reads
+  // the current facets instead of the ones captured at mount time.
+  const logFiltersRef = useRef(logFilters);
+  useEffect(() => {
+    logFiltersRef.current = logFilters;
+  }, [logFilters]);
   const [pricingGroups, setPricingGroups] = useState(['default']);
   const [prices, setPrices] = useState([]);
 
@@ -523,6 +567,7 @@ export default function App() {
 
   const [probing, setProbing] = useState(false);
   const [probeAlert, setProbeAlert] = useState(null);
+  const [submittingChannel, setSubmittingChannel] = useState(false);
 
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [newKey, setNewKey] = useState({
@@ -530,6 +575,7 @@ export default function App() {
     key: '',
     rpm: 60,
   });
+  const [submittingKey, setSubmittingKey] = useState(false);
 
   const [testingId, setTestingId] = useState(null);
 
@@ -553,17 +599,34 @@ export default function App() {
     return 'chat';
   };
 
-  // Load backend data
+  // Load backend data.
+  // Returns true when every endpoint answered, false when something failed
+  // (network error, unparseable body, or a 5xx). Callers such as the Dashboard
+  // refresh button use this to report the real outcome instead of assuming
+  // success. Client-side permission errors (401/403) are not treated as a
+  // failure so a limited account does not see spurious "refresh failed" toasts.
   const fetchData = async (overrideToken) => {
     const opts = overrideToken ? { token: overrideToken } : {};
+    let failed = false;
+    const getJSON = (url) =>
+      adminFetch(url, opts)
+        .then((r) => {
+          if (r.status >= 500) failed = true;
+          return r.json();
+        })
+        .catch(() => {
+          failed = true;
+          return { code: 1 };
+        });
+
     try {
       const [chRes, keyRes, statsRes, mRes, routesRes, pricingRes] = await Promise.all([
-        adminFetch('/api/v1/admin/channels', opts).then(r => r.json()).catch(() => ({ code: 1 })),
-        adminFetch('/api/v1/admin/keys', opts).then(r => r.json()).catch(() => ({ code: 1 })),
-        adminFetch('/api/v1/admin/stats/overview', opts).then(r => r.json()).catch(() => ({ code: 1 })),
-        adminFetch('/api/v1/admin/models', opts).then(r => r.json()).catch(() => ({ code: 1 })),
-        adminFetch('/api/v1/admin/models/routes', opts).then(r => r.json()).catch(() => ({ code: 1 })),
-        adminFetch('/api/v1/admin/pricing', opts).then(r => r.json()).catch(() => ({ code: 1 })),
+        getJSON('/api/v1/admin/channels'),
+        getJSON('/api/v1/admin/keys'),
+        getJSON('/api/v1/admin/stats/overview'),
+        getJSON('/api/v1/admin/models'),
+        getJSON('/api/v1/admin/models/routes'),
+        getJSON('/api/v1/admin/pricing'),
       ]);
 
       if (chRes.code === 0) setChannels(chRes.data || []);
@@ -597,8 +660,10 @@ export default function App() {
         setPlayModel(prev => (prev && effChat.includes(prev)) ? prev : (effChat[0] || ''));
       }
     } catch (e) {
+      failed = true;
       console.error('Fetch data failed:', e);
     }
+    return !failed;
   };
 
   const fetchLogs = async (override = {}, overrideToken) => {
@@ -627,6 +692,17 @@ export default function App() {
         p.set('session_id', sf.trim());
       }
 
+      // Keyword and facet filters are applied SERVER-SIDE. Filtering only the
+      // loaded page made search/filter/export silently miss every match on the
+      // other pages.
+      const kw = override.q !== undefined ? override.q : logFiltersRef.current.q;
+      if (kw && kw.trim()) p.set('q', kw.trim());
+      const facets = logFiltersRef.current;
+      if (facets.channel && facets.channel !== 'all') p.set('channel', facets.channel);
+      if (facets.status && facets.status !== 'all') p.set('status', facets.status);
+      if (facets.cache && facets.cache !== 'all') p.set('cache', facets.cache);
+      if (facets.latency && facets.latency !== 'all') p.set('latency', facets.latency);
+
       const now = new Date();
       if (tr === '1h') {
         p.set('start_time', new Date(now.getTime() - 3600000).toISOString());
@@ -646,12 +722,55 @@ export default function App() {
       const data = await res.json();
       if (data.code === 0) {
         setLogs(data.data || []);
+        // Total rows for the current filter, used for honest pagination.
+        setLogTotal(typeof data.total === 'number' ? data.total : (data.data || []).length);
+        return true;
       }
+      return false;
     } catch (e) {
       console.error('Fetch logs failed:', e);
+      return false;
     } finally {
       setLogLoading(false);
     }
+  };
+
+  // Fetch EVERY row matching the active log filters (used by the CSV export).
+  // Bounded so a pathological filter cannot pull an unbounded result set.
+  const fetchAllLogsForExport = async (maxRows = 5000) => {
+    const pageSize = 200; // repository hard cap per request
+    const collected = [];
+    let offset = 0;
+    for (;;) {
+      const p = new URLSearchParams();
+      p.set('limit', String(pageSize));
+      p.set('offset', String(offset));
+      const facets = logFiltersRef.current;
+      if (facets.q && facets.q.trim()) p.set('q', facets.q.trim());
+      if (facets.channel && facets.channel !== 'all') p.set('channel', facets.channel);
+      if (facets.status && facets.status !== 'all') p.set('status', facets.status);
+      if (facets.cache && facets.cache !== 'all') p.set('cache', facets.cache);
+      if (facets.latency && facets.latency !== 'all') p.set('latency', facets.latency);
+      if (facets.session && facets.session.trim()) p.set('session_id', facets.session.trim());
+      const tr = facets.range;
+      const now = new Date();
+      if (tr === '1h') p.set('start_time', new Date(now.getTime() - 3600000).toISOString());
+      else if (tr === 'today') p.set('start_time', new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString());
+      else if (tr === '7d') p.set('start_time', new Date(now.getTime() - 7 * 86400000).toISOString());
+      else if (tr === 'custom') {
+        if (facets.start) p.set('start_time', new Date(facets.start).toISOString());
+        if (facets.end) p.set('end_time', new Date(facets.end).toISOString());
+      }
+
+      const res = await adminFetch(`/api/v1/admin/logs?${p.toString()}`);
+      const data = await res.json();
+      if (!res.ok || data.code !== 0) break;
+      const batch = data.data || [];
+      collected.push(...batch);
+      if (batch.length < pageSize || collected.length >= maxRows) break;
+      offset += pageSize;
+    }
+    return collected;
   };
 
   useEffect(() => {
@@ -675,6 +794,19 @@ export default function App() {
       fetchLogs({ offset: 0 });
     }
   }, [currentTab, timeRange, sessionFilter]);
+
+  // Keyword / facet changes are filtered on the server, so they must trigger a
+  // refetch (debounced to avoid a request per keystroke).
+  useEffect(() => {
+    if (currentTab !== 'logs' && currentTab !== 'dashboard') return undefined;
+    const timer = setTimeout(() => {
+      logOffsetRef.current = 0;
+      setLogOffset(0);
+      fetchLogs({ offset: 0, q: logFilters.q });
+    }, 350);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logFilters.q, logFilters.channel, logFilters.status, logFilters.cache, logFilters.latency]);
 
   // Server-side pagination for audit logs (offset-based, page size above).
   const handleLogPageChange = (newOffset) => {
@@ -1022,6 +1154,7 @@ export default function App() {
   // Handle Channel/Provider Creation & Editing
   const handleCreateChannel = async (e) => {
     e.preventDefault();
+    if (submittingChannel) return;
     const cleanUrl = (newChannel.base_url || '').trim();
     if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
       showToast(isZh ? '接口地址必须以 http:// 或 https:// 开头' : 'Base URL must start with http:// or https://', 'warning');
@@ -1049,6 +1182,7 @@ export default function App() {
     delete payload.models_str;
     delete payload.mapping_str;
 
+    setSubmittingChannel(true);
     try {
       if (editingChannelId) {
         await adminJSON(`/api/v1/admin/channels/${editingChannelId}`, {
@@ -1068,6 +1202,8 @@ export default function App() {
     } catch (err) {
       showToast((isZh ? '保存 Provider 失败: ' : 'Failed to save provider: ') + err.message, 'error');
       return;
+    } finally {
+      setSubmittingChannel(false);
     }
 
     setShowChannelModal(false);
@@ -1311,10 +1447,12 @@ export default function App() {
   // Handle Key Creation
   const handleCreateKey = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
+    if (submittingKey) return;
     if (!newKey.tenant_id.trim()) {
       showToast(isZh ? '请输入密钥名称' : 'Please enter key name', 'warning');
       return;
     }
+    setSubmittingKey(true);
     try {
       const res = await adminFetch('/api/v1/admin/keys', {
         method: 'POST',
@@ -1325,12 +1463,16 @@ export default function App() {
       if (res.ok && data.code === 0) {
         showToast(isZh ? 'API 访问密钥创建成功' : 'API access key created successfully', 'success');
         setShowKeyModal(false);
-        fetchKeys();
+        // fetchKeys() did not exist, so the success path threw a ReferenceError
+        // and the list never refreshed. fetchData() is the real loader.
+        fetchData();
       } else {
         showToast((isZh ? '创建失败: ' : 'Creation failed: ') + (data.error || (isZh ? '未知错误' : 'Unknown error')), 'error');
       }
     } catch (e) {
       showToast((isZh ? '请求异常: ' : 'Request error: ') + e.message, 'error');
+    } finally {
+      setSubmittingKey(false);
     }
   };
 
@@ -1397,19 +1539,10 @@ export default function App() {
   };
 
 
-  const filteredLogs = logs.filter(l => {
-    if (!logFilter) return true;
-    const f = logFilter.toLowerCase();
-    return (
-      (l.trace_id && l.trace_id.toLowerCase().includes(f)) ||
-      (l.chat_id && l.chat_id.toLowerCase().includes(f)) ||
-      (l.session_id && l.session_id.toLowerCase().includes(f)) ||
-      (l.model && l.model.toLowerCase().includes(f)) ||
-      (l.channel && l.channel.toLowerCase().includes(f)) ||
-      (l.tenant_id && l.tenant_id.toLowerCase().includes(f)) ||
-      (l.api_key && l.api_key.toLowerCase().includes(f))
-    );
-  });
+  // The server already applied keyword/facet filters, so the page is exactly the
+  // result set. Re-filtering here would be wrong (it would hide rows the server
+  // matched on fields the client does not check, e.g. error_message).
+  const filteredLogs = logs;
 
   if (viewMode === 'landing') {
     return (
@@ -1418,7 +1551,7 @@ export default function App() {
           <Toast toast={toast} onClose={() => setToast(prev => ({ ...prev, show: false }))} />
           <Suspense fallback={<ViewLoader />}>
             <LandingPage
-              isLoggedIn={!!adminToken}
+              isLoggedIn={!!adminToken || !!adminUser}
               adminUser={adminUser}
               lang={lang}
               setLang={setLang}
@@ -1530,7 +1663,7 @@ export default function App() {
                 setAuthTab('login');
                 setViewMode('auth');
               }}
-              isLoggedIn={!!adminToken}
+              isLoggedIn={!!adminToken || !!adminUser}
               lang={lang}
               setLang={setLang}
               t={t}
@@ -2267,6 +2400,7 @@ export default function App() {
             {/* 1.5. MODEL ROUTES TAB */}
             {currentTab === 'models' && (
               <ModelRoutesManager
+                isAdmin={adminUser?.role === 'admin'}
                 adminFetch={adminFetch}
                 showToast={showToast}
                 lang={lang}
@@ -2381,6 +2515,8 @@ export default function App() {
                 setSelectedLogIds={setSelectedLogIds}
                 handleBatchDeleteLogs={handleBatchDeleteLogs}
                 filteredLogs={filteredLogs}
+                logTotal={logTotal}
+                onExportAll={fetchAllLogsForExport}
                 logsLength={logs.length}
                 logOffset={logOffset}
                 logPageSize={LOG_PAGE_SIZE}
@@ -2498,6 +2634,7 @@ export default function App() {
           handleProbeChannel={handleProbeChannel}
           toggleProtocol={toggleProtocol}
           onSubmit={handleCreateChannel}
+          submitting={submittingChannel}
           lang={lang}
           t={t}
         />
@@ -2511,6 +2648,7 @@ export default function App() {
           pricingGroups={pricingGroups}
           adminUser={adminUser}
           onSubmit={handleCreateKey}
+          submitting={submittingKey}
           lang={lang}
           t={t}
         />
@@ -2599,7 +2737,7 @@ export default function App() {
           channels={channels}
           keys={keys}
           adminUser={adminUser}
-          onOpenNewKey={() => setShowKeyModal(true)}
+          onOpenNewKey={handleOpenCreateKey}
           onOpenNewChannel={() => {
             setEditingChannelId(null);
             setNewChannel({

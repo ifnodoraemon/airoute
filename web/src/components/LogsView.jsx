@@ -7,18 +7,17 @@ import {
   Clock,
   Copy,
   Check,
-  Download,
-  CheckCircle2,
-  AlertCircle,
   FileSpreadsheet,
   Filter,
+  FilterX,
   X,
   RotateCcw,
-  Sparkles,
-  Cpu,
-  Layers
+  SlidersHorizontal,
+  MoreHorizontal,
+  ChevronDown
 } from 'lucide-react';
 import { copyToClipboard, toCSV } from '../config';
+import useUrlFilters from '../hooks/useUrlFilters';
 
 // Same-day rows show time only; older days get a compact date prefix.
 const formatLogTime = (iso) => {
@@ -76,6 +75,8 @@ export default function LogsView({
   filteredLogs = [],
   logsLength = 0,
   logOffset = 0,
+  logTotal = 0,
+  onExportAll,
   logPageSize = 50,
   onLogPageChange,
   setActiveLogDetail,
@@ -87,13 +88,36 @@ export default function LogsView({
   const isZh = lang === 'zh';
   const [copiedId, setCopiedId] = useState('');
   const [autoRefreshInterval, setAutoRefreshInterval] = useState(0); // 0 (off), 5, 10, 30
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  // Multi-condition combined filter states
-  const [modelFilter, setModelFilter] = useState('all');
-  const [channelFilter, setChannelFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'success' | 'error'
-  const [cacheFilter, setCacheFilter] = useState('all'); // 'all' | 'cached' | 'uncached'
-  const [latencyFilter, setLatencyFilter] = useState('all'); // 'all' | 'fast' | 'slow'
+  // Multi-condition combined filters live in the URL (`logs.<key>`) so a filtered
+  // view survives module switches and can be shared as a link. The keyword (`q`)
+  // and the server-side timeRange / sessionFilter stay owned by App.jsx, which
+  // persists them under the same `logs.` namespace.
+  const [filters, setFilters, resetUrlFilters] = useUrlFilters('logs', {
+    model: 'all',
+    channel: 'all',
+    status: 'all',
+    cache: 'all',
+    latency: 'all',
+  });
+  const {
+    model: modelFilter,
+    channel: channelFilter,
+    status: statusFilter, // 'all' | 'success' | 'error'
+    cache: cacheFilter, // 'all' | 'cached' | 'uncached'
+    latency: latencyFilter, // 'all' | 'fast' | 'slow'
+  } = filters;
+
+  const setModelFilter = (value) => setFilters({ model: value });
+  const setChannelFilter = (value) => setFilters({ channel: value });
+  const setStatusFilter = (value) => setFilters({ status: value });
+  const setCacheFilter = (value) => setFilters({ cache: value });
+  const setLatencyFilter = (value) => setFilters({ latency: value });
+
+  // The keyword search is owned by App.jsx (which does the filtering and keeps
+  // `logs.q` in the URL), so there is nothing to mirror here.
 
   // Handle auto-refresh interval
   useEffect(() => {
@@ -103,6 +127,16 @@ export default function LogsView({
     }, autoRefreshInterval * 1000);
     return () => clearInterval(timer);
   }, [autoRefreshInterval, fetchLogs]);
+
+  // Close the overflow menu on Escape (a backdrop handles outside clicks).
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [menuOpen]);
 
   const copyWithFeedback = async (text, type = 'Trace ID') => {
     if (!text) return;
@@ -158,24 +192,55 @@ export default function LogsView({
     cacheFilter !== 'all' ||
     latencyFilter !== 'all' ||
     Boolean(logFilter) ||
-    Boolean(sessionFilter);
+    Boolean(sessionFilter) ||
+    timeRange !== 'all';
 
-  const handleResetFilters = () => {
-    setModelFilter('all');
-    setChannelFilter('all');
-    setStatusFilter('all');
-    setCacheFilter('all');
-    setLatencyFilter('all');
-    setLogFilter('');
-    if (sessionFilter) {
-      setSessionFilter('');
-      fetchLogs({ sessionFilter: '' });
-    }
+  // Count of filters that live in the collapsible panel (shown on its toggle, so
+  // a collapsed panel never hides the fact that rows are being filtered out).
+  const activeFilterCount = [
+    modelFilter !== 'all',
+    channelFilter !== 'all',
+    statusFilter !== 'all',
+    cacheFilter !== 'all',
+    latencyFilter !== 'all',
+    timeRange !== 'all',
+  ].filter(Boolean).length;
+
+  // Every active condition, including the keyword and the parent-owned trace lock.
+  const totalActiveFilterCount = activeFilterCount + (logFilter ? 1 : 0) + (sessionFilter ? 1 : 0);
+
+  const timeRangeLabels = {
+    '1h': isZh ? '近 1 小时' : 'Last 1h',
+    today: isZh ? '今天' : 'Today',
+    '7d': isZh ? '近 7 天' : 'Last 7d',
+    custom: isZh ? '自定义区间' : 'Custom range',
   };
 
-  // Export filtered logs to CSV
-  const handleExportCSV = () => {
-    if (!displayedLogs || displayedLogs.length === 0) {
+  const handleResetFilters = () => {
+    resetUrlFilters();
+    setLogFilter('');
+    const needsServerRefetch = Boolean(sessionFilter) || timeRange !== 'all';
+    if (sessionFilter) setSessionFilter('');
+    if (timeRange !== 'all') setTimeRange('all');
+    if (needsServerRefetch) fetchLogs({ timeRange: 'all', sessionFilter: '' });
+  };
+
+  // Export the WHOLE filtered result set to CSV.
+  //
+  // Exporting `displayedLogs` only wrote the rows of the current page, so a user
+  // who filtered down to "all errors this week" silently received 50 rows. We now
+  // ask App.jsx to page through the server-side filter and hand back every match.
+  const handleExportCSV = async () => {
+    let exportRows = displayedLogs;
+    if (onExportAll) {
+      try {
+        exportRows = await onExportAll();
+      } catch (e) {
+        if (showToast) showToast((isZh ? '导出失败: ' : 'Export failed: ') + e.message, 'warning');
+        return;
+      }
+    }
+    if (!exportRows || exportRows.length === 0) {
       if (showToast) showToast(isZh ? '当前没有可导出的日志记录' : 'No logs available for export', 'warning');
       return;
     }
@@ -218,7 +283,7 @@ export default function LogsView({
       'Error Message'
     ];
 
-    const rows = displayedLogs.map((l) => [
+    const rows = exportRows.map((l) => [
       l.id,
       l.created_at || '',
       l.trace_id || '',
@@ -249,11 +314,11 @@ export default function LogsView({
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    if (showToast) showToast(isZh ? `成功导出 ${displayedLogs.length} 条审计日志` : `Successfully exported ${displayedLogs.length} audit logs`, 'success');
+    if (showToast) showToast(isZh ? `成功导出 ${exportRows.length} 条审计日志（全部匹配记录）` : `Exported ${exportRows.length} matching audit logs`, 'success');
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       {/* Header and Controls (Directly on canvas) */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
@@ -262,7 +327,7 @@ export default function LogsView({
               {isZh ? '对话审计与请求日志' : 'Audit Logs & Traces'}
             </h1>
             {autoRefreshInterval > 0 && (
-              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60">
+              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-xs font-mono font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>{autoRefreshInterval}s {isZh ? '轮询中' : 'polling'}</span>
               </span>
@@ -275,12 +340,13 @@ export default function LogsView({
           </p>
         </div>
 
-        {/* Actions & Search */}
-        <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+        {/* Primary controls stay visible: keyword search + refresh. Export, clear
+            logs and the heavier filter selects live in the panel / overflow menu. */}
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
           {/* Active Chat/Session/Trace Filter Tag */}
           {sessionFilter && (
             <div className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800 text-xs text-indigo-700 dark:text-indigo-300 animate-in fade-in">
-              <span className="text-[11px] text-slate-400">{isZh ? '已锁定链路:' : 'Locked Trace:'}</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">{isZh ? '已锁定链路:' : 'Locked Trace:'}</span>
               <span className="font-mono font-semibold max-w-[140px] truncate">{sessionFilter}</span>
               <button
                 onClick={() => {
@@ -296,303 +362,376 @@ export default function LogsView({
           )}
 
           {/* Keyword Search Input */}
-          <div className="relative flex-1 sm:w-64">
+          <div className="relative flex-1 min-w-[180px] sm:w-64">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
               value={logFilter}
               onChange={(e) => setLogFilter(e.target.value)}
               placeholder={isZh ? '筛选 Trace / 会话 / 模型 / 渠道...' : 'Filter trace, session, model, channel...'}
-              className="w-full bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition shadow-sm"
+              className="ui-field ui-field-sm pl-9"
             />
-          </div>
-
-          {/* Auto-Refresh Dropdown */}
-          <div className="relative">
-            <select
-              value={autoRefreshInterval}
-              onChange={(e) => setAutoRefreshInterval(Number(e.target.value))}
-              className="bg-white dark:bg-[#0F1420] hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-medium focus:outline-none cursor-pointer transition shadow-sm"
-              title={isZh ? '选择自动刷新频率' : 'Select refresh interval'}
-            >
-              <option value={0}>{isZh ? '暂停自动刷新' : 'Pause Auto-Refresh'}</option>
-              <option value={5}>{isZh ? '每 5 秒刷新' : 'Every 5s'}</option>
-              <option value={10}>{isZh ? '每 10 秒刷新' : 'Every 10s'}</option>
-              <option value={30}>{isZh ? '每 30 秒刷新' : 'Every 30s'}</option>
-            </select>
           </div>
 
           {/* Manual Refresh Button */}
           <button
             onClick={() => fetchLogs()}
             disabled={logLoading}
-            className="px-3.5 py-1.5 bg-white dark:bg-[#0F1420] hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-medium flex items-center space-x-1.5 transition border border-slate-200/80 dark:border-slate-800 cursor-pointer shadow-sm disabled:opacity-50"
+            className="ui-btn ui-btn-secondary ui-btn-sm shrink-0"
+            title={isZh ? '立即刷新日志' : 'Refresh logs now'}
           >
             <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${logLoading ? 'animate-spin' : ''}`} />
             <span>{isZh ? '刷新' : 'Refresh'}</span>
           </button>
 
-          {/* Export CSV Button */}
+          {/* Collapsible panel for the heavier filter controls */}
           <button
-            onClick={handleExportCSV}
-            className="px-3 py-1.5 bg-white dark:bg-[#0F1420] hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-medium flex items-center space-x-1.5 transition border border-slate-200/80 dark:border-slate-800 cursor-pointer shadow-sm"
-            title={isZh ? '导出当前筛选结果为 CSV 审计报表' : 'Export current filtered results as CSV'}
+            onClick={() => setShowMoreFilters((v) => !v)}
+            aria-expanded={showMoreFilters}
+            className={`ui-btn ui-btn-secondary ui-btn-sm shrink-0 ${
+              showMoreFilters || activeFilterCount > 0
+                ? 'border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300'
+                : ''
+            }`}
+            title={isZh ? '时间跨度、模型、渠道、状态、缓存与耗时筛选' : 'Time range, model, channel, status, cache and latency filters'}
           >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-slate-400" />
-            <span>{isZh ? '导出报表' : 'Export CSV'}</span>
+            <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
+            <span>{isZh ? '更多筛选' : 'More filters'}</span>
+            {activeFilterCount > 0 && (
+              <span className="rounded-full bg-indigo-100 dark:bg-indigo-950/70 px-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+                {activeFilterCount}
+              </span>
+            )}
+            <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${showMoreFilters ? 'rotate-180' : ''}`} />
           </button>
 
-          {/* Clear All Logs Button */}
-          <button
-            onClick={handleClearLogs}
-            className="px-3 py-1.5 bg-white dark:bg-[#0F1420] hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-slate-200/80 dark:border-slate-800 hover:border-rose-200 dark:hover:border-rose-900/60 rounded-lg text-xs font-medium flex items-center space-x-1.5 transition cursor-pointer shadow-sm"
-            title={isZh ? '清空全部审计调用日志' : 'Clear all audit logs'}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>{isZh ? '清空' : 'Clear'}</span>
-          </button>
+          {/* Overflow menu: auto-refresh rate, CSV export, and the destructive clear */}
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-haspopup="true"
+              aria-expanded={menuOpen}
+              className="ui-icon-btn border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F1420] shadow-sm"
+              title={isZh ? '更多操作' : 'More actions'}
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
+
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
+                <div className="ui-menu min-w-[230px]">
+                  <div className="px-2.5 py-1.5">
+                    <label htmlFor="logs-auto-refresh" className="block mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                      {isZh ? '自动刷新频率' : 'Auto-refresh'}
+                    </label>
+                    <select
+                      id="logs-auto-refresh"
+                      value={autoRefreshInterval}
+                      onChange={(e) => setAutoRefreshInterval(Number(e.target.value))}
+                      className="ui-field ui-field-sm cursor-pointer"
+                      title={isZh ? '选择自动刷新频率' : 'Select refresh interval'}
+                    >
+                      <option value={0}>{isZh ? '暂停自动刷新' : 'Pause Auto-Refresh'}</option>
+                      <option value={5}>{isZh ? '每 5 秒刷新' : 'Every 5s'}</option>
+                      <option value={10}>{isZh ? '每 10 秒刷新' : 'Every 10s'}</option>
+                      <option value={30}>{isZh ? '每 30 秒刷新' : 'Every 30s'}</option>
+                    </select>
+                  </div>
+
+                  <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      handleExportCSV();
+                    }}
+                    className="ui-menu-item"
+                    title={isZh ? '导出当前筛选结果为 CSV 审计报表' : 'Export current filtered results as CSV'}
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{isZh ? '导出 CSV 报表' : 'Export CSV'}</span>
+                  </button>
+
+                  <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+
+                  {/* Destructive action, visually separated from the rest */}
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      handleClearLogs();
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+                    title={isZh ? '清空全部审计调用日志（需确认）' : 'Clear all audit logs (ask for confirmation)'}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>{isZh ? '清空全部日志' : 'Clear all logs'}</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Multi-Condition Combined Filter Bar */}
-      <div className="p-4 bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-xs space-y-3">
-        {/* Row 1: Time Range and Matching Count */}
-        <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-slate-500 dark:text-slate-400 font-medium flex items-center space-x-1">
-              <Clock className="w-3.5 h-3.5 text-slate-400" />
-              <span>{isZh ? '时间跨度:' : 'Time Range:'}</span>
-            </span>
-            <div className="inline-flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200/80 dark:border-slate-800">
-              {[
-                { id: 'all', label: isZh ? '全部' : 'All' },
-                { id: '1h', label: isZh ? '近 1 小时' : '1h' },
-                { id: 'today', label: isZh ? '今天' : 'Today' },
-                { id: '7d', label: isZh ? '近 7 天' : '7d' },
-                { id: 'custom', label: isZh ? '自定义' : 'Custom' },
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setTimeRange(item.id);
-                    if (item.id !== 'custom') {
-                      fetchLogs({ timeRange: item.id });
-                    }
-                  }}
-                  className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
-                    timeRange === item.id
-                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs font-semibold'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
+      {/* Collapsible filter panel: time range plus the five combined selects */}
+      {showMoreFilters && (
+        <div className="p-4 bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-xs space-y-3 animate-in fade-in">
+          {/* Row 1: Time Range and Matching Count */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="ui-meta font-medium flex items-center space-x-1">
+                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                <span>{isZh ? '时间跨度:' : 'Time Range:'}</span>
+              </span>
+              <div className="inline-flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200/80 dark:border-slate-800">
+                {[
+                  { id: 'all', label: isZh ? '全部' : 'All' },
+                  { id: '1h', label: isZh ? '近 1 小时' : '1h' },
+                  { id: 'today', label: isZh ? '今天' : 'Today' },
+                  { id: '7d', label: isZh ? '近 7 天' : '7d' },
+                  { id: 'custom', label: isZh ? '自定义' : 'Custom' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setTimeRange(item.id);
+                      if (item.id !== 'custom') {
+                        fetchLogs({ timeRange: item.id });
+                      }
+                    }}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
+                      timeRange === item.id
+                        ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs font-semibold'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom Time Picker */}
+              {timeRange === 'custom' && (
+                <div className="flex items-center space-x-1.5 animate-in fade-in">
+                  <input
+                    type="datetime-local"
+                    value={customStartTime}
+                    onChange={(e) => setCustomStartTime(e.target.value)}
+                    className="bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-700 dark:text-slate-200 shadow-xs"
+                    title={isZh ? '开始时间' : 'Start time'}
+                  />
+                  <span className="ui-meta">{isZh ? '至' : 'to'}</span>
+                  <input
+                    type="datetime-local"
+                    value={customEndTime}
+                    onChange={(e) => setCustomEndTime(e.target.value)}
+                    className="bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-700 dark:text-slate-200 shadow-xs"
+                    title={isZh ? '结束时间' : 'End time'}
+                  />
+                  <button
+                    onClick={() => fetchLogs({ timeRange: 'custom' })}
+                    className="ui-btn ui-btn-primary ui-btn-sm"
+                  >
+                    {isZh ? '查询' : 'Query'}
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Custom Time Picker */}
-            {timeRange === 'custom' && (
-              <div className="flex items-center space-x-1.5 animate-in fade-in">
-                <input
-                  type="datetime-local"
-                  value={customStartTime}
-                  onChange={(e) => setCustomStartTime(e.target.value)}
-                  className="bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-700 dark:text-slate-200 shadow-xs"
-                  title={isZh ? '开始时间' : 'Start time'}
-                />
-                <span className="text-slate-400">{isZh ? '至' : 'to'}</span>
-                <input
-                  type="datetime-local"
-                  value={customEndTime}
-                  onChange={(e) => setCustomEndTime(e.target.value)}
-                  className="bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-700 dark:text-slate-200 shadow-xs"
-                  title={isZh ? '结束时间' : 'End time'}
-                />
-                <button
-                  onClick={() => fetchLogs({ timeRange: 'custom' })}
-                  className="px-2.5 py-1 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg font-medium transition cursor-pointer shadow-xs"
-                >
-                  {isZh ? '查询' : 'Query'}
+            <div className="ui-meta font-mono">
+              {isZh
+                ? `本页 ${displayedLogs.length} 条${logTotal > 0 ? ` · 全库匹配 ${logTotal} 条` : ''}（搜索与筛选作用于全部记录）`
+                : `${displayedLogs.length} on this page${logTotal > 0 ? ` · ${logTotal} matching in total` : ''} (search/filter cover all records)`}
+            </div>
+          </div>
+
+          {/* Row 2: Combined Multi-Condition Dropdown Selectors */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800/60">
+            {/* 1. Model Selector */}
+            <div>
+              <label className="block mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                {isZh ? '请求模型' : 'Model'}
+              </label>
+              <select
+                value={modelFilter}
+                onChange={(e) => setModelFilter(e.target.value)}
+                className="ui-field ui-field-sm cursor-pointer font-mono"
+              >
+                <option value="all">{isZh ? '全部模型' : 'All Models'}</option>
+                {availableModels.map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 2. Channel Selector */}
+            <div>
+              <label className="block mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                {isZh ? '命中渠道' : 'Channel'}
+              </label>
+              <select
+                value={channelFilter}
+                onChange={(e) => setChannelFilter(e.target.value)}
+                className="ui-field ui-field-sm cursor-pointer font-mono"
+              >
+                <option value="all">{isZh ? '全部服务商渠道' : 'All Channels'}</option>
+                {availableChannels.map(ch => (
+                  <option key={ch} value={ch}>{ch}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 3. HTTP Status */}
+            <div>
+              <label className="block mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                {isZh ? '响应状态' : 'HTTP Status'}
+              </label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="ui-field ui-field-sm cursor-pointer"
+              >
+                <option value="all">{isZh ? '全部状态 (2xx/4xx/5xx)' : 'All Statuses'}</option>
+                <option value="success">{isZh ? '● 仅成功 (2xx)' : 'Success Only'}</option>
+                <option value="error">{isZh ? '▲ 仅异常 (≥400)' : 'Errors Only'}</option>
+              </select>
+            </div>
+
+            {/* 4. Cache Hit */}
+            <div>
+              <label className="block mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                {isZh ? '前缀缓存' : 'Prompt Cache'}
+              </label>
+              <select
+                value={cacheFilter}
+                onChange={(e) => setCacheFilter(e.target.value)}
+                className="ui-field ui-field-sm cursor-pointer"
+              >
+                <option value="all">{isZh ? '全部缓存状态' : 'All Cache'}</option>
+                <option value="cached">{isZh ? '★ 命中前缀缓存 (>0)' : 'Cache Hit'}</option>
+                <option value="uncached">{isZh ? '○ 未命中缓存 (=0)' : 'Cache Miss'}</option>
+              </select>
+            </div>
+
+            {/* 5. Latency Filter */}
+            <div>
+              <label className="block mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                {isZh ? '耗时区间' : 'Latency Range'}
+              </label>
+              <select
+                value={latencyFilter}
+                onChange={(e) => setLatencyFilter(e.target.value)}
+                className="ui-field ui-field-sm cursor-pointer"
+              >
+                <option value="all">{isZh ? '全部耗时区间' : 'All Latencies'}</option>
+                <option value="fast">{isZh ? '⚡ 极速请求 (<500ms)' : 'Fast (<500ms)'}</option>
+                <option value="slow">{isZh ? '🐢 慢请求 (≥2000ms)' : 'Slow (≥2s)'}</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Active filter summary: always rendered when filtering, so a collapsed
+          panel can never silently hide rows, with a one-click clear. */}
+      {hasActiveFilters && (
+        <div className="flex flex-wrap items-center justify-between gap-2 animate-in fade-in">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="ui-meta font-medium flex items-center space-x-1 mr-1">
+              <Filter className="w-3.5 h-3.5 text-indigo-500" />
+              <span>{isZh ? `已生效条件 (${totalActiveFilterCount}):` : `Active filters (${totalActiveFilterCount}):`}</span>
+            </span>
+
+            {modelFilter !== 'all' && (
+              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200/70 dark:border-purple-800 text-xs font-mono">
+                <span>{isZh ? '模型:' : 'Model:'} {modelFilter}</span>
+                <button onClick={() => setModelFilter('all')} className="hover:text-rose-500 cursor-pointer" title={isZh ? '清除模型筛选' : 'Clear model filter'}>
+                  <X className="w-3 h-3" />
                 </button>
-              </div>
+              </span>
+            )}
+
+            {channelFilter !== 'all' && (
+              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800 text-xs">
+                <span>{isZh ? '渠道:' : 'Channel:'} {channelFilter}</span>
+                <button onClick={() => setChannelFilter('all')} className="hover:text-rose-500 cursor-pointer" title={isZh ? '清除渠道筛选' : 'Clear channel filter'}>
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {statusFilter !== 'all' && (
+              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs">
+                <span>{statusFilter === 'success' ? (isZh ? '状态: 成功' : 'Status: Success') : (isZh ? '状态: 异常' : 'Status: Error')}</span>
+                <button onClick={() => setStatusFilter('all')} className="hover:text-rose-500 cursor-pointer" title={isZh ? '清除状态筛选' : 'Clear status filter'}>
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {cacheFilter !== 'all' && (
+              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800 text-xs">
+                <span>{cacheFilter === 'cached' ? (isZh ? '命中缓存' : 'Cached') : (isZh ? '未命中' : 'Uncached')}</span>
+                <button onClick={() => setCacheFilter('all')} className="hover:text-rose-500 cursor-pointer" title={isZh ? '清除缓存筛选' : 'Clear cache filter'}>
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {latencyFilter !== 'all' && (
+              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200/70 dark:border-sky-800 text-xs">
+                <span>{latencyFilter === 'fast' ? '<500ms' : '≥2s'}</span>
+                <button onClick={() => setLatencyFilter('all')} className="hover:text-rose-500 cursor-pointer" title={isZh ? '清除耗时筛选' : 'Clear latency filter'}>
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {timeRange !== 'all' && (
+              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs">
+                <span>{isZh ? '时间:' : 'Time:'} {timeRangeLabels[timeRange] || timeRange}</span>
+                <button
+                  onClick={() => {
+                    setTimeRange('all');
+                    fetchLogs({ timeRange: 'all' });
+                  }}
+                  className="hover:text-rose-500 cursor-pointer"
+                  title={isZh ? '清除时间筛选' : 'Clear time filter'}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {Boolean(logFilter) && (
+              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs">
+                <span>"{logFilter}"</span>
+                <button onClick={() => setLogFilter('')} className="hover:text-rose-500 cursor-pointer" title={isZh ? '清除关键词' : 'Clear keyword'}>
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {Boolean(sessionFilter) && (
+              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-mono">
+                <span>{isZh ? 'Trace/会话:' : 'Trace:'} {sessionFilter}</span>
+                <button onClick={() => { setSessionFilter(''); fetchLogs({ sessionFilter: '' }); }} className="hover:text-rose-500 cursor-pointer" title={isZh ? '清除链路筛选' : 'Clear trace filter'}>
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
             )}
           </div>
 
-          <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-            {isZh
-              ? `匹配到 ${displayedLogs.length} / 共 ${filteredLogs.length} 条记录`
-              : `Showing ${displayedLogs.length} of ${filteredLogs.length} logs`}
-          </div>
+          <button
+            onClick={handleResetFilters}
+            className="ui-btn ui-btn-ghost ui-btn-sm shrink-0"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>{isZh ? '清除筛选' : 'Clear filters'}</span>
+          </button>
         </div>
-
-        {/* Row 2: Combined Multi-Condition Dropdown Selectors */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2.5 text-xs pt-1 border-t border-slate-100 dark:border-slate-800/60">
-          {/* 1. Model Selector */}
-          <div>
-            <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1 font-medium">
-              {isZh ? '请求模型' : 'Model'}
-            </label>
-            <select
-              value={modelFilter}
-              onChange={(e) => setModelFilter(e.target.value)}
-              className="w-full bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 shadow-2xs focus:outline-none focus:border-indigo-500 cursor-pointer font-mono"
-            >
-              <option value="all">{isZh ? '全部模型' : 'All Models'}</option>
-              {availableModels.map(m => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* 2. Channel Selector */}
-          <div>
-            <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1 font-medium">
-              {isZh ? '命中渠道' : 'Channel'}
-            </label>
-            <select
-              value={channelFilter}
-              onChange={(e) => setChannelFilter(e.target.value)}
-              className="w-full bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 shadow-2xs focus:outline-none focus:border-indigo-500 cursor-pointer font-mono"
-            >
-              <option value="all">{isZh ? '全部服务商渠道' : 'All Channels'}</option>
-              {availableChannels.map(ch => (
-                <option key={ch} value={ch}>{ch}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* 3. HTTP Status */}
-          <div>
-            <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1 font-medium">
-              {isZh ? '响应状态' : 'HTTP Status'}
-            </label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 shadow-2xs focus:outline-none focus:border-indigo-500 cursor-pointer"
-            >
-              <option value="all">{isZh ? '全部状态 (2xx/4xx/5xx)' : 'All Statuses'}</option>
-              <option value="success">{isZh ? '● 仅成功 (2xx)' : 'Success Only'}</option>
-              <option value="error">{isZh ? '▲ 仅异常 (≥400)' : 'Errors Only'}</option>
-            </select>
-          </div>
-
-          {/* 4. Cache Hit */}
-          <div>
-            <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1 font-medium">
-              {isZh ? '前缀缓存' : 'Prompt Cache'}
-            </label>
-            <select
-              value={cacheFilter}
-              onChange={(e) => setCacheFilter(e.target.value)}
-              className="w-full bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 shadow-2xs focus:outline-none focus:border-indigo-500 cursor-pointer"
-            >
-              <option value="all">{isZh ? '全部缓存状态' : 'All Cache'}</option>
-              <option value="cached">{isZh ? '★ 命中前缀缓存 (>0)' : 'Cache Hit'}</option>
-              <option value="uncached">{isZh ? '○ 未命中缓存 (=0)' : 'Cache Miss'}</option>
-            </select>
-          </div>
-
-          {/* 5. Latency Filter */}
-          <div>
-            <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1 font-medium">
-              {isZh ? '耗时区间' : 'Latency Range'}
-            </label>
-            <select
-              value={latencyFilter}
-              onChange={(e) => setLatencyFilter(e.target.value)}
-              className="w-full bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 shadow-2xs focus:outline-none focus:border-indigo-500 cursor-pointer"
-            >
-              <option value="all">{isZh ? '全部耗时区间' : 'All Latencies'}</option>
-              <option value="fast">{isZh ? '⚡ 极速请求 (<500ms)' : 'Fast (<500ms)'}</option>
-              <option value="slow">{isZh ? '🐢 慢请求 (≥2000ms)' : 'Slow (≥2s)'}</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Row 3: Active Filters Chips Bar (Shown when any filter is active) */}
-        {hasActiveFilters && (
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/60 animate-in fade-in">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] text-slate-400 font-medium flex items-center space-x-1 mr-1">
-                <Filter className="w-3 h-3 text-indigo-500" />
-                <span>{isZh ? '已生效条件:' : 'Active Filters:'}</span>
-              </span>
-
-              {modelFilter !== 'all' && (
-                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200/70 dark:border-purple-800 text-[11px] font-mono">
-                  <span>{isZh ? '模型:' : 'Model:'} {modelFilter}</span>
-                  <button onClick={() => setModelFilter('all')} className="hover:text-rose-500 cursor-pointer">
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                </span>
-              )}
-
-              {channelFilter !== 'all' && (
-                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800 text-[11px]">
-                  <span>{isZh ? '渠道:' : 'Channel:'} {channelFilter}</span>
-                  <button onClick={() => setChannelFilter('all')} className="hover:text-rose-500 cursor-pointer">
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                </span>
-              )}
-
-              {statusFilter !== 'all' && (
-                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 text-[11px]">
-                  <span>{statusFilter === 'success' ? (isZh ? '状态: 成功' : 'Status: Success') : (isZh ? '状态: 异常' : 'Status: Error')}</span>
-                  <button onClick={() => setStatusFilter('all')} className="hover:text-rose-500 cursor-pointer">
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                </span>
-              )}
-
-              {cacheFilter !== 'all' && (
-                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800 text-[11px]">
-                  <span>{cacheFilter === 'cached' ? (isZh ? '命中缓存' : 'Cached') : (isZh ? '未命中' : 'Uncached')}</span>
-                  <button onClick={() => setCacheFilter('all')} className="hover:text-rose-500 cursor-pointer">
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                </span>
-              )}
-
-              {latencyFilter !== 'all' && (
-                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200/70 dark:border-sky-800 text-[11px]">
-                  <span>{latencyFilter === 'fast' ? '<500ms' : '≥2s'}</span>
-                  <button onClick={() => setLatencyFilter('all')} className="hover:text-rose-500 cursor-pointer">
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                </span>
-              )}
-
-              {Boolean(logFilter) && (
-                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 text-[11px]">
-                  <span>"{logFilter}"</span>
-                  <button onClick={() => setLogFilter('')} className="hover:text-rose-500 cursor-pointer">
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                </span>
-              )}
-
-              {Boolean(sessionFilter) && (
-                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 text-[11px] font-mono">
-                  <span>Trace/会话: {sessionFilter}</span>
-                  <button onClick={() => { setSessionFilter(''); fetchLogs({ sessionFilter: '' }); }} className="hover:text-rose-500 cursor-pointer">
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                </span>
-              )}
-            </div>
-
-            <button
-              onClick={handleResetFilters}
-              className="text-xs text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 font-medium inline-flex items-center space-x-1 cursor-pointer transition"
-            >
-              <RotateCcw className="w-3 h-3" />
-              <span>{isZh ? '重置所有筛选' : 'Reset All'}</span>
-            </button>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Batch Action Bar */}
       {selectedLogIds.length > 0 && (
@@ -603,14 +742,14 @@ export default function LogsView({
           <div className="flex items-center space-x-2">
             <button
               onClick={handleBatchDeleteLogs}
-              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium rounded-lg shadow-sm transition flex items-center space-x-1 cursor-pointer"
+              className="ui-btn ui-btn-danger ui-btn-sm"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>{isZh ? '批量删除' : 'Batch Delete'}</span>
             </button>
             <button
               onClick={() => setSelectedLogIds([])}
-              className="px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-medium rounded-lg hover:bg-slate-50 transition cursor-pointer"
+              className="ui-btn ui-btn-secondary ui-btn-sm"
             >
               {isZh ? '取消选择' : 'Deselect All'}
             </button>
@@ -619,8 +758,8 @@ export default function LogsView({
       )}
 
       {/* Logs Table Card */}
-      <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl overflow-hidden shadow-xs flex flex-col">
-        <div className="overflow-auto max-h-[calc(100vh-380px)]">
+      <div className="ui-card overflow-hidden flex flex-col">
+        <div className="overflow-auto max-h-[calc(100vh-320px)]">
           <table className="w-full text-left border-collapse min-w-[1080px]">
             <thead className="sticky top-0 z-20 shadow-2xs">
               <tr className="text-slate-500 dark:text-slate-400 text-xs uppercase font-medium tracking-wide">
@@ -727,7 +866,7 @@ export default function LogsView({
                       {log.session_id && (
                         <div className="flex items-center space-x-1 mt-0.5">
                           <span
-                            className="text-[10px] text-slate-400 truncate max-w-[110px]"
+                            className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[110px]"
                             title={isZh ? `会话: ${log.session_id}` : `Session: ${log.session_id}`}
                           >
                             {isZh ? '会话:' : 'Session:'} {log.session_id}
@@ -746,7 +885,7 @@ export default function LogsView({
                       )}
                       {log.chat_id && (
                         <span
-                          className="block text-[10px] text-slate-400 truncate max-w-[120px]"
+                          className="block text-xs text-slate-500 dark:text-slate-400 truncate max-w-[120px]"
                           title={isZh ? `对话: ${log.chat_id}` : `Chat: ${log.chat_id}`}
                         >
                           {isZh ? '对话:' : 'Chat:'} {log.chat_id}
@@ -763,7 +902,7 @@ export default function LogsView({
                         {log.model || '-'}
                       </span>
                       {log.channel && (
-                        <div className="text-[10px] text-slate-400 font-mono mt-0.5 truncate max-w-[140px]">
+                        <div className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5 truncate max-w-[140px]">
                           {isZh ? '渠道:' : 'Provider:'} {log.channel}
                         </div>
                       )}
@@ -795,7 +934,7 @@ export default function LogsView({
                       {tps !== '-' ? (
                         <div className="flex items-center justify-end space-x-0.5 font-semibold">
                           <span className="text-indigo-600 dark:text-indigo-400">{tps}</span>
-                          <span className="text-[10px] text-slate-400 font-normal">tok/s</span>
+                          <span className="text-xs text-slate-500 dark:text-slate-400 font-normal">tok/s</span>
                         </div>
                       ) : (
                         <span className="text-slate-400">-</span>
@@ -810,7 +949,7 @@ export default function LogsView({
                         </span>
                         {log.is_off_peak && (
                           <span
-                            className="px-1.5 py-0.2 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                            className="px-1.5 py-0.2 rounded text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
                             title={`Off-peak ${(log.off_peak_discount || 0.5) * 100}%`}
                           >
                             {isZh ? `闲` : `Off`}
@@ -832,7 +971,7 @@ export default function LogsView({
                       >
                         {formatDuration(log.duration_ms ?? 0)}
                       </div>
-                      <div className="text-[10px] font-mono text-slate-400">
+                      <div className="text-xs font-mono text-slate-500 dark:text-slate-400">
                         TTFT: {(log.ttft_ms || 0) > 0 ? formatDuration(log.ttft_ms) : '-'}
                       </div>
                     </td>
@@ -852,7 +991,7 @@ export default function LogsView({
                       </span>
                       {log.error_message && (
                         <span
-                          className="inline-block align-middle max-w-[150px] truncate text-[10px] text-amber-600 dark:text-amber-400"
+                          className="inline-block align-middle max-w-[150px] truncate text-xs text-amber-600 dark:text-amber-400"
                           title={log.error_message}
                         >
                           {log.error_message}
@@ -877,17 +1016,43 @@ export default function LogsView({
               })}
               {displayedLogs.length === 0 && (
                 <tr>
-                  <td colSpan="11" className="py-12 text-center text-slate-400 font-sans">
+                  <td colSpan="11" className="py-12 text-center font-sans">
                     <div className="flex flex-col items-center justify-center space-y-2">
-                      <History className="w-8 h-8 text-slate-300 dark:text-slate-600 stroke-1" />
-                      <span>{isZh ? '暂无匹配的审计调用记录' : 'No matching audit logs found'}</span>
-                      {hasActiveFilters && (
-                        <button
-                          onClick={handleResetFilters}
-                          className="text-xs text-indigo-600 hover:underline font-medium cursor-pointer"
-                        >
-                          {isZh ? '重置所有联合筛选条件' : 'Reset all combined filters'}
-                        </button>
+                      {hasActiveFilters ? (
+                        <>
+                          <FilterX className="w-8 h-8 text-slate-300 dark:text-slate-600 stroke-1" />
+                          <span className="ui-meta font-medium">
+                            {isZh ? '没有日志匹配当前筛选条件' : 'No logs match the current filters'}
+                          </span>
+                          <span className="ui-meta">
+                            {isZh ? '试着放宽条件，或清除筛选后重新查看全部日志。' : 'Loosen the conditions, or clear the filters to see every log again.'}
+                          </span>
+                          <button
+                            onClick={handleResetFilters}
+                            className="ui-btn ui-btn-secondary ui-btn-sm"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>{isZh ? '清除筛选' : 'Clear filters'}</span>
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <History className="w-8 h-8 text-slate-300 dark:text-slate-600 stroke-1" />
+                          <span className="ui-meta font-medium">
+                            {isZh ? '暂无审计调用日志' : 'No audit logs yet'}
+                          </span>
+                          <span className="ui-meta">
+                            {isZh ? '发起一次对话请求后，这里会出现对应的链路记录。' : 'Trace records will appear here after the first chat request.'}
+                          </span>
+                          <button
+                            onClick={() => fetchLogs()}
+                            disabled={logLoading}
+                            className="ui-btn ui-btn-secondary ui-btn-sm"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${logLoading ? 'animate-spin' : ''}`} />
+                            <span>{isZh ? '刷新' : 'Refresh'}</span>
+                          </button>
+                        </>
                       )}
                     </div>
                   </td>
@@ -901,8 +1066,8 @@ export default function LogsView({
         <div className="flex items-center justify-between p-4 border-t border-slate-100 dark:border-slate-800/80">
           <span className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
             {isZh
-              ? `第 ${Math.floor(logOffset / logPageSize) + 1} 页 · 本页展示 ${displayedLogs.length} 条`
-              : `Page ${Math.floor(logOffset / logPageSize) + 1} · Showing ${displayedLogs.length}`}
+              ? `第 ${Math.floor(logOffset / logPageSize) + 1} 页 · 本页 ${displayedLogs.length} 条${logTotal > 0 ? ` · 筛选结果共 ${logTotal} 条` : ''}`
+              : `Page ${Math.floor(logOffset / logPageSize) + 1} · ${displayedLogs.length} shown${logTotal > 0 ? ` · ${logTotal} matching` : ''}`}
             {displayedLogs.length < logsLength ? (isZh ? ` (筛选后 / 累计 ${logsLength})` : ` (filtered / total ${logsLength})`) : ''}
           </span>
           <div className="flex items-center space-x-2">
@@ -910,15 +1075,15 @@ export default function LogsView({
               type="button"
               onClick={() => onLogPageChange(logOffset - logPageSize)}
               disabled={logLoading || logOffset <= 0}
-              className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer shadow-sm"
+              className="ui-btn ui-btn-secondary ui-btn-sm"
             >
               {isZh ? '上一页' : 'Previous'}
             </button>
             <button
               type="button"
               onClick={() => onLogPageChange(logOffset + logPageSize)}
-              disabled={logLoading || logsLength < logPageSize}
-              className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer shadow-sm"
+              disabled={logLoading || (logTotal > 0 ? logOffset + logPageSize >= logTotal : logsLength < logPageSize)}
+              className="ui-btn ui-btn-secondary ui-btn-sm"
             >
               {isZh ? '下一页' : 'Next'}
             </button>

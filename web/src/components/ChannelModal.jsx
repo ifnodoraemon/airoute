@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { X, Sparkles, RefreshCw, Search, Eye, EyeOff } from 'lucide-react';
+import { X, Sparkles, RefreshCw, Search, Eye, EyeOff, Loader2 } from 'lucide-react';
 import ModelChipManager from './ModelChipManager';
 import ModelMappingEditor from './ModelMappingEditor';
 import CapabilitiesSelector from './CapabilitiesSelector';
 import useModalA11y from '../hooks/useModalA11y';
+import useFormDirty from '../hooks/useFormDirty';
+import useUnsavedGuard from '../hooks/useUnsavedGuard';
+import DiscardChangesDialog from './DiscardChangesDialog';
 
 export default function ChannelModal({
   isOpen,
@@ -17,11 +20,26 @@ export default function ChannelModal({
   handleProbeChannel,
   toggleProtocol,
   onSubmit,
+  submitting = false,
   lang = 'zh',
   t
 }) {
-  useModalA11y(isOpen, onClose);
   const [showApiKeyPlain, setShowApiKeyPlain] = useState(false);
+
+  // Dismissing the sheet (backdrop / close button / Esc) must not silently
+  // throw away typed configuration.
+  const isDirty = useFormDirty(isOpen, newChannel);
+  const { confirming, requestClose, keepEditing, discard } = useUnsavedGuard({ isOpen, isDirty, onClose });
+  const guardedClose = () => {
+    // A save already in flight owns the draft: don't prompt about discarding
+    // it, and never trap the user if the request hangs.
+    if (submitting) {
+      onClose?.();
+      return;
+    }
+    requestClose();
+  };
+  useModalA11y(isOpen, guardedClose);
 
   if (!isOpen) return null;
   const isZh = lang === 'zh';
@@ -30,11 +48,12 @@ export default function ChannelModal({
     <div
       className="fixed inset-0 z-50 overflow-hidden bg-slate-900/40 backdrop-blur-sm animate-in fade-in"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) guardedClose();
       }}
     >
       <form
         onSubmit={onSubmit}
+        aria-busy={submitting}
         className="fixed inset-y-0 right-0 w-full max-w-xl bg-white dark:bg-[#0F1420] border-l border-slate-200/70 dark:border-slate-800/80 shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-200"
       >
         <div className="p-6 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
@@ -48,8 +67,8 @@ export default function ChannelModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
-            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
+            onClick={guardedClose}
+            className="ui-icon-btn"
           >
             <X className="w-5 h-5" />
           </button>
@@ -110,7 +129,7 @@ export default function ChannelModal({
 
           {/* Field 1: Name */}
           <div>
-            <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
+            <label className="ui-label">
               {isZh ? '服务商名称' : 'Provider Name'} <span className="text-rose-500">*</span>
             </label>
             <input
@@ -118,13 +137,13 @@ export default function ChannelModal({
               value={newChannel.name}
               onChange={(e) => setNewChannel({ ...newChannel, name: e.target.value })}
               placeholder="gpustack-primary"
-              className="w-full bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-lg px-3 py-2 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-indigo-500 text-xs shadow-sm transition"
+              className="ui-field"
             />
           </div>
 
           {/* Field 2: Base URL + Test Ping */}
           <div>
-            <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
+            <label className="ui-label">
               {isZh ? '服务商 Base URL' : 'Provider Base URL'} <span className="text-rose-500">*</span>
             </label>
             <div className="flex space-x-2">
@@ -159,13 +178,13 @@ export default function ChannelModal({
                   newChannel.type === 'gpustack' ? (isZh ? '例如: http://<GPUStack服务IP或集群域名>/v1-openai' : 'e.g. http://<gpustack-ip-or-domain>/v1-openai') :
                   (isZh ? 'https://api.deepseek.com 或私有网关端点' : 'https://api.deepseek.com or private gateway endpoint')
                 }
-                className="flex-1 bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-lg px-3 py-2 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-indigo-500 font-mono text-xs shadow-sm transition"
+                className="ui-field flex-1 font-mono"
               />
               <button
                 type="button"
                 onClick={handleProbeChannel}
-                disabled={probing}
-                className="px-3.5 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium flex items-center space-x-1.5 shadow-sm transition disabled:opacity-50 shrink-0 cursor-pointer"
+                disabled={probing || submitting}
+                className="ui-btn-primary shrink-0"
               >
                 {probing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
                 <span>{probing ? (isZh ? '连通中...' : 'Probing...') : (isZh ? '测试连通性' : 'Test Ping')}</span>
@@ -175,7 +194,7 @@ export default function ChannelModal({
 
           {/* Field 3: API Key */}
           <div>
-            <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
+            <label className="ui-label">
               API Key
             </label>
             <div className="relative">
@@ -184,7 +203,7 @@ export default function ChannelModal({
                 value={newChannel.api_key}
                 onChange={(e) => setNewChannel({ ...newChannel, api_key: e.target.value })}
                 placeholder={isZh ? '留空或填 none 表示免密' : 'Leave empty or none for no auth'}
-                className="w-full bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-lg pl-3 pr-10 py-2 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-indigo-500 font-mono text-xs shadow-sm transition"
+                className="ui-field pl-3 pr-10 font-mono"
               />
               <button
                 type="button"
@@ -217,7 +236,7 @@ export default function ChannelModal({
                 <select
                   value={newChannel.type}
                   onChange={(e) => setNewChannel({ ...newChannel, type: e.target.value })}
-                  className="w-full bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 text-xs shadow-sm"
+                  className="ui-field cursor-pointer"
                 >
                   <option value="gpustack">GPUStack</option>
                   <option value="deepseek">DeepSeek</option>
@@ -247,30 +266,30 @@ export default function ChannelModal({
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-[11px] text-slate-500 mb-1">{isZh ? '优先级 (1最先)' : 'Priority (1 highest)'}</label>
+                  <label className="ui-label-sm">{isZh ? '优先级 (1最先)' : 'Priority (1 highest)'}</label>
                   <input
                     type="number"
                     value={newChannel.priority}
                     onChange={(e) => setNewChannel({ ...newChannel, priority: parseInt(e.target.value) || 1 })}
-                    className="w-full bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 font-mono text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 shadow-sm"
+                    className="ui-field ui-field-sm font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] text-slate-500 mb-1">{isZh ? '负载权重' : 'Weight'}</label>
+                  <label className="ui-label-sm">{isZh ? '负载权重' : 'Weight'}</label>
                   <input
                     type="number"
                     value={newChannel.weight}
                     onChange={(e) => setNewChannel({ ...newChannel, weight: parseInt(e.target.value) || 10 })}
-                    className="w-full bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 font-mono text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 shadow-sm"
+                    className="ui-field ui-field-sm font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] text-slate-500 mb-1">{isZh ? '超时时间 (秒)' : 'Timeout (s)'}</label>
+                  <label className="ui-label-sm">{isZh ? '超时时间 (秒)' : 'Timeout (s)'}</label>
                   <input
                     type="number"
                     value={newChannel.timeout_seconds || 60}
                     onChange={(e) => setNewChannel({ ...newChannel, timeout_seconds: parseInt(e.target.value) || 60 })}
-                    className="w-full bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 font-mono text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 shadow-sm"
+                    className="ui-field ui-field-sm font-mono"
                   />
                 </div>
               </div>
@@ -279,22 +298,43 @@ export default function ChannelModal({
         </div>
 
         {/* Sticky Footer */}
-        <div className="p-4 bg-slate-50/70 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-end space-x-3 mt-auto">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 font-medium transition cursor-pointer"
-          >
-            {isZh ? '取消' : 'Cancel'}
-          </button>
-          <button
-            type="submit"
-            className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium shadow-sm transition cursor-pointer"
-          >
-            {editingChannelId ? (isZh ? '保存配置' : 'Save Changes') : (isZh ? '确认接入' : 'Connect Provider')}
-          </button>
+        <div className="p-4 bg-slate-50/70 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-3 mt-auto">
+          <span className="ui-meta-sm truncate">
+            {isDirty && !submitting ? (isZh ? '有未保存的修改' : 'Unsaved changes') : ''}
+          </span>
+          <div className="flex items-center space-x-3 shrink-0">
+            <button
+              type="button"
+              onClick={guardedClose}
+              className="ui-btn-ghost"
+            >
+              {isZh ? '取消' : 'Cancel'}
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="ui-btn-primary"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>{isZh ? '保存中…' : 'Saving…'}</span>
+                </>
+              ) : (
+                <span>{editingChannelId ? (isZh ? '保存配置' : 'Save Changes') : (isZh ? '确认接入' : 'Connect Provider')}</span>
+              )}
+            </button>
+          </div>
         </div>
       </form>
+
+      <DiscardChangesDialog
+        open={confirming}
+        onKeepEditing={keepEditing}
+        onDiscard={discard}
+        lang={lang}
+        title={editingChannelId ? (isZh ? '放弃未保存的服务商修改？' : 'Discard provider changes?') : (isZh ? '放弃未保存的服务商配置？' : 'Discard provider setup?')}
+      />
     </div>
   );
 }

@@ -1,21 +1,41 @@
 package controlplane
 
 import (
+	"strings"
+
 	"github.com/ifnodoraemon/airoute/internal/billing"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
-// saveRoutePricing synchronizes route pricing rules and off-peak discount configurations.
-func (h *AdminHandler) saveRoutePricing(req *UpdateModelRouteRequest) error {
-	if req.PromptPrice == nil && req.CompletionPrice == nil && req.CacheReadPrice == nil && req.FixedPrice == nil {
-		return nil
+// buildRoutePricing resolves the price row to persist for the group being
+// edited, WITHOUT writing it (the caller commits it with the rest of the route
+// change).
+//
+// Two defects are fixed here:
+//  1. It used to load the row with GetModelPrice(), which is hard-wired to the
+//     "default" group. Editing a VIP/enterprise route therefore seeded the form
+//     from (and wrote back) the default group's rates, silently dragging one
+//     group's prices into another.
+//  2. It wrote its own transaction, so a later channel failure left the price
+//     applied.
+func (h *AdminHandler) buildRoutePricing(req *UpdateModelRouteRequest) (*storage.ModelPriceRecord, error) {
+	if req.PromptPrice == nil && req.CompletionPrice == nil && req.CacheReadPrice == nil && req.FixedPrice == nil &&
+		req.OffPeakEnabled == nil && req.OffPeakMode == "" && req.OffPeakSlots == "" &&
+		req.WeekendAllDay == nil && req.OffPeakStart == "" && req.OffPeakEnd == "" && req.OffPeakDiscount == nil {
+		return nil, nil
 	}
 	currency := req.Currency
 	if currency == "" {
 		currency = "CNY"
 	}
+	groupName := strings.TrimSpace(req.GroupName)
+	if groupName == "" {
+		groupName = "default"
+	}
 	var pPrice, cPrice, cachePrice, fPrice float64
-	existing, _ := h.repo.GetModelPrice(req.Model)
+	// Read the exact group first; fall back to the default group only when this
+	// group has no row yet (that mirrors how the billing engine resolves rates).
+	existing, _ := h.repo.GetModelPriceWithGroup(req.Model, groupName)
 	if existing != nil {
 		// Start from the stored prices so a partial update (e.g. only the fixed
 		// price) cannot silently reset prompt/completion prices to zero.
@@ -76,12 +96,13 @@ func (h *AdminHandler) saveRoutePricing(req *UpdateModelRouteRequest) error {
 
 	if offEnabled && offSlots != "" {
 		if err := billing.ValidateSlotsOverlap(offSlots); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
-	err := h.repo.SaveModelPrice(&storage.ModelPriceRecord{
+	rec := &storage.ModelPriceRecord{
 		Model:           req.Model,
+		GroupName:       groupName,
 		PromptPrice:     pPrice,
 		CompletionPrice: cPrice,
 		CacheReadPrice:  cachePrice,
@@ -94,9 +115,6 @@ func (h *AdminHandler) saveRoutePricing(req *UpdateModelRouteRequest) error {
 		OffPeakStart:    offStart,
 		OffPeakEnd:      offEnd,
 		OffPeakDiscount: offDiscount,
-	})
-	if err == nil && billing.GlobalEngine != nil {
-		_ = billing.GlobalEngine.ReloadPrices()
 	}
-	return err
+	return rec, nil
 }

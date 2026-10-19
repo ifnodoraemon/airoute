@@ -67,6 +67,10 @@ export default function ModelRouteModal({
   const [promptPrice, setPromptPrice] = useState(modelRoute?.prompt_price ?? 2.0);
   const [completionPrice, setCompletionPrice] = useState(modelRoute?.completion_price ?? 8.0);
   const [cacheReadPrice, setCacheReadPrice] = useState(modelRoute?.cache_read_price ?? 0.2);
+  // Per-request (fixed) price, used by image / video / TTS routes. It must be
+  // carried through on save: the payload used to hardcode fixed_price: 0, which
+  // silently zeroed the per-call price of every edited multimodal model.
+  const [fixedPrice, setFixedPrice] = useState(modelRoute?.fixed_price ?? 0);
   const [currency] = useState(modelRoute?.currency || 'CNY');
   const [offPeakEnabled, setOffPeakEnabled] = useState(modelRoute?.off_peak_enabled !== false);
 
@@ -76,8 +80,11 @@ export default function ModelRouteModal({
       channel_id: p.channel_id,
       channel_name: p.channel_name,
       channel_type: p.channel_type,
-      priority: p.priority || 1,
-      weight: p.weight || 50,
+      priority: p.priority ?? 1,
+      // Preserve a real weight (including 0 / small values); the old `|| 50`
+      // silently rewrote any falsy weight to 50 on every save.
+      weight: p.weight ?? 50,
+      shared_model_count: p.shared_model_count ?? 0,
       mapped_model: p.mapped_model || modelRoute?.model || ''
     }));
   });
@@ -219,13 +226,13 @@ export default function ModelRouteModal({
         provider_updates: providers.map(p => ({
           channel_id: p.channel_id,
           priority: p.priority || 1,
-          weight: parseInt(p.weight) || 50,
+          weight: Number.isFinite(parseInt(p.weight, 10)) ? parseInt(p.weight, 10) : 50,
           mapped_model: (p.mapped_model || '').trim() || targetModel
         })),
         prompt_price: parseFloat(promptPrice) || 0,
         completion_price: parseFloat(completionPrice) || 0,
         cache_read_price: parseFloat(cacheReadPrice) || 0,
-        fixed_price: 0,
+        fixed_price: parseFloat(fixedPrice) || 0,
         currency: currency,
         off_peak_enabled: offPeakEnabled,
         off_peak_mode: offPeakEnabled ? (modelRoute?.off_peak_mode || 'custom') : 'none',
@@ -265,19 +272,19 @@ export default function ModelRouteModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 max-w-xl w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
+      <div className="bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-xl w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3 shrink-0">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 shrink-0">
           <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 font-bold">
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold">
               <Cpu className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-base text-slate-900 tracking-tight">
+              <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 tracking-tight">
                 {isNew ? (isZh ? '新建模型路由' : 'Create Model Route') : (isZh ? '配置模型路由' : 'Configure Model Route')}
               </h3>
               {!isNew && (
-                <span className="font-mono text-xs text-indigo-600 font-medium">
+                <span className="font-mono text-xs text-indigo-600 dark:text-indigo-400 font-medium">
                   {modelName}
                 </span>
               )}
@@ -285,15 +292,15 @@ export default function ModelRouteModal({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition cursor-pointer"
+            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {error && (
-          <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center space-x-2 shrink-0">
-            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs flex items-center space-x-2 shrink-0">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
             <span>{error}</span>
           </div>
         )}
@@ -302,7 +309,7 @@ export default function ModelRouteModal({
         <form onSubmit={handleSave} className="space-y-4 overflow-y-auto pr-1 flex-1 text-xs">
           {/* Field 1: Model Identifier */}
           <div>
-            <label className="block font-semibold text-slate-800 mb-1">
+            <label className="block font-semibold text-slate-800 dark:text-slate-200 mb-1">
               {isZh ? '模型标识' : 'Model Identifier'} <span className="text-rose-500">*</span>
             </label>
             <input
@@ -313,7 +320,7 @@ export default function ModelRouteModal({
               value={modelName}
               onChange={(e) => setModelName(e.target.value)}
               placeholder={isZh ? '如 deepseek-chat 或从下方一键选择' : 'e.g., deepseek-chat or select below'}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-xs text-slate-900 focus:outline-none focus:border-indigo-500 disabled:bg-slate-100 disabled:text-slate-500"
+              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 font-mono text-xs text-slate-900 dark:text-slate-100 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:text-slate-500 dark:disabled:text-slate-400"
             />
             <datalist id="channel-models-datalist">
               {channelModelCandidates.map(c => (
@@ -325,8 +332,8 @@ export default function ModelRouteModal({
 
             {/* Zero-typing: Quick select from connected channels */}
             {isNew && channelModelCandidates.length > 0 && (
-              <div className="mt-2 pt-2 border-t border-slate-100">
-                <span className="text-[11px] text-slate-500 font-medium block mb-1.5">
+              <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block mb-1.5">
                   {isZh ? '已连通服务商的模型 (点击自动填入并直接绑定服务商):' : 'Connected provider models (click to auto-fill & bind):'}
                 </span>
                 <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
@@ -337,14 +344,14 @@ export default function ModelRouteModal({
                         key={c.model}
                         type="button"
                         onClick={() => handleSelectCandidateModel(c)}
-                        className={`px-2 py-1 rounded-lg border text-[11px] font-mono transition cursor-pointer flex items-center space-x-1 ${
+                        className={`px-2 py-1 rounded-lg border text-xs font-mono transition cursor-pointer flex items-center space-x-1 ${
                           isSelected
                             ? 'bg-indigo-600 text-white border-indigo-600 font-semibold shadow-sm'
-                            : 'bg-white hover:bg-indigo-50 border-slate-200 text-slate-700 hover:text-indigo-700 hover:border-indigo-200'
+                            : 'bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:text-indigo-700 dark:hover:text-indigo-300 hover:border-indigo-200 dark:hover:border-indigo-700'
                         }`}
                       >
                         <span>{c.model}</span>
-                        <span className={`text-[10px] ${isSelected ? 'text-indigo-200' : 'text-slate-400'}`}>
+                        <span className={`text-xs ${isSelected ? 'text-indigo-200' : 'text-slate-500 dark:text-slate-400'}`}>
                           ({c.channel.name})
                         </span>
                       </button>
@@ -358,40 +365,40 @@ export default function ModelRouteModal({
           {/* Field 2: Upstream Providers & Weights */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="font-semibold text-slate-800 flex items-center space-x-1.5">
-                <Layers className="w-3.5 h-3.5 text-indigo-500" />
+              <label className="font-semibold text-slate-800 dark:text-slate-200 flex items-center space-x-1.5">
+                <Layers className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
                 <span>{isZh ? '上游服务商' : 'Upstream Providers'} ({providers.length})</span>
               </label>
             </div>
 
             {providers.length === 0 ? (
-              <div className="p-3 rounded-xl bg-slate-50 border border-dashed border-slate-200 text-center text-slate-400 text-xs">
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-dashed border-slate-200 dark:border-slate-700 text-center text-slate-400 dark:text-slate-400 text-xs">
                 {isZh ? '未绑定服务商' : 'No upstream providers bound'}
               </div>
             ) : (
-              <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100">
+              <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
                 {providers.map((p) => {
                   const pChannel = allChannels.find(c => c.id === p.channel_id);
                   const pModels = getChannelModels(pChannel);
                   const isCustomMode = !!customModeMap[p.channel_id];
 
                   return (
-                    <div key={p.channel_id} className="p-3 bg-white hover:bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div key={p.channel_id} className="p-3 bg-white dark:bg-[#0F1420] hover:bg-slate-50/50 dark:hover:bg-slate-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="min-w-0 flex-1 space-y-1.5">
                         <div className="flex items-center space-x-2">
-                          <span className="font-semibold text-slate-800 truncate">{p.channel_name}</span>
-                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-sm bg-slate-100 text-slate-500">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">{p.channel_name}</span>
+                          <span className="text-xs font-mono px-1.5 py-0.5 rounded-sm bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
                             {p.channel_type}
                           </span>
                           {pModels.length > 0 && (
-                            <span className="text-[10px] text-slate-400">
+                            <span className="ui-meta">
                               {isZh ? `(${pModels.length} 个可用模型)` : `(${pModels.length} models available)`}
                             </span>
                           )}
                         </div>
 
                         <div className="flex items-center space-x-1.5">
-                          <span className="text-[11px] text-slate-400 shrink-0">{isZh ? '上游模型:' : 'Mapped Model:'}</span>
+                          <span className="ui-meta shrink-0">{isZh ? '上游模型:' : 'Mapped Model:'}</span>
                           {isCustomMode || pModels.length === 0 ? (
                             <div className="flex-1 flex items-center space-x-1.5">
                               <input
@@ -399,13 +406,13 @@ export default function ModelRouteModal({
                                 value={p.mapped_model}
                                 onChange={(e) => handleMappedModelChange(p.channel_id, e.target.value)}
                                 placeholder={isZh ? '远端模型标识 (可选)' : 'Remote model ID (optional)'}
-                                className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-[11px] font-mono text-slate-700 focus:outline-none focus:border-indigo-400"
+                                className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-[11px] font-mono text-slate-700 dark:text-slate-100 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-400"
                               />
                               {pModels.length > 0 && (
                                 <button
                                   type="button"
                                   onClick={() => setCustomModeMap(prev => ({ ...prev, [p.channel_id]: false }))}
-                                  className="text-[10px] text-indigo-600 hover:text-indigo-800 px-2 py-1 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition cursor-pointer shrink-0 font-medium"
+                                  className="text-[11px] text-indigo-600 dark:text-indigo-300 hover:text-indigo-800 dark:hover:text-indigo-200 px-2 py-1 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 rounded-lg transition cursor-pointer shrink-0 font-medium"
                                   title={isZh ? '切换为服务商模型下拉列表' : 'Switch to model dropdown'}
                                 >
                                   {isZh ? '从渠道选择' : 'From Channel'}
@@ -423,7 +430,7 @@ export default function ModelRouteModal({
                                     handleMappedModelChange(p.channel_id, e.target.value);
                                   }
                                 }}
-                                className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-[11px] font-mono text-slate-700 focus:outline-none focus:border-indigo-400 truncate cursor-pointer"
+                                className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-[11px] font-mono text-slate-700 dark:text-slate-100 focus:outline-none focus:border-indigo-400 truncate cursor-pointer"
                               >
                                 {p.mapped_model && !pModels.includes(p.mapped_model) && (
                                   <option value={p.mapped_model}>{isZh ? `当前: ${p.mapped_model}` : `Current: ${p.mapped_model}`}</option>
@@ -441,7 +448,7 @@ export default function ModelRouteModal({
                               <button
                                 type="button"
                                 onClick={() => setCustomModeMap(prev => ({ ...prev, [p.channel_id]: true }))}
-                                className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer shrink-0"
+                                className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition cursor-pointer shrink-0"
                                 title={isZh ? '手动输入自定义模型标识' : 'Enter custom model ID'}
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
@@ -453,13 +460,13 @@ export default function ModelRouteModal({
                         {pChannel && (
                           <>
                             {(pChannel.status === 'inactive' || pChannel.status === 'disabled') && (
-                              <div className="mt-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-sm px-2 py-0.5 flex items-center space-x-1">
+                              <div className="mt-1 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-sm px-2 py-0.5 flex items-center space-x-1">
                                 <span>⚠️</span>
                                 <span>{isZh ? '该服务商渠道当前处于停用状态' : 'This upstream provider is currently inactive'}</span>
                               </div>
                             )}
                             {pModels.length > 0 && !pModels.includes('*') && p.mapped_model && !pModels.includes(p.mapped_model) && (
-                              <div className="mt-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-sm px-2 py-0.5 flex items-center space-x-1">
+                              <div className="mt-1 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-sm px-2 py-0.5 flex items-center space-x-1">
                                 <span>⚠️</span>
                                 <span>{isZh ? `渠道模型库中未声明「${p.mapped_model}」，请确认远端真实支持` : `Model "${p.mapped_model}" is not in channel catalog; verify remote availability`}</span>
                               </div>
@@ -470,21 +477,33 @@ export default function ModelRouteModal({
 
                       <div className="flex items-center space-x-3 shrink-0 self-end sm:self-center">
                         <div className="flex items-center space-x-1.5">
-                          <span className="text-[11px] text-slate-400">{isZh ? '权重:' : 'Weight:'}</span>
+                          <span
+                            className="ui-meta"
+                            title={isZh
+                              ? '权重与优先级是「渠道级」配置：修改后会影响该渠道上承载的所有模型，而不是仅当前模型。'
+                              : 'Weight and priority are channel-wide: changing them affects every model this channel serves, not just this model.'}
+                          >
+                            {isZh ? '权重:' : 'Weight:'}
+                            {p.shared_model_count > 1 && (
+                              <span className="ml-1 text-xs text-amber-600 dark:text-amber-400">
+                                {isZh ? `(渠道级, 影响 ${p.shared_model_count} 个模型)` : `(channel-wide, ${p.shared_model_count} models)`}
+                              </span>
+                            )}
+                          </span>
                           <input
                             type="number"
                             min="1"
                             max="1000"
                             value={p.weight}
                             onChange={(e) => handleWeightChange(p.channel_id, e.target.value)}
-                            className="w-14 bg-slate-50 border border-slate-200 rounded-lg px-1.5 py-1 text-center font-mono text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
+                            className="w-14 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-1.5 py-1 text-center font-mono text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
                           />
                         </div>
 
                         <button
                           type="button"
                           onClick={() => handleRemoveProvider(p.channel_id)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                          className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition cursor-pointer"
                           title={isZh ? '移除服务商' : 'Remove provider'}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -498,12 +517,12 @@ export default function ModelRouteModal({
 
             {/* Quick Add Provider Row */}
             {availableChannelsToAdd.length > 0 && (
-              <div className="pt-2 border-t border-slate-100 space-y-1.5">
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <select
                     value={selectedChannelToAdd}
                     onChange={(e) => handleSelectChannelToAdd(e.target.value)}
-                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                    className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer"
                   >
                     <option value="">{isZh ? '-- 选择上游服务商 --' : '-- Select Upstream Provider --'}</option>
                     {availableChannelsToAdd.map((ch) => (
@@ -521,7 +540,7 @@ export default function ModelRouteModal({
                           value={selectedModelToAdd}
                           onChange={(e) => setSelectedModelToAdd(e.target.value)}
                           placeholder={isZh ? '上游模型标识' : 'Upstream model ID'}
-                          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 font-mono text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
+                          className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 font-mono text-xs text-slate-800 dark:text-slate-100 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                         />
                       ) : (
                         <select
@@ -534,7 +553,7 @@ export default function ModelRouteModal({
                               setSelectedModelToAdd(e.target.value);
                             }
                           }}
-                          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 font-mono text-xs text-slate-800 focus:outline-none focus:border-indigo-500 truncate cursor-pointer"
+                          className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 font-mono text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 truncate cursor-pointer"
                         >
                           {modelName.trim() && !addChannelModels.includes(modelName.trim()) && (
                             <option value={modelName.trim()}>{isZh ? `与路由同名 (${modelName.trim()})` : `Same as route (${modelName.trim()})`}</option>
@@ -555,7 +574,7 @@ export default function ModelRouteModal({
                             setCustomAddMode(false);
                             setSelectedModelToAdd(addChannelModels[0] || modelName.trim());
                           }}
-                          className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-[10px] whitespace-nowrap cursor-pointer"
+                          className="px-2 py-1 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 rounded-lg text-[11px] whitespace-nowrap cursor-pointer"
                         >
                           {isZh ? '列表' : 'List'}
                         </button>
@@ -567,7 +586,7 @@ export default function ModelRouteModal({
                     type="button"
                     onClick={handleAddChannel}
                     disabled={!selectedChannelToAdd}
-                    className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-lg font-medium shadow-sm flex items-center justify-center space-x-1 transition shrink-0 cursor-pointer text-xs"
+                    className="px-3.5 py-1.5 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 text-white rounded-lg font-medium shadow-sm flex items-center justify-center space-x-1 transition shrink-0 cursor-pointer text-xs"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>{isZh ? '添加' : 'Add'}</span>
@@ -578,17 +597,17 @@ export default function ModelRouteModal({
           </div>
 
           {/* Field 3: Fallback & Pricing (Clean and Compact) */}
-          <div className="border-t border-slate-100 pt-3 space-y-3">
+          <div className="border-t border-slate-100 dark:border-slate-800 pt-3 space-y-3">
             {/* Fallback Model */}
             <div>
-              <label className="font-semibold text-slate-800 flex items-center space-x-1.5 mb-1">
-                <Shield className="w-3.5 h-3.5 text-indigo-500" />
+              <label className="font-semibold text-slate-800 dark:text-slate-200 flex items-center space-x-1.5 mb-1">
+                <Shield className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
                 <span>{isZh ? '容灾降级' : 'Disaster Recovery / Fallback'}</span>
               </label>
               <select
                 value={fallbackModel}
                 onChange={(e) => setFallbackModel(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-mono text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer"
               >
                 <option value="">{isZh ? '-- 无 (直接返回错误) --' : '-- None (Fail Fast on Error) --'}</option>
                 {allModels
@@ -603,13 +622,13 @@ export default function ModelRouteModal({
 
             {/* Pricing Row */}
             <div>
-              <label className="font-semibold text-slate-800 flex items-center space-x-1.5 mb-1.5">
-                <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+              <label className="font-semibold text-slate-800 dark:text-slate-200 flex items-center space-x-1.5 mb-1.5">
+                <DollarSign className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 <span>{isZh ? '计费单价 (元/1M Tokens)' : 'Pricing Unit (CNY/1M Tokens)'}</span>
               </label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-4 gap-2">
                 <div>
-                  <span className="block text-[10px] text-slate-400 mb-0.5">{isZh ? '输入' : 'Prompt'}</span>
+                  <span className="block ui-meta mb-0.5">{isZh ? '输入' : 'Prompt'}</span>
                   <input
                     type="number"
                     step="0.01"
@@ -617,11 +636,11 @@ export default function ModelRouteModal({
                     value={promptPrice}
                     onChange={(e) => setPromptPrice(e.target.value)}
                     placeholder="2.00"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 font-mono text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 font-mono text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
                 <div>
-                  <span className="block text-[10px] text-slate-400 mb-0.5">{isZh ? '输出' : 'Completion'}</span>
+                  <span className="block ui-meta mb-0.5">{isZh ? '输出' : 'Completion'}</span>
                   <input
                     type="number"
                     step="0.01"
@@ -629,11 +648,11 @@ export default function ModelRouteModal({
                     value={completionPrice}
                     onChange={(e) => setCompletionPrice(e.target.value)}
                     placeholder="8.00"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 font-mono text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 font-mono text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
                 <div>
-                  <span className="block text-[10px] text-emerald-700 mb-0.5">{isZh ? '缓存读取' : 'Cache Read'}</span>
+                  <span className="block text-xs text-emerald-700 dark:text-emerald-400 mb-0.5">{isZh ? '缓存读取' : 'Cache Read'}</span>
                   <input
                     type="number"
                     step="0.01"
@@ -641,16 +660,30 @@ export default function ModelRouteModal({
                     value={cacheReadPrice}
                     onChange={(e) => setCacheReadPrice(e.target.value)}
                     placeholder="0.20"
-                    className="w-full bg-slate-50 border border-emerald-300 rounded-xl px-2.5 py-1.5 font-mono text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 rounded-xl px-2.5 py-1.5 font-mono text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <span className="block text-xs text-amber-700 dark:text-amber-400 mb-0.5" title={isZh ? '图片/视频/语音等按次计费模型的单次固定价格' : 'Per-request price for image/video/audio models'}>
+                    {isZh ? '按次固定价' : 'Fixed/Req'}
+                  </span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={fixedPrice}
+                    onChange={(e) => setFixedPrice(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-amber-300 dark:border-amber-800 rounded-xl px-2.5 py-1.5 font-mono text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500"
                   />
                 </div>
               </div>
 
               {/* Time-of-use discount toggle */}
-              <div className="mt-2.5 p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+              <div className="mt-2.5 p-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-between">
                 <div>
-                  <span className="block text-xs font-semibold text-slate-700">{isZh ? '分时优惠' : 'Time-of-Use Off-Peak Discount'}</span>
-                  <span className="block text-[11px] text-slate-400">{isZh ? '开启后享受优惠费率，可在「模型定价」自定义任意时间段' : 'Enjoy discounted rates during off-peak hours'}</span>
+                  <span className="block text-xs font-semibold text-slate-700 dark:text-slate-200">{isZh ? '分时优惠' : 'Time-of-Use Off-Peak Discount'}</span>
+                  <span className="block ui-meta">{isZh ? '开启后享受优惠费率，可在「模型定价」自定义任意时间段' : 'Enjoy discounted rates during off-peak hours'}</span>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -659,25 +692,25 @@ export default function ModelRouteModal({
                     onChange={(e) => setOffPeakEnabled(e.target.checked)}
                     className="sr-only peer"
                   />
-                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                  <div className="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white dark:after:bg-slate-300 after:border-slate-300 dark:after:border-slate-500 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
                 </label>
               </div>
             </div>
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end space-x-3 pt-3 border-t border-slate-100 shrink-0">
+          <div className="flex justify-end space-x-3 pt-3 border-t border-slate-100 dark:border-slate-800 shrink-0">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-1.5 text-slate-500 hover:text-slate-800 font-medium transition cursor-pointer"
+              className="px-4 py-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 font-medium transition cursor-pointer"
             >
               {isZh ? '取消' : 'Cancel'}
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-medium shadow-sm transition flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer text-xs"
+              className="px-4 py-1.5 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg font-medium shadow-sm transition flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer text-xs"
             >
               {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
               <span>{isNew ? (isZh ? '创建模型' : 'Create Route') : (isZh ? '保存' : 'Save')}</span>

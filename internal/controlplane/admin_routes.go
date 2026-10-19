@@ -5,11 +5,18 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/billing"
+	"github.com/ifnodoraemon/airoute/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
 // UpdateModelRouteRequest specifies model-level distribution, mapping, and fallback settings.
 type UpdateModelRouteRequest struct {
-	Model           string                `json:"model" binding:"required"`
+	Model string `json:"model" binding:"required"`
+	// GroupName selects the pricing group being edited. Empty means "default".
+	// Without it, editing a non-default group silently read and wrote the
+	// default group's rates.
+	GroupName       string                `json:"group_name,omitempty"`
 	FallbackModel   string                `json:"fallback_model"`
 	ProviderUpdates []ModelProviderUpdate `json:"provider_updates"`
 	PromptPrice     *float64              `json:"prompt_price,omitempty"`
@@ -54,29 +61,42 @@ func (h *AdminHandler) UpdateModelRoute(c *gin.Context) {
 		return
 	}
 
-	// 1. Update Fallback model
+	// Build the complete change set first, then commit it as one unit. The three
+	// concerns below used to be written through three independent transactions,
+	// so a failure midway left fallback/price/channels partially applied while
+	// the caller only saw an error.
+	bundle := &storage.ModelRouteBundle{Model: req.Model}
 	if req.FallbackModel != "" && req.FallbackModel != req.Model {
-		if err := h.repo.SetModelFallback(req.Model, req.FallbackModel, true); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "保存模型兜底失败: " + err.Error()})
-			return
-		}
-	} else {
-		_ = h.repo.DeleteModelFallback(req.Model)
+		bundle.FallbackModel = req.FallbackModel
 	}
 
-	// 2. Save model pricing if provided
-	if err := h.saveRoutePricing(&req); err != nil {
+	price, err := h.buildRoutePricing(&req)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	bundle.Price = price
 
-	// 3. Update channels: bind desired channels, unbind removed channels
-	if err := h.applyChannelUpdatesForModel(req.Model, req.ProviderUpdates); err != nil {
+	channelRows, err := h.collectChannelUpdatesForModel(req.Model, req.ProviderUpdates)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新渠道配置失败: " + err.Error()})
 		return
 	}
+	bundle.Channels = channelRows
 
-	// 4. Atomically sync DB state into Dispatcher and broadcast to Redis cluster
+	if err := h.repo.ApplyModelRouteBundle(c.Request.Context(), bundle); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存模型路由失败（已回滚，未改动任何配置）: " + err.Error()})
+		return
+	}
+
+	// Refresh in-memory prices so the very next request bills with the new rate.
+	if bundle.Price != nil && billing.GlobalEngine != nil {
+		if err := billing.GlobalEngine.ReloadPrices(); err != nil {
+			telemetry.Logger.Error("failed to reload prices after model route update", "error", err.Error())
+		}
+	}
+
+	// Sync DB state into Dispatcher and broadcast to Redis cluster
 	if err := h.sync.ReloadAndBroadcast(c.Request.Context(), "model_route_updated"); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "数据面热重载失败: " + err.Error()})
 		return
@@ -85,7 +105,10 @@ func (h *AdminHandler) UpdateModelRoute(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "模型多源路由及分发容灾配置已保存并完成热重载"})
 }
 
-func (h *AdminHandler) applyChannelUpdatesForModel(modelName string, providerUpdates []ModelProviderUpdate) error {
+// collectChannelUpdatesForModel computes the channel rows that must change for a
+// model route, WITHOUT writing them: the caller commits them together with the
+// fallback and pricing rows in one transaction.
+func (h *AdminHandler) collectChannelUpdatesForModel(modelName string, providerUpdates []ModelProviderUpdate) ([]*storage.ChannelRecord, error) {
 	desiredProviders := make(map[int64]ModelProviderUpdate, len(providerUpdates))
 	for _, pu := range providerUpdates {
 		desiredProviders[pu.ChannelID] = pu
@@ -93,9 +116,10 @@ func (h *AdminHandler) applyChannelUpdatesForModel(modelName string, providerUpd
 
 	allChannels, err := h.repo.ListChannels()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	var changedRows []*storage.ChannelRecord
 	for _, ch := range allChannels {
 		pu, isDesired := desiredProviders[ch.ID]
 		changed := false
@@ -155,10 +179,8 @@ func (h *AdminHandler) applyChannelUpdatesForModel(modelName string, providerUpd
 		}
 
 		if changed {
-			if err := h.repo.UpdateChannel(ch); err != nil {
-				return err
-			}
+			changedRows = append(changedRows, ch)
 		}
 	}
-	return nil
+	return changedRows, nil
 }

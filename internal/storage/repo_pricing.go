@@ -187,8 +187,9 @@ func (r *Repository) GetModelPriceWithGroup(modelName, groupName string) (*Model
 	return nil, sql.ErrNoRows
 }
 
-// SaveModelPrice inserts or updates pricing rates for a model within a specific group.
-func (r *Repository) SaveModelPrice(rec *ModelPriceRecord) error {
+// normalizeModelPrice applies the defaults every price row must have before it
+// is persisted. Shared by SaveModelPrice and the transactional route bundle.
+func normalizeModelPrice(rec *ModelPriceRecord) {
 	if rec.GroupName == "" {
 		rec.GroupName = "default"
 	}
@@ -210,6 +211,12 @@ func (r *Repository) SaveModelPrice(rec *ModelPriceRecord) error {
 	if rec.OffPeakDiscount <= 0 || rec.OffPeakDiscount > 1.0 {
 		rec.OffPeakDiscount = 0.5
 	}
+}
+
+// SaveModelPrice inserts or updates pricing rates for a model within a specific group.
+func (r *Repository) SaveModelPrice(rec *ModelPriceRecord) error {
+	normalizeModelPrice(rec)
+
 	offEnabled := 0
 	if rec.OffPeakEnabled {
 		offEnabled = 1

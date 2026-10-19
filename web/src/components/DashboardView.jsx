@@ -57,6 +57,8 @@ export default function DashboardView({
   const [chartMetric, setChartMetric] = useState('requests'); // 'requests' | 'tokens' | 'latency' | 'errors'
   const [timeframe, setTimeframe] = useState('24h'); // '1h' | '24h' | '7d'
   const [hoveredBucket, setHoveredBucket] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState(null);
 
   // 1. DYNAMIC HOURLY TIME-SERIES AGGREGATION FROM LOGS
   const timeBuckets = useMemo(() => {
@@ -118,12 +120,30 @@ export default function DashboardView({
   }, [timeBuckets, chartMetric]);
 
   // 2. SLA & AVAILABILITY BREAKDOWN
+  //
+  // Computed from the server-side aggregate over ALL usage logs. It previously
+  // used the `logs` prop, which is only the current page (<= 50 rows), so the
+  // "availability" figure described the page rather than the deployment.
+  const totalRequests = stats.total_requests || 0;
+  const error4xx = stats.client_error_requests || 0;
+  const error5xx = stats.server_error_requests || 0;
+  const errorLogs = error4xx + error5xx;
+  const success2xx = stats.success_requests || 0;
+  const slaAvailability = totalRequests > 0 ? ((success2xx / totalRequests) * 100).toFixed(2) : '—';
+  // `logs` is still used for page-scoped breakdowns; label them as such.
   const totalLogs = logs.length;
-  const errorLogs = useMemo(() => logs.filter(l => l.status_code >= 400), [logs]);
-  const error4xx = useMemo(() => logs.filter(l => l.status_code >= 400 && l.status_code < 500).length, [logs]);
-  const error5xx = useMemo(() => logs.filter(l => l.status_code >= 500).length, [logs]);
-  const success2xx = totalLogs - errorLogs.length;
-  const slaAvailability = totalLogs > 0 ? ((success2xx / totalLogs) * 100).toFixed(2) : '100.00';
+  const pageScoped = totalRequests > logs.length;
+
+  // 2b. ACTIONABLE SIGNALS for the "needs attention" strip.
+  // Derived only from data already held in props — no extra requests.
+  const attention = useMemo(() => {
+    const tripped = channels.filter(ch =>
+      ['OPEN', 'HALF-OPEN'].includes(String(ch.breaker_status || '').toUpperCase())
+    ).length;
+    const disabled = channels.filter(ch => ch.status !== 'active').length;
+    const failed = (stats.client_error_requests || 0) + (stats.server_error_requests || 0);
+    return { tripped, disabled, failed, recentTotal: stats.total_requests || 0 };
+  }, [channels, stats]);
 
   // 3. MULTIMODAL WORKLOAD BREAKDOWN
   const modalityStats = useMemo(() => {
@@ -163,25 +183,24 @@ export default function DashboardView({
   }, [logs, stats.total_tokens]);
 
   // 5. CALCULATE TRUE PERCENTILES (P50, P90, P99) FROM LOGS
+  // Renders a percentile value, or an explicit "no data" marker when there are
+  // no latency samples to compute it from.
+  const fmtPct = (v) => (typeof v === 'number' && v > 0 ? `${v}ms` : (isZh ? '无样本' : 'n/a'));
+
   const percentiles = useMemo(() => {
-    const latencies = logs.map(l => l.ttft_ms).filter(Boolean).sort((a, b) => a - b);
+    const latencies = logs.map(l => l.ttft_ms).filter(v => typeof v === 'number' && v > 0).sort((a, b) => a - b);
     if (!latencies.length) {
-      const avg = stats.avg_ttft_ms || 210;
-      return {
-        p50: Math.round(avg * 0.75),
-        p90: Math.round(avg * 1.1),
-        p99: Math.round(avg * 1.8)
-      };
+      // No samples: report nothing rather than inventing numbers. The previous
+      // implementation multiplied the average TTFT by hardcoded factors
+      // (0.75 / 1.1 / 1.8) and presented the result as measured percentiles.
+      return { p50: null, p90: null, p99: null, sampled: 0, total: stats.ttft_samples || 0 };
     }
-    const p50Idx = Math.floor(latencies.length * 0.5);
-    const p90Idx = Math.floor(latencies.length * 0.9);
-    const p99Idx = Math.floor(latencies.length * 0.99);
-    return {
-      p50: latencies[p50Idx] || latencies[0],
-      p90: latencies[p90Idx] || latencies[latencies.length - 1],
-      p99: latencies[p99Idx] || latencies[latencies.length - 1],
+    const at = (q) => {
+      const idx = Math.min(latencies.length - 1, Math.floor(latencies.length * q));
+      return latencies[idx];
     };
-  }, [logs, stats.avg_ttft_ms]);
+    return { p50: at(0.5), p90: at(0.9), p99: at(0.99), sampled: latencies.length, total: stats.ttft_samples || latencies.length };
+  }, [logs, stats.ttft_samples]);
 
   // 6. TOP MODELS BREAKDOWN
   const topModels = useMemo(() => {
@@ -310,14 +329,14 @@ export default function DashboardView({
 
 **生成时间**：${new Date().toLocaleString()}
 **高可用集群架构**：双活双节点负载均衡 (Active-Active HA)
-**整体 SLA 可用性**：${slaAvailability}% (目标: 99.9%)
+**整体 SLA 可用性**：${slaAvailability}% (目标: 99.9%, 基于全部 ${totalRequests} 次请求)
 
 ---
 
 ## 1. 核心关键指标 (KPIs)
 - **累计调用量**：${totalCalls.toLocaleString()} 次
 - **Token 总吞吐**：${(stats.total_tokens || 0).toLocaleString()} Tokens (输入占比 ${tokenMetrics.promptPct}%, 输出占比 ${tokenMetrics.compPct}%)
-- **首字时延 SLA (TTFT)**：平均 ${avgTtft}ms (P50: ${percentiles.p50}ms, P90: ${percentiles.p90}ms, P99: ${percentiles.p99}ms)
+- **首字时延 SLA (TTFT)**：平均 ${avgTtft}ms (P50: ${fmtPct(percentiles.p50)}, P90: ${fmtPct(percentiles.p90)}, P99: ${fmtPct(percentiles.p99)}; 样本 ${percentiles.sampled}/${percentiles.total})
 - **接入上游通道**：${channels.length} 个服务商 (活跃: ${channels.filter(c => c.status === 'active').length} 个, 熔断: ${channels.filter(c => c.breaker_status === 'open').length} 个)
 
 ## 2. FinOps 成本优化与缓存成效
@@ -331,14 +350,14 @@ export default function DashboardView({
 
 **Generated**: ${new Date().toLocaleString()}
 **Cluster Architecture**: Active-Active Dual-Node HA
-**SLA Availability**: ${slaAvailability}% (Target: 99.9%)
+**SLA Availability**: ${slaAvailability}% (Target: 99.9%, over all ${totalRequests} requests)
 
 ---
 
 ## 1. Core KPIs
 - **Total Invocations**: ${totalCalls.toLocaleString()}
 - **Token Throughput**: ${(stats.total_tokens || 0).toLocaleString()} Tokens (Prompt: ${tokenMetrics.promptPct}%, Completion: ${tokenMetrics.compPct}%)
-- **TTFT SLA Latency**: Avg ${avgTtft}ms (P50: ${percentiles.p50}ms, P90: ${percentiles.p90}ms, P99: ${percentiles.p99}ms)
+- **TTFT SLA Latency**: Avg ${avgTtft}ms (P50: ${fmtPct(percentiles.p50)}, P90: ${fmtPct(percentiles.p90)}, P99: ${fmtPct(percentiles.p99)}; ${percentiles.sampled}/${percentiles.total} samples)
 - **Upstream Channels**: ${channels.length} providers (${channels.filter(c => c.status === 'active').length} active, ${channels.filter(c => c.breaker_status === 'open').length} tripped)
 
 ## 2. FinOps Cost Optimization
@@ -355,26 +374,108 @@ export default function DashboardView({
     if (showToast) showToast(isZh ? 'AI 运营与遥测大盘报告已复制！' : 'AI Executive Telemetry Report copied!', 'success');
   };
 
+  // Manual refresh. fetchData()/fetchLogs() resolve to a boolean (false = the
+  // request failed), so the toast reflects the real outcome instead of firing
+  // optimistically before the requests settle.
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      const [a, b] = await Promise.all([fetchData?.(), fetchLogs?.()]);
+      const ok = a !== false && b !== false;
+      if (ok) showToast?.(isZh ? '遥测数据已更新' : 'Telemetry refreshed', 'success');
+      else showToast?.(isZh ? '部分数据刷新失败，请检查网络或后端服务' : 'Some data failed to refresh — check the network or backend', 'error');
+    } catch (e) {
+      showToast?.((isZh ? '刷新失败: ' : 'Refresh failed: ') + (e?.message || ''), 'error');
+    } finally {
+      setLastRefreshed(new Date());
+      setRefreshing(false);
+    }
+  };
+
+  // Only signals we can actually derive from the props; `logs` is one page, so
+  // the failure count is always phrased as "of the last N logged requests".
+  const attentionItems = [];
+  if (channels.length === 0) {
+    attentionItems.push({
+      key: 'no-channels',
+      tone: 'danger',
+      icon: AlertTriangle,
+      title: isZh ? '尚未接入任何服务商' : 'No providers connected',
+      detail: isZh ? '接入一个上游渠道后，请求才会开始被路由。' : 'Connect an upstream provider to start routing requests.',
+      actionLabel: adminUser?.role === 'admin' && setShowChannelModal ? (isZh ? '接入服务商' : 'Add channel') : null,
+      onAction: () => setShowChannelModal?.(true)
+    });
+  }
+  if (attention.tripped > 0) {
+    attentionItems.push({
+      key: 'breaker',
+      tone: 'danger',
+      icon: Flame,
+      title: isZh ? `${attention.tripped} 个渠道断路器已触发` : `${attention.tripped} channel breaker${attention.tripped > 1 ? 's' : ''} tripped`,
+      detail: isZh ? '状态为 OPEN / HALF-OPEN，请求正在被降级或转移。' : 'State is OPEN / HALF-OPEN — traffic is failing over or degraded.',
+      actionLabel: isZh ? '查看渠道' : 'View channels',
+      onAction: () => setCurrentTab?.('channels')
+    });
+  }
+  if (attention.disabled > 0) {
+    attentionItems.push({
+      key: 'disabled',
+      tone: 'warn',
+      icon: Server,
+      title: isZh ? `${attention.disabled} 个渠道已停用` : `${attention.disabled} channel${attention.disabled > 1 ? 's' : ''} disabled`,
+      detail: isZh ? '状态不是 active，不会参与路由和测速。' : 'Status is not active — excluded from routing and probes.',
+      actionLabel: isZh ? '查看渠道' : 'View channels',
+      onAction: () => setCurrentTab?.('channels')
+    });
+  }
+  if (attention.failed > 0) {
+    attentionItems.push({
+      key: 'failures',
+      tone: 'warn',
+      icon: AlertCircle,
+      title: isZh
+        ? `最近 ${attention.recentTotal} 条日志中有 ${attention.failed} 条失败`
+        : `${attention.failed} of the last ${attention.recentTotal} logged requests failed`,
+      detail: isZh ? '统计范围仅限当前页日志样本，不代表全站错误率。' : 'Sample covers the current log page only — not a site-wide error rate.',
+      actionLabel: isZh ? '查看日志' : 'View logs',
+      onAction: () => setCurrentTab?.('logs')
+    });
+  }
+
+  const attentionTones = {
+    danger: {
+      card: 'border-rose-200/70 dark:border-rose-900/60 border-l-rose-500 bg-rose-50/60 dark:bg-rose-950/20',
+      icon: 'text-rose-500 dark:text-rose-400',
+      title: 'text-rose-900 dark:text-rose-100'
+    },
+    warn: {
+      card: 'border-amber-200/70 dark:border-amber-900/60 border-l-amber-500 bg-amber-50/60 dark:bg-amber-950/20',
+      icon: 'text-amber-500 dark:text-amber-400',
+      title: 'text-amber-900 dark:text-amber-100'
+    }
+  };
+
   return (
-    <div className="space-y-10 animate-in fade-in duration-200">
+    <div className="space-y-6 animate-in fade-in duration-200">
       {/* 1. Page Header (Directly on canvas, no box-in-box card) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
             {isZh ? '运营总览' : 'Dashboard'}
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="ui-meta mt-1">
             {isZh 
               ? '全双工并发吞吐、首字分位 SLA、多模态调用结构与 Prompt Cache 资金节约' 
               : 'Real-time telemetry, TTFT latency percentiles, multimodal workloads, and FinOps savings'}
           </p>
         </div>
 
-        <div className="flex items-center space-x-2.5">
+        <div className="flex flex-wrap items-center gap-2">
           {onOpenTopology && (
             <button
               onClick={onOpenTopology}
-              className="px-3.5 py-2 rounded-lg bg-white dark:bg-[#0F1420] hover:bg-slate-50 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 border border-slate-200/70 dark:border-slate-800/80 text-xs font-medium transition flex items-center space-x-1.5 cursor-pointer shadow-sm"
+              className="ui-btn-secondary"
               title={isZh ? '打开全链路动态路由与容灾演练' : 'Open visual routing & failover topology'}
             >
               <Layers className="w-3.5 h-3.5 text-slate-400" />
@@ -382,22 +483,31 @@ export default function DashboardView({
             </button>
           )}
 
-          <button
-            onClick={() => {
-              if (fetchData) fetchData();
-              if (fetchLogs) fetchLogs();
-              if (showToast) showToast(isZh ? '全链路遥测数据已更新' : 'Telemetry data refreshed', 'info');
-            }}
-            className="px-3.5 py-2 rounded-lg bg-white dark:bg-[#0F1420] hover:bg-slate-50 dark:hover:bg-slate-800/80 text-xs font-medium text-slate-700 dark:text-slate-300 border border-slate-200/70 dark:border-slate-800/80 transition flex items-center space-x-1.5 cursor-pointer shadow-sm"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
-            <span>{isZh ? '刷新' : 'Refresh'}</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="ui-btn-secondary"
+              title={isZh ? '重新拉取统计、渠道与日志数据' : 'Re-fetch stats, channels and logs'}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${refreshing ? 'animate-spin' : ''}`} />
+              <span>{refreshing ? (isZh ? '刷新中…' : 'Refreshing…') : (isZh ? '刷新' : 'Refresh')}</span>
+            </button>
+            {lastRefreshed && (
+              <span
+                className="ui-meta font-mono tabular-nums"
+                title={isZh ? '最近一次手动刷新的时间' : 'Time of the last manual refresh'}
+              >
+                {isZh ? '更新于 ' : 'Updated '}
+                {lastRefreshed.toLocaleTimeString([], { hour12: false })}
+              </span>
+            )}
+          </div>
 
           {adminUser?.role === 'admin' && setShowChannelModal && (
             <button
               onClick={() => setShowChannelModal(true)}
-              className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-xs font-medium text-white rounded-lg shadow-sm transition flex items-center space-x-1.5 cursor-pointer"
+              className="ui-btn-primary"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>{isZh ? '接入服务商' : 'Add Channel'}</span>
@@ -406,74 +516,128 @@ export default function DashboardView({
         </div>
       </div>
 
-      {/* 2. CORE TELEMETRY KPIS (4 CARDS) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* 2. NEEDS ATTENTION — what needs action, shown before the totals */}
+      <section className="space-y-2.5">
+        <h3 className="ui-section-title">{isZh ? '需要关注' : 'Needs attention'}</h3>
+
+        {attentionItems.length === 0 ? (
+          <div className="flex items-start gap-3 rounded-xl border border-l-2 border-emerald-200/70 dark:border-emerald-900/60 border-l-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 px-4 py-3">
+            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+            <div>
+              <div className="text-xs font-semibold text-emerald-900 dark:text-emerald-100">
+                {isZh ? '运行正常' : 'All clear'}
+              </div>
+              <p className="ui-meta mt-0.5">
+                {attention.recentTotal > 0
+                  ? (isZh
+                    ? `${channels.length} 个渠道的断路器均未触发，最近 ${attention.recentTotal} 条日志中没有失败请求。`
+                    : `No breaker tripped across ${channels.length} channel(s), and no failed request among the last ${attention.recentTotal} logged calls.`)
+                  : (isZh
+                    ? `已配置 ${channels.length} 个渠道且断路器均未触发；暂无请求日志可判断成功率。`
+                    : `${channels.length} channel(s) configured with no tripped breaker; no request logs yet to judge success rate.`)}
+              </p>
+              <p className="ui-meta mt-1">
+                {isZh ? '数据为最近一次探测结果。' : 'Based on the most recent probe.'}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+            {attentionItems.map(item => {
+              const tone = attentionTones[item.tone];
+              const ItemIcon = item.icon;
+              return (
+                <div key={item.key} className={`rounded-xl border border-l-2 px-3.5 py-3 flex flex-col ${tone.card}`}>
+                  <div className="flex items-start gap-2">
+                    <ItemIcon className={`w-4 h-4 shrink-0 mt-0.5 ${tone.icon}`} />
+                    <span className={`text-xs font-semibold leading-5 ${tone.title}`}>{item.title}</span>
+                  </div>
+                  <p className="ui-meta mt-1 flex-1">{item.detail}</p>
+                  {item.actionLabel && (
+                    <button
+                      onClick={item.onAction}
+                      className="ui-btn-ghost ui-btn-sm -ml-2.5 mt-1 self-start text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
+                    >
+                      {item.actionLabel} →
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* 3. CORE TELEMETRY KPIS (4 CARDS) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Requests */}
-        <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+        <div className="ui-card p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">{isZh ? '累计调用量' : 'Total Requests'}</span>
+            <span className="ui-section-title">{isZh ? '累计调用量' : 'Total Requests'}</span>
             <Zap className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="mt-3 text-3xl font-semibold font-mono tabular-nums tracking-tight text-slate-900 dark:text-white">
+          <div className="mt-2 text-2xl font-semibold font-mono tabular-nums tracking-tight text-slate-900 dark:text-white">
             {(stats.total_requests || 0).toLocaleString()}
           </div>
-          <div className="mt-2 text-xs text-slate-400 flex items-center space-x-1.5 font-mono">
+          <div className="ui-meta mt-2 flex items-center gap-1.5 font-mono">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
             <span>SLA {slaAvailability}%</span>
           </div>
         </div>
 
         {/* Total Tokens */}
-        <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+        <div className="ui-card p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">{isZh ? 'Token 总吞吐' : 'Total Tokens'}</span>
+            <span className="ui-section-title">{isZh ? 'Token 总吞吐' : 'Total Tokens'}</span>
             <Activity className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="mt-3 text-3xl font-semibold font-mono tabular-nums tracking-tight text-slate-900 dark:text-white">
+          <div className="mt-2 text-2xl font-semibold font-mono tabular-nums tracking-tight text-slate-900 dark:text-white">
             {(stats.total_tokens || 0).toLocaleString()}
           </div>
-          <div className="mt-2 text-xs text-slate-400 font-mono">
+          <div className="ui-meta mt-2 font-mono">
             Prompt {tokenMetrics.promptPct}% · Comp {tokenMetrics.compPct}%
           </div>
         </div>
 
         {/* Avg TTFT */}
-        <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+        <div className="ui-card p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">{isZh ? '平均首字延迟' : 'Avg TTFT'}</span>
+            <span className="ui-section-title">{isZh ? '平均首字延迟' : 'Avg TTFT'}</span>
             <Clock className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="mt-3 text-3xl font-semibold font-mono tabular-nums tracking-tight text-slate-900 dark:text-white">
-            {Math.round(stats.avg_ttft_ms || 0)} <span className="text-base font-normal text-slate-400">ms</span>
+          <div className="mt-2 text-2xl font-semibold font-mono tabular-nums tracking-tight text-slate-900 dark:text-white">
+            {Math.round(stats.avg_ttft_ms || 0)} <span className="text-sm font-normal text-slate-500 dark:text-slate-400">ms</span>
           </div>
-          <div className="mt-2 text-xs text-slate-400 font-mono">
-            P50: {percentiles.p50}ms · P90: {percentiles.p90}ms
+          <div className="ui-meta mt-2 font-mono">
+            {percentiles.sampled > 0
+              ? `P50: ${fmtPct(percentiles.p50)} · P90: ${fmtPct(percentiles.p90)} (${isZh ? `样本 ${percentiles.sampled}` : `${percentiles.sampled} samples`})`
+              : (isZh ? 'P50/P90: 暂无延迟样本' : 'P50/P90: no latency samples yet')}
           </div>
         </div>
 
         {/* Total Cost & Saved */}
-        <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+        <div className="ui-card p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">{isZh ? '累计消耗与节约' : 'Total Cost & Saved'}</span>
+            <span className="ui-section-title">{isZh ? '累计消耗与节约' : 'Total Cost & Saved'}</span>
             <DollarSign className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="mt-3 text-3xl font-semibold font-mono tabular-nums tracking-tight text-slate-900 dark:text-white">
+          <div className="mt-2 text-2xl font-semibold font-mono tabular-nums tracking-tight text-slate-900 dark:text-white">
             ¥{(stats.total_cost || 0).toFixed(4)}
           </div>
-          <div className="mt-2 text-xs text-slate-400 font-mono">
+          <div className="ui-meta mt-2 font-mono">
             {isZh ? '缓存减免' : 'Cache Saved'}: ¥{(stats.saved_cost || 0).toFixed(4)}
           </div>
         </div>
       </div>
 
-      {/* 3. INTERACTIVE MULTI-METRIC TIME-SERIES VISUALIZER */}
-      <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-7 shadow-sm space-y-6">
+      {/* 4. INTERACTIVE MULTI-METRIC TIME-SERIES VISUALIZER */}
+      <div className="ui-card p-6 space-y-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
             <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-100 tracking-tight">
               {isZh ? '多维时序走势与分位监测' : 'Time-Series Telemetry & SLA Waveform'}
             </h4>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="ui-meta mt-0.5">
               {isZh ? '近时段吞吐与首字时延波动曲线' : 'Live throughput and TTFT latency trends'}
             </p>
           </div>
@@ -580,7 +744,7 @@ export default function DashboardView({
 
           {/* Hover Tooltip Overlay */}
           {hoveredBucket && (
-            <div className="absolute top-2 right-2 bg-slate-900/90 dark:bg-slate-800/95 text-white text-[11px] px-3 py-1.5 rounded-lg border border-slate-700 shadow-md pointer-events-none z-10 flex items-center space-x-3">
+            <div className="absolute top-2 right-2 bg-slate-900/90 dark:bg-slate-800/95 text-white text-xs px-3 py-1.5 rounded-lg border border-slate-700 shadow-md pointer-events-none z-10 flex items-center gap-3">
               <span className="font-mono text-slate-300">{hoveredBucket.label}</span>
               <span className="font-semibold text-indigo-300 font-mono">
                 {isZh ? '请求' : 'Reqs'}: {hoveredBucket.requests}
@@ -629,7 +793,7 @@ export default function DashboardView({
           </div>
 
           {/* X-Axis Timeline Labels */}
-          <div className="flex justify-between text-[11px] text-slate-400 font-mono pt-3 border-t border-slate-100 dark:border-slate-800/80 z-1">
+          <div className="flex justify-between ui-meta font-mono pt-3 border-t border-slate-100 dark:border-slate-800/80 z-1">
             <span>{timeBuckets[0]?.label}</span>
             <span>{timeBuckets[Math.floor(timeBuckets.length / 2)]?.label}</span>
             <span>{isZh ? '当前 (实时)' : 'Live Now'}</span>
@@ -639,53 +803,53 @@ export default function DashboardView({
         {/* Latency Percentiles & SLA Quick Stat Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-1">
           <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/70">
-            <span className="text-xs text-slate-400 font-medium block">{isZh ? 'P50 中位时延' : 'P50 Median TTFT'}</span>
-            <div className="flex items-baseline space-x-1.5 mt-1">
+            <span className="ui-meta font-medium block">{isZh ? 'P50 中位时延' : 'P50 Median TTFT'}</span>
+            <div className="flex items-baseline gap-1.5 mt-1">
               <span className="text-lg font-semibold text-slate-900 dark:text-slate-100 font-mono tabular-nums">
-                {percentiles.p50} ms
+                {fmtPct(percentiles.p50)}
               </span>
-              <span className="text-[10px] text-slate-400 font-normal">(&lt; 200ms)</span>
+              <span className="ui-meta font-normal">(&lt; 200ms)</span>
             </div>
           </div>
           <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/70">
-            <span className="text-xs text-slate-400 font-medium block">{isZh ? 'P90 企业基准' : 'P90 Baseline'}</span>
-            <div className="flex items-baseline space-x-1.5 mt-1">
+            <span className="ui-meta font-medium block">{isZh ? 'P90 企业基准' : 'P90 Baseline'}</span>
+            <div className="flex items-baseline gap-1.5 mt-1">
               <span className="text-lg font-semibold text-slate-900 dark:text-slate-100 font-mono tabular-nums">
-                {percentiles.p90} ms
+                {fmtPct(percentiles.p90)}
               </span>
-              <span className="text-[10px] text-slate-400 font-normal">(&lt; 500ms)</span>
+              <span className="ui-meta font-normal">(&lt; 500ms)</span>
             </div>
           </div>
           <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/70">
-            <span className="text-xs text-slate-400 font-medium block">{isZh ? 'P99 极端长尾' : 'P99 Tail TTFT'}</span>
-            <div className="flex items-baseline space-x-1.5 mt-1">
+            <span className="ui-meta font-medium block">{isZh ? 'P99 极端长尾' : 'P99 Tail TTFT'}</span>
+            <div className="flex items-baseline gap-1.5 mt-1">
               <span className="text-lg font-semibold text-slate-900 dark:text-slate-100 font-mono tabular-nums">
-                {percentiles.p99} ms
+                {fmtPct(percentiles.p99)}
               </span>
-              <span className="text-[10px] text-slate-400 font-normal">(&lt; 1000ms)</span>
+              <span className="ui-meta font-normal">(&lt; 1000ms)</span>
             </div>
           </div>
           <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/70">
-            <span className="text-xs text-slate-400 font-medium block">{isZh ? '服务可用率 (SLA)' : 'SLA Availability'}</span>
-            <div className="flex items-baseline space-x-1.5 mt-1">
+            <span className="ui-meta font-medium block">{isZh ? '服务可用率 (SLA)' : 'SLA Availability'}</span>
+            <div className="flex items-baseline gap-1.5 mt-1">
               <span className="text-lg font-semibold text-emerald-600 dark:text-emerald-400 font-mono tabular-nums">
                 {slaAvailability}%
               </span>
-              <span className="text-[10px] text-slate-400 font-normal">{errorLogs.length} {isZh ? '次异常' : 'errors'}</span>
+              <span className="ui-meta font-normal">{errorLogs.length} {isZh ? '次异常' : 'errors'}</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 4. WORKLOAD DISTRIBUTION & TELEMETRY PANELS (FOUR QUADRANTS) */}
+      {/* 5. WORKLOAD DISTRIBUTION & TELEMETRY PANELS (FOUR QUADRANTS) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Panel 1: Multimodal Modality Distribution */}
-        <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-6 shadow-sm space-y-4">
+        <div className="ui-card p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
               {isZh ? '全模态负载分布' : 'Multimodal Workload Distribution'}
             </h4>
-            <span className="text-xs font-mono text-slate-400">
+            <span className="ui-meta font-mono">
               {modalityStats.length} {isZh ? '类模态' : 'Modalities'}
             </span>
           </div>
@@ -697,7 +861,7 @@ export default function DashboardView({
                   <span className="font-medium text-slate-700 dark:text-slate-300">
                     {mod.label}
                   </span>
-                  <span className="font-mono tabular-nums text-slate-400">
+                  <span className="font-mono tabular-nums text-slate-500 dark:text-slate-400">
                     {mod.count} {isZh ? '次' : 'reqs'} ({mod.pct}%)
                   </span>
                 </div>
@@ -713,18 +877,18 @@ export default function DashboardView({
         </div>
 
         {/* Panel 2: Provider Latency & SLA Benchmark */}
-        <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-6 shadow-sm space-y-4">
+        <div className="ui-card p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
               {isZh ? '服务商实时时延与可用性跑分' : 'Provider Latency & SLA Benchmark'}
             </h4>
-            <span className="text-xs font-mono text-slate-400">
+            <span className="ui-meta font-mono">
               {providerSlaStats.length} {isZh ? '个渠道' : 'Channels'}
             </span>
           </div>
 
           {providerSlaStats.length === 0 ? (
-            <div className="p-8 text-center text-xs text-slate-400">
+            <div className="p-8 text-center ui-meta">
               {isZh ? '暂无服务商测速数据' : 'No provider latency benchmark data'}
             </div>
           ) : (
@@ -763,10 +927,10 @@ export default function DashboardView({
           )}
 
           <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-xs">
-            <span className="text-slate-400 text-[11px]">{isZh ? '按周期核算各服务商调用与支出' : 'Reconcile upstream costs'}</span>
+            <span className="ui-meta">{isZh ? '按周期核算各服务商调用与支出' : 'Reconcile upstream costs'}</span>
             <button
               onClick={() => setCurrentTab('reconciliation')}
-              className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 font-medium inline-flex items-center space-x-1 cursor-pointer"
+              className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium inline-flex items-center gap-1 cursor-pointer"
             >
               <span>{isZh ? '进入供应商整体对账 →' : 'Supplier Reconciliation →'}</span>
             </button>
@@ -774,19 +938,19 @@ export default function DashboardView({
         </div>
 
         {/* Panel 3: Enterprise SLA Target & Error Budget Gauge */}
-        <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-6 shadow-sm space-y-4">
+        <div className="ui-card p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
               {isZh ? '企业级 99.9% SLA 承诺与错误预算' : 'Enterprise 99.9% SLA & Error Budget'}
             </h4>
-            <span className="text-xs font-mono text-slate-400">
+            <span className="ui-meta font-mono">
               Three-Nines
             </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
             <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/70">
-              <span className="text-[10px] text-slate-400 font-medium block">
+              <span className="ui-meta font-medium block">
                 {isZh ? 'SLA 目标承诺' : 'Committed Target'}
               </span>
               <div className="text-lg font-semibold text-slate-900 dark:text-slate-100 font-mono tabular-nums mt-0.5">
@@ -795,7 +959,7 @@ export default function DashboardView({
             </div>
 
             <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/70">
-              <span className="text-[10px] text-slate-400 font-medium block">
+              <span className="ui-meta font-medium block">
                 {isZh ? '当前实际可用率' : 'Actual Availability'}
               </span>
               <div className="text-lg font-semibold text-emerald-600 dark:text-emerald-400 font-mono tabular-nums mt-0.5">
@@ -804,7 +968,7 @@ export default function DashboardView({
             </div>
 
             <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/70">
-              <span className="text-[10px] text-slate-400 font-medium block">
+              <span className="ui-meta font-medium block">
                 {isZh ? '容灾漂移平均耗时' : 'Failover MTTR'}
               </span>
               <div className="text-lg font-semibold text-slate-900 dark:text-slate-100 font-mono tabular-nums mt-0.5">
@@ -832,16 +996,16 @@ export default function DashboardView({
         </div>
 
         {/* Panel 4: Top Models Breakdown */}
-        <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-6 shadow-sm space-y-4">
+        <div className="ui-card p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
               {isZh ? '热门大模型 Token 占比' : 'Top Models by Token Usage'}
             </h4>
-            <span className="text-xs font-mono text-slate-400">Top 5</span>
+            <span className="ui-meta font-mono">Top 5</span>
           </div>
 
           {topModels.length === 0 ? (
-            <div className="p-8 text-center text-xs text-slate-400">
+            <div className="p-8 text-center ui-meta">
               {isZh ? '暂无模型调用数据' : 'No model invocation telemetry yet'}
             </div>
           ) : (
@@ -852,7 +1016,7 @@ export default function DashboardView({
                     <span className="font-medium text-slate-800 dark:text-slate-200 truncate max-w-[200px]">
                       {m.name}
                     </span>
-                    <span className="text-slate-400">
+                    <span className="text-slate-500 dark:text-slate-400">
                       {m.tokens} tokens ({m.percent}%)
                     </span>
                   </div>
@@ -869,29 +1033,29 @@ export default function DashboardView({
         </div>
       </div>
 
-      {/* 5. UPSTREAM PROVIDERS HEALTH & CIRCUIT BREAKER MATRIX */}
-      <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl overflow-hidden shadow-sm">
+      {/* 6. UPSTREAM PROVIDERS HEALTH & CIRCUIT BREAKER MATRIX */}
+      <div className="ui-card overflow-hidden">
         <div className="p-6 border-b border-slate-100 dark:border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
             <h3 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
               {isZh ? '上游渠道健康度与测速' : 'Upstream Provider Health & Latency'}
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="ui-meta mt-0.5">
               {isZh ? '实时探测通道连通性与断路器隔离状态' : 'Real-time probe latency and circuit breaker status'}
             </p>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2">
             <button
               onClick={handleBatchTest}
               disabled={batchTesting || channels.length === 0}
-              className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#0F1420] hover:bg-slate-50 dark:hover:bg-slate-800/80 text-xs font-medium text-slate-700 dark:text-slate-200 border border-slate-200/70 dark:border-slate-800/80 transition flex items-center space-x-1.5 cursor-pointer shadow-sm"
+              className="ui-btn-secondary ui-btn-sm"
             >
               <Activity className={`w-3.5 h-3.5 text-slate-400 ${batchTesting ? 'animate-spin text-indigo-500' : ''}`} />
               <span>{batchTesting ? (isZh ? '体检中...' : 'Probing...') : (isZh ? '全渠道体检' : 'Probe All')}</span>
             </button>
             <button
               onClick={() => setCurrentTab('channels')}
-              className="px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white text-xs font-medium transition cursor-pointer shadow-sm"
+              className="ui-btn-primary ui-btn-sm"
             >
               {isZh ? `渠道管理 (${channels.length}) →` : `Manage Channels (${channels.length}) →`}
             </button>
@@ -904,7 +1068,7 @@ export default function DashboardView({
             {adminUser?.role === 'admin' && setShowChannelModal && (
               <button
                 onClick={() => setShowChannelModal(true)}
-                className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 text-white rounded-lg text-xs font-medium shadow-sm transition flex items-center space-x-1.5 cursor-pointer"
+                className="ui-btn-primary"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>{isZh ? '接入服务商' : 'Add Channel'}</span>
@@ -915,7 +1079,7 @@ export default function DashboardView({
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800/80 text-slate-400 text-xs font-medium">
+                <tr className="border-b border-slate-100 dark:border-slate-800/80 text-slate-500 dark:text-slate-400 text-xs font-medium">
                   <th className="py-3 px-6">{isZh ? '服务商名称' : 'Provider Name'}</th>
                   <th className="py-3 px-6">{isZh ? '协议类型' : 'Protocol'}</th>
                   <th className="py-3 px-6">{isZh ? '接入 Base URL' : 'Base URL'}</th>
@@ -937,7 +1101,7 @@ export default function DashboardView({
                       <td className="py-4 px-6 font-mono text-xs text-slate-500">
                         {ch.type}
                       </td>
-                      <td className="py-4 px-6 font-mono text-xs text-slate-400 max-w-xs truncate">
+                      <td className="py-4 px-6 font-mono text-xs text-slate-500 dark:text-slate-400 max-w-xs truncate">
                         {ch.base_url}
                       </td>
                       <td className="py-4 px-6 font-mono tabular-nums text-slate-500">
@@ -967,14 +1131,14 @@ export default function DashboardView({
                             <span className="text-rose-500">{isZh ? '异常' : 'Error'}</span>
                           )
                         ) : (
-                          <span className="text-slate-400">-</span>
+                          <span className="text-slate-500 dark:text-slate-400">-</span>
                         )}
                       </td>
                       <td className="py-4 px-6 text-right">
                         <button
                           onClick={() => handleTestChannel && handleTestChannel(ch)}
                           disabled={testingId === ch.id}
-                          className="text-xs px-2.5 py-1 rounded-md bg-white dark:bg-[#0F1420] text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 border border-slate-200/70 dark:border-slate-800/80 font-medium transition inline-flex items-center space-x-1 cursor-pointer shadow-sm"
+                          className="ui-btn-secondary ui-btn-sm"
                         >
                           {testingId === ch.id ? <RefreshCw className="w-3 h-3 animate-spin text-slate-400" /> : <Play className="w-3 h-3 text-slate-400" />}
                           <span>Ping</span>
@@ -989,14 +1153,14 @@ export default function DashboardView({
         )}
       </div>
 
-      {/* 6. RECENT TRAFFIC AUDIT STREAM */}
-      <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl overflow-hidden shadow-sm">
+      {/* 7. RECENT TRAFFIC AUDIT STREAM */}
+      <div className="ui-card overflow-hidden">
         <div className="p-6 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
           <div>
             <h3 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
               {isZh ? '最近调用流水' : 'Recent Inbound Audit Stream'}
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="ui-meta mt-0.5">
               {isZh ? '实时推理请求与首字延迟审计记录' : 'Live request stream with TTFT latency and status'}
             </p>
           </div>
@@ -1009,14 +1173,14 @@ export default function DashboardView({
         </div>
 
         {logs.length === 0 ? (
-          <div className="p-8 text-center text-xs text-slate-400">
+          <div className="p-8 text-center ui-meta">
             {isZh ? '暂无请求记录' : 'No request logs recorded yet'}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800/80 text-slate-400 text-xs font-medium">
+                <tr className="border-b border-slate-100 dark:border-slate-800/80 text-slate-500 dark:text-slate-400 text-xs font-medium">
                   <th className="py-3 px-6">{isZh ? '时间' : 'Timestamp'}</th>
                   <th className="py-3 px-6">{isZh ? '调用方' : 'Client'}</th>
                   <th className="py-3 px-6">{isZh ? '模型' : 'Model'}</th>
@@ -1033,7 +1197,7 @@ export default function DashboardView({
                     onClick={() => setActiveLogDetail && setActiveLogDetail(log)}
                     className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 cursor-pointer transition"
                   >
-                    <td className="py-3.5 px-6 font-mono text-slate-400 text-xs">
+                    <td className="py-3.5 px-6 font-mono text-slate-500 dark:text-slate-400 text-xs">
                       {new Date(log.created_at).toLocaleTimeString()}
                     </td>
                     <td className="py-3.5 px-6 font-medium text-slate-800 dark:text-slate-200">

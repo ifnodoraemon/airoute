@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Key,
   Plus,
@@ -16,6 +16,20 @@ import {
   Zap
 } from 'lucide-react';
 import { getGatewayOrigin, copyToClipboard, toCSV } from '../config';
+import useTableControls from '../hooks/useTableControls';
+import useUrlFilters from '../hooks/useUrlFilters';
+import { SortableTh, ColumnToggle } from './TableControls';
+
+// Low-priority columns are dropped at narrow widths so that name, status and
+// actions stay reachable on a phone-width viewport without horizontal hunting.
+const COLUMN_CLASS = {
+  token: 'hidden md:table-cell',
+  group: 'hidden md:table-cell',
+  usage: 'hidden sm:table-cell',
+  budget: 'hidden sm:table-cell',
+  models: 'hidden lg:table-cell',
+  rpm: 'hidden md:table-cell'
+};
 
 export default function KeysView({
   keys = [],
@@ -39,9 +53,34 @@ export default function KeysView({
   t
 }) {
   const isZh = lang === 'zh';
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'active' | 'disabled'
+  // Filters live in the URL (keys.q / keys.status) so they survive module
+  // switches and the current view can be shared as a link.
+  const [filters, setFilters, resetFilters] = useUrlFilters('keys', { q: '', status: 'all' });
+  const searchQuery = filters.q || '';
+  const statusFilter = filters.status || 'all'; // 'all' | 'active' | 'disabled'
   const [isMasked, setIsMasked] = useState(true);
+
+  const columns = useMemo(() => [
+    { key: 'name', label: isZh ? '密钥别名' : 'Key Name', sortValue: (k) => k.tenant_id || '' },
+    { key: 'token', label: isZh ? 'API Key 凭据' : 'API Key Token', sortable: false },
+    { key: 'group', label: isZh ? '计费分组' : 'Pricing Group', sortValue: (k) => (k.group_name || 'default').toLowerCase() },
+    { key: 'usage', label: isZh ? '已用额度' : 'Spent', sortValue: (k) => Number(k.used_cost || 0) },
+    // Unlimited budgets/rpm sort as the largest finite value so they cluster
+    // at one end without producing NaN comparisons.
+    { key: 'budget', label: isZh ? '预算上限' : 'Budget Cap', sortValue: (k) => (Number(k.budget) > 0 ? Number(k.budget) : Number.MAX_SAFE_INTEGER) },
+    { key: 'models', label: isZh ? '授权模型范围' : 'Allowed Models', sortValue: (k) => (k.allowed_models || []).length },
+    { key: 'rpm', label: isZh ? '速率限流' : 'Rate Limit', sortValue: (k) => (Number(k.rpm) > 0 ? Number(k.rpm) : Number.MAX_SAFE_INTEGER) },
+    { key: 'status', label: isZh ? '状态' : 'Status', sortValue: (k) => (k.status === 'disabled' ? 1 : 0) }
+  ], [isZh]);
+
+  // Column visibility is remembered per browser; default sort puts the heaviest
+  // spenders first so quota/budget outliers are visible without scanning.
+  const controls = useTableControls({
+    columns,
+    storageKey: 'airoute.keys.columns',
+    initialSort: { key: 'usage', dir: 'desc' }
+  });
+  const { sort, toggleSort, sortRows, isVisible } = controls;
 
   const isAdmin = adminUser?.role === 'admin';
   const userGuaranteedGroup = adminUser?.group_name && adminUser.group_name !== 'default' ? adminUser.group_name : null;
@@ -124,9 +163,12 @@ export default function KeysView({
     return true;
   });
 
+  const sortedKeys = sortRows(filteredKeys);
+  const allVisibleSelected = sortedKeys.length > 0 && sortedKeys.every((k) => selectedKeyIds.includes(k.id));
+
   // Export keys to CSV
   const handleExportKeysCSV = () => {
-    if (filteredKeys.length === 0) {
+    if (sortedKeys.length === 0) {
       if (showToast) showToast(isZh ? '当前没有可导出的密钥' : 'No keys available for export', 'warning');
       return;
     }
@@ -135,7 +177,7 @@ export default function KeysView({
     ] : [
       'ID', 'Alias', 'API Key', 'Billing Group', 'Used Cost', 'Budget Cap', 'Allowed Models', 'Rate Limit (RPM)', 'Status', 'Created At'
     ];
-    const rows = filteredKeys.map(k => [
+    const rows = sortedKeys.map(k => [
       k.id,
       k.tenant_id || '',
       k.key || '',
@@ -157,7 +199,7 @@ export default function KeysView({
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    if (showToast) showToast(isZh ? `成功导出 ${filteredKeys.length} 个密钥数据` : `Successfully exported ${filteredKeys.length} keys`, 'success');
+    if (showToast) showToast(isZh ? `成功导出 ${sortedKeys.length} 个密钥数据` : `Successfully exported ${sortedKeys.length} keys`, 'success');
   };
 
   // Copy cURL sample snippet
@@ -199,7 +241,7 @@ export default function KeysView({
           {onNavigateToPricing && (
             <button
               onClick={onNavigateToPricing}
-              className="px-3.5 py-2 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-800 rounded-lg text-xs font-medium shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
+              className="ui-btn-secondary"
               title={isZh ? '查看各计费分组的模型定价明细' : 'View model pricing rates per group'}
             >
               <DollarSign className="w-3.5 h-3.5 text-emerald-500" />
@@ -208,7 +250,7 @@ export default function KeysView({
           )}
           <button
             onClick={() => setIsMasked(!isMasked)}
-            className="px-3.5 py-2 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-800 rounded-lg text-xs font-medium shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
+            className="ui-btn-secondary"
             title={isMasked ? (isZh ? '显示明文密钥' : 'Show plaintext key') : (isZh ? '脱敏隐藏密钥' : 'Mask key')}
           >
             {isMasked ? <Eye className="w-3.5 h-3.5 text-slate-400" /> : <EyeOff className="w-3.5 h-3.5 text-slate-400" />}
@@ -216,7 +258,7 @@ export default function KeysView({
           </button>
           <button
             onClick={handleExportKeysCSV}
-            className="px-3.5 py-2 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-800 rounded-lg text-xs font-medium shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
+            className="ui-btn-secondary"
             title={isZh ? '导出当前密钥列表为 CSV' : 'Export keys as CSV'}
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-slate-400" />
@@ -224,7 +266,7 @@ export default function KeysView({
           </button>
           <button
             onClick={handleOpenCreateKey}
-            className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
+            className="ui-btn-primary"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>{isZh ? '新建密钥' : 'Create Key'}</span>
@@ -235,21 +277,21 @@ export default function KeysView({
       {/* Filter Bar (Directly on canvas) */}
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="relative flex-1 max-w-sm">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => setFilters({ q: e.target.value })}
             placeholder={isZh ? '搜索密钥别名 / 密钥 token / 计费分组...' : 'Search tenant, key token, group...'}
-            className="w-full bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition shadow-sm"
+            className="ui-field pl-9"
           />
         </div>
 
-        <div className="flex items-center space-x-2">
-          <span className="text-slate-500 dark:text-slate-400 font-medium">{isZh ? '状态:' : 'Status:'}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="ui-meta font-medium">{isZh ? '状态:' : 'Status:'}</span>
           <div className="inline-flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200/80 dark:border-slate-800">
             <button
-              onClick={() => setStatusFilter('all')}
+              onClick={() => setFilters({ status: 'all' })}
               className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
                 statusFilter === 'all'
                   ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-semibold'
@@ -259,7 +301,7 @@ export default function KeysView({
               {isZh ? '全部' : 'All'} ({keys.length})
             </button>
             <button
-              onClick={() => setStatusFilter('active')}
+              onClick={() => setFilters({ status: 'active' })}
               className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
                 statusFilter === 'active'
                   ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm font-semibold'
@@ -269,7 +311,7 @@ export default function KeysView({
               {isZh ? '正常' : 'Active'} ({activeCount})
             </button>
             <button
-              onClick={() => setStatusFilter('disabled')}
+              onClick={() => setFilters({ status: 'disabled' })}
               className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
                 statusFilter === 'disabled'
                   ? 'bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 shadow-sm font-semibold'
@@ -279,22 +321,23 @@ export default function KeysView({
               {isZh ? '已停用' : 'Disabled'} ({keys.length - activeCount})
             </button>
           </div>
+          <ColumnToggle controls={controls} lang={lang} />
         </div>
       </div>
 
       {/* Keys Content */}
       {keys.length === 0 ? (
         <div className="bg-white dark:bg-[#0F1420] border border-dashed border-slate-300 dark:border-slate-800 rounded-2xl p-12 text-center flex flex-col items-center justify-center space-y-3">
-          <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 shadow-sm">
+          <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 shadow-sm">
             <Key className="w-5 h-5" />
           </div>
           <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-100">{isZh ? '暂无 API 密钥' : 'No API Keys'}</h4>
-          <p className="text-xs text-slate-500 max-w-sm">
+          <p className="ui-meta max-w-sm">
             {isZh ? 'API 密钥是业务客户端调用大模型网关的身份凭证，创建后即可分配至对应系统使用。' : 'API keys authenticate client apps to access the gateway. Create one to get started.'}
           </p>
           <button
             onClick={handleOpenCreateKey}
-            className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium shadow-sm flex items-center space-x-1.5 transition cursor-pointer mt-2"
+            className="ui-btn-primary mt-2"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>{isZh ? '新建密钥' : 'Create Key'}</span>
@@ -307,29 +350,29 @@ export default function KeysView({
               <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-900 dark:text-indigo-200">
                 <span>{isZh ? `已选中 ${selectedKeyIds.length} 个密钥` : `Selected ${selectedKeyIds.length} keys`}</span>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => handleBatchStatusKeys('active')}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg shadow-sm transition cursor-pointer"
+                  className="ui-btn ui-btn-sm bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
                 >
                   {isZh ? '批量启用' : 'Batch Enable'}
                 </button>
                 <button
                   onClick={() => handleBatchStatusKeys('disabled')}
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium rounded-lg shadow-sm transition cursor-pointer"
+                  className="ui-btn ui-btn-sm bg-amber-600 text-white hover:bg-amber-700 shadow-sm"
                 >
                   {isZh ? '批量停用' : 'Batch Disable'}
                 </button>
                 <button
                   onClick={handleBatchDeleteKeys}
-                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium rounded-lg shadow-sm transition flex items-center space-x-1 cursor-pointer"
+                  className="ui-btn-danger ui-btn-sm"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   <span>{isZh ? '批量注销' : 'Batch Delete'}</span>
                 </button>
                 <button
                   onClick={() => setSelectedKeyIds([])}
-                  className="px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-medium rounded-lg hover:bg-slate-50 transition cursor-pointer"
+                  className="ui-btn-secondary ui-btn-sm"
                 >
                   {isZh ? '取消选择' : 'Deselect All'}
                 </button>
@@ -337,198 +380,206 @@ export default function KeysView({
             </div>
           )}
 
-          <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl overflow-hidden shadow-sm">
-            <div className="overflow-x-auto w-full">
-              <table className="w-full text-left border-collapse min-w-[850px]">
-              <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800/80 text-slate-500 dark:text-slate-400 text-xs uppercase bg-slate-50/60 dark:bg-slate-900/40">
-                  <th className="py-4 px-6 w-10 text-center">
-                    <input
-                      type="checkbox"
-                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                      checked={filteredKeys.length > 0 && selectedKeyIds.length === filteredKeys.length}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedKeyIds(filteredKeys.map((k) => k.id));
-                        } else {
-                          setSelectedKeyIds([]);
-                        }
-                      }}
-                    />
-                  </th>
-                  <th className="py-4 px-6 font-semibold">{isZh ? '密钥别名' : 'Key Name'}</th>
-                  <th className="py-4 px-6 font-semibold">{isZh ? 'API Key 凭据' : 'API Key Token'}</th>
-                  <th className="py-4 px-6 font-semibold">
-                    <div className="flex items-center space-x-1">
-                      <span>{isZh ? '计费分组' : 'Pricing Group'}</span>
-                      {onNavigateToPricing && (
-                        <button
-                          type="button"
-                          onClick={onNavigateToPricing}
-                          className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-normal cursor-pointer ml-0.5"
-                          title={isZh ? '查看各分组费率详情' : 'View group rates'}
-                        >
-                          {isZh ? '(费率明细)' : '(Rates)'}
-                        </button>
-                      )}
-                    </div>
-                  </th>
-                  <th className="py-4 px-6 font-semibold">{isZh ? '已用 / 额度上限' : 'Used / Budget'}</th>
-                  <th className="py-4 px-6 font-semibold">{isZh ? '授权模型范围' : 'Allowed Models'}</th>
-                  <th className="py-4 px-6 font-semibold">{isZh ? '速率限流' : 'Rate Limit'}</th>
-                  <th className="py-4 px-6 font-semibold">{isZh ? '状态' : 'Status'}</th>
-                  <th className="py-4 px-6 text-right font-semibold">{isZh ? '操作' : 'Actions'}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70 text-sm">
-                {filteredKeys.map((k) => (
-                  <tr key={k.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition">
-                    <td className="py-4 px-6 text-center">
-                      <input
-                        type="checkbox"
-                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                        checked={selectedKeyIds.includes(k.id)}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          if (e.target.checked) {
-                            setSelectedKeyIds((prev) => [...prev, k.id]);
-                          } else {
-                            setSelectedKeyIds((prev) => prev.filter((x) => x !== k.id));
-                          }
-                        }}
-                      />
-                    </td>
-                    <td className="py-4 px-6 text-slate-800 dark:text-slate-100 font-medium text-xs">
-                      {k.tenant_id}
-                    </td>
-                    <td className="py-4 px-6 font-mono text-xs text-indigo-700 dark:text-indigo-400">
-                      <div className="flex items-center space-x-1.5">
-                        <span className="select-all">{maskKeyString(k.key)}</span>
-                        <button
-                          onClick={() => copyToClipboard(k.key)}
-                          className="p-1 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-md text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 transition cursor-pointer"
-                          title={isZh ? "复制完整 API Key" : "Copy full API Key"}
-                        >
-                          {copiedKey === k.key ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-500" />
-                          ) : (
-                            <Copy className="w-3.5 h-3.5" />
-                          )}
-                        </button>
-                      </div>
-                    </td>
-                    <td className="py-4 px-6 text-xs">
-                      {canUserSwitch ? (
-                        <select
-                          value={k.group_name || 'default'}
-                          onChange={(e) => handleUpdateKeyGroup && handleUpdateKeyGroup(k.id, e.target.value)}
-                          className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition"
-                          title={isZh ? "切换该密钥的扣费分组" : "Change billing group"}
-                        >
-                          {getGroupOptions(k.group_name).map(opt => (
-                            <option key={opt.id} value={opt.id}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium border ${getGroupBadge(k.group_name).className}`}
-                        >
-                          {getGroupBadge(k.group_name).label}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-4 px-6 text-xs font-mono tabular-nums">
-                      <span className="text-slate-900 dark:text-slate-100 font-semibold">
-                        ¥{Number(k.used_cost || 0).toFixed(4)}
-                      </span>
-                      <span className="text-slate-400 mx-1">/</span>
-                      <span className={k.budget > 0 ? 'text-indigo-600 dark:text-indigo-400 font-medium' : 'text-slate-400'}>
-                        {k.budget > 0 ? `¥${Number(k.budget).toFixed(2)}` : (isZh ? '不限' : 'Unlimited')}
-                      </span>
-                    </td>
-                    <td className="py-4 px-6 text-xs text-slate-600 dark:text-slate-300 font-medium">
-                      {!k.allowed_models || k.allowed_models.length === 0 ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">
-                          {isZh ? '全部允许' : 'All Allowed'}
-                        </span>
-                      ) : (
-                        <span className="font-mono text-[11px] bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
-                          {k.allowed_models.join(', ')}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-4 px-6 text-slate-600 dark:text-slate-400 font-mono tabular-nums text-xs">
-                      {k.rpm ? `${k.rpm} RPM` : (isZh ? '不限' : 'Unlimited')}
-                    </td>
-                    <td className="py-4 px-6">
-                      {k.status === 'disabled' ? (
-                        <span className="inline-flex items-center space-x-1.5 text-xs text-rose-600 dark:text-rose-400 font-medium">
-                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                          <span>{isZh ? '已停用' : 'Disabled'}</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center space-x-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                          <span>{isZh ? '正常' : 'Active'}</span>
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-4 px-6 text-right space-x-1.5">
-                      <button
-                        onClick={() => copyCurlSnippet(k.key)}
-                        className="text-xs px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium transition inline-flex items-center space-x-1 cursor-pointer"
-                        title={isZh ? '复制 cURL 快速接入命令' : 'Copy cURL command'}
-                      >
-                        <Terminal className="w-3 h-3 text-slate-400" />
-                        <span>cURL</span>
-                      </button>
-                      <button
-                        onClick={() => handleToggleKeyStatus(k)}
-                        className={`text-xs px-2.5 py-1 rounded-lg border font-medium transition cursor-pointer ${
-                          k.status === 'disabled'
-                            ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 border-emerald-200 dark:border-emerald-800/60'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 border-slate-200 dark:border-slate-700'
-                        }`}
-                        title={k.status === 'disabled' ? (isZh ? '恢复启用' : 'Enable') : (isZh ? '暂停使用' : 'Disable')}
-                      >
-                        {k.status === 'disabled' ? (isZh ? '启用' : 'Enable') : (isZh ? '停用' : 'Disable')}
-                      </button>
-                      <button
-                        onClick={() => setActiveQuickKey(k)}
-                        className="text-xs px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800/60 font-medium transition inline-flex items-center space-x-1 cursor-pointer"
-                      >
-                        <Sparkles className="w-3 h-3 text-indigo-500" />
-                        <span>{isZh ? '快速接入' : 'Quick Connect'}</span>
-                      </button>
-                      <button
-                        onClick={() => handleDeleteKey(k.id)}
-                        className="text-xs px-2 py-1 text-rose-600 dark:text-rose-400 hover:text-rose-800 dark:hover:text-rose-300 transition font-medium cursor-pointer"
-                      >
-                        {isZh ? '删除' : 'Delete'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {filteredKeys.length === 0 && (
-                  <tr>
-                    <td colSpan="9" className="py-12 text-center text-slate-400 text-xs">
-                      {isZh ? '没有找到匹配的 API 密钥' : 'No matching API keys found'}
-                      {(searchQuery || statusFilter !== 'all') && (
-                        <button
-                          onClick={() => { setSearchQuery(''); setStatusFilter('all'); }}
-                          className="ml-2 text-indigo-600 hover:underline font-medium"
-                        >
-                          {isZh ? '清除筛选' : 'Clear Filters'}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-            </div>
+          <div className="ui-card overflow-hidden">
+            {filteredKeys.length === 0 ? (
+              <div className="p-12 text-center flex flex-col items-center justify-center space-y-3">
+                <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 shadow-sm">
+                  <Search className="w-5 h-5" />
+                </div>
+                <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
+                  {isZh ? '没有匹配的密钥' : 'No matching keys'}
+                </h4>
+                <p className="ui-meta max-w-sm">
+                  {isZh ? '当前筛选条件下没有密钥，可调整搜索词或状态筛选后重试。' : 'No key matches the current search and status filters. Adjust them and try again.'}
+                </p>
+                <button onClick={resetFilters} className="ui-btn-secondary ui-btn-sm mt-1">
+                  {isZh ? '清除筛选' : 'Clear filters'}
+                </button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto w-full">
+                <table className="w-full text-left border-collapse sm:min-w-[760px]">
+                  <thead>
+                    <tr className="border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/60 dark:bg-slate-900/40">
+                      <th scope="col" className="ui-th w-10 text-center">
+                        <input
+                          type="checkbox"
+                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                          checked={allVisibleSelected}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedKeyIds(sortedKeys.map((k) => k.id));
+                            } else {
+                              setSelectedKeyIds([]);
+                            }
+                          }}
+                        />
+                      </th>
+                      {columns.filter((col) => isVisible(col.key)).map((col) => (
+                        <SortableTh
+                          key={col.key}
+                          column={col}
+                          sort={sort}
+                          onSort={toggleSort}
+                          className={COLUMN_CLASS[col.key] || ''}
+                        />
+                      ))}
+                      <th scope="col" className="ui-th text-right">{isZh ? '操作' : 'Actions'}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
+                    {sortedKeys.map((k) => (
+                      <tr key={k.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition">
+                        <td className="ui-td text-center">
+                          <input
+                            type="checkbox"
+                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            checked={selectedKeyIds.includes(k.id)}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              if (e.target.checked) {
+                                setSelectedKeyIds((prev) => [...prev, k.id]);
+                              } else {
+                                setSelectedKeyIds((prev) => prev.filter((x) => x !== k.id));
+                              }
+                            }}
+                          />
+                        </td>
+                        {isVisible('name') && (
+                          <td className="ui-td font-medium text-slate-800 dark:text-slate-100">
+                            {k.tenant_id}
+                          </td>
+                        )}
+                        {isVisible('token') && (
+                          <td className={`ui-td font-mono text-indigo-700 dark:text-indigo-400 ${COLUMN_CLASS.token}`}>
+                            <div className="flex items-center space-x-1.5">
+                              <span className="select-all">{maskKeyString(k.key)}</span>
+                              <button
+                                onClick={() => copyToClipboard(k.key)}
+                                className="p-1 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-md text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 transition cursor-pointer"
+                                title={isZh ? "复制完整 API Key" : "Copy full API Key"}
+                              >
+                                {copiedKey === k.key ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-500" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                        {isVisible('group') && (
+                          <td className={`ui-td ${COLUMN_CLASS.group}`}>
+                            {canUserSwitch ? (
+                              <select
+                                value={k.group_name || 'default'}
+                                onChange={(e) => handleUpdateKeyGroup && handleUpdateKeyGroup(k.id, e.target.value)}
+                                className="ui-field ui-field-sm w-auto cursor-pointer font-medium"
+                                title={isZh ? "切换该密钥的扣费分组" : "Change billing group"}
+                              >
+                                {getGroupOptions(k.group_name).map(opt => (
+                                  <option key={opt.id} value={opt.id}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${getGroupBadge(k.group_name).className}`}
+                              >
+                                {getGroupBadge(k.group_name).label}
+                              </span>
+                            )}
+                          </td>
+                        )}
+                        {isVisible('usage') && (
+                          <td className={`ui-td font-mono tabular-nums ${COLUMN_CLASS.usage}`}>
+                            <span className="text-slate-900 dark:text-slate-100 font-semibold">
+                              ¥{Number(k.used_cost || 0).toFixed(4)}
+                            </span>
+                          </td>
+                        )}
+                        {isVisible('budget') && (
+                          <td className={`ui-td font-mono tabular-nums ${COLUMN_CLASS.budget}`}>
+                            <span className={k.budget > 0 ? 'text-indigo-600 dark:text-indigo-400 font-medium' : 'text-slate-500 dark:text-slate-400'}>
+                              {k.budget > 0 ? `¥${Number(k.budget).toFixed(2)}` : (isZh ? '不限' : 'Unlimited')}
+                            </span>
+                          </td>
+                        )}
+                        {isVisible('models') && (
+                          <td className={`ui-td font-medium text-slate-600 dark:text-slate-300 ${COLUMN_CLASS.models}`}>
+                            {!k.allowed_models || k.allowed_models.length === 0 ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">
+                                {isZh ? '全部允许' : 'All Allowed'}
+                              </span>
+                            ) : (
+                              <span className="font-mono text-xs bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                                {k.allowed_models.join(', ')}
+                              </span>
+                            )}
+                          </td>
+                        )}
+                        {isVisible('rpm') && (
+                          <td className={`ui-td font-mono tabular-nums ${COLUMN_CLASS.rpm}`}>
+                            {k.rpm ? `${k.rpm} RPM` : (isZh ? '不限' : 'Unlimited')}
+                          </td>
+                        )}
+                        {isVisible('status') && (
+                          <td className="ui-td">
+                            {k.status === 'disabled' ? (
+                              <span className="inline-flex items-center space-x-1.5 text-xs text-rose-600 dark:text-rose-400 font-medium">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                                <span>{isZh ? '已停用' : 'Disabled'}</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center space-x-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                <span>{isZh ? '正常' : 'Active'}</span>
+                              </span>
+                            )}
+                          </td>
+                        )}
+                        <td className="ui-td text-right whitespace-nowrap space-x-1.5">
+                          <button
+                            onClick={() => copyCurlSnippet(k.key)}
+                            className="text-xs px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium transition inline-flex items-center space-x-1 cursor-pointer"
+                            title={isZh ? '复制 cURL 快速接入命令' : 'Copy cURL command'}
+                          >
+                            <Terminal className="w-3 h-3 text-slate-400" />
+                            <span className="hidden sm:inline">cURL</span>
+                          </button>
+                          <button
+                            onClick={() => handleToggleKeyStatus(k)}
+                            className={`text-xs px-2.5 py-1 rounded-lg border font-medium transition cursor-pointer ${
+                              k.status === 'disabled'
+                                ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 border-emerald-200 dark:border-emerald-800/60'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 border-slate-200 dark:border-slate-700'
+                            }`}
+                            title={k.status === 'disabled' ? (isZh ? '恢复启用' : 'Enable') : (isZh ? '暂停使用' : 'Disable')}
+                          >
+                            {k.status === 'disabled' ? (isZh ? '启用' : 'Enable') : (isZh ? '停用' : 'Disable')}
+                          </button>
+                          <button
+                            onClick={() => setActiveQuickKey(k)}
+                            className="text-xs px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800/60 font-medium transition inline-flex items-center space-x-1 cursor-pointer"
+                            title={isZh ? '打开快速接入指引' : 'Open quick connect guide'}
+                          >
+                            <Sparkles className="w-3 h-3 text-indigo-500" />
+                            <span className="hidden md:inline">{isZh ? '快速接入' : 'Quick Connect'}</span>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteKey(k.id)}
+                            className="text-xs px-2 py-1 text-rose-600 dark:text-rose-400 hover:text-rose-800 dark:hover:text-rose-300 transition font-medium cursor-pointer"
+                          >
+                            {isZh ? '删除' : 'Delete'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -34,6 +34,13 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 		Model:     c.Query("model"),
 		TenantID:  c.Query("tenant_id"),
 		ChatID:    c.Query("chat_id"),
+		// The console's search box and facet filters must be applied server-side;
+		// filtering only the loaded page silently hides matches on other pages.
+		Keyword: c.Query("q"),
+		Channel: c.Query("channel"),
+		Status:  c.Query("status"),
+		Cache:   c.Query("cache"),
+		Latency: c.Query("latency"),
 	}
 
 	// Non-admin callers are scoped to their own API keys. Fail-closed: when the
@@ -51,7 +58,7 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 		}
 	}
 
-	logs, err := h.repo.ListUsageLogsWithFilter(filter)
+	logs, total, err := h.repo.ListUsageLogsWithFilterAndCount(filter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -62,7 +69,9 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 	if !shouldRevealKey(c) {
 		maskUsageLogKeys(logs)
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": logs})
+	// `total` is the size of the whole filtered result set, so the console can
+	// paginate honestly instead of assuming the current page is everything.
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": logs, "total": total, "limit": limit, "offset": offset})
 }
 
 // DeleteLog deletes a single log by ID (admin only).
