@@ -5,6 +5,11 @@ x-gateway-env: &gateway-env
   GATEWAY_ADMIN_SECRET: ${GATEWAY_ADMIN_SECRET:?Set a random GATEWAY_ADMIN_SECRET in .env}
   GATEWAY_ADMIN_USER: ${GATEWAY_ADMIN_USER:-admin}
   GATEWAY_ADMIN_PASSWORD: ${GATEWAY_ADMIN_PASSWORD:?Set a strong GATEWAY_ADMIN_PASSWORD in .env}
+  # One-shot escape hatch: set to true to force the stored admin password back to
+  # GATEWAY_ADMIN_PASSWORD on the next start, then remove it again. Without this
+  # pass-through the variable never reaches the container and the reset silently
+  # does nothing.
+  GATEWAY_ADMIN_RESET: ${GATEWAY_ADMIN_RESET:-false}
   ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
   INITIAL_USER_BALANCE: ${INITIAL_USER_BALANCE:-5.0}
   REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-false}

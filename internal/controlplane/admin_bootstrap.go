@@ -22,25 +22,44 @@ func InitDefaultAdmin(repo *storage.Repository, cfgs ...*config.Config) {
 	adminPass := cfg.GetAdminPassword()
 	forceReset := os.Getenv("GATEWAY_ADMIN_RESET") == "true" || os.Getenv("GATEWAY_ADMIN_RESET") == "1"
 
-	existing, _ := repo.GetUserByUsername(adminUser)
-	if existing == nil {
+	existing, err := repo.GetUserByUsername(adminUser)
+	if err != nil {
+		// A failed lookup (schema drift, NULL column, DB hiccup) used to be
+		// indistinguishable from "no admin yet", which is how a drifted schema
+		// silently produced a confusing login situation.
+		telemetry.Logger.Error("could not look up the administrator account; admin bootstrap skipped",
+			"username", adminUser, "error", err.Error())
+		return
+	}
+	switch {
+	case existing == nil:
 		_ = repo.EnsureDefaultAdmin(adminUser, adminPass)
 		telemetry.Logger.Info("initialized administrator account", "username", adminUser)
-	} else if forceReset {
-		hash, err := bcrypt.GenerateFromPassword([]byte(adminPass), bcrypt.DefaultCost)
-		if err == nil {
+	case forceReset:
+		hash, hashErr := bcrypt.GenerateFromPassword([]byte(adminPass), bcrypt.DefaultCost)
+		if hashErr == nil {
 			_ = repo.UpdateUserPassword(adminUser, string(hash))
 			telemetry.Logger.Info("force-reset administrator password from configuration", "username", adminUser)
 		}
-	} else if adminPass != "admin123" {
-		// If custom admin password is provided and current user is still using default "admin123", synchronize it
-		if err := bcrypt.CompareHashAndPassword([]byte(existing.PasswordHash), []byte("admin123")); err == nil {
-			hash, err := bcrypt.GenerateFromPassword([]byte(adminPass), bcrypt.DefaultCost)
-			if err == nil {
-				_ = repo.UpdateUserPassword(adminUser, string(hash))
-				telemetry.Logger.Info("synchronized administrator password with configured credentials", "username", adminUser)
-			}
+	case bcrypt.CompareHashAndPassword([]byte(existing.PasswordHash), []byte(adminPass)) == nil:
+		// Configured credential already matches: nothing to do.
+	case bcrypt.CompareHashAndPassword([]byte(existing.PasswordHash), []byte("admin123")) == nil:
+		// The account still uses the shipped default, so the configured password
+		// can safely be applied.
+		hash, hashErr := bcrypt.GenerateFromPassword([]byte(adminPass), bcrypt.DefaultCost)
+		if hashErr == nil {
+			_ = repo.UpdateUserPassword(adminUser, string(hash))
+			telemetry.Logger.Info("synchronized administrator password with configured credentials", "username", adminUser)
 		}
+	default:
+		// The stored password was changed (via the console) and deliberately
+		// differs from configuration. Never overwrite it, but say so loudly:
+		// otherwise operators change GATEWAY_ADMIN_PASSWORD, see the service
+		// restart successfully, and still cannot log in.
+		telemetry.Logger.Warn("configured admin password does not match the stored credential; configuration does not override an existing account",
+			"username", adminUser,
+			"remediation", "log in with the password set in the console, or set GATEWAY_ADMIN_RESET=true once and restart to force the configured password",
+		)
 	}
 
 	if adminPass == "admin123" {
