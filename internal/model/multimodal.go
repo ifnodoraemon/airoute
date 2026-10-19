@@ -190,4 +190,3 @@ type VideoTaskResponse struct {
 	Error     string `json:"error,omitempty"`
 	CreatedAt int64  `json:"created_at"`
 }
-

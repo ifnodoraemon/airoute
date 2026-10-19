@@ -9,8 +9,8 @@ import (
 // ResponseRequest represents the OpenAI Responses API (/v1/responses) request payload.
 type ResponseRequest struct {
 	Model              string            `json:"model"`
-	Input              any               `json:"input"`                     // string or []ChatMessage or []map[string]any
-	Instructions       string            `json:"instructions,omitempty"`    // system instructions
+	Input              any               `json:"input"`                  // string or []ChatMessage or []map[string]any
+	Instructions       string            `json:"instructions,omitempty"` // system instructions
 	PreviousResponseID string            `json:"previous_response_id,omitempty"`
 	User               string            `json:"user,omitempty"`
 	Stream             bool              `json:"stream,omitempty"`

@@ -384,6 +384,51 @@ func (db *DB) migrate() error {
 				return nil
 			},
 		},
+		{
+			Version: 12,
+			Name:    "add_integer_money_columns",
+			Up: func(db *DB) error {
+				// Money is mirrored as integer nano-yuan (1e-9 CNY) so that
+				// accumulation never drifts. The legacy REAL columns remain the
+				// display source while both are written in the same transaction.
+				ensureSQLiteColumn(db.DB, "users", "balance_nano", "INTEGER DEFAULT 0")
+				ensureSQLiteColumn(db.DB, "api_keys", "used_cost_nano", "INTEGER DEFAULT 0")
+				ensureSQLiteColumn(db.DB, "api_keys", "budget_nano", "INTEGER DEFAULT 0")
+				ensureSQLiteColumn(db.DB, "usage_logs", "cost_nano", "INTEGER DEFAULT 0")
+				_, _ = db.DB.Exec(`UPDATE users SET balance_nano = CAST(ROUND(balance * 1000000000) AS INTEGER) WHERE balance_nano = 0 AND balance <> 0;`)
+				_, _ = db.DB.Exec(`UPDATE api_keys SET used_cost_nano = CAST(ROUND(used_cost * 1000000000) AS INTEGER), budget_nano = CAST(ROUND(budget * 1000000000) AS INTEGER) WHERE used_cost_nano = 0 AND used_cost <> 0;`)
+				return nil
+			},
+		},
+		{
+			Version: 13,
+			Name:    "create_request_traces",
+			Up: func(db *DB) error {
+				_, err := db.DB.Exec(`
+					CREATE TABLE IF NOT EXISTS request_traces (
+						id INTEGER PRIMARY KEY AUTOINCREMENT,
+						trace_id TEXT NOT NULL,
+						chat_id TEXT DEFAULT '',
+						session_id TEXT DEFAULT '',
+						api_key TEXT DEFAULT '',
+						tenant_id TEXT DEFAULT '',
+						model TEXT DEFAULT '',
+						channel TEXT DEFAULT '',
+						status_code INTEGER DEFAULT 0,
+						error_message TEXT DEFAULT '',
+						request_snippet TEXT DEFAULT '',
+						response_snippet TEXT DEFAULT '',
+						duration_ms INTEGER DEFAULT 0,
+						created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+					);
+					CREATE INDEX IF NOT EXISTS idx_trace_trace_id ON request_traces(trace_id);
+					CREATE INDEX IF NOT EXISTS idx_trace_chat_id ON request_traces(chat_id);
+					CREATE INDEX IF NOT EXISTS idx_trace_session ON request_traces(session_id);
+					CREATE INDEX IF NOT EXISTS idx_trace_created ON request_traces(created_at);
+				`)
+				return err
+			},
+		},
 	}
 	return db.runMigrations(migrations)
 }

@@ -41,6 +41,7 @@ func ConvertAnthropicToCanonical(req *AnthropicInboundRequest) *model.ChatComple
 
 // HandleAnthropicMessages handles POST /v1/messages for Anthropic SDK clients.
 func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
+	CaptureRequestSnapshot(c)
 	var req AnthropicInboundRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondAnthropicError(c, http.StatusBadRequest, fmt.Sprintf("Failed to parse Anthropic request: %v", err), "invalid_request_error")

@@ -234,7 +234,6 @@ func (h *MCPHandler) executeBuiltinUtilityTools(ctx context.Context, name string
 	return "", false, false
 }
 
-
 // executeDynamicMCPTool dispatches execution to configured external MCP servers from storage via real JSON-RPC 2.0.
 func (h *MCPHandler) executeDynamicMCPTool(ctx context.Context, name string, args map[string]interface{}) (string, bool) {
 	if h.repo != nil {

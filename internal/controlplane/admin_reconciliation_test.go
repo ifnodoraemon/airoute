@@ -144,7 +144,7 @@ func TestSupplierReconciliation(t *testing.T) {
 	}
 
 	var resp struct {
-		Code int                                   `json:"code"`
+		Code int                                  `json:"code"`
 		Data storage.SupplierReconciliationReport `json:"data"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {

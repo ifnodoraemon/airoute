@@ -8,9 +8,9 @@ import (
 
 // ModelValidationRule defines per-model format validation rules.
 type ModelValidationRule struct {
-	Model               string `yaml:"model" json:"model"`                             // glob/prefix pattern, e.g. "claude-3-5-sonnet*", "o1*"
-	Protocol            string `yaml:"protocol" json:"protocol"`                       // "openai", "anthropic", "gemini" (optional)
-	Level               string `yaml:"level" json:"level"`                             // "off", "lenient", "strict"
+	Model               string `yaml:"model" json:"model"`                               // glob/prefix pattern, e.g. "claude-3-5-sonnet*", "o1*"
+	Protocol            string `yaml:"protocol" json:"protocol"`                         // "openai", "anthropic", "gemini" (optional)
+	Level               string `yaml:"level" json:"level"`                               // "off", "lenient", "strict"
 	DisallowTemperature bool   `yaml:"disallow_temperature" json:"disallow_temperature"` // e.g. for o1/o3 reasoning models
 }
 

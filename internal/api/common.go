@@ -264,9 +264,11 @@ func sanitizeErrorMessage(err error) string {
 func respondUpstreamDispatchError(c *gin.Context, sessionID, modelName string, dur time.Duration, err error) {
 	noUpstream := strings.Contains(err.Error(), "no upstream provider available")
 	if noUpstream {
+		RecordTrace(c, modelName, "", http.StatusNotFound, err.Error(), "", dur)
 		recordFailedRequest(c, sessionID, modelName, dur, http.StatusNotFound)
 		RespondOpenAIError(c, http.StatusNotFound, fmt.Sprintf("The model '%s' does not exist or has no active upstream providers configured.", modelName), "invalid_request_error", "model_not_found")
 	} else {
+		RecordTrace(c, modelName, "", http.StatusBadGateway, err.Error(), "", dur)
 		recordFailedRequest(c, sessionID, modelName, dur, http.StatusBadGateway)
 		safeErr := sanitizeErrorMessage(err)
 		RespondOpenAIError(c, http.StatusBadGateway, safeErr, "gateway_error", "upstream_failure")

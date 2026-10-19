@@ -170,15 +170,23 @@ export default function App() {
     }
   };
 
-  const setStoredAuth = (token, user) => {
+  const setStoredAuth = (_token, user) => {
     if (typeof window === 'undefined') return;
-    if (token) {
-      localStorage.setItem('airoute_token', token);
-    }
+    // The session token lives in an HttpOnly cookie; only profile hints are
+    // persisted locally. The legacy key is removed on login/logout so an XSS
+    // cannot read a long-lived credential out of localStorage.
+    localStorage.removeItem('airoute_token');
+    localStorage.removeItem('airoute_admin_token');
     if (user) {
       const userStr = typeof user === 'string' ? user : JSON.stringify(user);
       localStorage.setItem('airoute_user', userStr);
     }
+  };
+
+  const readCSRFCookie = () => {
+    if (typeof document === 'undefined') return '';
+    const match = document.cookie.match(/(?:^|;\s*)airoute_csrf=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : '';
   };
 
   const clearStoredAuth = () => {
@@ -277,30 +285,30 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
 
-  // Validate token on startup to prevent stale token UI issues
+  // Restore the browser session from the HttpOnly cookie instead of trusting
+  // a long-lived token in localStorage.
   useEffect(() => {
     const savedToken = getStoredToken();
-    if (savedToken) {
-      fetch('/api/v1/user/me', {
-        headers: { 'Authorization': `Bearer ${savedToken}` }
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (data.code === 0 && data.data) {
-            setAdminUser(data.data);
-            setStoredAuth(savedToken, data.data);
-          } else {
-            setAdminToken('');
-            setAdminUser(null);
-            clearStoredAuth();
-            if (viewMode === 'console') {
-              setViewMode('landing');
-              setShowLoginModal(true);
-            }
+    const headers = savedToken ? { 'Authorization': `Bearer ${savedToken}` } : {};
+    fetch('/api/v1/auth/me', { headers, credentials: 'same-origin' })
+      .then(res => (res.ok ? res.json() : { code: 401 }))
+      .then(data => {
+        if (data.code === 0 && data.data) {
+          const user = data.data.user || data.data;
+          setAdminUser(user);
+          setStoredAuth('', user);
+        } else {
+          setAdminToken('');
+          setAdminUser(null);
+          clearStoredAuth();
+          if (viewMode === 'console') {
+            setViewMode('landing');
+            setShowLoginModal(true);
           }
-        })
-        .catch(() => {});
-    }
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
 
     // Query gateway public status to resolve canonical external gateway URL
     fetch('/api/v1/public/status')
@@ -316,12 +324,16 @@ export default function App() {
   // Authenticated fetch helper for Control Plane APIs
   const adminFetch = async (url, options = {}) => {
     const headers = { ...(options.headers || {}) };
-    const effectiveToken = options.token || adminToken || getStoredToken();
+    const effectiveToken = options.token || adminToken;
     if (effectiveToken) {
       headers['Authorization'] = `Bearer ${effectiveToken}`;
     }
+    const csrf = readCSRFCookie();
+    if (csrf) {
+      headers['X-CSRF-Token'] = csrf;
+    }
     try {
-      const res = await fetch(url, { ...options, headers });
+      const res = await fetch(url, { ...options, headers, credentials: 'same-origin' });
       if (res.status === 401 && viewMode === 'console') {
         if (effectiveToken) {
           setAdminToken('');
@@ -375,7 +387,12 @@ export default function App() {
     setCurlExportCmd('');
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'same-origin' });
+    } catch (e) {
+      // Even if the call fails, drop all local state below.
+    }
     setAdminToken('');
     setAdminUser(null);
     clearStoredAuth();
@@ -410,6 +427,7 @@ export default function App() {
 
   const [activeQuickKey, setActiveQuickKey] = useState(null);
   const [activeLogDetail, setActiveLogDetail] = useState(null);
+  const [traceSnapshotId, setTraceSnapshotId] = useState('');
   const [curlExportCmd, setCurlExportCmd] = useState('');
   const [batchTesting, setBatchTesting] = useState(false);
   const [channelLatencies, setChannelLatencies] = useState({});
@@ -1582,6 +1600,7 @@ export default function App() {
             setSessionFilter(sid);
             setLogOffset(0);
             fetchLogs({ sessionFilter: sid, offset: 0 });
+            setTraceSnapshotId(sid);
             showToast(isZh ? `已按会话 ID: ${sid} 筛选` : `Filtered by session ID: ${sid}`, 'info');
           }}
           onDeleteLog={handleDeleteSingleLog}
@@ -2556,6 +2575,17 @@ export default function App() {
           lang={lang}
           t={t}
         />
+
+        {/* Redacted request/response snapshots for a trace id */}
+        {traceSnapshotId && (
+          <TraceSnapshotModal
+            isOpen={!!traceSnapshotId}
+            traceId={traceSnapshotId}
+            onClose={() => setTraceSnapshotId('')}
+            lang={lang}
+            adminFetch={adminFetch}
+          />
+        )}
 
         {/* Global Command Palette (Cmd+K) */}
         <CommandPalette

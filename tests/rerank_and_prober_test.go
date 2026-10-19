@@ -62,10 +62,10 @@ func TestAPI_Rerank_SuccessAndFallback(t *testing.T) {
 	}
 
 	ch2 := model.ChannelConfig{
-		Name:      "rerank-secondary",
-		Type:      model.ProviderOpenAI,
-		BaseURL:   backupServer.URL,
-		Models:    []string{"bge-reranker-large"},
+		Name:    "rerank-secondary",
+		Type:    model.ProviderOpenAI,
+		BaseURL: backupServer.URL,
+		Models:  []string{"bge-reranker-large"},
 		ModelMapping: map[string]string{
 			"bge-reranker-large": "BAAI/bge-reranker-v2-m3",
 		},

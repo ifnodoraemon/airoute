@@ -150,6 +150,10 @@ func runServer(args []string) {
 	// Initialize Real-Time Model Pricing & Prompt-Cache Billing Engine
 	billing.InitGlobalEngine(repo)
 
+	// Initialize redacted request/response trace archiving for troubleshooting
+	traceCapture := storage.InitTraceCapture(repo)
+	defer traceCapture.Stop()
+
 	// Initialize Control Plane Synchronizer & load state into Data Plane memory
 	synchronizer := controlplane.NewSynchronizer(repo, dispatcher)
 	if err := synchronizer.ReloadFromDB(); err != nil {

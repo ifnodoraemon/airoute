@@ -10,7 +10,7 @@ import (
 
 type preambleFailProvider struct{}
 
-func (p *preambleFailProvider) Name() string { return "preamble-fail" }
+func (p *preambleFailProvider) Name() string             { return "preamble-fail" }
 func (p *preambleFailProvider) Type() model.ProviderType { return model.ProviderOpenAI }
 func (p *preambleFailProvider) ChatComplete(context.Context, *model.ChatCompletionRequest, *model.ChannelConfig) (*model.ChatCompletionResponse, error) {
 	return nil, errors.New("not used")
@@ -34,9 +34,13 @@ func TestStreamFallsBackAfterRoleOnlyPreamble(t *testing.T) {
 	})
 	d.RegisterProvider(&preambleFailProvider{})
 	stream, err := d.DispatchStream(context.Background(), &model.ChatCompletionRequest{Model: "example", Stream: true})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	var events []*model.StreamEvent
-	for event := range stream { events = append(events, event) }
+	for event := range stream {
+		events = append(events, event)
+	}
 	if len(events) != 1 || events[0].Chunk.Choices[0].Delta.Content != "backup response" || events[0].Channel != "primary→backup" {
 		t.Fatalf("expected only backup content after preamble failure, got %+v", events)
 	}
@@ -48,5 +52,7 @@ func TestNativeAnthropicRequestExcludesOtherProviders(t *testing.T) {
 		{Name: "anthropic", Type: model.ProviderAnthropic, Status: "active", Models: []string{"example"}},
 	})
 	channels := d.candidateChannelsForRequest(context.Background(), &model.ChatCompletionRequest{Model: "example", AnthropicNativeOnly: true}, "chat")
-	if len(channels) != 1 || channels[0].Name != "anthropic" { t.Fatalf("unexpected native channels: %+v", channels) }
+	if len(channels) != 1 || channels[0].Name != "anthropic" {
+		t.Fatalf("unexpected native channels: %+v", channels)
+	}
 }

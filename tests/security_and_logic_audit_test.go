@@ -257,14 +257,14 @@ func TestLogic_RecordUsageLog_FallbackDeduction(t *testing.T) {
 
 	// Record usage log with Cost = 2.5
 	log := &storage.UsageLogRecord{
-		APIKey:      "sk-nano-legacy-bob",
-		TenantID:    "bobtenant",
-		Model:       "gpt-4o",
-		PromptTokens: 100,
+		APIKey:           "sk-nano-legacy-bob",
+		TenantID:         "bobtenant",
+		Model:            "gpt-4o",
+		PromptTokens:     100,
 		CompletionTokens: 50,
-		TotalTokens: 150,
-		Cost:        2.5,
-		StatusCode:  200,
+		TotalTokens:      150,
+		Cost:             2.5,
+		StatusCode:       200,
 	}
 	if err := repo.RecordUsageLog(log); err != nil {
 		t.Fatalf("failed to record usage log: %v", err)

@@ -258,8 +258,8 @@ func TestAnthropicAdapter_ArraySystemAndReasoning(t *testing.T) {
 		Model: "claude-3-7-sonnet",
 		System: []any{
 			map[string]any{
-				"type": "text",
-				"text": "You are an expert AI engineer.",
+				"type":          "text",
+				"text":          "You are an expert AI engineer.",
 				"cache_control": map[string]any{"type": "ephemeral"},
 			},
 			map[string]any{

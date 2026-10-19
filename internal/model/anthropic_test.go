@@ -19,8 +19,8 @@ func TestExtractAnthropicContentString(t *testing.T) {
 	// 3. Array of content blocks (with cache_control)
 	blocks := []any{
 		map[string]any{
-			"type": "text",
-			"text": "Instruction block 1",
+			"type":          "text",
+			"text":          "Instruction block 1",
 			"cache_control": map[string]any{"type": "ephemeral"},
 		},
 		map[string]any{

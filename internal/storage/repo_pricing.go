@@ -11,11 +11,11 @@ import (
 type ModelPriceRecord struct {
 	ID              int64     `json:"id"`
 	Model           string    `json:"model"`
-	GroupName       string    `json:"group_name"`       // "default", "vip", "enterprise", etc.
-	PromptPrice     float64   `json:"prompt_price"`     // per 1,000,000 prompt tokens (CNY/USD)
-	CompletionPrice float64   `json:"completion_price"` // per 1,000,000 completion tokens
-	CacheReadPrice  float64   `json:"cache_read_price"` // per 1,000,000 cached tokens
-	FixedPrice      float64   `json:"fixed_price"`      // per request (e.g. image/video)
+	GroupName       string    `json:"group_name"`        // "default", "vip", "enterprise", etc.
+	PromptPrice     float64   `json:"prompt_price"`      // per 1,000,000 prompt tokens (CNY/USD)
+	CompletionPrice float64   `json:"completion_price"`  // per 1,000,000 completion tokens
+	CacheReadPrice  float64   `json:"cache_read_price"`  // per 1,000,000 cached tokens
+	FixedPrice      float64   `json:"fixed_price"`       // per request (e.g. image/video)
 	Currency        string    `json:"currency"`          // CNY or USD
 	OffPeakEnabled  bool      `json:"off_peak_enabled"`  // whether time-of-use discount is active
 	OffPeakMode     string    `json:"off_peak_mode"`     // "custom", "night", "none"
@@ -246,5 +246,3 @@ func (r *Repository) DeleteModelPriceWithGroup(modelName, groupName string) erro
 	_, err := r.db.Exec(`DELETE FROM model_prices WHERE model = ? AND group_name = ?`, modelName, groupName)
 	return err
 }
-
-

@@ -25,9 +25,9 @@ func TestTimeOfUseBilling(t *testing.T) {
 	// Model 1: Custom Multi-Slot Mode (Workday 00:00-09:00, 12:00-14:00, 18:00-24:00 + weekends 50% discount)
 	priceRec := &storage.ModelPriceRecord{
 		Model:           "deepseek-chat",
-		PromptPrice:     2.0,  // ¥2.00 / 1M
-		CompletionPrice: 8.0,  // ¥8.00 / 1M
-		CacheReadPrice:  0.2,  // ¥0.20 / 1M
+		PromptPrice:     2.0, // ¥2.00 / 1M
+		CompletionPrice: 8.0, // ¥8.00 / 1M
+		CacheReadPrice:  0.2, // ¥0.20 / 1M
 		FixedPrice:      0.0,
 		Currency:        "CNY",
 		OffPeakEnabled:  true,

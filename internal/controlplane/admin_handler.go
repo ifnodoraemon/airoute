@@ -65,7 +65,6 @@ func cContext() context.Context {
 	return context.Background()
 }
 
-
 // GetRepo returns the underlying storage repository.
 func (h *AdminHandler) GetRepo() *storage.Repository {
 	if h == nil {
@@ -73,7 +72,6 @@ func (h *AdminHandler) GetRepo() *storage.Repository {
 	}
 	return h.repo
 }
-
 
 // ResolvePublicBaseURL dynamically resolves the public base URL of the gateway
 // prioritizing configuration/env (PUBLIC_URL, GATEWAY_PUBLIC_URL) or HTTP proxy headers.

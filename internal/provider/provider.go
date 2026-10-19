@@ -27,4 +27,3 @@ type EmbeddingProvider interface {
 type RerankProvider interface {
 	Rerank(ctx context.Context, req *model.RerankRequest, channel *model.ChannelConfig) (*model.RerankResponse, error)
 }
-

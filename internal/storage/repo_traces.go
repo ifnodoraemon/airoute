@@ -1,0 +1,144 @@
+package storage
+
+import (
+	"regexp"
+	"time"
+)
+
+// TraceCaptureConfig controls how much request/response detail is archived.
+type TraceCaptureConfig struct {
+	Mode          string  // "off" | "errors" | "all"
+	SamplePercent float64 // 0-100, applied to successful requests in "all" mode
+	TTL           time.Duration
+	MaxSnippet    int
+}
+
+// RequestTraceRecord is a redacted snapshot of a single gateway request, used
+// for troubleshooting by trace_id / chat_id / session_id.
+type RequestTraceRecord struct {
+	ID              int64     `json:"id"`
+	TraceID         string    `json:"trace_id"`
+	ChatID          string    `json:"chat_id,omitempty"`
+	SessionID       string    `json:"session_id,omitempty"`
+	APIKey          string    `json:"api_key,omitempty"`
+	TenantID        string    `json:"tenant_id,omitempty"`
+	Model           string    `json:"model,omitempty"`
+	Channel         string    `json:"channel,omitempty"`
+	StatusCode      int       `json:"status_code"`
+	ErrorMessage    string    `json:"error_message,omitempty"`
+	RequestSnippet  string    `json:"request_snippet,omitempty"`
+	ResponseSnippet string    `json:"response_snippet,omitempty"`
+	DurationMs      int64     `json:"duration_ms"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+// TraceFilter narrows a trace lookup.
+type TraceFilter struct {
+	TraceID   string
+	ChatID    string
+	SessionID string
+	APIKey    string
+	Limit     int
+}
+
+// RecordRequestTrace persists one redacted trace snapshot.
+func (r *Repository) RecordRequestTrace(rec *RequestTraceRecord) error {
+	if rec == nil {
+		return nil
+	}
+	if rec.Limit0() {
+		return nil
+	}
+	_, err := r.db.Exec(`INSERT INTO request_traces
+		(trace_id, chat_id, session_id, api_key, tenant_id, model, channel, status_code, error_message, request_snippet, response_snippet, duration_ms)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.TraceID, rec.ChatID, rec.SessionID, rec.APIKey, rec.TenantID, rec.Model, rec.Channel,
+		rec.StatusCode, rec.ErrorMessage, rec.RequestSnippet, rec.ResponseSnippet, rec.DurationMs)
+	return err
+}
+
+// Limit0 reports whether the record has nothing worth writing.
+func (rec *RequestTraceRecord) Limit0() bool {
+	return rec == nil || (rec.TraceID == "" && rec.ChatID == "" && rec.SessionID == "")
+}
+
+// ListRequestTraces returns trace snapshots matching the filter, newest first.
+func (r *Repository) ListRequestTraces(f TraceFilter) ([]*RequestTraceRecord, error) {
+	if f.Limit <= 0 || f.Limit > 200 {
+		f.Limit = 50
+	}
+	query := `SELECT id, trace_id, COALESCE(chat_id,''), COALESCE(session_id,''), COALESCE(api_key,''), COALESCE(tenant_id,''),
+		COALESCE(model,''), COALESCE(channel,''), status_code, COALESCE(error_message,''),
+		COALESCE(request_snippet,''), COALESCE(response_snippet,''), duration_ms, created_at
+		FROM request_traces WHERE 1=1`
+	args := make([]any, 0, 5)
+	if f.TraceID != "" {
+		query += ` AND trace_id = ?`
+		args = append(args, f.TraceID)
+	}
+	if f.ChatID != "" {
+		query += ` AND chat_id = ?`
+		args = append(args, f.ChatID)
+	}
+	if f.SessionID != "" {
+		query += ` AND session_id = ?`
+		args = append(args, f.SessionID)
+	}
+	if f.APIKey != "" {
+		query += ` AND api_key = ?`
+		args = append(args, f.APIKey)
+	}
+	query += ` ORDER BY id DESC LIMIT ?`
+	args = append(args, f.Limit)
+
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*RequestTraceRecord
+	for rows.Next() {
+		var t RequestTraceRecord
+		if err := rows.Scan(&t.ID, &t.TraceID, &t.ChatID, &t.SessionID, &t.APIKey, &t.TenantID,
+			&t.Model, &t.Channel, &t.StatusCode, &t.ErrorMessage, &t.RequestSnippet,
+			&t.ResponseSnippet, &t.DurationMs, &t.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, &t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// PurgeRequestTraces deletes snapshots older than the retention window.
+func (r *Repository) PurgeRequestTraces(cutoff time.Time) (int64, error) {
+	res, err := r.db.Exec(`DELETE FROM request_traces WHERE created_at < ?`, cutoff.UTC().Format("2006-01-02 15:04:05"))
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// TruncateSnippet redacts credentials and clamps a payload to max bytes.
+func TruncateSnippet(payload string, max int) string {
+	if max <= 0 {
+		max = 4096
+	}
+	cleaned := SensitiveKeyPattern.ReplaceAllString(payload, "$1=[REDACTED]")
+	if len(cleaned) <= max {
+		return cleaned
+	}
+	// Cut on a rune boundary so the snippet stays valid UTF-8.
+	cut := max
+	for cut > 0 && cut < len(cleaned) && (cleaned[cut]&0xC0) == 0x80 {
+		cut--
+	}
+	return cleaned[:cut] + "…(truncated)"
+}
+
+// SensitiveKeyPattern matches common credential fields in JSON/query payloads so
+// archived snippets never retain API keys, tokens or passwords.
+var SensitiveKeyPattern = regexp.MustCompile(`(?i)("?(?:api[_-]?key|authorization|token|secret|password|x-api-key)"?\s*[:=]\s*"?)([^",\s]+)`)

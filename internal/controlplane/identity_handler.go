@@ -111,6 +111,7 @@ func (h *AdminHandler) Register(c *gin.Context) {
 
 	// Generate login token
 	token, _ := GenerateAdminToken(user.Username, user.Role, 7*24*time.Hour)
+	SetSessionCookies(c, token)
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    0,

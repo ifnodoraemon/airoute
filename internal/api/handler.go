@@ -27,6 +27,7 @@ func NewHandler(dispatcher *router.Dispatcher) *Handler {
 
 // HandleChatCompletions handles POST /v1/chat/completions.
 func (h *Handler) HandleChatCompletions(c *gin.Context) {
+	CaptureRequestSnapshot(c)
 	var req model.ChatCompletionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{

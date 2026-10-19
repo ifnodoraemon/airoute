@@ -54,6 +54,10 @@ func (h *AdminHandler) Login(c *gin.Context) {
 		}
 	}
 
+	// Browser sessions use an HttpOnly cookie so the token is not reachable from
+	// JavaScript; API clients keep using the Bearer token in the body.
+	SetSessionCookies(c, token)
+
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
 		"data": gin.H{
@@ -168,4 +172,11 @@ func (h *AdminHandler) ChangePassword(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "密码修改成功，请使用新密码重新登录"})
+}
+
+// Logout clears the browser session cookies. The stateless token itself remains
+// valid until expiry, so browsers should rely on the cookie being removed.
+func (h *AdminHandler) Logout(c *gin.Context) {
+	ClearSessionCookies(c)
+	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "已安全退出"})
 }

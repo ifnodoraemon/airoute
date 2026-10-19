@@ -46,7 +46,7 @@ func TestCircuitBreaker_AbortCanary(t *testing.T) {
 
 type cancelingTestProvider struct{}
 
-func (m *cancelingTestProvider) Name() string { return "canceling_test" }
+func (m *cancelingTestProvider) Name() string             { return "canceling_test" }
 func (m *cancelingTestProvider) Type() model.ProviderType { return model.ProviderOpenAI }
 
 func (m *cancelingTestProvider) ChatComplete(ctx context.Context, req *model.ChatCompletionRequest, channel *model.ChannelConfig) (*model.ChatCompletionResponse, error) {

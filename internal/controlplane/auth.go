@@ -57,14 +57,25 @@ func (h *AdminHandler) AdminAuthMiddleware() gin.HandlerFunc {
 
 		authHeader := c.GetHeader("Authorization")
 		var token string
+		cookieAuth := false
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			token = strings.TrimPrefix(authHeader, "Bearer ")
 		} else if xToken := c.GetHeader("x-admin-token"); xToken != "" {
 			token = xToken
+		} else if cookieToken := sessionTokenFromCookie(c); cookieToken != "" {
+			token = cookieToken
+			cookieAuth = true
 		}
 
 		if token == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "请先登录管理员账号 (未提供凭证)"})
+			return
+		}
+
+		// Cookie-authenticated writes additionally require the double-submit
+		// CSRF token; Bearer/header clients are immune to CSRF by construction.
+		if cookieAuth && !CSRFValid(c) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": 403, "error": "CSRF 校验失败，请刷新页面后重试"})
 			return
 		}
 

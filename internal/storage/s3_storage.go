@@ -198,8 +198,6 @@ func (s *S3Storage) Get(ctx context.Context, key string) (io.ReadCloser, int64, 
 	return resp.Body, resp.ContentLength, nil
 }
 
-
-
 // Delete removes an artifact from S3/RustFS.
 func (s *S3Storage) Delete(ctx context.Context, key string) error {
 	targetURL := s.buildURL(key)

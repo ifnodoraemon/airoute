@@ -65,13 +65,13 @@ func (r *Repository) SeedDefaultMCPServers() error {
 				}
 				return "npx -y @modelcontextprotocol/server-postgres postgresql://${POSTGRES_USER:-airoute}:${POSTGRES_PASSWORD:-password}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-airoute}"
 			}(),
-			Status:      "active",
-			Author:      "ModelContextProtocol",
-			Version:     "0.9.2",
-			Tools:       []string{"read_query", "list_tables", "describe_table", "airoute_sql_security_check"},
-			Prompts:     []string{"explain_slow_query"},
-			Resources:   []string{"db://schema/public"},
-			Enabled:     true,
+			Status:    "active",
+			Author:    "ModelContextProtocol",
+			Version:   "0.9.2",
+			Tools:     []string{"read_query", "list_tables", "describe_table", "airoute_sql_security_check"},
+			Prompts:   []string{"explain_slow_query"},
+			Resources: []string{"db://schema/public"},
+			Enabled:   true,
 		},
 		{
 			ID:          "browser-fetch-mcp",

@@ -178,6 +178,7 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 	}
 
 	token, _ := GenerateAdminToken(user.Username, user.Role, 7*24*time.Hour)
+	SetSessionCookies(c, token)
 	c.JSON(http.StatusOK, gin.H{
 		"code":    0,
 		"message": fmt.Sprintf("通过 %s 授权登录成功", strings.ToUpper(provider)),

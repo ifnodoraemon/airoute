@@ -85,7 +85,6 @@ func (h *AdminHandler) UpdateModelRoute(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "模型多源路由及分发容灾配置已保存并完成热重载"})
 }
 
-
 func (h *AdminHandler) applyChannelUpdatesForModel(modelName string, providerUpdates []ModelProviderUpdate) error {
 	desiredProviders := make(map[int64]ModelProviderUpdate, len(providerUpdates))
 	for _, pu := range providerUpdates {
@@ -163,4 +162,3 @@ func (h *AdminHandler) applyChannelUpdatesForModel(modelName string, providerUpd
 	}
 	return nil
 }
-

@@ -25,11 +25,11 @@ type ChannelConfig struct {
 	Type           ProviderType      `yaml:"type" json:"type"`
 	BaseURL        string            `yaml:"base_url" json:"base_url"`
 	APIKey         string            `yaml:"api_key" json:"api_key"`
-	Models         []string          `yaml:"models" json:"models"`                                 // supported models in this channel
+	Models         []string          `yaml:"models" json:"models"`                                   // supported models in this channel
 	ModelMapping   map[string]string `yaml:"model_mapping,omitempty" json:"model_mapping,omitempty"` // incoming model -> actual upstream model
 	Protocols      []string          `yaml:"protocols,omitempty" json:"protocols,omitempty"`         // supported protocols: openai_chat, openai_text, anthropic_messages
-	Priority       int               `yaml:"priority" json:"priority"`                             // lower number means higher priority (e.g. 1 is primary, 2 is fallback)
-	Weight         int               `yaml:"weight" json:"weight"`                                 // weight for load balancing among same priority
+	Priority       int               `yaml:"priority" json:"priority"`                               // lower number means higher priority (e.g. 1 is primary, 2 is fallback)
+	Weight         int               `yaml:"weight" json:"weight"`                                   // weight for load balancing among same priority
 	TimeoutSeconds int               `yaml:"timeout_seconds" json:"timeout_seconds"`
 	Status         string            `yaml:"status,omitempty" json:"status,omitempty"`
 }
@@ -185,13 +185,15 @@ func (c *ChannelConfig) GetUpstreamModel(requestedModel string) string {
 
 // APIKeyConfig defines an API key configured on the gateway.
 type APIKeyConfig struct {
-	Key              string   `yaml:"key" json:"key"`                                                 // e.g. "sk-nano-8f92a1c4b7e3"
+	Key              string   `yaml:"key" json:"key"` // e.g. "sk-nano-8f92a1c4b7e3"
 	TenantID         string   `yaml:"tenant_id" json:"tenant_id"`
-	AllowedModels    []string `yaml:"allowed_models" json:"allowed_models"`                           // empty means all allowed
-	RPM              int      `yaml:"rpm" json:"rpm"`                                                 // Requests per minute limit (0 = unlimited)
-	TPM              int      `yaml:"tpm" json:"tpm"`                                                 // Tokens per minute limit (0 = unlimited)
-	Budget           float64  `yaml:"budget" json:"budget"`                                           // total dollar or token budget
+	AllowedModels    []string `yaml:"allowed_models" json:"allowed_models"` // empty means all allowed
+	RPM              int      `yaml:"rpm" json:"rpm"`                       // Requests per minute limit (0 = unlimited)
+	TPM              int      `yaml:"tpm" json:"tpm"`                       // Tokens per minute limit (0 = unlimited)
+	Budget           float64  `yaml:"budget" json:"budget"`                 // total dollar or token budget
 	UsedCost         float64  `yaml:"used_cost" json:"used_cost"`
+	BudgetNano       int64    `yaml:"budget_nano,omitempty" json:"budget_nano,omitempty"`       // integer nano-unit mirror
+	UsedCostNano     int64    `yaml:"used_cost_nano,omitempty" json:"used_cost_nano,omitempty"` // integer nano-unit mirror
 	Status           string   `yaml:"status" json:"status"`
 	GroupName        string   `yaml:"group_name" json:"group_name"`                                   // pricing group e.g. default, vip
 	UserID           int64    `yaml:"user_id" json:"user_id"`                                         // owner user id
@@ -200,6 +202,3 @@ type APIKeyConfig struct {
 	UserRole         string   `yaml:"user_role,omitempty" json:"user_role,omitempty"`
 	UserBalance      float64  `yaml:"user_balance,omitempty" json:"user_balance,omitempty"`
 }
-
-
-

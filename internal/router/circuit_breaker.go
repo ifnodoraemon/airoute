@@ -267,5 +267,3 @@ func (cb *CircuitBreaker) GetStatus(name string) CircuitState {
 	}
 	return StateClosed
 }
-
-

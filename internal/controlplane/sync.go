@@ -103,4 +103,3 @@ func (s *Synchronizer) StartPeriodicSync(interval time.Duration, stopCh <-chan s
 		}
 	}()
 }
-

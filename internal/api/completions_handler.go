@@ -28,8 +28,8 @@ type LegacyCompletionRequest struct {
 
 // TextCompletionChoice represents a choice in an OpenAI text completion response.
 type TextCompletionChoice struct {
-	Text         string `json:"text"`
-	Index        int    `json:"index"`
+	Text         string  `json:"text"`
+	Index        int     `json:"index"`
 	Logprobs     any     `json:"logprobs"`
 	FinishReason *string `json:"finish_reason"`
 }

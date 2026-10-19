@@ -13,7 +13,7 @@ type MCPServerRecord struct {
 	Category    string   `json:"category"`  // ops, dev, search, db, productivity, storage
 	Transport   string   `json:"transport"` // sse, stdio, http
 	Endpoint    string   `json:"endpoint"`
-	Status      string   `json:"status"`    // online, active, standby
+	Status      string   `json:"status"` // online, active, standby
 	Author      string   `json:"author"`
 	Version     string   `json:"version"`
 	Tools       []string `json:"tools"`
@@ -138,4 +138,3 @@ func (r *Repository) DeleteMCPServer(id string) error {
 	_, err := r.db.Exec(`DELETE FROM system_mcp_servers WHERE id = ?`, id)
 	return err
 }
-

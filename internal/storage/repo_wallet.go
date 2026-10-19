@@ -103,7 +103,7 @@ func (r *Repository) RedeemCode(code, username string) (*RedemptionCodeRecord, e
 	}
 
 	// Credit user balance
-	credited, err := tx.Exec(r.db.Rebind(`UPDATE users SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`), rec.Amount, username)
+	credited, err := tx.Exec(r.db.Rebind(`UPDATE users SET balance = balance + ?, balance_nano = COALESCE(balance_nano, 0) + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`), rec.Amount, ToNano(rec.Amount), username)
 	if err != nil {
 		return nil, fmt.Errorf("充值到账户余额失败: %w", err)
 	}
@@ -189,7 +189,7 @@ func (r *Repository) CompleteRechargeOrder(orderNo string) (*RechargeOrderRecord
 		return &rec, nil
 	}
 
-	credit, err := tx.Exec(`UPDATE users SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, rec.Amount, rec.Username)
+	credit, err := tx.Exec(`UPDATE users SET balance = balance + ?, balance_nano = COALESCE(balance_nano, 0) + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, rec.Amount, ToNano(rec.Amount), rec.Username)
 	if err != nil {
 		return nil, err
 	}

@@ -415,4 +415,3 @@ func parseSQLTime(raw interface{}) *time.Time {
 	}
 	return nil
 }
-

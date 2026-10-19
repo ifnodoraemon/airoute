@@ -214,5 +214,3 @@ func OpenDB(dataSourceName string) (*DB, error) {
 
 	return wrapper, nil
 }
-
-

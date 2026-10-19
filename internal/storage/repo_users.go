@@ -89,7 +89,7 @@ func (r *Repository) UpdateUserStatus(username, status string) error {
 
 // UpdateUserBalance adjusts a user's wallet balance by a delta amount.
 func (r *Repository) UpdateUserBalance(username string, delta float64) error {
-	_, err := r.db.Exec(`UPDATE users SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, delta, username)
+	_, err := r.db.Exec(`UPDATE users SET balance = balance + ?, balance_nano = COALESCE(balance_nano, 0) + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, delta, ToNano(delta), username)
 	return err
 }
 
@@ -122,7 +122,7 @@ func (r *Repository) DeductUserBalance(userID int64, cost float64) error {
 	if userID <= 0 || cost <= 0 {
 		return nil
 	}
-	_, err := r.db.Exec(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND role != 'admin'`, cost, userID)
+	_, err := r.db.Exec(`UPDATE users SET balance = balance - ?, balance_nano = COALESCE(balance_nano, 0) - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND role != 'admin'`, cost, ToNano(cost), userID)
 	return err
 }
 

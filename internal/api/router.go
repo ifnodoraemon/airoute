@@ -105,6 +105,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 			authGroup.POST("/oauth/:provider/callback", adminHandler.OAuthCallback)
 			authGroup.GET("/oauth/:provider/callback", adminHandler.OAuthCallback)
 			authGroup.GET("/me", adminHandler.AdminAuthMiddleware(), adminHandler.GetMe)
+			authGroup.POST("/logout", adminHandler.Logout)
 		}
 
 		// Public Payment Webhooks
@@ -162,6 +163,8 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 					adminOnly.GET("/models/routes", adminHandler.GetModelRoutes)
 					adminOnly.GET("/storage/status", adminHandler.GetStorageStatus)
 					adminOnly.GET("/mcp/servers", adminHandler.ListMCPServers)
+
+					adminOnly.GET("/traces", adminHandler.ListRequestTraces)
 
 					adminOnly.GET("/users", adminHandler.ListUsers)
 					adminOnly.POST("/users", adminHandler.CreateUser)

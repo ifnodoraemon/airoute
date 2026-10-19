@@ -87,6 +87,13 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `REDIS_URL` | unset | Optional Redis Streams logging queue |
 | `GATEWAY_FIRST_TOKEN_TIMEOUT` | 30 seconds (60 for reasoning model names) | Upper bound in seconds for the first content token, capped by channel timeout |
 | `GIN_MODE` | `release` | Web engine mode (`release` or `debug`) |
+| `GATEWAY_MAX_BODY_BYTES` | `67108864` (64 MiB) | Maximum accepted request body size |
+| `GATEWAY_TRACE_CAPTURE` | `errors` | Request/response snapshot archiving: `off`, `errors` or `all` |
+| `GATEWAY_TRACE_SAMPLE` | `100` | Percentage of **successful** requests captured when mode is `all` |
+| `GATEWAY_TRACE_TTL_HOURS` | `72` | Retention window for archived snapshots |
+| `GATEWAY_TRACE_MAX_SNIPPET` | `4096` | Maximum bytes retained per request/response snippet |
+
+Snapshots are redacted (API keys, tokens, passwords) before storage and are queryable at `GET /api/v1/admin/traces?trace_id=…` (admin only; regular users see only their own keys).
 
 Helm defaults to one SQLite pod with a ReadWriteOnce volume and creates a Kubernetes Secret for the admin password and signing secret. For multiple replicas, provide `database.existingSecret` with key `url` containing a PostgreSQL URL and set `persistence.enabled=false`; configure shared object storage if artifacts must be accessible from every pod. Helm refuses a multi-replica SQLite deployment. Retrieve the generated admin password with `kubectl get secret <fullname>-auth -o jsonpath='{.data.admin-password}' | base64 -d` (for the default `airoute` release, `<fullname>` is `airoute`). Keep the Secret across upgrades.
 
