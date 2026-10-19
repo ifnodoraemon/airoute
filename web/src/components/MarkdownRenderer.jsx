@@ -50,7 +50,7 @@ function renderHighlightedCode(code = '', lang = '') {
   if (normalizedLang === 'json') {
     return <span>{highlightMatches(
       code,
-      /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+      /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g,
       (match) => {
         let cls = 'text-amber-400'; // number
         if (/^"/.test(match)) {
@@ -151,7 +151,7 @@ export function RenderInline({ tokens = [] }) {
 
       case 'del':
         return (
-          <del key={idx} className="line-through text-slate-400">
+          <del key={idx} className="line-through text-slate-500 dark:text-slate-400">
             <RenderInline tokens={token.tokens} />
           </del>
         );
@@ -167,7 +167,7 @@ export function RenderInline({ tokens = [] }) {
               className="rounded-xl border border-slate-200 dark:border-slate-800 max-h-60 object-contain shadow-xs"
             />
             {token.text && (
-              <span className="block text-[10px] text-center text-slate-400 mt-1 italic">
+              <span className="block text-xs text-center text-slate-500 dark:text-slate-400 mt-1 italic">
                 {token.text}
               </span>
             )}
@@ -182,7 +182,7 @@ export function RenderInline({ tokens = [] }) {
           return (
             <kbd
               key={idx}
-              className="px-1.5 py-0.5 mx-0.5 text-[10px] font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300/80 dark:border-slate-700 rounded-md shadow-2xs"
+              className="px-1.5 py-0.5 mx-0.5 text-xs font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300/80 dark:border-slate-700 rounded-md shadow-2xs"
             >
               {kbdMatch[1]}
             </kbd>
@@ -221,7 +221,7 @@ function CodeBlock({ code = '', lang = '' }) {
   return (
     <div className="my-3 rounded-xl border border-slate-800 bg-slate-950 text-slate-100 overflow-hidden shadow-md">
       {/* Code Header Bar */}
-      <div className="flex items-center justify-between px-3.5 py-2 bg-slate-900 border-b border-slate-800/80 text-[11px] text-slate-400 font-mono">
+      <div className="flex items-center justify-between px-3.5 py-2 bg-slate-900 border-b border-slate-800/80 text-xs text-slate-400 font-mono">
         <div className="flex items-center space-x-2">
           {cleanLang === 'json' ? (
             <FileCode className="w-3.5 h-3.5 text-amber-400" />
@@ -230,11 +230,11 @@ function CodeBlock({ code = '', lang = '' }) {
           ) : (
             <Code className="w-3.5 h-3.5 text-indigo-400" />
           )}
-          <span className="font-semibold uppercase tracking-wider text-[10px] text-slate-300">
+          <span className="font-semibold uppercase tracking-wider text-xs text-slate-300">
             {cleanLang}
           </span>
           {lineCount > 1 && (
-            <span className="text-[10px] text-slate-500">
+            <span className="text-xs text-slate-400">
               ({lineCount} lines)
             </span>
           )}
@@ -244,7 +244,7 @@ function CodeBlock({ code = '', lang = '' }) {
           <button
             type="button"
             onClick={() => setIsWrapped(!isWrapped)}
-            className="text-[10px] text-slate-400 hover:text-slate-200 transition cursor-pointer px-1.5 py-0.5 rounded hover:bg-slate-800"
+            className="text-xs text-slate-400 hover:text-slate-200 transition cursor-pointer px-1.5 py-0.5 rounded hover:bg-slate-800"
             title={isWrapped ? '切换单行滚动' : '切换自动换行'}
           >
             {isWrapped ? 'Nowrap' : 'Wrap'}
@@ -252,7 +252,7 @@ function CodeBlock({ code = '', lang = '' }) {
           <button
             type="button"
             onClick={handleCopy}
-            className="inline-flex items-center gap-1 text-slate-300 hover:text-white transition cursor-pointer px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] shadow-xs"
+            className="inline-flex items-center gap-1 text-slate-300 hover:text-white transition cursor-pointer px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-xs shadow-xs"
             title="复制代码"
           >
             {copied ? (
@@ -419,7 +419,7 @@ function BlockquoteBlock({ tokens = [], rawText = '' }) {
 
     return (
       <div className={`my-3 p-3 rounded-xl border ${cfg.border} ${cfg.bg} ${cfg.text} text-xs`}>
-        <div className={`flex items-center gap-1.5 font-bold ${cfg.title} mb-1.5 text-[11px]`}>
+        <div className={`flex items-center gap-1.5 font-bold ${cfg.title} mb-1.5 text-xs`}>
           {cfg.icon}
           <span>{cfg.label}</span>
         </div>
@@ -454,7 +454,7 @@ function TableBlock({ header = [], rows = [], align = [] }) {
             {header.map((col, idx) => (
               <th
                 key={idx}
-                className="py-2.5 px-3.5 text-[11px] font-semibold tracking-tight"
+                className="py-2.5 px-3.5 text-xs font-semibold tracking-tight"
                 style={{ textAlign: align[idx] || 'left' }}
               >
                 <RenderInline tokens={col.tokens} />

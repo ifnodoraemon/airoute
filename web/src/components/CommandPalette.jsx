@@ -175,17 +175,17 @@ export default function CommandPalette({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={isZh ? '搜索功能模块、操作指令或模型 (支持 ↑ ↓ 导航)...' : 'Search modules, commands, or models (↑ ↓ to navigate)...'}
-            className="w-full text-sm bg-transparent text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none"
+            className="w-full text-sm bg-transparent text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none"
           />
           {query && (
             <button
               onClick={() => setQuery('')}
-              className="text-slate-400 hover:text-slate-600 p-1 mr-2"
+              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 p-1 mr-2"
             >
               <X className="w-4 h-4" />
             </button>
           )}
-          <kbd className="hidden sm:inline-flex items-center px-2 py-0.5 text-[10px] font-mono font-semibold text-slate-500 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
+          <kbd className="hidden sm:inline-flex items-center px-2 py-0.5 text-xs font-mono font-semibold text-slate-500 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
             ESC
           </kbd>
         </div>
@@ -193,7 +193,7 @@ export default function CommandPalette({
         {/* Results List */}
         <div ref={listRef} className="overflow-y-auto p-2 space-y-1 flex-1">
           {filteredItems.length === 0 ? (
-            <div className="py-10 text-center text-slate-400 text-xs flex flex-col items-center">
+            <div className="py-10 text-center text-xs text-slate-500 dark:text-slate-400 flex flex-col items-center">
               <p className="mb-3">{isZh ? `未找到与 "${query}" 相关的系统导航` : `No system navigation matching "${query}"`}</p>
               {query && onOpenCopilotWithQuery && (
                 <button
@@ -201,7 +201,7 @@ export default function CommandPalette({
                     onClose();
                     onOpenCopilotWithQuery(query.trim());
                   }}
-                  className="px-3.5 py-2 rounded-lg bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white font-medium flex items-center space-x-1.5 shadow-sm cursor-pointer text-xs"
+                  className="ui-btn-primary"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-amber-300" />
                   <span>{isZh ? `向 AI 智能副驾驶询问: "${query}"` : `Ask AI Copilot: "${query}"`}</span>
@@ -243,10 +243,10 @@ export default function CommandPalette({
                   </div>
 
                   <div className="flex items-center space-x-2 shrink-0 ml-2">
-                    <span className={`text-[10px] font-medium px-2 py-0.5 rounded-md ${
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${
                       item.isAi
                         ? 'bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 font-bold'
-                        : 'text-slate-400 bg-slate-100 dark:bg-slate-800/80'
+                        : 'text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/80'
                     }`}>
                       {item.category}
                     </span>
@@ -261,13 +261,13 @@ export default function CommandPalette({
         </div>
 
         {/* Footer shortcuts info */}
-        <div className="px-5 py-2.5 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200/70 dark:border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+        <div className="px-5 py-2.5 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200/70 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <span>{isZh ? '↑ ↓ 移动光标' : '↑ ↓ Navigate'}</span>
             <span>{isZh ? '↵ 确认跳转' : '↵ Select'}</span>
             <span>{isZh ? 'ESC 关闭' : 'ESC Close'}</span>
           </div>
-          <span className="font-mono text-slate-400">{isZh ? 'Airoute · 快捷控制中心' : 'Airoute · Command Center'}</span>
+          <span className="font-mono text-slate-500 dark:text-slate-400">{isZh ? 'Airoute · 快捷控制中心' : 'Airoute · Command Center'}</span>
         </div>
       </div>
     </div>

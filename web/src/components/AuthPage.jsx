@@ -206,12 +206,12 @@ export default function AuthPage({
   };
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-slate-50 via-indigo-50/30 to-slate-100 flex flex-col justify-between py-10 px-4 sm:px-6 lg:px-8 selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-linear-to-br from-slate-50 via-indigo-50/30 to-slate-100 dark:from-[#0A0D14] dark:via-[#0A0D14] dark:to-[#0A0D14] flex flex-col justify-between py-10 px-4 sm:px-6 lg:px-8 selection:bg-indigo-500 selection:text-white">
       {/* Top Bar with Brand & Back */}
       <div className="max-w-md w-full mx-auto flex items-center justify-between">
         <button
           onClick={onBackHome}
-          className="inline-flex items-center space-x-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition py-2 px-3 rounded-xl hover:bg-white/80 cursor-pointer"
+          className="inline-flex items-center space-x-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition py-2 px-3 rounded-xl hover:bg-white/80 dark:hover:bg-slate-800/80 cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{isZh ? '返回产品门户' : 'Back to Portal'}</span>
@@ -222,42 +222,42 @@ export default function AuthPage({
             <button
               onClick={toggleLang}
               type="button"
-              className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white/90 border border-slate-200 text-slate-700 hover:text-indigo-600 hover:border-indigo-300 shadow-sm transition cursor-pointer"
+              className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white/90 dark:bg-[#0F1420]/90 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 dark:hover:border-indigo-500/60 shadow-sm transition cursor-pointer"
             >
-              <Globe className="w-3.5 h-3.5 text-indigo-600" />
+              <Globe className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
               <span>{isZh ? 'EN' : '中'}</span>
             </button>
           )}
 
           <div className="flex items-center space-x-2">
-            <div className="w-7 h-7 rounded-lg bg-slate-900 flex items-center justify-center text-white shadow-sm">
+            <div className="w-7 h-7 rounded-lg bg-slate-900 dark:bg-indigo-600 flex items-center justify-center text-white shadow-sm">
               <Zap className="w-4 h-4 fill-white" />
             </div>
-            <span className="font-semibold text-sm text-slate-900 tracking-tight">Airoute</span>
+            <span className="font-semibold text-sm text-slate-900 dark:text-slate-100 tracking-tight">Airoute</span>
           </div>
         </div>
       </div>
 
       {/* Main Card Container */}
       <div className="max-w-md w-full mx-auto my-auto">
-        <div className="bg-white/95 backdrop-blur-xl border border-slate-200/90 rounded-2xl p-8 shadow-xl shadow-slate-200/50 space-y-6">
+        <div className="bg-white/95 dark:bg-[#0F1420]/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800/90 rounded-2xl p-8 shadow-xl shadow-slate-200/50 dark:shadow-slate-950/50 space-y-6">
           {/* Header */}
           <div className="text-center space-y-1.5">
-            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
               {activeTab === 'login' ? (isZh ? '欢迎回来' : 'Welcome Back') : (isZh ? '账号注册' : 'Create Account')}
             </h2>
           </div>
 
           {/* Tab Switcher */}
           {sysConfig.allow_registration && (
-            <div className="flex p-1 bg-slate-100/90 rounded-lg">
+            <div className="flex p-1 bg-slate-100/90 dark:bg-slate-900/60 rounded-lg">
               <button
                 type="button"
                 onClick={() => setActiveTab('login')}
                 className={`flex-1 py-2 text-xs font-semibold rounded-md transition cursor-pointer ${
                   activeTab === 'login'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800'
+                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
                 }`}
               >
                 {isZh ? '账号登录' : 'Sign In'}
@@ -267,8 +267,8 @@ export default function AuthPage({
                 onClick={() => setActiveTab('register')}
                 className={`flex-1 py-2 text-xs font-semibold rounded-md transition cursor-pointer ${
                   activeTab === 'register'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800'
+                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
                 }`}
               >
                 {isZh ? '新用户注册' : 'Register'}
@@ -278,14 +278,14 @@ export default function AuthPage({
 
           {/* Feedback Messages */}
           {error && (
-            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center space-x-2 animate-in fade-in">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+            <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-300 text-xs flex items-center space-x-2 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
               <span>{error}</span>
             </div>
           )}
           {successMsg && (
-            <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center space-x-2 animate-in fade-in">
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+            <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-xs flex items-center space-x-2 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
               <span>{successMsg}</span>
             </div>
           )}
@@ -294,11 +294,11 @@ export default function AuthPage({
           {activeTab === 'login' && (
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label className="ui-label font-semibold mb-1.5">
                   {isZh ? '用户名 / 绑定邮箱' : 'Username / Email'}
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 pl-3.5 flex items-center pointer-events-none text-slate-400">
                     <User className="w-4 h-4" />
                   </div>
                   <input
@@ -307,17 +307,17 @@ export default function AuthPage({
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder={isZh ? "输入用户名或登录邮箱" : "Enter username or email"}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white transition"
+                    className="ui-field pl-10 pr-4"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label className="ui-label font-semibold mb-1.5">
                   {isZh ? '登录密码' : 'Password'}
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 pl-3.5 flex items-center pointer-events-none text-slate-400">
                     <Lock className="w-4 h-4" />
                   </div>
                   <input
@@ -326,12 +326,12 @@ export default function AuthPage({
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder={isZh ? "输入账户密码" : "Enter account password"}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-10 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white transition font-mono"
+                    className="ui-field pl-10 pr-10 font-mono"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -341,7 +341,7 @@ export default function AuthPage({
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
+                className="ui-btn-primary w-full py-3"
               >
                 {loading ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
@@ -359,11 +359,11 @@ export default function AuthPage({
           {activeTab === 'register' && (
             <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="ui-label font-semibold">
                   {isZh ? '登录用户名 *' : 'Username *'}
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 pl-3.5 flex items-center pointer-events-none text-slate-400">
                     <User className="w-4 h-4" />
                   </div>
                   <input
@@ -372,17 +372,17 @@ export default function AuthPage({
                     value={regUsername}
                     onChange={(e) => setRegUsername(e.target.value)}
                     placeholder={isZh ? "至少 3 个字符 (字母、数字)" : "At least 3 characters (letters, numbers)"}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white transition"
+                    className="ui-field pl-10 pr-4"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="ui-label font-semibold">
                   {isZh ? '电子邮箱 *' : 'Email Address *'}
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 pl-3.5 flex items-center pointer-events-none text-slate-400">
                     <Mail className="w-4 h-4" />
                   </div>
                   <input
@@ -391,14 +391,14 @@ export default function AuthPage({
                     value={regEmail}
                     onChange={(e) => setRegEmail(e.target.value)}
                     placeholder="name@example.com"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white transition"
+                    className="ui-field pl-10 pr-4"
                   />
                 </div>
               </div>
 
               {sysConfig.require_email_verification && (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  <label className="ui-label font-semibold">
                     {isZh ? '邮箱验证码 *' : 'Verification Code *'}
                   </label>
                   <div className="flex space-x-2">
@@ -409,13 +409,13 @@ export default function AuthPage({
                       value={regCode}
                       onChange={(e) => setRegCode(e.target.value)}
                       placeholder={isZh ? "6 位数字验证码" : "6-digit code"}
-                      className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-xs font-mono text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white transition tracking-widest text-center"
+                      className="ui-field flex-1 px-4 font-mono tracking-widest text-center"
                     />
                     <button
                       type="button"
                       disabled={sendingCode || codeCountdown > 0}
                       onClick={handleSendCode}
-                      className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-2xl text-xs font-semibold transition shrink-0 disabled:opacity-50 cursor-pointer"
+                      className="ui-btn-secondary shrink-0"
                     >
                       {sendingCode ? (
                         <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -430,11 +430,11 @@ export default function AuthPage({
               )}
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="ui-label font-semibold">
                   {isZh ? '设置密码 *' : 'Set Password *'}
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 pl-3.5 flex items-center pointer-events-none text-slate-400">
                     <Lock className="w-4 h-4" />
                   </div>
                   <input
@@ -443,12 +443,12 @@ export default function AuthPage({
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
                     placeholder={isZh ? "至少 6 个字符" : "At least 6 characters"}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-10 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white transition font-mono"
+                    className="ui-field pl-10 pr-10 font-mono"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -458,7 +458,7 @@ export default function AuthPage({
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
+                className="ui-btn-primary w-full py-3"
               >
                 {loading ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
@@ -476,11 +476,11 @@ export default function AuthPage({
           {(sysConfig.oauth_github_enabled || sysConfig.oauth_google_enabled) && (
             <div className="pt-2">
               <div className="relative flex py-2 items-center">
-                <div className="grow border-t border-slate-200"></div>
-                <span className="shrink mx-3 text-[11px] text-slate-400 font-medium">
+                <div className="grow border-t border-slate-200 dark:border-slate-800"></div>
+                <span className="shrink mx-3 ui-meta font-medium">
                   {isZh ? '企业第三方单点登录' : 'Enterprise SSO Login'}
                 </span>
-                <div className="grow border-t border-slate-200"></div>
+                <div className="grow border-t border-slate-200 dark:border-slate-800"></div>
               </div>
 
               <div className="grid grid-cols-2 gap-3 mt-3">
@@ -488,9 +488,9 @@ export default function AuthPage({
                   <button
                     type="button"
                     onClick={() => handleOAuthLogin('github')}
-                    className="flex items-center justify-center space-x-2 py-2.5 px-3 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-2xl text-xs font-semibold transition cursor-pointer"
+                    className="ui-btn-secondary px-3 py-2.5"
                   >
-                    <svg className="w-4 h-4 text-slate-800" fill="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 text-slate-800 dark:text-slate-200" fill="currentColor" viewBox="0 0 24 24">
                       <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
                     </svg>
                     <span>{isZh ? 'GitHub 登录' : 'GitHub SSO'}</span>
@@ -501,7 +501,7 @@ export default function AuthPage({
                   <button
                     type="button"
                     onClick={() => handleOAuthLogin('google')}
-                    className="flex items-center justify-center space-x-2 py-2.5 px-3 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-2xl text-xs font-semibold transition cursor-pointer"
+                    className="ui-btn-secondary px-3 py-2.5"
                   >
                     <svg className="w-4 h-4" viewBox="0 0 24 24">
                       <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -519,7 +519,7 @@ export default function AuthPage({
       </div>
 
       {/* Footer copyright */}
-      <div className="max-w-md w-full mx-auto text-center text-xs text-slate-400">
+      <div className="max-w-md w-full mx-auto text-center ui-meta">
         © {new Date().getFullYear()} Airoute · {isZh ? '极简高性能 AI 路由器' : 'Minimalist High-Performance AI Router'}
       </div>
     </div>

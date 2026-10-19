@@ -349,21 +349,16 @@ export default function App() {
     if (csrf) {
       headers['X-CSRF-Token'] = csrf;
     }
-    try {
-      const res = await fetch(url, { ...options, headers, credentials: 'same-origin' });
-      if (res.status === 401 && viewMode === 'console') {
-        if (effectiveToken) {
-          setAdminToken('');
-          setAdminUser(null);
-          clearStoredAuth();
-          setShowLoginModal(true);
-          showToast(isZh ? '登录凭证已失效，请重新登录' : 'Session expired, please login again', 'warning');
-        }
-      }
-      return res;
-    } catch (e) {
-      throw e;
+
+    const res = await fetch(url, { ...options, headers, credentials: 'same-origin' });
+    if (res.status === 401 && viewMode === 'console' && effectiveToken) {
+      setAdminToken('');
+      setAdminUser(null);
+      clearStoredAuth();
+      setShowLoginModal(true);
+      showToast(isZh ? '登录凭证已失效，请重新登录' : 'Session expired, please login again', 'warning');
     }
+    return res;
   };
 
   // Authenticated fetch helper that also treats application-level failures as
@@ -1124,21 +1119,6 @@ export default function App() {
   };
   const handleBatchTest = handleBatchPing;
 
-  const generateCurlForPlayground = () => {
-    const origin = getGatewayOrigin();
-    const key = getEffectivePlayApiKey() || 'sk-airoute-your-key';
-    return `curl -X POST "${origin}/v1/chat/completions" \\
-  -H "Authorization: Bearer ${key}" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "model": "${playModel}",
-    "messages": [
-      {"role": "user", "content": ${JSON.stringify(playPrompt)}}
-    ],
-    "stream": ${playStream}
-  }'`;
-  };
-
   // Toggle protocol checkbox
   const toggleProtocol = (proto) => {
     setNewChannel(prev => {
@@ -1547,7 +1527,7 @@ export default function App() {
   if (viewMode === 'landing') {
     return (
       <I18nContext.Provider value={{ lang, setLang, toggleLang, t }}>
-        <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-indigo-500 selection:text-white">
+        <div className="min-h-screen bg-slate-50 dark:bg-[#0A0D14] text-slate-800 dark:text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
           <Toast toast={toast} onClose={() => setToast(prev => ({ ...prev, show: false }))} />
           <Suspense fallback={<ViewLoader />}>
             <LandingPage
@@ -1614,7 +1594,7 @@ export default function App() {
   if (viewMode === 'auth') {
     return (
       <I18nContext.Provider value={{ lang, setLang, toggleLang, t }}>
-        <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-indigo-500 selection:text-white">
+        <div className="min-h-screen bg-slate-50 dark:bg-[#0A0D14] text-slate-800 dark:text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
           <Toast toast={toast} onClose={() => setToast(prev => ({ ...prev, show: false }))} />
           <Suspense fallback={<ViewLoader />}>
             <AuthPage
@@ -1645,7 +1625,7 @@ export default function App() {
   if (viewMode === 'status') {
     return (
       <I18nContext.Provider value={{ lang, setLang, toggleLang, t }}>
-        <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-indigo-500 selection:text-white">
+        <div className="min-h-screen bg-slate-50 dark:bg-[#0A0D14] text-slate-800 dark:text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
           <Toast toast={toast} onClose={() => setToast(prev => ({ ...prev, show: false }))} />
           <Suspense fallback={<ViewLoader />}>
             <ServiceStatus
@@ -2603,6 +2583,7 @@ export default function App() {
                 keys={keys}
                 models={models}
                 modelRoutes={modelRoutes}
+                prices={prices}
                 adminFetch={adminFetch}
                 showToast={showToast}
                 initialModel={playModel}

@@ -22,10 +22,18 @@ jobs:
           cache: 'npm'
           cache-dependency-path: web/package-lock.json
 
-      - name: Build Web UI Frontend
+      # Static analysis must run BEFORE the build. Vite/esbuild cannot detect an
+      # undefined identifier (it is only a runtime error in JS), which is how two
+      # ReferenceErrors once shipped in the console.
+      - name: Lint Web UI (undefined identifiers, hook rules)
         run: |
           cd web
           npm ci
+          npm run lint
+
+      - name: Build Web UI Frontend
+        run: |
+          cd web
           npm run build
 
       - name: Setup Go

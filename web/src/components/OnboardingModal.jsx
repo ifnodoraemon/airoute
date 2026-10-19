@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   X,
   Sparkles,
@@ -19,6 +19,9 @@ import {
 import { getGatewayOrigin } from '../config';
 import useModalA11y from '../hooks/useModalA11y';
 import { copyToClipboard as crossOriginCopy } from '../utils/clipboard';
+import useFormDirty from '../hooks/useFormDirty';
+import useUnsavedGuard from '../hooks/useUnsavedGuard';
+import DiscardChangesDialog from './DiscardChangesDialog';
 
 export default function OnboardingModal({
   isOpen,
@@ -30,8 +33,6 @@ export default function OnboardingModal({
   lang = 'zh',
   t
 }) {
-  useModalA11y(isOpen, onClose);
-
   const isZh = lang === 'zh';
   const [step, setStep] = useState(1);
   const [selectedKey, setSelectedKey] = useState(() => (keys.length > 0 ? keys[0].key : 'sk-airoute-demo-key'));
@@ -42,9 +43,39 @@ export default function OnboardingModal({
   const [testingPing, setTestingPing] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
+  // Only the wizard's configuration is a draft: the step indicator and the
+  // snippet tab are navigation/view state, so they never trip the guard.
+  const isDirty = useFormDirty(isOpen, { selectedKey, selectedProtocol, selectedModel });
+  const { confirming, requestClose, keepEditing, discard } = useUnsavedGuard({ isOpen, isDirty, onClose });
+
+  // Remember the configuration the wizard opened with, so finishing a run can
+  // restore it and leave nothing dirty behind for the next open.
+  const openedDraftRef = useRef(null);
+  useEffect(() => {
+    if (isOpen) {
+      openedDraftRef.current = { selectedKey, selectedProtocol, selectedModel };
+    }
+  }, [isOpen]);
+
+  // Escape goes through the guard as well (useModalA11y reads the callback via a ref).
+  useModalA11y(isOpen, requestClose);
+
   if (!isOpen) return null;
 
   const origin = getGatewayOrigin();
+
+  // Completion closes for real: restore the opened configuration first so the
+  // dirty draft can never re-open the discard prompt on the way out.
+  const completeWizard = (after) => {
+    const opened = openedDraftRef.current;
+    if (opened) {
+      setSelectedKey(opened.selectedKey);
+      setSelectedProtocol(opened.selectedProtocol);
+      setSelectedModel(opened.selectedModel);
+    }
+    onClose?.();
+    if (after) after();
+  };
 
   const copyToClipboard = async (text, key) => {
     await crossOriginCopy(text);
@@ -173,7 +204,7 @@ print(message.content[0].text)
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) requestClose();
       }}
     >
       <div className="bg-white dark:bg-[#111726] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl max-w-2xl w-full p-6 sm:p-7 shadow-2xl relative space-y-6">
@@ -193,7 +224,7 @@ print(message.content[0].text)
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={requestClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -210,7 +241,7 @@ print(message.content[0].text)
                 : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
             }`}
           >
-            <span className="w-5 h-5 rounded-full bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-[11px]">
+            <span className="w-5 h-5 rounded-full bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-xs">
               1
             </span>
             <span>{isZh ? '选择或获取密钥' : 'Select API Key'}</span>
@@ -226,7 +257,7 @@ print(message.content[0].text)
                 : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
             }`}
           >
-            <span className="w-5 h-5 rounded-full bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-[11px]">
+            <span className="w-5 h-5 rounded-full bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-xs">
               2
             </span>
             <span>{isZh ? '选择模型与协议' : 'Choose Protocol & Model'}</span>
@@ -242,7 +273,7 @@ print(message.content[0].text)
                 : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
             }`}
           >
-            <span className="w-5 h-5 rounded-full bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-[11px]">
+            <span className="w-5 h-5 rounded-full bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-xs">
               3
             </span>
             <span>{isZh ? '代码接入与握手' : 'SDK & Handshake Probe'}</span>
@@ -263,7 +294,7 @@ print(message.content[0].text)
                   <select
                     value={selectedKey}
                     onChange={(e) => setSelectedKey(e.target.value)}
-                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
+                    className="ui-field font-mono"
                   >
                     {keys.map((k) => (
                       <option key={k.id || k.key} value={k.key}>
@@ -272,7 +303,7 @@ print(message.content[0].text)
                       </option>
                     ))}
                   </select>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="ui-meta">
                     {isZh ? '该密钥已自动关联默认扣费组与全模态访问权限。' : 'This key is automatically mapped to the default billing group and full multimodal scope.'}
                   </p>
                 </div>
@@ -303,7 +334,7 @@ print(message.content[0].text)
               <button
                 type="button"
                 onClick={() => setStep(2)}
-                className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium shadow-sm transition flex items-center space-x-1.5 cursor-pointer"
+                className="ui-btn-primary"
               >
                 <span>{isZh ? '下一步：选择模型与协议' : 'Next: Protocol & Model'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -336,7 +367,7 @@ print(message.content[0].text)
                     }`}
                   >
                     <div className="font-semibold text-xs">{p.label}</div>
-                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">{p.sub}</div>
+                    <div className="ui-meta font-mono mt-0.5">{p.sub}</div>
                   </button>
                 ))}
               </div>
@@ -367,7 +398,7 @@ print(message.content[0].text)
                   className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-800 dark:text-slate-100"
                 />
               )}
-              <p className="text-[11px] text-slate-400 mt-1">
+              <p className="ui-meta mt-1">
                 {isZh ? 'Airoute 会根据此模型名称，通过多通道优先级和三态熔断引擎无感分发。' : 'Airoute automatically routes requests across multiple upstream channels with zero-loss fallback.'}
               </p>
             </div>
@@ -383,7 +414,7 @@ print(message.content[0].text)
               <button
                 type="button"
                 onClick={() => setStep(3)}
-                className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium shadow-sm transition flex items-center space-x-1.5 cursor-pointer"
+                className="ui-btn-primary"
               >
                 <span>{isZh ? '下一步：代码验证与握手' : 'Next: Code & Handshake'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -455,7 +486,7 @@ print(message.content[0].text)
                     <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
                     <span>{isZh ? '在线握手探测 (Live Handshake Probe)' : 'Live Handshake Probe'}</span>
                   </span>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  <p className="ui-meta mt-0.5">
                     {isZh ? '从浏览器直接发送首次轻量请求，实时校验网关连通度与首字时延' : 'Send lightweight probe directly from the browser to verify gateway connectivity and latency'}
                   </p>
                 </div>
@@ -483,11 +514,11 @@ print(message.content[0].text)
                     <span>
                       {testResult.success ? (isZh ? '握手成功' : 'Handshake Successful') : (isZh ? '探测返回异常' : 'Handshake Error')}
                     </span>
-                    <span className="text-[11px] font-mono tabular-nums">
+                    <span className="text-xs font-mono tabular-nums">
                       {isZh ? '耗时' : 'Latency'}: {testResult.latency} ms
                     </span>
                   </div>
-                  <div className="mt-1 text-[11px] truncate">
+                  <div className="mt-1 text-xs truncate">
                     {testResult.success ? testResult.text : testResult.error}
                   </div>
                 </div>
@@ -507,12 +538,11 @@ print(message.content[0].text)
               <div className="flex items-center space-x-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    onClose();
+                  onClick={() => completeWizard(() => {
                     if (onNavigateToPlayground) {
                       onNavigateToPlayground(selectedModel);
                     }
-                  }}
+                  })}
                   className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium transition flex items-center space-x-1 cursor-pointer"
                 >
                   <Terminal className="w-3.5 h-3.5" />
@@ -521,8 +551,8 @@ print(message.content[0].text)
 
                 <button
                   type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium shadow-sm transition cursor-pointer"
+                  onClick={() => completeWizard()}
+                  className="ui-btn-primary"
                 >
                   {isZh ? '完成向导' : 'Finish Wizard'}
                 </button>
@@ -530,6 +560,14 @@ print(message.content[0].text)
             </div>
           </div>
         )}
+
+        <DiscardChangesDialog
+          open={confirming}
+          onKeepEditing={keepEditing}
+          onDiscard={discard}
+          lang={lang}
+          title={isZh ? '放弃未完成的接入向导配置？' : 'Discard this onboarding setup?'}
+        />
       </div>
     </div>
   );

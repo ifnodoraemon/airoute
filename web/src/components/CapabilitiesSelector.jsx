@@ -36,7 +36,7 @@ export default function CapabilitiesSelector({ protocols = [], onToggle, onSetPr
           <Layers className="w-3.5 h-3.5 text-indigo-500" />
           <span>{isZh ? `协议能力 (${protocols.length}/${CAPABILITIES.length})` : `Protocol Capabilities (${protocols.length}/${CAPABILITIES.length})`}</span>
         </label>
-        <div className="flex items-center space-x-2 text-[11px]">
+        <div className="flex items-center space-x-2 text-xs">
           <button
             type="button"
             onClick={handleSelectAll}
@@ -90,7 +90,7 @@ export default function CapabilitiesSelector({ protocols = [], onToggle, onSetPr
               </div>
               <div className="mt-2">
                 <div className="text-xs font-semibold leading-tight">{isZh ? (cap.nameZh || cap.name) : cap.name}</div>
-                <div className="text-[10px] text-slate-400 font-mono truncate mt-0.5">{cap.path}</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400 font-mono truncate mt-0.5">{cap.path}</div>
               </div>
             </button>
           );

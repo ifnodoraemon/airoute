@@ -34,8 +34,8 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
       {/* Category sidebar */}
-      <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-3 space-y-1 shadow-sm h-fit">
-        <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-3 mb-2 block">
+      <div className="ui-card p-3 space-y-1 h-fit">
+        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-3 mb-2 block">
           {isZh ? '接入与规范文档' : 'Documentation & Specs'}
         </span>
         
@@ -137,7 +137,7 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
       </div>
 
       {/* Doc Content */}
-      <div className="md:col-span-3 bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-8 shadow-sm space-y-6">
+      <div className="md:col-span-3 ui-card p-8 shadow-sm space-y-6">
         {docsSection === 'architecture' && (
           <div className="space-y-6">
             <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
@@ -170,7 +170,7 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
               </p>
               <div className="bg-white dark:bg-[#0b0f19] p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-900/50 text-xs space-y-2">
                 <span className="font-semibold text-slate-800 dark:text-slate-200 block">{isZh ? '容灾工作流时序:' : 'Failover Workflow Sequence:'}</span>
-                <div className="font-mono text-[11px] text-slate-600 dark:text-slate-400 space-y-1">
+                <div className="font-mono text-xs text-slate-600 dark:text-slate-400 space-y-1">
                   <div>{isZh ? '[客户端请求] ➔ Airoute ➔ 首选渠道 A (Primary Provider)' : '[Client Request] ➔ Airoute ➔ Primary Provider A'}</div>
                   <div className="text-amber-600 dark:text-amber-400">{isZh ? '↳ 发生 429 Rate Limit / 500 错误 (未输出首字 chunk)' : '↳ Upstream 429 Rate Limit / 500 error (before first chunk)'}</div>
                   <div className="text-emerald-600 dark:text-emerald-400">{isZh ? '↳ 网关在首个内容分块前尝试备份渠道 B' : '↳ Gateway tries Backup Provider B before sending content'}</div>
@@ -204,7 +204,7 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
                       <th className="py-2 px-3 font-semibold">{isZh ? '支持的上游后端提供商' : 'Supported Upstream Providers'}</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-emerald-100 dark:divide-emerald-900/40 text-[11px]">
+                  <tbody className="divide-y divide-emerald-100 dark:divide-emerald-900/40 text-xs">
                     <tr>
                       <td className="py-2 px-3 font-mono text-indigo-600 dark:text-indigo-400 font-semibold">OpenAI Chat</td>
                       <td className="py-2 px-3 font-mono">/v1/chat/completions</td>
@@ -249,19 +249,19 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-center">
                 <div className="p-2.5 rounded-xl bg-white dark:bg-[#0b0f19] border border-purple-100 dark:border-purple-900/50">
                   <span className="text-xs font-bold text-purple-700 dark:text-purple-300">{isZh ? '💬 文本/对话' : '💬 Text / Chat'}</span>
-                  <p className="text-[10px] text-slate-400 mt-0.5">{isZh ? 'SSE 流式转发' : 'SSE Streaming'}</p>
+                  <p className="ui-meta mt-0.5">{isZh ? 'SSE 流式转发' : 'SSE Streaming'}</p>
                 </div>
                 <div className="p-2.5 rounded-xl bg-white dark:bg-[#0b0f19] border border-purple-100 dark:border-purple-900/50">
                   <span className="text-xs font-bold text-pink-700 dark:text-pink-300">{isZh ? '🎨 图像生成' : '🎨 Image Gen'}</span>
-                  <p className="text-[10px] text-slate-400 mt-0.5">/v1/images/generations</p>
+                  <p className="ui-meta mt-0.5">/v1/images/generations</p>
                 </div>
                 <div className="p-2.5 rounded-xl bg-white dark:bg-[#0b0f19] border border-purple-100 dark:border-purple-900/50">
                   <span className="text-xs font-bold text-cyan-700 dark:text-cyan-300">{isZh ? '🔊 语音 TTS/STT' : '🔊 Audio TTS/STT'}</span>
-                  <p className="text-[10px] text-slate-400 mt-0.5">{isZh ? '音频二进制直通流' : 'Binary Audio Streaming'}</p>
+                  <p className="ui-meta mt-0.5">{isZh ? '音频二进制直通流' : 'Binary Audio Streaming'}</p>
                 </div>
                 <div className="p-2.5 rounded-xl bg-white dark:bg-[#0b0f19] border border-purple-100 dark:border-purple-900/50">
                   <span className="text-xs font-bold text-teal-700 dark:text-teal-300">{isZh ? '🎬 视频生成' : '🎬 Video Gen'}</span>
-                  <p className="text-[10px] text-slate-400 mt-0.5">{isZh ? '异步任务与轮询' : 'Async Tasks & Polling'}</p>
+                  <p className="ui-meta mt-0.5">{isZh ? '异步任务与轮询' : 'Async Tasks & Polling'}</p>
                 </div>
               </div>
             </div>
@@ -301,7 +301,7 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
               {/* Pillar 1 */}
               <div className="p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800/60 space-y-2">
                 <div className="flex items-center space-x-2 font-bold text-indigo-900 dark:text-indigo-200">
-                  <span className="w-5 h-5 rounded-lg bg-indigo-500 text-white flex items-center justify-center text-[10px]">1</span>
+                  <span className="w-5 h-5 rounded-lg bg-indigo-500 text-white flex items-center justify-center text-xs">1</span>
                   <span>{isZh ? '架构极简：内存路由缓存' : 'Minimalist Architecture: In-Memory Routing Cache'}</span>
                 </div>
                 <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
@@ -314,7 +314,7 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
               {/* Pillar 2 */}
               <div className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 space-y-2">
                 <div className="flex items-center space-x-2 font-bold text-emerald-900 dark:text-emerald-200">
-                  <span className="w-5 h-5 rounded-lg bg-emerald-500 text-white flex items-center justify-center text-[10px]">2</span>
+                  <span className="w-5 h-5 rounded-lg bg-emerald-500 text-white flex items-center justify-center text-xs">2</span>
                   <span>{isZh ? '交互极简：开箱即用与智能推导' : 'Zero Mental Friction: 1-Click Presets'}</span>
                 </div>
                 <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
@@ -327,7 +327,7 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
               {/* Pillar 3 */}
               <div className="p-4 rounded-2xl bg-purple-50/50 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-800/60 space-y-2">
                 <div className="flex items-center space-x-2 font-bold text-purple-900 dark:text-purple-200">
-                  <span className="w-5 h-5 rounded-lg bg-purple-500 text-white flex items-center justify-center text-[10px]">3</span>
+                  <span className="w-5 h-5 rounded-lg bg-purple-500 text-white flex items-center justify-center text-xs">3</span>
                   <span>{isZh ? '信息极简：渐进式呈现 (Progressive Disclosure)' : 'Information Density: Progressive Disclosure'}</span>
                 </div>
                 <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
@@ -340,7 +340,7 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
               {/* Pillar 4 */}
               <div className="p-4 rounded-2xl bg-sky-50/50 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-800/60 space-y-2">
                 <div className="flex items-center space-x-2 font-bold text-sky-900 dark:text-sky-200">
-                  <span className="w-5 h-5 rounded-lg bg-sky-500 text-white flex items-center justify-center text-[10px]">4</span>
+                  <span className="w-5 h-5 rounded-lg bg-sky-500 text-white flex items-center justify-center text-xs">4</span>
                   <span>{isZh ? '工程极简：透明无感容灾自愈' : 'Resilience: Zero-Surprise Self-Healing'}</span>
                 </div>
                 <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
@@ -396,7 +396,7 @@ for chunk in response:
               </pre>
               <button
                 onClick={() => copyToClipboard(`from openai import OpenAI\n\nclient = OpenAI(\n    base_url="${docBaseUrl}",\n    api_key="sk-airoute-xxxx",\n)\n\nresponse = client.chat.completions.create(\n    model="deepseek-v3",\n    messages=[{"role": "user", "content": "你好！"}],\n    stream=True,\n)\n\nfor chunk in response:\n    content = chunk.choices[0].delta.content or ""\n    print(content, end="", flush=True)`, 'py')}
-                className="absolute top-3 right-3 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-sm text-[11px] font-mono flex items-center space-x-1"
+                className="absolute top-3 right-3 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-sm text-xs font-mono flex items-center space-x-1"
               >
                 {copiedKey === 'py' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                 <span>{copiedKey === 'py' ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制' : 'Copy')}</span>
@@ -426,7 +426,7 @@ for chunk in response:
                 </pre>
                 <button
                   onClick={() => copyToClipboard(`curl -X POST "${docBaseUrl}/chat/completions" \\\n  -H "Authorization: Bearer sk-airoute-xxxx" \\\n  -H "Content-Type: application/json" \\\n  -d '{"model": "deepseek-v3", "messages": [{"role": "user", "content": "Ping"}], "stream": true}'`, 'curl')}
-                  className="absolute top-2 right-2 px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-sm text-[11px] font-mono flex items-center space-x-1"
+                  className="absolute top-2 right-2 px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-sm text-xs font-mono flex items-center space-x-1"
                 >
                   {copiedKey === 'curl' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                   <span>{copiedKey === 'curl' ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制' : 'Copy')}</span>
@@ -463,7 +463,7 @@ print(message.content[0].text)`}
               </pre>
               <button
                 onClick={() => copyToClipboard(`import anthropic\n\nclient = anthropic.Anthropic(\n    base_url="${docOrigin}",\n    api_key="sk-airoute-xxxx",\n)\n\nmessage = client.messages.create(\n    model="claude-3-7-sonnet",\n    max_tokens=1024,\n    messages=[\n        {"role": "user", "content": "请介绍量子计算的核心原理。"}\n    ]\n)\nprint(message.content[0].text)`, 'claude')}
-                className="absolute top-3 right-3 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-sm text-[11px] font-mono flex items-center space-x-1"
+                className="absolute top-3 right-3 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-sm text-xs font-mono flex items-center space-x-1"
               >
                 {copiedKey === 'claude' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                 <span>{copiedKey === 'claude' ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制' : 'Copy')}</span>
@@ -558,27 +558,27 @@ GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
               <h4 className="font-bold text-slate-900 dark:text-slate-100">{isZh ? '映射格式与示例:' : 'Mapping Formats & Examples:'}</h4>
               <ul className="list-disc pl-5 space-y-1.5 text-slate-700 dark:text-slate-300">
                 <li>
-                  <strong>{isZh ? '精确别名重写:' : 'Exact Alias Rewrite:'}</strong> <code className="text-indigo-600 font-mono">yy/xxx/xx:xxx/xx</code> <br />
+                  <strong>{isZh ? '精确别名重写:' : 'Exact Alias Rewrite:'}</strong> <code className="text-indigo-600 dark:text-indigo-400 font-mono">yy/xxx/xx:xxx/xx</code> <br />
                   {isZh ? (
-                    <>客户端请求 <code className="text-indigo-600 font-mono">yy/xxx/xx</code>，发往上游时改写为 <code className="text-indigo-600 font-mono">xxx/xx</code>。</>
+                    <>客户端请求 <code className="text-indigo-600 dark:text-indigo-400 font-mono">yy/xxx/xx</code>，发往上游时改写为 <code className="text-indigo-600 dark:text-indigo-400 font-mono">xxx/xx</code>。</>
                   ) : (
-                    <>Client requests <code className="text-indigo-600 font-mono">yy/xxx/xx</code>; gateway rewrites it to <code className="text-indigo-600 font-mono">xxx/xx</code> before dispatching.</>
+                    <>Client requests <code className="text-indigo-600 dark:text-indigo-400 font-mono">yy/xxx/xx</code>; gateway rewrites it to <code className="text-indigo-600 dark:text-indigo-400 font-mono">xxx/xx</code> before dispatching.</>
                   )}
                 </li>
                 <li>
-                  <strong>{isZh ? '前缀通配映射:' : 'Prefix Wildcard Mapping:'}</strong> <code className="text-indigo-600 font-mono">org/dept/*:*</code> <br />
+                  <strong>{isZh ? '前缀通配映射:' : 'Prefix Wildcard Mapping:'}</strong> <code className="text-indigo-600 dark:text-indigo-400 font-mono">org/dept/*:*</code> <br />
                   {isZh ? (
-                    <>客户端请求 <code className="text-indigo-600 font-mono">org/dept/v1/deepseek-ai/DeepSeek-V4-Pro</code>，自动剥离前缀发往目标集群。</>
+                    <>客户端请求 <code className="text-indigo-600 dark:text-indigo-400 font-mono">org/dept/v1/deepseek-ai/DeepSeek-V4-Pro</code>，自动剥离前缀发往目标集群。</>
                   ) : (
-                    <>Client requests <code className="text-indigo-600 font-mono">org/dept/v1/deepseek-ai/DeepSeek-V4-Pro</code>; prefix is stripped and routed to upstream.</>
+                    <>Client requests <code className="text-indigo-600 dark:text-indigo-400 font-mono">org/dept/v1/deepseek-ai/DeepSeek-V4-Pro</code>; prefix is stripped and routed to upstream.</>
                   )}
                 </li>
                 <li>
-                  <strong>{isZh ? '服务商自动前缀:' : 'Provider Auto-Prefix Routing:'}</strong> <code className="text-indigo-600 font-mono">&lt;ProviderName&gt;/&lt;Model&gt;</code> <br />
+                  <strong>{isZh ? '服务商自动前缀:' : 'Provider Auto-Prefix Routing:'}</strong> <code className="text-indigo-600 dark:text-indigo-400 font-mono">&lt;ProviderName&gt;/&lt;Model&gt;</code> <br />
                   {isZh ? (
-                    <>当存在多个提供商均提供 <code className="text-indigo-600 font-mono">gpt-6</code> 时，客户端可直接指定 <code className="text-indigo-600 font-mono">openai-us/gpt-6</code> 精准定向路由！</>
+                    <>当存在多个提供商均提供 <code className="text-indigo-600 dark:text-indigo-400 font-mono">gpt-6</code> 时，客户端可直接指定 <code className="text-indigo-600 dark:text-indigo-400 font-mono">openai-us/gpt-6</code> 精准定向路由！</>
                   ) : (
-                    <>When multiple providers offer <code className="text-indigo-600 font-mono">gpt-6</code>, clients can directly route to <code className="text-indigo-600 font-mono">openai-us/gpt-6</code>!</>
+                    <>When multiple providers offer <code className="text-indigo-600 dark:text-indigo-400 font-mono">gpt-6</code>, clients can directly route to <code className="text-indigo-600 dark:text-indigo-400 font-mono">openai-us/gpt-6</code>!</>
                   )}
                 </li>
               </ul>
@@ -596,7 +596,7 @@ GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
             <div className="space-y-3 text-xs">
               <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
                 <span className="font-bold text-slate-900 dark:text-slate-100">{isZh ? '1. 重排请求格式 (POST /v1/rerank):' : '1. Rerank Request Format (POST /v1/rerank):'}</span>
-                <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl font-mono overflow-x-auto text-[11px] leading-relaxed">
+                <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl font-mono overflow-x-auto text-xs leading-relaxed">
 {`curl -X POST ${docOrigin}/v1/rerank \\
   -H "Authorization: Bearer sk-airoute-xxxx" \\
   -H "Content-Type: application/json" \\

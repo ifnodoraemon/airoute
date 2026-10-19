@@ -54,14 +54,14 @@ export default function CurlExportModal({ curlCmd, onClose, onCopy, lang = 'zh',
           <div className="flex items-center space-x-2">
             <button
               onClick={handleCopy}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition shadow-sm cursor-pointer"
+              className="ui-btn bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copied ? (isZh ? '已复制！' : 'Copied!') : (isZh ? '复制命令' : 'Copy Command')}</span>
             </button>
             <button
               onClick={onClose}
-              className="px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-medium transition cursor-pointer"
+              className="ui-btn bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200"
             >
               {isZh ? '关闭' : 'Close'}
             </button>

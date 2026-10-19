@@ -54,13 +54,13 @@ export default function TraceSnapshotModal({ isOpen, traceId, onClose, lang = 'z
             <div className="text-sm font-bold text-slate-900 dark:text-white">
               {isZh ? '链路快照' : 'Trace Snapshot'}
             </div>
-            <div className="font-mono text-[11px] text-slate-500 dark:text-slate-400">{traceId}</div>
+            <div className="ui-meta font-mono">{traceId}</div>
           </div>
           <div className="flex items-center space-x-1">
-            <button onClick={load} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500" title={isZh ? '刷新' : 'Refresh'}>
+            <button onClick={load} className="ui-icon-btn" title={isZh ? '刷新' : 'Refresh'}>
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500">
+            <button onClick={onClose} className="ui-icon-btn">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -70,7 +70,7 @@ export default function TraceSnapshotModal({ isOpen, traceId, onClose, lang = 'z
           <select
             value={queryField}
             onChange={(e) => setQueryField(e.target.value)}
-            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1.5 text-[11px]"
+            className="ui-field ui-field-sm w-auto cursor-pointer"
           >
             <option value="trace_id">Trace ID</option>
             <option value="chat_id">Chat ID</option>
@@ -81,11 +81,11 @@ export default function TraceSnapshotModal({ isOpen, traceId, onClose, lang = 'z
             onChange={(e) => setQueryValue(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') load(); }}
             placeholder={isZh ? '输入关联 ID 后回车查询' : 'Enter a correlation id and press Enter'}
-            className="flex-1 min-w-[180px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-[11px] font-mono"
+            className="ui-field ui-field-sm flex-1 min-w-[180px] font-mono"
           />
           <button
             onClick={() => load()}
-            className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 text-[11px] font-semibold"
+            className="ui-btn ui-btn-sm bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
           >
             {isZh ? '查询' : 'Search'}
           </button>
@@ -106,14 +106,14 @@ export default function TraceSnapshotModal({ isOpen, traceId, onClose, lang = 'z
           )}
           {rows.map((row) => (
             <div key={row.id} className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-              <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800/60 text-[11px]">
+              <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800/60 text-xs">
                 <span className={`px-1.5 py-0.5 rounded font-semibold ${row.status_code >= 400 ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'}`}>
                   HTTP {row.status_code}
                 </span>
                 <span className="font-mono text-slate-600 dark:text-slate-300">{row.model}</span>
-                {row.channel && <span className="text-slate-500">@ {row.channel}</span>}
-                <span className="text-slate-500">{row.duration_ms}ms</span>
-                <span className="ml-auto text-slate-400">{row.created_at}</span>
+                {row.channel && <span className="text-slate-500 dark:text-slate-400">@ {row.channel}</span>}
+                <span className="text-slate-500 dark:text-slate-400">{row.duration_ms}ms</span>
+                <span className="ml-auto text-slate-500 dark:text-slate-400">{row.created_at}</span>
               </div>
               {row.error_message && (
                 <div className="flex items-start gap-2 px-3 py-2 border-t border-slate-100 dark:border-slate-800 text-rose-700 dark:text-rose-300">
@@ -123,18 +123,18 @@ export default function TraceSnapshotModal({ isOpen, traceId, onClose, lang = 'z
               )}
               {row.request_snippet && (
                 <div className="border-t border-slate-100 dark:border-slate-800">
-                  <div className="px-3 pt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  <div className="px-3 pt-2 ui-section-title">
                     {isZh ? '请求（已脱敏）' : 'Request (redacted)'}
                   </div>
-                  <pre className="px-3 py-2 overflow-x-auto font-mono text-[11px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-all">{row.request_snippet}</pre>
+                  <pre className="px-3 py-2 overflow-x-auto font-mono text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-all">{row.request_snippet}</pre>
                 </div>
               )}
               {row.response_snippet && (
                 <div className="border-t border-slate-100 dark:border-slate-800">
-                  <div className="px-3 pt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  <div className="px-3 pt-2 ui-section-title">
                     {isZh ? '响应（已脱敏）' : 'Response (redacted)'}
                   </div>
-                  <pre className="px-3 py-2 overflow-x-auto font-mono text-[11px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-all">{row.response_snippet}</pre>
+                  <pre className="px-3 py-2 overflow-x-auto font-mono text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-all">{row.response_snippet}</pre>
                 </div>
               )}
             </div>

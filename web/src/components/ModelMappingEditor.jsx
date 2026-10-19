@@ -93,12 +93,12 @@ export default function ModelMappingEditor({ mappingStr = '', onChange, lang = '
             {isZh ? '模型别名映射' : 'Model Alias Mapping'}
           </span>
           {configuredCount > 0 && (
-            <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 font-medium border border-emerald-200/80 dark:border-emerald-800/60">
+            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 font-medium border border-emerald-200/80 dark:border-emerald-800/60">
               {isZh ? `已配 ${configuredCount} 条` : `${configuredCount} configured`}
             </span>
           )}
           {rows.length > configuredCount && (
-            <span className="text-[10px] text-amber-500 font-medium">
+            <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">
               {isZh ? `(${rows.length - configuredCount} 条待补全)` : `(${rows.length - configuredCount} draft)`}
             </span>
           )}
@@ -111,7 +111,7 @@ export default function ModelMappingEditor({ mappingStr = '', onChange, lang = '
       {isOpen && (
         <div className="p-3.5 space-y-3 border-t border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#111726]">
           {rows.length === 0 ? (
-            <p className="text-xs text-slate-400 dark:text-slate-500 text-center py-2">
+            <p className="ui-meta text-center py-2">
               {isZh ? '暂无映射规则。可将客户端请求模型名（如 gpt-4o）重定向到服务商实际模型名（如 deepseek-chat）' : 'No alias rules configured. Map incoming model names to upstream provider models.'}
             </p>
           ) : (
@@ -123,7 +123,7 @@ export default function ModelMappingEditor({ mappingStr = '', onChange, lang = '
                     placeholder={isZh ? "原模型 (如 gpt-4o)" : "Source Model (e.g. gpt-4o)"}
                     value={row.from}
                     onChange={(e) => handleChangeRow(row.id, 'from', e.target.value)}
-                    className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="ui-field ui-field-sm font-mono flex-1"
                   />
                   <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   <input
@@ -131,7 +131,7 @@ export default function ModelMappingEditor({ mappingStr = '', onChange, lang = '
                     placeholder={isZh ? "映射模型 (如 deepseek-chat)" : "Target Model (e.g. deepseek-chat)"}
                     value={row.to}
                     onChange={(e) => handleChangeRow(row.id, 'to', e.target.value)}
-                    className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="ui-field ui-field-sm font-mono flex-1"
                   />
                   <button
                     type="button"
@@ -155,7 +155,7 @@ export default function ModelMappingEditor({ mappingStr = '', onChange, lang = '
               <Plus className="w-3 h-3" />
               <span>{isZh ? '添加映射规则' : 'Add Mapping Rule'}</span>
             </button>
-            <span className="text-[10px] text-slate-400">
+            <span className="ui-meta-sm">
               {isZh ? '支持 * 通配符，如 dept/*:*' : 'Supports wildcards, e.g. dept/*:*'}
             </span>
           </div>

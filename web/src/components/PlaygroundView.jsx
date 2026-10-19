@@ -35,6 +35,7 @@ export default function PlaygroundView({
   keys = [],
   models = [],
   modelRoutes = [],
+  prices = [],
   adminFetch,
   showToast,
   initialModel = '',
@@ -44,6 +45,22 @@ export default function PlaygroundView({
 }) {
   const isZh = lang === 'zh';
   const [playModality, setPlayModality] = useState(initialModality || 'chat');
+
+  // Real off-peak state for the currently selected chat model.
+  //
+  // The footer used to print a hardcoded "闲时费率 5 折激活中" banner regardless
+  // of the model's actual configuration, which is a claim the UI cannot support
+  // without the pricing row. We now read it from the pricing data and show
+  // nothing when the model has no off-peak discount configured.
+  const activeChatModel = playModel || (models.length > 0 ? models[0] : '');
+  const activePrice = prices.find(p => p.model === activeChatModel && (p.group_name || 'default') === 'default')
+    || prices.find(p => p.model === activeChatModel);
+  const offPeak = (() => {
+    if (!activePrice || activePrice.off_peak_enabled === false) return null;
+    const discount = typeof activePrice.off_peak_discount === 'number' ? activePrice.off_peak_discount : null;
+    if (discount === null || discount >= 1) return null;
+    return { discount, label: `${Math.round(discount * 10)}` };
+  })();
   const [playMode, setPlayMode] = useState('single'); // 'single' | 'arena'
   const [playApiKey, setPlayApiKey] = useState('');
   const [isCustomKey, setIsCustomKey] = useState(false);
@@ -103,6 +120,10 @@ export default function PlaygroundView({
   const chatModels = getPlaygroundModels('chat');
   const imgModels = getPlaygroundModels('images');
   const ttsModels = getPlaygroundModels('audio_speech');
+  const sttModels = getPlaygroundModels('audio_transcription');
+  const videoModels = getPlaygroundModels('videos');
+  const embedModels = getPlaygroundModels('embeddings');
+  const rerankModels = getPlaygroundModels('rerank');
 
   // Single Model state
   const [playModel, setPlayModel] = useState(initialModel || (chatModels[0] || ''));
@@ -153,6 +174,31 @@ export default function PlaygroundView({
   const [ttsSpeed] = useState(1.0);
   const [ttsInput, setTtsInput] = useState(isZh ? '欢迎使用 Airoute 企业级大模型与多模态网关系统。' : 'Welcome to Airoute enterprise LLM and multimodal gateway system.');
   const [ttsAudioUrl, setTtsAudioUrl] = useState(null);
+
+  // STT (audio transcription)
+  const [sttModel, setSttModel] = useState(sttModels[0] || '');
+  const [sttFile, setSttFile] = useState(null);
+  const [sttLanguage, setSttLanguage] = useState('');
+  const [sttResult, setSttResult] = useState(null);
+
+  // Video generation (async task + polling)
+  const [videoModel, setVideoModel] = useState(videoModels[0] || '');
+  const [videoPrompt, setVideoPrompt] = useState(isZh ? '无人机掠过云海之上的雪山群峰，电影级运镜' : 'Drone flying over snow peaks above a sea of clouds, cinematic');
+  const [videoResult, setVideoResult] = useState(null);
+  const [videoTaskId, setVideoTaskId] = useState('');
+
+  // Embeddings
+  const [embedModel, setEmbedModel] = useState(embedModels[0] || '');
+  const [embedInput, setEmbedInput] = useState(isZh ? 'Airoute 统一协议网关\n第二行文本用于批量向量化' : 'Airoute unified protocol gateway\nSecond line for batch embedding');
+  const [embedResult, setEmbedResult] = useState(null);
+
+  // Rerank
+  const [rerankModel, setRerankModel] = useState(rerankModels[0] || '');
+  const [rerankQuery, setRerankQuery] = useState(isZh ? '如何配置上游渠道的故障降级？' : 'How do I configure upstream failover?');
+  const [rerankDocs, setRerankDocs] = useState(isZh
+    ? '在模型路由中为同一模型绑定多个渠道并设置权重与优先级。\nPython 的列表推导式可以快速生成新列表。\n三态熔断器在连续失败后自动旁路异常渠道。'
+    : 'Bind multiple channels to one model with weights and priorities in Model Routes.\nPython list comprehensions build new lists quickly.\nThe tri-state breaker bypasses a failing channel automatically.');
+  const [rerankResult, setRerankResult] = useState(null);
 
   // Sync initial model
   useEffect(() => {
@@ -240,6 +286,37 @@ Execute the following mission with precision, maintainability, and zero speculat
     if (key) headers['Authorization'] = `Bearer ${key}`;
     return headers;
   };
+
+  const buildVideoRequest = () => ({
+    method: 'POST',
+    path: '/v1/videos/generations',
+    body: {
+      model: videoModel,
+      prompt: videoPrompt
+    }
+  });
+
+  const buildEmbeddingRequest = () => ({
+    method: 'POST',
+    path: '/v1/embeddings',
+    body: {
+      model: embedModel,
+      // One line per input keeps batch embedding reproducible and obvious.
+      input: embedInput.split('\n').map(t => t.trim()).filter(Boolean)
+    }
+  });
+
+  const buildRerankRequest = () => ({
+    method: 'POST',
+    path: '/v1/rerank',
+    body: {
+      model: rerankModel,
+      query: rerankQuery,
+      documents: rerankDocs.split('\n').map(t => t.trim()).filter(Boolean),
+      top_n: 3,
+      return_documents: true
+    }
+  });
 
   const withSystemPrompt = (msgs) => [
     ...(systemPrompt.trim() ? [{ role: 'system', content: systemPrompt.trim() }] : []),
@@ -588,6 +665,169 @@ Execute the following mission with precision, maintainability, and zero speculat
         const err = await res.json().catch(() => ({}));
         if (showToast) showToast(isZh ? `TTS 失败: ${err.error?.message || '未知错误'}` : `TTS failed: ${err.error?.message || 'Unknown error'}`, 'error');
       }
+    } catch (e) {
+      if (!isAbortError(e) && showToast) showToast(e.message, 'error');
+    } finally {
+      setPlayLoading(false);
+      abortRef.current = null;
+    }
+  };
+
+  // Audio Transcription (STT) — multipart upload
+  const handleTranscribe = async () => {
+    if (!sttFile) {
+      if (showToast) showToast(isZh ? '请先选择音频文件' : 'Please choose an audio file first', 'warning');
+      return;
+    }
+    setPlayLoading(true);
+    setPlayStopped(false);
+    setSttResult(null);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const start = Date.now();
+    try {
+      const form = new FormData();
+      form.append('file', sttFile);
+      form.append('model', sttModel);
+      if (sttLanguage.trim()) form.append('language', sttLanguage.trim());
+      const key = getEffectiveApiKey();
+      const res = await fetch('/v1/audio/transcriptions', {
+        method: 'POST',
+        // No Content-Type header: the browser must set the multipart boundary.
+        headers: key ? { Authorization: `Bearer ${key}` } : {},
+        body: form,
+        signal: controller.signal
+      });
+      const data = await res.json().catch(() => ({}));
+      setPlayDurationMs(Date.now() - start);
+      if (res.ok) {
+        setSttResult(data.text || '');
+      } else if (showToast) {
+        showToast(isZh ? `转写失败: ${data.error?.message || res.statusText}` : `Transcription failed: ${data.error?.message || res.statusText}`, 'error');
+      }
+    } catch (e) {
+      if (!isAbortError(e) && showToast) showToast(e.message, 'error');
+    } finally {
+      setPlayLoading(false);
+      abortRef.current = null;
+    }
+  };
+
+  // Video generation. The gateway returns either a finished asset or an async
+  // task id that must be polled through /v1/videos/tasks/{id}.
+  const handleGenerateVideo = async () => {
+    setPlayLoading(true);
+    setPlayStopped(false);
+    setVideoResult(null);
+    setVideoTaskId('');
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const start = Date.now();
+    try {
+      const request = buildVideoRequest();
+      const res = await fetch(request.path, {
+        method: request.method,
+        headers: buildHeaders(),
+        body: JSON.stringify(request.body),
+        signal: controller.signal
+      });
+      const data = await res.json().catch(() => ({}));
+      setPlayDurationMs(Date.now() - start);
+      if (!res.ok) {
+        if (showToast) showToast(isZh ? `视频生成失败: ${data.error?.message || res.statusText}` : `Video generation failed: ${data.error?.message || res.statusText}`, 'error');
+        return;
+      }
+      const taskId = data.id || data.task_id || data.data?.id || data.data?.task_id;
+      if (taskId) {
+        setVideoTaskId(taskId);
+        await pollVideoTask(taskId);
+      } else {
+        setVideoResult(data);
+      }
+    } catch (e) {
+      if (!isAbortError(e) && showToast) showToast(e.message, 'error');
+    } finally {
+      setPlayLoading(false);
+      abortRef.current = null;
+    }
+  };
+
+  const pollVideoTask = async (taskId, attempt = 0) => {
+    // Bounded polling: give up after ~2 minutes instead of polling forever.
+    if (attempt > 40) {
+      if (showToast) showToast(isZh ? '视频任务仍在处理中，请稍后在任务查询接口查看' : 'Video task still running; check the task endpoint later', 'warning');
+      return;
+    }
+    await new Promise(r => setTimeout(r, 3000));
+    try {
+      const res = await fetch(`/v1/videos/tasks/${encodeURIComponent(taskId)}`, {
+        headers: buildHeaders()
+      });
+      const data = await res.json().catch(() => ({}));
+      const status = String(data.status || data.data?.status || '').toLowerCase();
+      if (status === 'succeeded' || status === 'completed' || status === 'success') {
+        setVideoResult(data.data || data);
+        return;
+      }
+      if (status === 'failed' || status === 'error') {
+        if (showToast) showToast(isZh ? '视频任务失败' : 'Video task failed', 'error');
+        return;
+      }
+      setVideoResult(data.data || data);
+      await pollVideoTask(taskId, attempt + 1);
+    } catch (e) {
+      if (showToast) showToast((isZh ? '任务查询异常: ' : 'Task polling error: ') + e.message, 'warning');
+    }
+  };
+
+  // Embeddings
+  const handleEmbed = async () => {
+    setPlayLoading(true);
+    setPlayStopped(false);
+    setEmbedResult(null);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const start = Date.now();
+    try {
+      const request = buildEmbeddingRequest();
+      const res = await fetch(request.path, {
+        method: request.method,
+        headers: buildHeaders(),
+        body: JSON.stringify(request.body),
+        signal: controller.signal
+      });
+      const data = await res.json().catch(() => ({}));
+      setPlayDurationMs(Date.now() - start);
+      if (res.ok) setEmbedResult(data);
+      else if (showToast) showToast(isZh ? `向量化失败: ${data.error?.message || res.statusText}` : `Embedding failed: ${data.error?.message || res.statusText}`, 'error');
+    } catch (e) {
+      if (!isAbortError(e) && showToast) showToast(e.message, 'error');
+    } finally {
+      setPlayLoading(false);
+      abortRef.current = null;
+    }
+  };
+
+  // Rerank
+  const handleRerank = async () => {
+    setPlayLoading(true);
+    setPlayStopped(false);
+    setRerankResult(null);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const start = Date.now();
+    try {
+      const request = buildRerankRequest();
+      const res = await fetch(request.path, {
+        method: request.method,
+        headers: buildHeaders(),
+        body: JSON.stringify(request.body),
+        signal: controller.signal
+      });
+      const data = await res.json().catch(() => ({}));
+      setPlayDurationMs(Date.now() - start);
+      if (res.ok) setRerankResult(data);
+      else if (showToast) showToast(isZh ? `重排失败: ${data.error?.message || res.statusText}` : `Rerank failed: ${data.error?.message || res.statusText}`, 'error');
     } catch (e) {
       if (!isAbortError(e) && showToast) showToast(e.message, 'error');
     } finally {
@@ -991,6 +1231,113 @@ Execute the following mission with precision, maintainability, and zero speculat
             </div>
           )}
 
+          {/* STT (audio transcription) Controls */}
+          {playModality === 'audio_transcription' && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">{isZh ? '语音识别模型' : 'STT Model'}</label>
+                <select value={sttModel} onChange={(e) => setSttModel(e.target.value)} className="ui-field font-mono">
+                  {sttModels.length === 0 && <option value="">{isZh ? '未配置 STT 模型' : 'No STT model configured'}</option>}
+                  {sttModels.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">{isZh ? '音频文件 (multipart)' : 'Audio File (multipart)'}</label>
+                <input
+                  type="file"
+                  accept="audio/*"
+                  onChange={(e) => setSttFile(e.target.files?.[0] || null)}
+                  className="ui-field text-xs"
+                />
+                {sttFile && <span className="ui-meta mt-1 block font-mono">{sttFile.name} · {Math.round(sttFile.size / 1024)} KB</span>}
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">{isZh ? '语言 (可选, 如 zh/en)' : 'Language (optional, e.g. zh/en)'}</label>
+                <input value={sttLanguage} onChange={(e) => setSttLanguage(e.target.value)} className="ui-field font-mono" placeholder="zh" />
+              </div>
+              <button onClick={handleTranscribe} disabled={playLoading || !sttFile} className="ui-btn w-full bg-teal-600 text-white hover:bg-teal-700 shadow-sm disabled:opacity-50">
+                {playLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Mic className="w-3.5 h-3.5" />}
+                <span>{playLoading ? (isZh ? '转写中...' : 'Transcribing...') : (isZh ? '开始转写' : 'Transcribe')}</span>
+              </button>
+            </div>
+          )}
+
+          {/* Video generation Controls */}
+          {playModality === 'videos' && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">{isZh ? '视频生成模型' : 'Video Model'}</label>
+                <select value={videoModel} onChange={(e) => setVideoModel(e.target.value)} className="ui-field font-mono">
+                  {videoModels.length === 0 && <option value="">{isZh ? '未配置视频模型' : 'No video model configured'}</option>}
+                  {videoModels.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">{isZh ? '视频提示词 (Prompt)' : 'Prompt'}</label>
+                <textarea rows={4} value={videoPrompt} onChange={(e) => setVideoPrompt(e.target.value)} className="ui-field resize-y" />
+              </div>
+              <button onClick={handleGenerateVideo} disabled={playLoading} className="ui-btn w-full bg-purple-600 text-white hover:bg-purple-700 shadow-sm">
+                {playLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Video className="w-3.5 h-3.5" />}
+                <span>{playLoading ? (isZh ? '生成中(异步轮询)...' : 'Generating (async polling)...') : (isZh ? '生成视频' : 'Generate Video')}</span>
+              </button>
+              {videoTaskId && (
+                <div className="ui-meta font-mono break-all">
+                  {isZh ? '任务 ID: ' : 'Task ID: '}{videoTaskId}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Embeddings Controls */}
+          {playModality === 'embeddings' && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">{isZh ? '向量模型' : 'Embedding Model'}</label>
+                <select value={embedModel} onChange={(e) => setEmbedModel(e.target.value)} className="ui-field font-mono">
+                  {embedModels.length === 0 && <option value="">{isZh ? '未配置向量模型' : 'No embedding model configured'}</option>}
+                  {embedModels.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  {isZh ? '输入文本（每行一条，批量向量化）' : 'Input (one line per item, batch embedding)'}
+                </label>
+                <textarea rows={5} value={embedInput} onChange={(e) => setEmbedInput(e.target.value)} className="ui-field resize-y font-mono text-xs" />
+              </div>
+              <button onClick={handleEmbed} disabled={playLoading} className="ui-btn w-full bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm">
+                {playLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Cpu className="w-3.5 h-3.5" />}
+                <span>{playLoading ? (isZh ? '向量化中...' : 'Embedding...') : (isZh ? '生成向量' : 'Generate Embeddings')}</span>
+              </button>
+            </div>
+          )}
+
+          {/* Rerank Controls */}
+          {playModality === 'rerank' && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">{isZh ? '重排模型' : 'Rerank Model'}</label>
+                <select value={rerankModel} onChange={(e) => setRerankModel(e.target.value)} className="ui-field font-mono">
+                  {rerankModels.length === 0 && <option value="">{isZh ? '未配置重排模型' : 'No rerank model configured'}</option>}
+                  {rerankModels.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">{isZh ? '查询语句 (Query)' : 'Query'}</label>
+                <input value={rerankQuery} onChange={(e) => setRerankQuery(e.target.value)} className="ui-field" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  {isZh ? '候选文档（每行一条）' : 'Documents (one per line)'}
+                </label>
+                <textarea rows={5} value={rerankDocs} onChange={(e) => setRerankDocs(e.target.value)} className="ui-field resize-y text-xs" />
+              </div>
+              <button onClick={handleRerank} disabled={playLoading} className="ui-btn w-full bg-amber-600 text-white hover:bg-amber-700 shadow-sm">
+                {playLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sliders className="w-3.5 h-3.5" />}
+                <span>{playLoading ? (isZh ? '重排中...' : 'Reranking...') : (isZh ? '执行重排' : 'Run Rerank')}</span>
+              </button>
+            </div>
+          )}
+
           {/* Telemetry Summary Footer */}
           <div className="ui-meta pt-3 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
             <div className="flex justify-between">
@@ -1234,10 +1581,26 @@ Execute the following mission with precision, maintainability, and zero speculat
                     <span>{isZh ? 'Prompt 缓存识别就绪' : 'Prompt Caching Ready'}</span>
                   </span>
                 </div>
-                <div className="flex items-center space-x-1 text-indigo-600 dark:text-indigo-400 font-medium">
-                  <Clock className="w-3 h-3" />
-                  <span>{isZh ? '闲时费率 5 折激活中' : 'Off-peak 50% Active'}</span>
-                </div>
+                {offPeak ? (
+                  <div
+                    className="flex items-center space-x-1 text-indigo-600 dark:text-indigo-400 font-medium"
+                    title={isZh
+                      ? `模型 [${activeChatModel}] 配置了闲时折扣；是否生效取决于当前时刻与优惠时段设置。`
+                      : `Model [${activeChatModel}] has an off-peak discount; whether it applies now depends on the configured time windows.`}
+                  >
+                    <Clock className="w-3 h-3" />
+                    <span>
+                      {isZh
+                        ? `闲时折扣已配置 (${offPeak.label} 折, 按时段生效)`
+                        : `Off-peak discount configured (${offPeak.label}/10, time-windowed)`}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-1 text-slate-400 dark:text-slate-500 font-medium">
+                    <Clock className="w-3 h-3" />
+                    <span>{isZh ? '该模型未配置闲时折扣' : 'No off-peak discount configured'}</span>
+                  </div>
+                )}
               </div>
 
               {/* Chat Input Bar: auto-growing composer (Enter sends, Shift+Enter newline) */}
@@ -1331,6 +1694,106 @@ Execute the following mission with precision, maintainability, and zero speculat
                 <div className="text-center ui-meta space-y-2">
                   <FileAudio className="w-12 h-12 stroke-1 mx-auto text-slate-400" />
                   <p>{isZh ? '点击左侧【生成语音】开始流式音频合成' : 'Click [Synthesize Speech] on the left to start streaming audio'}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* STT Result */}
+          {playModality === 'audio_transcription' && (
+            <div className="flex-1 flex flex-col p-4 overflow-y-auto">
+              {sttResult !== null ? (
+                <div className="w-full space-y-2">
+                  <span className="ui-meta font-semibold">{isZh ? '转写文本' : 'Transcript'}</span>
+                  <pre className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs whitespace-pre-wrap break-words font-mono">{sttResult}</pre>
+                </div>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-center ui-meta space-y-2">
+                  <Mic className="w-12 h-12 stroke-1 text-slate-400" />
+                  <p>{isZh ? '选择音频文件后点击【开始转写】' : 'Choose an audio file, then click Transcribe'}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Video Result */}
+          {playModality === 'videos' && (
+            <div className="flex-1 flex flex-col items-center justify-center p-4 space-y-3 overflow-y-auto">
+              {videoResult ? (
+                <div className="w-full max-w-2xl space-y-2">
+                  {(() => {
+                    const v = videoResult.video || videoResult.data?.[0] || videoResult;
+                    const url = v?.url || v?.video_url || (v?.b64_json ? `data:video/mp4;base64,${v.b64_json}` : '');
+                    return url ? (
+                      <video controls src={url} className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 shadow-md" />
+                    ) : (
+                      <pre className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px] overflow-x-auto font-mono">{JSON.stringify(videoResult, null, 2)}</pre>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div className="text-center ui-meta space-y-2">
+                  <Video className="w-12 h-12 stroke-1 text-slate-400" />
+                  <p>{isZh ? '视频为异步任务：提交后会自动轮询任务状态' : 'Video is asynchronous: the task is polled automatically after submit'}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Embeddings Result */}
+          {playModality === 'embeddings' && (
+            <div className="flex-1 flex flex-col p-4 overflow-y-auto">
+              {embedResult ? (
+                <div className="w-full space-y-3">
+                  <div className="flex flex-wrap gap-3 ui-meta font-mono">
+                    <span>{isZh ? '向量条数: ' : 'Vectors: '}{(embedResult.data || []).length}</span>
+                    <span>{isZh ? '维度: ' : 'Dimensions: '}{(embedResult.data?.[0]?.embedding || []).length}</span>
+                    {embedResult.usage?.prompt_tokens != null && <span>{isZh ? '消耗 Token: ' : 'Tokens: '}{embedResult.usage.prompt_tokens}</span>}
+                  </div>
+                  {(embedResult.data || []).map((item, idx) => (
+                    <div key={idx} className="rounded-xl border border-slate-200 dark:border-slate-800 p-3">
+                      <span className="ui-meta font-semibold block mb-1">#{item.index ?? idx}</span>
+                      <pre className="text-[10px] font-mono whitespace-pre-wrap break-all max-h-28 overflow-y-auto">
+                        {JSON.stringify((item.embedding || []).slice(0, 24))}{(item.embedding || []).length > 24 ? ' …' : ''}
+                      </pre>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-center ui-meta space-y-2">
+                  <Cpu className="w-12 h-12 stroke-1 text-slate-400" />
+                  <p>{isZh ? '输入文本后点击【生成向量】' : 'Enter text, then click Generate Embeddings'}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Rerank Result */}
+          {playModality === 'rerank' && (
+            <div className="flex-1 flex flex-col p-4 overflow-y-auto">
+              {rerankResult ? (
+                <div className="w-full space-y-2">
+                  {(rerankResult.results || []).map((r, idx) => (
+                    <div key={idx} className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <span className="ui-meta font-mono block mb-1">#{idx + 1} · index {r.index}</span>
+                        <p className="text-xs break-words">
+                          {r.document?.text || r.document || (rerankDocs.split('\n').filter(Boolean)[r.index] ?? '')}
+                        </p>
+                      </div>
+                      <span className="shrink-0 px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 text-[11px] font-mono font-semibold">
+                        {(r.relevance_score ?? 0).toFixed(4)}
+                      </span>
+                    </div>
+                  ))}
+                  {(rerankResult.results || []).length === 0 && (
+                    <pre className="text-[11px] font-mono">{JSON.stringify(rerankResult, null, 2)}</pre>
+                  )}
+                </div>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-center ui-meta space-y-2">
+                  <Sliders className="w-12 h-12 stroke-1 text-slate-400" />
+                  <p>{isZh ? '填写查询与候选文档后点击【执行重排】' : 'Fill in a query and documents, then click Run Rerank'}</p>
                 </div>
               )}
             </div>

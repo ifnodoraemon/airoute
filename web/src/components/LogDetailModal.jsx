@@ -39,7 +39,20 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
   };
 
   const isSuccess = log ? log.status_code >= 200 && log.status_code < 300 : false;
+  // Evidence flags used by the remediation panel below. They must live at
+  // component scope: the classification block is an IIFE, so anything declared
+  // inside it is invisible to the JSX.
+  const errorMessage = (log && log.error_message ? String(log.error_message) : '').trim();
+  const hasUpstreamDetail = errorMessage.length > 0;
+  const isErrorLog = !!log && ((log.status_code || 200) >= 400 || hasUpstreamDetail);
 
+  // Heuristic remediation hint.
+  //
+  // This is derived ONLY from the HTTP status code and the captured error text,
+  // so it must be presented as a *possible* cause with a suggested next step —
+  // not as a verified root cause. The upstream error message (shown separately)
+  // is the authoritative evidence; the classification below cannot see the
+  // upstream's actual reason.
   const rca = (() => {
     if (!log) return null;
     const code = log.status_code || 200;
@@ -65,7 +78,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
       return {
         type: 'warning',
         badge: '429 Rate Limit',
-        title: isZh ? '根因剖析: 上游服务商速率限制 (TPM/RPM Throttling)' : 'RCA: Upstream Rate Limit (TPM/RPM)',
+        title: isZh ? '可能原因: 上游限流 (TPM/RPM)' : 'Likely Cause: Upstream Rate Limit (TPM/RPM)',
         summary: isZh
           ? `上游渠道 [${log.channel || '默认'}] 的请求频率或单分钟 Token 消耗达到限额。建议在【模型路由】中为模型 [${log.model}] 挂载第二家服务商作为降级容灾渠道，或在【通道管理】中增加备用 Key 轮询。`
           : `Upstream channel [${log.channel || 'Default'}] hit rate limits. Recommended action: configure a secondary fallback provider for [${log.model}] in Model Routes, or add backup keys in Channels.`,
@@ -78,7 +91,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
       return {
         type: 'error',
         badge: 'Context / Parameter',
-        title: isZh ? '根因剖析: 上下文超限或模型参数不兼容' : 'RCA: Context Overflow or Parameter Mismatch',
+        title: isZh ? '可能原因: 上下文超限或参数不兼容' : 'Likely Cause: Context Overflow or Parameter Mismatch',
         summary: isZh
           ? `传入 Prompt 超过模型 [${log.model}] 的最大 Token 窗口，或携带了模型不支持的参数。建议开启 Prompt 压缩截断，或将路由升级为 128k/1M 上下文长文本模型。`
           : `Prompt tokens exceed the maximum context window of [${log.model}], or unsupported parameters were sent. Truncate conversation history or route to a long-context model.`,
@@ -91,7 +104,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
       return {
         type: 'error',
         badge: 'Auth Failure',
-        title: isZh ? '根因剖析: 上游凭证失效或权限拒绝' : 'RCA: Upstream Credential Revoked / Unauthorized',
+        title: isZh ? '可能原因: 上游凭证失效或权限拒绝' : 'Likely Cause: Upstream Credential Invalid / Unauthorized',
         summary: isZh
           ? `上游通道 [${log.channel || '渠道'}] 绑定的 API 密钥已失效、服务商余额欠费或账号被封禁。请前往【通道管理】更新密钥并执行连通性探测。`
           : `The API key for upstream channel [${log.channel || 'Channel'}] is invalid, expired, or out of balance. Update upstream API key in Channels and re-probe.`,
@@ -104,7 +117,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
       return {
         type: 'error',
         badge: 'Upstream Timeout',
-        title: isZh ? '根因剖析: 上游网关握手超时' : 'RCA: Gateway Timeout or Network Unreachable',
+        title: isZh ? '可能原因: 上游超时或网络不可达' : 'Likely Cause: Upstream Timeout or Network Unreachable',
         summary: isZh
           ? `网关向上游发起推理请求时超时。若该模型为复杂思维链推理（如 DeepSeek-R1 / o1），建议在【通道管理】中延长超时时间至 90s~120s，并开启断路器保护。`
           : `Upstream request timed out. For deep reasoning models, increase channel timeout to 90s-120s in Channel settings and keep circuit breaker enabled.`,
@@ -116,7 +129,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
     return {
       type: 'error',
       badge: `HTTP ${code}`,
-      title: isZh ? '根因剖析: 上游内部异常' : 'RCA: Upstream Internal Failure',
+      title: isZh ? '可能原因: 上游返回异常状态' : 'Likely Cause: Upstream Returned an Error Status',
       summary: isZh
         ? `上游服务商返回非预期状态码。已触发链路追踪 Trace ID，建议检查上游日志或在模型路由中将权重调度转移至其他稳定渠道。`
         : `Unexpected response from upstream provider. Shift traffic weight to other active channels in Model Routes.`,
@@ -417,7 +430,9 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
             </div>
           )}
 
-          {/* AI Root Cause Analysis & Auto-Remediation (AI RCA) */}
+          {/* Heuristic remediation hint derived from the status code. The
+              upstream's own error message is the authoritative evidence and is
+              rendered below it when present. */}
           {rca && (
             <div className={`p-4 rounded-xl border text-xs ${
               rca.type === 'success'
@@ -438,6 +453,21 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                 </span>
               </div>
               <p className="leading-relaxed opacity-90">{rca.summary}</p>
+              {hasUpstreamDetail && (
+                <div className="mt-2.5 pt-2.5 border-t border-current/10">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wide opacity-60 mb-1">
+                    {isZh ? '上游原始错误（权威依据）' : 'Upstream error (authoritative)'}
+                  </span>
+                  <code className="block font-mono text-[11px] break-all opacity-90">{errorMessage}</code>
+                </div>
+              )}
+              {!hasUpstreamDetail && isErrorLog && (
+                <p className="mt-2 text-[11px] opacity-60">
+                  {isZh
+                    ? '本次请求未记录上游错误详情，以上仅为基于状态码的推测，不能作为根因结论。'
+                    : 'No upstream error detail was recorded for this request; the above is inferred from the status code only.'}
+                </p>
+              )}
               {rca.actionLabel && onNavigate && (
                 <div className="mt-3 pt-2.5 border-t border-slate-200/60 dark:border-slate-800/60 flex justify-end">
                   <button

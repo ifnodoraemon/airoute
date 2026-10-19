@@ -22,6 +22,9 @@ import {
   Coins
 } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
+import useFormDirty from '../hooks/useFormDirty';
+import useUnsavedGuard from '../hooks/useUnsavedGuard';
+import DiscardChangesDialog from './DiscardChangesDialog';
 
 export default function UserManagementView({ adminUser, adminFetch, showToast, lang = 'zh', t }) {
   const isZh = lang === 'zh';
@@ -55,9 +58,47 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
   const [resetting, setResetting] = useState(false);
   const [resetModalError, setResetModalError] = useState('');
 
-  useModalA11y(showAddModal, () => setShowAddModal(false));
-  useModalA11y(!!quotaTargetUser, () => setQuotaTargetUser(null));
-  useModalA11y(!!resetTargetUser, () => setResetTargetUser(null));
+  // Dismissing a form modal (backdrop / X / Cancel / Esc) must never silently
+  // drop typed input, so every dismissal is routed through a per-modal guard.
+  // Drafts contain only the fields the user can edit in that modal.
+  const addUserDraft = {
+    username: newUsername,
+    email: newEmail,
+    password: newPassword,
+    role: newRole,
+    status: newStatus,
+    balance: newBalance,
+    groupName: newGroupName
+  };
+  const addUserDirty = useFormDirty(showAddModal, addUserDraft);
+  const {
+    confirming: addUserConfirming,
+    requestClose: requestCloseAddUser,
+    keepEditing: keepEditingAddUser,
+    discard: discardAddUser
+  } = useUnsavedGuard({ isOpen: showAddModal, isDirty: addUserDirty, onClose: () => setShowAddModal(false) });
+
+  const quotaDraft = { mode: quotaMode, value: quotaValue };
+  const quotaDirty = useFormDirty(!!quotaTargetUser, quotaDraft);
+  const {
+    confirming: quotaConfirming,
+    requestClose: requestCloseQuota,
+    keepEditing: keepEditingQuota,
+    discard: discardQuota
+  } = useUnsavedGuard({ isOpen: !!quotaTargetUser, isDirty: quotaDirty, onClose: () => setQuotaTargetUser(null) });
+
+  const resetPasswordDraft = { password: resetPassword };
+  const resetPasswordDirty = useFormDirty(!!resetTargetUser, resetPasswordDraft);
+  const {
+    confirming: resetConfirming,
+    requestClose: requestCloseReset,
+    keepEditing: keepEditingReset,
+    discard: discardReset
+  } = useUnsavedGuard({ isOpen: !!resetTargetUser, isDirty: resetPasswordDirty, onClose: () => setResetTargetUser(null) });
+
+  useModalA11y(showAddModal, requestCloseAddUser);
+  useModalA11y(!!quotaTargetUser, requestCloseQuota);
+  useModalA11y(!!resetTargetUser, requestCloseReset);
 
   // Password visibility
   const [showNewPassPlain, setShowNewPassPlain] = useState(false);
@@ -155,7 +196,8 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
       const data = await res.json();
       if (res.ok && data.code === 0) {
         if (showToast) showToast(isZh ? `用户 [${newUsername}] 创建成功，已自动生成 API 密钥` : `User [${newUsername}] created successfully with API key`, 'success');
-        setShowAddModal(false);
+        // Reset the draft to its baseline first, so the unsaved guard can never
+        // block the close that follows a successful create.
         setNewUsername('');
         setNewEmail('');
         setNewPassword('');
@@ -164,6 +206,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
         setNewBalance('10.0');
         setNewGroupName('default');
         setAddModalError('');
+        setShowAddModal(false);
         fetchUsers();
       } else {
         const errMsg = data.error || (isZh ? '创建账号失败' : 'Failed to create user account');
@@ -229,6 +272,9 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
       const data = await res.json();
       if (res.ok && data.code === 0) {
         showToast(data.message || (isZh ? '额度调整成功' : 'Balance updated successfully'), 'success');
+        // Restore the draft baseline before closing so the guard cannot prompt.
+        setQuotaMode('delta');
+        setQuotaValue('50');
         setQuotaTargetUser(null);
         fetchUsers();
       } else {
@@ -316,8 +362,9 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
       const data = await res.json();
       if (res.ok && data.code === 0) {
         showToast(isZh ? `账号 [${resetTargetUser.username}] 密码已成功重置` : `Password for [${resetTargetUser.username}] reset successfully`, 'success');
-        setResetTargetUser(null);
+        // Clear the draft before closing so the guard cannot prompt afterwards.
         setResetPassword('');
+        setResetTargetUser(null);
       } else {
         setResetModalError(data.error || (isZh ? '重置密码失败' : 'Failed to reset password'));
       }
@@ -402,7 +449,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-5 rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between">
           <div>
-            <div className="text-xs font-semibold text-slate-400">{isZh ? '总注册用户' : 'Total Users'}</div>
+            <div className="ui-meta font-semibold">{isZh ? '总注册用户' : 'Total Users'}</div>
             <div className="text-2xl font-black text-slate-900 dark:text-slate-100 mt-1">{totalUsers}</div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
@@ -412,7 +459,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
 
         <div className="p-5 rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between">
           <div>
-            <div className="text-xs font-semibold text-slate-400">{isZh ? '超级管理员' : 'Administrators'}</div>
+            <div className="ui-meta font-semibold">{isZh ? '超级管理员' : 'Administrators'}</div>
             <div className="text-2xl font-black text-purple-700 dark:text-purple-300 mt-1">{adminCount}</div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-100 dark:border-purple-900 flex items-center justify-center text-purple-600 dark:text-purple-400">
@@ -422,7 +469,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
 
         <div className="p-5 rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between">
           <div>
-            <div className="text-xs font-semibold text-slate-400">{isZh ? '普通用户' : 'Regular Users'}</div>
+            <div className="ui-meta font-semibold">{isZh ? '普通用户' : 'Regular Users'}</div>
             <div className="text-2xl font-black text-emerald-700 dark:text-emerald-300 mt-1">{regularCount}</div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
@@ -432,7 +479,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
 
         <div className="p-5 rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between">
           <div>
-            <div className="text-xs font-semibold text-slate-400">{isZh ? '已锁定账号' : 'Locked Accounts'}</div>
+            <div className="ui-meta font-semibold">{isZh ? '已锁定账号' : 'Locked Accounts'}</div>
             <div className="text-2xl font-black text-rose-700 dark:text-rose-300 mt-1">{lockedCount}</div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 flex items-center justify-center text-rose-600 dark:text-rose-400">
@@ -506,7 +553,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 uppercase font-bold bg-slate-50/50 dark:bg-slate-900/50">
+              <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 uppercase font-bold bg-slate-50/50 dark:bg-slate-900/50">
                 <th className="py-3.5 px-4">{isZh ? '用户标识与邮箱' : 'User & Email'}</th>
                 <th className="py-3.5 px-4">{isZh ? '角色' : 'Role'}</th>
                 <th className="py-3.5 px-4">{isZh ? '状态' : 'Status'}</th>
@@ -519,14 +566,14 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading && users.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="py-12 text-center text-slate-400">
+                  <td colSpan="7" className="py-12 text-center ui-meta">
                     <RefreshCw className="w-5 h-5 animate-spin text-indigo-600 mx-auto mb-2" />
                     <span>{isZh ? '正在加载用户数据...' : 'Loading users...'}</span>
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="py-12 text-center text-slate-400">
+                  <td colSpan="7" className="py-12 text-center ui-meta">
                     {isZh ? '未找到匹配的用户账号' : 'No matching user accounts found'}
                   </td>
                 </tr>
@@ -696,17 +743,17 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
         <div
           className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in"
           onClick={(e) => {
-            if (e.target === e.currentTarget) setShowAddModal(false);
+            if (e.target === e.currentTarget) requestCloseAddUser();
           }}
         >
-          <div className="bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+          <div className="relative bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center space-x-2">
                 <UserPlus className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                 <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">{isZh ? '创建新用户账号' : 'Create User Account'}</h3>
               </div>
               <button
-                onClick={() => setShowAddModal(false)}
+                onClick={() => requestCloseAddUser()}
                 className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
               >
                 ✕
@@ -849,7 +896,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
               <div className="pt-2 flex items-center justify-end space-x-2">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => requestCloseAddUser()}
                   className="px-4 py-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-medium cursor-pointer"
                 >
                   {isZh ? '取消' : 'Cancel'}
@@ -863,6 +910,14 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
                 </button>
               </div>
             </form>
+
+            <DiscardChangesDialog
+              open={addUserConfirming}
+              onKeepEditing={keepEditingAddUser}
+              onDiscard={discardAddUser}
+              lang={lang}
+              title={isZh ? '放弃未保存的用户信息？' : 'Discard this new user?'}
+            />
           </div>
         </div>
       )}
@@ -872,17 +927,17 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
         <div
           className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in"
           onClick={(e) => {
-            if (e.target === e.currentTarget) setQuotaTargetUser(null);
+            if (e.target === e.currentTarget) requestCloseQuota();
           }}
         >
-          <div className="bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+          <div className="relative bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center space-x-2">
                 <Coins className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                 <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">{isZh ? '调整用户可用额度' : 'Adjust User Quota / Balance'}</h3>
               </div>
               <button
-                onClick={() => setQuotaTargetUser(null)}
+                onClick={() => requestCloseQuota()}
                 className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
               >
                 ✕
@@ -890,8 +945,8 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
             </div>
 
             <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-100 dark:border-slate-800 text-xs space-y-1">
-              <div className="text-slate-500 dark:text-slate-400">{isZh ? '目标用户:' : 'Target User:'} <span className="font-bold text-slate-900 dark:text-slate-100">{quotaTargetUser.username}</span></div>
-              <div className="text-slate-500 dark:text-slate-400">{isZh ? '当前余额:' : 'Current Balance:'} <span className="font-bold font-mono text-indigo-600 dark:text-indigo-400">¥ {Number(quotaTargetUser.balance || 0).toFixed(2)}</span></div>
+              <div className="ui-meta">{isZh ? '目标用户:' : 'Target User:'} <span className="font-bold text-slate-900 dark:text-slate-100">{quotaTargetUser.username}</span></div>
+              <div className="ui-meta">{isZh ? '当前余额:' : 'Current Balance:'} <span className="font-bold font-mono text-indigo-600 dark:text-indigo-400">¥ {Number(quotaTargetUser.balance || 0).toFixed(2)}</span></div>
             </div>
 
             {quotaModalError && (
@@ -966,7 +1021,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
               <div className="pt-2 flex items-center justify-end space-x-2">
                 <button
                   type="button"
-                  onClick={() => setQuotaTargetUser(null)}
+                  onClick={() => requestCloseQuota()}
                   className="px-4 py-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-medium cursor-pointer"
                 >
                   {isZh ? '取消' : 'Cancel'}
@@ -980,6 +1035,14 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
                 </button>
               </div>
             </form>
+
+            <DiscardChangesDialog
+              open={quotaConfirming}
+              onKeepEditing={keepEditingQuota}
+              onDiscard={discardQuota}
+              lang={lang}
+              title={isZh ? '放弃未保存的额度调整？' : 'Discard this quota change?'}
+            />
           </div>
         </div>
       )}
@@ -989,17 +1052,17 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
         <div
           className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in"
           onClick={(e) => {
-            if (e.target === e.currentTarget) setResetTargetUser(null);
+            if (e.target === e.currentTarget) requestCloseReset();
           }}
         >
-          <div className="bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+          <div className="relative bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center space-x-2">
                 <Key className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                 <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">{isZh ? '重置用户密码' : 'Reset User Password'}</h3>
               </div>
               <button
-                onClick={() => setResetTargetUser(null)}
+                onClick={() => requestCloseReset()}
                 className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
               >
                 ✕
@@ -1053,7 +1116,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
               <div className="pt-2 flex items-center justify-end space-x-2">
                 <button
                   type="button"
-                  onClick={() => setResetTargetUser(null)}
+                  onClick={() => requestCloseReset()}
                   className="px-4 py-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-medium cursor-pointer"
                 >
                   {isZh ? '取消' : 'Cancel'}
@@ -1067,6 +1130,14 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
                 </button>
               </div>
             </form>
+
+            <DiscardChangesDialog
+              open={resetConfirming}
+              onKeepEditing={keepEditingReset}
+              onDiscard={discardReset}
+              lang={lang}
+              title={isZh ? '放弃未保存的密码？' : 'Discard this password?'}
+            />
           </div>
         </div>
       )}

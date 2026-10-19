@@ -194,23 +194,23 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
+      <div className="bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
           <div className="flex items-center space-x-2.5">
-            <div className="w-9 h-9 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700">
-              <Key className="w-4 h-4 text-slate-700" />
+            <div className="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200">
+              <Key className="w-4 h-4 text-slate-700 dark:text-slate-200" />
             </div>
             <div>
-              <h3 className="font-semibold text-base text-slate-900 tracking-tight">
+              <h3 className="font-semibold text-base text-slate-900 dark:text-slate-100 tracking-tight">
                 {isZh ? 'Airoute 统一门户' : 'Airoute Portal'}
               </h3>
-              <p className="text-[11px] text-slate-500">{isZh ? '统一身份验证与额度管理' : 'Unified Auth & Quota Management'}</p>
+              <p className="ui-meta">{isZh ? '统一身份验证与额度管理' : 'Unified Auth & Quota Management'}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition cursor-pointer"
+            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -218,7 +218,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
 
         {/* Tab Switcher */}
         {sysConfig.allow_registration ? (
-          <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-lg text-xs font-semibold">
+          <div className="grid grid-cols-2 gap-2 bg-slate-100 dark:bg-slate-900 p-1 rounded-lg text-xs font-semibold">
             <button
               type="button"
               onClick={() => {
@@ -228,8 +228,8 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
               }}
               className={`py-2 rounded-md transition cursor-pointer ${
                 activeTab === 'login'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800'
+                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100'
               }`}
             >
               {isZh ? '账号登录' : 'Sign In'}
@@ -243,8 +243,8 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
               }}
               className={`py-2 rounded-md transition cursor-pointer flex items-center justify-center ${
                 activeTab === 'register'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800'
+                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100'
               }`}
             >
               <span>{isZh ? '注册账号' : 'Register'}</span>
@@ -253,15 +253,15 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
         ) : null}
 
         {error && (
-          <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center space-x-2">
-            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+          <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs flex items-center space-x-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
             <span>{error}</span>
           </div>
         )}
 
         {successMsg && (
-          <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center space-x-2">
-            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+          <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs flex items-center space-x-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
             <span>{successMsg}</span>
           </div>
         )}
@@ -270,40 +270,40 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
         {activeTab === 'login' ? (
           <form onSubmit={handleLoginSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="ui-label font-semibold">
                 {isZh ? '用户名或绑定邮箱' : 'Username or Email'}
               </label>
               <div className="relative">
-                <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   required
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder={isZh ? 'admin / 注册用户名 / 邮箱' : 'admin / username / email'}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                  className="ui-field pl-9 pr-3"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="ui-label font-semibold">
                 {isZh ? '登录密码' : 'Password'}
               </label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   required
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder={isZh ? '密码' : 'Password'}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-10 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                  className="ui-field pl-9 pr-10"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
                   title={showPassword ? (isZh ? '隐藏密码' : 'Hide password') : (isZh ? '显示密码' : 'Show password')}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -315,7 +315,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
+                className="ui-btn-primary w-full gap-2 bg-indigo-600 hover:bg-indigo-700 font-bold shadow-md hover:shadow-lg"
               >
                 {loading ? (
                   <>
@@ -335,11 +335,11 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
             {(sysConfig.oauth_github_enabled || sysConfig.oauth_google_enabled) && (
               <div className="pt-2">
                 <div className="relative flex py-2 items-center">
-                  <div className="grow border-t border-slate-200"></div>
-                  <span className="shrink mx-3 text-[10px] text-slate-400 uppercase font-semibold">
+                  <div className="grow border-t border-slate-200 dark:border-slate-800"></div>
+                  <span className="shrink mx-3 ui-section-title">
                     {isZh ? '快速三方登录' : 'Social Sign-in'}
                   </span>
-                  <div className="grow border-t border-slate-200"></div>
+                  <div className="grow border-t border-slate-200 dark:border-slate-800"></div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2.5 mt-2">
@@ -348,7 +348,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
                       type="button"
                       onClick={() => handleOAuthLogin('github')}
                       disabled={loading}
-                      className="py-2 px-3 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold flex items-center justify-center space-x-2 transition cursor-pointer"
+                      className="ui-btn-secondary gap-2 font-semibold"
                     >
                       <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
                         <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
@@ -361,7 +361,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
                       type="button"
                       onClick={() => handleOAuthLogin('google')}
                       disabled={loading}
-                      className="py-2 px-3 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold flex items-center justify-center space-x-2 transition cursor-pointer"
+                      className="ui-btn-secondary gap-2 font-semibold"
                     >
                       <svg className="w-4 h-4" viewBox="0 0 24 24">
                         <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z" />
@@ -380,42 +380,42 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
           /* TAB: REGISTER */
           <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="ui-label font-semibold">
                 {isZh ? '用户名' : 'Username'}
               </label>
               <div className="relative">
-                <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   required
                   type="text"
                   value={regUsername}
                   onChange={(e) => setRegUsername(e.target.value)}
                   placeholder={isZh ? '字母/数字，至少 3 字符' : 'Letters/digits, min 3 chars'}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                  className="ui-field pl-9 pr-3"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="ui-label font-semibold">
                 {isZh ? '邮箱地址' : 'Email Address'}
               </label>
               <div className="relative">
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   required
                   type="email"
                   value={regEmail}
                   onChange={(e) => setRegEmail(e.target.value)}
                   placeholder="your-name@company.com"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                  className="ui-field pl-9 pr-3"
                 />
               </div>
             </div>
 
             {sysConfig.require_email_verification && (
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="ui-label font-semibold">
                   {isZh ? '邮箱验证码' : 'Email Verification Code'}
                 </label>
                 <div className="flex space-x-2">
@@ -426,13 +426,13 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
                     value={regCode}
                     onChange={(e) => setRegCode(e.target.value)}
                     placeholder={isZh ? '6 位验证码' : '6-digit code'}
-                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                    className="ui-field flex-1 font-mono"
                   />
                   <button
                     type="button"
                     onClick={handleSendCode}
                     disabled={sendingCode || codeCountdown > 0}
-                    className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-indigo-700 text-xs font-bold transition whitespace-nowrap disabled:opacity-50 cursor-pointer"
+                    className="ui-btn-secondary px-3 gap-2 border-transparent bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-indigo-700 dark:text-indigo-300 font-bold whitespace-nowrap"
                   >
                     {sendingCode ? (
                       <RefreshCw className="w-3.5 h-3.5 animate-spin mx-auto" />
@@ -447,23 +447,23 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
             )}
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="ui-label font-semibold">
                 {isZh ? '设置密码' : 'Password'}
               </label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   required
                   type={showPassword ? 'text' : 'password'}
                   value={regPassword}
                   onChange={(e) => setRegPassword(e.target.value)}
                   placeholder={isZh ? '至少 6 位字符' : 'At least 6 characters'}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-10 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                  className="ui-field pl-9 pr-10"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -474,7 +474,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 bg-linear-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
+                className="ui-btn-primary w-full gap-2 bg-linear-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 font-bold shadow-md hover:shadow-lg"
               >
                 {loading ? (
                   <>

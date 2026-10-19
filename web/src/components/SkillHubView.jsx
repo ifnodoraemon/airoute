@@ -299,7 +299,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 max-w-3xl leading-relaxed">
+          <p className="ui-meta mt-2 max-w-3xl leading-relaxed">
             {isZh
               ? '标准化智能体 SOP 作业包体系，支持线上代码审查、直连高速下载归档与一键接入 Claude Code、Cursor、OpenCode 等客户端。'
               : 'Standardized Agent SOP packages with online review, direct downloads, and seamless client integration.'}
@@ -309,14 +309,14 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
         <div className="flex items-center gap-3 shrink-0">
           <button
             onClick={() => { setSelectedSkillForGuide(null); setClientGuideModalOpen(true); }}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-2xs cursor-pointer"
+            className="ui-btn-secondary shadow-2xs"
           >
             <BookOpen className="w-4 h-4 text-amber-600 dark:text-amber-400" />
             <span>{isZh ? '客户端接入指南' : 'Client Guide'}</span>
           </button>
           <button
             onClick={() => setCreateModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-xl transition-colors shadow-2xs cursor-pointer"
+            className="ui-btn bg-amber-600 hover:bg-amber-700 text-white shadow-2xs"
           >
             <Plus className="w-4 h-4" />
             <span>{isZh ? '新建技能' : 'New Skill'}</span>
@@ -331,9 +331,9 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
             <Workflow className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs text-slate-400">{isZh ? '已挂载 SOP 技能' : 'Available SOP Skills'}</div>
+            <div className="ui-meta">{isZh ? '已挂载 SOP 技能' : 'Available SOP Skills'}</div>
             <div className="text-xl font-bold font-mono text-slate-900 dark:text-white mt-0.5">
-              {skills.filter(s => s.enabled).length} <span className="text-xs font-normal text-slate-400">/ 共 {skills.length} 项</span>
+              {skills.filter(s => s.enabled).length} <span className="ui-meta font-normal">/ 共 {skills.length} 项</span>
             </div>
           </div>
         </div>
@@ -343,13 +343,13 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
             <ShieldCheck className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs text-slate-400">{isZh ? '标准三阶段渐进加载' : 'Progressive Loading'}</div>
+            <div className="ui-meta">{isZh ? '标准三阶段渐进加载' : 'Progressive Loading'}</div>
             <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 mt-1 flex items-center gap-1.5 font-mono">
-              <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px]">L1 检索</span>
+              <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-xs">L1 检索</span>
               <ArrowRight className="w-3 h-3 text-slate-400" />
-              <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px]">L2 SOP</span>
+              <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-xs">L2 SOP</span>
               <ArrowRight className="w-3 h-3 text-slate-400" />
-              <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px]">L3 执行</span>
+              <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-xs">L3 执行</span>
             </div>
           </div>
         </div>
@@ -359,7 +359,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
             <HardDrive className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs text-slate-400">{isZh ? 'ZIP 产物归档存储' : 'Bundle Storage'}</div>
+            <div className="ui-meta">{isZh ? 'ZIP 产物归档存储' : 'Bundle Storage'}</div>
             <div className="text-xs font-medium text-slate-800 dark:text-slate-200 mt-1 flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
               <span>{storageStatus?.driver === 's3' ? (isZh ? 'S3 对象存储集群' : 'S3 Object Storage') : (isZh ? '本地高速持久存储' : 'Local Fast Storage')}</span>
@@ -398,7 +398,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
             placeholder={isZh ? '搜索技能名称或适用工具...' : 'Search skill name or tool...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3.5 py-2 text-xs rounded-xl border border-slate-200/80 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-amber-500 transition-colors"
+            className="w-full pl-9 pr-3.5 py-2 text-xs rounded-xl border border-slate-200/80 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors"
           />
         </div>
       </div>
@@ -410,7 +410,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
           <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
             {isZh ? '未找到匹配的 Agent 技能' : 'No matching Agent Skills found'}
           </p>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="ui-meta mt-1">
             {isZh ? '可在上方切换分类筛选或点击「新建技能」添加' : 'Switch category filters above or click "New Skill" to add one'}
           </p>
         </div>
@@ -444,11 +444,11 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
                           <h3 className="text-sm font-semibold text-slate-900 dark:text-white truncate">
                             {skill.name}
                           </h3>
-                          <span className="px-2 py-0.5 text-[10px] font-mono rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                          <span className="px-2 py-0.5 text-xs font-mono rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
                             v{skill.version || '1.0.0'}
                           </span>
                         </div>
-                        <div className="text-[11px] font-mono text-slate-400 truncate mt-0.5">
+                        <div className="ui-meta font-mono truncate mt-0.5">
                           {skill.id}
                         </div>
                       </div>
@@ -473,18 +473,18 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
 
                   {/* 适用工具清单 */}
                   {skill.tools && skill.tools.length > 0 && (
-                    <div className="flex items-center gap-1.5 flex-wrap mb-5 text-[11px]">
-                      <span className="text-slate-400 mr-0.5">{isZh ? '工具集:' : 'Tools:'}</span>
+                    <div className="flex items-center gap-1.5 flex-wrap mb-5 text-xs">
+                      <span className="ui-meta mr-0.5">{isZh ? '工具集:' : 'Tools:'}</span>
                       {skill.tools.slice(0, 5).map(t => (
                         <span
                           key={t}
-                          className="px-2 py-0.5 font-mono text-[10px] bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 rounded-md border border-slate-200/70 dark:border-slate-800"
+                          className="px-2 py-0.5 font-mono text-xs bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 rounded-md border border-slate-200/70 dark:border-slate-800"
                         >
                           {t}
                         </span>
                       ))}
                       {skill.tools.length > 5 && (
-                        <span className="text-slate-400 text-[10px] font-mono font-medium">+{skill.tools.length - 5}</span>
+                        <span className="ui-meta font-mono font-medium">+{skill.tools.length - 5}</span>
                       )}
                     </div>
                   )}
@@ -549,7 +549,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
             if (e.target === e.currentTarget) setClientGuideModalOpen(false);
           }}
         >
-          <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-[#0F1420] rounded-xl shadow-2xl border border-gray-200 dark:border-slate-800 max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-linear-to-br from-amber-500 to-orange-600 text-white rounded-lg">
@@ -559,7 +559,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
                   <h3 className="text-base font-bold text-gray-900 dark:text-white">
                     {isZh ? '智能体客户端接入示例' : 'Agent Client Integration Examples'}
                   </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="ui-meta">
                     {selectedSkillForGuide 
                       ? (isZh ? `将 [${selectedSkillForGuide.name}] 导入您的 Agent 编程环境` : `Import [${selectedSkillForGuide.name}] into your Agent environment`)
                       : (isZh ? '将 Agent Skills 规范集成到各大主流智能体客户端' : 'Integrate Agent Skills standards into major AI clients')}
@@ -568,7 +568,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
               </div>
               <button
                 onClick={() => setClientGuideModalOpen(false)}
-                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg"
+                className="ui-icon-btn"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -789,7 +789,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
             if (e.target === e.currentTarget) setManifestSkill(null);
           }}
         >
-          <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-3xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-[#0F1420] rounded-xl shadow-2xl border border-gray-200 dark:border-slate-800 max-w-3xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             {/* 模态框头部 */}
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
@@ -803,7 +803,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
                       {manifestSkill.id}
                     </span>
                   </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="ui-meta">
                     {isZh ? '遵循 agentskills.io 开放标准的智能体 SOP 标准包与元数据契约' : 'Standard SOP package and metadata contract adhering to agentskills.io'}
                   </p>
                 </div>
@@ -827,7 +827,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
                 </button>
                 <button
                   onClick={() => setManifestSkill(null)}
-                  className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg"
+                  className="ui-icon-btn"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -900,7 +900,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
             {manifestTab === 'bundle_tree' && (
               <div className="space-y-4">
                 {/* 存储后端与加速说明 */}
-                <div className="p-3 bg-linear-to-r from-gray-50 to-slate-100 dark:from-gray-900 dark:to-gray-850 rounded-xl border border-gray-200 dark:border-gray-800 flex items-start justify-between gap-3 text-xs">
+                <div className="p-3 bg-linear-to-r from-gray-50 to-slate-100 dark:from-gray-900 dark:to-[#0F1420] rounded-xl border border-gray-200 dark:border-gray-800 flex items-start justify-between gap-3 text-xs">
                   <div className="space-y-1">
                     <div className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
                       {storageStatus?.driver === 's3' ? (
@@ -1054,7 +1054,7 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
             if (e.target === e.currentTarget) setTestModalSkill(null);
           }}
         >
-          <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-[#0F1420] rounded-xl shadow-2xl border border-gray-200 dark:border-slate-800 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-linear-to-br from-amber-500 to-orange-600 text-white rounded-lg">
@@ -1064,14 +1064,14 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
                   <h3 className="text-base font-bold text-gray-900 dark:text-white">
                     {isZh ? `模拟 SOP 执行演练: ${testModalSkill.name}` : `Simulated SOP Execution: ${testModalSkill.name}`}
                   </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="ui-meta">
                     {isZh ? '模拟智能体在此技能指引下的三级执行链路与输出' : 'Simulating Agent 3-tier execution trace and output under this skill'}
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setTestModalSkill(null)}
-                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg"
+                className="ui-icon-btn"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1139,7 +1139,7 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
             if (e.target === e.currentTarget) setCreateModalOpen(false);
           }}
         >
-          <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-[#0F1420] rounded-xl shadow-2xl border border-gray-200 dark:border-slate-800 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-linear-to-br from-amber-500 to-orange-600 text-white rounded-lg">
@@ -1149,14 +1149,14 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
                   <h3 className="text-base font-bold text-gray-900 dark:text-white">
                     {isZh ? '新建自定义 Agent 技能' : 'Create Custom Agent Skill'}
                   </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="ui-meta">
                     {isZh ? '遵循 agentskills.io 规范编写自定义工作流 SOP' : 'Author custom workflow SOP adhering to agentskills.io standards'}
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setCreateModalOpen(false)}
-                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg"
+                className="ui-icon-btn"
               >
                 <X className="w-5 h-5" />
               </button>
