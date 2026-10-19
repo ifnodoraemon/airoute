@@ -55,6 +55,8 @@ export default function OnboardingModal({
     if (isOpen) {
       openedDraftRef.current = { selectedKey, selectedProtocol, selectedModel };
     }
+    // Snapshot only on open; later edits must not overwrite the baseline.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   // Escape goes through the guard as well (useModalA11y reads the callback via a ref).

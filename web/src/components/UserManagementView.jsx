@@ -611,7 +611,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
                           value={u.role || 'user'}
                           disabled={isSysAdmin || isCurrentAdmin}
                           onChange={(e) => handleUpdateRole(u, e.target.value)}
-                          className={`border rounded-lg px-2 py-1 text-[11px] font-bold focus:outline-none transition cursor-pointer ${
+                          className={`border rounded-lg px-2 py-1 text-xs font-bold focus:outline-none transition cursor-pointer ${
                             u.role === 'admin'
                               ? 'bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800 hover:bg-purple-100 dark:hover:bg-purple-900/60'
                               : 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60'
@@ -676,7 +676,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
                               handleUpdateGroup(u, e.target.value);
                             }
                           }}
-                          className="bg-slate-50 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-500 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                          className="bg-slate-50 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-500 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-medium text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
                         >
                           {allAvailableGroups.map(g => (
                             <option key={g} value={g}>
@@ -797,7 +797,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
                   <button
                     type="button"
                     onClick={() => setNewPassword(generateSecurePassword())}
-                    className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1"
+                    className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1"
                   >
                     <Sparkles className="w-3 h-3" />
                     <span>{isZh ? '随机生成' : 'Generate'}</span>
@@ -1001,7 +1001,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
                       setQuotaMode('delta');
                       setQuotaValue(String(num));
                     }}
-                    className="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-[11px] font-bold text-slate-700 dark:text-slate-200 cursor-pointer"
+                    className="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer"
                   >
                     +{num}
                   </button>
@@ -1012,7 +1012,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
                     setQuotaMode('exact');
                     setQuotaValue('0');
                   }}
-                  className="px-2 py-1 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 rounded-lg text-[11px] font-bold text-rose-700 dark:text-rose-300 cursor-pointer"
+                  className="px-2 py-1 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 rounded-lg text-xs font-bold text-rose-700 dark:text-rose-300 cursor-pointer"
                 >
                   {isZh ? '归零' : 'Zero'}
                 </button>
@@ -1088,7 +1088,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
                   <button
                     type="button"
                     onClick={() => setResetPassword(generateSecurePassword())}
-                    className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 cursor-pointer"
+                    className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 cursor-pointer"
                   >
                     <Sparkles className="w-3 h-3" />
                     <span>{isZh ? '随机生成' : 'Generate'}</span>

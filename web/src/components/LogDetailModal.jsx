@@ -187,25 +187,25 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
           {/* Top key metric cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-800/70">
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">{isZh ? '请求模型' : 'Model'}</span>
+              <span className="ui-meta block font-medium">{isZh ? '请求模型' : 'Model'}</span>
               <span className="text-xs font-mono font-semibold text-slate-900 dark:text-white truncate block mt-1">
                 {log.model || '-'}
               </span>
             </div>
             <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-800/70">
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">{isZh ? '路由渠道' : 'Channel'}</span>
+              <span className="ui-meta block font-medium">{isZh ? '路由渠道' : 'Channel'}</span>
               <span className="text-xs font-medium text-slate-900 dark:text-white truncate block mt-1 font-mono">
                 {log.channel || (isZh ? '直通/多源' : 'Direct / Multi')}
               </span>
             </div>
             <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-800/70">
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">{isZh ? '首字延迟 (TTFT)' : 'TTFT Latency'}</span>
+              <span className="ui-meta block font-medium">{isZh ? '首字延迟 (TTFT)' : 'TTFT Latency'}</span>
               <span className="text-xs font-mono tabular-nums font-semibold text-amber-600 dark:text-amber-400 block mt-1">
                 {log.ttft_ms ? `${log.ttft_ms} ms` : '-'}
               </span>
             </div>
             <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-800/70">
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">{isZh ? '总执行耗时' : 'Total Duration'}</span>
+              <span className="ui-meta block font-medium">{isZh ? '总执行耗时' : 'Total Duration'}</span>
               <span className="text-xs font-mono tabular-nums font-semibold text-slate-900 dark:text-white block mt-1">
                 {log.duration_ms} ms
               </span>
@@ -340,7 +340,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                   ¥{(log.cost || 0).toFixed(4)}
                 </span>
                 {log.is_off_peak && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                     {isZh ? `闲时 (${Math.round((log.off_peak_discount || 0.5) * 10)}折)` : `Off-peak (${Math.round((1 - (log.off_peak_discount || 0.5)) * 100)}% off)`}
                   </span>
                 )}
@@ -349,7 +349,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                     {isZh ? `缓存: ${log.cached_tokens} Tokens` : `Cache: ${log.cached_tokens} Tokens`}
                   </span>
                 ) : (
-                  <span className="text-slate-400 text-[11px] font-sans">{isZh ? '未命中缓存' : 'Cache miss'}</span>
+                  <span className="ui-meta font-sans">{isZh ? '未命中缓存' : 'Cache miss'}</span>
                 )}
               </div>
             </div>
@@ -455,14 +455,14 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
               <p className="leading-relaxed opacity-90">{rca.summary}</p>
               {hasUpstreamDetail && (
                 <div className="mt-2.5 pt-2.5 border-t border-current/10">
-                  <span className="block text-[10px] font-semibold uppercase tracking-wide opacity-60 mb-1">
+                  <span className="block text-xs font-semibold uppercase tracking-wide opacity-75 mb-1">
                     {isZh ? '上游原始错误（权威依据）' : 'Upstream error (authoritative)'}
                   </span>
                   <code className="block font-mono text-[11px] break-all opacity-90">{errorMessage}</code>
                 </div>
               )}
               {!hasUpstreamDetail && isErrorLog && (
-                <p className="mt-2 text-[11px] opacity-60">
+                <p className="mt-2 text-xs opacity-75">
                   {isZh
                     ? '本次请求未记录上游错误详情，以上仅为基于状态码的推测，不能作为根因结论。'
                     : 'No upstream error detail was recorded for this request; the above is inferred from the status code only.'}

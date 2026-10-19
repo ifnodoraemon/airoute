@@ -341,7 +341,7 @@ export default function AuthPage({
               <button
                 type="submit"
                 disabled={loading}
-                className="ui-btn-primary w-full py-3"
+                className="ui-btn-primary w-full py-3 bg-indigo-600 hover:bg-indigo-500 dark:bg-indigo-600 dark:hover:bg-indigo-500"
               >
                 {loading ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
@@ -458,7 +458,7 @@ export default function AuthPage({
               <button
                 type="submit"
                 disabled={loading}
-                className="ui-btn-primary w-full py-3"
+                className="ui-btn-primary w-full py-3 bg-indigo-600 hover:bg-indigo-500 dark:bg-indigo-600 dark:hover:bg-indigo-500"
               >
                 {loading ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />

@@ -125,7 +125,7 @@ export default function KeyModal({
                       }`}
                     >
                       <div className="text-xs font-bold">{isZh ? '默认基础组 (default)' : 'Default Group (default)'}</div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      <div className="ui-meta mt-0.5">
                         {isZh ? '标准定价，适合常规调用或测试环境' : 'Standard rate, ideal for general dev and testing'}
                       </div>
                     </button>
@@ -141,7 +141,7 @@ export default function KeyModal({
                       <div className="text-xs font-bold text-amber-600 dark:text-amber-400">
                         {adminUser.group_name.toUpperCase()} {isZh ? '专属保障组' : 'Tier Group'}
                       </div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      <div className="ui-meta mt-0.5">
                         {isZh ? '享受您账号签约的特权与优惠费率' : 'Enjoy your account negotiated discount rates'}
                       </div>
                     </button>
@@ -150,9 +150,9 @@ export default function KeyModal({
                   <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
                     <div>
                       <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">{isZh ? '默认计费组 (Standard)' : 'Default Group (Standard)'}</div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">{isZh ? '该密钥调用将按通用标准费率结算扣费' : 'Usage will be billed under general standard rates'}</div>
+                      <div className="ui-meta mt-0.5">{isZh ? '该密钥调用将按通用标准费率结算扣费' : 'Usage will be billed under general standard rates'}</div>
                     </div>
-                    <span className="px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    <span className="px-2 py-0.5 rounded-lg text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                       {isZh ? '标准费率' : 'Standard'}
                     </span>
                   </div>
@@ -167,7 +167,7 @@ export default function KeyModal({
               <button
                 type="button"
                 onClick={() => setNewKey(prev => ({ ...prev, key: '' }))}
-                className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 cursor-pointer"
+                className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 cursor-pointer"
               >
                 <span>{isZh ? '由服务端安全生成' : 'Generate server-side'}</span>
               </button>
@@ -185,7 +185,7 @@ export default function KeyModal({
               <label className="font-semibold text-slate-700 dark:text-slate-300">
                 {isZh ? '额度限制 (CNY, 0 为不限)' : 'Quota Limit (CNY, 0 for unlimited)'}
               </label>
-              <div className="flex items-center space-x-1.5 text-[11px]">
+              <div className="flex items-center space-x-1.5 text-xs">
                 {[
                   { label: isZh ? '不限' : 'Unlimited', val: 0 },
                   { label: '¥10', val: 10 },
@@ -218,7 +218,7 @@ export default function KeyModal({
               <label className="font-semibold text-slate-700 dark:text-slate-300">
                 {isZh ? '速率限制 (RPM, 0 为不限)' : 'Rate Limit (RPM, 0 for unlimited)'}
               </label>
-              <div className="flex items-center space-x-1.5 text-[11px]">
+              <div className="flex items-center space-x-1.5 text-xs">
                 {[
                   { label: isZh ? '不限' : 'Unlimited', val: 0 },
                   { label: '60', val: 60 },

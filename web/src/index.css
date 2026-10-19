@@ -69,7 +69,7 @@
     @apply text-xs text-slate-500 dark:text-slate-400;
   }
   .ui-meta-sm {
-    @apply text-[11px] text-slate-500 dark:text-slate-400;
+    @apply text-xs text-slate-500 dark:text-slate-400;
   }
   .ui-section-title {
     @apply text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400;
@@ -126,7 +126,7 @@
   }
   .ui-chip {
     @apply inline-flex items-center gap-1 rounded-md border border-slate-200 dark:border-slate-800
-           bg-slate-50 dark:bg-slate-900/60 px-2 py-0.5 text-[11px] font-medium
+           bg-slate-50 dark:bg-slate-900/60 px-2 py-0.5 text-xs font-medium
            text-slate-600 dark:text-slate-300;
   }
 

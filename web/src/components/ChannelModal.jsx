@@ -95,7 +95,7 @@ export default function ChannelModal({
           {!editingChannelId && (
             <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200/80 dark:border-slate-800/80 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="font-medium text-slate-700 dark:text-slate-300 text-[11px] flex items-center space-x-1.5">
+                <span className="font-medium text-slate-700 dark:text-slate-300 text-xs flex items-center space-x-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-slate-400" />
                   <span>{isZh ? '快捷预设服务商 (点击一键自动填入):' : 'Quick Presets (1-click autofill):'}</span>
                 </span>
@@ -120,7 +120,7 @@ export default function ChannelModal({
                     className="px-2.5 py-1 rounded-md border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium transition flex items-center space-x-1 cursor-pointer shadow-sm"
                   >
                     <span>{p.label}</span>
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">({p.badge})</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-normal">({p.badge})</span>
                   </button>
                 ))}
               </div>

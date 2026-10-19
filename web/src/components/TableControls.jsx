@@ -71,7 +71,7 @@ export function ColumnToggle({ controls, lang = 'zh' }) {
           <button
             type="button"
             onClick={resetColumns}
-            className="inline-flex items-center gap-1 text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+            className="inline-flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
           >
             <RotateCcw className="h-3 w-3" />
             <span>{isZh ? '重置' : 'Reset'}</span>
