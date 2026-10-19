@@ -1,8 +1,6 @@
 # Binaries
 bin/
 /airoute
-/nano
-/nano-gateway
 *.exe
 *.exe~
 *.dll

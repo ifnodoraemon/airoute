@@ -53,8 +53,8 @@ func (h *Handler) handleResponsesStreaming(
 		return
 	}
 
-	respID := fmt.Sprintf("resp_%d", time.Now().UnixNano())
-	msgID := fmt.Sprintf("msg_%d", time.Now().UnixNano())
+	respID := fmt.Sprintf("resp_%d", time.Now().UnixMicro())
+	msgID := fmt.Sprintf("msg_%d", time.Now().UnixMicro())
 	w := c.Writer
 
 	// 1. response.created
@@ -97,6 +97,30 @@ func (h *Handler) handleResponsesStreaming(
 	totalCompTokens := 0
 	respUpstreamChatID := ""
 	respUpstreamChannel := ""
+	var streamError error
+
+	recordStreamEnd := func(statusCode int) (float64, float64, int) {
+		if statusCode == http.StatusOK {
+			if totalPromptTokens == 0 {
+				totalPromptTokens = estimateCanonicalPromptTokens(chatReq)
+			}
+			if totalCompTokens == 0 && fullContent.Len() > 0 {
+				totalCompTokens = estimateTokens(fullContent.Len())
+			}
+		}
+		return recordUsage(c, AuditRecordParams{
+			ChatID:           respUpstreamChatID,
+			Channel:          respUpstreamChannel,
+			SessionID:        sessionID,
+			Model:            req.Model,
+			PromptTokens:     totalPromptTokens,
+			CompletionTokens: totalCompTokens,
+			Duration:         time.Since(start),
+			TTFT:             ttftDuration,
+			StatusCode:       statusCode,
+			ErrorMessage:     sanitizeErrorMessage(streamError),
+		})
+	}
 
 	for event := range streamChan {
 		if respUpstreamChannel == "" && event.Channel != "" {
@@ -104,14 +128,21 @@ func (h *Handler) handleResponsesStreaming(
 		}
 
 		if event.Err != nil {
+			streamError = event.Err
 			writeSSEJSON(w, flusher, "error", gin.H{
 				"type": "error",
 				"error": gin.H{
-					"message": event.Err.Error(),
+					"message": sanitizeErrorMessage(event.Err),
 					"type":    "stream_error",
 				},
 			})
-			break
+			// An upstream failure must NOT be followed by
+			// response.output_text.done / response.completed: clients that key
+			// off the last event would otherwise treat a failed stream as a
+			// successful completion. Record it as a failure and stop here.
+			recordStreamEnd(http.StatusBadGateway)
+			flusher.Flush()
+			return
 		}
 
 		if event.IsDone {
@@ -155,26 +186,8 @@ func (h *Handler) handleResponsesStreaming(
 	})
 
 	// response.completed
-	dur := time.Since(start)
-	if totalPromptTokens == 0 && totalCompTokens == 0 {
-		totalCompTokens = len(fullText) / 4
-		if totalCompTokens == 0 && len(fullText) > 0 {
-			totalCompTokens = 1
-		}
-		totalPromptTokens = 10
-	}
-
-	RecordUsage(c, AuditRecordParams{
-		ChatID:           respUpstreamChatID,
-		Channel:          respUpstreamChannel,
-		SessionID:        sessionID,
-		Model:            req.Model,
-		PromptTokens:     totalPromptTokens,
-		CompletionTokens: totalCompTokens,
-		Duration:         dur,
-		TTFT:             ttftDuration,
-		StatusCode:       http.StatusOK,
-	})
+	cost, savedCost, cachedTokens := recordStreamEnd(http.StatusOK)
+	writeStreamUsageTrailer(w, flusher, cost, savedCost, cachedTokens)
 
 	writeSSEJSON(w, flusher, "response.completed", gin.H{
 		"type": "response.completed",

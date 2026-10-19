@@ -98,7 +98,9 @@ func (h *Handler) HandlePublicStatus(c *gin.Context) {
 	allHealthy := true
 
 	for _, m := range models {
-		channels := h.dispatcher.GetChannelsForModel(m)
+		// Read-only listing: GetChannelsForModel would run the SWRR/affinity
+		// selector and mutate load-balancing state from an anonymous endpoint.
+		channels := h.dispatcher.ListChannelsForModel(m, "")
 		healthyCount := 0
 		for _, ch := range channels {
 			if h.dispatcher.GetBreakerStatus(ch.Name) != "OPEN" {

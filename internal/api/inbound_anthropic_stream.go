@@ -33,7 +33,7 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 			errType = "not_found_error"
 		}
 		recordFailedRequest(c, sessionID, canonicalReq.Model, time.Since(start), statusCode)
-		RespondAnthropicError(c, statusCode, err.Error(), errType)
+		RespondAnthropicError(c, statusCode, sanitizeErrorMessage(err), errType)
 		return
 	}
 	firstEvent, open := <-streamChan
@@ -53,7 +53,7 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 		return
 	}
 
-	msgID := fmt.Sprintf("msg_%d", time.Now().UnixNano())
+	msgID := fmt.Sprintf("msg_%d", time.Now().UnixMicro())
 	firstTokenRecorded := false
 	var ttftDuration time.Duration
 	totalPromptTokens := 0
@@ -87,21 +87,26 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 
 	// Audit record: persisted exactly once on every exit path — normal end,
 	// upstream mid-stream failure, or downstream client disconnect.
+	var finalCost, finalSaved float64
+	var finalCached int
 	var recordOnce sync.Once
-	recordStreamEnd := func() {
-		// Anthropic wire format requires input_tokens on every message. When the
-		// upstream stream omits usage, approximate the prompt from the request so
-		// the audit log does not show a misleading zero input count.
-		if totalPromptTokens == 0 {
-			if estimated := estimateCanonicalPromptTokens(canonicalReq); estimated > 0 {
-				totalPromptTokens = estimated
+	recordStreamEnd := func(statusCode int) {
+		if statusCode == http.StatusOK {
+			// Anthropic wire format requires input_tokens on every message. When
+			// the upstream stream omits usage, approximate the prompt from the
+			// request so the audit log does not show a misleading zero.
+			if totalPromptTokens == 0 {
+				if estimated := estimateCanonicalPromptTokens(canonicalReq); estimated > 0 {
+					totalPromptTokens = estimated
+					usageSource = "estimated"
+				}
+			}
+			if totalCompTokens == 0 && accumulatedCompChars > 0 {
+				totalCompTokens = estimateTokens(accumulatedCompChars)
 				usageSource = "estimated"
 			}
 		}
-		if totalCompTokens == 0 {
-			usageSource = "estimated"
-		}
-		RecordUsage(c, AuditRecordParams{
+		finalCost, finalSaved, finalCached = recordUsage(c, AuditRecordParams{
 			SessionID:        sessionID,
 			ChatID:           anthropicUpstreamChatID,
 			Channel:          upstreamChannel,
@@ -111,17 +116,24 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 			CachedTokens:     totalCachedTokens,
 			Duration:         time.Since(start),
 			TTFT:             ttftDuration,
-			StatusCode:       http.StatusOK,
+			StatusCode:       statusCode,
 			UsageSource:      usageSource,
-			ErrorMessage: func() string {
-				if streamError != nil {
-					return streamError.Error()
-				}
-				return ""
-			}(),
+			ErrorMessage:     sanitizeErrorMessage(streamError),
 		})
 	}
-	defer recordOnce.Do(recordStreamEnd)
+	defer func() {
+		// Failure or client disconnect: record once with a truthful status.
+		recordOnce.Do(func() {
+			statusCode := http.StatusOK
+			if streamError != nil {
+				statusCode = http.StatusBadGateway
+			}
+			if c.Request.Context().Err() != nil {
+				statusCode = 499
+			}
+			recordStreamEnd(statusCode)
+		})
+	}()
 
 	// 1. Emit event: message_start
 	startEvent := gin.H{
@@ -193,11 +205,12 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 				deltaBytes, _ := json.Marshal(deltaEvent)
 				fmt.Fprintf(w, "event: message_delta\ndata: %s\n\n", deltaBytes)
 
-				// Emit message_stop
+				recordOnce.Do(func() { recordStreamEnd(http.StatusOK) })
+				writeStreamUsageTrailer(w, flusher, finalCost, finalSaved, finalCached)
+
+				// Emit message_stop last so clients see a clean terminator.
 				fmt.Fprintf(w, "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
 				flusher.Flush()
-
-				recordOnce.Do(recordStreamEnd)
 				return
 			}
 
@@ -213,7 +226,7 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 					"type": "error",
 					"error": gin.H{
 						"type":    "stream_error",
-						"message": event.Err.Error(),
+						"message": sanitizeErrorMessage(event.Err),
 					},
 				})
 				fmt.Fprintf(w, "event: error\ndata: %s\n\n", errBytes)
@@ -409,7 +422,9 @@ func (h *Handler) handleNativeAnthropicStream(c *gin.Context, stream <-chan *mod
 	for {
 		select {
 		case <-c.Request.Context().Done():
-			statusCode = http.StatusRequestTimeout
+			// 499 matches the other stream handlers: the *client* went away, the
+			// upstream did not time out.
+			statusCode = 499
 			return
 		case event, open := <-stream:
 			if !open {

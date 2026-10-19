@@ -6,9 +6,9 @@ import "fmt"
 // the legacy floating-point mirror for a single API key.
 type MoneyDrift struct {
 	APIKey        string  `json:"api_key"`
-	LogCostNano   int64   `json:"log_cost_nano"`   // SUM(usage_logs.cost_nano)
-	KeyCostNano   int64   `json:"key_cost_nano"`   // api_keys.used_cost_nano
-	Difference    int64   `json:"difference_nano"` // log - key
+	LogCostUnits  int64   `json:"log_cost_units"`   // SUM(usage_logs.cost_units)
+	KeyCostUnits  int64   `json:"key_cost_units"`   // api_keys.used_cost_units
+	Difference    int64   `json:"difference_units"` // log - key
 	DifferenceCNY float64 `json:"difference_cny"`
 }
 
@@ -21,12 +21,12 @@ func (r *Repository) ReconcileMoney(limit int) ([]*MoneyDrift, error) {
 	}
 	query := r.db.Rebind(`
 		SELECT k.key,
-		       COALESCE(SUM(l.cost_nano), 0) AS log_cost,
-		       COALESCE(k.used_cost_nano, 0) AS key_cost
+		       COALESCE(SUM(l.cost_units), 0) AS log_cost,
+		       COALESCE(k.used_cost_units, 0) AS key_cost
 		FROM api_keys k
 		LEFT JOIN usage_logs l ON l.api_key = k.key
-		GROUP BY k.key, k.used_cost_nano
-		HAVING COALESCE(SUM(l.cost_nano), 0) <> COALESCE(k.used_cost_nano, 0)
+		GROUP BY k.key, k.used_cost_units
+		HAVING COALESCE(SUM(l.cost_units), 0) <> COALESCE(k.used_cost_units, 0)
 		LIMIT ?`)
 	rows, err := r.db.Query(query, limit)
 	if err != nil {
@@ -37,11 +37,11 @@ func (r *Repository) ReconcileMoney(limit int) ([]*MoneyDrift, error) {
 	var out []*MoneyDrift
 	for rows.Next() {
 		var d MoneyDrift
-		if err := rows.Scan(&d.APIKey, &d.LogCostNano, &d.KeyCostNano); err != nil {
+		if err := rows.Scan(&d.APIKey, &d.LogCostUnits, &d.KeyCostUnits); err != nil {
 			return nil, err
 		}
-		d.Difference = d.LogCostNano - d.KeyCostNano
-		d.DifferenceCNY = FromNano(d.Difference)
+		d.Difference = d.LogCostUnits - d.KeyCostUnits
+		d.DifferenceCNY = FromUnits(d.Difference)
 		out = append(out, &d)
 	}
 	if err := rows.Err(); err != nil {

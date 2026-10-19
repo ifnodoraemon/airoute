@@ -24,7 +24,9 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		// If no API keys configured in system and no keys ever created, allow all requests in open dev mode.
 		// If keys have been registered in the gateway (even if currently disabled/revoked), strictly enforce auth!
-		if len(cfg.APIKeys) == 0 && !cfg.HasConfiguredKeys {
+		// Both fields are rewritten by the periodic hot reload, so they must be
+		// read through the locked accessors (see config.ActiveAPIKeyCount).
+		if cfg.ActiveAPIKeyCount() == 0 && !cfg.HasRegisteredAPIKeys() {
 			c.Next()
 			return
 		}
@@ -90,9 +92,9 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		// 2. Key budget check (fast in-memory check first). Use the integer
-		// nano-unit mirror when available so repeated float accumulation cannot
+		// 1e-9-unit mirror when available so repeated float accumulation cannot
 		// drift across the budget boundary.
-		if budgetExceeded(effectiveKey.BudgetNano, effectiveKey.UsedCostNano, effectiveKey.Budget, effectiveKey.UsedCost) {
+		if budgetExceeded(effectiveKey.BudgetUnits, effectiveKey.UsedCostUnits, effectiveKey.Budget, effectiveKey.UsedCost) {
 			c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
 				"error": gin.H{
 					"message": "This API key has exceeded its assigned quota budget limit.",
@@ -121,11 +123,11 @@ func AuthMiddleware() gin.HandlerFunc {
 				if effectiveBudget <= 0 {
 					effectiveBudget = effectiveKey.Budget
 				}
-				budgetNano := keyRec.BudgetNano
-				if budgetNano <= 0 {
-					budgetNano = effectiveKey.BudgetNano
+				budgetUnits := keyRec.BudgetUnits
+				if budgetUnits <= 0 {
+					budgetUnits = effectiveKey.BudgetUnits
 				}
-				if budgetExceeded(budgetNano, keyRec.UsedCostNano, effectiveBudget, keyRec.UsedCost) {
+				if budgetExceeded(budgetUnits, keyRec.UsedCostUnits, effectiveBudget, keyRec.UsedCost) {
 					c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
 						"error": gin.H{
 							"message": "This API key has exceeded its assigned quota budget limit.",
@@ -237,13 +239,13 @@ func ValidateModelAllowed(c *gin.Context, requestedModel string) bool {
 	return false
 }
 
-// budgetExceeded compares spend against a budget using integer nano-units when
+// budgetExceeded compares spend against a budget using integer 1e-9 units when
 // the ledger mirror is authoritative. The integer path is only taken when both
 // sides are populated; otherwise legacy rows or out-of-band updates are still
 // enforced through the float columns.
-func budgetExceeded(budgetNano, usedNano int64, budget, used float64) bool {
-	if budgetNano > 0 && usedNano > 0 {
-		return usedNano >= budgetNano
+func budgetExceeded(budgetUnits, usedUnits int64, budget, used float64) bool {
+	if budgetUnits > 0 && usedUnits > 0 {
+		return usedUnits >= budgetUnits
 	}
 	return budget > 0 && used >= budget
 }

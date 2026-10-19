@@ -20,8 +20,8 @@ type APIKeyRecord struct {
 	Budget           float64   `json:"budget"`
 	UsedTokens       int64     `json:"used_tokens"`
 	UsedCost         float64   `json:"used_cost"`
-	BudgetNano       int64     `json:"budget_nano"`
-	UsedCostNano     int64     `json:"used_cost_nano"`
+	BudgetUnits      int64     `json:"budget_units"`
+	UsedCostUnits    int64     `json:"used_cost_units"`
 	GroupName        string    `json:"group_name"`
 	UserID           int64     `json:"user_id"`
 	Status           string    `json:"status"`
@@ -36,21 +36,21 @@ func (rec *APIKeyRecord) resolveMoney() {
 	if rec == nil {
 		return
 	}
-	if rec.UsedCostNano != 0 || rec.UsedCost == 0 {
-		rec.UsedCost = FromNano(rec.UsedCostNano)
+	if rec.UsedCostUnits != 0 || rec.UsedCost == 0 {
+		rec.UsedCost = FromUnits(rec.UsedCostUnits)
 	} else {
-		rec.UsedCostNano = ToNano(rec.UsedCost)
+		rec.UsedCostUnits = ToUnits(rec.UsedCost)
 	}
-	if rec.BudgetNano != 0 || rec.Budget == 0 {
-		rec.Budget = FromNano(rec.BudgetNano)
+	if rec.BudgetUnits != 0 || rec.Budget == 0 {
+		rec.Budget = FromUnits(rec.BudgetUnits)
 	} else {
-		rec.BudgetNano = ToNano(rec.Budget)
+		rec.BudgetUnits = ToUnits(rec.Budget)
 	}
 }
 
 // ListAPIKeys returns all API keys.
 func (r *Repository) ListAPIKeys() ([]*APIKeyRecord, error) {
-	rows, err := r.db.Query(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_nano, 0), COALESCE(used_cost_nano, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys ORDER BY id ASC`)
+	rows, err := r.db.Query(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys ORDER BY id ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (r *Repository) ListAPIKeys() ([]*APIKeyRecord, error) {
 	for rows.Next() {
 		var rec APIKeyRecord
 		var allowedJSON string
-		err := rows.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.BudgetNano, &rec.UsedCostNano, &rec.GroupName, &rec.UserID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt)
+		err := rows.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.BudgetUnits, &rec.UsedCostUnits, &rec.GroupName, &rec.UserID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -78,7 +78,7 @@ func (r *Repository) ListAPIKeys() ([]*APIKeyRecord, error) {
 
 // ListAPIKeysByUser returns API keys belonging to a specific user.
 func (r *Repository) ListAPIKeysByUser(userID int64) ([]*APIKeyRecord, error) {
-	rows, err := r.db.Query(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_nano, 0), COALESCE(used_cost_nano, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE user_id = ? ORDER BY id ASC`, userID)
+	rows, err := r.db.Query(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE user_id = ? ORDER BY id ASC`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (r *Repository) ListAPIKeysByUser(userID int64) ([]*APIKeyRecord, error) {
 	for rows.Next() {
 		var rec APIKeyRecord
 		var allowedJSON string
-		err := rows.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.BudgetNano, &rec.UsedCostNano, &rec.GroupName, &rec.UserID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt)
+		err := rows.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.BudgetUnits, &rec.UsedCostUnits, &rec.GroupName, &rec.UserID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -129,8 +129,8 @@ func (r *Repository) CreateAPIKey(rec *APIKeyRecord) error {
 		}
 	}
 
-	id, err := r.db.InsertGetID(`INSERT INTO api_keys (key, tenant_id, allowed_models, rpm, tpm, budget, budget_nano, used_tokens, used_cost, used_cost_nano, group_name, user_id, status, format_validation, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-		rec.Key, rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, ToNano(rec.Budget), rec.UsedTokens, rec.UsedCost, ToNano(rec.UsedCost), rec.GroupName, rec.UserID, rec.Status, rec.FormatValidation)
+	id, err := r.db.InsertGetID(`INSERT INTO api_keys (key, tenant_id, allowed_models, rpm, tpm, budget, budget_units, used_tokens, used_cost, used_cost_units, group_name, user_id, status, format_validation, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		rec.Key, rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, ToUnits(rec.Budget), rec.UsedTokens, rec.UsedCost, ToUnits(rec.UsedCost), rec.GroupName, rec.UserID, rec.Status, rec.FormatValidation)
 	if err != nil {
 		return err
 	}
@@ -146,10 +146,10 @@ func (r *Repository) DeleteAPIKey(id int64) error {
 
 // GetAPIKey returns a single API key by ID.
 func (r *Repository) GetAPIKey(id int64) (*APIKeyRecord, error) {
-	row := r.db.QueryRow(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_nano, 0), COALESCE(used_cost_nano, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE id = ?`, id)
+	row := r.db.QueryRow(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE id = ?`, id)
 	var rec APIKeyRecord
 	var allowedJSON string
-	if err := row.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.BudgetNano, &rec.UsedCostNano, &rec.GroupName, &rec.UserID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+	if err := row.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.BudgetUnits, &rec.UsedCostUnits, &rec.GroupName, &rec.UserID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
 		return nil, err
 	}
 	if allowedJSON != "" {
@@ -161,10 +161,10 @@ func (r *Repository) GetAPIKey(id int64) (*APIKeyRecord, error) {
 
 // GetAPIKeyByKey returns a single API key by key string.
 func (r *Repository) GetAPIKeyByKey(key string) (*APIKeyRecord, error) {
-	row := r.db.QueryRow(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_nano, 0), COALESCE(used_cost_nano, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE key = ?`, key)
+	row := r.db.QueryRow(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE key = ?`, key)
 	var rec APIKeyRecord
 	var allowedJSON string
-	if err := row.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.BudgetNano, &rec.UsedCostNano, &rec.GroupName, &rec.UserID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+	if err := row.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.BudgetUnits, &rec.UsedCostUnits, &rec.GroupName, &rec.UserID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
 		return nil, err
 	}
 	if allowedJSON != "" {
@@ -183,8 +183,8 @@ func (r *Repository) UpdateAPIKey(rec *APIKeyRecord) error {
 	if rec.GroupName == "" {
 		rec.GroupName = "default"
 	}
-	_, err := r.db.Exec(`UPDATE api_keys SET tenant_id = ?, allowed_models = ?, rpm = ?, tpm = ?, budget = ?, budget_nano = ?, group_name = ?, user_id = ?, status = ?, format_validation = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-		rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, ToNano(rec.Budget), rec.GroupName, rec.UserID, rec.Status, rec.FormatValidation, rec.ID)
+	_, err := r.db.Exec(`UPDATE api_keys SET tenant_id = ?, allowed_models = ?, rpm = ?, tpm = ?, budget = ?, budget_units = ?, group_name = ?, user_id = ?, status = ?, format_validation = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, ToUnits(rec.Budget), rec.GroupName, rec.UserID, rec.Status, rec.FormatValidation, rec.ID)
 	return err
 }
 
@@ -284,8 +284,8 @@ func (r *Repository) ToModelAPIKeys() ([]model.APIKeyConfig, error) {
 			TPM:              rec.TPM,
 			Budget:           rec.Budget,
 			UsedCost:         rec.UsedCost,
-			BudgetNano:       rec.BudgetNano,
-			UsedCostNano:     rec.UsedCostNano,
+			BudgetUnits:      rec.BudgetUnits,
+			UsedCostUnits:    rec.UsedCostUnits,
 			Status:           rec.Status,
 			GroupName:        rec.GroupName,
 			UserID:           rec.UserID,

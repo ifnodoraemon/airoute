@@ -201,15 +201,15 @@ func (c *ChannelConfig) GetUpstreamModel(requestedModel string) string {
 
 // APIKeyConfig defines an API key configured on the gateway.
 type APIKeyConfig struct {
-	Key              string   `yaml:"key" json:"key"` // e.g. "sk-nano-8f92a1c4b7e3"
+	Key              string   `yaml:"key" json:"key"` // e.g. "sk-airoute-8f92a1c4b7e3"
 	TenantID         string   `yaml:"tenant_id" json:"tenant_id"`
 	AllowedModels    []string `yaml:"allowed_models" json:"allowed_models"` // empty means all allowed
 	RPM              int      `yaml:"rpm" json:"rpm"`                       // Requests per minute limit (0 = unlimited)
 	TPM              int      `yaml:"tpm" json:"tpm"`                       // Tokens per minute limit (0 = unlimited)
 	Budget           float64  `yaml:"budget" json:"budget"`                 // total dollar or token budget
 	UsedCost         float64  `yaml:"used_cost" json:"used_cost"`
-	BudgetNano       int64    `yaml:"budget_nano,omitempty" json:"budget_nano,omitempty"`       // integer nano-unit mirror
-	UsedCostNano     int64    `yaml:"used_cost_nano,omitempty" json:"used_cost_nano,omitempty"` // integer nano-unit mirror
+	BudgetUnits      int64    `yaml:"budget_units,omitempty" json:"budget_units,omitempty"`       // integer 1e-9-unit mirror
+	UsedCostUnits    int64    `yaml:"used_cost_units,omitempty" json:"used_cost_units,omitempty"` // integer 1e-9-unit mirror
 	Status           string   `yaml:"status" json:"status"`
 	GroupName        string   `yaml:"group_name" json:"group_name"`                                   // pricing group e.g. default, vip
 	UserID           int64    `yaml:"user_id" json:"user_id"`                                         // owner user id

@@ -66,3 +66,32 @@ func TestNativeAnthropicRequestFallsBackWhenNoNativeProvider(t *testing.T) {
 		t.Fatalf("expected fallback to gpustack when no native anthropic channel exists, got: %+v", channels)
 	}
 }
+
+func TestNativeAnthropicRequestMatchesChannelWithAnthropicMessagesProtocol(t *testing.T) {
+	ch := model.ChannelConfig{
+		Name:      "gpustack-cluster",
+		Type:      model.ProviderGPUStack,
+		Status:    "active",
+		Models:    []string{"deepseek-v4.1-flash"},
+		Protocols: []string{"openai_chat", "anthropic_messages"},
+	}
+	d := NewDispatcher([]model.ChannelConfig{ch})
+
+	req := &model.ChatCompletionRequest{
+		Model:               "deepseek-v4.1-flash",
+		Protocol:            "anthropic_messages",
+		AnthropicNativeOnly: true,
+		AnthropicOriginal:   &model.AnthropicInboundRequest{Model: "deepseek-v4.1-flash"},
+	}
+
+	channels := d.candidateChannelsForRequest(context.Background(), req, "anthropic_messages")
+	if len(channels) != 1 || channels[0].Name != "gpustack-cluster" {
+		t.Fatalf("expected gpustack-cluster to be matched, got: %+v", channels)
+	}
+
+	prov, ok := d.getProviderForChannel(&ch, req)
+	if !ok || prov.Type() != model.ProviderAnthropic {
+		t.Fatalf("expected Anthropic provider for channel with anthropic_messages protocol, got: %v", prov)
+	}
+}
+

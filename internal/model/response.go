@@ -140,7 +140,7 @@ func ConvertChatResponseToResponseResult(chatResp *ChatCompletionResponse) *Resp
 	if len(resID) > 9 && resID[:9] == "chatcmpl-" {
 		resID = "resp_" + resID[9:]
 	} else if resID == "" {
-		resID = fmt.Sprintf("resp_%d", time.Now().UnixNano())
+		resID = fmt.Sprintf("resp_%d", time.Now().UnixMicro())
 	}
 
 	var outputItems []ResponseOutputItem

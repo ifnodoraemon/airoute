@@ -157,9 +157,12 @@ func (e *BillingEngine) GetPriceWithGroup(modelName, groupName string) *storage.
 	// 3. Wildcard prefix match in group (e.g. "vip:gpt-4o-*" matching "gpt-4o-mini").
 	// The rule list is pre-sorted longest-prefix-first, so the result is stable
 	// across requests and processes.
+	//
+	// NOTE: this closure must NOT re-acquire e.mu. The caller already holds the
+	// read lock, and sync.RWMutex is not reentrant: if a writer (price reload)
+	// queues between the outer RLock and this one, the inner RLock blocks
+	// forever while the writer waits for the outer lock to be released.
 	prefixMatch := func(g string) *storage.ModelPriceRecord {
-		e.mu.RLock()
-		defer e.mu.RUnlock()
 		for _, rule := range e.wildcard {
 			if rule.group != g {
 				continue

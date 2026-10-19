@@ -199,6 +199,17 @@ func (a *ReasoningStreamAdapter) Flush(baseChunk *model.ChatCompletionChunk) []*
 		return nil
 	}
 	c := deepCopyChunk(baseChunk)
+	if len(c.Choices) == 0 {
+		// The last frame before [DONE] is usually a usage-only chunk
+		// (stream_options.include_usage) with an empty choices array. Indexing
+		// Choices[0] here used to panic inside the provider goroutine and take
+		// the whole process down. Rebuild a synthetic choice so the buffered
+		// tail is not silently dropped either.
+		c.Choices = []model.ChunkChoice{{Index: 0}}
+		// Never duplicate usage: the original frame carries the authoritative
+		// numbers and will be forwarded by the caller.
+		c.Usage = nil
+	}
 	if a.inThinking {
 		c.Choices[0].Delta.ReasoningContent = remaining
 		c.Choices[0].Delta.Content = ""

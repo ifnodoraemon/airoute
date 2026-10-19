@@ -195,6 +195,7 @@ func (a *AnthropicAdapter) ToCanonical(ctx context.Context, input any) (*model.C
 		Tools:               canonicalTools,
 		ToolChoice:          convertAnthropicToolChoice(req.ToolChoice),
 		Stop:                stop,
+		Protocol:            "anthropic_messages",
 		AnthropicOriginal:   req,
 		AnthropicNativeOnly: requiresNativeAnthropic(req),
 	}, nil

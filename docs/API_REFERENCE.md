@@ -7,8 +7,8 @@ Airoute provides high-performance, unified API endpoints conforming to OpenAI st
 ## 1. Authentication & Rate Limiting
 
 Client requests to Data Plane endpoints under `/v1` require API key authentication via standard HTTP headers:
-- `Authorization: Bearer sk-nano-xxxx`
-- Or `x-api-key: sk-nano-xxxx`
+- `Authorization: Bearer sk-airoute-xxxx`
+- Or `x-api-key: sk-airoute-xxxx`
 
 If no API keys are configured, the gateway operates in open bypass mode (no authentication required).
 
@@ -24,7 +24,7 @@ If no API keys are configured, the gateway operates in open bypass mode (no auth
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/chat/completions \
-  -H "Authorization: Bearer sk-nano-xxxx" \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "deepseek-chat",
@@ -44,7 +44,7 @@ curl -X POST http://localhost:8080/v1/chat/completions \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/completions \
-  -H "Authorization: Bearer sk-nano-xxxx" \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "text-davinci-003",
@@ -61,7 +61,7 @@ curl -X POST http://localhost:8080/v1/completions \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/messages \
-  -H "x-api-key: sk-nano-xxxx" \
+  -H "x-api-key: sk-airoute-xxxx" \
   -H "anthropic-version: 2023-06-01" \
   -H "Content-Type: application/json" \
   -d '{
@@ -81,7 +81,7 @@ curl -X POST http://localhost:8080/v1/messages \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/messages/count_tokens \
-  -H "x-api-key: sk-nano-xxxx" \
+  -H "x-api-key: sk-airoute-xxxx" \
   -H "anthropic-version: 2023-06-01" \
   -H "Content-Type: application/json" \
   -d '{
@@ -112,7 +112,7 @@ curl -X POST http://localhost:8080/v1/messages/count_tokens \
 #### Request Example (countTokens):
 ```bash
 curl -X POST http://localhost:8080/v1beta/models/gemini-4-argon:countTokens \
-  -H "Authorization: Bearer sk-nano-xxxx" \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "contents": [{"role": "user", "parts": [{"text": "Hello world!"}]}]
@@ -141,7 +141,7 @@ curl -X POST http://localhost:8080/v1beta/models/gemini-4-argon:countTokens \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/images/generations \
-  -H "Authorization: Bearer sk-nano-xxxx" \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "flux-1.1-pro",
@@ -159,7 +159,7 @@ curl -X POST http://localhost:8080/v1/images/generations \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/audio/speech \
-  -H "Authorization: Bearer sk-nano-xxxx" \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "tts-1",
@@ -176,7 +176,7 @@ curl -X POST http://localhost:8080/v1/audio/speech \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/audio/transcriptions \
-  -H "Authorization: Bearer sk-nano-xxxx" \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
   -F "file=@/path/to/audio.mp3" \
   -F "model=whisper-large-v3-turbo"
 ```
@@ -189,7 +189,7 @@ curl -X POST http://localhost:8080/v1/audio/transcriptions \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/audio/translations \
-  -H "Authorization: Bearer sk-nano-xxxx" \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
   -F "file=@/path/to/french_speech.mp3" \
   -F "model=whisper-large-v3-turbo"
 ```
@@ -202,7 +202,7 @@ curl -X POST http://localhost:8080/v1/audio/translations \
 ```bash
 # 1. Submit task
 curl -X POST http://localhost:8080/v1/videos/generations \
-  -H "Authorization: Bearer sk-nano-xxxx" \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "cogvideox-5b",
@@ -214,7 +214,7 @@ curl -X POST http://localhost:8080/v1/videos/generations \
 
 # 2. Poll task status
 curl -X GET http://localhost:8080/v1/videos/tasks/video_task_123 \
-  -H "Authorization: Bearer sk-nano-xxxx"
+  -H "Authorization: Bearer sk-airoute-xxxx"
 ```
 
 ### 3.6 Vector Embeddings
@@ -225,7 +225,7 @@ curl -X GET http://localhost:8080/v1/videos/tasks/video_task_123 \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/embeddings \
-  -H "Authorization: Bearer sk-nano-xxxx" \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "text-embedding-3-small",
@@ -265,7 +265,7 @@ curl -X POST http://localhost:8080/v1/embeddings \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/rerank \
-  -H "Authorization: Bearer sk-nano-xxxx" \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "bge-reranker-large",

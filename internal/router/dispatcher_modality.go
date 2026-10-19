@@ -96,17 +96,40 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 				return nil, ctx.Err()
 			}
 			lastErr = err
+			if provider.IsClientError(err) {
+				d.circuitBreaker.AbortCanary(ch.Name)
+				return nil, err
+			}
+			if !provider.IsChannelFailure(err) {
+				d.circuitBreaker.AbortCanary(ch.Name)
+				attempted = append(attempted, ch.Name)
+				continue
+			}
 			attempted = append(attempted, d.recordChannelFailure(ch.Name, err, i+1))
 			continue
 		}
 
 		// Check if response indicates server error or rate limit
-		if httpResp.StatusCode == http.StatusTooManyRequests || httpResp.StatusCode >= http.StatusInternalServerError {
-			bodyBytes, _ := io.ReadAll(httpResp.Body)
+		if httpResp.StatusCode == http.StatusTooManyRequests || httpResp.StatusCode >= http.StatusInternalServerError || httpResp.StatusCode == http.StatusUnauthorized || httpResp.StatusCode == http.StatusForbidden {
+			bodyBytes, _ := io.ReadAll(io.LimitReader(httpResp.Body, 64<<10))
 			httpResp.Body.Close()
-			lastErr = fmt.Errorf("upstream %s returned status %d: %s", ch.Name, httpResp.StatusCode, string(bodyBytes))
+			lastErr = provider.NewUpstreamError(ch.Name, httpResp.StatusCode, bodyBytes)
 			attempted = append(attempted, d.recordChannelFailure(ch.Name, lastErr, i+1))
 			continue
+		}
+
+		// Deterministic 4xx: the caller's request is at fault, replaying it on
+		// another channel is pointless and would only add load.
+		if httpResp.StatusCode >= 400 && httpResp.StatusCode < 500 {
+			bodyBytes, _ := io.ReadAll(io.LimitReader(httpResp.Body, 1<<20))
+			httpResp.Body.Close()
+			d.circuitBreaker.AbortCanary(ch.Name)
+			return &UpstreamResponse{
+				StatusCode: httpResp.StatusCode,
+				Headers:    httpResp.Header,
+				Stream:     io.NopCloser(bytes.NewReader(bodyBytes)),
+				Channel:    formatChannelTrail(ctx, attempted, ch.Name),
+			}, nil
 		}
 
 		// Success! Mark circuit breaker healthy and record metrics
@@ -149,6 +172,7 @@ func (d *Dispatcher) DispatchEmbedding(ctx context.Context, req *model.Embedding
 
 		if !exists {
 			lastErr = fmt.Errorf("unsupported provider type '%s' on channel %s", ch.Type, ch.Name)
+			d.circuitBreaker.AbortCanary(ch.Name)
 			continue
 		}
 
@@ -165,6 +189,15 @@ func (d *Dispatcher) DispatchEmbedding(ctx context.Context, req *model.Embedding
 				return nil, ctx.Err()
 			}
 			lastErr = err
+			if provider.IsClientError(err) {
+				d.circuitBreaker.AbortCanary(ch.Name)
+				return nil, err
+			}
+			if !provider.IsChannelFailure(err) {
+				d.circuitBreaker.AbortCanary(ch.Name)
+				attempted = append(attempted, ch.Name)
+				continue
+			}
 			attempted = append(attempted, d.recordChannelFailure(ch.Name, err, i+1))
 			continue
 		}
@@ -203,6 +236,7 @@ func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankReques
 
 		if !exists {
 			lastErr = fmt.Errorf("unsupported provider type '%s' on channel %s", ch.Type, ch.Name)
+			d.circuitBreaker.AbortCanary(ch.Name)
 			continue
 		}
 
@@ -219,6 +253,15 @@ func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankReques
 				return nil, ctx.Err()
 			}
 			lastErr = err
+			if provider.IsClientError(err) {
+				d.circuitBreaker.AbortCanary(ch.Name)
+				return nil, err
+			}
+			if !provider.IsChannelFailure(err) {
+				d.circuitBreaker.AbortCanary(ch.Name)
+				attempted = append(attempted, ch.Name)
+				continue
+			}
 			attempted = append(attempted, d.recordChannelFailure(ch.Name, err, i+1))
 			continue
 		}

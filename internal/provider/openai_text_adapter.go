@@ -80,7 +80,7 @@ func (p *OpenAIProvider) chatCompleteText(ctx context.Context, req *model.ChatCo
 		return nil, fmt.Errorf("read response body error: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("upstream %s returned status %d: %s", channel.Name, resp.StatusCode, string(bodyBytes))
+		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
 	}
 	var textResp struct {
 		ID      string `json:"id"`
@@ -149,25 +149,39 @@ func (p *OpenAIProvider) chatCompleteTextStream(ctx context.Context, req *model.
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return nil, fmt.Errorf("upstream %s returned status %d: %s", channel.Name, resp.StatusCode, string(bodyBytes))
+		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
 	}
 	eventChan := make(chan *model.StreamEvent, 64)
 	go func() {
 		defer resp.Body.Close()
 		defer close(eventChan)
 		reader := bufio.NewReader(resp.Body)
+
+		// send is context-aware: a bare channel send would block forever once
+		// the consumer (client / pipe) goes away, leaking this goroutine and the
+		// upstream response body for the lifetime of the process.
+		send := func(ev *model.StreamEvent) bool {
+			select {
+			case eventChan <- ev:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
+
 		for {
 			select {
 			case <-ctx.Done():
-				eventChan <- &model.StreamEvent{Err: ctx.Err()}
 				return
 			default:
 			}
 			line, err := reader.ReadBytes('\n')
 			if err != nil {
 				if err != io.EOF {
-					eventChan <- &model.StreamEvent{Err: err}
+					send(&model.StreamEvent{Err: err})
+					return
 				}
+				send(&model.StreamEvent{IsDone: true})
 				return
 			}
 			lineStr := strings.TrimSpace(string(line))
@@ -176,7 +190,7 @@ func (p *OpenAIProvider) chatCompleteTextStream(ctx context.Context, req *model.
 			}
 			dataContent := strings.TrimSpace(strings.TrimPrefix(lineStr, "data:"))
 			if dataContent == "[DONE]" {
-				eventChan <- &model.StreamEvent{IsDone: true}
+				send(&model.StreamEvent{IsDone: true})
 				return
 			}
 			var textChunk struct {
@@ -190,35 +204,40 @@ func (p *OpenAIProvider) chatCompleteTextStream(ctx context.Context, req *model.
 				Usage *model.Usage `json:"usage"`
 			}
 			if err := json.Unmarshal([]byte(dataContent), &textChunk); err != nil {
-				eventChan <- &model.StreamEvent{Raw: line}
+				if !send(&model.StreamEvent{Raw: line}) {
+					return
+				}
 				continue
 			}
-			deltaText := ""
-			var finishReason *string
-			if len(textChunk.Choices) > 0 {
-				deltaText = textChunk.Choices[0].Text
-				finishReason = textChunk.Choices[0].FinishReason
+
+			// Preserve every choice and its real index so `n > 1` keeps working
+			// through the text-completion adaptation (previously only choices[0]
+			// survived and was renumbered to 0).
+			choices := make([]model.ChunkChoice, 0, len(textChunk.Choices))
+			for _, ch := range textChunk.Choices {
+				choices = append(choices, model.ChunkChoice{
+					Index: ch.Index,
+					Delta: model.ChunkDelta{
+						Role:    "assistant",
+						Content: ch.Text,
+					},
+					FinishReason: ch.FinishReason,
+				})
+			}
+			if len(choices) == 0 {
+				// Usage-only trailer frame.
+				choices = []model.ChunkChoice{}
 			}
 			chatChunk := model.ChatCompletionChunk{
 				ID:      textChunk.ID,
 				Object:  "chat.completion.chunk",
 				Created: textChunk.Created,
 				Model:   req.Model,
-				Choices: []model.ChunkChoice{
-					{
-						Index: 0,
-						Delta: model.ChunkDelta{
-							Role:    "assistant",
-							Content: deltaText,
-						},
-						FinishReason: finishReason,
-					},
-				},
-				Usage: textChunk.Usage,
+				Choices: choices,
+				Usage:   textChunk.Usage,
 			}
-			eventChan <- &model.StreamEvent{
-				Chunk: &chatChunk,
-				Raw:   line,
+			if !send(&model.StreamEvent{Chunk: &chatChunk}) {
+				return
 			}
 		}
 	}()

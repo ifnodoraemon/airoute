@@ -111,6 +111,24 @@ func (d *Dispatcher) GetAllModelFallbacks() map[string]string {
 	return res
 }
 
+// getProviderForChannel selects the appropriate Provider implementation for a channel given the request.
+// If the request targets the Anthropic Messages protocol and the channel explicitly supports anthropic_messages,
+// the native Anthropic provider is used.
+func (d *Dispatcher) getProviderForChannel(ch *model.ChannelConfig, req *model.ChatCompletionRequest) (provider.Provider, bool) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	if req != nil && (req.AnthropicOriginal != nil || req.Protocol == "anthropic_messages") &&
+		(ch.Type == model.ProviderAnthropic || ch.HasExplicitProtocol("anthropic_messages")) {
+		if prov, ok := d.providers[model.ProviderAnthropic]; ok {
+			return prov, true
+		}
+	}
+
+	prov, exists := d.providers[ch.Type]
+	return prov, exists
+}
+
 // Dispatch executes non-streaming chat with automatic fallback.
 func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequest) (*model.ChatCompletionResponse, error) {
 	proto := "chat"
@@ -145,13 +163,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 			continue
 		}
 
-		d.mu.RLock()
-		prov, exists := d.providers[ch.Type]
-		d.mu.RUnlock()
+		prov, exists := d.getProviderForChannel(ch, req)
 
 		if !exists {
 			lastErr = fmt.Errorf("unsupported provider type '%s' on channel %s", ch.Type, ch.Name)
 			telemetry.Logger.Warn("provider type not found", "channel", ch.Name, "type", ch.Type)
+			// CanExecute may have taken a half-open canary slot; hand it back or
+			// the channel stays locked out until the 2x-cooldown reset.
+			d.circuitBreaker.AbortCanary(ch.Name)
 			continue
 		}
 
@@ -181,6 +200,27 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		}
 
 		lastErr = err
+		// A deterministic 4xx means the caller's payload is at fault: the same
+		// request would fail on every channel, so do not trip the breaker and do
+		// not replay it across the fleet.
+		if provider.IsClientError(err) {
+			telemetry.Logger.Warn("upstream rejected request with a client error, aborting fallback",
+				"channel", ch.Name,
+				"error", err.Error(),
+			)
+			d.circuitBreaker.AbortCanary(ch.Name)
+			return nil, err
+		}
+		if !provider.IsChannelFailure(err) {
+			// Unknown but non-fatal classification: try the next channel without
+			// charging the breaker.
+			telemetry.Logger.Warn("channel returned a non-health error, trying next channel without tripping breaker",
+				"channel", ch.Name,
+				"error", err.Error(),
+			)
+			attempted = append(attempted, ch.Name)
+			continue
+		}
 		attempted = append(attempted, d.recordChannelFailure(ch.Name, err, i+1))
 	}
 

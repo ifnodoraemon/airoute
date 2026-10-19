@@ -120,7 +120,7 @@ func (h *AdminHandler) SendVerificationCode(c *gin.Context) {
 	n, err := rand.Int(rand.Reader, big.NewInt(900000))
 	var code string
 	if err != nil {
-		code = fmt.Sprintf("%06d", time.Now().UnixNano()%1000000)
+		code = fmt.Sprintf("%06d", time.Now().UnixMicro()%1000000)
 	} else {
 		code = fmt.Sprintf("%06d", n.Int64()+100000)
 	}

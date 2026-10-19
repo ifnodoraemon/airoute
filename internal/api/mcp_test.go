@@ -108,8 +108,8 @@ func TestMCPSecurityAndUtilityTools(t *testing.T) {
 		}
 	})
 
-	t.Run("nano_calc_eval via utility tools", func(t *testing.T) {
-		out, isErr, handled := handler.executeBuiltinUtilityTools(ctx, "nano_calc_eval", map[string]interface{}{
+	t.Run("airoute_calc_eval via utility tools", func(t *testing.T) {
+		out, isErr, handled := handler.executeBuiltinUtilityTools(ctx, "airoute_calc_eval", map[string]interface{}{
 			"expression": "100 / 4 + 5",
 		})
 		if !handled || isErr {

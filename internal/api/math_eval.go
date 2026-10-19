@@ -7,27 +7,63 @@ import (
 	"strings"
 )
 
+const (
+	// maxMathExprLen bounds the input before tokenizing. Expressions longer than
+	// this are never legitimate from an LLM tool call.
+	maxMathExprLen = 512
+	// maxMathDepth bounds recursion. Without it a payload of a few thousand '('
+	// characters overflows the goroutine stack, which is a fatal (unrecoverable)
+	// runtime error that kills the whole gateway process.
+	maxMathDepth = 32
+)
+
 // evalSimpleMath evaluates clean arithmetic expressions (+, -, *, /, ^).
 func evalSimpleMath(expr string) (float64, error) {
 	expr = strings.ReplaceAll(expr, " ", "")
 	if expr == "" {
 		return 0, fmt.Errorf("empty expression")
 	}
-	return parseAddSub(&expr)
-}
-
-func parseAddSub(s *string) (float64, error) {
-	val, err := parseMulDiv(s)
+	if len(expr) > maxMathExprLen {
+		return 0, fmt.Errorf("expression too long (%d > %d bytes)", len(expr), maxMathExprLen)
+	}
+	p := &mathParser{input: expr}
+	val, err := p.parseAddSub(0)
 	if err != nil {
 		return 0, err
 	}
-	for len(*s) > 0 {
-		op := (*s)[0]
-		if op != '+' && op != '-' {
-			break
+	if p.pos != len(p.input) {
+		return 0, fmt.Errorf("unexpected trailing input at position %d: %s", p.pos, p.input[p.pos:])
+	}
+	return val, nil
+}
+
+type mathParser struct {
+	input string
+	pos   int
+}
+
+func (p *mathParser) peek() (byte, bool) {
+	if p.pos >= len(p.input) {
+		return 0, false
+	}
+	return p.input[p.pos], true
+}
+
+func (p *mathParser) parseAddSub(depth int) (float64, error) {
+	if depth > maxMathDepth {
+		return 0, fmt.Errorf("expression nesting too deep (> %d)", maxMathDepth)
+	}
+	val, err := p.parseMulDiv(depth)
+	if err != nil {
+		return 0, err
+	}
+	for {
+		op, ok := p.peek()
+		if !ok || (op != '+' && op != '-') {
+			return val, nil
 		}
-		*s = (*s)[1:]
-		nextVal, err := parseMulDiv(s)
+		p.pos++
+		nextVal, err := p.parseMulDiv(depth)
 		if err != nil {
 			return 0, err
 		}
@@ -37,21 +73,20 @@ func parseAddSub(s *string) (float64, error) {
 			val -= nextVal
 		}
 	}
-	return val, nil
 }
 
-func parseMulDiv(s *string) (float64, error) {
-	val, err := parsePower(s)
+func (p *mathParser) parseMulDiv(depth int) (float64, error) {
+	val, err := p.parsePower(depth)
 	if err != nil {
 		return 0, err
 	}
-	for len(*s) > 0 {
-		op := (*s)[0]
-		if op != '*' && op != '/' {
-			break
+	for {
+		op, ok := p.peek()
+		if !ok || (op != '*' && op != '/') {
+			return val, nil
 		}
-		*s = (*s)[1:]
-		nextVal, err := parsePower(s)
+		p.pos++
+		nextVal, err := p.parsePower(depth)
 		if err != nil {
 			return 0, err
 		}
@@ -64,17 +99,19 @@ func parseMulDiv(s *string) (float64, error) {
 			val /= nextVal
 		}
 	}
-	return val, nil
 }
 
-func parsePower(s *string) (float64, error) {
-	val, err := parsePrimary(s)
+func (p *mathParser) parsePower(depth int) (float64, error) {
+	if depth > maxMathDepth {
+		return 0, fmt.Errorf("expression nesting too deep (> %d)", maxMathDepth)
+	}
+	val, err := p.parsePrimary(depth)
 	if err != nil {
 		return 0, err
 	}
-	if len(*s) > 0 && (*s)[0] == '^' {
-		*s = (*s)[1:]
-		exp, err := parsePower(s)
+	if op, ok := p.peek(); ok && op == '^' {
+		p.pos++
+		exp, err := p.parsePower(depth + 1)
 		if err != nil {
 			return 0, err
 		}
@@ -83,36 +120,40 @@ func parsePower(s *string) (float64, error) {
 	return val, nil
 }
 
-func parsePrimary(s *string) (float64, error) {
-	if len(*s) == 0 {
+func (p *mathParser) parsePrimary(depth int) (float64, error) {
+	if depth > maxMathDepth {
+		return 0, fmt.Errorf("expression nesting too deep (> %d)", maxMathDepth)
+	}
+	ch, ok := p.peek()
+	if !ok {
 		return 0, fmt.Errorf("unexpected end of expression")
 	}
-	if (*s)[0] == '(' {
-		*s = (*s)[1:]
-		val, err := parseAddSub(s)
+	if ch == '(' {
+		p.pos++
+		val, err := p.parseAddSub(depth + 1)
 		if err != nil {
 			return 0, err
 		}
-		if len(*s) == 0 || (*s)[0] != ')' {
+		if c, ok := p.peek(); !ok || c != ')' {
 			return 0, fmt.Errorf("missing closing parenthesis")
 		}
-		*s = (*s)[1:]
+		p.pos++
 		return val, nil
 	}
-	if (*s)[0] == '-' {
-		*s = (*s)[1:]
-		val, err := parsePrimary(s)
+	if ch == '-' {
+		p.pos++
+		val, err := p.parsePrimary(depth + 1)
 		return -val, err
 	}
 
-	i := 0
-	for i < len(*s) && (((*s)[i] >= '0' && (*s)[i] <= '9') || (*s)[i] == '.') {
+	i := p.pos
+	for i < len(p.input) && ((p.input[i] >= '0' && p.input[i] <= '9') || p.input[i] == '.') {
 		i++
 	}
-	if i == 0 {
-		return 0, fmt.Errorf("invalid token: %s", *s)
+	if i == p.pos {
+		return 0, fmt.Errorf("invalid token at position %d: %s", p.pos, p.input[p.pos:])
 	}
-	numStr := (*s)[:i]
-	*s = (*s)[i:]
+	numStr := p.input[p.pos:i]
+	p.pos = i
 	return strconv.ParseFloat(numStr, 64)
 }

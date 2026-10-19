@@ -50,6 +50,8 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 	var recordOnce sync.Once
 	var streamError error
 	usageSource := "upstream"
+	var finalCost, finalSaved float64
+	var finalCached int
 	recordStreamEnd := func() {
 		dur := time.Since(start)
 		statusCode := http.StatusOK
@@ -64,22 +66,16 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 		} else {
 			// Fallback token estimation if upstream provider did not report usage on successful completion
 			if totalPromptTokens == 0 && approxPromptChars > 0 {
-				totalPromptTokens = approxPromptChars / 3
-				if totalPromptTokens < 1 {
-					totalPromptTokens = 1
-				}
+				totalPromptTokens = estimateTokens(approxPromptChars)
 				usageSource = "estimated"
 			}
 			if totalCompTokens == 0 && accumulatedCompChars > 0 {
-				totalCompTokens = accumulatedCompChars / 3
-				if totalCompTokens < 1 {
-					totalCompTokens = 1
-				}
+				totalCompTokens = estimateTokens(accumulatedCompChars)
 				usageSource = "estimated"
 			}
 		}
 
-		RecordUsage(c, AuditRecordParams{
+		finalCost, finalSaved, finalCached = recordUsage(c, AuditRecordParams{
 			ChatID:           upstreamChatID,
 			Channel:          upstreamChannel,
 			SessionID:        sessionID,
@@ -108,6 +104,8 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 			return
 		case event, open := <-streamChan:
 			if !open {
+				recordOnce.Do(recordStreamEnd)
+				writeStreamUsageTrailer(w, flusher, finalCost, finalSaved, finalCached)
 				fmt.Fprintf(w, "data: [DONE]\n\n")
 				flusher.Flush()
 				recordOnce.Do(recordStreamEnd)
@@ -127,20 +125,22 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 				telemetry.Logger.Error("stream error received mid-flight", "error", event.Err.Error())
 				errJSON, _ := json.Marshal(gin.H{
 					"error": gin.H{
-						"message": event.Err.Error(),
+						"message": sanitizeErrorMessage(event.Err),
 						"type":    "stream_error",
 					},
 				})
 				fmt.Fprintf(w, "data: %s\n\n", errJSON)
+				recordOnce.Do(recordStreamEnd)
 				fmt.Fprintf(w, "data: [DONE]\n\n")
 				flusher.Flush()
 				return
 			}
 
 			if event.IsDone {
+				recordOnce.Do(recordStreamEnd)
+				writeStreamUsageTrailer(w, flusher, finalCost, finalSaved, finalCached)
 				fmt.Fprintf(w, "data: [DONE]\n\n")
 				flusher.Flush()
-				recordOnce.Do(recordStreamEnd)
 				return
 			}
 

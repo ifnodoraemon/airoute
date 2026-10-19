@@ -10,7 +10,7 @@ import (
 // executeSkillTools executes progressive discovery and skill inspection tools.
 func (h *MCPHandler) executeSkillTools(_ context.Context, name string, args map[string]interface{}) (string, bool, bool) {
 	switch name {
-	case "airoute_search_skills", "nano_search_skills", "nano_discover_skills":
+	case "airoute_search_skills":
 		if h.repo == nil {
 			return "Storage repository not initialized", true, true
 		}
@@ -66,7 +66,7 @@ func (h *MCPHandler) executeSkillTools(_ context.Context, name string, args map[
 		b, _ := json.MarshalIndent(list, "", "  ")
 		return string(b), false, true
 
-	case "airoute_inspect_skill", "nano_inspect_skill":
+	case "airoute_inspect_skill":
 		if h.repo == nil {
 			return "Storage repository not initialized", true, true
 		}
@@ -105,7 +105,7 @@ func (h *MCPHandler) executeSkillTools(_ context.Context, name string, args map[
 		b, _ := json.MarshalIndent(inspect, "", "  ")
 		return string(b), false, true
 
-	case "airoute_get_skill_manifest", "nano_get_skill_manifest":
+	case "airoute_get_skill_manifest":
 		if h.repo == nil {
 			return "Storage repository not initialized", true, true
 		}

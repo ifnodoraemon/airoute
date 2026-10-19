@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/provider"
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
@@ -47,12 +48,11 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			continue
 		}
 
-		d.mu.RLock()
-		prov, exists := d.providers[ch.Type]
-		d.mu.RUnlock()
+		prov, exists := d.getProviderForChannel(ch, req)
 
 		if !exists {
 			lastErr = fmt.Errorf("unsupported provider type '%s' on channel %s", ch.Type, ch.Name)
+			d.circuitBreaker.AbortCanary(ch.Name)
 			continue
 		}
 
@@ -70,7 +70,17 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 				d.circuitBreaker.AbortCanary(ch.Name)
 				return nil, ctx.Err()
 			}
-			d.circuitBreaker.RecordFailure(ch.Name)
+			// Client mistakes (bad payload, unknown model) fail identically on
+			// every channel: do not trip the breaker and do not fan out.
+			if provider.IsClientError(err) {
+				d.circuitBreaker.AbortCanary(ch.Name)
+				return nil, err
+			}
+			if provider.IsChannelFailure(err) {
+				d.circuitBreaker.RecordFailure(ch.Name)
+			} else {
+				d.circuitBreaker.AbortCanary(ch.Name)
+			}
 			lastErr = err
 			attempted = append(attempted, ch.Name)
 			telemetry.GlobalMetrics.RecordFallback()
@@ -124,7 +134,15 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 				d.circuitBreaker.AbortCanary(ch.Name)
 				return nil, ctx.Err()
 			}
-			d.circuitBreaker.RecordFailure(ch.Name)
+			if provider.IsClientError(firstErr) {
+				d.circuitBreaker.AbortCanary(ch.Name)
+				return nil, firstErr
+			}
+			if provider.IsChannelFailure(firstErr) {
+				d.circuitBreaker.RecordFailure(ch.Name)
+			} else {
+				d.circuitBreaker.AbortCanary(ch.Name)
+			}
 			lastErr = firstErr
 			attempted = append(attempted, ch.Name)
 			telemetry.GlobalMetrics.RecordFallback()

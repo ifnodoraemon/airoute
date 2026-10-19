@@ -554,7 +554,7 @@ func TestAPIKey_BudgetLimitEnforcement(t *testing.T) {
 	user, _ := repo.GetUserByUsername("budget-user")
 
 	// Create key with Budget: 10.0
-	vkKey := "sk-nano-budget-test"
+	vkKey := "sk-airoute-budget-test"
 	_ = repo.CreateAPIKey(&storage.APIKeyRecord{
 		Key:      vkKey,
 		TenantID: "budget-user",
@@ -633,7 +633,7 @@ func TestModelsEndpoint_AllowedModelsFiltering(t *testing.T) {
 	user, _ := repo.GetUserByUsername("model-user")
 
 	// Create key restricted to ONLY gpt-4o
-	vkKey := "sk-nano-model-filter"
+	vkKey := "sk-airoute-model-filter"
 	_ = repo.CreateAPIKey(&storage.APIKeyRecord{
 		Key:           vkKey,
 		TenantID:      "model-user",

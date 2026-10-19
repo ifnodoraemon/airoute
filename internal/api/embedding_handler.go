@@ -39,7 +39,7 @@ func (h *Handler) HandleEmbeddings(c *gin.Context) {
 	resp, err := h.dispatcher.DispatchEmbedding(c.Request.Context(), &req)
 	if err != nil {
 		recordFailedRequest(c, sessionID, req.Model, time.Since(start), http.StatusBadGateway)
-		RespondOpenAIError(c, http.StatusBadGateway, err.Error(), "gateway_error", "upstream_failure")
+		RespondOpenAIError(c, http.StatusBadGateway, sanitizeErrorMessage(err), "gateway_error", "upstream_failure")
 		return
 	}
 

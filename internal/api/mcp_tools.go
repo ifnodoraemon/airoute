@@ -17,7 +17,7 @@ import (
 // executeBuiltinUtilityTools executes real in-process utilities (math, time, local database reflection, reasoning).
 func (h *MCPHandler) executeBuiltinUtilityTools(ctx context.Context, name string, args map[string]interface{}) (string, bool, bool) {
 	switch name {
-	case "nano_get_current_time":
+	case "airoute_get_current_time":
 		cst := time.FixedZone("CST", 8*3600)
 		now := time.Now().In(cst)
 		hourMinute := now.Format("15:04")
@@ -38,7 +38,7 @@ func (h *MCPHandler) executeBuiltinUtilityTools(ctx context.Context, name string
 		b, _ := json.MarshalIndent(info, "", "  ")
 		return string(b), false, true
 
-	case "nano_calc_eval":
+	case "airoute_calc_eval":
 		expr, _ := args["expression"].(string)
 		if expr == "" {
 			return "Error: parameter 'expression' is required", true, true
@@ -277,7 +277,7 @@ func (h *MCPHandler) executeDynamicMCPTool(ctx context.Context, name string, arg
 func forwardJSONRPCToolCall(ctx context.Context, endpoint, toolName string, args map[string]interface{}) (string, bool) {
 	rpcReq := map[string]interface{}{
 		"jsonrpc": "2.0",
-		"id":      time.Now().UnixNano(),
+		"id":      time.Now().UnixMicro(),
 		"method":  "tools/call",
 		"params": map[string]interface{}{
 			"name":      toolName,
@@ -336,7 +336,7 @@ func forwardJSONRPCToolCall(ctx context.Context, endpoint, toolName string, args
 func executeStdioMCPTool(ctx context.Context, cmdParts []string, toolName string, args map[string]interface{}) (string, bool) {
 	rpcReq := map[string]interface{}{
 		"jsonrpc": "2.0",
-		"id":      time.Now().UnixNano(),
+		"id":      time.Now().UnixMicro(),
 		"method":  "tools/call",
 		"params": map[string]interface{}{
 			"name":      toolName,

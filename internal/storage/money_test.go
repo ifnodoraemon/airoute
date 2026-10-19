@@ -5,19 +5,19 @@ import (
 	"testing"
 )
 
-func TestToNanoRoundTrip(t *testing.T) {
+func TestToUnitsRoundTrip(t *testing.T) {
 	cases := []float64{0, 0.000000001, 0.000252, 1.5, 25.5, 1234.567890123}
 	for _, in := range cases {
-		nano := ToNano(in)
-		got := FromNano(nano)
+		units := ToUnits(in)
+		got := FromUnits(units)
 		if diff := got - in; diff > 1e-9 || diff < -1e-9 {
-			t.Fatalf("round trip %v -> %d -> %v exceeds 1e-9", in, nano, got)
+			t.Fatalf("round trip %v -> %d -> %v exceeds 1e-9", in, units, got)
 		}
 	}
 }
 
-func TestToNanoHandlesInvalidValues(t *testing.T) {
-	if got := ToNano(0); got != 0 {
+func TestToUnitsHandlesInvalidValues(t *testing.T) {
+	if got := ToUnits(0); got != 0 {
 		t.Fatalf("expected 0, got %d", got)
 	}
 }
@@ -46,7 +46,7 @@ func TestReconcileMoneyDetectsDrift(t *testing.T) {
 		t.Fatalf("record log: %v", err)
 	}
 	// Simulate a mirror that only saw the first entry.
-	if _, err := db.Exec(`UPDATE api_keys SET used_cost_nano = ? WHERE key = ?`, ToNano(0.5), key.Key); err != nil {
+	if _, err := db.Exec(`UPDATE api_keys SET used_cost_units = ? WHERE key = ?`, ToUnits(0.5), key.Key); err != nil {
 		t.Fatalf("simulate drift: %v", err)
 	}
 
@@ -57,7 +57,7 @@ func TestReconcileMoneyDetectsDrift(t *testing.T) {
 	if len(drifts) != 1 {
 		t.Fatalf("expected 1 drift row, got %d: %+v", len(drifts), drifts)
 	}
-	if drifts[0].Difference != ToNano(0.25) {
-		t.Fatalf("expected difference %d, got %d", ToNano(0.25), drifts[0].Difference)
+	if drifts[0].Difference != ToUnits(0.25) {
+		t.Fatalf("expected difference %d, got %d", ToUnits(0.25), drifts[0].Difference)
 	}
 }

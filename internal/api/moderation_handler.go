@@ -119,7 +119,7 @@ func (h *Handler) HandleModerations(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, ModerationResponse{
-		ID:      fmt.Sprintf("modr-%d", time.Now().UnixNano()),
+		ID:      fmt.Sprintf("modr-%d", time.Now().UnixMicro()),
 		Model:   modModel,
 		Results: results,
 	})

@@ -70,7 +70,6 @@ func TestChatIDAndChannelAudit(t *testing.T) {
 		// on streams (SSE headers are written before the upstream ID is
 		// known), and the audit DB record carries the real upstream ID.
 		assert.Empty(t, resp.Header().Get("X-Airoute-Chat-ID"))
-		assert.Empty(t, resp.Header().Get("X-Nano-Chat-ID"))
 
 		// Async logger is not enabled in tests; verify via direct record readback
 		require.NoError(t, repo.RecordUsageLog(&storage.UsageLogRecord{

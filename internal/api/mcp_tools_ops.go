@@ -13,7 +13,7 @@ import (
 // executeOpsTools executes gateway cluster status, model routes, and usage log queries.
 func (h *MCPHandler) executeOpsTools(ctx context.Context, name string, args map[string]interface{}) (string, bool, bool) {
 	switch name {
-	case "airoute_cluster_status", "nano_check_status":
+	case "airoute_cluster_status":
 		if h.repo != nil {
 			if h.repo.CountActiveKeys() > 0 {
 				apiKey, _ := ctx.Value(contextKeyCallerKey).(string)
@@ -78,7 +78,7 @@ func (h *MCPHandler) executeOpsTools(ctx context.Context, name string, args map[
 		}
 		return "Status OK", false, true
 
-	case "airoute_model_topology", "nano_list_models":
+	case "airoute_model_topology":
 		if h.dispatcher != nil {
 			routes := h.dispatcher.GetModelRoutes()
 			if len(routes) > 0 {
@@ -111,7 +111,7 @@ func (h *MCPHandler) executeOpsTools(ctx context.Context, name string, args map[
 		}
 		return `[{"model":"deepseek-chat","modality":"chat","providers":2},{"model":"deepseek-reasoner","modality":"chat","providers":2},{"model":"gpt-4o","modality":"chat","providers":1}]`, false, true
 
-	case "airoute_query_logs", "nano_query_logs":
+	case "airoute_query_logs":
 		if h.repo == nil {
 			return "Storage repository not initialized", true, true
 		}

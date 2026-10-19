@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	ReloadChannel    = "nano:cluster:reload"
+	ReloadChannel    = "airoute:cluster:reload"
 	ConfigVersionKey = "airoute:cluster:config_version"
 )
 
@@ -113,7 +113,7 @@ func (c *Client) PublishReload(ctx context.Context, reason string) error {
 	evt := ClusterEvent{
 		Event:     "reload",
 		Reason:    reason,
-		Timestamp: time.Now().UnixNano(),
+		Timestamp: time.Now().UnixMicro(),
 	}
 	payload, _ := json.Marshal(evt)
 
@@ -179,7 +179,7 @@ func (c *Client) GetSessionChannel(ctx context.Context, model, sessionID string)
 	if !c.IsActive() || sessionID == "" {
 		return "", nil
 	}
-	key := fmt.Sprintf("nano:session:%s:%s", model, sessionID)
+	key := fmt.Sprintf("airoute:session:%s:%s", model, sessionID)
 	val, err := c.rdb.Get(ctx, key).Result()
 	if err == redis.Nil {
 		return "", nil
@@ -192,7 +192,7 @@ func (c *Client) SetSessionChannel(ctx context.Context, model, sessionID, channe
 	if !c.IsActive() || sessionID == "" || channelName == "" {
 		return nil
 	}
-	key := fmt.Sprintf("nano:session:%s:%s", model, sessionID)
+	key := fmt.Sprintf("airoute:session:%s:%s", model, sessionID)
 	return c.rdb.Set(ctx, key, channelName, ttl).Err()
 }
 

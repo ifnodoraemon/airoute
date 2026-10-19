@@ -361,12 +361,12 @@ func (db *DB) migratePostgres() error {
 			Name:    "add_integer_money_columns",
 			Up: func(db *DB) error {
 				stmts := []string{
-					"ALTER TABLE users ADD COLUMN IF NOT EXISTS balance_nano BIGINT DEFAULT 0;",
-					"ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS used_cost_nano BIGINT DEFAULT 0;",
-					"ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS budget_nano BIGINT DEFAULT 0;",
-					"ALTER TABLE usage_logs ADD COLUMN IF NOT EXISTS cost_nano BIGINT DEFAULT 0;",
-					"UPDATE users SET balance_nano = ROUND(balance * 1000000000)::BIGINT WHERE balance_nano = 0 AND balance <> 0;",
-					"UPDATE api_keys SET used_cost_nano = ROUND(used_cost * 1000000000)::BIGINT, budget_nano = ROUND(budget * 1000000000)::BIGINT WHERE used_cost_nano = 0 AND used_cost <> 0;",
+					"ALTER TABLE users ADD COLUMN IF NOT EXISTS balance_units BIGINT DEFAULT 0;",
+					"ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS used_cost_units BIGINT DEFAULT 0;",
+					"ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS budget_units BIGINT DEFAULT 0;",
+					"ALTER TABLE usage_logs ADD COLUMN IF NOT EXISTS cost_units BIGINT DEFAULT 0;",
+					"UPDATE users SET balance_units = ROUND(balance * 1000000000)::BIGINT WHERE balance_units = 0 AND balance <> 0;",
+					"UPDATE api_keys SET used_cost_units = ROUND(used_cost * 1000000000)::BIGINT, budget_units = ROUND(budget * 1000000000)::BIGINT WHERE used_cost_units = 0 AND used_cost <> 0;",
 				}
 				for _, stmt := range stmts {
 					if _, err := db.DB.Exec(stmt); err != nil {

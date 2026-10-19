@@ -34,6 +34,18 @@ func (p *AnthropicProvider) Type() model.ProviderType {
 	return model.ProviderAnthropic
 }
 
+// buildAnthropicURL joins base URL with /messages or /v1/messages cleanly.
+func buildAnthropicURL(baseURL string) string {
+	baseURL = strings.TrimRight(baseURL, "/")
+	if strings.HasSuffix(baseURL, "/v1/messages") || strings.HasSuffix(baseURL, "/messages") {
+		return baseURL
+	}
+	if strings.HasSuffix(baseURL, "/v1") {
+		return baseURL + "/messages"
+	}
+	return baseURL + "/v1/messages"
+}
+
 // ChatComplete executes a non-streaming Anthropic request and converts the response to OpenAI format.
 func (p *AnthropicProvider) ChatComplete(ctx context.Context, req *model.ChatCompletionRequest, channel *model.ChannelConfig) (*model.ChatCompletionResponse, error) {
 	anthropicReq := convertOpenAIToAnthropic(req, channel)
@@ -44,10 +56,7 @@ func (p *AnthropicProvider) ChatComplete(ctx context.Context, req *model.ChatCom
 		return nil, fmt.Errorf("marshal anthropic request error: %w", err)
 	}
 
-	baseURL := strings.TrimRight(channel.BaseURL, "/")
-	if !strings.HasSuffix(baseURL, "/v1/messages") {
-		baseURL += "/v1/messages"
-	}
+	baseURL := buildAnthropicURL(channel.BaseURL)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL, bytes.NewReader(payloadBytes))
 	if err != nil {
@@ -55,7 +64,10 @@ func (p *AnthropicProvider) ChatComplete(ctx context.Context, req *model.ChatCom
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-api-key", channel.APIKey)
+	if channel.APIKey != "" && channel.APIKey != "none" {
+		httpReq.Header.Set("x-api-key", channel.APIKey)
+		httpReq.Header.Set("Authorization", "Bearer "+channel.APIKey)
+	}
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 	if req.AnthropicBeta != "" {
 		httpReq.Header.Set("anthropic-beta", req.AnthropicBeta)
@@ -73,7 +85,7 @@ func (p *AnthropicProvider) ChatComplete(ctx context.Context, req *model.ChatCom
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("upstream anthropic %s returned %d: %s", channel.Name, resp.StatusCode, string(bodyBytes))
+		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
 	}
 
 	var anthropicResp AnthropicResponse
@@ -82,10 +94,13 @@ func (p *AnthropicProvider) ChatComplete(ctx context.Context, req *model.ChatCom
 	}
 
 	var fullContent strings.Builder
+	var reasoningBuilder strings.Builder
 	var toolCalls []model.ToolCall
 	for _, block := range anthropicResp.Content {
 		if block.Type == "text" {
 			fullContent.WriteString(block.Text)
+		} else if block.Type == "thinking" {
+			reasoningBuilder.WriteString(block.Thinking)
 		} else if block.Type == "tool_use" {
 			toolCalls = append(toolCalls, model.ToolCall{
 				ID:   block.ID,
@@ -114,9 +129,10 @@ func (p *AnthropicProvider) ChatComplete(ctx context.Context, req *model.ChatCom
 			{
 				Index: 0,
 				Message: model.ChatMessage{
-					Role:      "assistant",
-					Content:   fullContent.String(),
-					ToolCalls: toolCalls,
+					Role:             "assistant",
+					Content:          fullContent.String(),
+					ReasoningContent: reasoningBuilder.String(),
+					ToolCalls:        toolCalls,
 				},
 				FinishReason: &finishReason,
 			},

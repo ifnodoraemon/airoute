@@ -47,7 +47,7 @@ func (h *Handler) HandleGeminiModelDetail(c *gin.Context) {
 	param := strings.TrimPrefix(c.Param("modelAction"), "/")
 	modelName := strings.TrimPrefix(param, "models/")
 
-	channels := h.dispatcher.GetChannelsForModel(modelName)
+	channels := h.dispatcher.ListChannelsForModel(modelName, "")
 	if len(channels) == 0 {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": gin.H{
@@ -161,7 +161,7 @@ func (h *Handler) handleGeminiUnary(c *gin.Context, reqCtx context.Context, cano
 	resp, err := h.dispatcher.Dispatch(reqCtx, canonicalReq)
 	if err != nil {
 		recordFailedRequest(c, sessionID, canonicalReq.Model, time.Since(start), http.StatusBadGateway)
-		RespondGeminiError(c, http.StatusBadGateway, err.Error(), "UNAVAILABLE")
+		RespondGeminiError(c, http.StatusBadGateway, sanitizeErrorMessage(err), "UNAVAILABLE")
 		return
 	}
 

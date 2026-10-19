@@ -47,7 +47,7 @@ func (p *OpenAIProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("upstream embedding %s returned %d: %s", channel.Name, resp.StatusCode, string(bodyBytes))
+		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
 	}
 
 	var embResp model.EmbeddingResponse
@@ -102,7 +102,7 @@ func (p *OpenAIProvider) Rerank(ctx context.Context, req *model.RerankRequest, c
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("upstream rerank %s returned %d: %s", channel.Name, resp.StatusCode, string(bodyBytes))
+		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
 	}
 
 	var rerankResp model.RerankResponse

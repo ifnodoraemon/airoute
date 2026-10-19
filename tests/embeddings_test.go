@@ -75,7 +75,7 @@ func TestAPI_Embeddings_OpenAICompatible(t *testing.T) {
 	_ = repo.CreateChannel(&ch)
 
 	vKey := storage.APIKeyRecord{
-		Key:           "sk-nano-embed-key",
+		Key:           "sk-airoute-embed-key",
 		TenantID:      "tenant-embed",
 		AllowedModels: []string{"*"},
 		Status:        "active",
@@ -105,7 +105,7 @@ func TestAPI_Embeddings_OpenAICompatible(t *testing.T) {
 	reqBytes, _ := json.Marshal(reqPayload)
 
 	httpReq, _ := http.NewRequest(http.MethodPost, "/v1/embeddings", bytes.NewReader(reqBytes))
-	httpReq.Header.Set("Authorization", "Bearer sk-nano-embed-key")
+	httpReq.Header.Set("Authorization", "Bearer sk-airoute-embed-key")
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()

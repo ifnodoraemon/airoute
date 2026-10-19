@@ -103,7 +103,7 @@ func (h *Handler) handleAnthropicUnary(c *gin.Context, reqCtx context.Context, r
 			"type": "error",
 			"error": gin.H{
 				"type":    errType,
-				"message": err.Error(),
+				"message": sanitizeErrorMessage(err),
 			},
 		})
 		return
@@ -122,11 +122,19 @@ func (h *Handler) handleAnthropicUnary(c *gin.Context, reqCtx context.Context, r
 		}
 	}
 
-	var contentBlocks []gin.H
+	contentBlocks := make([]gin.H, 0)
 	stopReason := "end_turn"
 
 	if len(resp.Choices) > 0 {
 		choice := resp.Choices[0]
+		// Do NOT synthesise a {"type":"thinking"} block from ReasoningContent.
+		// The Anthropic Messages API requires every thinking block to carry a
+		// provider signature, and clients echo assistant content back on the next
+		// turn; an unsigned block therefore makes the follow-up request fail with
+		// "thinking.signature: Field required". Reasoning from adapted
+		// (non-Anthropic) upstreams is surfaced to OpenAI-shaped clients through
+		// reasoning_content instead, and native Anthropic thinking blocks are
+		// passed through verbatim by the native path above.
 		if replyText := choice.Message.GetContentString(); replyText != "" {
 			contentBlocks = append(contentBlocks, gin.H{
 				"type": "text",
@@ -151,6 +159,13 @@ func (h *Handler) handleAnthropicUnary(c *gin.Context, reqCtx context.Context, r
 		} else if choice.FinishReason != nil && *choice.FinishReason == "length" {
 			stopReason = "max_tokens"
 		}
+	}
+
+	if len(contentBlocks) == 0 {
+		contentBlocks = append(contentBlocks, gin.H{
+			"type": "text",
+			"text": "",
+		})
 	}
 
 	inputTokens := 0
@@ -223,7 +238,7 @@ func (h *Handler) HandleAnthropicCountTokens(c *gin.Context) {
 	channels := h.dispatcher.ResolveCandidateChannels(c.Request.Context(), req.Model, "anthropic_messages")
 	var lastErr error
 	for _, channel := range channels {
-		if channel.Type != model.ProviderAnthropic {
+		if channel.Type != model.ProviderAnthropic && !channel.HasExplicitProtocol("anthropic_messages") {
 			continue
 		}
 		payload := map[string]any{"model": channel.GetUpstreamModel(req.Model), "messages": req.Messages}
@@ -245,8 +260,10 @@ func (h *Handler) HandleAnthropicCountTokens(c *gin.Context) {
 			continue
 		}
 		url := strings.TrimRight(channel.BaseURL, "/")
-		if strings.HasSuffix(url, "/v1/messages") {
+		if strings.HasSuffix(url, "/v1/messages") || strings.HasSuffix(url, "/messages") {
 			url += "/count_tokens"
+		} else if strings.HasSuffix(url, "/v1") {
+			url += "/messages/count_tokens"
 		} else {
 			url += "/v1/messages/count_tokens"
 		}
@@ -256,7 +273,10 @@ func (h *Handler) HandleAnthropicCountTokens(c *gin.Context) {
 			continue
 		}
 		httpReq.Header.Set("Content-Type", "application/json")
-		httpReq.Header.Set("x-api-key", channel.APIKey)
+		if channel.APIKey != "" && channel.APIKey != "none" {
+			httpReq.Header.Set("x-api-key", channel.APIKey)
+			httpReq.Header.Set("Authorization", "Bearer "+channel.APIKey)
+		}
 		httpReq.Header.Set("anthropic-version", "2023-06-01")
 		if beta := c.GetHeader("anthropic-beta"); beta != "" {
 			httpReq.Header.Set("anthropic-beta", beta)
@@ -296,7 +316,7 @@ func (h *Handler) HandleAnthropicCountTokens(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"input_tokens": estimateAnthropicInputTokens(&req)})
 		return
 	}
-	RespondAnthropicError(c, http.StatusBadGateway, lastErr.Error(), "api_error")
+	RespondAnthropicError(c, http.StatusBadGateway, sanitizeErrorMessage(lastErr), "api_error")
 }
 
 // estimateAnthropicInputTokens provides a conservative local token estimate

@@ -105,7 +105,7 @@ func (h *Handler) handleChatUnary(c *gin.Context, reqCtx context.Context, req *m
 	// never persisted (it would never reconcile with the provider).
 	upstreamChatID := resp.ID
 	if resp.ID == "" {
-		resp.ID = fmt.Sprintf("chatcmpl-%x", time.Now().UnixNano())
+		resp.ID = fmt.Sprintf("chatcmpl-%x", time.Now().UnixMicro())
 	}
 	if req.Model != "" {
 		resp.Model = req.Model

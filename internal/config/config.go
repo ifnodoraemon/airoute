@@ -66,6 +66,30 @@ func (c *Config) GetAPIKey(key string) *model.APIKeyConfig {
 	return c.apiKeysMap[key]
 }
 
+// ActiveAPIKeyCount returns the number of in-memory API keys under the key lock.
+// Callers must use this (and HasRegisteredAPIKeys) instead of reading the
+// APIKeys / HasConfiguredKeys fields directly: those are rewritten by
+// UpdateAPIKeys on every hot reload, so an unguarded read is a data race.
+func (c *Config) ActiveAPIKeyCount() int {
+	if c == nil {
+		return 0
+	}
+	c.keyMu.RLock()
+	defer c.keyMu.RUnlock()
+	return len(c.APIKeys)
+}
+
+// HasRegisteredAPIKeys reports whether any API key has ever been registered in
+// the gateway, even if all of them have since been disabled or deleted.
+func (c *Config) HasRegisteredAPIKeys() bool {
+	if c == nil {
+		return false
+	}
+	c.keyMu.RLock()
+	defer c.keyMu.RUnlock()
+	return c.HasConfiguredKeys
+}
+
 // UpdateAPIKeys safely updates keys and their lookup map in-place without copying lock values.
 func (c *Config) UpdateAPIKeys(keys []model.APIKeyConfig, hasConfiguredKeys bool) {
 	if c == nil {

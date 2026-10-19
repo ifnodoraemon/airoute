@@ -61,7 +61,7 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("gemini embed returned %d: %s", resp.StatusCode, string(body))
+			return nil, NewUpstreamError(channel.Name, resp.StatusCode, []byte(body))
 		}
 
 		var parsed struct {
@@ -132,7 +132,7 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("gemini batchEmbed returned %d: %s", resp.StatusCode, string(body))
+			return nil, NewUpstreamError(channel.Name, resp.StatusCode, []byte(body))
 		}
 
 		var parsed struct {

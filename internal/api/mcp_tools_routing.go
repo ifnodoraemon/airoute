@@ -19,7 +19,7 @@ import (
 // executeRoutingTools executes prompt optimizer, model recommender, deep search, and chat completions.
 func (h *MCPHandler) executeRoutingTools(ctx context.Context, name string, args map[string]interface{}) (string, bool, bool) {
 	switch name {
-	case "airoute_deep_search", "nano_web_search":
+	case "airoute_deep_search":
 		query, _ := args["query"].(string)
 		if strings.TrimSpace(query) == "" {
 			return "Error: parameter 'query' is required", true, true
@@ -143,7 +143,7 @@ func (h *MCPHandler) executeRoutingTools(ctx context.Context, name string, args 
 		b, _ := json.MarshalIndent(res, "", "  ")
 		return string(b), false, true
 
-	case "airoute_chat", "nano_chat":
+	case "airoute_chat":
 		modelName, _ := args["model"].(string)
 		msgText, _ := args["message"].(string)
 		sessionID, _ := args["session_id"].(string)
@@ -221,7 +221,7 @@ func (h *MCPHandler) executeRoutingTools(ctx context.Context, name string, args 
 			telemetry.GlobalMetrics.RecordRequest(true, dur, pTokens, cTokens)
 			if storage.GlobalAsyncLogger != nil {
 				storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
-					TraceID:          fmt.Sprintf("tr-mcp-%d", time.Now().UnixNano()),
+					TraceID:          fmt.Sprintf("tr-mcp-%d", time.Now().UnixMicro()),
 					ChatID:           resp.ID,
 					Channel:          resp.Channel,
 					SessionID:        sessionID,

@@ -12,7 +12,6 @@ var weakAdminSecrets = map[string]struct{}{
 	"":                             {},
 	"airoute-secret-key-change-me": {},
 	"airoute-cluster-admin-shared-secret-key-32b":   {},
-	"nano-swarm-enterprise-secret-key":              {},
 	"change_me_super_secret_production_key_32bytes": {},
 	"REPLACE_WITH_STRONG_RANDOM_SECRET":             {},
 }
@@ -23,9 +22,6 @@ func productionSecurityIssues(cfg *config.Config) []string {
 	var issues []string
 
 	secret := os.Getenv("GATEWAY_ADMIN_SECRET")
-	if secret == "" {
-		secret = os.Getenv("NANO_SECRET_KEY")
-	}
 	if _, weak := weakAdminSecrets[secret]; weak {
 		issues = append(issues, "GATEWAY_ADMIN_SECRET is empty or a well-known placeholder (admin tokens would be forgeable)")
 	}

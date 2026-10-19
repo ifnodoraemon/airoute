@@ -39,7 +39,7 @@ func (h *MultimodalHandler) dispatchAndForward(c *gin.Context, upReq *router.Ups
 	resp, err := h.dispatcher.DispatchHTTP(c.Request.Context(), upReq)
 	if err != nil {
 		recordFailedRequest(c, sessionID, upReq.Model, time.Since(start), http.StatusBadGateway)
-		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadGateway, gin.H{"error": sanitizeErrorMessage(err)})
 		return
 	}
 	defer resp.Stream.Close()

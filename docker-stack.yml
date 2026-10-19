@@ -10,17 +10,17 @@ services:
   # 1. Distributed Relational Database (PostgreSQL 16)
   # Provides shared transactional consistency across all gateway nodes.
   # ============================================================================
-  nano-postgres:
+  airoute-postgres:
     image: postgres:16-alpine
     environment:
-      - POSTGRES_USER=${DB_USER:-nanouser}
-      - POSTGRES_PASSWORD=${DB_PASSWORD:-nanopassword}
-      - POSTGRES_DB=${DB_NAME:-nanodb}
+      - POSTGRES_USER=${DB_USER:-airouteuser}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-airoutepassword}
+      - POSTGRES_DB=${DB_NAME:-airoutedb}
       - PGDATA=/var/lib/postgresql/data/pgdata
     volumes:
-      - nano-pgdata:/var/lib/postgresql/data
+      - airoute-pgdata:/var/lib/postgresql/data
     networks:
-      - nano-swarm-net
+      - airoute-swarm-net
     deploy:
       mode: replicated
       replicas: 1
@@ -42,7 +42,7 @@ services:
   # 2. Distributed Memory Broker & Log Message Queue (Redis 7 + Redis Streams)
   # Powers cluster-wide rate limiting, cache invalidation, and async log queues.
   # ============================================================================
-  nano-redis:
+  airoute-redis:
     image: redis:7-alpine
     command: >
       redis-server
@@ -52,9 +52,9 @@ services:
       --maxmemory-policy allkeys-lru
       --tcp-keepalive 60
     volumes:
-      - nano-redisdata:/data
+      - airoute-redisdata:/data
     networks:
-      - nano-swarm-net
+      - airoute-swarm-net
     deploy:
       mode: replicated
       replicas: 1
@@ -81,12 +81,12 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - GATEWAY_HOST=0.0.0.0
-      - DATABASE_URL=postgres://${DB_USER:-nanouser}:${DB_PASSWORD:?DB_PASSWORD must be set}@nano-postgres:5432/${DB_NAME:-nanodb}?sslmode=disable
-      - REDIS_URL=redis://nano-redis:6379/0
-      - NANO_SECRET_KEY=${NANO_SECRET_KEY:?NANO_SECRET_KEY must be set to a strong random value}
+      - DATABASE_URL=postgres://${DB_USER:-airouteuser}:${DB_PASSWORD:?DB_PASSWORD must be set}@airoute-postgres:5432/${DB_NAME:-airoutedb}?sslmode=disable
+      - REDIS_URL=redis://airoute-redis:6379/0
+      - GATEWAY_ADMIN_SECRET=${GATEWAY_ADMIN_SECRET:?GATEWAY_ADMIN_SECRET must be set to a strong random value}
       - LOG_LEVEL=${LOG_LEVEL:-info}
     networks:
-      - nano-swarm-net
+      - airoute-swarm-net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 10s
@@ -123,7 +123,7 @@ services:
   # 4. Swarm Ingress Load Balancer (NGINX with HTTP/2 & SSE Streaming)
   # Distributes ingress traffic across all gateway nodes with zero-buffering.
   # ============================================================================
-  nano-lb:
+  airoute-lb:
     image: nginx:alpine
     ports:
       - target: 80
@@ -134,7 +134,7 @@ services:
       - source: nginx_swarm_config
         target: /etc/nginx/conf.d/default.conf
     networks:
-      - nano-swarm-net
+      - airoute-swarm-net
     deploy:
       mode: replicated
       replicas: 2
@@ -155,12 +155,12 @@ configs:
     file: ./deploy/swarm/nginx-swarm.conf
 
 networks:
-  nano-swarm-net:
+  airoute-swarm-net:
     driver: overlay
     attachable: true
 
 volumes:
-  nano-pgdata:
+  airoute-pgdata:
     driver: local
-  nano-redisdata:
+  airoute-redisdata:
     driver: local

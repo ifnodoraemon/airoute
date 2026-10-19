@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	RedisLogStreamKey = "nano:stream:logs"
-	RedisLogGroup     = "nano_log_group"
+	RedisLogStreamKey = "airoute:stream:logs"
+	RedisLogGroup     = "airoute_log_group"
 )
 
 // AsyncLogger buffers and batches usage log records to prevent blocking the data plane.
@@ -87,7 +87,7 @@ func (al *AsyncLogger) Record(rec *UsageLogRecord) {
 		if rec.SessionID != "" {
 			rec.TraceID = rec.SessionID
 		} else {
-			rec.TraceID = fmt.Sprintf("tr-%x", time.Now().UnixNano())
+			rec.TraceID = fmt.Sprintf("tr-%x", time.Now().UnixMicro())
 		}
 	}
 

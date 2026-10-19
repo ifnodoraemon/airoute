@@ -388,15 +388,15 @@ func (db *DB) migrate() error {
 			Version: 12,
 			Name:    "add_integer_money_columns",
 			Up: func(db *DB) error {
-				// Money is mirrored as integer nano-yuan (1e-9 CNY) so that
+				// Money is mirrored as integer 1e-9 CNY units so that
 				// accumulation never drifts. The legacy REAL columns remain the
 				// display source while both are written in the same transaction.
-				ensureSQLiteColumn(db.DB, "users", "balance_nano", "INTEGER DEFAULT 0")
-				ensureSQLiteColumn(db.DB, "api_keys", "used_cost_nano", "INTEGER DEFAULT 0")
-				ensureSQLiteColumn(db.DB, "api_keys", "budget_nano", "INTEGER DEFAULT 0")
-				ensureSQLiteColumn(db.DB, "usage_logs", "cost_nano", "INTEGER DEFAULT 0")
-				_, _ = db.DB.Exec(`UPDATE users SET balance_nano = CAST(ROUND(balance * 1000000000) AS INTEGER) WHERE balance_nano = 0 AND balance <> 0;`)
-				_, _ = db.DB.Exec(`UPDATE api_keys SET used_cost_nano = CAST(ROUND(used_cost * 1000000000) AS INTEGER), budget_nano = CAST(ROUND(budget * 1000000000) AS INTEGER) WHERE used_cost_nano = 0 AND used_cost <> 0;`)
+				ensureSQLiteColumn(db.DB, "users", "balance_units", "INTEGER DEFAULT 0")
+				ensureSQLiteColumn(db.DB, "api_keys", "used_cost_units", "INTEGER DEFAULT 0")
+				ensureSQLiteColumn(db.DB, "api_keys", "budget_units", "INTEGER DEFAULT 0")
+				ensureSQLiteColumn(db.DB, "usage_logs", "cost_units", "INTEGER DEFAULT 0")
+				_, _ = db.DB.Exec(`UPDATE users SET balance_units = CAST(ROUND(balance * 1000000000) AS INTEGER) WHERE balance_units = 0 AND balance <> 0;`)
+				_, _ = db.DB.Exec(`UPDATE api_keys SET used_cost_units = CAST(ROUND(used_cost * 1000000000) AS INTEGER), budget_units = CAST(ROUND(budget * 1000000000) AS INTEGER) WHERE used_cost_units = 0 AND used_cost <> 0;`)
 				return nil
 			},
 		},

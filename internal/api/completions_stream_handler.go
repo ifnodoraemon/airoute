@@ -28,22 +28,26 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 	w := c.Writer
 	firstTokenRecorded := false
 	var ttftDuration time.Duration
-	respID := fmt.Sprintf("cmpl_%d", time.Now().UnixNano())
+	respID := fmt.Sprintf("cmpl_%d", time.Now().UnixMicro())
 	nowCreated := time.Now().Unix()
 
 	totalPromptTokens := 0
 	totalCompTokens := 0
 	upstreamChannel := ""
 	accumulatedChars := 0
+	var streamError error
+	sawDone := false
+	usageSource := "upstream"
 
 	for event := range streamChan {
 		if upstreamChannel == "" && event.Channel != "" {
 			upstreamChannel = event.Channel
 		}
 		if event.Err != nil {
+			streamError = event.Err
 			errBytes, _ := json.Marshal(gin.H{
 				"error": gin.H{
-					"message": event.Err.Error(),
+					"message": sanitizeErrorMessage(event.Err),
 					"type":    "stream_error",
 				},
 			})
@@ -53,25 +57,29 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 		}
 
 		if event.IsDone {
-			fmt.Fprintf(w, "data: [DONE]\n\n")
-			flusher.Flush()
+			sawDone = true
 			break
 		}
 
 		if event.Chunk != nil {
-			deltaText := ""
-			var finishReason *string
-			if len(event.Chunk.Choices) > 0 {
-				deltaText = event.Chunk.Choices[0].Delta.Content
-				finishReason = event.Chunk.Choices[0].FinishReason
-			}
-			if deltaText != "" {
-				if !firstTokenRecorded {
-					ttftDuration = time.Since(start)
-					telemetry.GlobalMetrics.RecordTTFT(ttftDuration)
-					firstTokenRecorded = true
+			// Preserve every choice with its real index; `n > 1` used to collapse
+			// to choices[0] renumbered as 0.
+			choices := make([]gin.H, 0, len(event.Chunk.Choices))
+			for _, ch := range event.Chunk.Choices {
+				if ch.Delta.Content != "" {
+					if !firstTokenRecorded {
+						ttftDuration = time.Since(start)
+						telemetry.GlobalMetrics.RecordTTFT(ttftDuration)
+						firstTokenRecorded = true
+					}
+					accumulatedChars += len(ch.Delta.Content)
 				}
-				accumulatedChars += len(deltaText)
+				choices = append(choices, gin.H{
+					"text":          ch.Delta.Content,
+					"index":         ch.Index,
+					"logprobs":      nil,
+					"finish_reason": ch.FinishReason,
+				})
 			}
 			if event.Chunk.Usage != nil {
 				totalPromptTokens = event.Chunk.Usage.PromptTokens
@@ -83,14 +91,7 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 				"object":  "text_completion",
 				"created": nowCreated,
 				"model":   req.Model,
-				"choices": []gin.H{
-					{
-						"text":          deltaText,
-						"index":         0,
-						"logprobs":      nil,
-						"finish_reason": finishReason,
-					},
-				},
+				"choices": choices,
 			}
 			chunkBytes, err := json.Marshal(chunkPayload)
 			if err == nil {
@@ -100,23 +101,43 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 		}
 	}
 
-	dur := time.Since(start)
-	if totalPromptTokens == 0 && totalCompTokens == 0 {
-		totalCompTokens = accumulatedChars / 4
-		if totalCompTokens == 0 && accumulatedChars > 0 {
-			totalCompTokens = 1
+	statusCode := http.StatusOK
+	if streamError != nil {
+		statusCode = http.StatusBadGateway
+		if c.Request.Context().Err() != nil {
+			statusCode = 499
 		}
-		totalPromptTokens = 10
+	} else {
+		if totalPromptTokens == 0 {
+			totalPromptTokens = estimateCanonicalPromptTokens(&chatReq)
+			usageSource = "estimated"
+		}
+		if totalCompTokens == 0 && accumulatedChars > 0 {
+			totalCompTokens = estimateTokens(accumulatedChars)
+			usageSource = "estimated"
+		}
 	}
-	RecordUsage(c, AuditRecordParams{
+
+	cost, savedCost, cachedTokens := recordUsage(c, AuditRecordParams{
 		ChatID:           respID,
 		Channel:          upstreamChannel,
 		SessionID:        sessionID,
 		Model:            req.Model,
 		PromptTokens:     totalPromptTokens,
 		CompletionTokens: totalCompTokens,
-		Duration:         dur,
+		Duration:         time.Since(start),
 		TTFT:             ttftDuration,
-		StatusCode:       http.StatusOK,
+		StatusCode:       statusCode,
+		UsageSource:      usageSource,
+		ErrorMessage:     sanitizeErrorMessage(streamError),
 	})
+
+	if statusCode == http.StatusOK {
+		writeStreamUsageTrailer(w, flusher, cost, savedCost, cachedTokens)
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+		flusher.Flush()
+	} else if sawDone {
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+		flusher.Flush()
+	}
 }

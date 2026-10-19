@@ -117,7 +117,7 @@ func (h *AdminHandler) GetSystemMiddlewares(c *gin.Context) {
 			Name:        "分布式事件流队列 (Redis Stream)",
 			Category:    "消息流管道",
 			Status:      "operational",
-			Mode:        "Redis Stream (nano:log_stream) 消费组",
+			Mode:        "Redis Stream (airoute:stream:logs) 消费组",
 			Description: "纳秒级非阻塞事件追加，消费者组分布式并发消费，确保高峰期高并发日志不丢不漏。",
 		})
 	} else {
