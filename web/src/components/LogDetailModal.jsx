@@ -253,6 +253,17 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                   >
                     <Copy className="w-3 h-3" />
                   </button>
+                  {onOpenTrace && (
+                    <button
+                      onClick={() => {
+                        onOpenTrace(log.chat_id);
+                        onClose();
+                      }}
+                      className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-[11px] font-medium transition cursor-pointer"
+                    >
+                      {isZh ? '查看快照' : 'Snapshot'}
+                    </button>
+                  )}
                 </div>
               </div>
             )}

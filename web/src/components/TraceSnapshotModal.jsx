@@ -8,13 +8,21 @@ export default function TraceSnapshotModal({ isOpen, traceId, onClose, lang = 'z
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Allow searching by any correlation id, not just the one that opened the modal.
+  const [queryField, setQueryField] = useState('trace_id');
+  const [queryValue, setQueryValue] = useState(traceId || '');
 
-  const load = async () => {
-    if (!traceId) return;
+  const load = async (field = queryField, value = queryValue || traceId) => {
+    if (!value) {
+      setRows([]);
+      return;
+    }
     setLoading(true);
     setError('');
     try {
-      const res = await adminFetch(`/api/v1/admin/traces?trace_id=${encodeURIComponent(traceId)}&limit=20`);
+      const params = new URLSearchParams({ limit: '20' });
+      params.set(field, value);
+      const res = await adminFetch(`/api/v1/admin/traces?${params.toString()}`);
       const data = await res.json();
       if (!res.ok || data.code !== 0) {
         throw new Error(data.error || `HTTP ${res.status}`);
@@ -28,7 +36,11 @@ export default function TraceSnapshotModal({ isOpen, traceId, onClose, lang = 'z
   };
 
   useEffect(() => {
-    if (isOpen) load();
+    if (isOpen) {
+      setQueryValue(traceId || '');
+      setQueryField('trace_id');
+      load('trace_id', traceId);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, traceId]);
 
@@ -52,6 +64,31 @@ export default function TraceSnapshotModal({ isOpen, traceId, onClose, lang = 'z
               <X className="w-4 h-4" />
             </button>
           </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-slate-200 dark:border-slate-800">
+          <select
+            value={queryField}
+            onChange={(e) => setQueryField(e.target.value)}
+            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1.5 text-[11px]"
+          >
+            <option value="trace_id">Trace ID</option>
+            <option value="chat_id">Chat ID</option>
+            <option value="session_id">Session ID</option>
+          </select>
+          <input
+            value={queryValue}
+            onChange={(e) => setQueryValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') load(); }}
+            placeholder={isZh ? '输入关联 ID 后回车查询' : 'Enter a correlation id and press Enter'}
+            className="flex-1 min-w-[180px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-[11px] font-mono"
+          />
+          <button
+            onClick={() => load()}
+            className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 text-[11px] font-semibold"
+          >
+            {isZh ? '查询' : 'Search'}
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-3 text-xs">

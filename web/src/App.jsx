@@ -1603,6 +1603,7 @@ export default function App() {
             setTraceSnapshotId(sid);
             showToast(isZh ? `已按会话 ID: ${sid} 筛选` : `Filtered by session ID: ${sid}`, 'info');
           }}
+          onOpenTrace={(chatId) => setTraceSnapshotId(chatId)}
           onDeleteLog={handleDeleteSingleLog}
           onNavigate={(targetTab) => {
             setCurrentTab(targetTab);

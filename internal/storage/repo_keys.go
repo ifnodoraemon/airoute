@@ -30,6 +30,24 @@ type APIKeyRecord struct {
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
+// resolveMoney reconciles the integer ledger mirrors with the legacy float
+// columns so callers always read a consistent pair.
+func (rec *APIKeyRecord) resolveMoney() {
+	if rec == nil {
+		return
+	}
+	if rec.UsedCostNano != 0 || rec.UsedCost == 0 {
+		rec.UsedCost = FromNano(rec.UsedCostNano)
+	} else {
+		rec.UsedCostNano = ToNano(rec.UsedCost)
+	}
+	if rec.BudgetNano != 0 || rec.Budget == 0 {
+		rec.Budget = FromNano(rec.BudgetNano)
+	} else {
+		rec.BudgetNano = ToNano(rec.Budget)
+	}
+}
+
 // ListAPIKeys returns all API keys.
 func (r *Repository) ListAPIKeys() ([]*APIKeyRecord, error) {
 	rows, err := r.db.Query(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_nano, 0), COALESCE(used_cost_nano, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys ORDER BY id ASC`)
@@ -49,6 +67,7 @@ func (r *Repository) ListAPIKeys() ([]*APIKeyRecord, error) {
 		if allowedJSON != "" {
 			_ = json.Unmarshal([]byte(allowedJSON), &rec.AllowedModels)
 		}
+		rec.resolveMoney()
 		list = append(list, &rec)
 	}
 	if err := rows.Err(); err != nil {
@@ -76,6 +95,7 @@ func (r *Repository) ListAPIKeysByUser(userID int64) ([]*APIKeyRecord, error) {
 		if allowedJSON != "" {
 			_ = json.Unmarshal([]byte(allowedJSON), &rec.AllowedModels)
 		}
+		rec.resolveMoney()
 		list = append(list, &rec)
 	}
 	if err := rows.Err(); err != nil {
@@ -135,6 +155,7 @@ func (r *Repository) GetAPIKey(id int64) (*APIKeyRecord, error) {
 	if allowedJSON != "" {
 		_ = json.Unmarshal([]byte(allowedJSON), &rec.AllowedModels)
 	}
+	rec.resolveMoney()
 	return &rec, nil
 }
 
@@ -149,6 +170,7 @@ func (r *Repository) GetAPIKeyByKey(key string) (*APIKeyRecord, error) {
 	if allowedJSON != "" {
 		_ = json.Unmarshal([]byte(allowedJSON), &rec.AllowedModels)
 	}
+	rec.resolveMoney()
 	return &rec, nil
 }
 
