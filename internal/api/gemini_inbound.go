@@ -126,7 +126,7 @@ func (h *Handler) HandleGeminiAction(c *gin.Context) {
 				totalChars += len(p.Text)
 			}
 		}
-		totalTokens := totalChars / 4
+		totalTokens := model.EstimateTokensFromChars(totalChars)
 		if totalTokens == 0 {
 			totalTokens = 1
 		}

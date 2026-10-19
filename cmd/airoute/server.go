@@ -83,6 +83,13 @@ func runServer(args []string) {
 	if isRelease && os.Getenv("STRIPE_WEBHOOK_SECRET") == "" {
 		telemetry.Logger.Warn("SECURITY WARNING: STRIPE_WEBHOOK_SECRET is unset in production release mode. Stripe payment webhooks will be rejected.")
 	}
+	// Without a shared secret the HMAC signing key is generated randomly per
+	// process: every restart invalidates all issued tokens, and in a multi-replica
+	// cluster a token minted by one node is rejected by every other node.
+	if os.Getenv("GATEWAY_ADMIN_SECRET") == "" {
+		telemetry.Logger.Warn("CONFIGURATION WARNING: GATEWAY_ADMIN_SECRET is unset; using a per-process random signing key. " +
+			"User sessions will not survive a restart and will not be valid across cluster replicas.")
+	}
 	if !strings.HasPrefix(dataSource, "postgres://") && !strings.HasPrefix(dataSource, "postgresql://") {
 		if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
 			telemetry.Logger.Warn("STORAGE WARNING: Running in Kubernetes with SQLite file storage. For multi-replica deployments (replicas > 1), configure PostgreSQL via DATABASE_URL to avoid database lock contention.")

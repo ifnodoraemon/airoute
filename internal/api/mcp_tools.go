@@ -303,7 +303,10 @@ func forwardJSONRPCToolCall(ctx context.Context, endpoint, toolName string, args
 	}
 	defer resp.Body.Close()
 
-	respBytes, err := io.ReadAll(resp.Body)
+	// Cap the response: an untrusted MCP server could otherwise stream gigabytes
+	// into memory within the 30s client timeout.
+	const maxMCPResponseBytes = 8 << 20
+	respBytes, err := io.ReadAll(io.LimitReader(resp.Body, maxMCPResponseBytes))
 	if err != nil {
 		return fmt.Sprintf("Failed reading response from upstream MCP server: %v", err), true
 	}

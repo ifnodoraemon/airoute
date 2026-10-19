@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"time"
 )
@@ -51,6 +52,11 @@ func normalizeUsageSource(src string) string {
 
 // RecordUsageLog records an audit log and updates key quota/cost atomically.
 func (r *Repository) RecordUsageLog(log *UsageLogRecord) error {
+	return r.RecordUsageLogContext(context.Background(), log)
+}
+
+// RecordUsageLogContext is RecordUsageLog bound to a context/deadline.
+func (r *Repository) RecordUsageLogContext(ctx context.Context, log *UsageLogRecord) error {
 	normalizeUsageLog(log)
 	isOff := 0
 	if log.IsOffPeak {
@@ -68,7 +74,7 @@ func (r *Repository) RecordUsageLog(log *UsageLogRecord) error {
 		}
 	}
 
-	tx, err := r.db.Begin()
+	tx, err := r.db.BeginTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -129,17 +135,25 @@ func (r *Repository) RecordUsageLog(log *UsageLogRecord) error {
 
 // BatchRecordUsageLogs writes multiple usage logs in a single atomic transaction with aggregated cost updates.
 func (r *Repository) BatchRecordUsageLogs(logs []*UsageLogRecord) error {
+	return r.BatchRecordUsageLogsContext(context.Background(), logs)
+}
+
+// BatchRecordUsageLogsContext is BatchRecordUsageLogs bound to a context.
+// Background writers must use a deadline: without one a stalled database pins
+// the flush goroutine forever, the in-memory queue fills up, and request
+// completion starts blocking on backpressure.
+func (r *Repository) BatchRecordUsageLogsContext(ctx context.Context, logs []*UsageLogRecord) error {
 	if len(logs) == 0 {
 		return nil
-	}
-	if len(logs) == 1 {
-		return r.RecordUsageLog(logs[0])
 	}
 	for _, log := range logs {
 		normalizeUsageLog(log)
 	}
+	if len(logs) == 1 {
+		return r.RecordUsageLogContext(ctx, logs[0])
+	}
 
-	tx, err := r.db.Begin()
+	tx, err := r.db.BeginTx(ctx)
 	if err != nil {
 		return err
 	}

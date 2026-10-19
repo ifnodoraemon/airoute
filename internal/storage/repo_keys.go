@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -161,7 +163,17 @@ func (r *Repository) GetAPIKey(id int64) (*APIKeyRecord, error) {
 
 // GetAPIKeyByKey returns a single API key by key string.
 func (r *Repository) GetAPIKeyByKey(key string) (*APIKeyRecord, error) {
-	row := r.db.QueryRow(`SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE key = ?`, key)
+	return r.GetAPIKeyByKeyContext(context.Background(), key)
+}
+
+// GetAPIKeyByKeyContext is GetAPIKeyByKey bound to a caller context/deadline.
+// The data-plane auth middleware uses this on every request: without a deadline
+// a lock-contended SQLite (or a stalled Postgres) query pins the request forever.
+func (r *Repository) GetAPIKeyByKeyContext(ctx context.Context, key string) (*APIKeyRecord, error) {
+	if r == nil || r.db == nil {
+		return nil, sql.ErrNoRows
+	}
+	row := r.db.QueryRowContext(ctx, `SELECT id, key, tenant_id, allowed_models, rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE key = ?`, key)
 	var rec APIKeyRecord
 	var allowedJSON string
 	if err := row.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.BudgetUnits, &rec.UsedCostUnits, &rec.GroupName, &rec.UserID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt); err != nil {

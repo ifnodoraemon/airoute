@@ -62,21 +62,37 @@ func (d *Dispatcher) RegisterProvider(p provider.Provider) {
 	d.providers[p.Type()] = p
 }
 
+// swrrKeySeparator separates the model name from the channel name in the SWRR
+// weight map. It must not be ":" because both model and channel names may
+// contain colons, which made the old strings.Split(k, ":") prune check silently
+// skip those entries and leak them forever.
+const swrrKeySeparator = "\x00"
+
+// swrrKey builds the weight-map key for a (model, channel) pair.
+func swrrKey(modelName, channelName string) string {
+	return modelName + swrrKeySeparator + channelName
+}
+
 // UpdateChannels updates channel configurations dynamically and prunes obsolete weights.
 func (d *Dispatcher) UpdateChannels(channels []model.ChannelConfig) {
 	d.mu.Lock()
 	d.channels = channels
 	d.mu.Unlock()
 
-	activeNames := make(map[string]bool)
+	activeNames := make(map[string]bool, len(channels))
 	for _, ch := range channels {
 		activeNames[ch.Name] = true
 	}
 
 	d.wrrMu.Lock()
 	for k := range d.wrrWeights {
-		parts := strings.Split(k, ":")
-		if len(parts) == 2 && !activeNames[parts[1]] {
+		idx := strings.LastIndex(k, swrrKeySeparator)
+		if idx < 0 {
+			// Unrecognized legacy key shape: drop it rather than leak.
+			delete(d.wrrWeights, k)
+			continue
+		}
+		if !activeNames[k[idx+len(swrrKeySeparator):]] {
 			delete(d.wrrWeights, k)
 		}
 	}

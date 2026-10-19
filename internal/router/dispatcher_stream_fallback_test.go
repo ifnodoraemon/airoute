@@ -94,4 +94,3 @@ func TestNativeAnthropicRequestMatchesChannelWithAnthropicMessagesProtocol(t *te
 		t.Fatalf("expected Anthropic provider for channel with anthropic_messages protocol, got: %v", prov)
 	}
 }
-

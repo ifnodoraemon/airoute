@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -119,14 +120,23 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 		}
 
 		// Deterministic 4xx: the caller's request is at fault, replaying it on
-		// another channel is pointless and would only add load.
+		// another channel is pointless and would only add load. Return the
+		// upstream error body so the caller keeps the diagnostic detail.
 		if httpResp.StatusCode >= 400 && httpResp.StatusCode < 500 {
 			bodyBytes, _ := io.ReadAll(io.LimitReader(httpResp.Body, 1<<20))
 			httpResp.Body.Close()
 			d.circuitBreaker.AbortCanary(ch.Name)
+
+			// The buffered body must be replayed with a matching Content-Length;
+			// the original header would be stale once the body was truncated.
+			headers := httpResp.Header.Clone()
+			headers.Del("Content-Length")
+			headers.Del("Transfer-Encoding")
+			headers.Del("Content-Encoding")
+			headers.Set("Content-Length", strconv.Itoa(len(bodyBytes)))
 			return &UpstreamResponse{
 				StatusCode: httpResp.StatusCode,
-				Headers:    httpResp.Header,
+				Headers:    headers,
 				Stream:     io.NopCloser(bytes.NewReader(bodyBytes)),
 				Channel:    formatChannelTrail(ctx, attempted, ch.Name),
 			}, nil

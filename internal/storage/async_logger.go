@@ -17,6 +17,11 @@ import (
 const (
 	RedisLogStreamKey = "airoute:stream:logs"
 	RedisLogGroup     = "airoute_log_group"
+
+	// logWriteTimeout bounds a single database flush of buffered usage logs.
+	// Billing batches are small; anything slower than this is a database problem
+	// that must surface as a retry rather than as a wedged worker.
+	logWriteTimeout = 10 * time.Second
 )
 
 // AsyncLogger buffers and batches usage log records to prevent blocking the data plane.
@@ -147,7 +152,12 @@ func (al *AsyncLogger) worker() {
 		if len(batch) == 0 {
 			return true
 		}
-		if err := al.repo.BatchRecordUsageLogs(batch); err != nil {
+		// Bound each flush: an unbounded wait would wedge this worker, fill the
+		// queue and eventually block request completion on backpressure.
+		flushCtx, cancel := context.WithTimeout(context.Background(), logWriteTimeout)
+		err := al.repo.BatchRecordUsageLogsContext(flushCtx, batch)
+		cancel()
+		if err != nil {
 			failures++
 			telemetry.Logger.Error("failed to persist usage logs",
 				"error", err.Error(), "count", len(batch), "attempt", failures)
@@ -240,7 +250,9 @@ func (al *AsyncLogger) redisStreamWorker(client *distributed.Client) {
 		if len(streamBatch) > 0 {
 			var writeErr error
 			for attempt := 1; attempt <= 3; attempt++ {
-				writeErr = al.repo.BatchRecordUsageLogs(streamBatch)
+				writeCtx, cancel := context.WithTimeout(ctx, logWriteTimeout)
+				writeErr = al.repo.BatchRecordUsageLogsContext(writeCtx, streamBatch)
+				cancel()
 				if writeErr == nil {
 					break
 				}

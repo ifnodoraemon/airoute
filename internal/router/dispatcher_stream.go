@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
@@ -224,16 +225,28 @@ func streamEventHasContent(event *model.StreamEvent) bool {
 // GetFirstTokenTimeout determines the safe fallback window timeout for a channel and model.
 // Deep thinking / reasoning models (e.g. o1, o3, DeepSeek-R1) are given an extended window (up to 60s),
 // and the environment variable GATEWAY_FIRST_TOKEN_TIMEOUT can explicitly override the default 30s.
+// firstTokenTimeoutOverride reads GATEWAY_FIRST_TOKEN_TIMEOUT once per process.
+// It used to be parsed on every streaming request (os.Getenv + strconv.Atoi).
+var firstTokenTimeoutOverride = sync.OnceValue(func() time.Duration {
+	env := os.Getenv("GATEWAY_FIRST_TOKEN_TIMEOUT")
+	if env == "" {
+		return 0
+	}
+	s, err := strconv.Atoi(env)
+	if err != nil || s <= 0 {
+		return 0
+	}
+	return time.Duration(s) * time.Second
+})
+
 func (d *Dispatcher) GetFirstTokenTimeout(ch *model.ChannelConfig, modelName string) time.Duration {
 	timeout := 30 * time.Second
 	lowerModel := strings.ToLower(modelName)
 	if strings.Contains(lowerModel, "r1") || strings.Contains(lowerModel, "o1") || strings.Contains(lowerModel, "o3") || strings.Contains(lowerModel, "reasoning") || strings.Contains(lowerModel, "thinking") {
 		timeout = 60 * time.Second
 	}
-	if env := os.Getenv("GATEWAY_FIRST_TOKEN_TIMEOUT"); env != "" {
-		if s, err := strconv.Atoi(env); err == nil && s > 0 {
-			timeout = time.Duration(s) * time.Second
-		}
+	if override := firstTokenTimeoutOverride(); override > 0 {
+		timeout = override
 	}
 	if ch != nil && ch.TimeoutSeconds > 0 {
 		chTimeout := time.Duration(ch.TimeoutSeconds) * time.Second

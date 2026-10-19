@@ -34,16 +34,30 @@ func (p *AnthropicProvider) Type() model.ProviderType {
 	return model.ProviderAnthropic
 }
 
+// BuildAnthropicURL joins a channel base URL with an Anthropic Messages endpoint.
+// endpoint is "" for /messages, or "count_tokens" for /messages/count_tokens.
+// Exported so the count_tokens handler shares one implementation instead of
+// duplicating the suffix table.
+func BuildAnthropicURL(baseURL, endpoint string) string {
+	baseURL = strings.TrimRight(baseURL, "/")
+	var messagesURL string
+	switch {
+	case strings.HasSuffix(baseURL, "/v1/messages"), strings.HasSuffix(baseURL, "/messages"):
+		messagesURL = baseURL
+	case strings.HasSuffix(baseURL, "/v1"):
+		messagesURL = baseURL + "/messages"
+	default:
+		messagesURL = baseURL + "/v1/messages"
+	}
+	if endpoint == "" {
+		return messagesURL
+	}
+	return messagesURL + "/" + strings.TrimPrefix(endpoint, "/")
+}
+
 // buildAnthropicURL joins base URL with /messages or /v1/messages cleanly.
 func buildAnthropicURL(baseURL string) string {
-	baseURL = strings.TrimRight(baseURL, "/")
-	if strings.HasSuffix(baseURL, "/v1/messages") || strings.HasSuffix(baseURL, "/messages") {
-		return baseURL
-	}
-	if strings.HasSuffix(baseURL, "/v1") {
-		return baseURL + "/messages"
-	}
-	return baseURL + "/v1/messages"
+	return BuildAnthropicURL(baseURL, "")
 }
 
 // ChatComplete executes a non-streaming Anthropic request and converts the response to OpenAI format.

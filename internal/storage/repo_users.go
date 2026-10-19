@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"strings"
 	"time"
@@ -50,7 +51,15 @@ func (r *Repository) GetUserByUsername(username string) (*UserRecord, error) {
 
 // GetUserByID finds a user by primary key ID.
 func (r *Repository) GetUserByID(id int64) (*UserRecord, error) {
-	row := r.db.QueryRow(`SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE id = ?`, id)
+	return r.GetUserByIDContext(context.Background(), id)
+}
+
+// GetUserByIDContext is GetUserByID bound to a caller context/deadline.
+func (r *Repository) GetUserByIDContext(ctx context.Context, id int64) (*UserRecord, error) {
+	if r == nil || r.db == nil {
+		return nil, sql.ErrNoRows
+	}
+	row := r.db.QueryRowContext(ctx, `SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE id = ?`, id)
 	var u UserRecord
 	if err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.Balance, &u.BalanceUnits, &u.GroupName, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		return nil, err

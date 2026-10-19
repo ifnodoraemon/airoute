@@ -285,14 +285,7 @@ func getAPIKeyConfig(c *gin.Context) *model.APIKeyConfig {
 // payloads. Previously each handler divided by 3 or 4 locally, so the same
 // request could be billed differently depending on which endpoint served it.
 func estimateTokens(chars int) int {
-	if chars <= 0 {
-		return 0
-	}
-	tokens := chars / 4
-	if tokens < 1 {
-		return 1
-	}
-	return tokens
+	return model.EstimateTokensFromChars(chars)
 }
 
 // estimateCanonicalPromptTokens approximates prompt tokens from the canonical
@@ -321,7 +314,7 @@ func estimateCanonicalPromptTokens(req *model.ChatCompletionRequest) int {
 // Deliberately explicit rather than "any long random-looking word": error
 // messages also contain model names and chat IDs, which must stay readable.
 var (
-	sensitivePattern = regexp.MustCompile(`(?i)\b(api[-_]?key|access[-_]?token|secret|password|passwd|authorization)(["']?\s*[:=]\s*["']?)([^\s"',}\]]{4,})`)
+	sensitivePattern = regexp.MustCompile(`(?i)\b(api[-_]?key|access[-_]?token|secret|password|passwd)(["']?\s*[:=]\s*["']?)([^\s"',}\]]{4,})`)
 	bearerPattern    = regexp.MustCompile(`(?i)\b(bearer)\s+([A-Za-z0-9_\-\.\+=/]{8,})`)
 	providerKeyRegex = regexp.MustCompile(`\b(sk-[A-Za-z0-9_\-]{8,}|gsk_[A-Za-z0-9]{8,}|xai-[A-Za-z0-9]{8,}|hf_[A-Za-z0-9]{8,}|AIza[0-9A-Za-z_\-]{20,})`)
 )
@@ -332,7 +325,8 @@ func sanitizeErrorMessage(err error) string {
 		return ""
 	}
 	msg := err.Error()
-	msg = sensitivePattern.ReplaceAllString(msg, "$1$2[REDACTED]")
+	// Credential-shaped tokens first: once a label like "Authorization:" has been
+	// rewritten, the token after it would no longer be recognisable.
 	msg = bearerPattern.ReplaceAllString(msg, "$1 [REDACTED]")
 	msg = providerKeyRegex.ReplaceAllStringFunc(msg, func(s string) string {
 		switch {
@@ -348,6 +342,7 @@ func sanitizeErrorMessage(err error) string {
 			return "[REDACTED]"
 		}
 	})
+	msg = sensitivePattern.ReplaceAllString(msg, "$1$2[REDACTED]")
 	return msg
 }
 

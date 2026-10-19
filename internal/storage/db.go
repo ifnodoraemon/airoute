@@ -1,8 +1,10 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -159,6 +161,59 @@ func (db *DB) Begin() (*Tx, error) {
 	return &Tx{Tx: tx, db: db}, nil
 }
 
+// BeginTx begins a transaction bound to ctx. Callers that must not block
+// indefinitely (background writers) should use this so a stalled database
+// releases the goroutine instead of pinning it until the process restarts.
+func (db *DB) BeginTx(ctx context.Context) (*Tx, error) {
+	tx, err := db.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &Tx{Tx: tx, db: db}, nil
+}
+
+// PostgresStatementTimeoutMS bounds any single server-side statement.
+//
+// The repository layer is mostly context-free (a full ExecContext/QueryContext
+// migration is a much larger refactor), so a runaway query on the control plane
+// would otherwise pin a pooled connection indefinitely. Setting the limit in the
+// connection string makes the *server* abort it, which covers every call site
+// including ones that never had a deadline.
+const PostgresStatementTimeoutMS = 30000
+
+// ApplyPostgresStatementTimeouts injects statement_timeout (and an idle
+// transaction timeout) into a libpq DSN unless the operator already configured
+// `options` themselves. Both the URL form and the keyword/value form are
+// supported; anything unrecognised is returned unchanged.
+func ApplyPostgresStatementTimeouts(dsn string) string {
+	if strings.TrimSpace(dsn) == "" {
+		return dsn
+	}
+	opts := fmt.Sprintf("-c statement_timeout=%d -c idle_in_transaction_session_timeout=%d",
+		PostgresStatementTimeoutMS, PostgresStatementTimeoutMS)
+
+	lower := strings.ToLower(dsn)
+	if strings.HasPrefix(lower, "postgres://") || strings.HasPrefix(lower, "postgresql://") {
+		u, err := url.Parse(dsn)
+		if err != nil {
+			return dsn
+		}
+		q := u.Query()
+		if q.Get("options") != "" {
+			return dsn // operator-provided options win
+		}
+		q.Set("options", opts)
+		u.RawQuery = q.Encode()
+		return u.String()
+	}
+
+	// Keyword/value DSN: host=... dbname=... [options='...']
+	if strings.Contains(lower, "options=") {
+		return dsn
+	}
+	return dsn + " options='" + opts + "'"
+}
+
 // OpenDB opens either a SQLite or PostgreSQL database depending on dataSourceName.
 func OpenDB(dataSourceName string) (*DB, error) {
 	if dataSourceName == "" {
@@ -174,6 +229,7 @@ func OpenDB(dataSourceName string) (*DB, error) {
 		(strings.Contains(lowerDSN, "host=") && strings.Contains(lowerDSN, "dbname="))
 
 	if isPostgres {
+		dataSourceName = ApplyPostgresStatementTimeouts(dataSourceName)
 		telemetry.Logger.Info("initializing distributed PostgreSQL connection", "source", strings.Split(dataSourceName, "@")[len(strings.Split(dataSourceName, "@"))-1])
 		db, err := sql.Open("postgres", dataSourceName)
 		if err != nil {
@@ -183,6 +239,10 @@ func OpenDB(dataSourceName string) (*DB, error) {
 		db.SetMaxOpenConns(50)
 		db.SetMaxIdleConns(25)
 		db.SetConnMaxLifetime(10 * time.Minute)
+		// Recycle idle connections too: without this, connections kept open by
+		// the pool can outlive a server-side idle timeout and then fail the first
+		// query issued on them.
+		db.SetConnMaxIdleTime(5 * time.Minute)
 
 		if err := db.Ping(); err != nil {
 			telemetry.Logger.Warn("postgres ping failed, checking connection", "error", err.Error())
@@ -223,10 +283,13 @@ func OpenDB(dataSourceName string) (*DB, error) {
 		return nil, fmt.Errorf("open sqlite db error: %w", err)
 	}
 
-	// Configure connection pool for SQLite with WAL mode for serialized concurrency
+	// Configure connection pool for SQLite with WAL mode for serialized concurrency.
+	// A single connection makes every query (including the per-request auth
+	// lookup) strictly serialized, which is why those lookups carry deadlines.
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	db.SetConnMaxLifetime(time.Hour)
+	db.SetConnMaxIdleTime(30 * time.Minute)
 
 	if dataSourceName != ":memory:" {
 		// Verify the pragmas actually applied; a silent failure here means lock

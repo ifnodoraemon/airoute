@@ -137,7 +137,6 @@ func (tc *TraceCapture) worker() {
 	defer tc.wg.Done()
 	purge := time.NewTicker(time.Hour)
 	defer purge.Stop()
-	lastPurge := time.Now()
 
 	for {
 		select {
@@ -149,10 +148,6 @@ func (tc *TraceCapture) worker() {
 				slog.Default().Warn("failed to persist request trace", "error", err.Error(), "trace_id", rec.TraceID)
 			}
 		case <-purge.C:
-			if time.Since(lastPurge) < 55*time.Minute {
-				continue
-			}
-			lastPurge = time.Now()
 			if n, err := tc.repo.PurgeRequestTraces(time.Now().Add(-tc.ttl)); err == nil && n > 0 {
 				slog.Default().Info("purged expired request traces", "count", n)
 			}

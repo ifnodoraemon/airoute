@@ -25,6 +25,46 @@ func buildCompletionURL(baseURL string) string {
 	return baseURL + "/completions"
 }
 
+// ErrTextAdapterUnsupported is returned when a request needs capabilities the
+// legacy /v1/completions protocol cannot express (tool calling, multimodal
+// input). It is deliberately NOT an *UpstreamError: the channel is healthy, the
+// protocol simply cannot carry the request, so the router should try another
+// channel and only surface this message if none can serve it.
+type ErrTextAdapterUnsupported struct {
+	Reason string
+}
+
+func (e *ErrTextAdapterUnsupported) Error() string {
+	return "text-completion channel cannot serve this request: " + e.Reason
+}
+
+// requiresChatCapabilities reports whether the request needs a chat-capable
+// upstream. Previously such requests were silently flattened into a plain
+// prompt: tool definitions were dropped (so the model could never call a tool)
+// and image parts were serialised as base64 text into the prompt, which blew up
+// the token count and usually overflowed the context window.
+func requiresChatCapabilities(req *model.ChatCompletionRequest) string {
+	if req == nil {
+		return ""
+	}
+	if len(req.Tools) > 0 {
+		return "request declares tools, which /v1/completions cannot express"
+	}
+	if tc, ok := req.ToolChoice.(string); ok && tc != "" && tc != "none" {
+		return "request sets tool_choice, which /v1/completions cannot express"
+	}
+	for _, m := range req.Messages {
+		parts := model.ParseMessageContent(m.Content)
+		for _, part := range parts {
+			switch part.Type {
+			case model.ContentPartImageURL, model.ContentPartInputAudio:
+				return "request contains non-text content, which /v1/completions cannot express"
+			}
+		}
+	}
+	return ""
+}
+
 func convertChatToPrompt(messages []model.ChatMessage) string {
 	var sb strings.Builder
 	for _, m := range messages {
@@ -46,6 +86,9 @@ func convertChatToPrompt(messages []model.ChatMessage) string {
 }
 
 func (p *OpenAIProvider) chatCompleteText(ctx context.Context, req *model.ChatCompletionRequest, channel *model.ChannelConfig, targetModel string) (*model.ChatCompletionResponse, error) {
+	if reason := requiresChatCapabilities(req); reason != "" {
+		return nil, &ErrTextAdapterUnsupported{Reason: reason}
+	}
 	prompt := convertChatToPrompt(req.Messages)
 	textReq := map[string]any{
 		"model":       targetModel,
@@ -117,6 +160,9 @@ func (p *OpenAIProvider) chatCompleteText(ctx context.Context, req *model.ChatCo
 }
 
 func (p *OpenAIProvider) chatCompleteTextStream(ctx context.Context, req *model.ChatCompletionRequest, channel *model.ChannelConfig, targetModel string) (<-chan *model.StreamEvent, error) {
+	if reason := requiresChatCapabilities(req); reason != "" {
+		return nil, &ErrTextAdapterUnsupported{Reason: reason}
+	}
 	prompt := convertChatToPrompt(req.Messages)
 	textReq := map[string]any{
 		"model":       targetModel,

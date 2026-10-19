@@ -671,11 +671,6 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                   }
                   if (delta.content) {
                     fullContent += delta.content;
-                    if (!fullReasoning && fullContent.includes('</think>')) {
-                      const parts = fullContent.split('</think>');
-                      fullReasoning = parts[0].replace(/^<think>/, '').trim();
-                      fullContent = parts[1].replace(/^\n+/, '');
-                    }
                   }
 
                   // Accumulate streamed tool calls

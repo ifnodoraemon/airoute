@@ -1,14 +1,22 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/config"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
+
+// authStorageTimeout bounds the per-request authoritative key/user lookups.
+// The in-memory snapshot already carries the quota data; the database read is a
+// consistency check, not something worth blocking a request (or the shared
+// SQLite connection) for.
+const authStorageTimeout = 2 * time.Second
 
 const (
 	ContextKeyTenant       = "tenant_id"
@@ -105,10 +113,16 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// 3. Authoritative storage key check if database repository is available
+		// 3. Authoritative storage key check if database repository is available.
+		// Bounded by a short deadline: this runs on every data-plane request, so a
+		// stalled database must fail the request rather than pin the goroutine
+		// (and, on SQLite's single connection, the whole gateway).
 		repo := storage.GetGlobalRepository()
 		if repo != nil {
-			if keyRec, _ := repo.GetAPIKeyByKey(effectiveKey.Key); keyRec != nil {
+			lookupCtx, cancel := context.WithTimeout(c.Request.Context(), authStorageTimeout)
+			keyRec, _ := repo.GetAPIKeyByKeyContext(lookupCtx, effectiveKey.Key)
+			cancel()
+			if keyRec != nil {
 				if keyRec.Status != "" && keyRec.Status != "active" {
 					c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 						"error": gin.H{
@@ -154,7 +168,10 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		// Fallback to storage only if memory snapshot was not populated
 		if userStatus == "" && effectiveKey.UserID > 0 && repo != nil {
-			if u, _ := repo.GetUserByID(effectiveKey.UserID); u != nil {
+			lookupCtx, cancel := context.WithTimeout(c.Request.Context(), authStorageTimeout)
+			u, _ := repo.GetUserByIDContext(lookupCtx, effectiveKey.UserID)
+			cancel()
+			if u != nil {
 				userStatus = u.Status
 				userRole = u.Role
 				userBalance = u.Balance
@@ -239,12 +256,16 @@ func ValidateModelAllowed(c *gin.Context, requestedModel string) bool {
 	return false
 }
 
-// budgetExceeded compares spend against a budget using integer 1e-9 units when
-// the ledger mirror is authoritative. The integer path is only taken when both
-// sides are populated; otherwise legacy rows or out-of-band updates are still
-// enforced through the float columns.
+// budgetExceeded compares spend against a budget using integer nano-units when
+// the ledger mirror is populated, falling back to the float columns for legacy
+// rows.
+//
+// The previous condition required BOTH sides to be positive, so a key configured
+// with only budget_nano (float budget = 0) or a key that had not spent anything
+// yet bypassed the integer check entirely and could be unbounded. The integer
+// mirror is now authoritative whenever a budget is set in it.
 func budgetExceeded(budgetUnits, usedUnits int64, budget, used float64) bool {
-	if budgetUnits > 0 && usedUnits > 0 {
+	if budgetUnits > 0 {
 		return usedUnits >= budgetUnits
 	}
 	return budget > 0 && used >= budget

@@ -59,7 +59,12 @@ func (s *Synchronizer) ReloadFromDB() error {
 
 	// 4. Sync Model Prices to Billing Engine
 	if billing.GlobalEngine != nil {
-		_ = billing.GlobalEngine.ReloadPrices()
+		if err := billing.GlobalEngine.ReloadPrices(); err != nil {
+			// Keep the previously loaded prices (fail-static) but surface the
+			// failure: silently ignoring it means pricing edits never apply.
+			telemetry.Logger.Error("failed to reload model prices, keeping previous in-memory rates",
+				"error", err.Error())
+		}
 	}
 
 	telemetry.Logger.Info("hot reloaded data plane memory state from database",
@@ -93,10 +98,26 @@ func (s *Synchronizer) StartPeriodicSync(interval time.Duration, stopCh <-chan s
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
+		var consecutiveFailures int
 		for {
 			select {
 			case <-ticker.C:
-				_ = s.ReloadFromDB()
+				if err := s.ReloadFromDB(); err != nil {
+					consecutiveFailures++
+					// Log the first failure and then only every 30th (5 minutes at
+					// the default interval) so a persistent DB outage does not
+					// flood the log while staying observable.
+					if consecutiveFailures == 1 || consecutiveFailures%30 == 0 {
+						telemetry.Logger.Error("periodic data plane sync from database failed",
+							"error", err.Error(),
+							"consecutive_failures", consecutiveFailures,
+						)
+					}
+				} else if consecutiveFailures > 0 {
+					telemetry.Logger.Info("periodic data plane sync recovered",
+						"after_failures", consecutiveFailures)
+					consecutiveFailures = 0
+				}
 			case <-stopCh:
 				return
 			}

@@ -120,6 +120,10 @@ func init() {
 		ticker := time.NewTicker(10 * time.Minute)
 		for range ticker.C {
 			GlobalRateLimiter.CleanupIdle(15 * time.Minute)
+			// The TPM tracker keeps one bucket per API key ever seen; without
+			// this sweep the map only ever grows (deleted/rotated keys leak
+			// forever).
+			GlobalTokenQuota.CleanupIdle(15 * time.Minute)
 		}
 	}()
 }

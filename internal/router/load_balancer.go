@@ -122,7 +122,7 @@ func (s *SWRRSelector) Select(ctx context.Context, group []*model.ChannelConfig,
 		}
 		totalWeight += w
 
-		key := modelName + ":" + ch.Name
+		key := swrrKey(modelName, ch.Name)
 		cur := s.weights[key] + w
 		s.weights[key] = cur
 		if cur > maxWeight {
@@ -131,7 +131,7 @@ func (s *SWRRSelector) Select(ctx context.Context, group []*model.ChannelConfig,
 		}
 	}
 
-	winnerKey := modelName + ":" + group[winnerIdx].Name
+	winnerKey := swrrKey(modelName, group[winnerIdx].Name)
 	s.weights[winnerKey] -= totalWeight
 
 	result := make([]*model.ChannelConfig, 0, len(group))

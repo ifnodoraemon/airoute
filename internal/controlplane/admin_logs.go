@@ -36,34 +36,19 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 		ChatID:    c.Query("chat_id"),
 	}
 
+	// Non-admin callers are scoped to their own API keys. Fail-closed: when the
+	// user lookup fails, ScopeByAPIKeys stays set with an empty key list, and the
+	// repository then returns no rows (never the full admin view).
 	if claims, ok := GetClaimsFromContext(c); ok && claims.Role != "admin" {
-		// Fail-closed scoping: even if the user lookup fails, an empty
-		// key list must never widen to full (admin) visibility — the
-		// repository returns no rows when scope is set and keys are empty.
 		filter.ScopeByAPIKeys = true
-		user, _ := h.repo.GetUserByUsername(claims.Username)
-		if user != nil {
+		if user, _ := h.repo.GetUserByUsername(claims.Username); user != nil {
 			userKeys, _ := h.repo.ListAPIKeysByUser(user.ID)
-			// Scope to the user's own keys in SQL so that LIMIT/OFFSET
-			// pagination applies after filtering, not before.
+			// Scope in SQL so LIMIT/OFFSET pagination applies after filtering.
 			filter.APIKeys = make([]string, 0, len(userKeys))
 			for _, k := range userKeys {
 				filter.APIKeys = append(filter.APIKeys, k.Key)
 			}
 		}
-		logs, err := h.repo.ListUsageLogsWithFilter(filter)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		if logs == nil {
-			logs = make([]*storage.UsageLogRecord, 0)
-		}
-		if !shouldRevealKey(c) {
-			maskUsageLogKeys(logs)
-		}
-		c.JSON(http.StatusOK, gin.H{"code": 0, "data": logs})
-		return
 	}
 
 	logs, err := h.repo.ListUsageLogsWithFilter(filter)
@@ -76,9 +61,6 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 	}
 	if !shouldRevealKey(c) {
 		maskUsageLogKeys(logs)
-	}
-	if logs == nil {
-		logs = make([]*storage.UsageLogRecord, 0)
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": logs})
 }

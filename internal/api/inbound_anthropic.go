@@ -209,7 +209,6 @@ func (h *Handler) handleAnthropicUnary(c *gin.Context, reqCtx context.Context, r
 		CompletionTokens: outputTokens,
 		CachedTokens:     cachedTokens,
 		Duration:         time.Since(start),
-		TTFT:             time.Since(start),
 		StatusCode:       http.StatusOK,
 		UsageSource:      "upstream",
 	})
@@ -259,14 +258,9 @@ func (h *Handler) HandleAnthropicCountTokens(c *gin.Context) {
 			lastErr = err
 			continue
 		}
-		url := strings.TrimRight(channel.BaseURL, "/")
-		if strings.HasSuffix(url, "/v1/messages") || strings.HasSuffix(url, "/messages") {
-			url += "/count_tokens"
-		} else if strings.HasSuffix(url, "/v1") {
-			url += "/messages/count_tokens"
-		} else {
-			url += "/v1/messages/count_tokens"
-		}
+		// Shared URL builder: keeps /v1, /v1/messages and bare-base channels in
+		// sync with the provider package instead of duplicating the suffix table.
+		url := provider.BuildAnthropicURL(channel.BaseURL, "count_tokens")
 		httpReq, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, url, bytes.NewReader(body))
 		if err != nil {
 			lastErr = err
@@ -334,7 +328,7 @@ func estimateAnthropicInputTokens(req *model.AnthropicInboundRequest) int {
 			chars += len(b)
 		}
 	}
-	tokens := chars / 4
+	tokens := model.EstimateTokensFromChars(chars)
 	if tokens == 0 {
 		tokens = 1
 	}

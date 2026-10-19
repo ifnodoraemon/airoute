@@ -294,15 +294,7 @@ Execute the following mission with precision, maintainability, and zero speculat
             }
             if (delta?.content) {
               fullContent += delta.content;
-              if (!fullReasoning && fullContent.includes('</think>')) {
-                const parts = fullContent.split('</think>');
-                fullReasoning = parts[0].replace(/^ thinking/, '').trim();
-                fullContent = parts[1].replace(/^\n+/, '');
-                setReasoning(fullReasoning);
-                setOutput(fullContent);
-              } else {
-                setOutput(fullContent);
-              }
+              setOutput(fullContent);
             }
           };
 
@@ -351,15 +343,6 @@ Execute the following mission with precision, maintainability, and zero speculat
             setReasoning(fullReasoning);
           }
           fullContent = choice?.message?.content || '';
-          setOutput(fullContent);
-        }
-
-        // Secondary fallback: if reasoning_content was missing, extract </think> tag
-        if (!fullReasoning && fullContent.includes('</think>')) {
-          const parts = fullContent.split('</think>');
-          fullReasoning = parts[0].replace(/^<think>/, '').trim();
-          fullContent = parts[1].replace(/^\n+/, '');
-          setReasoning(fullReasoning);
           setOutput(fullContent);
         }
 

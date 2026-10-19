@@ -150,7 +150,6 @@ func (h *Handler) handleCompletionsUnary(c *gin.Context, reqCtx context.Context,
 		CompletionTokens: cTokens,
 		CachedTokens:     cachedTokens,
 		Duration:         dur,
-		TTFT:             dur,
 		StatusCode:       http.StatusOK,
 	})
 
