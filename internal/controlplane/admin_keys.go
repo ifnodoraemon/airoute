@@ -95,7 +95,10 @@ func (h *AdminHandler) CreateAPIKey(c *gin.Context) {
 	rec.Key = strings.TrimSpace(rec.Key)
 	if len(rec.Key) < 16 || !isWellFormedAPIKey(rec.Key) {
 		b := make([]byte, 16)
-		_, _ = rand.Read(b)
+		if _, err := rand.Read(b); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "安全随机源不可用，无法生成密钥"})
+			return
+		}
 		rec.Key = fmt.Sprintf("sk-airoute-%s", hex.EncodeToString(b))
 	}
 	// Usage counters are server-owned; ignore client-supplied accounting.

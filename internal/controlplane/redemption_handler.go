@@ -63,7 +63,10 @@ func (h *AdminHandler) GenerateRedemptions(c *gin.Context) {
 	createdCodes := make([]string, 0, count)
 	for i := 0; i < count; i++ {
 		codeBytes := make([]byte, 8)
-		_, _ = rand.Read(codeBytes)
+		if _, err := rand.Read(codeBytes); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "安全随机源不可用，无法生成兑换码"})
+			return
+		}
 		code := fmt.Sprintf("CARD-%s-%s", strings.ToUpper(hex.EncodeToString(codeBytes[:4])), strings.ToUpper(hex.EncodeToString(codeBytes[4:])))
 
 		rec := &storage.RedemptionCodeRecord{

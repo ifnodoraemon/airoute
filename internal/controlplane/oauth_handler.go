@@ -155,7 +155,10 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 	if user == nil {
 		// New OAuth user: create with trial balance
 		randPassBytes := make([]byte, 16)
-		_, _ = rand.Read(randPassBytes)
+		if _, err := rand.Read(randPassBytes); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "安全随机源不可用"})
+			return
+		}
 		hash, _ := bcrypt.GenerateFromPassword(randPassBytes, bcrypt.DefaultCost)
 
 		user = &storage.UserRecord{
@@ -171,7 +174,10 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 
 		// Create default API key
 		keyBytes := make([]byte, 16)
-		_, _ = rand.Read(keyBytes)
+		if _, err := rand.Read(keyBytes); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "安全随机源不可用，无法生成密钥"})
+			return
+		}
 		_ = h.repo.CreateAPIKey(&storage.APIKeyRecord{
 			Key:           "sk-airoute-" + hex.EncodeToString(keyBytes),
 			TenantID:      username,

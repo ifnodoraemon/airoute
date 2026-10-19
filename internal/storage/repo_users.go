@@ -113,7 +113,7 @@ func (r *Repository) UpdateUserBalance(username string, delta float64) error {
 
 // SetUserBalance sets an exact wallet balance for a user.
 func (r *Repository) SetUserBalance(username string, balance float64) error {
-	_, err := r.db.Exec(`UPDATE users SET balance = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, balance, username)
+	_, err := r.db.Exec(`UPDATE users SET balance = ?, balance_nano = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, balance, ToNano(balance), username)
 	return err
 }
 

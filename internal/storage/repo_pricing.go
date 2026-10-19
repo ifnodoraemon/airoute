@@ -2,6 +2,7 @@ package storage
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -175,7 +176,11 @@ func (r *Repository) GetModelPriceWithGroup(modelName, groupName string) (*Model
 	if err == nil {
 		return rec, nil
 	}
-	// Fallback to default group if specific group not found
+	// Only "not found" falls back to the default group; a database failure must
+	// surface instead of silently pricing the request with the default rate.
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
 	if groupName != "default" {
 		return r.GetModelPriceExact(modelName, "default")
 	}

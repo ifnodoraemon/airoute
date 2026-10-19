@@ -82,7 +82,10 @@ func (h *AdminHandler) CreateUserKey(c *gin.Context) {
 	}
 
 	keyBytes := make([]byte, 16)
-	_, _ = rand.Read(keyBytes)
+	if _, err := rand.Read(keyBytes); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "安全随机源不可用，无法生成密钥"})
+		return
+	}
 	newKey := "sk-airoute-" + hex.EncodeToString(keyBytes)
 
 	rec := &storage.APIKeyRecord{
