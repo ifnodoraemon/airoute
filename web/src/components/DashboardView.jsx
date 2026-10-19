@@ -84,7 +84,8 @@ export default function DashboardView({
       };
     });
 
-    logs.forEach(l => {
+    (logs || []).forEach(l => {
+      if (!l) return;
       const t = new Date(l.created_at).getTime();
       const diff = now - t;
       const index = numBuckets - 1 - Math.floor(diff / intervalMs);
@@ -110,7 +111,8 @@ export default function DashboardView({
   // Max value for scaling SVG chart bars/lines
   const maxMetricVal = useMemo(() => {
     let max = 1;
-    timeBuckets.forEach(b => {
+    (timeBuckets || []).forEach(b => {
+      if (!b) return;
       if (chartMetric === 'requests' && b.requests > max) max = b.requests;
       if (chartMetric === 'tokens' && b.tokens > max) max = b.tokens;
       if (chartMetric === 'latency' && b.avgTtft > max) max = b.avgTtft;
@@ -121,26 +123,25 @@ export default function DashboardView({
 
   // 2. SLA & AVAILABILITY BREAKDOWN
   //
-  // Computed from the server-side aggregate over ALL usage logs. It previously
-  // used the `logs` prop, which is only the current page (<= 50 rows), so the
-  // "availability" figure described the page rather than the deployment.
+  // Computed from the server-side aggregate over ALL usage logs.
   const totalRequests = stats.total_requests || 0;
   const error4xx = stats.client_error_requests || 0;
   const error5xx = stats.server_error_requests || 0;
-  const errorLogs = error4xx + error5xx;
+  const totalErrorRequests = error4xx + error5xx;
+  const errorLogs = useMemo(() => (logs || []).filter(l => l && l.status_code >= 400), [logs]);
   const success2xx = stats.success_requests || 0;
   const slaAvailability = totalRequests > 0 ? ((success2xx / totalRequests) * 100).toFixed(2) : '—';
   // `logs` is still used for page-scoped breakdowns; label them as such.
-  const totalLogs = logs.length;
-  const pageScoped = totalRequests > logs.length;
+  const totalLogs = (logs || []).length;
+  const pageScoped = totalRequests > (logs || []).length;
 
   // 2b. ACTIONABLE SIGNALS for the "needs attention" strip.
   // Derived only from data already held in props — no extra requests.
   const attention = useMemo(() => {
-    const tripped = channels.filter(ch =>
+    const tripped = (channels || []).filter(ch =>
       ['OPEN', 'HALF-OPEN'].includes(String(ch.breaker_status || '').toUpperCase())
     ).length;
-    const disabled = channels.filter(ch => ch.status !== 'active').length;
+    const disabled = (channels || []).filter(ch => ch.status !== 'active').length;
     const failed = (stats.client_error_requests || 0) + (stats.server_error_requests || 0);
     return { tripped, disabled, failed, recentTotal: stats.total_requests || 0 };
   }, [channels, stats]);
@@ -148,7 +149,8 @@ export default function DashboardView({
   // 3. MULTIMODAL WORKLOAD BREAKDOWN
   const modalityStats = useMemo(() => {
     const counts = { chat: 0, images: 0, audio: 0, video: 0, embeddings: 0, rerank: 0 };
-    logs.forEach(l => {
+    (logs || []).forEach(l => {
+      if (!l) return;
       const m = (l.model || '').toLowerCase();
       if (m.includes('rerank')) counts.rerank += 1;
       else if (m.includes('embed')) counts.embeddings += 1;
@@ -157,7 +159,7 @@ export default function DashboardView({
       else if (m.includes('video') || m.includes('sora') || m.includes('kling') || m.includes('wan') || m.includes('cogvideox')) counts.video += 1;
       else counts.chat += 1;
     });
-    const total = Math.max(1, logs.length);
+    const total = Math.max(1, (logs || []).length);
     return [
       { key: 'chat', label: isZh ? '文本对话' : 'Chat', count: counts.chat, pct: Math.round((counts.chat / total) * 100), color: 'bg-indigo-500' },
       { key: 'images', label: isZh ? '图像生成' : 'Images', count: counts.images, pct: Math.round((counts.images / total) * 100), color: 'bg-pink-500' },
@@ -172,7 +174,8 @@ export default function DashboardView({
   const tokenMetrics = useMemo(() => {
     let promptTokens = 0;
     let completionTokens = 0;
-    logs.forEach(l => {
+    (logs || []).forEach(l => {
+      if (!l) return;
       promptTokens += l.prompt_tokens || 0;
       completionTokens += l.completion_tokens || 0;
     });
@@ -188,11 +191,8 @@ export default function DashboardView({
   const fmtPct = (v) => (typeof v === 'number' && v > 0 ? `${v}ms` : (isZh ? '无样本' : 'n/a'));
 
   const percentiles = useMemo(() => {
-    const latencies = logs.map(l => l.ttft_ms).filter(v => typeof v === 'number' && v > 0).sort((a, b) => a - b);
+    const latencies = (logs || []).map(l => l?.ttft_ms).filter(v => typeof v === 'number' && v > 0).sort((a, b) => a - b);
     if (!latencies.length) {
-      // No samples: report nothing rather than inventing numbers. The previous
-      // implementation multiplied the average TTFT by hardcoded factors
-      // (0.75 / 1.1 / 1.8) and presented the result as measured percentiles.
       return { p50: null, p90: null, p99: null, sampled: 0, total: stats.ttft_samples || 0 };
     }
     const at = (q) => {
@@ -205,7 +205,8 @@ export default function DashboardView({
   // 6. TOP MODELS BREAKDOWN
   const topModels = useMemo(() => {
     const modelStats = {};
-    logs.forEach(l => {
+    (logs || []).forEach(l => {
+      if (!l) return;
       const m = l.model || 'unknown';
       modelStats[m] = (modelStats[m] || 0) + (l.total_tokens || 1);
     });
@@ -223,8 +224,10 @@ export default function DashboardView({
   // 7. ERROR CODE CLUSTERING
   const errorCountByCode = useMemo(() => {
     const counts = {};
-    errorLogs.forEach(l => {
-      counts[l.status_code] = (counts[l.status_code] || 0) + 1;
+    (errorLogs || []).forEach(l => {
+      if (l && l.status_code) {
+        counts[l.status_code] = (counts[l.status_code] || 0) + 1;
+      }
     });
     return counts;
   }, [errorLogs]);
@@ -266,25 +269,26 @@ export default function DashboardView({
   const errorBudget = useMemo(() => {
     const targetSla = 99.9;
     const allowedErrorRate = 0.001;
-    const total = Math.max(1, logs.length);
+    const total = totalRequests > 0 ? totalRequests : Math.max(1, (logs || []).length);
     const allowedErrors = Math.max(1, Math.ceil(total * allowedErrorRate * 20));
-    const actualErrors = errorLogs.length;
+    const actualErrors = totalRequests > 0 ? totalErrorRequests : errorLogs.length;
     const remainingBudgetPct = actualErrors === 0 
       ? 100 
       : Math.max(0, Math.min(100, Math.round(((allowedErrors - actualErrors) / allowedErrors) * 100)));
     return {
       targetSla,
-      actualSla: parseFloat(slaAvailability),
+      actualSla: parseFloat(slaAvailability) || 100,
       allowedErrors,
       actualErrors,
       remainingBudgetPct
     };
-  }, [logs, errorLogs, slaAvailability]);
+  }, [logs, totalRequests, totalErrorRequests, errorLogs.length, slaAvailability]);
 
   // 10. PROVIDER LATENCY SLA COMPARISON BENCHMARK
   const providerSlaStats = useMemo(() => {
     const providerMap = {};
-    channels.forEach(ch => {
+    (channels || []).forEach(ch => {
+      if (!ch) return;
       providerMap[ch.id] = {
         id: ch.id,
         name: ch.name,
@@ -296,8 +300,9 @@ export default function DashboardView({
         breakerStatus: ch.breaker_status || 'CLOSED'
       };
     });
-    logs.forEach(l => {
-      const ch = channels.find(c => c.name === l.channel_name || c.id === l.channel_id);
+    (logs || []).forEach(l => {
+      if (!l) return;
+      const ch = (channels || []).find(c => c && (c.name === l.channel_name || c.id === l.channel_id));
       if (ch && providerMap[ch.id]) {
         providerMap[ch.id].totalCalls += 1;
         if (l.status_code >= 400) providerMap[ch.id].errors += 1;
@@ -835,7 +840,7 @@ export default function DashboardView({
               <span className="text-lg font-semibold text-emerald-600 dark:text-emerald-400 font-mono tabular-nums">
                 {slaAvailability}%
               </span>
-              <span className="ui-meta font-normal">{errorLogs.length} {isZh ? '次异常' : 'errors'}</span>
+              <span className="ui-meta font-normal">{(totalRequests > 0 ? totalErrorRequests : errorLogs.length)} {isZh ? '次异常' : 'errors'}</span>
             </div>
           </div>
         </div>

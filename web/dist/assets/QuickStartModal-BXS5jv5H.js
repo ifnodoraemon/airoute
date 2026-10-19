@@ -1,4 +1,4 @@
-import{n as e}from"./rolldown-runtime-CbXtAM7H.js";import{At as t,Dt as n,Tt as r,Vt as i,b as a,en as o,m as s,n as c,qt as l}from"./icons-Crj4S585.js";import{t as u}from"./vendor-onRm2v9a.js";import{r as d}from"./index-Ckasv3CX.js";import{t as f}from"./useModalA11y-BOP-kLEh.js";var p=e(o(),1),m=u();function h({apiKey:e,onClose:o,onCopy:u,lang:h=`zh`,t:g}){f(!!e,o);let _=h===`zh`,[v,y]=(0,p.useState)(`cursor`),[b,x]=(0,p.useState)(``),S=d(),C=S?`${S}/v1`:`/v1`,w=e?.key||`sk-airoute-xxxx`,T=`from openai import OpenAI
+import{n as e}from"./rolldown-runtime-CbXtAM7H.js";import{At as t,Dt as n,Tt as r,Vt as i,b as a,en as o,m as s,n as c,qt as l}from"./icons-Crj4S585.js";import{t as u}from"./vendor-onRm2v9a.js";import{r as d}from"./index-l_pWXlWe.js";import{t as f}from"./useModalA11y-BOP-kLEh.js";var p=e(o(),1),m=u();function h({apiKey:e,onClose:o,onCopy:u,lang:h=`zh`,t:g}){f(!!e,o);let _=h===`zh`,[v,y]=(0,p.useState)(`cursor`),[b,x]=(0,p.useState)(``),S=d(),C=S?`${S}/v1`:`/v1`,w=e?.key||`sk-airoute-xxxx`,T=`from openai import OpenAI
 
 client = OpenAI(
     base_url="${C}",
