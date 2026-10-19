@@ -2,6 +2,7 @@ package controlplane
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,8 +25,16 @@ func (h *AdminHandler) Login(c *gin.Context) {
 		return
 	}
 
+	clientIP := c.ClientIP()
+	if ok, retry := globalLoginGuard.check(req.Username, clientIP); !ok {
+		c.Header("Retry-After", strconv.Itoa(int(retry.Seconds())+1))
+		c.JSON(http.StatusTooManyRequests, gin.H{"code": 429, "error": "登录失败次数过多，请稍后再试"})
+		return
+	}
+
 	user, err := h.repo.GetUserByUsername(req.Username)
 	if err != nil || user == nil {
+		globalLoginGuard.failure(req.Username, clientIP)
 		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "用户名或密码错误"})
 		return
 	}
@@ -36,9 +45,11 @@ func (h *AdminHandler) Login(c *gin.Context) {
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+		globalLoginGuard.failure(req.Username, clientIP)
 		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "用户名或密码错误"})
 		return
 	}
+	globalLoginGuard.success(req.Username, clientIP)
 
 	expiryHours := config.GetGlobalConfig().GetTokenExpiryHours()
 	token, err := GenerateAdminToken(user.Username, user.Role, time.Duration(expiryHours)*time.Hour)

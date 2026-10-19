@@ -13,12 +13,17 @@ import (
 )
 
 // signRequest applies AWS SigV4 Authorization headers to an outgoing HTTP request.
+// A nil payload means the body is streamed and the request is signed with
+// UNSIGNED-PAYLOAD, which every S3-compatible service supports over HTTPS.
 func (s *S3Storage) signRequest(req *http.Request, payload []byte) {
 	now := time.Now().UTC()
 	amzDate := now.Format("20060102T150405Z")
 	dateStamp := now.Format("20060102")
 
-	payloadHash := sha256Hex(payload)
+	payloadHash := "UNSIGNED-PAYLOAD"
+	if payload != nil {
+		payloadHash = sha256Hex(payload)
+	}
 	req.Header.Set("x-amz-date", amzDate)
 	req.Header.Set("x-amz-content-sha256", payloadHash)
 	if req.Header.Get("Host") == "" {

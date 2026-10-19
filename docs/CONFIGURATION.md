@@ -92,6 +92,11 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `GATEWAY_TRACE_SAMPLE` | `100` | Percentage of **successful** requests captured when mode is `all` |
 | `GATEWAY_TRACE_TTL_HOURS` | `72` | Retention window for archived snapshots |
 | `GATEWAY_TRACE_MAX_SNIPPET` | `4096` | Maximum bytes retained per request/response snippet |
+| `GATEWAY_METRICS_TOKEN` | unset | When set, `/metrics` requires `Authorization: Bearer <token>` |
+| `GATEWAY_PUBLIC_STATUS` | `true` | Set `false` to hide the model catalog on the public status page |
+| `GATEWAY_BLOCK_PRIVATE_PROBE` | `false` | Reject probing RFC1918 private upstream addresses |
+| `GATEWAY_BLOCK_LOOPBACK_PROBE` | `false` | Reject probing loopback upstream addresses |
+| `AIROUTE_DEV_VERIFICATION_CODE` | unset | Set `true` to return email verification codes in API responses (development only) |
 
 Snapshots are redacted (API keys, tokens, passwords) before storage and are queryable at `GET /api/v1/admin/traces?trace_id=…` (admin only; regular users see only their own keys).
 
@@ -178,3 +183,11 @@ api_keys:
     tenant_id: "qa-testing"
     format_validation: "strict"
 ```
+
+
+### Rate limiting and sessions
+
+- **RPM** is enforced with a distributed Redis sliding window (or a local token bucket without Redis).
+- **TPM** is enforced with a per-key, one-minute sliding window and reports `X-RateLimit-Limit-Tokens` / `X-RateLimit-Remaining-Tokens`; over-budget requests get `429` with `Retry-After: 60`.
+- **Sessions** are cookie-based: login sets an HttpOnly `airoute_session` cookie plus a readable `airoute_csrf` cookie. State-changing requests authenticated by cookie must echo the CSRF value in `X-CSRF-Token`. API clients keep using `Authorization: Bearer`.
+- **Login throttling** locks an account/IP pair for 15 minutes after 5 consecutive failures (HTTP 429).

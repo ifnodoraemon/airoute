@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/distributed"
@@ -26,6 +27,8 @@ type AsyncLogger struct {
 	repo       *Repository
 	ch         chan *UsageLogRecord
 	stopCh     chan struct{}
+	stopOnce   sync.Once
+	stopped    atomic.Bool
 	wg         sync.WaitGroup
 	batchSize  int
 	flushTimer time.Duration
@@ -107,6 +110,10 @@ func (al *AsyncLogger) Record(rec *UsageLogRecord) {
 	if al.ch == nil {
 		return
 	}
+	if al.stopped.Load() {
+		telemetry.Logger.Warn("async logger already stopped; dropping log record", "trace_id", rec.TraceID)
+		return
+	}
 	select {
 	case al.ch <- rec:
 	case <-al.stopCh:
@@ -119,7 +126,10 @@ func (al *AsyncLogger) Stop() {
 	if al == nil {
 		return
 	}
-	close(al.stopCh)
+	al.stopOnce.Do(func() {
+		al.stopped.Store(true)
+		close(al.stopCh)
+	})
 	al.wg.Wait()
 }
 
@@ -131,15 +141,30 @@ func (al *AsyncLogger) worker() {
 
 	var batch []*UsageLogRecord
 
+	failures := 0
+	const maxFailures = 5
 	flush := func() bool {
 		if len(batch) == 0 {
 			return true
 		}
 		if err := al.repo.BatchRecordUsageLogs(batch); err != nil {
-			telemetry.Logger.Error("failed to persist usage logs; retaining batch for retry", "error", err.Error(), "count", len(batch))
+			failures++
+			telemetry.Logger.Error("failed to persist usage logs",
+				"error", err.Error(), "count", len(batch), "attempt", failures)
+			if failures >= maxFailures {
+				// Give up on this batch rather than letting memory grow without
+				// bound; the records are surfaced loudly so they can be
+				// reconciled from the Redis stream or upstream provider bills.
+				telemetry.Logger.Error("dropping unpersistable usage log batch after repeated failures",
+					"count", len(batch), "attempts", failures)
+				batch = batch[:0]
+				failures = 0
+				return true
+			}
 			return false
 		}
 		batch = batch[:0]
+		failures = 0
 		return true
 	}
 

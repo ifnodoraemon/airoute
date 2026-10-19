@@ -132,22 +132,27 @@ func (s *S3Storage) ensureBucket(ctx context.Context) error {
 
 // Put uploads an artifact stream to S3/RustFS.
 func (s *S3Storage) Put(ctx context.Context, key string, r io.Reader, size int64, contentType string) error {
-	var bodyBytes []byte
-	var err error
-	if size > 0 && size <= 64*1024*1024 {
-		bodyBytes, err = io.ReadAll(r)
-		if err != nil {
-			return fmt.Errorf("read artifact stream error: %w", err)
-		}
-	} else {
-		bodyBytes, err = io.ReadAll(r)
-		if err != nil {
-			return fmt.Errorf("read artifact stream error: %w", err)
-		}
-	}
+	const bufferThreshold = 8 * 1024 * 1024
 
 	targetURL := s.buildURL(key)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, targetURL, bytes.NewReader(bodyBytes))
+	var body io.Reader
+	var signedPayload []byte
+	if size >= 0 && size <= bufferThreshold {
+		// Small artifacts are buffered so the request can carry a real payload
+		// hash (and be retried safely by intermediaries).
+		buf, err := io.ReadAll(io.LimitReader(r, bufferThreshold))
+		if err != nil {
+			return fmt.Errorf("read artifact stream error: %w", err)
+		}
+		signedPayload = buf
+		body = bytes.NewReader(buf)
+	} else {
+		// Large artifacts stream straight through with UNSIGNED-PAYLOAD to keep
+		// memory flat regardless of object size.
+		body = r
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, targetURL, body)
 	if err != nil {
 		return err
 	}
@@ -156,8 +161,11 @@ func (s *S3Storage) Put(ctx context.Context, key string, r io.Reader, size int64
 		contentType = "application/octet-stream"
 	}
 	req.Header.Set("Content-Type", contentType)
+	if size > 0 {
+		req.ContentLength = size
+	}
 
-	s.signRequest(req, bodyBytes)
+	s.signRequest(req, signedPayload)
 
 	resp, err := s.client.Do(req)
 	if err != nil {
