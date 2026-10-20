@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
+import { useEffect, useCallback, lazy, Suspense } from 'react';
 import {
   Zap,
   Server,
@@ -36,13 +36,7 @@ import { useConsoleData } from './hooks/useConsoleData';
 import { useLogsData, LOG_PAGE_SIZE } from './hooks/useLogsData';
 import { useChannelActions } from './hooks/useChannelActions';
 import { useKeyActions } from './hooks/useKeyActions';
-import {
-  SESSION_MARKER,
-  getStoredToken,
-  getStoredUser,
-  setStoredAuth,
-  clearStoredAuth,
-} from './api/session';
+import { getStoredToken, getStoredUser } from './api/session';
 
 // Lazy loaded views and heavy modals for code splitting and fast initial bundle loading
 // The tabs that make up the console. Module scope on purpose: as an array literal
@@ -98,6 +92,8 @@ import { useUiPreferences } from './hooks/useUiPreferences';
 import { useToast } from './hooks/useToast';
 import { useConsoleOverlays } from './hooks/useConsoleOverlays';
 import { useConsoleSelections } from './hooks/useConsoleSelections';
+import { useConsoleChrome } from './hooks/useConsoleChrome';
+import { useConsoleSession } from './hooks/useConsoleSession';
 
 export default function App() {
   // Language, theme and the toast each carry their own logic (persistence, the
@@ -163,11 +159,35 @@ export default function App() {
   const initialRoute = getRouteFromURL();
 
   // View mode: 'landing' (公共门户首页), 'console' (工作台), 'status' (对外状态页), 'auth' (认证页)
-  const [viewMode, setViewMode] = useState(() => initialRoute.viewMode);
+  // The session state machine. App supplies the UI reaction to each transition
+  // (the login dialog and the expiry notice) rather than interleaving it here.
+  const {
+    viewMode,
+    adminToken,
+    adminUser,
+    authTab,
+    credentialToken,
+    setViewMode,
+    setAuthTab,
+    signIn,
+    restoreSession,
+    refreshUser,
+    patchUser,
+    endSession,
+    signOutLocal,
+    applyRoute,
+  } = useConsoleSession({
+    initialRoute,
+    onEntered: () => setShowLoginModal(false),
+    onEnded: ({ notify }) => {
+      setShowLoginModal(true);
+      if (notify) {
+        showToast(isZh ? '登录凭证已失效，请重新登录' : 'Session expired, please login again', 'warning');
+      }
+    },
+  });
 
   // Account & Authentication state (Unified token & user based on role)
-  const [adminToken, setAdminToken] = useState(() => getStoredToken());
-  const [adminUser, setAdminUser] = useState(() => getStoredUser());
   const {
     showCommandPalette, setShowCommandPalette,
     showOnboardingModal, setShowOnboardingModal,
@@ -180,9 +200,6 @@ export default function App() {
     reset: resetOverlays,
   } = useConsoleOverlays();
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [authTab, setAuthTab] = useState(() => initialRoute.authTab);
 
   // Global Command Palette shortcut (Cmd+K / Ctrl+K)
   useEffect(() => {
@@ -201,36 +218,15 @@ export default function App() {
   // The session handlers are read at call time, so a late answer from the gateway
   // is judged against the view mode the user is on now rather than the one
   // captured when this component mounted.
-  const viewModeRef = useRef(viewMode);
-  useEffect(() => {
-    viewModeRef.current = viewMode;
-  }, [viewMode]);
-
   const handleSessionRestored = useCallback((user) => {
-    setAdminUser(user);
-    // The session lives in an HttpOnly cookie, so there is no bearer token to
-    // keep in state. We still need a non-empty marker: adminToken gates the data
-    // polling loop and the isLoggedIn props, and it was initialised from
-    // localStorage — which setStoredAuth deliberately clears. Without this, every
-    // refresh restored the user but left the token empty, so the console looked
-    // logged out and stopped polling.
-    setAdminToken(SESSION_MARKER);
-    setStoredAuth('', user);
-    // A valid cookie session makes the auth page pointless. This is the route an
-    // OAuth grant lands on (#/login + ?oauth_code=...), and the route a browser
-    // refresh restores, since the URL no longer carries a readable token.
-    setViewMode(prev => (prev === 'auth' ? 'console' : prev));
-  }, []);
+    restoreSession(user);
+  }, [restoreSession]);
 
+  // A rejected restore on first load moves the visitor out of the console without
+  // an expiry notice: they never had a session to lose.
   const handleSessionExpired = useCallback(() => {
-    setAdminToken('');
-    setAdminUser(null);
-    clearStoredAuth();
-    if (viewModeRef.current === 'console') {
-      setViewMode('landing');
-      setShowLoginModal(true);
-    }
-  }, [setViewMode, setShowLoginModal]);
+    endSession({ notify: false });
+  }, [endSession]);
 
   // Restore the browser session from the HttpOnly cookie instead of trusting
   // a long-lived token in localStorage.
@@ -287,12 +283,8 @@ export default function App() {
           throw new Error(data.error || (isZh ? 'OAuth 登录失败' : 'OAuth sign-in failed'));
         }
         const user = data.data?.user;
-        setStoredAuth('', user);
-        setAdminToken(SESSION_MARKER);
-        setAdminUser(user);
+        signIn(user);
         setCurrentTab(user?.role === 'admin' ? 'dashboard' : 'wallet');
-        setViewMode('console');
-        setShowLoginModal(false);
         showToast(
           isZh ? `欢迎回来，${user?.username || ''}！` : `Welcome back, ${user?.username || ''}!`,
           'success'
@@ -324,12 +316,8 @@ export default function App() {
     // Only a console session holding a credential is torn down here; the landing
     // and auth pages also make unauthenticated calls.
     if (viewMode !== 'console' || !usedToken) return;
-    setAdminToken('');
-    setAdminUser(null);
-    clearStoredAuth();
-    setShowLoginModal(true);
-    showToast(isZh ? '登录凭证已失效，请重新登录' : 'Session expired, please login again', 'warning');
-  }, [viewMode, isZh, showToast, setShowLoginModal]);
+    endSession({ notify: true });
+  }, [viewMode, endSession]);
 
   // Bind the shared request layer (src/api/client.js) to this session. It used to
   // be a pair of closures defined in this component (adminFetch/adminJSON) that
@@ -364,34 +352,23 @@ export default function App() {
     } catch (e) {
       // Even if the call fails, drop all local state below.
     }
-    setAdminToken('');
-    setAdminUser(null);
-    clearStoredAuth();
+    signOutLocal();
     resetWorkspaceState();
-    setViewMode('landing');
     showToast(isZh ? '已安全退出账号' : 'Successfully logged out', 'info');
   };
 
   const fetchUserProfile = async () => {
-    const raw = adminToken || getStoredToken();
-    const tok = raw === SESSION_MARKER ? '' : raw;
+    // The marker is not a credential; the hook strips it.
+    const tok = credentialToken || getStoredToken();
     try {
       const res = await fetch('/api/v1/user/me', {
         headers: { 'Authorization': `Bearer ${tok}` }
       });
       const data = await res.json();
       if (res.ok && data.code === 0 && data.data) {
-        setAdminUser(data.data);
-        setStoredAuth(tok, data.data);
+        refreshUser(data.data, { token: tok });
       } else if (res.status === 401) {
-        setAdminToken('');
-        setAdminUser(null);
-        clearStoredAuth();
-        if (viewMode === 'console') {
-          setViewMode('landing');
-          setShowLoginModal(true);
-          showToast(isZh ? '登录凭证已过期，请重新登录' : 'Session expired, please sign in again', 'warning');
-        }
+        endSession({ notify: true });
       }
     } catch (e) {}
   };
@@ -403,7 +380,15 @@ export default function App() {
     curlExportCmd, setCurlExportCmd,
     reset: resetSelections,
   } = useConsoleSelections();
-  const [currentTab, setCurrentTab] = useState(() => initialRoute.tab);
+  const {
+    sidebarCollapsed,
+    mobileMenuOpen, setMobileMenuOpen,
+    currentTab, setCurrentTab,
+    playModality, setPlayModality,
+    closeMobileMenu,
+    collapseSidebar,
+    expandSidebar,
+  } = useConsoleChrome({ initialTab: initialRoute.tab });
 
   // Synchronize browser address bar URL hash with active view and tab
   useEffect(() => {
@@ -426,16 +411,15 @@ export default function App() {
     if (targetHash && window.location.hash !== targetHash) {
       window.history.replaceState(null, '', targetHash);
     }
-  }, [viewMode, currentTab, authTab]);
+  }, [viewMode, currentTab, authTab, setCurrentTab, setAuthTab]);
 
   // Browser Back / Forward. Defined at component scope rather than inside the
   // effect so it can be memoised: a hook may not be called from within a callback.
   const handleLocationChange = useCallback(() => {
     const routeInfo = getRouteFromURL();
-    setViewMode(prev => prev !== routeInfo.viewMode ? routeInfo.viewMode : prev);
+    applyRoute(routeInfo);
     setCurrentTab(prev => prev !== routeInfo.tab ? routeInfo.tab : prev);
-    setAuthTab(prev => prev !== routeInfo.authTab ? routeInfo.authTab : prev);
-  }, [getRouteFromURL, setViewMode, setCurrentTab, setAuthTab]);
+  }, [getRouteFromURL, applyRoute, setCurrentTab]);
 
   // Listen to browser Back / Forward buttons (hashchange and popstate)
   useEffect(() => {
@@ -461,7 +445,7 @@ export default function App() {
         setCurrentTab('wallet');
       }
     }
-  }, [adminUser, currentTab]);
+  }, [adminUser, currentTab, setCurrentTab]);
 
   // The console's tenant-scoped data and its loader live in one hook. The loader
   // is aliased to fetchData so the twenty-odd existing call sites — including the
@@ -566,8 +550,6 @@ export default function App() {
     reset: resetKeyActions,
   } = keyActions;
 
-  // Playground Modality and Model selector state (for navigation from channels/routes)
-  const [playModality, setPlayModality] = useState('chat');
 
   // Fetch EVERY row matching the active log filters (used by the CSV export).
   // Bounded so a pathological filter cannot pull an unbounded result set.
@@ -690,13 +672,7 @@ export default function App() {
               t={t}
               onLoginSuccess={(token, user) => {
                 resetWorkspaceState();
-                setStoredAuth(token, user);
-                setAdminToken(token);
-                setAdminUser(user);
-                const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
-                setCurrentTab(defTab);
-                setShowLoginModal(false);
-                setViewMode('console');
+                signIn(user, { token, tab: user.role === 'admin' ? 'dashboard' : 'wallet' });
                 showToast(isZh ? `欢迎回来，${user.username}！` : `Welcome back, ${user.username}!`, 'success');
                 fetchData(token);
                 fetchLogs({}, token);
@@ -721,12 +697,7 @@ export default function App() {
               toggleLang={toggleLang}
               t={t}
               onLoginSuccess={(token, user) => {
-                setStoredAuth(token, user);
-                setAdminToken(token);
-                setAdminUser(user);
-                const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
-                setCurrentTab(defTab);
-                setViewMode('console');
+                signIn(user, { token, tab: user.role === 'admin' ? 'dashboard' : 'wallet' });
                 showToast(isZh ? `欢迎回来，${user.username}！` : `Welcome back, ${user.username}!`, 'success');
                 fetchData(token);
                 fetchLogs({}, token);
@@ -780,13 +751,7 @@ export default function App() {
               t={t}
               onLoginSuccess={(token, user) => {
                 resetWorkspaceState();
-                setStoredAuth(token, user);
-                setAdminToken(token);
-                setAdminUser(user);
-                const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
-                setCurrentTab(defTab);
-                setShowLoginModal(false);
-                setViewMode('console');
+                signIn(user, { token, tab: user.role === 'admin' ? 'dashboard' : 'wallet' });
                 showToast(isZh ? `欢迎回来，${user.username}！` : `Welcome back, ${user.username}!`, 'success');
                 fetchData(token);
                 fetchLogs({}, token);
@@ -861,7 +826,7 @@ export default function App() {
       {/* Mobile Drawer Backdrop */}
       {mobileMenuOpen && (
         <div
-          onClick={() => setMobileMenuOpen(false)}
+          onClick={closeMobileMenu}
           className="fixed inset-0 bg-slate-900/60 z-30 md:hidden backdrop-blur-sm animate-in fade-in"
         />
       )}
@@ -897,7 +862,7 @@ export default function App() {
 
           {!sidebarCollapsed && (
             <button
-              onClick={() => setSidebarCollapsed(true)}
+              onClick={collapseSidebar}
               className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
               title={isZh ? '收起侧边栏' : 'Collapse sidebar'}
             >
@@ -909,7 +874,7 @@ export default function App() {
         {sidebarCollapsed && (
           <div className="p-2 border-b border-slate-100 dark:border-slate-800/70 flex justify-center">
             <button
-              onClick={() => setSidebarCollapsed(false)}
+              onClick={expandSidebar}
               className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
               title={isZh ? '展开侧边栏' : 'Expand sidebar'}
             >
@@ -1677,19 +1642,11 @@ export default function App() {
                 adminFetch={apiFetch}
                 showToast={showToast}
                 onUserUpdated={(updatedUser) => {
-                  setAdminUser(prev => {
-                    const merged = prev ? { ...prev, ...updatedUser } : updatedUser;
-                    localStorage.setItem('airoute_user', JSON.stringify(merged));
-                    return merged;
-                  });
+                  patchUser(updatedUser);
                   fetchUserProfile();
                 }}
                 onBalanceUpdate={(newBal) => {
-                  setAdminUser(prev => {
-                    const merged = prev ? { ...prev, balance: newBal } : prev;
-                    localStorage.setItem('airoute_user', JSON.stringify(merged));
-                    return merged;
-                  });
+                  patchUser({ balance: newBal });
                   fetchUserProfile();
                 }}
                 lang={lang}
@@ -1777,12 +1734,7 @@ export default function App() {
           lang={lang}
           t={t}
           onLoginSuccess={(token, user) => {
-            setStoredAuth(token, user);
-            setAdminToken(token);
-            setAdminUser(user);
-            const defTab = user.role === 'admin' ? 'dashboard' : 'wallet';
-            setCurrentTab(defTab);
-            setShowLoginModal(false);
+            signIn(user, { token, tab: user.role === 'admin' ? 'dashboard' : 'wallet' });
             showToast(isZh ? `欢迎回来，${user.username}！` : `Welcome back, ${user.username}!`, 'success');
             fetchData(token);
             fetchLogs({}, token);

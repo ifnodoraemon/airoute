@@ -140,6 +140,46 @@ describe('App integration', () => {
     expect(urls.some((u) => u.includes('/api/v1/admin/models/routes'))).toBe(true);
   });
 
+  it('leaves the console when the stored session is rejected', async () => {
+    // The expiry transition. The console is entered optimistically — the stored
+    // marker is trusted until the gateway answers, which is what makes a refresh
+    // feel instant — so a load may already have started. What must happen is that a
+    // 401 moves the visitor back out to the landing page instead of leaving them in
+    // a console whose every panel fails.
+    signIn();
+    window.location.hash = '#/console';
+    stubGateway({
+      '/api/v1/auth/me': () => jsonResponse({ code: 401 }, 401),
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        '/api/v1/auth/me',
+        expect.objectContaining({ credentials: 'same-origin' })
+      );
+    }, { timeout: 8000 });
+
+    // The landing page is rendered again, which only happens on the transition out
+    // of the console.
+    expect(await screen.findByText('Developer Guide', {}, { timeout: 8000 })).toBeInTheDocument();
+  });
+
+  it('clears the stored session when the gateway rejects it', async () => {
+    signIn();
+    window.location.hash = '#/console';
+    stubGateway({
+      '/api/v1/auth/me': () => jsonResponse({ code: 401 }, 401),
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(localStorage.getItem('airoute_admin_token')).toBeFalsy();
+    }, { timeout: 8000 });
+  });
+
   it('sends the audit-log query when the logs tab is routed to', async () => {
     signIn();
     window.location.hash = '#/logs';

@@ -363,15 +363,14 @@ export default function AiCopilot({
   // handleSend is rebuilt on every render and closes over the current input, so it
   // cannot be a dependency: doing so would re-send the query on every keystroke.
   // The latest version is read through a ref instead.
-  const handleSendRef = useRef(handleSend);
-  useEffect(() => {
-    handleSendRef.current = handleSend;
-    // Runs after every render on purpose: the point is to keep the ref pointing at
-    // the newest closure.
-  }, [handleSend]);
+  //
+  // The ref starts empty and is filled in by the effect below handleSend's
+  // definition. Reading handleSend here would throw: it is a const declared further
+  // down, so it is in the temporal dead zone at this point.
+  const handleSendRef = useRef(null);
 
   useEffect(() => {
-    if (isOpen && initialQuery && initialQuery.trim()) {
+    if (isOpen && initialQuery && initialQuery.trim() && handleSendRef.current) {
       handleSendRef.current(initialQuery.trim());
       if (onClearInitialQuery) onClearInitialQuery();
     }
@@ -817,6 +816,12 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
       }));
     }
   };
+
+  // Keeps the ref above pointing at the newest closure. Runs after every render on
+  // purpose, which is why it is not a dependency of anything.
+  useEffect(() => {
+    handleSendRef.current = handleSend;
+  }, [handleSend]);
 
   const toggleReasoning = (id) => {
     setExpandedReasoningIds(prev => ({ ...prev, [id]: !prev[id] }));

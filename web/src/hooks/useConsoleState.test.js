@@ -4,6 +4,7 @@ import { useToast } from './useToast';
 import { useUiPreferences } from './useUiPreferences';
 import { useConsoleOverlays } from './useConsoleOverlays';
 import { useConsoleSelections } from './useConsoleSelections';
+import { useConsoleChrome } from './useConsoleChrome';
 
 const translations = { zh: { hello: '你好' }, en: { hello: 'hello' } };
 
@@ -261,5 +262,69 @@ describe('useConsoleSelections', () => {
     expect(result.current.activeLogDetail).toBeNull();
     expect(result.current.traceSnapshotId).toBe('');
     expect(result.current.curlExportCmd).toBe('');
+  });
+});
+
+describe('useConsoleChrome', () => {
+  it('starts with the sidebar open, the mobile menu closed and the route tab', () => {
+    const { result } = renderHook(() => useConsoleChrome({ initialTab: 'logs' }));
+
+    expect(result.current.sidebarCollapsed).toBe(false);
+    expect(result.current.mobileMenuOpen).toBe(false);
+    expect(result.current.currentTab).toBe('logs');
+    expect(result.current.playModality).toBe('chat');
+  });
+
+  it('collapses and expands the sidebar', () => {
+    const { result } = renderHook(() => useConsoleChrome());
+
+    act(() => {
+      result.current.collapseSidebar();
+    });
+    expect(result.current.sidebarCollapsed).toBe(true);
+
+    act(() => {
+      result.current.expandSidebar();
+    });
+    expect(result.current.sidebarCollapsed).toBe(false);
+  });
+
+  it('opens and closes the mobile menu', () => {
+    const { result } = renderHook(() => useConsoleChrome());
+
+    act(() => {
+      result.current.openMobileMenu();
+    });
+    expect(result.current.mobileMenuOpen).toBe(true);
+
+    act(() => {
+      result.current.closeMobileMenu();
+    });
+    expect(result.current.mobileMenuOpen).toBe(false);
+  });
+
+  it('closes the mobile menu when a tab is selected', () => {
+    // The menu is an overlay: leaving it open hides the view just asked for.
+    const { result } = renderHook(() => useConsoleChrome());
+
+    act(() => {
+      result.current.openMobileMenu();
+    });
+    act(() => {
+      result.current.selectTab('pricing');
+    });
+
+    expect(result.current.currentTab).toBe('pricing');
+    expect(result.current.mobileMenuOpen).toBe(false);
+  });
+
+  it('carries the playground modality another view selects', () => {
+    const { result } = renderHook(() => useConsoleChrome());
+
+    act(() => {
+      result.current.setPlayModality('images');
+    });
+
+    expect(result.current.playModality).toBe('images');
   });
 });
