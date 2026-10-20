@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor, act } from '@testing-library/react';
 import { useSessionRestore } from './useSessionRestore';
+import { useConsoleSession } from './useConsoleSession';
 
 // A fetch whose resolution the test controls, so the "session answers after the
 // user has moved on" case can be exercised deterministically.
@@ -138,5 +139,28 @@ describe('useSessionRestore', () => {
     rerender({ onExpired: vi.fn() });
 
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(1));
+  });
+
+  it.each(['logout', 'login'])('ignores a stale restore response after %s', async (transition) => {
+    const pending = deferredResponse();
+    globalThis.fetch.mockReturnValue(pending.promise);
+    const { result } = renderHook(() => {
+      const session = useConsoleSession({ initialRoute: { viewMode: 'console', authTab: 'login' } });
+      useSessionRestore({
+        onRestored: session.restoreSession, onExpired: session.endSession,
+        getSessionGeneration: session.getSessionGeneration,
+      });
+      return session;
+    });
+    act(() => {
+      if (transition === 'logout') result.current.signOutLocal();
+      else result.current.signIn({ username: 'new-user', role: 'user' });
+    });
+    await act(async () => {
+      pending.resolve(okResponse({ code: 0, data: { username: 'old-user', role: 'admin' } }));
+      await pending.promise;
+    });
+    expect(result.current.adminUser?.username).toBe(transition === 'logout' ? undefined : 'new-user');
+    expect(localStorage.getItem('airoute_user') || '').not.toContain('old-user');
   });
 });

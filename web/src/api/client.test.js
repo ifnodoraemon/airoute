@@ -32,6 +32,19 @@ describe('apiFetch', () => {
     vi.unstubAllGlobals();
   });
 
+  it('does not expire a new cookie session for an old request returning 401', async () => {
+    let generation = 0;
+    let release;
+    const unauthorized = vi.fn();
+    configureApiClient({ token: () => SESSION_MARKER, session: () => generation, unauthorized });
+    globalThis.fetch.mockReturnValue(new Promise((resolve) => { release = resolve; }));
+    const pending = apiFetch('/api/v1/admin/logs');
+    generation += 1;
+    release(jsonResponse({ code: 401 }, { status: 401 }));
+    await pending;
+    expect(unauthorized).not.toHaveBeenCalled();
+  });
+
   it('sends the configured token as a bearer token', async () => {
     configureApiClient({ token: () => 'real-token' });
 

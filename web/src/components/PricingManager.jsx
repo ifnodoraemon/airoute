@@ -388,12 +388,13 @@ export default function PricingManager({
       return;
     }
     try {
-      const res = await adminFetch(`/api/v1/admin/pricing/${encodeURIComponent(model)}?group=${encodeURIComponent(groupName || 'default')}`, {
+      const query = new URLSearchParams({ model, group: groupName || 'default' });
+      const res = await adminFetch(`/api/v1/admin/pricing?${query}`, {
         method: 'DELETE'
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(isZh ? `已删除 [${groupName}] 组模型 [${model}] 定价规则` : `Deleted pricing rule for model [${model}] in [${groupName}]`, 'success');
+        showToast(data.warning || (isZh ? `已删除 [${groupName}] 组模型 [${model}] 定价规则` : `Deleted pricing rule for model [${model}] in [${groupName}]`), data.warning ? 'warning' : 'success');
         fetchPrices();
       } else {
         showToast(data.error || (isZh ? '删除失败' : 'Failed to delete'), 'warning');
@@ -421,7 +422,7 @@ export default function PricingManager({
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(data.message || (isZh ? '已批量删除定价规则' : 'Batch deleted pricing rules'), 'success');
+        showToast(data.warning || (data.message || (isZh ? '已批量删除定价规则' : 'Batch deleted pricing rules')), data.warning ? 'warning' : 'success');
         setSelectedKeys([]);
         fetchPrices();
       } else {
@@ -497,7 +498,7 @@ export default function PricingManager({
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(isZh ? `已保存 [${payload.group_name}] 组模型 [${payload.model}] 定价规则` : `Saved pricing rule for [${payload.model}] in [${payload.group_name}]`, 'success');
+        showToast(data.warning || (isZh ? `已保存 [${payload.group_name}] 组模型 [${payload.model}] 定价规则` : `Saved pricing rule for [${payload.model}] in [${payload.group_name}]`), data.warning ? 'warning' : 'success');
         setShowModal(false);
         fetchPrices();
       } else {

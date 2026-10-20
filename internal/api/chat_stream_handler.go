@@ -171,9 +171,11 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 				}
 
 				if event.Chunk.Usage != nil {
-					totalPromptTokens = event.Chunk.Usage.PromptTokens
-					totalCompTokens = event.Chunk.Usage.CompletionTokens
-					totalCachedTokens = event.Chunk.Usage.GetCachedTokens()
+					// Usage counters are cumulative; output-only trailers must not
+					// erase input/cache counts reported by an earlier frame.
+					totalPromptTokens = max(totalPromptTokens, event.Chunk.Usage.PromptTokens)
+					totalCompTokens = max(totalCompTokens, event.Chunk.Usage.CompletionTokens)
+					totalCachedTokens = max(totalCachedTokens, event.Chunk.Usage.GetCachedTokens())
 				}
 
 				chunkBytes, err := json.Marshal(event.Chunk)

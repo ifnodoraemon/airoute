@@ -59,6 +59,13 @@ function lastPayload(adminFetch) {
 }
 
 describe('ModelRouteModal', () => {
+  it('preserves a saved route while showing an apply warning', async () => {
+    const { adminFetch, showToast, onSaveSuccess } = setup({ modelRoute: route() });
+    adminFetch.mockResolvedValue(jsonResponse({ code: 0, warning: '配置已保存，暂未生效' }, 202));
+    submit();
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('配置已保存，暂未生效', 'warning'));
+    expect(onSaveSuccess).toHaveBeenCalledOnce();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });

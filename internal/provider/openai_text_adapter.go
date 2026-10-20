@@ -165,11 +165,12 @@ func (p *OpenAIProvider) chatCompleteTextStream(ctx context.Context, req *model.
 	}
 	prompt := convertChatToPrompt(req.Messages)
 	textReq := map[string]any{
-		"model":       targetModel,
-		"prompt":      prompt,
-		"stream":      true,
-		"temperature": req.Temperature,
-		"top_p":       req.TopP,
+		"model":          targetModel,
+		"prompt":         prompt,
+		"stream":         true,
+		"stream_options": &model.StreamOptions{IncludeUsage: true},
+		"temperature":    req.Temperature,
+		"top_p":          req.TopP,
 	}
 	if req.MaxTokens != nil {
 		textReq["max_tokens"] = *req.MaxTokens
@@ -222,7 +223,7 @@ func (p *OpenAIProvider) chatCompleteTextStream(ctx context.Context, req *model.
 			default:
 			}
 			line, err := reader.ReadBytes('\n')
-			if err != nil {
+			if err != nil && !(err == io.EOF && len(line) > 0) {
 				if err != io.EOF {
 					send(&model.StreamEvent{Err: err})
 					return

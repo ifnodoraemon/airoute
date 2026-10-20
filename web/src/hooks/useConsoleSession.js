@@ -19,6 +19,10 @@ export function useConsoleSession({ initialRoute, onEntered, onEnded }) {
   const [adminToken, setAdminToken] = useState(() => getStoredToken());
   const [adminUser, setAdminUser] = useState(() => getStoredUser());
   const [authTab, setAuthTab] = useState(() => initialRoute.authTab);
+  const [restoringSession, setRestoringSession] = useState(true);
+  const sessionGeneration = useRef(0);
+  const getSessionGeneration = useCallback(() => sessionGeneration.current, []);
+  const finishSessionRestore = useCallback(() => setRestoringSession(false), []);
 
   // The transitions below are passed to effects and to the request layer, so they
   // read the view mode at call time rather than the value captured when their
@@ -40,6 +44,8 @@ export function useConsoleSession({ initialRoute, onEntered, onEnded }) {
   const credentialToken = adminToken === SESSION_MARKER ? '' : (adminToken || '');
 
   const clearCredential = useCallback(() => {
+    sessionGeneration.current += 1;
+    setRestoringSession(false);
     setAdminToken('');
     setAdminUser(null);
     clearStoredAuth();
@@ -57,6 +63,8 @@ export function useConsoleSession({ initialRoute, onEntered, onEnded }) {
    * the isLoggedIn props.
    */
   const signIn = useCallback((user, { token, tab, closeAuth = true } = {}) => {
+    sessionGeneration.current += 1;
+    setRestoringSession(false);
     setStoredAuth('', user);
     setAdminToken(token || SESSION_MARKER);
     setAdminUser(user);
@@ -71,6 +79,7 @@ export function useConsoleSession({ initialRoute, onEntered, onEnded }) {
    * the auth page is skipped, because a valid session makes it pointless.
    */
   const restoreSession = useCallback((user) => {
+    setRestoringSession(false);
     setStoredAuth('', user);
     setAdminToken(SESSION_MARKER);
     setAdminUser(user);
@@ -104,10 +113,13 @@ export function useConsoleSession({ initialRoute, onEntered, onEnded }) {
    * non-sensitive parts. Does not touch the credential: a profile refresh must not
    * sign anyone in or out.
    */
-  const refreshUser = useCallback((user, { token } = {}) => {
+  const refreshUser = useCallback((user) => {
     if (!user) return;
-    setStoredAuth(token || '', user);
-    setAdminUser(user);
+    setAdminUser((previous) => {
+      if (!previous || previous.username !== user.username) return previous;
+      setStoredAuth('', user);
+      return user;
+    });
   }, []);
 
   /**
@@ -142,6 +154,9 @@ export function useConsoleSession({ initialRoute, onEntered, onEnded }) {
     isAdmin,
     isAuthenticated,
     credentialToken,
+    restoringSession,
+    getSessionGeneration,
+    finishSessionRestore,
     setViewMode,
     setAuthTab,
     signIn,

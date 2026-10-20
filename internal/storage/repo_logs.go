@@ -6,6 +6,9 @@ import (
 	"time"
 )
 
+const usageLogErrorSQL = `(COALESCE(status_code, 0) < 200 OR status_code >= 400 OR COALESCE(error_message, '') <> '')`
+const usageLogSuccessSQL = `(status_code >= 200 AND status_code < 400 AND COALESCE(error_message, '') = '')`
+
 // UsageLogRecord represents an audit log entry.
 type UsageLogRecord struct {
 	ID               int64     `json:"id"`
@@ -119,9 +122,9 @@ func (r *Repository) buildUsageLogWhere(f LogFilter) (string, []interface{}) {
 		args = append(args, f.Channel)
 	}
 	if f.Status == "success" {
-		where += ` AND status_code < 400 AND COALESCE(error_message, '') = ''`
+		where += ` AND ` + usageLogSuccessSQL
 	} else if f.Status == "error" {
-		where += ` AND (status_code >= 400 OR COALESCE(error_message, '') <> '')`
+		where += ` AND ` + usageLogErrorSQL
 	}
 	if f.Cache == "cached" {
 		where += ` AND COALESCE(cached_tokens, 0) > 0`

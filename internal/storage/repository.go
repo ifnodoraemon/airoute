@@ -87,8 +87,8 @@ func (r *Repository) GetStatsOverview() (*StatsOverview, error) {
 
 	row := r.db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(total_tokens), 0), COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0), COALESCE(SUM(cached_tokens), 0), COALESCE(SUM(cost), 0.0), COALESCE(AVG(ttft_ms), 0), COALESCE(AVG(duration_ms), 0), ` +
 		`COALESCE(SUM(CASE WHEN status_code >= 400 AND status_code < 500 THEN 1 ELSE 0 END), 0), ` +
-		`COALESCE(SUM(CASE WHEN status_code >= 500 THEN 1 ELSE 0 END), 0), ` +
-		`COALESCE(SUM(CASE WHEN status_code >= 200 AND status_code < 400 THEN 1 ELSE 0 END), 0), ` +
+		`COALESCE(SUM(CASE WHEN ` + usageLogErrorSQL + ` AND (COALESCE(status_code, 0) < 400 OR status_code >= 500) THEN 1 ELSE 0 END), 0), ` +
+		`COALESCE(SUM(CASE WHEN ` + usageLogSuccessSQL + ` THEN 1 ELSE 0 END), 0), ` +
 		`COALESCE(SUM(CASE WHEN ttft_ms > 0 THEN 1 ELSE 0 END), 0) ` +
 		`FROM usage_logs`)
 	err := row.Scan(&stats.TotalRequests, &stats.TotalTokens, &stats.PromptTokens, &stats.CompletionTokens, &stats.TotalCachedTokens, &stats.TotalCost, &stats.AvgTTFTMs, &stats.AvgDurationMs,
@@ -151,8 +151,8 @@ func (r *Repository) GetStatsOverviewForKeys(keys []string) (*StatsOverview, err
 
 	query := fmt.Sprintf(`SELECT COUNT(*), COALESCE(SUM(total_tokens), 0), COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0), COALESCE(SUM(cached_tokens), 0), COALESCE(SUM(cost), 0.0), COALESCE(AVG(ttft_ms), 0), COALESCE(AVG(duration_ms), 0), `+
 		`COALESCE(SUM(CASE WHEN status_code >= 400 AND status_code < 500 THEN 1 ELSE 0 END), 0), `+
-		`COALESCE(SUM(CASE WHEN status_code >= 500 THEN 1 ELSE 0 END), 0), `+
-		`COALESCE(SUM(CASE WHEN status_code >= 200 AND status_code < 400 THEN 1 ELSE 0 END), 0), `+
+		`COALESCE(SUM(CASE WHEN `+usageLogErrorSQL+` AND (COALESCE(status_code, 0) < 400 OR status_code >= 500) THEN 1 ELSE 0 END), 0), `+
+		`COALESCE(SUM(CASE WHEN `+usageLogSuccessSQL+` THEN 1 ELSE 0 END), 0), `+
 		`COALESCE(SUM(CASE WHEN ttft_ms > 0 THEN 1 ELSE 0 END), 0) `+
 		`FROM usage_logs WHERE api_key IN (%s)`, clause)
 	if err := r.db.QueryRow(query, args...).Scan(&stats.TotalRequests, &stats.TotalTokens, &stats.PromptTokens, &stats.CompletionTokens, &stats.TotalCachedTokens, &stats.TotalCost, &stats.AvgTTFTMs, &stats.AvgDurationMs,

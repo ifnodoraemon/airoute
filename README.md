@@ -186,7 +186,7 @@ E2E 套件覆盖的 8 大核心验收维度（共 25 项自动化测试）：
 2. **安全边界 & 鉴权校验**：非鉴权拦截 (401)、错误口令拒绝、Admin JWT 签发与 `/api/v1/auth/me` 身份自省
 3. **MCP 生态集成**：内置 15 款核心 MCP 服务器（Dev / Search / Data / AI / Ops / Enterprise）元数据核验与动态启停
 4. **Skills Hub & 边缘缓存**：Skill ZIP 包网关权威流式下载（PK 结构校验）与 Nginx 边缘缓存 (`X-Cache-Status: HIT`)
-5. **模型拓扑与计费引擎**：路由矩阵、上游渠道、分级计费规则与实时运行遥测
+5. **模型拓扑与计费引擎**：[运行时容灾拓扑](docs/ROUTING_TOPOLOGY.md)、真实渠道验证、审计切换记录与分级计费规则
 6. **密钥治理与节点热同步**：虚拟密钥动态签发、配额设置与 Redis Pub/Sub 多节点毫秒级同步
 7. **数据面代理与分布式追踪**：`/v1/models`、`/v1/chat/completions` 与全链路 `X-Airoute-Trace-Id` 注入校验
 8. **高可用并发稳定性**：高并发批量探针零丢包、负载均衡无损转发验证

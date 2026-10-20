@@ -2,6 +2,7 @@ package controlplane
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -234,6 +235,7 @@ func (s *Synchronizer) ReloadAndBroadcast(ctx context.Context, reason string) er
 	if client := distributed.GetClient(); client != nil && client.IsActive() {
 		if pubErr := client.PublishReload(ctx, reason); pubErr != nil {
 			telemetry.Logger.Warn("failed to broadcast reload event to redis cluster", "error", pubErr.Error())
+			err = errors.Join(err, &HotReloadError{Stage: "集群广播", Err: pubErr})
 		} else {
 			telemetry.Logger.Info("broadcast cluster reload notification via Redis Pub/Sub", "reason", reason)
 		}

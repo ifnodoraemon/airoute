@@ -15,6 +15,7 @@ import { SESSION_MARKER, readCSRFCookie } from './session';
 
 let tokenProvider = () => '';
 let unauthorizedHandler = () => {};
+let sessionProvider = () => 0;
 
 /**
  * Register the session hooks the client uses on every request.
@@ -24,15 +25,17 @@ let unauthorizedHandler = () => {};
  *   unauthorized({response, token}) -> called on every 401, before the caller
  *                                       sees the response
  */
-export function configureApiClient({ token, unauthorized } = {}) {
+export function configureApiClient({ token, unauthorized, session } = {}) {
   if (typeof token === 'function') tokenProvider = token;
   if (typeof unauthorized === 'function') unauthorizedHandler = unauthorized;
+  if (typeof session === 'function') sessionProvider = session;
 }
 
 /** Restore the initial state. Intended for tests. */
 export function resetApiClient() {
   tokenProvider = () => '';
   unauthorizedHandler = () => {};
+  sessionProvider = () => 0;
 }
 
 /**
@@ -45,6 +48,7 @@ export async function apiFetch(url, options = {}) {
   const { token, headers: optionHeaders, ...rest } = options;
   const headers = { ...(optionHeaders || {}) };
   const effectiveToken = token || tokenProvider();
+  const generation = sessionProvider();
 
   // SESSION_MARKER only means "logged in"; sending it as a bearer token would
   // make the server validate it (and reject it) before falling back to the
@@ -58,7 +62,7 @@ export async function apiFetch(url, options = {}) {
   }
 
   const res = await fetch(url, { ...rest, headers, credentials: 'same-origin' });
-  if (res.status === 401) {
+  if (res.status === 401 && generation === sessionProvider()) {
     unauthorizedHandler({ response: res, token: effectiveToken });
   }
   return res;

@@ -17,9 +17,13 @@ import { configureApiClient } from '../api/client';
  * @param {string}   options.token           current bearer token ('' for cookie sessions)
  * @param {Function} options.onUnauthorized  called as ({response, token}) on every 401
  */
-export function useApiSession({ token, onUnauthorized }) {
+export function useApiSession({ token, onUnauthorized, getSessionGeneration }) {
   const tokenRef = useRef(token);
   const unauthorizedRef = useRef(onUnauthorized);
+  const generationRef = useRef(getSessionGeneration);
+  useEffect(() => {
+    generationRef.current = getSessionGeneration;
+  }, [getSessionGeneration]);
 
   useEffect(() => {
     tokenRef.current = token;
@@ -34,6 +38,7 @@ export function useApiSession({ token, onUnauthorized }) {
     configureApiClient({
       token: () => tokenRef.current,
       unauthorized: (ctx) => unauthorizedRef.current(ctx),
+      session: () => generationRef.current?.(),
     });
   }, []);
 }

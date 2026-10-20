@@ -168,6 +168,8 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 					// Admin-only infrastructure inspection (topology/storage/MCP secrets)
 					adminOnly.GET("/system/middlewares", adminHandler.GetSystemMiddlewares)
 					adminOnly.GET("/models/routes", adminHandler.GetModelRoutes)
+					adminOnly.GET("/models/topology", adminHandler.GetRoutingTopology)
+					adminOnly.POST("/models/topology/probe", adminHandler.ValidateRoutingChannel)
 					adminOnly.GET("/storage/status", adminHandler.GetStorageStatus)
 					adminOnly.GET("/mcp/servers", adminHandler.ListMCPServers)
 
@@ -197,11 +199,15 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 					adminOnly.POST("/channels/batch-status", adminHandler.BatchStatusChannels)
 
 					adminOnly.POST("/models/routes", adminHandler.UpdateModelRoute)
+					// Query identifiers preserve model names containing slashes. Keep
+					// the single-segment path endpoints for existing API clients.
+					adminOnly.DELETE("/models/routes", adminHandler.DeleteModelRoute)
 					adminOnly.DELETE("/models/routes/:model", adminHandler.DeleteModelRoute)
 					adminOnly.POST("/models/routes/batch-delete", adminHandler.BatchDeleteModelRoutes)
 					adminOnly.POST("/models/routes/probe", adminHandler.ProbeModelRoute)
 
 					adminOnly.POST("/pricing", adminHandler.SavePricingRate)
+					adminOnly.DELETE("/pricing", adminHandler.DeletePricingRate)
 					adminOnly.DELETE("/pricing/:model", adminHandler.DeletePricingRate)
 					adminOnly.POST("/pricing/batch-delete", adminHandler.BatchDeletePricingRates)
 

@@ -84,7 +84,7 @@ func writeRouteError(c *gin.Context, err error) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "保存模型路由失败（已回滚，未改动任何配置）: " + serr.Err.Error()})
 			return
 		case RouteStageApply:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "数据面热重载失败: " + serr.Err.Error()})
+			writeHotReloadWarning(c, &HotReloadError{Stage: "模型路由", Err: serr.Err}, nil)
 			return
 		}
 	}

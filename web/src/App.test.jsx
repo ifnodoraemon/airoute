@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import App from './App';
 
 // The first test that renders the whole console. Everything before this exercised
@@ -57,14 +57,14 @@ async function waitForConsoleLoad() {
 describe('App integration', () => {
   beforeEach(() => {
     localStorage.clear();
-    window.location.hash = '';
+    window.history.replaceState(null, '', '/');
     vi.stubGlobal('fetch', vi.fn());
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
     localStorage.clear();
-    window.location.hash = '';
+    window.history.replaceState(null, '', '/');
   });
 
   it('renders the public landing page for an anonymous visitor', async () => {
@@ -99,7 +99,7 @@ describe('App integration', () => {
 
   it('loads the console data when the route asks for the console', async () => {
     signIn();
-    window.location.hash = '#/console';
+    window.history.replaceState(null, '', '/#/console');
     stubGateway({
       '/api/v1/auth/me': () => jsonResponse({ code: 0, data: { user: { username: 'root', role: 'admin' } } }),
     });
@@ -109,9 +109,40 @@ describe('App integration', () => {
     await waitForConsoleLoad();
   });
 
+  it('restores the dashboard deep link from a cookie without any legacy token or profile hint', async () => {
+    window.history.replaceState(null, '', '/#/dashboard');
+    stubGateway({
+      '/api/v1/auth/me': () => jsonResponse({ code: 0, data: { user: { username: 'root', role: 'admin' } } }),
+    });
+    render(<App />);
+    await waitForConsoleLoad();
+    await waitFor(() => expect(window.location.hash).toBe('#/dashboard'));
+    expect(localStorage.getItem('airoute_token')).toBeNull();
+    expect(await screen.findByText('需要关注')).toBeInTheDocument();
+  });
+
+  it('opens all failed logs from the overview and clears unrelated saved filters', async () => {
+    window.history.replaceState(null, '', '/?logs.channel=old&logs.range=1h&logs.q=other#/dashboard');
+    stubGateway({
+      '/api/v1/auth/me': () => jsonResponse({ code: 0, data: { user: { username: 'root', role: 'admin' } } }),
+      '/api/v1/admin/stats/overview': () => jsonResponse({ code: 0, data: { total_requests: 100, server_error_requests: 2 } }),
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /查看日志/ }, { timeout: 8000 }));
+    await waitFor(() => {
+      const urls = requestedUrls().filter((url) => url.includes('/admin/logs?'));
+      const query = new URL(urls.at(-1), 'http://test').searchParams;
+      expect(query.get('status')).toBe('error');
+      expect(query.has('channel')).toBe(false);
+      expect(query.has('q')).toBe(false);
+      expect(query.has('start_time')).toBe(false);
+      expect(query.get('offset')).toBe('0');
+    });
+  }, 12000);
+
   it('does not request the super-admin endpoints for a regular user', async () => {
     signIn('user', 'alice');
-    window.location.hash = '#/console';
+    window.history.replaceState(null, '', '/#/console');
     stubGateway({
       '/api/v1/auth/me': () => jsonResponse({ code: 0, data: { user: { username: 'alice', role: 'user' } } }),
     });
@@ -127,7 +158,7 @@ describe('App integration', () => {
 
   it('requests the super-admin endpoints for an administrator', async () => {
     signIn();
-    window.location.hash = '#/console';
+    window.history.replaceState(null, '', '/#/console');
     stubGateway({
       '/api/v1/auth/me': () => jsonResponse({ code: 0, data: { user: { username: 'root', role: 'admin' } } }),
     });
@@ -147,7 +178,7 @@ describe('App integration', () => {
     // 401 moves the visitor back out to the landing page instead of leaving them in
     // a console whose every panel fails.
     signIn();
-    window.location.hash = '#/console';
+    window.history.replaceState(null, '', '/#/console');
     stubGateway({
       '/api/v1/auth/me': () => jsonResponse({ code: 401 }, 401),
     });
@@ -168,7 +199,7 @@ describe('App integration', () => {
 
   it('clears the stored session when the gateway rejects it', async () => {
     signIn();
-    window.location.hash = '#/console';
+    window.history.replaceState(null, '', '/#/console');
     stubGateway({
       '/api/v1/auth/me': () => jsonResponse({ code: 401 }, 401),
     });
@@ -182,7 +213,7 @@ describe('App integration', () => {
 
   it('sends the audit-log query when the logs tab is routed to', async () => {
     signIn();
-    window.location.hash = '#/logs';
+    window.history.replaceState(null, '', '/#/logs');
     stubGateway({
       '/api/v1/auth/me': () => jsonResponse({ code: 0, data: { user: { username: 'root', role: 'admin' } } }),
     });

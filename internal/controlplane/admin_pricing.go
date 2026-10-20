@@ -24,13 +24,7 @@ func writePricingError(c *gin.Context, err error, fallback string) {
 	// The write committed but the in-memory state did not follow. Answering "failed"
 	// would send the operator to re-enter a rate that is already saved; answering
 	// plain success would hide that traffic is still priced by the previous rate.
-	var hot *HotReloadError
-	if errors.As(err, &hot) {
-		c.JSON(http.StatusAccepted, gin.H{
-			"code":    0,
-			"warning": "配置已保存，但热加载未完全生效（" + hot.Stage + "）：" + hot.Err.Error(),
-			"message": "定价已保存，热加载未完全生效",
-		})
+	if writeHotReloadWarning(c, err, nil) {
 		return
 	}
 	if fallback == "" {
@@ -122,7 +116,11 @@ func (h *AdminHandler) SavePricingRate(c *gin.Context) {
 
 // DeletePricingRate removes pricing for a model (optionally within a group).
 func (h *AdminHandler) DeletePricingRate(c *gin.Context) {
-	if err := h.pricing.DeleteRate(c.Request.Context(), c.Param("model"), c.Query("group")); err != nil {
+	modelName := c.Param("model")
+	if modelName == "" {
+		modelName = c.Query("model")
+	}
+	if err := h.pricing.DeleteRate(c.Request.Context(), modelName, c.Query("group")); err != nil {
 		writePricingError(c, err, "删除模型定价失败")
 		return
 	}

@@ -179,19 +179,19 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
     setSubmittingChannel(true);
     try {
       if (editingChannelId) {
-        await apiJSON(`/api/v1/admin/channels/${editingChannelId}`, {
+        const result = await apiJSON(`/api/v1/admin/channels/${editingChannelId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
-        showToast(isZh ? 'Provider 更新成功，内存已热重载' : 'Provider updated successfully, memory hot-reloaded', 'success');
+        showToast(result.warning || (isZh ? 'Provider 更新成功，内存已热重载' : 'Provider updated successfully, memory hot-reloaded'), result.warning ? 'warning' : 'success');
       } else {
-        await apiJSON('/api/v1/admin/channels', {
+        const result = await apiJSON('/api/v1/admin/channels', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
-        showToast(isZh ? 'Provider 创建成功，内存已热重载' : 'Provider created successfully, memory hot-reloaded', 'success');
+        showToast(result.warning || (isZh ? 'Provider 创建成功，内存已热重载' : 'Provider created successfully, memory hot-reloaded'), result.warning ? 'warning' : 'success');
       }
     } catch (err) {
       showToast((isZh ? '保存 Provider 失败: ' : 'Failed to save provider: ') + err.message, 'error');
@@ -234,8 +234,8 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
   const handleDeleteChannel = useCallback(async (id) => {
     if (!window.confirm(isZh ? '确认注销该模型提供商 (Provider)？' : 'Are you sure you want to remove this Provider?')) return;
     try {
-      await apiJSON(`/api/v1/admin/channels/${id}`, { method: 'DELETE' });
-      showToast(isZh ? 'Provider 已注销，内存已原子更新' : 'Provider removed, memory atomically updated', 'info');
+      const result = await apiJSON(`/api/v1/admin/channels/${id}`, { method: 'DELETE' });
+      showToast(result.warning || (isZh ? 'Provider 已注销，内存已更新' : 'Provider removed, memory updated'), result.warning ? 'warning' : 'info');
       refresh();
     } catch (err) {
       showToast((isZh ? '注销 Provider 失败: ' : 'Failed to remove provider: ') + err.message, 'error');
@@ -279,7 +279,7 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(data.message || (isZh ? '已批量删除服务商渠道' : 'Selected channels deleted'), 'success');
+        showToast(data.warning || data.message || (isZh ? '已批量删除服务商渠道' : 'Selected channels deleted'), data.warning ? 'warning' : 'success');
         setSelectedChannelIds([]);
         refresh();
       } else {
@@ -307,7 +307,7 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(data.message || (isZh ? '批量更新状态成功' : 'Batch update status successful'), 'success');
+        showToast(data.warning || data.message || (isZh ? '批量更新状态成功' : 'Batch update status successful'), data.warning ? 'warning' : 'success');
         // Only the checkbox-driven flow owns the selection.
         if (!Array.isArray(overrideIds)) setSelectedChannelIds([]);
         refresh();

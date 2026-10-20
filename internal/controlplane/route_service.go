@@ -2,11 +2,11 @@ package controlplane
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/ifnodoraemon/airoute/internal/billing"
 	"github.com/ifnodoraemon/airoute/internal/storage"
-	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
 // RouteStore is the persistence surface the route rules need.
@@ -68,11 +68,8 @@ func NewRouteService(store RouteStore, sync RouteSync, prices PriceReloader) *Ro
 //
 // The write is transactional: fallback, pricing and channel rows commit together
 // or not at all. The refresh steps that follow are NOT part of that transaction.
-// In particular the final data plane reload can fail after the write has already
-// committed, and the request then reports failure for a change that did happen.
-// That ambiguity between "saved" and "live" is deliberate here: this refactor
-// keeps the existing API contract, and resolving the ambiguity is the job of the
-// configuration-version work.
+// A failure after commit is returned as RouteStageApply so the HTTP adapter
+// reports "saved, pending application" separately from a rejected write.
 func (s *RouteService) UpdateModelRoute(ctx context.Context, req *UpdateModelRouteRequest) error {
 	if req == nil {
 		return &ValidationError{Message: "模型标识不能为空"}
@@ -106,18 +103,19 @@ func (s *RouteService) UpdateModelRoute(ctx context.Context, req *UpdateModelRou
 	}
 
 	// Refresh in-memory prices so the very next request bills with the new rate.
-	// A failure here is logged, not surfaced: the rates that are still loaded are
-	// the previous ones, which is a degraded but consistent state.
+	// Attempt both reload paths and report any failure after the committed write.
+	var applyErr error
 	if bundle.Price != nil && s.prices != nil {
-		if err := s.prices.ReloadPrices(); err != nil {
-			telemetry.Logger.Error("failed to reload prices after model route update", "error", err.Error())
-		}
+		applyErr = s.prices.ReloadPrices()
 	}
 
 	if s.sync != nil {
 		if err := s.sync.ReloadAndBroadcast(ctx, "model_route_updated"); err != nil {
-			return &RouteStageError{Stage: RouteStageApply, Err: err}
+			applyErr = errors.Join(applyErr, err)
 		}
+	}
+	if applyErr != nil {
+		return &RouteStageError{Stage: RouteStageApply, Err: applyErr}
 	}
 
 	return nil

@@ -182,16 +182,18 @@ func TestRouteServicePriceReloadsAfterWrite(t *testing.T) {
 	}
 }
 
-func TestRouteServicePriceReloadFailureDoesNotFailTheRequest(t *testing.T) {
+func TestRouteServicePriceReloadFailureReportsCommittedWrite(t *testing.T) {
 	// The write committed; the previously loaded rates simply stay in effect.
 	store := newFakeRouteStore()
 	prices := &fakePriceReloader{err: errors.New("engine unavailable")}
 	svc := NewRouteService(store, nil, prices)
 
-	if err := svc.UpdateModelRoute(context.Background(), &UpdateModelRouteRequest{
+	err := svc.UpdateModelRoute(context.Background(), &UpdateModelRouteRequest{
 		Model: "gpt-x", PromptPrice: priceFloat(1.5),
-	}); err != nil {
-		t.Fatalf("price reload failure leaked out of the request: %v", err)
+	})
+	var stage *RouteStageError
+	if !errors.As(err, &stage) || stage.Stage != RouteStageApply || store.applyCalls != 1 {
+		t.Fatalf("want committed write and apply warning, got %v", err)
 	}
 	if prices.calls != 1 {
 		t.Errorf("price reload calls = %d, want 1", prices.calls)
