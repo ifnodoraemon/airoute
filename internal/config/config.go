@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -37,19 +38,19 @@ type AuthConfig struct {
 
 // Config represents the complete gateway configuration.
 type Config struct {
-	Server                 ServerConfig              `yaml:"server"`
-	Admin                  AdminConfig               `yaml:"admin"`
-	Auth                   AuthConfig                `yaml:"auth"`
-	Storage                StorageConfig             `yaml:"storage"`
-	Channels               []model.ChannelConfig     `yaml:"channels"`
-	APIKeys                []model.APIKeyConfig      `yaml:"api_keys"`
-	ModelValidation        ModelValidationConfig     `yaml:"model_validation"`
-	EnableFallback         bool                      `yaml:"enable_fallback"`
-	MaxRetries             int                       `yaml:"max_retries"`
-	DefaultTimeoutSeconds  int                       `yaml:"default_timeout_seconds"`
-	HasConfiguredKeys      bool                      `yaml:"-"`
-	keyMu                  sync.RWMutex              `yaml:"-"`
-	apiKeysMap             map[string]*model.APIKeyConfig
+	Server                ServerConfig          `yaml:"server"`
+	Admin                 AdminConfig           `yaml:"admin"`
+	Auth                  AuthConfig            `yaml:"auth"`
+	Storage               StorageConfig         `yaml:"storage"`
+	Channels              []model.ChannelConfig `yaml:"channels"`
+	APIKeys               []model.APIKeyConfig  `yaml:"api_keys"`
+	ModelValidation       ModelValidationConfig `yaml:"model_validation"`
+	EnableFallback        bool                  `yaml:"enable_fallback"`
+	MaxRetries            int                   `yaml:"max_retries"`
+	DefaultTimeoutSeconds int                   `yaml:"default_timeout_seconds"`
+	HasConfiguredKeys     bool                  `yaml:"-"`
+	keyMu                 sync.RWMutex          `yaml:"-"`
+	apiKeysMap            map[string]*model.APIKeyConfig
 }
 
 // GetAPIKey returns the APIKeyConfig in O(1) constant time safely.
@@ -63,6 +64,30 @@ func (c *Config) GetAPIKey(key string) *model.APIKeyConfig {
 		return nil
 	}
 	return c.apiKeysMap[key]
+}
+
+// ActiveAPIKeyCount returns the number of in-memory API keys under the key lock.
+// Callers must use this (and HasRegisteredAPIKeys) instead of reading the
+// APIKeys / HasConfiguredKeys fields directly: those are rewritten by
+// UpdateAPIKeys on every hot reload, so an unguarded read is a data race.
+func (c *Config) ActiveAPIKeyCount() int {
+	if c == nil {
+		return 0
+	}
+	c.keyMu.RLock()
+	defer c.keyMu.RUnlock()
+	return len(c.APIKeys)
+}
+
+// HasRegisteredAPIKeys reports whether any API key has ever been registered in
+// the gateway, even if all of them have since been disabled or deleted.
+func (c *Config) HasRegisteredAPIKeys() bool {
+	if c == nil {
+		return false
+	}
+	c.keyMu.RLock()
+	defer c.keyMu.RUnlock()
+	return c.HasConfiguredKeys
 }
 
 // UpdateAPIKeys safely updates keys and their lookup map in-place without copying lock values.
@@ -152,7 +177,7 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("read config file error: %w", err)
 	}
 
-	expanded := []byte(os.ExpandEnv(string(data)))
+	expanded := []byte(expandConfigEnv(string(data)))
 	if err := yaml.Unmarshal(expanded, cfg); err != nil {
 		return nil, fmt.Errorf("unmarshal config yaml error: %w", err)
 	}
@@ -190,9 +215,29 @@ func SetGlobalConfig(cfg *Config) {
 // GetGlobalConfig returns the singleton config.
 func GetGlobalConfig() *Config {
 	configMutex.RLock()
-	defer configMutex.RUnlock()
+	cfg := globalConfig
+	configMutex.RUnlock()
+	if cfg != nil {
+		return cfg
+	}
+	configMutex.Lock()
+	defer configMutex.Unlock()
 	if globalConfig == nil {
 		globalConfig = DefaultConfig()
 	}
 	return globalConfig
+}
+
+var configEnvDefault = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*):-([^}]*)\}`)
+
+// expandConfigEnv supports both ${NAME} and the documented ${NAME:-default} form.
+func expandConfigEnv(value string) string {
+	withDefaults := configEnvDefault.ReplaceAllStringFunc(value, func(match string) string {
+		parts := configEnvDefault.FindStringSubmatch(match)
+		if env := os.Getenv(parts[1]); env != "" {
+			return env
+		}
+		return parts[2]
+	})
+	return os.ExpandEnv(withDefaults)
 }

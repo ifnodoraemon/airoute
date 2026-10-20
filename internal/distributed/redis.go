@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	ReloadChannel    = "nano:cluster:reload"
+	ReloadChannel    = "airoute:cluster:reload"
 	ConfigVersionKey = "airoute:cluster:config_version"
 )
 
@@ -113,7 +113,7 @@ func (c *Client) PublishReload(ctx context.Context, reason string) error {
 	evt := ClusterEvent{
 		Event:     "reload",
 		Reason:    reason,
-		Timestamp: time.Now().UnixNano(),
+		Timestamp: time.Now().UnixMicro(),
 	}
 	payload, _ := json.Marshal(evt)
 
@@ -124,54 +124,91 @@ func (c *Client) PublishReload(ctx context.Context, reason string) error {
 
 // SubscribeReload listens for real-time cache invalidation events from peer cluster nodes
 // and periodically reconciles cluster configuration version to heal missed broadcasts.
+//
+// The subscription is re-established automatically: go-redis closes the channel
+// when the connection drops, and the previous implementation simply returned,
+// silently degrading the cluster to 10s polling until the process restarted.
 func (c *Client) SubscribeReload(onReload func(reason string), stopChan <-chan struct{}) {
 	if !c.IsActive() {
 		return
 	}
 
 	go func() {
-		pubsub := c.rdb.Subscribe(context.Background(), ReloadChannel)
-		defer pubsub.Close()
-
-		ch := pubsub.Channel()
-		telemetry.Logger.Info("subscribed to Redis cluster invalidation channel", "channel", ReloadChannel)
-
 		var localVersion int64
 		if v, err := c.rdb.Get(context.Background(), ConfigVersionKey).Int64(); err == nil {
 			localVersion = v
 		}
 
-		// Self-healing periodic ticker to catch any dropped pub/sub events
-		reconcileTicker := time.NewTicker(15 * time.Second)
-		defer reconcileTicker.Stop()
-
+		backoff := time.Second
 		for {
 			select {
-			case msg, ok := <-ch:
-				if !ok {
-					return
-				}
-				var evt ClusterEvent
-				if err := json.Unmarshal([]byte(msg.Payload), &evt); err == nil {
-					telemetry.Logger.Info("received Redis cluster reload broadcast (<1ms latency)", "reason", evt.Reason)
-					if v, err := c.rdb.Get(context.Background(), ConfigVersionKey).Int64(); err == nil && v > localVersion {
-						localVersion = v
-					}
-					onReload(evt.Reason)
-				}
-			case <-reconcileTicker.C:
-				if v, err := c.rdb.Get(context.Background(), ConfigVersionKey).Int64(); err == nil {
-					if v > localVersion {
-						telemetry.Logger.Info("reconciled cluster config version divergence, triggering self-healing reload", "localVersion", localVersion, "remoteVersion", v)
-						localVersion = v
-						onReload("version_sync_reconciliation")
-					}
-				}
+			case <-stopChan:
+				return
+			default:
+			}
+
+			if !c.subscribeReloadOnce(stopChan, onReload, &localVersion) {
+				return
+			}
+
+			// Channel closed unexpectedly: resubscribe with capped backoff.
+			telemetry.Logger.Warn("redis cluster reload subscription lost, reconnecting",
+				"retry_in", backoff.String())
+			select {
+			case <-time.After(backoff):
 			case <-stopChan:
 				return
 			}
+			if backoff < 30*time.Second {
+				backoff *= 2
+			}
+			if backoff > 30*time.Second {
+				backoff = 30 * time.Second
+			}
 		}
 	}()
+}
+
+// subscribeReloadOnce runs one subscription lifetime. It returns true when the
+// channel ended unexpectedly (caller should reconnect) and false when the
+// caller should stop (stopChan closed).
+func (c *Client) subscribeReloadOnce(stopChan <-chan struct{}, onReload func(reason string), localVersion *int64) bool {
+	pubsub := c.rdb.Subscribe(context.Background(), ReloadChannel)
+	defer pubsub.Close()
+
+	ch := pubsub.Channel()
+	telemetry.Logger.Info("subscribed to Redis cluster invalidation channel", "channel", ReloadChannel)
+
+	// Self-healing periodic ticker to catch any dropped pub/sub events
+	reconcileTicker := time.NewTicker(15 * time.Second)
+	defer reconcileTicker.Stop()
+
+	for {
+		select {
+		case msg, ok := <-ch:
+			if !ok {
+				return true
+			}
+			var evt ClusterEvent
+			if err := json.Unmarshal([]byte(msg.Payload), &evt); err == nil {
+				telemetry.Logger.Info("received Redis cluster reload broadcast (<1ms latency)", "reason", evt.Reason)
+				if v, err := c.rdb.Get(context.Background(), ConfigVersionKey).Int64(); err == nil && v > *localVersion {
+					*localVersion = v
+				}
+				onReload(evt.Reason)
+			}
+		case <-reconcileTicker.C:
+			if v, err := c.rdb.Get(context.Background(), ConfigVersionKey).Int64(); err == nil {
+				if v > *localVersion {
+					telemetry.Logger.Info("reconciled cluster config version divergence, triggering self-healing reload", "localVersion", *localVersion, "remoteVersion", v)
+					*localVersion = v
+					onReload("version_sync_reconciliation")
+				}
+			}
+		case <-stopChan:
+			return false
+		}
+	}
 }
 
 // GetSessionChannel retrieves the pinned provider channel name for a sticky session.
@@ -179,7 +216,7 @@ func (c *Client) GetSessionChannel(ctx context.Context, model, sessionID string)
 	if !c.IsActive() || sessionID == "" {
 		return "", nil
 	}
-	key := fmt.Sprintf("nano:session:%s:%s", model, sessionID)
+	key := fmt.Sprintf("airoute:session:%s:%s", model, sessionID)
 	val, err := c.rdb.Get(ctx, key).Result()
 	if err == redis.Nil {
 		return "", nil
@@ -192,7 +229,7 @@ func (c *Client) SetSessionChannel(ctx context.Context, model, sessionID, channe
 	if !c.IsActive() || sessionID == "" || channelName == "" {
 		return nil
 	}
-	key := fmt.Sprintf("nano:session:%s:%s", model, sessionID)
+	key := fmt.Sprintf("airoute:session:%s:%s", model, sessionID)
 	return c.rdb.Set(ctx, key, channelName, ttl).Err()
 }
 

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
@@ -63,7 +64,10 @@ func (h *AdminHandler) GenerateRedemptions(c *gin.Context) {
 	createdCodes := make([]string, 0, count)
 	for i := 0; i < count; i++ {
 		codeBytes := make([]byte, 8)
-		_, _ = rand.Read(codeBytes)
+		if _, err := rand.Read(codeBytes); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "安全随机源不可用，无法生成兑换码"})
+			return
+		}
 		code := fmt.Sprintf("CARD-%s-%s", strings.ToUpper(hex.EncodeToString(codeBytes[:4])), strings.ToUpper(hex.EncodeToString(codeBytes[4:])))
 
 		rec := &storage.RedemptionCodeRecord{
@@ -117,6 +121,15 @@ func (h *AdminHandler) RedeemWalletCode(c *gin.Context) {
 		return
 	}
 
+	// Gift-card codes are short enough to be brute-forced; limit attempts per
+	// account and per source IP before the code is even looked up.
+	if !middleware.GlobalRateLimiter.GetBucket("redeem:user:"+claims.Username, 10).Allow() ||
+		!middleware.GlobalRateLimiter.GetBucket("redeem:ip:"+c.ClientIP(), 20).Allow() {
+		c.Header("Retry-After", "60")
+		c.JSON(http.StatusTooManyRequests, gin.H{"code": 429, "error": "兑换尝试过于频繁，请稍后再试"})
+		return
+	}
+
 	var req RedeemRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.Code == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "请输入兑换码"})
@@ -134,6 +147,9 @@ func (h *AdminHandler) RedeemWalletCode(c *gin.Context) {
 	if user != nil {
 		newBal = user.Balance
 	}
+	// Push the new balance into the data-plane memory snapshot immediately
+	// instead of leaving it stale until the next periodic sync.
+	h.syncDataPlane()
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    0,

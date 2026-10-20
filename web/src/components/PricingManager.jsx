@@ -1,20 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  DollarSign,
-  Sparkles,
   Plus,
   RefreshCw,
-  Edit3,
   Trash2,
   AlertCircle,
-  Clock,
   Moon,
-  Sun,
   X,
-  Check,
   CheckCircle2,
   Calendar,
-  Zap,
+  Clock,
   Info,
   ArrowRight
 } from 'lucide-react';
@@ -145,6 +139,9 @@ export default function PricingManager({
   const [showModal, setShowModal] = useState(false);
   useModalA11y(showModal, () => setShowModal(false));
   const [editingPrice, setEditingPrice] = useState(null);
+  // The gateway reports its own clock because off-peak windows are evaluated in
+  // the gateway's time zone, not the browser's. The header renders these next to
+  // the rate table so "off-peak active" is interpretable.
   const [serverTime, setServerTime] = useState('');
   const [serverWeekday, setServerWeekday] = useState('');
   const [isWeekend, setIsWeekend] = useState(false);
@@ -170,7 +167,10 @@ export default function PricingManager({
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
-  const fetchPrices = async () => {
+  // Wrapped so the mount effect can depend on it without re-running every render.
+  // Its own dependencies are the props it reads, all of which are stable in
+  // practice: the parent passes a module-level fetch and a memoised toast.
+  const fetchPrices = useCallback(async () => {
     setLoading(true);
     try {
       const [res, modelsRes] = await Promise.all([
@@ -198,7 +198,7 @@ export default function PricingManager({
     } finally {
       setLoading(false);
     }
-  };
+  }, [adminFetch, showToast, isZh]);
 
   const availableGroups = React.useMemo(() => {
     const set = new Set(['default']);
@@ -237,24 +237,24 @@ export default function PricingManager({
     if (g === 'vip') {
       return {
         label: isZh ? 'VIP 用户组' : 'VIP Tier',
-        className: 'bg-amber-50 text-amber-700 border-amber-200'
+        className: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
       };
     }
     if (g === 'enterprise') {
       return {
         label: isZh ? '企业大客户' : 'Enterprise Tier',
-        className: 'bg-purple-50 text-purple-700 border-purple-200'
+        className: 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
       };
     }
     if (g === 'default') {
       return {
         label: isZh ? '默认基础组' : 'Default Tier',
-        className: 'bg-indigo-50 text-indigo-700 border-indigo-200'
+        className: 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
       };
     }
     return {
       label: isZh ? `${group} 组` : `${group} Tier`,
-      className: 'bg-sky-50 text-sky-700 border-sky-200'
+      className: 'bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800'
     };
   };
 
@@ -287,7 +287,7 @@ export default function PricingManager({
 
   useEffect(() => {
     fetchPrices();
-  }, []);
+  }, [fetchPrices]);
 
   const handleOpenAdd = () => {
     setEditingPrice(null);
@@ -388,12 +388,13 @@ export default function PricingManager({
       return;
     }
     try {
-      const res = await adminFetch(`/api/v1/admin/pricing/${encodeURIComponent(model)}?group=${encodeURIComponent(groupName || 'default')}`, {
+      const query = new URLSearchParams({ model, group: groupName || 'default' });
+      const res = await adminFetch(`/api/v1/admin/pricing?${query}`, {
         method: 'DELETE'
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(isZh ? `已删除 [${groupName}] 组模型 [${model}] 定价规则` : `Deleted pricing rule for model [${model}] in [${groupName}]`, 'success');
+        showToast(data.warning || (isZh ? `已删除 [${groupName}] 组模型 [${model}] 定价规则` : `Deleted pricing rule for model [${model}] in [${groupName}]`), data.warning ? 'warning' : 'success');
         fetchPrices();
       } else {
         showToast(data.error || (isZh ? '删除失败' : 'Failed to delete'), 'warning');
@@ -421,7 +422,7 @@ export default function PricingManager({
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(data.message || (isZh ? '已批量删除定价规则' : 'Batch deleted pricing rules'), 'success');
+        showToast(data.warning || (data.message || (isZh ? '已批量删除定价规则' : 'Batch deleted pricing rules')), data.warning ? 'warning' : 'success');
         setSelectedKeys([]);
         fetchPrices();
       } else {
@@ -497,7 +498,7 @@ export default function PricingManager({
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(isZh ? `已保存 [${payload.group_name}] 组模型 [${payload.model}] 定价规则` : `Saved pricing rule for [${payload.model}] in [${payload.group_name}]`, 'success');
+        showToast(data.warning || (isZh ? `已保存 [${payload.group_name}] 组模型 [${payload.model}] 定价规则` : `Saved pricing rule for [${payload.model}] in [${payload.group_name}]`), data.warning ? 'warning' : 'success');
         setShowModal(false);
         fetchPrices();
       } else {
@@ -571,7 +572,7 @@ export default function PricingManager({
       {/* 2. Rates Table (High Whitespace & Clean) */}
       <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl shadow-sm overflow-hidden">
         {/* Group Filter Tabs */}
-        <div className="flex flex-wrap items-center gap-2 px-6 pt-5 pb-3 border-b border-slate-100">
+        <div className="flex flex-wrap items-center gap-2 px-6 pt-5 pb-3 border-b border-slate-100 dark:border-slate-800">
           <span className="text-xs text-slate-400 font-medium mr-1">{isZh ? '价格分组:' : 'Price Group:'}</span>
           {[
             { id: 'all', label: isZh ? '全部规则' : 'All Rules' },
@@ -632,6 +633,19 @@ export default function PricingManager({
           </div>
         )}
 
+        {(serverTime || serverWeekday) && (
+          <div className="mb-4 flex items-center space-x-2 text-xs text-slate-500 dark:text-slate-400">
+            <Clock className="w-3.5 h-3.5" />
+            <span>
+              {isZh ? '计费服务器时间' : 'Billing server time'}: {serverWeekday} {serverTime}
+              {isWeekend ? (isZh ? '（周末）' : ' (weekend)') : ''}
+            </span>
+            <span className="text-slate-400 dark:text-slate-600">
+              {isZh ? '离峰判定以服务器时区为准' : 'Off-peak is judged in the server time zone'}
+            </span>
+          </div>
+        )}
+
         {unroutedPrices.length > 0 && (
           <div className="mb-4 p-3 rounded-xl border border-indigo-200/80 dark:border-indigo-800/60 bg-indigo-50/70 dark:bg-indigo-950/30 flex items-center justify-between text-xs animate-in fade-in">
             <div className="flex items-center space-x-2 text-indigo-950 dark:text-indigo-200 min-w-0">
@@ -672,7 +686,7 @@ export default function PricingManager({
                     <th className="py-3 px-4 w-10 text-center">
                       <input
                         type="checkbox"
-                        className="rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        className="rounded-sm border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                         checked={filteredPrices.length > 0 && selectedKeys.length === filteredPrices.length}
                         onChange={(e) => {
                           if (e.target.checked) {
@@ -729,7 +743,7 @@ export default function PricingManager({
                         <td className="py-4 px-4 text-center" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
-                            className="rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            className="rounded-sm border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                             checked={selectedKeys.includes(itemKey)}
                             onChange={(e) => {
                               e.stopPropagation();
@@ -787,11 +801,11 @@ export default function PricingManager({
                         {currencySym}{Number(p.completion_price || 0).toFixed(2)}
                       </td>
 
-                      <td className="py-4 px-4 font-mono text-emerald-700">
+                      <td className="py-4 px-4 font-mono text-emerald-700 dark:text-emerald-400">
                         <div>
                           {currencySym}{Number(p.cache_read_price || 0).toFixed(2)}
                           {p.prompt_price > 0 && (
-                            <span className="text-[10px] text-slate-400 ml-1">
+                            <span className="text-xs text-slate-500 dark:text-slate-400 ml-1">
                               ({Math.round(((p.prompt_price - p.cache_read_price) / p.prompt_price) * 100)}% {isZh ? '节省' : 'Saved'})
                             </span>
                           )}
@@ -808,7 +822,7 @@ export default function PricingManager({
                                 return (
                                   <span
                                     key={sIdx}
-                                    className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-semibold"
+                                    className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-xs font-semibold"
                                   >
                                     <Moon className="w-3 h-3 text-indigo-500" />
                                     <span>
@@ -821,7 +835,7 @@ export default function PricingManager({
                               })}
                             </div>
                             {p.weekend_all_day && (
-                              <div className="text-[11px] text-slate-400 flex items-center space-x-1">
+                              <div className="ui-meta flex items-center space-x-1">
                                 <Calendar className="w-3 h-3 text-slate-400" />
                                 <span>{isZh ? '周六日全天享受优惠' : 'Weekend all-day discount active'}</span>
                               </div>
@@ -836,20 +850,20 @@ export default function PricingManager({
                       <td className="py-4 px-4 font-mono">
                         {isOff ? (
                           <div className="space-y-0.5">
-                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold">
+                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-bold">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                               <span>{isZh ? `优惠 ${Math.round(discount * 10)}折 生效中` : `${Math.round((1 - discount) * 100)}% Off Active`}</span>
                             </span>
-                            <div className="text-xs text-emerald-700 font-bold">
+                            <div className="text-xs text-emerald-700 dark:text-emerald-400 font-bold">
                               {isZh ? '输入' : 'Prompt'} {currencySym}{effPrompt.toFixed(2)} / {isZh ? '输出' : 'Output'} {currencySym}{effComp.toFixed(2)}
                             </div>
                           </div>
                         ) : (
                           <div className="space-y-0.5">
-                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-medium">
+                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium">
                               <span>{isZh ? '基准单价' : 'Standard Rate'}</span>
                             </span>
-                            <div className="text-xs text-slate-700 font-medium">
+                            <div className="text-xs text-slate-700 dark:text-slate-300 font-medium">
                               {isZh ? '输入' : 'Prompt'} {currencySym}{effPrompt.toFixed(2)} / {isZh ? '输出' : 'Output'} {currencySym}{effComp.toFixed(2)}
                             </div>
                           </div>
@@ -861,13 +875,13 @@ export default function PricingManager({
                         <td className="py-4 px-6 text-right space-x-2 font-sans">
                           <button
                             onClick={() => handleOpenEdit(p)}
-                            className="px-3 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium transition cursor-pointer"
+                            className="px-3 py-1 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-xs font-medium transition cursor-pointer"
                           >
                             {isZh ? '编辑' : 'Edit'}
                           </button>
                           <button
                             onClick={() => handleDelete(p.model, p.group_name || 'default')}
-                            className="px-3 py-1 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 text-xs font-medium transition cursor-pointer"
+                            className="px-3 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 text-xs font-medium transition cursor-pointer"
                           >
                             {isZh ? '删除' : 'Delete'}
                           </button>
@@ -935,6 +949,29 @@ export default function PricingManager({
                     <option key={m} value={m} />
                   ))}
                 </datalist>
+                {/* The placeholder promised "click below to select", but no such row
+                    existed: handleSelectModelCandidate was written and never wired.
+                    It prefills a rate that suits the model's kind, which is the
+                    part an operator cannot guess. */}
+                {!editingPrice && unpricedModels.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {unpricedModels.slice(0, 8).map(m => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => handleSelectModelCandidate(m)}
+                        className={`px-2 py-1 rounded-lg text-xs font-mono border transition cursor-pointer ${
+                          formData.model === m
+                            ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700'
+                            : 'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
+                        }`}
+                        title={isZh ? '按模型类型预填建议费率' : 'Prefill a suggested rate for this model kind'}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Field: User Group Tier */}
@@ -977,20 +1014,20 @@ export default function PricingManager({
                       placeholder={isZh ? '或输入自定义用户组标识 (如 partner / test 等)' : 'Or input custom group identifier (e.g. partner / test)'}
                       value={formData.group_name}
                       onChange={(e) => setFormData({ ...formData, group_name: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '') })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-slate-900 focus:outline-none focus:border-indigo-500 text-xs"
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 font-mono text-slate-900 dark:text-slate-100 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 text-xs"
                     />
                   </div>
                 )}
               </div>
 
               {/* Field 2: Base Rates */}
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
-                <span className="font-bold text-slate-800 block text-xs">
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-3">
+                <span className="font-bold text-slate-800 dark:text-slate-200 block text-xs">
                   {isZh ? '基准单价 (每 1,000,000 Tokens)' : 'Base Price (per 1,000,000 Tokens)'}
                 </span>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-slate-600 font-medium mb-1">
+                    <label className="block text-slate-600 dark:text-slate-300 font-medium mb-1">
                       {isZh ? '输入单价 (¥)' : 'Prompt Price (¥)'}
                     </label>
                     <input
@@ -1007,12 +1044,12 @@ export default function PricingManager({
                           cache_read_price: (val * 0.1).toFixed(2)
                         });
                       }}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 font-mono text-slate-900 focus:outline-none focus:border-indigo-500 text-xs"
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500 text-xs"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-slate-600 font-medium mb-1">
+                    <label className="block text-slate-600 dark:text-slate-300 font-medium mb-1">
                       {isZh ? '输出单价 (¥)' : 'Completion Price (¥)'}
                     </label>
                     <input
@@ -1022,12 +1059,12 @@ export default function PricingManager({
                       required
                       value={formData.completion_price}
                       onChange={(e) => setFormData({ ...formData, completion_price: e.target.value })}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 font-mono text-slate-900 focus:outline-none focus:border-indigo-500 text-xs"
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500 text-xs"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-emerald-700 font-medium mb-1">
+                    <label className="block text-emerald-700 dark:text-emerald-400 font-medium mb-1">
                       {isZh ? '缓存命中 (¥)' : 'Cache Hit (¥)'}
                     </label>
                     <input
@@ -1036,18 +1073,18 @@ export default function PricingManager({
                       min="0"
                       value={formData.cache_read_price}
                       onChange={(e) => setFormData({ ...formData, cache_read_price: e.target.value })}
-                      className="w-full bg-white border border-emerald-300 rounded-xl px-2.5 py-1.5 font-mono text-slate-900 focus:outline-none focus:border-emerald-500 text-xs"
+                      className="w-full bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 rounded-xl px-2.5 py-1.5 font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500 text-xs"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Field 3: Time-of-Use Multi-Slot Flexible Configuration */}
-              <div className="p-4 rounded-2xl bg-indigo-50/40 border border-indigo-100 space-y-4">
+              <div className="p-4 rounded-2xl bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
-                    <Moon className="w-4 h-4 text-indigo-600" />
-                    <span className="font-bold text-slate-900">
+                    <Moon className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    <span className="font-bold text-slate-900 dark:text-slate-100">
                       {isZh ? '开启分时优惠' : 'Enable Off-Peak Discount'}
                     </span>
                   </div>
@@ -1058,14 +1095,14 @@ export default function PricingManager({
                       onChange={(e) => setFormData({ ...formData, off_peak_enabled: e.target.checked })}
                       className="sr-only peer"
                     />
-                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                    <div className="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white dark:after:bg-slate-300 after:border-slate-300 dark:after:border-slate-500 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
                   </label>
                 </div>
 
                 {formData.off_peak_enabled && (
                   <div className="space-y-3 pt-1 animate-in fade-in">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-700">
+                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                         {isZh ? '优惠时间段列表 (支持自由配置任意多个时段)' : 'Time Windows (Multiple custom windows supported)'}
                       </span>
                       <button
@@ -1147,7 +1184,7 @@ export default function PricingManager({
 
                           {/* Zero-burden Weekday Selector */}
                           <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 dark:border-slate-800 text-xs">
-                            <span className="text-slate-400 text-[11px]">{isZh ? '生效周期:' : 'Active on:'}</span>
+                            <span className="ui-meta">{isZh ? '生效周期:' : 'Active on:'}</span>
                             <div className="flex items-center space-x-1">
                               {[
                                 { label: isZh ? '一' : 'M', val: 1 },

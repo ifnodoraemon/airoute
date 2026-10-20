@@ -1,9 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -12,6 +14,7 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/adapter"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/provider"
 	"github.com/ifnodoraemon/airoute/internal/router"
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 	"github.com/ifnodoraemon/airoute/internal/validator"
@@ -38,6 +41,7 @@ func ConvertAnthropicToCanonical(req *AnthropicInboundRequest) *model.ChatComple
 
 // HandleAnthropicMessages handles POST /v1/messages for Anthropic SDK clients.
 func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
+	CaptureRequestSnapshot(c)
 	var req AnthropicInboundRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondAnthropicError(c, http.StatusBadRequest, fmt.Sprintf("Failed to parse Anthropic request: %v", err), "invalid_request_error")
@@ -69,6 +73,7 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 
 	start := time.Now()
 	canonicalReq := ConvertAnthropicToCanonical(&req)
+	canonicalReq.AnthropicBeta = c.GetHeader("anthropic-beta")
 
 	sessionID := resolveSessionID(c, canonicalReq.Model, canonicalReq.Messages, "")
 	reqCtx := c.Request.Context()
@@ -98,17 +103,38 @@ func (h *Handler) handleAnthropicUnary(c *gin.Context, reqCtx context.Context, r
 			"type": "error",
 			"error": gin.H{
 				"type":    errType,
-				"message": err.Error(),
+				"message": sanitizeErrorMessage(err),
 			},
 		})
 		return
 	}
+	if len(resp.NativeAnthropicResponse) > 0 {
+		var native map[string]any
+		if err := json.Unmarshal(resp.NativeAnthropicResponse, &native); err == nil {
+			native["model"] = req.Model
+			inputTokens, outputTokens := 0, 0
+			if resp.Usage != nil {
+				inputTokens, outputTokens = resp.Usage.PromptTokens, resp.Usage.CompletionTokens
+			}
+			RecordUsage(c, AuditRecordParams{SessionID: sessionID, ChatID: resp.ID, Channel: resp.Channel, Model: req.Model, PromptTokens: inputTokens, CompletionTokens: outputTokens, Duration: time.Since(start), StatusCode: http.StatusOK})
+			c.JSON(http.StatusOK, native)
+			return
+		}
+	}
 
-	var contentBlocks []gin.H
+	contentBlocks := make([]gin.H, 0)
 	stopReason := "end_turn"
 
 	if len(resp.Choices) > 0 {
 		choice := resp.Choices[0]
+		// Do NOT synthesise a {"type":"thinking"} block from ReasoningContent.
+		// The Anthropic Messages API requires every thinking block to carry a
+		// provider signature, and clients echo assistant content back on the next
+		// turn; an unsigned block therefore makes the follow-up request fail with
+		// "thinking.signature: Field required". Reasoning from adapted
+		// (non-Anthropic) upstreams is surfaced to OpenAI-shaped clients through
+		// reasoning_content instead, and native Anthropic thinking blocks are
+		// passed through verbatim by the native path above.
 		if replyText := choice.Message.GetContentString(); replyText != "" {
 			contentBlocks = append(contentBlocks, gin.H{
 				"type": "text",
@@ -135,11 +161,33 @@ func (h *Handler) handleAnthropicUnary(c *gin.Context, reqCtx context.Context, r
 		}
 	}
 
+	if len(contentBlocks) == 0 {
+		contentBlocks = append(contentBlocks, gin.H{
+			"type": "text",
+			"text": "",
+		})
+	}
+
 	inputTokens := 0
 	outputTokens := 0
+	cachedTokens := 0
 	if resp.Usage != nil {
-		inputTokens = resp.Usage.PromptTokens
+		cachedTokens = resp.Usage.GetCachedTokens()
+		// Anthropic's input_tokens excludes prompt-cache reads; our canonical
+		// PromptTokens includes them, so subtract before rendering the response.
+		inputTokens = resp.Usage.PromptTokens - cachedTokens
+		if inputTokens < 0 {
+			inputTokens = 0
+		}
 		outputTokens = resp.Usage.CompletionTokens
+	}
+
+	usagePayload := gin.H{
+		"input_tokens":  inputTokens,
+		"output_tokens": outputTokens,
+	}
+	if cachedTokens > 0 {
+		usagePayload["cache_read_input_tokens"] = cachedTokens
 	}
 
 	anthropicResp := gin.H{
@@ -149,10 +197,7 @@ func (h *Handler) handleAnthropicUnary(c *gin.Context, reqCtx context.Context, r
 		"model":       req.Model,
 		"content":     contentBlocks,
 		"stop_reason": stopReason,
-		"usage": gin.H{
-			"input_tokens":  inputTokens,
-			"output_tokens": outputTokens,
-		},
+		"usage":       usagePayload,
 	}
 
 	RecordUsage(c, AuditRecordParams{
@@ -160,47 +205,132 @@ func (h *Handler) handleAnthropicUnary(c *gin.Context, reqCtx context.Context, r
 		ChatID:           resp.ID,
 		Channel:          resp.Channel,
 		Model:            req.Model,
-		PromptTokens:     inputTokens,
+		PromptTokens:     inputTokens + cachedTokens,
 		CompletionTokens: outputTokens,
+		CachedTokens:     cachedTokens,
 		Duration:         time.Since(start),
 		StatusCode:       http.StatusOK,
+		UsageSource:      "upstream",
 	})
 
 	c.JSON(http.StatusOK, anthropicResp)
 }
 
-// HandleAnthropicCountTokens handles POST /v1/messages/count_tokens for Anthropic Claude SDK compatibility.
+// HandleAnthropicCountTokens delegates token counting to the upstream Anthropic
+// tokenizer when a native channel serves the model. Otherwise it returns a local
+// character-based estimate (flagged with X-Airoute-Token-Estimate) so that
+// Anthropic SDK clients keep working on OpenAI/Gemini-backed models.
 func (h *Handler) HandleAnthropicCountTokens(c *gin.Context) {
-	var req struct {
-		Model    string `json:"model"`
-		Messages []struct {
-			Role    string `json:"role"`
-			Content any    `json:"content"`
-		} `json:"messages"`
-		System any `json:"system,omitempty"`
-	}
+	var req model.AnthropicInboundRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		RespondAnthropicError(c, http.StatusBadRequest, "invalid request body", "invalid_request_error")
 		return
 	}
+	if req.Model == "" || len(req.Messages) == 0 {
+		RespondAnthropicError(c, http.StatusBadRequest, "model and messages are required", "invalid_request_error")
+		return
+	}
+	if !middleware.ValidateModelAllowed(c, req.Model) {
+		RespondAnthropicError(c, http.StatusForbidden, "model is not permitted for this API key", "permission_error")
+		return
+	}
+	channels := h.dispatcher.ResolveCandidateChannels(c.Request.Context(), req.Model, "anthropic_messages")
+	var lastErr error
+	for _, channel := range channels {
+		if channel.Type != model.ProviderAnthropic && !channel.HasExplicitProtocol("anthropic_messages") {
+			continue
+		}
+		payload := map[string]any{"model": channel.GetUpstreamModel(req.Model), "messages": req.Messages}
+		if req.System != nil {
+			payload["system"] = req.System
+		}
+		if len(req.Tools) > 0 {
+			payload["tools"] = req.Tools
+		}
+		if req.ToolChoice != nil {
+			payload["tool_choice"] = req.ToolChoice
+		}
+		if req.Thinking != nil {
+			payload["thinking"] = req.Thinking
+		}
+		body, err := json.Marshal(payload)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		// Shared URL builder: keeps /v1, /v1/messages and bare-base channels in
+		// sync with the provider package instead of duplicating the suffix table.
+		url := provider.BuildAnthropicURL(channel.BaseURL, "count_tokens")
+		httpReq, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, url, bytes.NewReader(body))
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		if channel.APIKey != "" && channel.APIKey != "none" {
+			httpReq.Header.Set("x-api-key", channel.APIKey)
+			httpReq.Header.Set("Authorization", "Bearer "+channel.APIKey)
+		}
+		httpReq.Header.Set("anthropic-version", "2023-06-01")
+		if beta := c.GetHeader("anthropic-beta"); beta != "" {
+			httpReq.Header.Set("anthropic-beta", beta)
+		}
+		resp, err := provider.SharedDefaultHTTPClient.Do(httpReq)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		responseBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		resp.Body.Close()
+		if readErr != nil {
+			lastErr = readErr
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			lastErr = fmt.Errorf("channel %s returned HTTP %d: %s", channel.Name, resp.StatusCode, responseBody)
+			continue
+		}
+		var result struct {
+			InputTokens int `json:"input_tokens"`
+		}
+		if err := json.Unmarshal(responseBody, &result); err != nil {
+			lastErr = err
+			continue
+		}
+		c.JSON(http.StatusOK, result)
+		return
+	}
+	if lastErr == nil {
+		// No native Anthropic channel serves this model (it is routed to an
+		// OpenAI/Gemini-compatible upstream). Anthropic SDK clients call
+		// /messages/count_tokens routinely before every turn, so returning 501
+		// here would break otherwise working clients. Fall back to a local
+		// character-based estimate and mark the response as approximate.
+		c.Header("X-Airoute-Token-Estimate", "true")
+		c.JSON(http.StatusOK, gin.H{"input_tokens": estimateAnthropicInputTokens(&req)})
+		return
+	}
+	RespondAnthropicError(c, http.StatusBadGateway, sanitizeErrorMessage(lastErr), "api_error")
+}
 
-	chars := 0
-	if req.System != nil {
-		if s, ok := req.System.(string); ok {
-			chars += len(s)
-		}
+// estimateAnthropicInputTokens provides a conservative local token estimate
+// (roughly 4 bytes per token) for models without a native Anthropic tokenizer.
+func estimateAnthropicInputTokens(req *model.AnthropicInboundRequest) int {
+	if req == nil {
+		return 1
 	}
+	chars := len(model.ExtractAnthropicContentString(req.System))
 	for _, m := range req.Messages {
-		if s, ok := m.Content.(string); ok {
-			chars += len(s)
+		chars += len(model.ExtractAnthropicContentString(m.Content))
+	}
+	if len(req.Tools) > 0 {
+		if b, err := json.Marshal(req.Tools); err == nil {
+			chars += len(b)
 		}
 	}
-	tokens := chars / 4
+	tokens := model.EstimateTokensFromChars(chars)
 	if tokens == 0 {
 		tokens = 1
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"input_tokens": tokens,
-	})
+	return tokens
 }

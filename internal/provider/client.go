@@ -7,9 +7,7 @@ import (
 	"time"
 )
 
-// SharedDefaultHTTPClient is a globally tuned, pre-warmed HTTP client designed for
-// extreme throughput and low latency. It reuses TCP/TLS connections across thousands of
-// concurrent upstream requests to prevent socket exhaustion and latency spikes.
+// SharedDefaultHTTPClient reuses connections opened on demand across upstream requests.
 var SharedDefaultHTTPClient = &http.Client{
 	Transport: &http.Transport{
 		Proxy: http.ProxyFromEnvironment,

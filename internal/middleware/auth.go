@@ -1,14 +1,25 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/config"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
+
+// authStorageTimeout bounds the per-request authoritative key/user lookups.
+// The in-memory snapshot already carries the quota data; the database read is a
+// consistency check, not something worth blocking a request (or the shared
+// SQLite connection) for.
+//
+// Deliberately uncached: budget/quota changes written outside this process must
+// be observed by the very next request, which a TTL cache would mask.
+const authStorageTimeout = 2 * time.Second
 
 const (
 	ContextKeyTenant       = "tenant_id"
@@ -24,7 +35,9 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		// If no API keys configured in system and no keys ever created, allow all requests in open dev mode.
 		// If keys have been registered in the gateway (even if currently disabled/revoked), strictly enforce auth!
-		if len(cfg.APIKeys) == 0 && !cfg.HasConfiguredKeys {
+		// Both fields are rewritten by the periodic hot reload, so they must be
+		// read through the locked accessors (see config.ActiveAPIKeyCount).
+		if cfg.ActiveAPIKeyCount() == 0 && !cfg.HasRegisteredAPIKeys() {
 			c.Next()
 			return
 		}
@@ -89,8 +102,10 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// 2. Key budget check (fast in-memory check first)
-		if effectiveKey.Budget > 0 && effectiveKey.UsedCost >= effectiveKey.Budget {
+		// 2. Key budget check (fast in-memory check first). Use the integer
+		// 1e-9-unit mirror when available so repeated float accumulation cannot
+		// drift across the budget boundary.
+		if budgetExceeded(effectiveKey.BudgetUnits, effectiveKey.UsedCostUnits, effectiveKey.Budget, effectiveKey.UsedCost) {
 			c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
 				"error": gin.H{
 					"message": "This API key has exceeded its assigned quota budget limit.",
@@ -101,10 +116,16 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// 3. Authoritative storage key check if database repository is available
+		// 3. Authoritative storage key check if database repository is available.
+		// Bounded by a short deadline: this runs on every data-plane request, so a
+		// stalled database must fail the request rather than pin the goroutine
+		// (and, on SQLite's single connection, the whole gateway).
 		repo := storage.GetGlobalRepository()
 		if repo != nil {
-			if keyRec, _ := repo.GetAPIKeyByKey(effectiveKey.Key); keyRec != nil {
+			lookupCtx, cancel := context.WithTimeout(c.Request.Context(), authStorageTimeout)
+			keyRec, _ := repo.GetAPIKeyByKeyContext(lookupCtx, effectiveKey.Key)
+			cancel()
+			if keyRec != nil {
 				if keyRec.Status != "" && keyRec.Status != "active" {
 					c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 						"error": gin.H{
@@ -119,7 +140,11 @@ func AuthMiddleware() gin.HandlerFunc {
 				if effectiveBudget <= 0 {
 					effectiveBudget = effectiveKey.Budget
 				}
-				if effectiveBudget > 0 && keyRec.UsedCost >= effectiveBudget {
+				budgetUnits := keyRec.BudgetUnits
+				if budgetUnits <= 0 {
+					budgetUnits = effectiveKey.BudgetUnits
+				}
+				if budgetExceeded(budgetUnits, keyRec.UsedCostUnits, effectiveBudget, keyRec.UsedCost) {
 					c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
 						"error": gin.H{
 							"message": "This API key has exceeded its assigned quota budget limit.",
@@ -146,7 +171,10 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		// Fallback to storage only if memory snapshot was not populated
 		if userStatus == "" && effectiveKey.UserID > 0 && repo != nil {
-			if u, _ := repo.GetUserByID(effectiveKey.UserID); u != nil {
+			lookupCtx, cancel := context.WithTimeout(c.Request.Context(), authStorageTimeout)
+			u, _ := repo.GetUserByIDContext(lookupCtx, effectiveKey.UserID)
+			cancel()
+			if u != nil {
 				userStatus = u.Status
 				userRole = u.Role
 				userBalance = u.Balance
@@ -181,7 +209,8 @@ func AuthMiddleware() gin.HandlerFunc {
 
 				// Pre-flight in-flight reservation to prevent concurrent overdraft storm
 				if userID > 0 {
-					if !globalQuotaTracker.TryAcquire(userID, userBalance) {
+					acquired, backend := globalQuotaTracker.TryAcquire(userID, userBalance)
+					if !acquired {
 						c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
 							"error": gin.H{
 								"message": "Concurrent requests exceed available wallet balance reserve. Please wait for pending requests to finish or recharge.",
@@ -191,7 +220,7 @@ func AuthMiddleware() gin.HandlerFunc {
 						})
 						return
 					}
-					defer globalQuotaTracker.Release(userID)
+					defer globalQuotaTracker.Release(userID, backend)
 				}
 			}
 		}
@@ -228,4 +257,19 @@ func ValidateModelAllowed(c *gin.Context, requestedModel string) bool {
 		}
 	}
 	return false
+}
+
+// budgetExceeded compares spend against a budget using integer nano-units when
+// the ledger mirror is populated, falling back to the float columns for legacy
+// rows.
+//
+// The previous condition required BOTH sides to be positive, so a key configured
+// with only budget_nano (float budget = 0) or a key that had not spent anything
+// yet bypassed the integer check entirely and could be unbounded. The integer
+// mirror is now authoritative whenever a budget is set in it.
+func budgetExceeded(budgetUnits, usedUnits int64, budget, used float64) bool {
+	if budgetUnits > 0 {
+		return usedUnits >= budgetUnits
+	}
+	return budget > 0 && used >= budget
 }

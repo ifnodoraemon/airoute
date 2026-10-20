@@ -45,6 +45,9 @@ func (r *Repository) ListSkills() ([]*SkillRecord, error) {
 		_ = json.Unmarshal([]byte(toolsStr), &s.Tools)
 		list = append(list, &s)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return list, nil
 }
 
@@ -132,11 +135,7 @@ func (r *Repository) IsSkillEnabled(id string) bool {
 
 // IsToolEnabled checks if any enabled skill contains this tool.
 func (r *Repository) IsToolEnabled(toolName string) bool {
-	if strings.HasPrefix(toolName, "airoute_search_skills") ||
-		strings.HasPrefix(toolName, "airoute_discover_skills") ||
-		strings.HasPrefix(toolName, "airoute_inspect_skill") ||
-		strings.HasPrefix(toolName, "airoute_get_skill_manifest") ||
-		strings.HasPrefix(toolName, "nano_") {
+	if strings.HasPrefix(toolName, "airoute_") {
 		return true
 	}
 	skills, err := r.ListSkills()

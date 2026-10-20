@@ -2,7 +2,7 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-replicaCount: 3
+replicaCount: 1
 
 image:
   repository: ghcr.io/ifnodoraemon/airoute
@@ -36,7 +36,7 @@ service:
   port: 8080
 
 ingress:
-  enabled: true
+  enabled: false
   className: "nginx"
   annotations:
     nginx.ingress.kubernetes.io/proxy-buffering: "off"
@@ -60,7 +60,7 @@ resources:
 
 autoscaling:
   enabled: false
-  minReplicas: 2
+  minReplicas: 1
   maxReplicas: 10
   targetCPUUtilizationPercentage: 80
   targetMemoryUtilizationPercentage: 80
@@ -72,10 +72,20 @@ affinity: {}
 # Persistence for SQLite database
 persistence:
   enabled: true
-  accessMode: ReadWriteMany # or ReadWriteOnce with Litestream/LiteFS
+  accessMode: ReadWriteOnce
   size: 5Gi
   storageClass: ""
   mountPath: /app/data
+
+# Optional Secret containing key "url" with a PostgreSQL DATABASE_URL.
+# Multi-replica operation also requires persistence.enabled=false and shared object storage.
+database:
+  existingSecret: ""
+
+# If unset, Helm creates a Secret with random admin-password and admin-secret keys.
+# Keep that Secret across upgrades. An existing Secret must contain both keys.
+auth:
+  existingSecret: ""
 
 # Initial configuration file
 config:

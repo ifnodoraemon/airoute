@@ -85,65 +85,85 @@ func (p *OpenAIProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 	clonedReq := *req
 	clonedReq.Model = targetModel
 	clonedReq.Stream = false
+	stripReasoningContent(clonedReq.Messages)
 
-	payloadBytes, err := json.Marshal(clonedReq)
-	if err != nil {
-		return nil, fmt.Errorf("marshal request error: %w", err)
-	}
-
-	targetURL := buildURL(channel.BaseURL)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(payloadBytes))
-	if err != nil {
-		return nil, fmt.Errorf("create http request error: %w", err)
-	}
-
-	httpReq.Header.Set("Content-Type", "application/json")
-	if channel.APIKey != "" && channel.APIKey != "none" {
-		httpReq.Header.Set("Authorization", "Bearer "+channel.APIKey)
-	}
-
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("do http request to %s error: %w", channel.Name, err)
-	}
-	defer resp.Body.Close()
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response body error: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		// Auto-heal context length overflow if max_tokens exceeded upstream model context limit
-		if resp.StatusCode == http.StatusBadRequest && req.MaxTokens != nil {
-			if safeMax, ok := extractClampedMaxTokens(bodyBytes); ok {
-				slog.Warn("auto-clamping max_tokens to fit upstream context limit",
-					"upstream", channel.Name,
-					"model", req.Model,
-					"original_max_tokens", *req.MaxTokens,
-					"clamped_max_tokens", safeMax,
-				)
-				retryReq := *req
-				retryReq.MaxTokens = &safeMax
-				return p.ChatComplete(ctx, &retryReq, channel)
-			}
+	for attempt := 0; ; attempt++ {
+		payloadBytes, err := json.Marshal(clonedReq)
+		if err != nil {
+			return nil, fmt.Errorf("marshal request error: %w", err)
 		}
-		return nil, fmt.Errorf("upstream %s returned status %d: %s", channel.Name, resp.StatusCode, string(bodyBytes))
+
+		targetURL := buildURL(channel.BaseURL)
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(payloadBytes))
+		if err != nil {
+			return nil, fmt.Errorf("create http request error: %w", err)
+		}
+
+		httpReq.Header.Set("Content-Type", "application/json")
+		if channel.APIKey != "" && channel.APIKey != "none" {
+			httpReq.Header.Set("Authorization", "Bearer "+channel.APIKey)
+		}
+
+		resp, err := p.client.Do(httpReq)
+		if err != nil {
+			return nil, fmt.Errorf("do http request to %s error: %w", channel.Name, err)
+		}
+
+		bodyBytes, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr != nil {
+			return nil, fmt.Errorf("read response body error: %w", readErr)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			// Auto-heal context length overflow at most once. Recurring on every
+			// 400 would let a misbehaving upstream drive an unbounded retry chain
+			// (each pass shrinking max_tokens by one).
+			if resp.StatusCode == http.StatusBadRequest && attempt == 0 && clonedReq.MaxTokens != nil {
+				if safeMax, ok := extractClampedMaxTokens(bodyBytes); ok && safeMax < *clonedReq.MaxTokens {
+					slog.Warn("auto-clamping max_tokens to fit upstream context limit",
+						"upstream", channel.Name,
+						"model", req.Model,
+						"original_max_tokens", *clonedReq.MaxTokens,
+						"clamped_max_tokens", safeMax,
+					)
+					clonedReq.MaxTokens = &safeMax
+					continue
+				}
+			}
+			return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
+		}
+
+		var chatResp model.ChatCompletionResponse
+		if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
+			return nil, fmt.Errorf("unmarshal chat response error: %w", err)
+		}
+		chatResp.Model = req.Model
+
+		SeparateReasoningInResponse(&chatResp)
+
+		return &chatResp, nil
 	}
+}
 
-	var chatResp model.ChatCompletionResponse
-	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
-		return nil, fmt.Errorf("unmarshal chat response error: %w", err)
+// stripReasoningContent removes historical reasoning traces from outbound
+// messages. reasoning_content is a DeepSeek-specific extension; strict
+// OpenAI-compatible endpoints (Azure OpenAI in particular) reject unknown
+// message fields with HTTP 400.
+func stripReasoningContent(messages []model.ChatMessage) {
+	for i := range messages {
+		messages[i].ReasoningContent = ""
 	}
-	chatResp.Model = req.Model
-
-	SeparateReasoningInResponse(&chatResp)
-
-	return &chatResp, nil
 }
 
 // ChatCompleteStream executes a streaming chat request.
 func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.ChatCompletionRequest, channel *model.ChannelConfig) (<-chan *model.StreamEvent, error) {
+	return p.chatCompleteStream(ctx, req, channel, true)
+}
+
+// chatCompleteStream is ChatCompleteStream with an explicit clamp-retry budget so
+// the context-overflow auto-heal can never recurse without bound.
+func (p *OpenAIProvider) chatCompleteStream(ctx context.Context, req *model.ChatCompletionRequest, channel *model.ChannelConfig, allowClamp bool) (<-chan *model.StreamEvent, error) {
 	targetModel := channel.GetUpstreamModel(req.Model)
 
 	// Automatic full-duplex streaming protocol adaptation for text completion upstreams (/v1/completions)
@@ -154,6 +174,8 @@ func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 	clonedReq := *req
 	clonedReq.Model = targetModel
 	clonedReq.Stream = true
+	clonedReq.StreamOptions = &model.StreamOptions{IncludeUsage: true}
+	stripReasoningContent(clonedReq.Messages)
 
 	payloadBytes, err := json.Marshal(clonedReq)
 	if err != nil {
@@ -178,24 +200,25 @@ func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 		resp.Body.Close()
 
-		// Auto-heal context length overflow if max_tokens exceeded upstream model context limit
-		if resp.StatusCode == http.StatusBadRequest && req.MaxTokens != nil {
-			if safeMax, ok := extractClampedMaxTokens(bodyBytes); ok {
+		// Auto-heal context length overflow at most once (see ChatComplete).
+		if allowClamp && resp.StatusCode == http.StatusBadRequest && clonedReq.MaxTokens != nil {
+			if safeMax, ok := extractClampedMaxTokens(bodyBytes); ok && safeMax < *clonedReq.MaxTokens {
 				slog.Warn("auto-clamping max_tokens in stream to fit upstream context limit",
 					"upstream", channel.Name,
 					"model", req.Model,
-					"original_max_tokens", *req.MaxTokens,
+					"original_max_tokens", *clonedReq.MaxTokens,
 					"clamped_max_tokens", safeMax,
 				)
 				retryReq := *req
 				retryReq.MaxTokens = &safeMax
-				return p.ChatCompleteStream(ctx, &retryReq, channel)
+				// allowClamp=false guarantees the retry cannot recurse further.
+				return p.chatCompleteStream(ctx, &retryReq, channel, false)
 			}
 		}
-		return nil, fmt.Errorf("upstream %s returned status %d: %s", channel.Name, resp.StatusCode, string(bodyBytes))
+		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
 	}
 
 	eventChan := make(chan *model.StreamEvent, 64)
@@ -217,6 +240,19 @@ func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 
 		var lastChunk *model.ChatCompletionChunk
 
+		// flushReasoning emits any text still held back by a partial tag.
+		flushReasoning := func() bool {
+			if lastChunk == nil {
+				return true
+			}
+			for _, flushedChunk := range reasoningAdapter.Flush(lastChunk) {
+				if !sendEvent(&model.StreamEvent{Chunk: flushedChunk}) {
+					return false
+				}
+			}
+			return true
+		}
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -226,10 +262,14 @@ func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 			}
 
 			line, err := reader.ReadBytes('\n')
-			if err != nil {
+			if err != nil && !(err == io.EOF && len(line) > 0) {
 				if err != io.EOF {
 					sendEvent(&model.StreamEvent{Err: err})
+					return
 				}
+				// Upstream closed without [DONE]: still flush buffered tag text
+				// so a trailing partial  thinking marker is not swallowed.
+				flushReasoning()
 				return
 			}
 
@@ -244,12 +284,8 @@ func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 
 			dataContent := strings.TrimSpace(strings.TrimPrefix(lineStr, "data:"))
 			if dataContent == "[DONE]" {
-				if lastChunk != nil {
-					for _, flushedChunk := range reasoningAdapter.Flush(lastChunk) {
-						if !sendEvent(&model.StreamEvent{Chunk: flushedChunk}) {
-							return
-						}
-					}
+				if !flushReasoning() {
+					return
 				}
 				sendEvent(&model.StreamEvent{IsDone: true})
 				return
@@ -279,4 +315,3 @@ func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 
 	return eventChan, nil
 }
-

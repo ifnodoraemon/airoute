@@ -53,6 +53,10 @@ func (h *MultimodalHandler) HandleVideoTask(c *gin.Context) {
 	if modelName == "" {
 		modelName = "cogvideox"
 	}
+	if !middleware.ValidateModelAllowed(c, modelName) {
+		RespondOpenAIError(c, http.StatusForbidden, fmt.Sprintf("Model '%s' is not allowed for your API key", modelName), "forbidden", "model_not_allowed")
+		return
+	}
 
 	sessionID := resolveGenericSessionID(c, "vid")
 	h.dispatchAndForward(c, &router.UpstreamRequest{

@@ -224,17 +224,19 @@ func (db *DB) migratePostgres() error {
 			Version: 4,
 			Name:    "rename_virtual_keys_to_api_keys",
 			Up: func(db *DB) error {
-				_, _ = db.DB.Exec(`
+				if _, err := db.DB.Exec(`
 				DO $$
 				BEGIN
-					IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'virtual_keys') THEN
+					IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'virtual_keys' AND table_schema = current_schema()) THEN
 						ALTER TABLE virtual_keys RENAME TO api_keys;
 					END IF;
 					IF EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'usage_logs' AND column_name = 'virtual_key') THEN
 						ALTER TABLE usage_logs RENAME COLUMN virtual_key TO api_key;
 					END IF;
 				END $$;
-				`)
+				`); err != nil {
+					return err
+				}
 				return nil
 			},
 		},
@@ -242,14 +244,16 @@ func (db *DB) migratePostgres() error {
 			Version: 5,
 			Name:    "add_format_validation_to_api_keys",
 			Up: func(db *DB) error {
-				_, _ = db.DB.Exec(`
+				if _, err := db.DB.Exec(`
 				DO $$
 				BEGIN
 					IF NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'api_keys' AND column_name = 'format_validation') THEN
 						ALTER TABLE api_keys ADD COLUMN format_validation VARCHAR(32) DEFAULT '';
 					END IF;
 				END $$;
-				`)
+				`); err != nil {
+					return err
+				}
 				return nil
 			},
 		},
@@ -257,14 +261,16 @@ func (db *DB) migratePostgres() error {
 			Version: 6,
 			Name:    "clean_legacy_orphan_api_keys",
 			Up: func(db *DB) error {
-				_, _ = db.DB.Exec(`
+				if _, err := db.DB.Exec(`
 					UPDATE api_keys 
 					SET user_id = COALESCE((SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1), 1)
 					WHERE user_id <= 0 OR user_id NOT IN (SELECT id FROM users);
 					UPDATE api_keys SET group_name = 'default' WHERE group_name IS NULL OR group_name = '';
 					UPDATE api_keys SET status = 'active' WHERE status IS NULL OR status = '';
 					UPDATE api_keys SET format_validation = '' WHERE format_validation IS NULL;
-				`)
+				`); err != nil {
+					return err
+				}
 				return nil
 			},
 		},
@@ -325,7 +331,9 @@ func (db *DB) migratePostgres() error {
 			Version: 9,
 			Name:    "add_attempts_to_verification_codes",
 			Up: func(db *DB) error {
-				_, _ = db.DB.Exec("ALTER TABLE verification_codes ADD COLUMN IF NOT EXISTS attempts INT DEFAULT 0;")
+				if _, err := db.DB.Exec("ALTER TABLE verification_codes ADD COLUMN IF NOT EXISTS attempts INT DEFAULT 0;"); err != nil {
+					return err
+				}
 				return nil
 			},
 		},
@@ -338,6 +346,139 @@ func (db *DB) migratePostgres() error {
 					CREATE INDEX IF NOT EXISTS idx_usage_channel_created ON usage_logs(channel, created_at);
 				`)
 				return err
+			},
+		},
+		{
+			Version: 11,
+			Name:    "add_usage_source_to_usage_logs",
+			Up: func(db *DB) error {
+				_, err := db.DB.Exec("ALTER TABLE usage_logs ADD COLUMN IF NOT EXISTS usage_source VARCHAR(16) DEFAULT 'upstream';")
+				return err
+			},
+		},
+		{
+			Version: 12,
+			Name:    "add_integer_money_columns",
+			Up: func(db *DB) error {
+				stmts := []string{
+					"ALTER TABLE users ADD COLUMN IF NOT EXISTS balance_units BIGINT DEFAULT 0;",
+					"ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS used_cost_units BIGINT DEFAULT 0;",
+					"ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS budget_units BIGINT DEFAULT 0;",
+					"ALTER TABLE usage_logs ADD COLUMN IF NOT EXISTS cost_units BIGINT DEFAULT 0;",
+					"UPDATE users SET balance_units = ROUND(balance * 1000000000)::BIGINT WHERE balance_units = 0 AND balance <> 0;",
+					"UPDATE api_keys SET used_cost_units = ROUND(used_cost * 1000000000)::BIGINT, budget_units = ROUND(budget * 1000000000)::BIGINT WHERE used_cost_units = 0 AND used_cost <> 0;",
+				}
+				for _, stmt := range stmts {
+					if _, err := db.DB.Exec(stmt); err != nil {
+						return err
+					}
+				}
+				return nil
+			},
+		},
+		{
+			Version: 14,
+			Name:    "add_error_message_to_usage_logs",
+			Up: func(db *DB) error {
+				_, err := db.DB.Exec("ALTER TABLE usage_logs ADD COLUMN IF NOT EXISTS error_message TEXT DEFAULT '';")
+				return err
+			},
+		},
+		{
+			Version: 13,
+			Name:    "create_request_traces",
+			Up: func(db *DB) error {
+				_, err := db.DB.Exec(`
+					CREATE TABLE IF NOT EXISTS request_traces (
+						id BIGSERIAL PRIMARY KEY,
+						trace_id TEXT NOT NULL,
+						chat_id TEXT DEFAULT '',
+						session_id TEXT DEFAULT '',
+						api_key TEXT DEFAULT '',
+						tenant_id TEXT DEFAULT '',
+						model TEXT DEFAULT '',
+						channel TEXT DEFAULT '',
+						status_code INT DEFAULT 0,
+						error_message TEXT DEFAULT '',
+						request_snippet TEXT DEFAULT '',
+						response_snippet TEXT DEFAULT '',
+						duration_ms BIGINT DEFAULT 0,
+						created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+					);
+					CREATE INDEX IF NOT EXISTS idx_trace_trace_id ON request_traces(trace_id);
+					CREATE INDEX IF NOT EXISTS idx_trace_chat_id ON request_traces(chat_id);
+					CREATE INDEX IF NOT EXISTS idx_trace_session ON request_traces(session_id);
+					CREATE INDEX IF NOT EXISTS idx_trace_created ON request_traces(created_at);
+				`)
+				return err
+			},
+		},
+		{
+			// Version 12 originally created the *_nano money columns and was
+			// applied to existing deployments. It was later edited in place to
+			// create *_units instead, so databases that had already recorded
+			// version 12 kept the *_nano columns and never received *_units —
+			// every api_keys read and usage_logs insert then failed with
+			// `column "budget_units" does not exist`.
+			//
+			// This migration is the forward-only repair: it guarantees the
+			// *_units columns exist and backfills them from the legacy *_nano
+			// columns when those are still present. It is idempotent and safe on
+			// fresh databases (which already have *_units from version 12).
+			Version: 15,
+			Name:    "repair_integer_money_units_columns",
+			Up: func(db *DB) error {
+				stmts := []string{
+					"ALTER TABLE users ADD COLUMN IF NOT EXISTS balance_units BIGINT DEFAULT 0;",
+					"ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS used_cost_units BIGINT DEFAULT 0;",
+					"ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS budget_units BIGINT DEFAULT 0;",
+					"ALTER TABLE usage_logs ADD COLUMN IF NOT EXISTS cost_units BIGINT DEFAULT 0;",
+					// Backfill from the legacy columns only when they exist. The
+					// float columns are the authoritative display source and are
+					// mirrored here so ledger reads stop returning zero.
+					`DO $$
+					BEGIN
+						IF EXISTS (SELECT 1 FROM information_schema.columns
+						           WHERE table_schema = current_schema()
+						             AND table_name = 'users' AND column_name = 'balance_nano') THEN
+							UPDATE users SET balance_units = balance_nano
+							 WHERE balance_units = 0 AND balance_nano <> 0;
+						END IF;
+
+						IF EXISTS (SELECT 1 FROM information_schema.columns
+						           WHERE table_schema = current_schema()
+						             AND table_name = 'api_keys' AND column_name = 'used_cost_nano') THEN
+							UPDATE api_keys
+							   SET used_cost_units = used_cost_nano
+							 WHERE used_cost_units = 0 AND used_cost_nano <> 0;
+						END IF;
+
+						IF EXISTS (SELECT 1 FROM information_schema.columns
+						           WHERE table_schema = current_schema()
+						             AND table_name = 'api_keys' AND column_name = 'budget_nano') THEN
+							UPDATE api_keys SET budget_units = budget_nano
+							 WHERE budget_units = 0 AND budget_nano <> 0;
+						END IF;
+
+						IF EXISTS (SELECT 1 FROM information_schema.columns
+						           WHERE table_schema = current_schema()
+						             AND table_name = 'usage_logs' AND column_name = 'cost_nano') THEN
+							UPDATE usage_logs SET cost_units = cost_nano
+							 WHERE cost_units = 0 AND cost_nano <> 0;
+						END IF;
+					END $$;`,
+					// Anything still at zero but with a non-zero float value is
+					// legacy data that predates both mirrors.
+					"UPDATE users SET balance_units = ROUND(balance * 1000000000)::BIGINT WHERE balance_units = 0 AND balance <> 0;",
+					"UPDATE api_keys SET used_cost_units = ROUND(used_cost * 1000000000)::BIGINT WHERE used_cost_units = 0 AND used_cost <> 0;",
+					"UPDATE api_keys SET budget_units = ROUND(budget * 1000000000)::BIGINT WHERE budget_units = 0 AND budget <> 0;",
+				}
+				for _, stmt := range stmts {
+					if _, err := db.DB.Exec(stmt); err != nil {
+						return err
+					}
+				}
+				return nil
 			},
 		},
 	}

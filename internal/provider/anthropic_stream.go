@@ -24,10 +24,7 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 		return nil, fmt.Errorf("marshal anthropic request error: %w", err)
 	}
 
-	baseURL := strings.TrimRight(channel.BaseURL, "/")
-	if !strings.HasSuffix(baseURL, "/v1/messages") {
-		baseURL += "/v1/messages"
-	}
+	baseURL := buildAnthropicURL(channel.BaseURL)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL, bytes.NewReader(payloadBytes))
 	if err != nil {
@@ -36,8 +33,14 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
-	httpReq.Header.Set("x-api-key", channel.APIKey)
+	if channel.APIKey != "" && channel.APIKey != "none" {
+		httpReq.Header.Set("x-api-key", channel.APIKey)
+		httpReq.Header.Set("Authorization", "Bearer "+channel.APIKey)
+	}
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
+	if req.AnthropicBeta != "" {
+		httpReq.Header.Set("anthropic-beta", req.AnthropicBeta)
+	}
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
@@ -47,7 +50,7 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return nil, fmt.Errorf("upstream anthropic %s returned %d: %s", channel.Name, resp.StatusCode, string(bodyBytes))
+		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
 	}
 
 	eventChan := make(chan *model.StreamEvent, 64)
@@ -63,6 +66,8 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 		var currentEvent string
 		inputTokens := 0
 		outputTokens := 0
+		cacheReadTokens := 0
+		cacheCreationTokens := 0
 
 		sendEvent := func(ev *model.StreamEvent) bool {
 			select {
@@ -85,7 +90,9 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 			if err != nil {
 				if err != io.EOF {
 					sendEvent(&model.StreamEvent{Err: err})
+					return
 				}
+				sendEvent(&model.StreamEvent{IsDone: true})
 				return
 			}
 
@@ -105,6 +112,24 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 				if err := json.Unmarshal([]byte(dataStr), &eventMap); err != nil {
 					continue
 				}
+				// Anthropic can abort a stream with an `event: error` frame at any
+				// point. Handle it for BOTH paths: previously the adapted
+				// (OpenAI-shaped) path fell through the switch and silently
+				// dropped it, so the downstream client saw a truncated but
+				// "successful" 200 stream.
+				if currentEvent == "error" {
+					sendEvent(&model.StreamEvent{Err: fmt.Errorf("upstream anthropic stream error: %s", dataStr)})
+					return
+				}
+				if req.AnthropicOriginal != nil {
+					if !sendEvent(&model.StreamEvent{NativeAnthropicEvent: []byte(dataStr), NativeAnthropicType: currentEvent, IsDone: currentEvent == "message_stop"}) {
+						return
+					}
+					if currentEvent == "message_stop" {
+						return
+					}
+					continue
+				}
 
 				switch currentEvent {
 				case "message_start":
@@ -115,6 +140,12 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 						if u, ok := msgObj["usage"].(map[string]any); ok {
 							if in, ok := u["input_tokens"].(float64); ok {
 								inputTokens = int(in)
+							}
+							if cr, ok := u["cache_read_input_tokens"].(float64); ok {
+								cacheReadTokens = int(cr)
+							}
+							if cc, ok := u["cache_creation_input_tokens"].(float64); ok {
+								cacheCreationTokens = int(cc)
 							}
 						}
 					}
@@ -230,6 +261,15 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 
 				case "message_delta":
 					if u, ok := eventMap["usage"].(map[string]any); ok {
+						if in, ok := u["input_tokens"].(float64); ok {
+							inputTokens = int(in)
+						}
+						if cached, ok := u["cache_read_input_tokens"].(float64); ok {
+							cacheReadTokens = int(cached)
+						}
+						if created, ok := u["cache_creation_input_tokens"].(float64); ok {
+							cacheCreationTokens = int(created)
+						}
 						if out, ok := u["output_tokens"].(float64); ok {
 							outputTokens = int(out)
 						}
@@ -258,9 +298,15 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 							},
 						},
 						Usage: &model.Usage{
-							PromptTokens:     inputTokens,
+							PromptTokens:     inputTokens + cacheReadTokens + cacheCreationTokens,
 							CompletionTokens: outputTokens,
-							TotalTokens:      inputTokens + outputTokens,
+							TotalTokens:      inputTokens + cacheReadTokens + cacheCreationTokens + outputTokens,
+							PromptTokensDetails: func() *model.PromptTokensDetails {
+								if cacheReadTokens > 0 {
+									return &model.PromptTokensDetails{CachedTokens: cacheReadTokens}
+								}
+								return nil
+							}(),
 						},
 					}
 					if !sendEvent(&model.StreamEvent{Chunk: chunk}) {

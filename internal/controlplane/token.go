@@ -16,18 +16,15 @@ import (
 
 var (
 	// Secure shared secret across cluster replicas for stateless HMAC token verification.
-	// Reads GATEWAY_ADMIN_SECRET or NANO_SECRET_KEY, falling back to a cryptographically secure random secret.
+	// Reads GATEWAY_ADMIN_SECRET, falling back to a cryptographically secure random secret.
 	adminSecret = func() []byte {
 		sec := os.Getenv("GATEWAY_ADMIN_SECRET")
-		if sec == "" {
-			sec = os.Getenv("NANO_SECRET_KEY")
-		}
 		if sec == "" {
 			b := make([]byte, 32)
 			if _, err := rand.Read(b); err == nil {
 				sec = hex.EncodeToString(b)
 			} else {
-				sec = fmt.Sprintf("airoute-rnd-%d", time.Now().UnixNano())
+				sec = fmt.Sprintf("airoute-rnd-%d", time.Now().UnixMicro())
 			}
 		}
 		return []byte(sec)

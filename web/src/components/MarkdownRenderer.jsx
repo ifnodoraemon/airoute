@@ -8,7 +8,6 @@ import {
   AlertTriangle,
   ShieldAlert,
   ExternalLink,
-  ChevronRight,
   Square,
   CheckSquare,
   FileCode,
@@ -17,14 +16,40 @@ import {
 } from 'lucide-react';
 import { copyToClipboard as crossOriginCopy } from '../config';
 
-// 1. Syntax colorizer helper for code blocks
+function safeMarkdownUrl(value, image = false) {
+  const url = (value || '').trim();
+  if (image && /^data:image\/(png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/i.test(url)) return url;
+  if (url.startsWith('#')) return image ? null : url;
+  try {
+    const parsed = new URL(url, window.location.origin);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:' || (!image && parsed.protocol === 'mailto:')) return url;
+  } catch {
+    // Invalid URLs are rendered as text.
+  }
+  return null;
+}
+
+function highlightMatches(code, regex, classify) {
+  const nodes = [];
+  let offset = 0;
+  for (const match of code.matchAll(regex)) {
+    if (match.index > offset) nodes.push(code.slice(offset, match.index));
+    nodes.push(<span key={match.index} className={classify(match[0])}>{match[0]}</span>);
+    offset = match.index + match[0].length;
+  }
+  if (offset < code.length) nodes.push(code.slice(offset));
+  return nodes;
+}
+
+// 1. Syntax colorizer helper for code blocks. React escapes every code fragment.
 function renderHighlightedCode(code = '', lang = '') {
   const normalizedLang = (lang || '').toLowerCase().trim();
 
   // JSON syntax highlighting
   if (normalizedLang === 'json') {
-    const highlighted = code.replace(
-      /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+    return <span>{highlightMatches(
+      code,
+      /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g,
       (match) => {
         let cls = 'text-amber-400'; // number
         if (/^"/.test(match)) {
@@ -38,39 +63,34 @@ function renderHighlightedCode(code = '', lang = '') {
         } else if (/null/.test(match)) {
           cls = 'text-rose-400 font-bold'; // null
         }
-        return `<span class="${cls}">${match}</span>`;
+        return cls;
       }
-    );
-    return <span dangerouslySetInnerHTML={{ __html: highlighted }} />;
+    )}</span>;
   }
 
   // Shell / Bash / cURL syntax highlighting
   if (['bash', 'sh', 'shell', 'zsh', 'curl'].includes(normalizedLang)) {
     const lines = code.split('\n');
-    const highlighted = lines.map(line => {
+    return <span>{lines.map((line, index) => {
       const trimmed = line.trim();
       if (trimmed.startsWith('#')) {
-        return `<span class="text-slate-500 italic">${line}</span>`;
+        return <React.Fragment key={index}><span className="text-slate-500 italic">{line}</span>{index < lines.length - 1 && '\n'}</React.Fragment>;
       }
-      let l = line.replace(/(\$[A-Z0-9_]+|\${[A-Z0-9_]+})/g, '<span class="text-amber-400 font-semibold">$1</span>');
-      l = l.replace(/(^|\s)(--?[a-zA-Z0-9_-]+)/g, '$1<span class="text-sky-300 font-medium">$2</span>');
-      return l;
-    }).join('\n');
-    return <span dangerouslySetInnerHTML={{ __html: highlighted }} />;
+      return <React.Fragment key={index}>{highlightMatches(line, /(\$[A-Z0-9_]+|\${[A-Z0-9_]+}|--?[a-zA-Z0-9_-]+)/g, match => match.startsWith('-') ? 'text-sky-300 font-medium' : 'text-amber-400 font-semibold')}{index < lines.length - 1 && '\n'}</React.Fragment>;
+    })}</span>;
   }
 
   // Python syntax highlighting
   if (['python', 'py'].includes(normalizedLang)) {
     const keywords = /\b(def|class|import|from|as|return|if|elif|else|for|while|try|except|finally|with|in|is|not|and|or|lambda|yield|True|False|None|async|await)\b/g;
     const lines = code.split('\n');
-    const highlighted = lines.map(line => {
+    return <span>{lines.map((line, index) => {
       const trimmed = line.trim();
       if (trimmed.startsWith('#')) {
-        return `<span class="text-slate-500 italic">${line}</span>`;
+        return <React.Fragment key={index}><span className="text-slate-500 italic">{line}</span>{index < lines.length - 1 && '\n'}</React.Fragment>;
       }
-      return line.replace(keywords, '<span class="text-purple-400 font-bold">$1</span>');
-    }).join('\n');
-    return <span dangerouslySetInnerHTML={{ __html: highlighted }} />;
+      return <React.Fragment key={index}>{highlightMatches(line, keywords, () => 'text-purple-400 font-bold')}{index < lines.length - 1 && '\n'}</React.Fragment>;
+    })}</span>;
   }
 
   // Default plaintext code
@@ -111,11 +131,13 @@ export function RenderInline({ tokens = [] }) {
         );
 
       case 'link': {
-        const isHash = (token.href || '').startsWith('#');
+        const href = safeMarkdownUrl(token.href);
+        if (!href) return <span key={idx}><RenderInline tokens={token.tokens} /></span>;
+        const isHash = href.startsWith('#');
         return (
           <a
             key={idx}
-            href={token.href}
+            href={href}
             target={isHash ? '_self' : '_blank'}
             rel={isHash ? '' : 'noopener noreferrer'}
             className="inline-flex items-center gap-0.5 text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 font-medium underline underline-offset-2 decoration-indigo-400/50 hover:decoration-indigo-500 transition-colors"
@@ -128,41 +150,44 @@ export function RenderInline({ tokens = [] }) {
 
       case 'del':
         return (
-          <del key={idx} className="line-through text-slate-400">
+          <del key={idx} className="line-through text-slate-500 dark:text-slate-400">
             <RenderInline tokens={token.tokens} />
           </del>
         );
 
-      case 'image':
+      case 'image': {
+        const src = safeMarkdownUrl(token.href, true);
+        if (!src) return <span key={idx}>{token.text || ''}</span>;
         return (
           <span key={idx} className="inline-block my-1.5 max-w-full">
             <img
-              src={token.href}
+              src={src}
               alt={token.text || 'image'}
               className="rounded-xl border border-slate-200 dark:border-slate-800 max-h-60 object-contain shadow-xs"
             />
             {token.text && (
-              <span className="block text-[10px] text-center text-slate-400 mt-1 italic">
+              <span className="block text-xs text-center text-slate-500 dark:text-slate-400 mt-1 italic">
                 {token.text}
               </span>
             )}
           </span>
         );
+      }
 
       case 'html': {
         const raw = token.text || token.raw || '';
-        const kbdMatch = raw.match(/<kbd>([^<]+)<\/kbd>/i);
+        const kbdMatch = raw.match(/^<kbd>([^<]+)<\/kbd>$/i);
         if (kbdMatch) {
           return (
             <kbd
               key={idx}
-              className="px-1.5 py-0.5 mx-0.5 text-[10px] font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300/80 dark:border-slate-700 rounded-md shadow-2xs"
+              className="px-1.5 py-0.5 mx-0.5 text-xs font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300/80 dark:border-slate-700 rounded-md shadow-2xs"
             >
               {kbdMatch[1]}
             </kbd>
           );
         }
-        return <span key={idx} dangerouslySetInnerHTML={{ __html: raw }} />;
+        return <span key={idx}>{raw}</span>;
       }
 
       case 'escape':
@@ -195,7 +220,7 @@ function CodeBlock({ code = '', lang = '' }) {
   return (
     <div className="my-3 rounded-xl border border-slate-800 bg-slate-950 text-slate-100 overflow-hidden shadow-md">
       {/* Code Header Bar */}
-      <div className="flex items-center justify-between px-3.5 py-2 bg-slate-900 border-b border-slate-800/80 text-[11px] text-slate-400 font-mono">
+      <div className="flex items-center justify-between px-3.5 py-2 bg-slate-900 border-b border-slate-800/80 text-xs text-slate-400 font-mono">
         <div className="flex items-center space-x-2">
           {cleanLang === 'json' ? (
             <FileCode className="w-3.5 h-3.5 text-amber-400" />
@@ -204,11 +229,11 @@ function CodeBlock({ code = '', lang = '' }) {
           ) : (
             <Code className="w-3.5 h-3.5 text-indigo-400" />
           )}
-          <span className="font-semibold uppercase tracking-wider text-[10px] text-slate-300">
+          <span className="font-semibold uppercase tracking-wider text-xs text-slate-300">
             {cleanLang}
           </span>
           {lineCount > 1 && (
-            <span className="text-[10px] text-slate-500">
+            <span className="text-xs text-slate-400">
               ({lineCount} lines)
             </span>
           )}
@@ -218,7 +243,7 @@ function CodeBlock({ code = '', lang = '' }) {
           <button
             type="button"
             onClick={() => setIsWrapped(!isWrapped)}
-            className="text-[10px] text-slate-400 hover:text-slate-200 transition cursor-pointer px-1.5 py-0.5 rounded hover:bg-slate-800"
+            className="text-xs text-slate-400 hover:text-slate-200 transition cursor-pointer px-1.5 py-0.5 rounded hover:bg-slate-800"
             title={isWrapped ? '切换单行滚动' : '切换自动换行'}
           >
             {isWrapped ? 'Nowrap' : 'Wrap'}
@@ -226,7 +251,7 @@ function CodeBlock({ code = '', lang = '' }) {
           <button
             type="button"
             onClick={handleCopy}
-            className="inline-flex items-center gap-1 text-slate-300 hover:text-white transition cursor-pointer px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] shadow-xs"
+            className="inline-flex items-center gap-1 text-slate-300 hover:text-white transition cursor-pointer px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-xs shadow-xs"
             title="复制代码"
           >
             {copied ? (
@@ -393,7 +418,7 @@ function BlockquoteBlock({ tokens = [], rawText = '' }) {
 
     return (
       <div className={`my-3 p-3 rounded-xl border ${cfg.border} ${cfg.bg} ${cfg.text} text-xs`}>
-        <div className={`flex items-center gap-1.5 font-bold ${cfg.title} mb-1.5 text-[11px]`}>
+        <div className={`flex items-center gap-1.5 font-bold ${cfg.title} mb-1.5 text-xs`}>
           {cfg.icon}
           <span>{cfg.label}</span>
         </div>
@@ -428,7 +453,7 @@ function TableBlock({ header = [], rows = [], align = [] }) {
             {header.map((col, idx) => (
               <th
                 key={idx}
-                className="py-2.5 px-3.5 text-[11px] font-semibold tracking-tight"
+                className="py-2.5 px-3.5 text-xs font-semibold tracking-tight"
                 style={{ textAlign: align[idx] || 'left' }}
               >
                 <RenderInline tokens={col.tokens} />
@@ -540,17 +565,22 @@ function RenderBlockToken({ token }) {
 
 // 8. Main Markdown Renderer Component
 export default function MarkdownRenderer({ content = '' }) {
-  if (!content) return null;
-
   // Auto-close unclosed markdown code fences if streaming cut off in the middle
   const normalizedContent = useMemo(() => {
     let text = content;
     const tripleBackticks = (text.match(/```/g) || []).length;
     if (tripleBackticks % 2 !== 0) {
-      text += '\n```';
+      // Close the fence that the stream has not finished yet. The newline is added
+      // only when the text does not already end with one: appending "\n```"
+      // unconditionally put an extra blank line inside the code block, which the
+      // block's own line counter then reported ("4 lines" for three lines of code).
+      if (!text.endsWith('\n')) text += '\n';
+      text += '```';
     }
     return text;
   }, [content]);
+
+  if (!content) return null;
 
   let tokens = [];
   try {

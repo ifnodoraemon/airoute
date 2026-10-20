@@ -11,28 +11,10 @@ server:
   port: 8080
   read_timeout_sec: 120
   write_timeout_sec: 120
-  max_header_bytes: 1048576
+  redis_url: "${REDIS_URL}"
 
-database:
-  driver: "sqlite"
-  dsn: "airoute.db"
-  # For PostgreSQL:
-  # driver: "postgres"
-  # dsn: "postgres://user:password@localhost:5432/airoute?sslmode=disable"
-
-# High-Performance HTTP Connection Pool
-connection_pool:
-  max_idle_conns: 2048
-  max_idle_conns_per_host: 256
-  idle_conn_timeout_sec: 90
-  tls_handshake_timeout_sec: 10
-  disable_compression: false
-
-# Circuit Breaker & Safe Fallback Window
-circuit_breaker:
-  consecutive_failures: 3       # Trip breaker to OPEN after 3 consecutive failures
-  cooldown_seconds: 30          # Wait 30s in OPEN state before canary HALF-OPEN probe
-  half_open_probes: 2           # Successful canary probes needed to return to CLOSED
+# Database is selected by command-line -db for SQLite or DATABASE_URL for PostgreSQL.
+# HTTP transport and circuit-breaker limits are currently code defaults, not YAML keys.
 
 # Initial Channels (Can also be managed dynamically via Web UI / SQLite)
 channels:
@@ -82,7 +64,7 @@ channels:
 
 # 客户端 API 访问密钥 (Client API Keys, 可通过 Web 控制台动态签发)
 api_keys:
-  - key: "sk-nano-8f92a1c4b7e3"
+  - key: "sk-airoute-8f92a1c4b7e3"
     tenant_id: "engineering-dept"
     allowed_models: []          # Empty means all models permitted
     rpm: 120                    # Rate limit: 120 requests/minute
@@ -93,15 +75,32 @@ api_keys:
 
 ## 2. Environment Variables
 
-All settings can be overridden via environment variables for cloud-native Docker / K8s deployments:
+The following environment variables are read by the server. YAML supports `${NAME}` and `${NAME:-default}` expansion.
 
 | Environment Variable | Default Value | Description |
 | :--- | :--- | :--- |
 | `GATEWAY_PORT` | `8080` | HTTP listen port |
 | `GATEWAY_CONFIG` | `configs/config.yaml` | Path to YAML configuration file |
-| `GATEWAY_DB_DRIVER` | `sqlite` | Database driver (`sqlite` or `postgres`) |
-| `GATEWAY_DB_DSN` | `airoute.db` | Database connection DSN or SQLite file path |
+| `DATABASE_URL` | unset | PostgreSQL connection URL; when unset, SQLite uses the `-db` path |
+| `GATEWAY_ADMIN_PASSWORD` | `admin123` outside Helm | Initial admin password; set a strong value before exposing the console |
+| `GATEWAY_ADMIN_SECRET` | random per process outside Helm | HMAC secret; use one stable shared value for multiple replicas |
+| `REDIS_URL` | unset | Optional Redis Streams logging queue |
+| `GATEWAY_FIRST_TOKEN_TIMEOUT` | 30 seconds (60 for reasoning model names) | Upper bound in seconds for the first content token, capped by channel timeout |
 | `GIN_MODE` | `release` | Web engine mode (`release` or `debug`) |
+| `GATEWAY_MAX_BODY_BYTES` | `67108864` (64 MiB) | Maximum accepted request body size |
+| `GATEWAY_TRACE_CAPTURE` | `errors` | Request/response snapshot archiving: `off`, `errors` or `all` |
+| `GATEWAY_TRACE_SAMPLE` | `100` | Percentage of **successful** requests captured when mode is `all` |
+| `GATEWAY_TRACE_TTL_HOURS` | `72` | Retention window for archived snapshots |
+| `GATEWAY_TRACE_MAX_SNIPPET` | `4096` | Maximum bytes retained per request/response snippet |
+| `GATEWAY_METRICS_TOKEN` | unset | When set, `/metrics` requires `Authorization: Bearer <token>` |
+| `GATEWAY_PUBLIC_STATUS` | `true` | Set `false` to hide the model catalog on the public status page |
+| `GATEWAY_BLOCK_PRIVATE_PROBE` | `false` | Reject probing RFC1918 private upstream addresses |
+| `GATEWAY_BLOCK_LOOPBACK_PROBE` | `false` | Reject probing loopback upstream addresses |
+| `AIROUTE_DEV_VERIFICATION_CODE` | unset | Set `true` to return email verification codes in API responses (development only) |
+
+Snapshots are redacted (API keys, tokens, passwords) before storage and are queryable at `GET /api/v1/admin/traces?trace_id=…` (admin only; regular users see only their own keys).
+
+Helm defaults to one SQLite pod with a ReadWriteOnce volume and creates a Kubernetes Secret for the admin password and signing secret. For multiple replicas, provide `database.existingSecret` with key `url` containing a PostgreSQL URL and set `persistence.enabled=false`; configure shared object storage if artifacts must be accessible from every pod. Helm refuses a multi-replica SQLite deployment. Retrieve the generated admin password with `kubectl get secret <fullname>-auth -o jsonpath='{.data.admin-password}' | base64 -d` (for the default `airoute` release, `<fullname>` is `airoute`). Keep the Secret across upgrades.
 
 ---
 
@@ -147,7 +146,10 @@ Airoute implements a Tri-State Circuit Breaker state machine:
 ### Safe Fallback Window
 When streaming requests fail:
 - If an upstream returns HTTP `429`, `500`, or network error **before the first token is emitted to the client**, the gateway seamlessly retries with the next healthy backup provider.
-- Zero error frames or disconnects are experienced by the client.
+- Failover is possible until a content token or tool call is emitted. Errors after that point are sent on the active stream.
+
+### Multimodal billing
+Images use the configured `fixed_price` per requested image (`n`, default 1). Audio and video creation use one configured fixed-price unit per successful request; video task polling is not billed. These are gateway prices, not live upstream invoices. A multimodal model with no positive fixed price is rejected with `pricing_not_configured`; set `GATEWAY_ALLOW_UNPRICED_MULTIMODAL=1` only when zero-cost forwarding is intentional.
 
 ---
 
@@ -182,3 +184,10 @@ api_keys:
     format_validation: "strict"
 ```
 
+
+### Rate limiting and sessions
+
+- **RPM** is enforced with a distributed Redis sliding window (or a local token bucket without Redis).
+- **TPM** is enforced with a per-key, one-minute sliding window and reports `X-RateLimit-Limit-Tokens` / `X-RateLimit-Remaining-Tokens`; over-budget requests get `429` with `Retry-After: 60`.
+- **Sessions** are cookie-based: login sets an HttpOnly `airoute_session` cookie plus a readable `airoute_csrf` cookie. State-changing requests authenticated by cookie must echo the CSRF value in `X-CSRF-Token`. API clients keep using `Authorization: Bearer`.
+- **Login throttling** locks an account/IP pair for 15 minutes after 5 consecutive failures (HTTP 429).

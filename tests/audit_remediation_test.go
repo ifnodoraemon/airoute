@@ -164,21 +164,22 @@ func TestAudit_MCPAuthAndTenantLogIsolation(t *testing.T) {
 
 	// Record logs for two different tenants
 	_ = repo.RecordUsageLog(&storage.UsageLogRecord{
-		APIKey:    "sk-alice-secret-key",
-		TenantID:  "tenant-alice",
-		Model:     "deepseek-chat",
-		SessionID: "sess-alice",
+		APIKey:     "sk-alice-secret-key",
+		TenantID:   "tenant-alice",
+		Model:      "deepseek-chat",
+		SessionID:  "sess-alice",
 		StatusCode: 200,
 	})
 	_ = repo.RecordUsageLog(&storage.UsageLogRecord{
-		APIKey:    "sk-bob-secret-key",
-		TenantID:  "tenant-bob",
-		Model:     "gpt-4o",
-		SessionID: "sess-bob",
+		APIKey:     "sk-bob-secret-key",
+		TenantID:   "tenant-bob",
+		Model:      "gpt-4o",
+		SessionID:  "sess-bob",
 		StatusCode: 200,
 	})
 
-	// Case 1: Unauthenticated airoute_chat is rejected when keys exist
+	// Case 1: Unauthenticated airoute_chat is rejected when keys exist.
+	// The endpoint itself is fail-closed now, so no tool ever executes.
 	{
 		rpcBody := map[string]interface{}{
 			"jsonrpc": "2.0",
@@ -196,11 +197,11 @@ func TestAudit_MCPAuthAndTenantLogIsolation(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/mcp/messages", bytes.NewReader(data))
 		w := httptest.NewRecorder()
 		engine.ServeHTTP(w, req)
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "Authentication required for airoute_chat")
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		assert.NotContains(t, w.Body.String(), "choices")
 	}
 
-	// Case 2: Unauthenticated airoute_query_logs cannot dump all logs without session_id
+	// Case 2: Unauthenticated airoute_query_logs cannot dump global logs either.
 	{
 		rpcBody := map[string]interface{}{
 			"jsonrpc": "2.0",
@@ -217,8 +218,8 @@ func TestAudit_MCPAuthAndTenantLogIsolation(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/mcp/messages", bytes.NewReader(data))
 		w := httptest.NewRecorder()
 		engine.ServeHTTP(w, req)
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "Authentication required to query global logs")
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		assert.NotContains(t, w.Body.String(), "tenant-bob")
 	}
 
 	// Case 3: Authenticated airoute_query_logs with Alice's API key is tenant-isolated

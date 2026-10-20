@@ -144,7 +144,7 @@ func TestSecurity_IDOR_APIKeyBatchOperations(t *testing.T) {
 	uA := &storage.UserRecord{Username: "userA", Role: "user", Status: "active"}
 	_ = repo.CreateUser(uA)
 	keyA := &storage.APIKeyRecord{
-		Key:      "sk-nano-userA-key1",
+		Key:      "sk-airoute-userA-key1",
 		TenantID: "userA",
 		UserID:   uA.ID,
 		Status:   "active",
@@ -156,7 +156,7 @@ func TestSecurity_IDOR_APIKeyBatchOperations(t *testing.T) {
 	uB := &storage.UserRecord{Username: "userB", Role: "user", Status: "active"}
 	_ = repo.CreateUser(uB)
 	keyB := &storage.APIKeyRecord{
-		Key:      "sk-nano-userB-key2",
+		Key:      "sk-airoute-userB-key2",
 		TenantID: "userB",
 		UserID:   uB.ID,
 		Status:   "active",
@@ -213,7 +213,7 @@ func TestLogic_APIKeyRPM0_Unlimited(t *testing.T) {
 	repo, _, _ := setupAuditTestEnv(t)
 
 	key := &storage.APIKeyRecord{
-		Key:      "sk-nano-unlimited-rpm",
+		Key:      "sk-airoute-unlimited-rpm",
 		TenantID: "unlimited-tenant",
 		RPM:      0, // Unlimited
 		TPM:      0,
@@ -223,7 +223,7 @@ func TestLogic_APIKeyRPM0_Unlimited(t *testing.T) {
 		t.Fatalf("failed to create api key: %v", err)
 	}
 
-	saved, err := repo.GetAPIKeyByKey("sk-nano-unlimited-rpm")
+	saved, err := repo.GetAPIKeyByKey("sk-airoute-unlimited-rpm")
 	if err != nil {
 		t.Fatalf("failed to get api key: %v", err)
 	}
@@ -248,7 +248,7 @@ func TestLogic_RecordUsageLog_FallbackDeduction(t *testing.T) {
 
 	// Key with UserID == 0
 	key := &storage.APIKeyRecord{
-		Key:      "sk-nano-legacy-bob",
+		Key:      "sk-airoute-legacy-bob",
 		TenantID: "bobtenant",
 		UserID:   0,
 		Status:   "active",
@@ -257,14 +257,14 @@ func TestLogic_RecordUsageLog_FallbackDeduction(t *testing.T) {
 
 	// Record usage log with Cost = 2.5
 	log := &storage.UsageLogRecord{
-		APIKey:      "sk-nano-legacy-bob",
-		TenantID:    "bobtenant",
-		Model:       "gpt-4o",
-		PromptTokens: 100,
+		APIKey:           "sk-airoute-legacy-bob",
+		TenantID:         "bobtenant",
+		Model:            "gpt-4o",
+		PromptTokens:     100,
 		CompletionTokens: 50,
-		TotalTokens: 150,
-		Cost:        2.5,
-		StatusCode:  200,
+		TotalTokens:      150,
+		Cost:             2.5,
+		StatusCode:       200,
 	}
 	if err := repo.RecordUsageLog(log); err != nil {
 		t.Fatalf("failed to record usage log: %v", err)

@@ -96,4 +96,3 @@ func TestCircuitBreaker_CanaryConcurrencyLimit(t *testing.T) {
 		t.Fatalf("expected CanExecute true in Closed state")
 	}
 }
-

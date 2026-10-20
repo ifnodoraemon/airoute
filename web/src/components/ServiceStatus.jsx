@@ -1,17 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   CheckCircle2,
   AlertTriangle,
   XCircle,
   Activity,
   RefreshCw,
-  Zap,
   Server,
-  ShieldCheck,
-  Cpu,
   Layers,
-  Globe,
-  Network,
   Search,
   Filter,
   Pause,
@@ -20,7 +15,6 @@ import {
   Check
 } from 'lucide-react';
 import { copyToClipboard as crossOriginCopy } from '../config';
-import { getGatewayOrigin } from '../config';
 
 export default function ServiceStatus({
   isStandalone = true,
@@ -41,7 +35,6 @@ export default function ServiceStatus({
   batchTesting = false,
 }) {
   const isZh = lang === 'zh';
-  const [hoveredDay, setHoveredDay] = useState(null);
   const [publicData, setPublicData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(new Date());
@@ -115,27 +108,6 @@ export default function ServiceStatus({
     return 'chat';
   };
 
-  const DEFAULT_PUBLIC_MODELS = [
-    { model: 'gpt-6', modality: 'chat', status: 'operational' },
-    { model: 'gpt-6-luna', modality: 'chat', status: 'operational' },
-    { model: 'claude-opus-5.5', modality: 'chat', status: 'operational' },
-    { model: 'claude-sonnet-5.5', modality: 'chat', status: 'operational' },
-    { model: 'gemini-4-argon', modality: 'chat', status: 'operational' },
-    { model: 'gemini-3.8-flash', modality: 'chat', status: 'operational' },
-    { model: 'deepseek-v4.1-flash', modality: 'chat', status: 'operational' },
-    { model: 'deepseek-v4-pro', modality: 'chat', status: 'operational' },
-    { model: 'deepseek-r1', modality: 'chat', status: 'operational' },
-    { model: 'qwen-3.8', modality: 'chat', status: 'operational' },
-    { model: 'glm-5.3', modality: 'chat', status: 'operational' },
-    { model: 'doubao-seed-2.1-pro', modality: 'chat', status: 'operational' },
-    { model: 'kimi-k3', modality: 'chat', status: 'operational' },
-    { model: 'flux-1.1-pro', modality: 'images', status: 'operational' },
-    { model: 'kling-4.0', modality: 'videos', status: 'operational' },
-    { model: 'cogvideox-5b', modality: 'videos', status: 'operational' },
-    { model: 'gpt-live-transcribe', modality: 'audio', status: 'operational' },
-    { model: 'embeddinggemma-2', modality: 'embeddings', status: 'operational' }
-  ];
-
   // Determine display models: prefer modelRoutes if available, otherwise public models from /api/v1/public/status
   const rawModels = modelRoutes.length > 0
     ? modelRoutes.map(mr => ({
@@ -151,7 +123,7 @@ export default function ServiceStatus({
             ...m,
             modality: getModalityFromModel(m.model, m.modality)
           }))
-        : (loading ? [] : DEFAULT_PUBLIC_MODELS));
+        : []);
 
   // Filter models based on search query and modality
   const displayModels = rawModels.filter(m => {
@@ -170,28 +142,8 @@ export default function ServiceStatus({
   const anyTripped = channels.some((c) => c.status === 'tripped' || (probeLatencies[c.id] && probeLatencies[c.id].error))
     || (publicData && publicData.status === 'degraded');
 
-  // Generate simulated 30-day uptime bars (deterministic based on model name)
-  const generate30DayBars = (modelName) => {
-    const bars = [];
-    const seed = modelName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const now = new Date();
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
-      const isSlightDegrade = (seed + i) % 29 === 0 && i > 4;
-      bars.push({
-        dayIndex: i,
-        date: dateStr,
-        status: isSlightDegrade ? 'degraded' : 'operational',
-        uptime: isSlightDegrade ? '99.85%' : '100.0%',
-      });
-    }
-    return bars;
-  };
-
-  // Get latency and capability metrics tailored for specific modality
-  const getModelMetrics = (modelName, modality) => {
+  // Show only actual probe measurements; no synthetic SLA or latency values.
+  const getModelMetrics = (modelName) => {
     let realProbeMs = null;
     if (channels && channels.length > 0 && probeLatencies) {
       for (const ch of channels) {
@@ -206,72 +158,7 @@ export default function ServiceStatus({
       }
     }
 
-    switch (modality) {
-      case 'images':
-        return {
-          label1: isZh ? '生成总耗时' : 'Generation Latency',
-          val1: realProbeMs ? `~${(realProbeMs / 1000 + 1.8).toFixed(1)} s` : '~2.6 s',
-          label2: isZh ? '渲染成功率' : 'Render Success Rate',
-          val2: '100.0%',
-          uptime: '99.98%',
-          realProbeMs
-        };
-      case 'audio':
-        return {
-          label1: isZh ? '转换首包时延' : 'TTFT Audio Latency',
-          val1: realProbeMs ? `${realProbeMs} ms` : '~380 ms',
-          label2: isZh ? '音频实时率' : 'Real-Time Factor',
-          val2: '0.12x RTF',
-          uptime: '100.0%',
-          realProbeMs
-        };
-      case 'videos':
-        return {
-          label1: isZh ? '调度队列时延' : 'Queue Dispatch Latency',
-          val1: realProbeMs ? `${realProbeMs} ms` : '~850 ms',
-          label2: isZh ? '任务就绪率' : 'Task Readiness',
-          val2: '100.0%',
-          uptime: '99.95%',
-          realProbeMs
-        };
-      case 'embeddings':
-        return {
-          label1: isZh ? '向量计算时延' : 'Embedding Latency',
-          val1: realProbeMs ? `${realProbeMs} ms` : '~28 ms',
-          label2: isZh ? '零首字等待' : 'Direct Return',
-          val2: '100%',
-          uptime: '100.0%',
-          realProbeMs
-        };
-      case 'rerank':
-        return {
-          label1: isZh ? '重排序时延' : 'Rerank Latency',
-          val1: realProbeMs ? `${realProbeMs} ms` : '~42 ms',
-          label2: isZh ? 'Top-N 吞吐' : 'Top-N Throughput',
-          val2: isZh ? '高并发' : 'High Concurrency',
-          uptime: '100.0%',
-          realProbeMs
-        };
-      case 'vision':
-        return {
-          label1: isZh ? '首字时延 (P95)' : 'TTFT (P95)',
-          val1: realProbeMs ? `${realProbeMs} ms` : '~210 ms',
-          label2: isZh ? '视觉解析耗时' : 'Vision Parse Time',
-          val2: '~1.6 s',
-          uptime: '99.99%',
-          realProbeMs
-        };
-      case 'chat':
-      default:
-        return {
-          label1: isZh ? '首字时延 (P95)' : 'TTFT (P95)',
-          val1: realProbeMs ? `${realProbeMs} ms` : '~160 ms',
-          label2: isZh ? '平均处理时延' : 'Avg Latency',
-          val2: '~1.1 s',
-          uptime: '99.99%',
-          realProbeMs
-        };
-    }
+    return { realProbeMs };
   };
 
   const modalitiesList = [
@@ -284,8 +171,6 @@ export default function ServiceStatus({
     { id: 'embeddings', label: isZh ? '向量嵌入' : 'Embeddings', count: modalityCounts['embeddings'] || 0 },
   ].filter(item => item.id === 'all' || item.count > 0);
 
-  const origin = getGatewayOrigin();
-  const currentHost = origin ? origin.replace(/^https?:\/\//, '') : (typeof window !== 'undefined' && window.location.host ? window.location.host : 'gateway');
 
   const content = (
     <div className="space-y-6">
@@ -293,8 +178,8 @@ export default function ServiceStatus({
       <div
         className={`p-6 rounded-2xl border shadow-sm transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
           anyTripped
-            ? 'bg-amber-500/10 border-amber-500/30 text-amber-900'
-            : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-950'
+            ? 'bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-200'
+            : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-950 dark:text-emerald-200'
         }`}
       >
         <div className="flex items-center space-x-4">
@@ -316,16 +201,16 @@ export default function ServiceStatus({
               <h2 className="text-base font-semibold tracking-tight">
                 {anyTripped
                   ? (t ? t.statusDegraded : (isZh ? '部分模型服务响应延迟偏高或触发熔断降级' : 'Partial service degradation or circuit breaker tripped'))
-                  : (t ? t.statusAllOperational : (isZh ? '所有核心模型与网关节点运行正常' : 'All systems and models operational'))}
+                  : (rawModels.length === 0 ? (isZh ? '暂无已配置模型' : 'No configured models') : (isZh ? '当前未发现熔断渠道' : 'No tripped channels reported'))}
               </h2>
-              <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-white/40 dark:bg-black/20 border border-current/20 backdrop-blur-sm">
+              <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-white/40 dark:bg-black/20 border border-current/20 backdrop-blur-sm">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>{isZh ? '99.99% 双活集群' : '99.99% Active-Active'}</span>
+                <span>{isZh ? '当前渠道状态' : 'Current channel state'}</span>
               </span>
             </div>
             <p className="text-xs opacity-80 mt-0.5">
-              {t ? t.statusSubtitle : (isZh ? '实时可用性、响应耗时与最近 30 天服务 SLA 运行看板' : 'Real-time uptime, response latency, and 30-day SLA telemetry')}
-              <span className="ml-2 font-mono tabular-nums text-[11px] opacity-75">
+              {isZh ? '基于当前配置与熔断状态；历史可用率需接入独立监控数据' : 'Based on current routes and circuit breakers; historical uptime requires monitoring data'}
+              <span className="ml-2 font-mono tabular-nums text-xs opacity-75">
                 ({isZh ? '更新于 ' : 'Updated at '}{lastUpdated.toLocaleTimeString()})
               </span>
             </p>
@@ -338,8 +223,8 @@ export default function ServiceStatus({
             onClick={() => setAutoRefresh(!autoRefresh)}
             className={`flex items-center space-x-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition cursor-pointer ${
               autoRefresh
-                ? 'bg-white/90 border-slate-200/80 text-slate-700 shadow-sm hover:bg-slate-50'
-                : 'bg-slate-100 border-slate-300 text-slate-400'
+                ? 'bg-white/90 dark:bg-[#0F1420]/90 border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-200 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800'
+                : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400'
             }`}
             title={autoRefresh ? (isZh ? '点击暂停自动刷新' : 'Click to pause auto refresh') : (isZh ? '点击恢复 30 秒自动刷新' : 'Click to resume 30s auto refresh')}
           >
@@ -351,9 +236,9 @@ export default function ServiceStatus({
               </>
             ) : (
               <>
-                <span className="w-2 h-2 rounded-full bg-slate-300"></span>
+                <span className="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600"></span>
                 <span>{isZh ? '已暂停' : 'Paused'}</span>
-                <Play className="w-3 h-3 text-slate-500 ml-0.5" />
+                <Play className="w-3 h-3 text-slate-500 dark:text-slate-400 ml-0.5" />
               </>
             )}
           </button>
@@ -361,164 +246,35 @@ export default function ServiceStatus({
           <button
             onClick={handleManualRefresh}
             disabled={loading}
-            className="p-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 transition shadow-sm flex items-center space-x-1 text-xs font-medium cursor-pointer disabled:opacity-50"
+            className="ui-btn-secondary ui-btn-sm"
             title={t ? t.statusRefresh : (isZh ? '刷新状态' : 'Refresh status')}
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-indigo-600' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-indigo-600 dark:text-indigo-400' : ''}`} />
             <span className="hidden sm:inline">{t ? t.statusRefresh : (isZh ? '刷新' : 'Refresh')}</span>
           </button>
         </div>
       </div>
 
-      {/* 2. Top SLA Key Performance Indicators (KPI Cards) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-sm flex flex-col justify-between space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">{isZh ? '30 天服务可用率' : '30-Day SLA Uptime'}</span>
-            <span className="p-1 rounded-lg bg-emerald-50 text-emerald-600">
-              <ShieldCheck className="w-3.5 h-3.5" />
-            </span>
-          </div>
-          <div>
-            <span className="text-2xl font-bold text-slate-900 font-mono tabular-nums tracking-tight">99.99%</span>
-            <span className="text-xs text-emerald-600 font-medium ml-2">{isZh ? 'SLA 达标' : 'SLA Met'}</span>
-          </div>
+      {/* Current configured routes and breaker state; historical uptime is not measured here. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="ui-card p-5">
+          <span className="ui-meta font-medium">{isZh ? '已配置模型路由' : 'Configured model routes'}</span>
+          <div className="text-2xl font-bold text-purple-700 dark:text-purple-400 font-mono mt-2">{rawModels.length}</div>
         </div>
-
-        <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-sm flex flex-col justify-between space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">{isZh ? '首字无感容灾率' : 'Zero-Downtime Failover'}</span>
-            <span className="p-1 rounded-lg bg-indigo-50 text-indigo-600">
-              <Zap className="w-3.5 h-3.5" />
-            </span>
-          </div>
-          <div>
-            <span className="text-2xl font-bold text-indigo-700 font-mono tabular-nums tracking-tight">100%</span>
-            <span className="text-xs text-indigo-600 font-medium ml-2">{isZh ? '毫秒漂移' : 'Sub-50ms MTTR'}</span>
-          </div>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-sm flex flex-col justify-between space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">{isZh ? '统一治理模型数' : 'Active Model Routes'}</span>
-            <span className="p-1 rounded-lg bg-purple-50 text-purple-600">
-              <Cpu className="w-3.5 h-3.5" />
-            </span>
-          </div>
-          <div>
-            <span className="text-2xl font-bold text-purple-700 font-mono tabular-nums tracking-tight">{rawModels.length}</span>
-            <span className="text-xs text-slate-500 ml-1.5 font-sans">{isZh ? '个在线大模型' : 'Online LLMs'}</span>
-          </div>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-sm flex flex-col justify-between space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">{isZh ? '集群拓扑状态' : 'Cluster Topology'}</span>
-            <span className="p-1 rounded-lg bg-sky-50 text-sky-600">
-              <Network className="w-3.5 h-3.5" />
-            </span>
-          </div>
-          <div>
-            <span className="text-lg font-bold text-slate-900 tracking-tight">{isZh ? '多节点双活' : 'Active-Active'}</span>
-            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 ml-2 animate-pulse"></span>
-          </div>
+        <div className="ui-card p-5">
+          <span className="ui-meta font-medium">{isZh ? '当前熔断状态' : 'Current circuit state'}</span>
+          <div className="text-lg font-bold text-slate-900 dark:text-slate-100 mt-2">{anyTripped ? (isZh ? '存在已熔断渠道' : 'A channel is tripped') : (isZh ? '未发现熔断' : 'No tripped channels reported')}</div>
         </div>
       </div>
 
-      {/* 3. Cluster High-Availability Topology */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-          <div className="flex items-center space-x-3.5">
-            <div className="w-9 h-9 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 shrink-0">
-              <Network className="w-4 h-4" />
-            </div>
-            <div className="flex items-center space-x-2">
-              <h3 className="font-bold text-base text-slate-900">
-                {lang === 'zh' ? '集群高可用拓扑与节点' : 'Cluster Topology & Nodes'}
-              </h3>
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>
-                {lang === 'zh' ? '多节点双活在线' : 'Multi-Node Active'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Topology Nodes Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
-          {/* Node 1: Nginx LB */}
-          <div className="p-4 rounded-2xl bg-slate-50/70 border border-slate-200/70 flex flex-col justify-between space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <span className="p-1.5 rounded-xl bg-sky-100 text-sky-600">
-                  <Globe className="w-4 h-4" />
-                </span>
-                <span className="font-semibold text-xs text-slate-800">{isZh ? '负载均衡 (LB)' : 'Load Balancer (LB)'}</span>
-              </div>
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded-lg bg-emerald-100/70 text-emerald-700 font-semibold truncate max-w-[120px]" title={currentHost}>
-                {currentHost}
-              </span>
-            </div>
-            <div className="text-[11px] text-slate-500 flex justify-between font-mono">
-              <span>{isZh ? 'Nginx 反向代理' : 'Nginx Reverse Proxy'}</span>
-              <span className="text-emerald-600 font-semibold">Round-Robin</span>
-            </div>
-          </div>
-
-          {/* Node 2: Gateway Instance 1 */}
-          <div className="p-4 rounded-2xl bg-slate-50/70 border border-slate-200/70 flex flex-col justify-between space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <span className="p-1.5 rounded-xl bg-indigo-100 text-indigo-600">
-                  <Server className="w-4 h-4" />
-                </span>
-                <span className="font-semibold text-xs text-slate-800">{isZh ? '计算节点 #1' : 'Gateway Node #1'}</span>
-              </div>
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded-lg bg-indigo-100/70 text-indigo-700 font-semibold">
-                gateway-1
-              </span>
-            </div>
-            <div className="text-[11px] text-slate-500 flex justify-between font-mono">
-              <span>{isZh ? '运算转发引擎' : 'Dispatch Engine'}</span>
-              <span className="text-emerald-600 font-semibold flex items-center space-x-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                <span>Active</span>
-              </span>
-            </div>
-          </div>
-
-          {/* Node 3: Gateway Instance 2 */}
-          <div className="p-4 rounded-2xl bg-slate-50/70 border border-slate-200/70 flex flex-col justify-between space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <span className="p-1.5 rounded-xl bg-purple-100 text-purple-600">
-                  <Server className="w-4 h-4" />
-                </span>
-                <span className="font-semibold text-xs text-slate-800">{isZh ? '计算节点 #2' : 'Gateway Node #2'}</span>
-              </div>
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded-lg bg-purple-100/70 text-purple-700 font-semibold">
-                gateway-2
-              </span>
-            </div>
-            <div className="text-[11px] text-slate-500 flex justify-between font-mono">
-              <span>{isZh ? '运算转发引擎' : 'Dispatch Engine'}</span>
-              <span className="text-emerald-600 font-semibold flex items-center space-x-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                <span>Active</span>
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 5. Core Model Health, Filter & 30-Day SLA Grid */}
+      {/* Configured models and live probe results */}
       <div className="space-y-4">
         {/* Header & Search Bar */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold text-slate-900 flex items-center space-x-2">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center space-x-2">
               <Activity className="w-4 h-4 text-indigo-500" />
-              <span>{isZh ? '核心模型运行健康度与 30 天可用性 SLA' : 'Core Model Health & 30-Day SLA Uptime'}</span>
+              <span>{isZh ? '模型路由与探针结果' : 'Model routes and probe results'}</span>
             </h3>
           </div>
 
@@ -531,19 +287,19 @@ export default function ServiceStatus({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={isZh ? '搜索模型名称...' : 'Search model ID...'}
-                className="pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-sm w-48 sm:w-56"
+                className="ui-field ui-field-sm pl-8 pr-3 w-48 sm:w-56"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs"
                 >
                   ✕
                 </button>
               )}
             </div>
 
-            <span className="text-xs text-slate-500 font-mono tabular-nums hidden sm:inline">
+            <span className="ui-meta font-mono tabular-nums hidden sm:inline">
               {isZh ? `显示 ${displayModels.length} / ${rawModels.length}` : `Showing ${displayModels.length} / ${rawModels.length}`}
             </span>
           </div>
@@ -557,15 +313,15 @@ export default function ServiceStatus({
               onClick={() => setSelectedModality(tab.id)}
               className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer shrink-0 flex items-center space-x-1.5 ${
                 selectedModality === tab.id
-                  ? 'bg-slate-900 text-white font-medium shadow-sm'
-                  : 'bg-white border border-slate-200/80 text-slate-600 hover:bg-slate-50'
+                  ? 'bg-slate-900 dark:bg-indigo-600 text-white font-medium shadow-sm'
+                  : 'bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
               }`}
             >
               <span>{tab.label}</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono tabular-nums ${
+              <span className={`text-xs px-1.5 py-0.2 rounded-full font-mono tabular-nums ${
                 selectedModality === tab.id
                   ? 'bg-white/20 text-white'
-                  : 'bg-slate-100 text-slate-500'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
               }`}>
                 {tab.count}
               </span>
@@ -575,18 +331,18 @@ export default function ServiceStatus({
 
         {/* Models Grid */}
         {loading && displayModels.length === 0 ? (
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-12 text-center text-slate-400 text-xs flex flex-col items-center justify-center space-y-2">
+          <div className="ui-card p-12 text-center ui-meta flex flex-col items-center justify-center space-y-2">
             <RefreshCw className="w-5 h-5 text-indigo-500 animate-spin" />
             <p>{isZh ? '正在获取实时模型可用性状态...' : 'Fetching live model health telemetry...'}</p>
           </div>
         ) : displayModels.length === 0 ? (
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-12 text-center text-slate-400 text-xs space-y-2">
-            <Filter className="w-8 h-8 text-slate-300 mx-auto" />
+          <div className="ui-card p-12 text-center ui-meta space-y-2">
+            <Filter className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
             <p>{isZh ? '未找到符合条件的大模型服务' : 'No matching models found'}</p>
             {(searchQuery || selectedModality !== 'all') && (
               <button
                 onClick={() => { setSearchQuery(''); setSelectedModality('all'); }}
-                className="text-indigo-600 hover:underline text-xs font-semibold cursor-pointer"
+                className="text-indigo-600 dark:text-indigo-400 hover:underline text-xs font-semibold cursor-pointer"
               >
                 {isZh ? '清空筛选条件' : 'Clear filters'}
               </button>
@@ -595,46 +351,45 @@ export default function ServiceStatus({
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {displayModels.map((mr) => {
-              const bars = generate30DayBars(mr.model);
               const isDegraded = mr.status === 'degraded';
-              const metrics = getModelMetrics(mr.model, mr.modality);
+              const metrics = getModelMetrics(mr.model);
 
               return (
                 <div
                   key={mr.model}
-                  className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm hover:border-indigo-400/40 transition space-y-4"
+                  className="ui-card p-5 hover:border-indigo-400/40 dark:hover:border-indigo-500/50 transition space-y-4"
                 >
                   {/* Model Header */}
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="flex items-center space-x-2">
-                        <span className="font-mono text-sm font-bold text-slate-900">
+                        <span className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
                           {mr.model}
                         </span>
                         <button
                           onClick={() => copyToClipboard(mr.model)}
-                          className="text-slate-400 hover:text-indigo-600 transition cursor-pointer p-0.5"
+                          className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition cursor-pointer p-0.5"
                           title={isZh ? '复制模型名称' : 'Copy model ID'}
                         >
                           {copiedModel === mr.model ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                           ) : (
                             <Copy className="w-3.5 h-3.5" />
                           )}
                         </button>
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 uppercase">
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 uppercase">
                           {mr.modality}
                         </span>
                       </div>
                       {(mr.activeProviders !== undefined || mr.fallback_model) && (
-                        <p className="text-xs text-slate-500 mt-1 flex items-center flex-wrap gap-1.5">
+                        <p className="ui-meta mt-1 flex items-center flex-wrap gap-1.5">
                           {mr.activeProviders !== undefined && (
                             <span>
                               {mr.activeProviders}/{mr.totalProviders} {t ? t.statusActivePool : (isZh ? '健康渠道提供商' : 'Healthy Channels')}
                             </span>
                           )}
                           {mr.fallback_model && (
-                            <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md font-mono text-[11px] border border-amber-200">
+                            <span className="text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md font-mono text-xs border border-amber-200 dark:border-amber-800">
                               {isZh ? '➔ 容灾: ' : '➔ Fallback: '}{mr.fallback_model}
                             </span>
                           )}
@@ -644,62 +399,17 @@ export default function ServiceStatus({
 
                     <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border flex items-center space-x-1.5 shrink-0 ${
                       isDegraded
-                        ? 'bg-amber-50 text-amber-700 border-amber-200'
-                        : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                        : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                     }`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${isDegraded ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`}></span>
-                      <span>{isDegraded ? (t ? t.statusDegradedBadge : (isZh ? '延迟升高' : 'Degraded')) : (t ? t.statusOperationalBadge : (isZh ? '运行正常' : 'Operational'))}</span>
+                      <span>{isDegraded ? (isZh ? '渠道已熔断' : 'Channel tripped') : (isZh ? '未熔断' : 'Not tripped')}</span>
                     </span>
                   </div>
 
-                  {/* Latency & Availability Stats tailored for modality */}
-                  <div className="grid grid-cols-3 gap-2 py-2.5 px-3 rounded-2xl bg-slate-50/80 border border-slate-100 text-xs">
-                    <div>
-                      <span className="text-slate-400 block text-[10px]">{t ? t.statusUptime30Days : (isZh ? '最近 30 天可用率' : '30-Day Uptime')}</span>
-                      <span className="font-mono font-bold text-emerald-600">{metrics.uptime}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[10px]">{metrics.label1}</span>
-                      <span className="font-mono font-bold text-slate-700 flex items-center space-x-1">
-                        <span>{metrics.val1}</span>
-                        {metrics.realProbeMs && (
-                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" title={isZh ? '实测探针延迟' : 'Live probe latency'}></span>
-                        )}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[10px]">{metrics.label2}</span>
-                      <span className="font-mono font-bold text-slate-700">{metrics.val2}</span>
-                    </div>
-                  </div>
-
-                  {/* 30-Day Uptime Bar (DeepSeek / GitHub Style) */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-[10px] text-slate-400">
-                      <span>{isZh ? '30 天前' : '30d ago'}</span>
-                      <span className="text-emerald-600 font-medium">{isZh ? '100.0% 可用率' : '100.0% Uptime'}</span>
-                      <span>{isZh ? '今天' : 'Today'}</span>
-                    </div>
-                    <div className="flex items-center space-x-1 h-7 bg-slate-50 p-1 rounded-xl border border-slate-100">
-                      {bars.map((bar, idx) => (
-                        <div
-                          key={idx}
-                          onMouseEnter={() => setHoveredDay(`${mr.model}:${bar.date}:${bar.uptime}`)}
-                          onMouseLeave={() => setHoveredDay(null)}
-                          className={`flex-1 h-full rounded-xs transition-all cursor-pointer hover:opacity-75 ${
-                            bar.status === 'operational'
-                              ? 'bg-emerald-500 hover:scale-y-110'
-                              : 'bg-amber-400 hover:scale-y-110'
-                          }`}
-                          title={`${bar.date}: ${bar.uptime} ${isZh ? '可用' : 'uptime'}`}
-                        />
-                      ))}
-                    </div>
-                    {hoveredDay && hoveredDay.startsWith(mr.model) && (
-                      <div className="text-[10px] font-mono text-center text-slate-500 pt-0.5">
-                        {hoveredDay.split(':')[1]}: {isZh ? '可用率 ' : 'Uptime '}{hoveredDay.split(':')[2]}
-                      </div>
-                    )}
+                  <div className="rounded-2xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 px-3 py-2.5 text-xs">
+                    <span className="text-slate-500 dark:text-slate-400">{isZh ? '最近一次实测探针延迟' : 'Latest measured probe latency'}</span>
+                    <span className="font-mono font-bold text-slate-700 dark:text-slate-200 ml-2">{metrics.realProbeMs ? `${metrics.realProbeMs} ms` : (isZh ? '暂无探针数据' : 'No probe data')}</span>
                   </div>
                 </div>
               );
@@ -710,11 +420,11 @@ export default function ServiceStatus({
 
       {/* 6. Upstream Provider Channels Status */}
       {channels.length > 0 && (
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
+        <div className="ui-card p-6 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2">
             <div className="flex items-center space-x-2">
               <Layers className="w-4 h-4 text-indigo-500" />
-              <h3 className="font-semibold text-slate-900 text-sm">
+              <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
                 {t ? t.statusCircuitBreakers : (isZh ? '上游提供商与熔断探针矩阵' : 'Upstream Channels & Circuit Breakers')}
               </h3>
             </div>
@@ -723,7 +433,7 @@ export default function ServiceStatus({
               <button
                 onClick={onBatchProbe}
                 disabled={batchTesting}
-                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-medium transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50 self-start sm:self-auto"
+                className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-medium transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50 self-start sm:self-auto"
               >
                 <Activity className={`w-3.5 h-3.5 ${batchTesting ? 'animate-spin' : ''}`} />
                 <span>{batchTesting ? (isZh ? '正在并发探活...' : 'Probing in parallel...') : (isZh ? '一键探测全部渠道' : 'Probe All Channels')}</span>
@@ -734,51 +444,51 @@ export default function ServiceStatus({
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-100 text-[11px] text-slate-400 uppercase">
+                <tr className="border-b border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 uppercase">
                   <th className="py-2.5 px-4 font-semibold">{t ? t.statusChannelName : (isZh ? '渠道名称' : 'Channel Name')}</th>
                   <th className="py-2.5 px-4 font-semibold">{t ? t.statusChannelType : (isZh ? '协议类型' : 'Protocol')}</th>
                   <th className="py-2.5 px-4 font-semibold">{t ? t.statusBreakerState : (isZh ? '熔断器状态' : 'Circuit Breaker')}</th>
                   <th className="py-2.5 px-4 font-semibold">{t ? t.statusProbeLatency : (isZh ? '实时探测延迟' : 'Live Latency')}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-xs">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
                 {channels.map((ch) => {
                   const isTripped = ch.status === 'tripped';
                   const lat = probeLatencies[ch.id];
 
                   return (
-                    <tr key={ch.id} className="hover:bg-slate-50/60 transition">
-                      <td className="py-3 px-4 font-medium text-slate-900">
+                    <tr key={ch.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/50 transition">
+                      <td className="py-3 px-4 font-medium text-slate-900 dark:text-slate-100">
                         <div className="flex items-center space-x-2">
                           <span className={`w-2 h-2 rounded-full ${isTripped ? 'bg-rose-500' : 'bg-emerald-500'}`}></span>
                           <span className="font-semibold">{ch.name}</span>
                         </div>
                       </td>
-                      <td className="py-3 px-4 font-mono text-[11px] text-slate-600">
+                      <td className="py-3 px-4 font-mono text-xs text-slate-600 dark:text-slate-300">
                         {(ch.type || 'openai').toUpperCase()}
                       </td>
                       <td className="py-3 px-4">
                         {isTripped ? (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200 inline-flex items-center space-x-1">
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 inline-flex items-center space-x-1">
                             <XCircle className="w-3 h-3 text-rose-500" />
                             <span>{t ? t.statusStateOpen : (isZh ? '已熔断跳闸' : 'Tripped (Open)')}</span>
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center space-x-1">
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 inline-flex items-center space-x-1">
                             <CheckCircle2 className="w-3 h-3 text-emerald-500" />
                             <span>{t ? t.statusStateClosed : (isZh ? '健康闭合' : 'Closed (Healthy)')}</span>
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4 font-mono text-[11px]">
+                      <td className="py-3 px-4 font-mono text-xs">
                         {lat ? (
                           lat.error ? (
-                            <span className="text-rose-600 font-semibold">{isZh ? '超时 / 探测失败' : 'Timeout / Failed'}</span>
+                            <span className="text-rose-600 dark:text-rose-400 font-semibold">{isZh ? '超时 / 探测失败' : 'Timeout / Failed'}</span>
                           ) : (
-                            <span className="text-emerald-600 font-semibold">{lat.latency_ms} ms</span>
+                            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{lat.latency_ms} ms</span>
                           )
                         ) : (
-                          <span className="text-slate-400">{isZh ? '~35 ms (探针正常)' : '~35 ms (Normal)'}</span>
+                          <span className="text-slate-500 dark:text-slate-400">{isZh ? '~35 ms (探针正常)' : '~35 ms (Normal)'}</span>
                         )}
                       </td>
                     </tr>
@@ -798,28 +508,28 @@ export default function ServiceStatus({
 
   // Standalone Public Page View
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0A0D14] text-slate-800 dark:text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
       {/* Top Standalone Navigation Bar */}
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200/80">
+      <header className="sticky top-0 z-40 bg-white/90 dark:bg-[#0A0D14]/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div
             onClick={onBackHome}
             className="flex items-center space-x-3 cursor-pointer group transition duration-150 hover:opacity-90"
             title={lang === 'zh' ? '点击返回门户首页' : 'Return to Home'}
           >
-            <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center text-white shadow-sm font-semibold text-sm">
+            <div className="w-8 h-8 rounded-lg bg-slate-900 dark:bg-indigo-600 flex items-center justify-center text-white shadow-sm font-semibold text-sm">
               AR
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="font-semibold text-base tracking-tight text-slate-900">
+                <span className="font-semibold text-base tracking-tight text-slate-900 dark:text-slate-100">
                   Airoute
                 </span>
-                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                   {t ? t.statusOperationalBadge : (isZh ? '运行正常' : 'Operational')}
                 </span>
               </div>
-              <span className="text-[11px] text-slate-500 block">
+              <span className="text-xs text-slate-500 dark:text-slate-400 block">
                 {lang === 'zh' ? '服务运行状态监控 (Status)' : 'Live System Status'}
               </span>
             </div>
@@ -829,7 +539,7 @@ export default function ServiceStatus({
             {setLang && (
               <button
                 onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
-                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition cursor-pointer"
+                className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium transition cursor-pointer"
               >
                 {lang === 'zh' ? 'EN' : '中'}
               </button>
@@ -837,7 +547,7 @@ export default function ServiceStatus({
 
             <button
               onClick={onBackHome}
-              className="px-3.5 py-1.5 rounded-lg border border-slate-200/80 hover:bg-slate-100 text-slate-700 text-xs font-medium transition cursor-pointer"
+              className="px-3.5 py-1.5 rounded-lg border border-slate-200/80 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium transition cursor-pointer"
             >
               {lang === 'zh' ? '← 返回首页' : '← Home'}
             </button>
@@ -845,7 +555,7 @@ export default function ServiceStatus({
             {isLoggedIn ? (
               <button
                 onClick={onEnterConsole}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-medium shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
+                className="ui-btn-primary"
               >
                 <Server className="w-3.5 h-3.5" />
                 <span>{lang === 'zh' ? '进入工作台 →' : 'Console →'}</span>
@@ -853,7 +563,7 @@ export default function ServiceStatus({
             ) : (
               <button
                 onClick={onOpenLogin}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-medium shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
+                className="ui-btn-primary"
               >
                 <span>{lang === 'zh' ? '登录 / 注册' : 'Login / Register'}</span>
               </button>
@@ -868,15 +578,15 @@ export default function ServiceStatus({
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-200/80 bg-white py-6 mt-12 text-center text-xs text-slate-400">
+      <footer className="border-t border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F1420] py-6 mt-12 text-center text-xs text-slate-500 dark:text-slate-400">
         <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p>© {new Date().getFullYear()} Airoute · {isZh ? '企业级大模型与多模态网关' : 'Enterprise AI Gateway'}</p>
           <div className="flex items-center space-x-4">
-            <button onClick={onBackHome} className="hover:text-indigo-600 transition cursor-pointer">
+            <button onClick={onBackHome} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition cursor-pointer">
               {isZh ? '门户首页' : 'Home'}
             </button>
             <span>·</span>
-            <span className="text-emerald-600 font-medium">{isZh ? 'SLA 99.99% 双活保障' : 'SLA 99.99% Active-Active'}</span>
+            <span className="text-slate-500 dark:text-slate-400 font-medium">{isZh ? '状态来自当前网关' : 'Status from this gateway'}</span>
           </div>
         </div>
       </footer>

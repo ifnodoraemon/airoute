@@ -5,7 +5,7 @@ set -e
 # Airoute Docker Swarm Multi-Node Deployment Helper
 # ==============================================================================
 
-STACK_NAME="nano-stack"
+STACK_NAME="airoute-stack"
 
 echo "=========================================================="
 echo " Airoute Enterprise Docker Swarm Deployment"
@@ -19,9 +19,9 @@ if ! docker info --format '{{.Swarm.LocalNodeState}}' | grep -q "active"; then
 fi
 
 # Ensure overlay network exists
-if ! docker network ls --filter name=^nano-swarm-net$ --format '{{.Name}}' | grep -q "nano-swarm-net"; then
-    echo "[*] Creating overlay network: nano-swarm-net..."
-    docker network create --driver overlay --attachable nano-swarm-net
+if ! docker network ls --filter name=^airoute-swarm-net$ --format '{{.Name}}' | grep -q "airoute-swarm-net"; then
+    echo "[*] Creating overlay network: airoute-swarm-net..."
+    docker network create --driver overlay --attachable airoute-swarm-net
 fi
 
 # Build local gateway image if not present or requested

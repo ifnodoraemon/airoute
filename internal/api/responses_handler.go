@@ -64,14 +64,13 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 	telemetry.GlobalMetrics.IncActiveConns()
 	defer telemetry.GlobalMetrics.DecActiveConns()
 
-	sessionID := req.PreviousResponseID
+	sessionID := sanitizeSessionID(req.PreviousResponseID)
 	if sessionID == "" {
 		sessionID = resolveSessionID(c, chatReq.Model, chatReq.Messages, req.User)
 	} else {
 		sessionID = "resp_" + sessionID
 		c.Header("X-Airoute-Session-ID", sessionID)
-		c.SetCookie("airoute_session", sessionID, 1800, "/", "", false, false)
-		c.SetCookie("nano_session", sessionID, 1800, "/", "", false, false)
+		c.SetCookie(llmSessionCookie, sessionID, 1800, "/", "", false, true)
 	}
 	reqCtx := c.Request.Context()
 	if sessionID != "" {

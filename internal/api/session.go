@@ -11,34 +11,63 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/model"
 )
 
+// llmSessionCookie is the data-plane sticky-session cookie used for LLM
+// affinity. It MUST NOT be named "airoute_session": that name belongs to the
+// control-plane login session (controlplane.SessionCookieName, HttpOnly,
+// contains the admin JWT). Sharing the name made every inference call overwrite
+// the console login cookie, and made the console JWT leak into usage_logs /
+// Redis keys through the session affinity path.
+const llmSessionCookie = "airoute_llm_session"
+
+// maxSessionIDLen bounds client-supplied session identifiers. Session IDs are
+// used verbatim as Redis key components and persisted into usage_logs, so an
+// unbounded header value would bloat both stores.
+const maxSessionIDLen = 128
+
+// sanitizeSessionID trims and bounds a candidate session identifier.
+func sanitizeSessionID(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	// Drop control characters; keep the value otherwise opaque to the client.
+	s = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, s)
+	if len(s) > maxSessionIDLen {
+		s = s[:maxSessionIDLen]
+	}
+	return s
+}
+
 // extractSessionID retrieves explicit LLM session affinity key from HTTP headers, cookies, query, or payload user.
 func extractSessionID(c *gin.Context, userField string) string {
-	if s := c.GetHeader("X-Session-ID"); s != "" {
-		return strings.TrimSpace(s)
+	if s := sanitizeSessionID(c.GetHeader("X-Session-ID")); s != "" {
+		return s
 	}
-	if s := c.GetHeader("X-Conversation-ID"); s != "" {
-		return strings.TrimSpace(s)
+	if s := sanitizeSessionID(c.GetHeader("X-Conversation-ID")); s != "" {
+		return s
 	}
-	if s := c.GetHeader("Session-Id"); s != "" {
-		return strings.TrimSpace(s)
+	if s := sanitizeSessionID(c.GetHeader("Session-Id")); s != "" {
+		return s
 	}
-	if s := c.GetHeader("Conversation-Id"); s != "" {
-		return strings.TrimSpace(s)
+	if s := sanitizeSessionID(c.GetHeader("Conversation-Id")); s != "" {
+		return s
 	}
-	if cookie, err := c.Cookie("airoute_session"); err == nil && cookie != "" {
-		return strings.TrimSpace(cookie)
-	}
-	if cookie, err := c.Cookie("nano_session"); err == nil && cookie != "" {
-		return strings.TrimSpace(cookie)
+	if cookie, err := c.Cookie(llmSessionCookie); err == nil && cookie != "" {
+		return sanitizeSessionID(cookie)
 	}
 	if cookie, err := c.Cookie("session_id"); err == nil && cookie != "" {
-		return strings.TrimSpace(cookie)
+		return sanitizeSessionID(cookie)
 	}
-	if s := c.Query("session_id"); s != "" {
-		return strings.TrimSpace(s)
+	if s := sanitizeSessionID(c.Query("session_id")); s != "" {
+		return s
 	}
 	if userField != "" {
-		return strings.TrimSpace(userField)
+		return sanitizeSessionID(userField)
 	}
 	return ""
 }
@@ -68,12 +97,9 @@ func deriveContextFingerprint(c *gin.Context, modelName string, messages []model
 		return ""
 	}
 
-	if len(firstUserMsg) > 256 {
-		firstUserMsg = firstUserMsg[:256]
-	}
-	if len(sysMsg) > 128 {
-		sysMsg = sysMsg[:128]
-	}
+	// Truncate on rune boundaries so the hash input stays valid UTF-8.
+	firstUserMsg = truncateRunes(firstUserMsg, 256)
+	sysMsg = truncateRunes(sysMsg, 128)
 
 	tenant := c.GetString("tenant_id")
 	if tenant == "" {
@@ -88,6 +114,18 @@ func deriveContextFingerprint(c *gin.Context, modelName string, messages []model
 	return "ctx_" + hex.EncodeToString(h[:12])
 }
 
+// truncateRunes returns s truncated to at most n runes.
+func truncateRunes(s string, n int) string {
+	i := 0
+	for pos := range s {
+		if i == n {
+			return s[:pos]
+		}
+		i++
+	}
+	return s
+}
+
 // resolveSessionID resolves either an explicit session ID or derives a zero-touch context fingerprint.
 // It also writes sticky session headers and cookies onto the HTTP response.
 func resolveSessionID(c *gin.Context, modelName string, messages []model.ChatMessage, userField string) string {
@@ -96,33 +134,33 @@ func resolveSessionID(c *gin.Context, modelName string, messages []model.ChatMes
 		sID = deriveContextFingerprint(c, modelName, messages)
 	}
 	if sID == "" {
-		sID = fmt.Sprintf("sess_%d_%x", time.Now().Unix(), time.Now().UnixNano()%1000000)
+		sID = fmt.Sprintf("sess_%d_%x", time.Now().Unix(), time.Now().UnixMicro()%1000000)
 	}
 	if sID != "" {
 		c.Header("X-Airoute-Session-ID", sID)
-		// Set cookie for browser-based clients (NextChat, OpenWebUI, LibreChat, Web App)
-		c.SetCookie("airoute_session", sID, 1800, "/", "", false, false)
-		c.SetCookie("nano_session", sID, 1800, "/", "", false, false)
+		// Set cookie for browser-based clients (NextChat, OpenWebUI, LibreChat, Web App).
+		// HttpOnly: the value is an affinity key, scripts have no reason to read it.
+		c.SetCookie(llmSessionCookie, sID, 1800, "/", "", false, true)
 	}
 	return sID
 }
 
 // resolveGenericSessionID extracts sticky session identifiers or derives a unique fallback session.
 func resolveGenericSessionID(c *gin.Context, prefix string) string {
-	sID := c.GetHeader("X-Session-ID")
+	sID := sanitizeSessionID(c.GetHeader("X-Session-ID"))
 	if sID == "" {
-		sID = c.GetHeader("X-Airoute-Session-ID")
+		sID = sanitizeSessionID(c.GetHeader("X-Airoute-Session-ID"))
 	}
 	if sID == "" {
-		if cookie, err := c.Cookie("airoute_session"); err == nil && cookie != "" {
-			sID = cookie
+		if cookie, err := c.Cookie(llmSessionCookie); err == nil && cookie != "" {
+			sID = sanitizeSessionID(cookie)
 		}
 	}
 	if sID == "" {
 		if prefix == "" {
 			prefix = "gen"
 		}
-		sID = fmt.Sprintf("sess_%s_%d_%x", prefix, time.Now().Unix(), time.Now().UnixNano()%1000000)
+		sID = fmt.Sprintf("sess_%s_%d_%x", prefix, time.Now().Unix(), time.Now().UnixMicro()%1000000)
 	}
 	c.Header("X-Airoute-Session-ID", sID)
 	return sID

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
@@ -14,7 +15,24 @@ type Migration struct {
 }
 
 // runMigrations executes a sequence of schema migrations within a dialect-specific tracking table.
+// On PostgreSQL it first takes an advisory lock so that concurrent replicas cannot
+// race through the same DDL, and each migration plus its version record is
+// committed atomically.
 func (db *DB) runMigrations(migrations []Migration) error {
+	if db.Dialect() == "postgres" {
+		conn, err := db.DB.Conn(context.Background())
+		if err != nil {
+			return fmt.Errorf("acquire migration connection: %w", err)
+		}
+		defer conn.Close()
+		if _, err := conn.ExecContext(context.Background(), `SELECT pg_advisory_lock(hashtext('airoute_migrations'))`); err != nil {
+			return fmt.Errorf("acquire migration advisory lock: %w", err)
+		}
+		defer func() {
+			_, _ = conn.ExecContext(context.Background(), `SELECT pg_advisory_unlock(hashtext('airoute_migrations'))`)
+		}()
+	}
+
 	var createMigrationsTableSQL string
 	if db.Dialect() == "postgres" {
 		createMigrationsTableSQL = `CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -50,19 +68,34 @@ func (db *DB) runMigrations(migrations []Migration) error {
 		}
 
 		telemetry.Logger.Info("applying database migration", "version", m.Version, "name", m.Name, "dialect", db.Dialect())
-		if err := m.Up(db); err != nil {
+		// Up and the version record are two separate statements rather than one
+		// transaction; see applyMigration below. A crash between them replays the
+		// migration on the next start, which is safe because every migration is
+		// written to be idempotent. This comment used to claim the two were
+		// committed together, which they never were.
+		if err := db.applyMigration(m); err != nil {
 			return fmt.Errorf("migration %d (%s) failed: %w", m.Version, m.Name, err)
 		}
+	}
+	return nil
+}
 
-		var recordSQL string
-		if db.Dialect() == "postgres" {
-			recordSQL = "INSERT INTO schema_migrations (version, name) VALUES ($1, $2)"
-		} else {
-			recordSQL = "INSERT INTO schema_migrations (version, name) VALUES (?, ?)"
-		}
-		if _, err := db.DB.Exec(recordSQL, m.Version, m.Name); err != nil {
-			return fmt.Errorf("record migration %d error: %w", m.Version, err)
-		}
+// applyMigration runs one migration and records its version. Migrations are
+// written to be idempotent (CREATE ... IF NOT EXISTS, ADD COLUMN IF NOT EXISTS,
+// ensureSQLiteColumn), so a crash between the DDL and the version record simply
+// replays the migration safely on the next start.
+func (db *DB) applyMigration(m Migration) error {
+	if err := m.Up(db); err != nil {
+		return err
+	}
+	var recordSQL string
+	if db.Dialect() == "postgres" {
+		recordSQL = "INSERT INTO schema_migrations (version, name) VALUES ($1, $2)"
+	} else {
+		recordSQL = "INSERT INTO schema_migrations (version, name) VALUES (?, ?)"
+	}
+	if _, err := db.DB.Exec(recordSQL, m.Version, m.Name); err != nil {
+		return fmt.Errorf("record migration: %w", err)
 	}
 	return nil
 }

@@ -1,4 +1,7 @@
 web/node_modules
+# Build artifact, rebuilt inside the image; the go-builder stage copies it from
+# the web-builder stage rather than from the build context.
+web/dist
 bin/
 data/
 .git

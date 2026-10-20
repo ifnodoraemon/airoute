@@ -3,18 +3,26 @@ package controlplane
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
 )
 
-// validateProbeURL verifies that the downstream URL does not target forbidden metadata endpoints (SSRF prevention).
+// validateProbeURL blocks cloud metadata endpoints unconditionally and can
+// additionally block loopback/private ranges via environment flags. Self-hosted
+// gateways legitimately probe intranet vLLM/Ollama instances, so private
+// addresses are allowed by default while metadata stays forbidden.
 func validateProbeURL(targetURL string) error {
 	u, err := url.Parse(targetURL)
 	if err != nil {
 		return fmt.Errorf("invalid URL format: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("only http/https URLs can be probed")
 	}
 
 	hostname := u.Hostname()
@@ -22,23 +30,51 @@ func validateProbeURL(targetURL string) error {
 		return fmt.Errorf("empty hostname in URL")
 	}
 
-	// Always block cloud metadata link-local addresses (AWS/GCP/Azure/Alibaba metadata endpoint 169.254.169.254)
+	// Cloud metadata endpoints are never a valid LLM upstream.
 	if hostname == "169.254.169.254" || strings.HasPrefix(hostname, "169.254.") {
 		return fmt.Errorf("probing cloud metadata IP (%s) is strictly forbidden for security", hostname)
 	}
 
-	// Strict SSRF protection mode if enabled
-	if os.Getenv("GATEWAY_BLOCK_PRIVATE_PROBE") == "true" {
-		ips, err := net.LookupIP(hostname)
-		if err == nil {
-			for _, ip := range ips {
-				if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
-					return fmt.Errorf("probing private/loopback IP address (%s) is forbidden in strict mode", ip.String())
-				}
-			}
+	blockPrivate := os.Getenv("GATEWAY_BLOCK_PRIVATE_PROBE") == "true"
+	blockLoopback := os.Getenv("GATEWAY_BLOCK_LOOPBACK_PROBE") == "true"
+	if !blockPrivate && !blockLoopback && !strings.EqualFold(hostname, "localhost") {
+		return nil
+	}
+
+	ips, err := net.LookupIP(hostname)
+	if err != nil {
+		return fmt.Errorf("cannot resolve host %s: %w", hostname, err)
+	}
+	if len(ips) == 0 {
+		return fmt.Errorf("host %s resolved to no addresses", hostname)
+	}
+	loopbackOnly := blockLoopback || strings.EqualFold(hostname, "localhost")
+	for _, ip := range ips {
+		if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+			return fmt.Errorf("probing link-local/unspecified address (%s) is forbidden", ip.String())
+		}
+		if ip.IsLoopback() && loopbackOnly {
+			return fmt.Errorf("probing loopback address (%s) is forbidden (set GATEWAY_BLOCK_LOOPBACK_PROBE=false to allow)", ip.String())
+		}
+		if ip.IsPrivate() && blockPrivate && !ip.IsLoopback() {
+			return fmt.Errorf("probing private address (%s) is forbidden by GATEWAY_BLOCK_PRIVATE_PROBE", ip.String())
 		}
 	}
 	return nil
+}
+
+// safeProbeClient returns an HTTP client that pins redirects off, so a public
+// URL cannot bounce the probe into the intranet.
+func safeProbeClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout: timeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 3 {
+				return fmt.Errorf("too many redirects")
+			}
+			return validateProbeURL(req.URL.String())
+		},
+	}
 }
 
 // inferProviderType guesses the specific provider category from headers, URL, and model IDs.

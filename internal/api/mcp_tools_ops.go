@@ -13,9 +13,9 @@ import (
 // executeOpsTools executes gateway cluster status, model routes, and usage log queries.
 func (h *MCPHandler) executeOpsTools(ctx context.Context, name string, args map[string]interface{}) (string, bool, bool) {
 	switch name {
-	case "airoute_cluster_status", "nano_check_status":
+	case "airoute_cluster_status":
 		if h.repo != nil {
-			if h.repo.CountActiveKeys() > 0 {
+			if h.repo.CountAPIKeys() > 0 {
 				apiKey, _ := ctx.Value(contextKeyCallerKey).(string)
 				if apiKey == "" {
 					if k, ok := args["api_key"].(string); ok && k != "" {
@@ -78,7 +78,7 @@ func (h *MCPHandler) executeOpsTools(ctx context.Context, name string, args map[
 		}
 		return "Status OK", false, true
 
-	case "airoute_model_topology", "nano_list_models":
+	case "airoute_model_topology":
 		if h.dispatcher != nil {
 			routes := h.dispatcher.GetModelRoutes()
 			if len(routes) > 0 {
@@ -111,7 +111,7 @@ func (h *MCPHandler) executeOpsTools(ctx context.Context, name string, args map[
 		}
 		return `[{"model":"deepseek-chat","modality":"chat","providers":2},{"model":"deepseek-reasoner","modality":"chat","providers":2},{"model":"gpt-4o","modality":"chat","providers":1}]`, false, true
 
-	case "airoute_query_logs", "nano_query_logs":
+	case "airoute_query_logs":
 		if h.repo == nil {
 			return "Storage repository not initialized", true, true
 		}
@@ -133,7 +133,7 @@ func (h *MCPHandler) executeOpsTools(ctx context.Context, name string, args map[
 		sessionID, _ := args["session_id"].(string)
 
 		// Tenant isolation & access control:
-		if h.repo.CountActiveKeys() > 0 && callerKeyRec == nil {
+		if h.repo.CountAPIKeys() > 0 && callerKeyRec == nil {
 			return "Error: Authentication required to query global logs. Please provide a valid API key.", true, true
 		}
 

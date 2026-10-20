@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   Shield,
   Code,
@@ -34,8 +34,8 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
       {/* Category sidebar */}
-      <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-3 space-y-1 shadow-sm h-fit">
-        <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-3 mb-2 block">
+      <div className="ui-card p-3 space-y-1 h-fit">
+        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-3 mb-2 block">
           {isZh ? '接入与规范文档' : 'Documentation & Specs'}
         </span>
         
@@ -137,7 +137,7 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
       </div>
 
       {/* Doc Content */}
-      <div className="md:col-span-3 bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-8 shadow-sm space-y-6">
+      <div className="md:col-span-3 ui-card p-8 shadow-sm space-y-6">
         {docsSection === 'architecture' && (
           <div className="space-y-6">
             <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
@@ -165,16 +165,16 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
               </div>
               <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
                 {isZh
-                  ? '遭遇上游 429 (并发限流)、500/502/503 (服务端异常) 或网络连接超时，首字分块发出前毫秒内切换到备份 Provider，客户端完全无感，连接不中断，零错误率。'
+                  ? '首个内容分块发出前遇到上游错误时，网关会尝试备用渠道；切换耗时由上游和超时配置决定。'
                   : 'When encountering upstream 429 rate limits, 500/502/503 errors, or timeouts, the gateway automatically switches to a backup provider within milliseconds before the first chunk is emitted, keeping connections uninterrupted with 0% error rate.'}
               </p>
               <div className="bg-white dark:bg-[#0b0f19] p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-900/50 text-xs space-y-2">
                 <span className="font-semibold text-slate-800 dark:text-slate-200 block">{isZh ? '容灾工作流时序:' : 'Failover Workflow Sequence:'}</span>
-                <div className="font-mono text-[11px] text-slate-600 dark:text-slate-400 space-y-1">
+                <div className="font-mono text-xs text-slate-600 dark:text-slate-400 space-y-1">
                   <div>{isZh ? '[客户端请求] ➔ Airoute ➔ 首选渠道 A (Primary Provider)' : '[Client Request] ➔ Airoute ➔ Primary Provider A'}</div>
                   <div className="text-amber-600 dark:text-amber-400">{isZh ? '↳ 发生 429 Rate Limit / 500 错误 (未输出首字 chunk)' : '↳ Upstream 429 Rate Limit / 500 error (before first chunk)'}</div>
-                  <div className="text-emerald-600 dark:text-emerald-400">{isZh ? '↳ 网关拦截异常并在 15ms 内重定向至备份渠道 B (Backup Provider)' : '↳ Gateway intercepts failure & reroutes to Backup Provider B within 15ms'}</div>
-                  <div>{isZh ? '↳ 客户端正常接收首字分块及完整 SSE 数据流，业务层调用成功率稳定保持 100%' : '↳ Client receives first token chunk & full SSE stream, maintaining 100% SLA'}</div>
+                  <div className="text-emerald-600 dark:text-emerald-400">{isZh ? '↳ 网关在首个内容分块前尝试备份渠道 B' : '↳ Gateway tries Backup Provider B before sending content'}</div>
+                  <div>{isZh ? '↳ 如果备用渠道成功，客户端继续接收 SSE；已输出内容后的错误不会重试' : '↳ A successful backup continues the SSE stream; errors after content starts are not retried'}</div>
                 </div>
               </div>
             </div>
@@ -204,7 +204,7 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
                       <th className="py-2 px-3 font-semibold">{isZh ? '支持的上游后端提供商' : 'Supported Upstream Providers'}</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-emerald-100 dark:divide-emerald-900/40 text-[11px]">
+                  <tbody className="divide-y divide-emerald-100 dark:divide-emerald-900/40 text-xs">
                     <tr>
                       <td className="py-2 px-3 font-mono text-indigo-600 dark:text-indigo-400 font-semibold">OpenAI Chat</td>
                       <td className="py-2 px-3 font-mono">/v1/chat/completions</td>
@@ -249,19 +249,19 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-center">
                 <div className="p-2.5 rounded-xl bg-white dark:bg-[#0b0f19] border border-purple-100 dark:border-purple-900/50">
                   <span className="text-xs font-bold text-purple-700 dark:text-purple-300">{isZh ? '💬 文本/对话' : '💬 Text / Chat'}</span>
-                  <p className="text-[10px] text-slate-400 mt-0.5">{isZh ? 'SSE 零拷贝流式' : 'SSE Zero-Copy Stream'}</p>
+                  <p className="ui-meta mt-0.5">{isZh ? 'SSE 流式转发' : 'SSE Streaming'}</p>
                 </div>
                 <div className="p-2.5 rounded-xl bg-white dark:bg-[#0b0f19] border border-purple-100 dark:border-purple-900/50">
                   <span className="text-xs font-bold text-pink-700 dark:text-pink-300">{isZh ? '🎨 图像生成' : '🎨 Image Gen'}</span>
-                  <p className="text-[10px] text-slate-400 mt-0.5">/v1/images/generations</p>
+                  <p className="ui-meta mt-0.5">/v1/images/generations</p>
                 </div>
                 <div className="p-2.5 rounded-xl bg-white dark:bg-[#0b0f19] border border-purple-100 dark:border-purple-900/50">
                   <span className="text-xs font-bold text-cyan-700 dark:text-cyan-300">{isZh ? '🔊 语音 TTS/STT' : '🔊 Audio TTS/STT'}</span>
-                  <p className="text-[10px] text-slate-400 mt-0.5">{isZh ? '音频二进制直通流' : 'Binary Audio Streaming'}</p>
+                  <p className="ui-meta mt-0.5">{isZh ? '音频二进制直通流' : 'Binary Audio Streaming'}</p>
                 </div>
                 <div className="p-2.5 rounded-xl bg-white dark:bg-[#0b0f19] border border-purple-100 dark:border-purple-900/50">
                   <span className="text-xs font-bold text-teal-700 dark:text-teal-300">{isZh ? '🎬 视频生成' : '🎬 Video Gen'}</span>
-                  <p className="text-[10px] text-slate-400 mt-0.5">{isZh ? '异步任务与轮询' : 'Async Tasks & Polling'}</p>
+                  <p className="ui-meta mt-0.5">{isZh ? '异步任务与轮询' : 'Async Tasks & Polling'}</p>
                 </div>
               </div>
             </div>
@@ -270,12 +270,12 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
             <div className="p-5 rounded-2xl bg-sky-50/50 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-800/60 space-y-2">
               <h4 className="font-bold text-sm text-sky-900 dark:text-sky-200 flex items-center space-x-2">
                 <Server className="w-4 h-4 text-sky-600 dark:text-sky-400" />
-                <span>{isZh ? '4. Zero-DB 热路径与双节点双活高可用架构' : '4. Zero-DB Fast Path & Active-Active HA Architecture'}</span>
+                <span>{isZh ? '4. 单机与多副本部署' : '4. Single-Node and Multi-Replica Deployment'}</span>
               </h4>
               <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
                 {isZh
-                  ? '数据面读操作 100% 内存无锁运行，无任何数据库 IO 延迟；控制面配置变更通过 WAL 模式原子写入并毫秒级广播至内存。前置 Nginx 对 2 个网关副本进行加权轮询，实现节点故障秒级隔离与 99.99% 高可用。'
-                  : 'Data-plane reads run 100% in-memory with zero DB latency; control-plane updates sync atomically via WAL and broadcast in milliseconds. Dual active-active nodes with Nginx load balancing provide 99.99% uptime.'}
+                  ? '单副本可使用 SQLite；多副本需 PostgreSQL 和共享签名密钥。路由配置缓存在内存，但计费与控制面仍依赖数据库。'
+                  : 'A single replica can use SQLite. Multiple replicas require PostgreSQL and a shared signing secret. Routing data is cached in memory, while billing and control-plane operations still depend on the database.'}
               </p>
             </div>
           </div>
@@ -292,7 +292,7 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
                 {isZh
-                  ? '源自 Dieter Rams 经典设计准则。真正的产品力不是堆砌繁琐的噱头功能，而是通过克制的设计，把大模型转发、流式零拷贝、首字前容灾与开发体验做到极致。'
+                  ? '源自 Dieter Rams 经典设计准则。真正的产品力不是堆砌繁琐的噱头功能，而是通过克制的设计，把大模型转发、流式处理与首字前容灾做好。'
                   : 'Inspired by Dieter Rams: true product excellence is not about accumulating bloated features, but exercising restraint to deliver extreme throughput, pre-token failover, and frictionless developer experience.'}
               </p>
             </div>
@@ -301,20 +301,20 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
               {/* Pillar 1 */}
               <div className="p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800/60 space-y-2">
                 <div className="flex items-center space-x-2 font-bold text-indigo-900 dark:text-indigo-200">
-                  <span className="w-5 h-5 rounded-lg bg-indigo-500 text-white flex items-center justify-center text-[10px]">1</span>
-                  <span>{isZh ? '架构极简：Zero-DB 热路径' : 'Minimalist Architecture: Zero-DB Fast Path'}</span>
+                  <span className="w-5 h-5 rounded-lg bg-indigo-500 text-white flex items-center justify-center text-xs">1</span>
+                  <span>{isZh ? '架构极简：内存路由缓存' : 'Minimalist Architecture: In-Memory Routing Cache'}</span>
                 </div>
                 <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
                   {isZh
-                    ? '数据面读路径 100% 内存无锁运行，无任何数据库 I/O 延迟与复杂分布式协调。控制面配置变更基于 WAL 模式原子写入并毫秒级广播至内存。'
-                    : 'Data plane runs 100% in-memory with lock-free concurrency and zero DB I/O latency. Control plane updates sync atomically via WAL and broadcast in milliseconds.'}
+                    ? '路由配置缓存在内存，控制面和计费仍使用数据库；多副本使用 PostgreSQL 同步配置。'
+                    : 'Routing configuration is cached in memory. Control-plane and billing work still use the database; multi-replica deployments synchronize through PostgreSQL.'}
                 </p>
               </div>
 
               {/* Pillar 2 */}
               <div className="p-4 rounded-2xl bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 space-y-2">
                 <div className="flex items-center space-x-2 font-bold text-emerald-900 dark:text-emerald-200">
-                  <span className="w-5 h-5 rounded-lg bg-emerald-500 text-white flex items-center justify-center text-[10px]">2</span>
+                  <span className="w-5 h-5 rounded-lg bg-emerald-500 text-white flex items-center justify-center text-xs">2</span>
                   <span>{isZh ? '交互极简：开箱即用与智能推导' : 'Zero Mental Friction: 1-Click Presets'}</span>
                 </div>
                 <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
@@ -327,7 +327,7 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
               {/* Pillar 3 */}
               <div className="p-4 rounded-2xl bg-purple-50/50 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-800/60 space-y-2">
                 <div className="flex items-center space-x-2 font-bold text-purple-900 dark:text-purple-200">
-                  <span className="w-5 h-5 rounded-lg bg-purple-500 text-white flex items-center justify-center text-[10px]">3</span>
+                  <span className="w-5 h-5 rounded-lg bg-purple-500 text-white flex items-center justify-center text-xs">3</span>
                   <span>{isZh ? '信息极简：渐进式呈现 (Progressive Disclosure)' : 'Information Density: Progressive Disclosure'}</span>
                 </div>
                 <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
@@ -340,13 +340,13 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
               {/* Pillar 4 */}
               <div className="p-4 rounded-2xl bg-sky-50/50 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-800/60 space-y-2">
                 <div className="flex items-center space-x-2 font-bold text-sky-900 dark:text-sky-200">
-                  <span className="w-5 h-5 rounded-lg bg-sky-500 text-white flex items-center justify-center text-[10px]">4</span>
+                  <span className="w-5 h-5 rounded-lg bg-sky-500 text-white flex items-center justify-center text-xs">4</span>
                   <span>{isZh ? '工程极简：透明无感容灾自愈' : 'Resilience: Zero-Surprise Self-Healing'}</span>
                 </div>
                 <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
                   {isZh
-                    ? '首字输出前遇到上游 429、500 或网络波动，网关在 15ms 内自动旁路至备用服务商。客户端保持 100% 连通，消灭业务层多余的重试样板代码。'
-                    : 'When upstream hits 429 or 500 errors, the gateway transparently reroutes to backup providers within 15ms before the first chunk, eliminating client retry boilerplate.'}
+                    ? '首个内容分块输出前遇到上游错误时，网关会尝试备用渠道。切换耗时取决于上游响应和超时配置。'
+                    : 'When an upstream fails before sending content, the gateway tries a backup. Failover time depends on upstream response and configured timeouts.'}
                 </p>
               </div>
             </div>
@@ -396,7 +396,7 @@ for chunk in response:
               </pre>
               <button
                 onClick={() => copyToClipboard(`from openai import OpenAI\n\nclient = OpenAI(\n    base_url="${docBaseUrl}",\n    api_key="sk-airoute-xxxx",\n)\n\nresponse = client.chat.completions.create(\n    model="deepseek-v3",\n    messages=[{"role": "user", "content": "你好！"}],\n    stream=True,\n)\n\nfor chunk in response:\n    content = chunk.choices[0].delta.content or ""\n    print(content, end="", flush=True)`, 'py')}
-                className="absolute top-3 right-3 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-sm text-[11px] font-mono flex items-center space-x-1"
+                className="absolute top-3 right-3 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-sm text-xs font-mono flex items-center space-x-1"
               >
                 {copiedKey === 'py' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                 <span>{copiedKey === 'py' ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制' : 'Copy')}</span>
@@ -410,8 +410,8 @@ for chunk in response:
               </span>
               <p className="leading-relaxed">
                 {isZh
-                  ? '网关在流式与非流式模式下均原生支持 reasoning_content 字段的零拷贝透传。前端应用或 NextChat / LobeChat 可直接原生渲染展开思维链推导卡片。'
-                  : 'Natively passes through reasoning_content in streaming and non-streaming modes with zero copy overhead. Client apps like NextChat or LobeChat render reasoning chains out of the box.'}
+                  ? '网关可处理 OpenAI 兼容的 reasoning_content 字段；原生 Anthropic 渠道保留签名思考块，跨协议请求的推理字段可能受到目标协议限制。'
+                  : 'Handles OpenAI-compatible reasoning_content. Native Anthropic routes preserve signed thinking blocks; cross-protocol behavior depends on the target API.'}
               </p>
             </div>
 
@@ -426,7 +426,7 @@ for chunk in response:
                 </pre>
                 <button
                   onClick={() => copyToClipboard(`curl -X POST "${docBaseUrl}/chat/completions" \\\n  -H "Authorization: Bearer sk-airoute-xxxx" \\\n  -H "Content-Type: application/json" \\\n  -d '{"model": "deepseek-v3", "messages": [{"role": "user", "content": "Ping"}], "stream": true}'`, 'curl')}
-                  className="absolute top-2 right-2 px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-sm text-[11px] font-mono flex items-center space-x-1"
+                  className="absolute top-2 right-2 px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-sm text-xs font-mono flex items-center space-x-1"
                 >
                   {copiedKey === 'curl' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                   <span>{copiedKey === 'curl' ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制' : 'Copy')}</span>
@@ -463,7 +463,7 @@ print(message.content[0].text)`}
               </pre>
               <button
                 onClick={() => copyToClipboard(`import anthropic\n\nclient = anthropic.Anthropic(\n    base_url="${docOrigin}",\n    api_key="sk-airoute-xxxx",\n)\n\nmessage = client.messages.create(\n    model="claude-3-7-sonnet",\n    max_tokens=1024,\n    messages=[\n        {"role": "user", "content": "请介绍量子计算的核心原理。"}\n    ]\n)\nprint(message.content[0].text)`, 'claude')}
-                className="absolute top-3 right-3 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-sm text-[11px] font-mono flex items-center space-x-1"
+                className="absolute top-3 right-3 px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-sm text-xs font-mono flex items-center space-x-1"
               >
                 {copiedKey === 'claude' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                 <span>{copiedKey === 'claude' ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制' : 'Copy')}</span>
@@ -474,7 +474,7 @@ print(message.content[0].text)`}
               <span className="font-bold">{isZh ? '💡 全双工协议转换特性:' : '💡 Full-Duplex Protocol Translation:'}</span>
               <p>
                 {isZh
-                  ? '即使您的下游供应商是仅支持 OpenAI 协议的私有集群，客户端通过 Anthropic SDK 请求时，网关也会在内存零拷贝将 Claude Messages 双向转换为 OpenAI Completions 并在返回时转回 Anthropic 格式。'
+                  ? '普通 Claude Messages 文本和工具调用可转换到 OpenAI 兼容渠道。签名思考块、缓存标记等原生字段需要 Anthropic 渠道。'
                   : 'Even if your downstream provider only supports OpenAI protocol, the gateway bidirectionally translates Claude Messages to OpenAI Completions and formats the response back with zero latency.'}
               </p>
             </div>
@@ -558,27 +558,27 @@ GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
               <h4 className="font-bold text-slate-900 dark:text-slate-100">{isZh ? '映射格式与示例:' : 'Mapping Formats & Examples:'}</h4>
               <ul className="list-disc pl-5 space-y-1.5 text-slate-700 dark:text-slate-300">
                 <li>
-                  <strong>{isZh ? '精确别名重写:' : 'Exact Alias Rewrite:'}</strong> <code className="text-indigo-600 font-mono">yy/xxx/xx:xxx/xx</code> <br />
+                  <strong>{isZh ? '精确别名重写:' : 'Exact Alias Rewrite:'}</strong> <code className="text-indigo-600 dark:text-indigo-400 font-mono">yy/xxx/xx:xxx/xx</code> <br />
                   {isZh ? (
-                    <>客户端请求 <code className="text-indigo-600 font-mono">yy/xxx/xx</code>，发往上游时自动零拷贝重写为 <code className="text-indigo-600 font-mono">xxx/xx</code>。</>
+                    <>客户端请求 <code className="text-indigo-600 dark:text-indigo-400 font-mono">yy/xxx/xx</code>，发往上游时改写为 <code className="text-indigo-600 dark:text-indigo-400 font-mono">xxx/xx</code>。</>
                   ) : (
-                    <>Client requests <code className="text-indigo-600 font-mono">yy/xxx/xx</code>; gateway rewrites it to <code className="text-indigo-600 font-mono">xxx/xx</code> before dispatching.</>
+                    <>Client requests <code className="text-indigo-600 dark:text-indigo-400 font-mono">yy/xxx/xx</code>; gateway rewrites it to <code className="text-indigo-600 dark:text-indigo-400 font-mono">xxx/xx</code> before dispatching.</>
                   )}
                 </li>
                 <li>
-                  <strong>{isZh ? '前缀通配映射:' : 'Prefix Wildcard Mapping:'}</strong> <code className="text-indigo-600 font-mono">org/dept/*:*</code> <br />
+                  <strong>{isZh ? '前缀通配映射:' : 'Prefix Wildcard Mapping:'}</strong> <code className="text-indigo-600 dark:text-indigo-400 font-mono">org/dept/*:*</code> <br />
                   {isZh ? (
-                    <>客户端请求 <code className="text-indigo-600 font-mono">org/dept/v1/deepseek-ai/DeepSeek-V4-Pro</code>，自动剥离前缀发往目标集群。</>
+                    <>客户端请求 <code className="text-indigo-600 dark:text-indigo-400 font-mono">org/dept/v1/deepseek-ai/DeepSeek-V4-Pro</code>，自动剥离前缀发往目标集群。</>
                   ) : (
-                    <>Client requests <code className="text-indigo-600 font-mono">org/dept/v1/deepseek-ai/DeepSeek-V4-Pro</code>; prefix is stripped and routed to upstream.</>
+                    <>Client requests <code className="text-indigo-600 dark:text-indigo-400 font-mono">org/dept/v1/deepseek-ai/DeepSeek-V4-Pro</code>; prefix is stripped and routed to upstream.</>
                   )}
                 </li>
                 <li>
-                  <strong>{isZh ? '服务商自动前缀:' : 'Provider Auto-Prefix Routing:'}</strong> <code className="text-indigo-600 font-mono">&lt;ProviderName&gt;/&lt;Model&gt;</code> <br />
+                  <strong>{isZh ? '服务商自动前缀:' : 'Provider Auto-Prefix Routing:'}</strong> <code className="text-indigo-600 dark:text-indigo-400 font-mono">&lt;ProviderName&gt;/&lt;Model&gt;</code> <br />
                   {isZh ? (
-                    <>当存在多个提供商均提供 <code className="text-indigo-600 font-mono">gpt-6</code> 时，客户端可直接指定 <code className="text-indigo-600 font-mono">openai-us/gpt-6</code> 精准定向路由！</>
+                    <>当存在多个提供商均提供 <code className="text-indigo-600 dark:text-indigo-400 font-mono">gpt-6</code> 时，客户端可直接指定 <code className="text-indigo-600 dark:text-indigo-400 font-mono">openai-us/gpt-6</code> 精准定向路由！</>
                   ) : (
-                    <>When multiple providers offer <code className="text-indigo-600 font-mono">gpt-6</code>, clients can directly route to <code className="text-indigo-600 font-mono">openai-us/gpt-6</code>!</>
+                    <>When multiple providers offer <code className="text-indigo-600 dark:text-indigo-400 font-mono">gpt-6</code>, clients can directly route to <code className="text-indigo-600 dark:text-indigo-400 font-mono">openai-us/gpt-6</code>!</>
                   )}
                 </li>
               </ul>
@@ -596,7 +596,7 @@ GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
             <div className="space-y-3 text-xs">
               <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
                 <span className="font-bold text-slate-900 dark:text-slate-100">{isZh ? '1. 重排请求格式 (POST /v1/rerank):' : '1. Rerank Request Format (POST /v1/rerank):'}</span>
-                <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl font-mono overflow-x-auto text-[11px] leading-relaxed">
+                <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl font-mono overflow-x-auto text-xs leading-relaxed">
 {`curl -X POST ${docOrigin}/v1/rerank \\
   -H "Authorization: Bearer sk-airoute-xxxx" \\
   -H "Content-Type: application/json" \\
@@ -618,8 +618,8 @@ GET /v1/videos/tasks/:id    -> 轮询状态直到 SUCCESS 并返回 video_url`}
                 <span className="font-bold">{isZh ? '🎯 高可用熔断与透明兜底保障:' : '🎯 High-Availability & Circuit Breaker Protection:'}</span>
                 <p className="leading-relaxed">
                   {isZh
-                    ? '当首选重排提供商（如私有部署的集群实例）发生 OOM、503 或网络异常时，Airoute 会在毫秒级内自动安全切换至备选重排提供商，为企业级 RAG 知识库检索流水线提供全天候 99.99% 的 SLA 稳定可用保障。'
-                    : 'When the primary reranker instance encounters OOM, 503, or network errors, Airoute transparently switches to the backup provider within milliseconds, ensuring 99.99% uptime for RAG pipelines.'}
+                    ? '首选重排渠道失败时，网关会尝试已配置的备用渠道；实际可用性取决于上游与部署环境。'
+                    : 'When the primary reranker fails, the gateway tries a configured backup. Availability depends on the upstreams and deployment.'}
                 </p>
               </div>
             </div>

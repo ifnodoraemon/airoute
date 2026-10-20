@@ -140,7 +140,9 @@ func (h *AdminHandler) DeleteSkill(c *gin.Context) {
 // ├── scripts/
 // │   └── run.sh
 // └── references/
-//     └── metadata.json
+//
+//	└── metadata.json
+//
 // Supports caching to Local/RustFS/S3 and presigned URL redirection.
 func (h *AdminHandler) DownloadSkillZip(c *gin.Context) {
 	id := c.Param("id")

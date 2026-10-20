@@ -35,14 +35,14 @@ func TestChatIDAndChannelAudit(t *testing.T) {
 	dispatcher.RegisterProvider(&channelReportingProvider{chatID: upstreamChatID})
 
 	ch := &storage.ChannelRecord{
-		Name:    "Mock Primary",
-		Type:    "mock-reporting",
-		BaseURL: "http://mock.local",
-		APIKey:  "sk-test",
-		Models:  []string{"test-model"},
+		Name:     "Mock Primary",
+		Type:     "mock-reporting",
+		BaseURL:  "http://mock.local",
+		APIKey:   "sk-test",
+		Models:   []string{"test-model"},
 		Priority: 1,
-		Weight:  10,
-		Status:  "active",
+		Weight:   10,
+		Status:   "active",
 	}
 	require.NoError(t, repo.CreateChannel(ch))
 	require.NoError(t, sync.ReloadFromDB())
@@ -70,16 +70,15 @@ func TestChatIDAndChannelAudit(t *testing.T) {
 		// on streams (SSE headers are written before the upstream ID is
 		// known), and the audit DB record carries the real upstream ID.
 		assert.Empty(t, resp.Header().Get("X-Airoute-Chat-ID"))
-		assert.Empty(t, resp.Header().Get("X-Nano-Chat-ID"))
 
 		// Async logger is not enabled in tests; verify via direct record readback
 		require.NoError(t, repo.RecordUsageLog(&storage.UsageLogRecord{
-			TraceID:   "tr-audit-1",
-			ChatID:    upstreamChatID,
-			Channel:   "Mock Primary",
-			Model:     "test-model",
+			TraceID:     "tr-audit-1",
+			ChatID:      upstreamChatID,
+			Channel:     "Mock Primary",
+			Model:       "test-model",
 			TotalTokens: 10,
-			CreatedAt: time.Now(),
+			CreatedAt:   time.Now(),
 		}))
 
 		// Filter by the new dedicated ChatID column
@@ -195,7 +194,9 @@ type channelReportingProvider struct {
 
 func (p *channelReportingProvider) Name() string { return "mock-reporting" }
 
-func (p *channelReportingProvider) Type() model.ProviderType { return model.ProviderType("mock-reporting") }
+func (p *channelReportingProvider) Type() model.ProviderType {
+	return model.ProviderType("mock-reporting")
+}
 
 func (p *channelReportingProvider) ChatComplete(_ context.Context, _ *model.ChatCompletionRequest, _ *model.ChannelConfig) (*model.ChatCompletionResponse, error) {
 	return &model.ChatCompletionResponse{

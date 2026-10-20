@@ -1,6 +1,8 @@
-import React from 'react';
-import { X } from 'lucide-react';
+import { X, Loader2 } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
+import useFormDirty from '../hooks/useFormDirty';
+import useUnsavedGuard from '../hooks/useUnsavedGuard';
+import DiscardChangesDialog from './DiscardChangesDialog';
 
 export default function KeyModal({
   isOpen,
@@ -10,10 +12,23 @@ export default function KeyModal({
   pricingGroups = ['default'],
   adminUser,
   onSubmit,
+  submitting = false,
   lang = 'zh',
   t
 }) {
-  useModalA11y(isOpen, onClose);
+  // Dismissing the dialog must not silently drop a half-filled key form.
+  const isDirty = useFormDirty(isOpen, newKey);
+  const { confirming, requestClose, keepEditing, discard } = useUnsavedGuard({ isOpen, isDirty, onClose });
+  const guardedClose = () => {
+    // A save already in flight owns the draft: don't prompt about discarding
+    // it, and never trap the user if the request hangs.
+    if (submitting) {
+      onClose?.();
+      return;
+    }
+    requestClose();
+  };
+  useModalA11y(isOpen, guardedClose);
 
   if (!isOpen) return null;
   const isZh = lang === 'zh';
@@ -22,11 +37,12 @@ export default function KeyModal({
     <div
       className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) guardedClose();
       }}
     >
       <form
         onSubmit={onSubmit}
+        aria-busy={submitting}
         className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-150"
       >
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
@@ -37,8 +53,8 @@ export default function KeyModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
-            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
+            onClick={guardedClose}
+            className="ui-icon-btn"
           >
             <X className="w-5 h-5" />
           </button>
@@ -46,7 +62,7 @@ export default function KeyModal({
 
         <div className="space-y-4 text-xs">
           <div>
-            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+            <label className="ui-label">
               {isZh ? '密钥名称' : 'Key Name / Description'} <span className="text-rose-500">*</span>
             </label>
             <input
@@ -54,12 +70,12 @@ export default function KeyModal({
               value={newKey.tenant_id}
               onChange={(e) => setNewKey({ ...newKey, tenant_id: e.target.value })}
               placeholder={isZh ? '如 个人开发 / Cursor / Claude Code' : 'e.g. Cursor, Claude Code, Dev Team'}
-              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 text-xs"
+              className="ui-field"
             />
           </div>
 
           <div>
-            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1 text-xs">
+            <label className="ui-label text-xs">
               {isZh ? '计费分组 (Pricing Group)' : 'Pricing Group'}
             </label>
             {adminUser?.role === 'admin' ? (
@@ -91,7 +107,7 @@ export default function KeyModal({
                   placeholder={isZh ? '或输入自定义计费分组标识' : 'or enter custom pricing group ID'}
                   value={newKey.group_name || ''}
                   onChange={(e) => setNewKey({ ...newKey, group_name: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '') })}
-                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 text-xs"
+                  className="ui-field ui-field-sm font-mono"
                 />
               </div>
             ) : (
@@ -108,7 +124,7 @@ export default function KeyModal({
                       }`}
                     >
                       <div className="text-xs font-bold">{isZh ? '默认基础组 (default)' : 'Default Group (default)'}</div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      <div className="ui-meta mt-0.5">
                         {isZh ? '标准定价，适合常规调用或测试环境' : 'Standard rate, ideal for general dev and testing'}
                       </div>
                     </button>
@@ -124,7 +140,7 @@ export default function KeyModal({
                       <div className="text-xs font-bold text-amber-600 dark:text-amber-400">
                         {adminUser.group_name.toUpperCase()} {isZh ? '专属保障组' : 'Tier Group'}
                       </div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      <div className="ui-meta mt-0.5">
                         {isZh ? '享受您账号签约的特权与优惠费率' : 'Enjoy your account negotiated discount rates'}
                       </div>
                     </button>
@@ -133,9 +149,9 @@ export default function KeyModal({
                   <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
                     <div>
                       <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">{isZh ? '默认计费组 (Standard)' : 'Default Group (Standard)'}</div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">{isZh ? '该密钥调用将按通用标准费率结算扣费' : 'Usage will be billed under general standard rates'}</div>
+                      <div className="ui-meta mt-0.5">{isZh ? '该密钥调用将按通用标准费率结算扣费' : 'Usage will be billed under general standard rates'}</div>
                     </div>
-                    <span className="px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    <span className="px-2 py-0.5 rounded-lg text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                       {isZh ? '标准费率' : 'Standard'}
                     </span>
                   </div>
@@ -149,20 +165,17 @@ export default function KeyModal({
               <label className="font-semibold text-slate-700 dark:text-slate-300">{isZh ? 'API 密钥' : 'API Key'}</label>
               <button
                 type="button"
-                onClick={() => {
-                  const rand = 'sk-airoute-' + Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 6);
-                  setNewKey(prev => ({ ...prev, key: rand }));
-                }}
-                className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 cursor-pointer"
+                onClick={() => setNewKey(prev => ({ ...prev, key: '' }))}
+                className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 cursor-pointer"
               >
-                <span>{isZh ? '随机生成' : 'Generate'}</span>
+                <span>{isZh ? '由服务端安全生成' : 'Generate server-side'}</span>
               </button>
             </div>
             <input
               value={newKey.key}
               onChange={(e) => setNewKey({ ...newKey, key: e.target.value })}
               placeholder={isZh ? '留空自动生成' : 'Leave empty to auto-generate'}
-              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-xs"
+              className="ui-field font-mono"
             />
           </div>
 
@@ -171,7 +184,7 @@ export default function KeyModal({
               <label className="font-semibold text-slate-700 dark:text-slate-300">
                 {isZh ? '额度限制 (CNY, 0 为不限)' : 'Quota Limit (CNY, 0 for unlimited)'}
               </label>
-              <div className="flex items-center space-x-1.5 text-[11px]">
+              <div className="flex items-center space-x-1.5 text-xs">
                 {[
                   { label: isZh ? '不限' : 'Unlimited', val: 0 },
                   { label: '¥10', val: 10 },
@@ -195,7 +208,7 @@ export default function KeyModal({
               min="0"
               value={newKey.budget ?? 0}
               onChange={(e) => setNewKey({ ...newKey, budget: parseFloat(e.target.value) || 0 })}
-              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-xs"
+              className="ui-field font-mono"
             />
           </div>
 
@@ -204,7 +217,7 @@ export default function KeyModal({
               <label className="font-semibold text-slate-700 dark:text-slate-300">
                 {isZh ? '速率限制 (RPM, 0 为不限)' : 'Rate Limit (RPM, 0 for unlimited)'}
               </label>
-              <div className="flex items-center space-x-1.5 text-[11px]">
+              <div className="flex items-center space-x-1.5 text-xs">
                 {[
                   { label: isZh ? '不限' : 'Unlimited', val: 0 },
                   { label: '60', val: 60 },
@@ -226,27 +239,48 @@ export default function KeyModal({
               type="number"
               value={newKey.rpm}
               onChange={(e) => setNewKey({ ...newKey, rpm: parseInt(e.target.value) || 0 })}
-              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 font-mono text-xs"
+              className="ui-field font-mono"
             />
           </div>
         </div>
 
-        <div className="flex justify-end space-x-3 pt-4 border-t border-slate-100 dark:border-slate-800/80">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 font-medium transition cursor-pointer"
-          >
-            {isZh ? '取消' : 'Cancel'}
-          </button>
-          <button
-            type="submit"
-            className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium shadow-sm transition cursor-pointer"
-          >
-            {isZh ? '确认创建' : 'Create Key'}
-          </button>
+        <div className="flex items-center justify-between gap-3 pt-4 border-t border-slate-100 dark:border-slate-800/80">
+          <span className="ui-meta-sm truncate">
+            {isDirty && !submitting ? (isZh ? '有未保存的修改' : 'Unsaved changes') : ''}
+          </span>
+          <div className="flex items-center space-x-3 shrink-0">
+            <button
+              type="button"
+              onClick={guardedClose}
+              className="ui-btn-ghost"
+            >
+              {isZh ? '取消' : 'Cancel'}
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="ui-btn-primary"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>{isZh ? '创建中…' : 'Creating…'}</span>
+                </>
+              ) : (
+                <span>{isZh ? '确认创建' : 'Create Key'}</span>
+              )}
+            </button>
+          </div>
         </div>
       </form>
+
+      <DiscardChangesDialog
+        open={confirming}
+        onKeepEditing={keepEditing}
+        onDiscard={discard}
+        lang={lang}
+        title={isZh ? '放弃未保存的密钥配置？' : 'Discard this key draft?'}
+      />
     </div>
   );
 }

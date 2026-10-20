@@ -21,6 +21,8 @@ func TestSkills_OnDemandTogglingAndMCP(t *testing.T) {
 	defer db.Close()
 
 	repo := storage.NewRepository(db)
+	// Admin tokens are validated against the users table, so seed the admin account.
+	assert.NoError(t, repo.CreateUser(&storage.UserRecord{Username: "admin", Role: "admin", Status: "active", Balance: 1000}))
 	dispatcher := router.NewDispatcher(nil)
 	sync := controlplane.NewSynchronizer(repo, dispatcher)
 	adminHandler := controlplane.NewAdminHandler(repo, sync, dispatcher)

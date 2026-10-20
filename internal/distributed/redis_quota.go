@@ -66,8 +66,8 @@ func (c *Client) AllowRPM(ctx context.Context, apiKey string, rpm int) (bool, er
 		return true, nil // unmetered or not active
 	}
 
-	key := fmt.Sprintf("nano:ratelimit:rpm:%s", apiKey)
-	nowMs := time.Now().UnixNano() / int64(time.Millisecond)
+	key := fmt.Sprintf("airoute:ratelimit:rpm:%s", apiKey)
+	nowMs := time.Now().UnixMilli()
 
 	res, err := slidingWindowLua.Run(ctx, c.rdb, []string{key}, rpm, nowMs).Result()
 	if err != nil {
@@ -88,7 +88,7 @@ func (c *Client) RecordTokens(ctx context.Context, apiKey string, tokens int) er
 	if !c.IsActive() || tokens <= 0 {
 		return nil
 	}
-	key := "nano:keys:tokens"
+	key := "airoute:keys:tokens"
 	return c.rdb.HIncrBy(ctx, key, apiKey, int64(tokens)).Err()
 }
 
@@ -97,7 +97,7 @@ func (c *Client) TryAcquireInFlightQuota(ctx context.Context, userID int64, bala
 	if !c.IsActive() || userID <= 0 {
 		return true, nil
 	}
-	key := fmt.Sprintf("nano:inflight:user:%d", userID)
+	key := fmt.Sprintf("airoute:inflight:user:%d", userID)
 	ttl := 120 // 120s safety timeout to avoid permanently trapped in-flight quota if node crashes
 	res, err := inFlightQuotaAcquireLua.Run(ctx, c.rdb, []string{key}, balance, minReserveCost, ttl).Result()
 	if err != nil {
@@ -112,6 +112,6 @@ func (c *Client) ReleaseInFlightQuota(ctx context.Context, userID int64) error {
 	if !c.IsActive() || userID <= 0 {
 		return nil
 	}
-	key := fmt.Sprintf("nano:inflight:user:%d", userID)
+	key := fmt.Sprintf("airoute:inflight:user:%d", userID)
 	return inFlightQuotaReleaseLua.Run(ctx, c.rdb, []string{key}).Err()
 }

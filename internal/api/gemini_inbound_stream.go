@@ -18,7 +18,7 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, canonicalReq)
 	if err != nil {
 		recordFailedRequest(c, sessionID, canonicalReq.Model, time.Since(start), http.StatusBadGateway)
-		RespondGeminiError(c, http.StatusBadGateway, err.Error(), "UNAVAILABLE")
+		RespondGeminiError(c, http.StatusBadGateway, sanitizeErrorMessage(err), "UNAVAILABLE")
 		return
 	}
 
@@ -32,12 +32,29 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 	totalPromptTokens := 0
 	totalCompTokens := 0
 	firstTokenRecorded := false
+	var ttftDuration time.Duration
 	upstreamChannel := ""      // populated from the first stream event
 	geminiUpstreamChatID := "" // upstream response ID, captured from the first chunk
 
+	accumulatedChars := 0
+	usageSource := "upstream"
+	var streamError error
+	var finalCost, finalSaved float64
+	var finalCached int
+
 	var recordOnce sync.Once
-	recordStreamEnd := func() {
-		RecordUsage(c, AuditRecordParams{
+	recordStreamEnd := func(statusCode int) {
+		if statusCode == http.StatusOK {
+			if totalPromptTokens == 0 {
+				totalPromptTokens = estimateCanonicalPromptTokens(canonicalReq)
+				usageSource = "estimated"
+			}
+			if totalCompTokens == 0 && accumulatedChars > 0 {
+				totalCompTokens = estimateTokens(accumulatedChars)
+				usageSource = "estimated"
+			}
+		}
+		finalCost, finalSaved, finalCached = recordUsage(c, AuditRecordParams{
 			SessionID:        sessionID,
 			ChatID:           geminiUpstreamChatID,
 			Channel:          upstreamChannel,
@@ -45,10 +62,21 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 			PromptTokens:     totalPromptTokens,
 			CompletionTokens: totalCompTokens,
 			Duration:         time.Since(start),
-			StatusCode:       http.StatusOK,
+			TTFT:             ttftDuration,
+			StatusCode:       statusCode,
+			UsageSource:      usageSource,
+			ErrorMessage:     sanitizeErrorMessage(streamError),
 		})
 	}
-	defer recordOnce.Do(recordStreamEnd)
+	defer func() {
+		recordOnce.Do(func() {
+			statusCode := http.StatusOK
+			if streamError != nil {
+				statusCode = http.StatusBadGateway
+			}
+			recordStreamEnd(statusCode)
+		})
+	}()
 
 	for {
 		select {
@@ -56,7 +84,8 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 			return
 		case event, open := <-streamChan:
 			if !open {
-				recordOnce.Do(recordStreamEnd)
+				recordOnce.Do(func() { recordStreamEnd(http.StatusOK) })
+				writeStreamUsageTrailer(w, flusher, finalCost, finalSaved, finalCached)
 				return
 			}
 
@@ -67,10 +96,11 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 			}
 
 			if event.Err != nil {
+				streamError = event.Err
 				errChunk := gin.H{
 					"error": gin.H{
 						"code":    500,
-						"message": event.Err.Error(),
+						"message": sanitizeErrorMessage(event.Err),
 					},
 				}
 				errBytes, _ := json.Marshal(errChunk)
@@ -89,16 +119,38 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 					geminiUpstreamChatID = event.Chunk.ID
 				}
 
+				// Usage may arrive on a frame with an empty choices array; capture it
+				// before the choice-specific handling so prompt tokens are not lost.
+				usageOnly := len(event.Chunk.Choices) == 0 && event.Chunk.Usage != nil
+				if event.Chunk.Usage != nil {
+					totalPromptTokens = event.Chunk.Usage.PromptTokens
+					totalCompTokens = event.Chunk.Usage.CompletionTokens
+				}
+				if usageOnly {
+					usageChunk := gin.H{
+						"usageMetadata": gin.H{
+							"promptTokenCount":     totalPromptTokens,
+							"candidatesTokenCount": totalCompTokens,
+							"totalTokenCount":      totalPromptTokens + totalCompTokens,
+						},
+					}
+					if b, err := json.Marshal(usageChunk); err == nil {
+						fmt.Fprintf(w, "data: %s\n\n", b)
+						flusher.Flush()
+					}
+				}
+
 				if len(event.Chunk.Choices) > 0 {
 					chunkChoice := event.Chunk.Choices[0]
 					var geminiParts []gin.H
 
 					if chunkChoice.Delta.Content != "" {
 						if !firstTokenRecorded {
-							telemetry.GlobalMetrics.RecordTTFT(time.Since(start))
+							ttftDuration = time.Since(start)
+							telemetry.GlobalMetrics.RecordTTFT(ttftDuration)
 							firstTokenRecorded = true
 						}
-						totalCompTokens++
+						accumulatedChars += len(chunkChoice.Delta.Content)
 						geminiParts = append(geminiParts, gin.H{"text": chunkChoice.Delta.Content})
 					}
 
@@ -141,8 +193,6 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 						}
 
 						if event.Chunk.Usage != nil {
-							totalPromptTokens = event.Chunk.Usage.PromptTokens
-							totalCompTokens = event.Chunk.Usage.CompletionTokens
 							chunkObj["usageMetadata"] = gin.H{
 								"promptTokenCount":     totalPromptTokens,
 								"candidatesTokenCount": totalCompTokens,

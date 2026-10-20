@@ -57,14 +57,25 @@ func (h *AdminHandler) AdminAuthMiddleware() gin.HandlerFunc {
 
 		authHeader := c.GetHeader("Authorization")
 		var token string
+		cookieAuth := false
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			token = strings.TrimPrefix(authHeader, "Bearer ")
 		} else if xToken := c.GetHeader("x-admin-token"); xToken != "" {
 			token = xToken
+		} else if cookieToken := sessionTokenFromCookie(c); cookieToken != "" {
+			token = cookieToken
+			cookieAuth = true
 		}
 
 		if token == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "请先登录管理员账号 (未提供凭证)"})
+			return
+		}
+
+		// Cookie-authenticated writes additionally require the double-submit
+		// CSRF token; Bearer/header clients are immune to CSRF by construction.
+		if cookieAuth && !CSRFValid(c) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": 403, "error": "CSRF 校验失败，请刷新页面后重试"})
 			return
 		}
 
@@ -75,9 +86,18 @@ func (h *AdminHandler) AdminAuthMiddleware() gin.HandlerFunc {
 		}
 
 		if h.repo != nil {
-			user, _ := h.repo.GetUserByUsername(claims.Username)
-			if user != nil && strings.EqualFold(user.Status, "locked") {
+			user, err := h.repo.GetUserByUsername(claims.Username)
+			if err != nil || user == nil {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "账户不存在或暂时无法验证，请重新登录"})
+				return
+			}
+			if strings.EqualFold(user.Status, "locked") {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": 403, "error": "该账户已被管理员锁定，无法继续访问"})
+				return
+			}
+			// A role change invalidates previously issued tokens immediately.
+			if user.Role != claims.Role {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "账户权限已变更，请重新登录"})
 				return
 			}
 		}

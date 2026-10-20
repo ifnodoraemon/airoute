@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Sparkles,
+  RefreshCw,
   BookOpen,
   FileText,
   Check,
@@ -10,17 +11,10 @@ import {
   Trash2,
   Play,
   X,
-  ExternalLink,
   ShieldCheck,
-  Cpu,
-  Layers,
   Terminal,
-  Activity,
   Code2,
   Workflow,
-  HelpCircle,
-  AlertCircle,
-  FileCode,
   DownloadCloud,
   CheckCircle2,
   GitBranch,
@@ -79,7 +73,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
   const [copiedKey, setCopiedKey] = useState('');
   const origin = getGatewayOrigin();
 
-  const fetchSkills = async () => {
+  const fetchSkills = useCallback(async () => {
     if (!adminFetch) return;
     setLoading(true);
     try {
@@ -95,9 +89,9 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
     } finally {
       setLoading(false);
     }
-  };
+  }, [adminFetch]);
 
-  const fetchStorageStatus = async () => {
+  const fetchStorageStatus = useCallback(async () => {
     if (!adminFetch) return;
     try {
       const res = await adminFetch('/api/v1/admin/storage/status');
@@ -110,12 +104,12 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
     } catch (err) {
       console.warn('Failed to load storage status:', err);
     }
-  };
+  }, [adminFetch]);
 
   useEffect(() => {
     fetchSkills();
     fetchStorageStatus();
-  }, []);
+  }, [fetchSkills, fetchStorageStatus]);
 
   const handleToggleSkill = async (skillId, currentEnabled) => {
     if (!adminFetch) return;
@@ -299,7 +293,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 max-w-3xl leading-relaxed">
+          <p className="ui-meta mt-2 max-w-3xl leading-relaxed">
             {isZh
               ? '标准化智能体 SOP 作业包体系，支持线上代码审查、直连高速下载归档与一键接入 Claude Code、Cursor、OpenCode 等客户端。'
               : 'Standardized Agent SOP packages with online review, direct downloads, and seamless client integration.'}
@@ -309,14 +303,14 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
         <div className="flex items-center gap-3 shrink-0">
           <button
             onClick={() => { setSelectedSkillForGuide(null); setClientGuideModalOpen(true); }}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-2xs cursor-pointer"
+            className="ui-btn-secondary shadow-2xs"
           >
             <BookOpen className="w-4 h-4 text-amber-600 dark:text-amber-400" />
             <span>{isZh ? '客户端接入指南' : 'Client Guide'}</span>
           </button>
           <button
             onClick={() => setCreateModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-xl transition-colors shadow-2xs cursor-pointer"
+            className="ui-btn bg-amber-600 hover:bg-amber-700 text-white shadow-2xs"
           >
             <Plus className="w-4 h-4" />
             <span>{isZh ? '新建技能' : 'New Skill'}</span>
@@ -331,9 +325,9 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
             <Workflow className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs text-slate-400">{isZh ? '已挂载 SOP 技能' : 'Available SOP Skills'}</div>
+            <div className="ui-meta">{isZh ? '已挂载 SOP 技能' : 'Available SOP Skills'}</div>
             <div className="text-xl font-bold font-mono text-slate-900 dark:text-white mt-0.5">
-              {skills.filter(s => s.enabled).length} <span className="text-xs font-normal text-slate-400">/ 共 {skills.length} 项</span>
+              {skills.filter(s => s.enabled).length} <span className="ui-meta font-normal">/ 共 {skills.length} 项</span>
             </div>
           </div>
         </div>
@@ -343,13 +337,13 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
             <ShieldCheck className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs text-slate-400">{isZh ? '标准三阶段渐进加载' : 'Progressive Loading'}</div>
+            <div className="ui-meta">{isZh ? '标准三阶段渐进加载' : 'Progressive Loading'}</div>
             <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 mt-1 flex items-center gap-1.5 font-mono">
-              <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px]">L1 检索</span>
+              <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-xs">L1 检索</span>
               <ArrowRight className="w-3 h-3 text-slate-400" />
-              <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px]">L2 SOP</span>
+              <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-xs">L2 SOP</span>
               <ArrowRight className="w-3 h-3 text-slate-400" />
-              <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[11px]">L3 执行</span>
+              <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-xs">L3 执行</span>
             </div>
           </div>
         </div>
@@ -359,7 +353,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
             <HardDrive className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs text-slate-400">{isZh ? 'ZIP 产物归档存储' : 'Bundle Storage'}</div>
+            <div className="ui-meta">{isZh ? 'ZIP 产物归档存储' : 'Bundle Storage'}</div>
             <div className="text-xs font-medium text-slate-800 dark:text-slate-200 mt-1 flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
               <span>{storageStatus?.driver === 's3' ? (isZh ? 'S3 对象存储集群' : 'S3 Object Storage') : (isZh ? '本地高速持久存储' : 'Local Fast Storage')}</span>
@@ -398,19 +392,28 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
             placeholder={isZh ? '搜索技能名称或适用工具...' : 'Search skill name or tool...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3.5 py-2 text-xs rounded-xl border border-slate-200/80 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-amber-500 transition-colors"
+            className="w-full pl-9 pr-3.5 py-2 text-xs rounded-xl border border-slate-200/80 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors"
           />
         </div>
       </div>
 
       {/* 技能卡片列表 */}
-      {filteredSkills.length === 0 ? (
+      {loading && skills.length === 0 ? (
+        // Without this the list rendered "No matching Agent Skills found" while the
+        // first request was still in flight, which reads as a broken catalogue.
+        <div className="p-16 text-center bg-white dark:bg-[#0F1420] rounded-2xl border border-slate-200 dark:border-slate-800">
+          <RefreshCw className="w-8 h-8 text-indigo-500 mx-auto mb-3 animate-spin" />
+          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+            {isZh ? '正在加载 Agent 技能…' : 'Loading Agent Skills…'}
+          </p>
+        </div>
+      ) : filteredSkills.length === 0 ? (
         <div className="p-16 text-center bg-white dark:bg-[#0F1420] rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
           <Sparkles className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
           <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
             {isZh ? '未找到匹配的 Agent 技能' : 'No matching Agent Skills found'}
           </p>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="ui-meta mt-1">
             {isZh ? '可在上方切换分类筛选或点击「新建技能」添加' : 'Switch category filters above or click "New Skill" to add one'}
           </p>
         </div>
@@ -444,11 +447,11 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
                           <h3 className="text-sm font-semibold text-slate-900 dark:text-white truncate">
                             {skill.name}
                           </h3>
-                          <span className="px-2 py-0.5 text-[10px] font-mono rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                          <span className="px-2 py-0.5 text-xs font-mono rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
                             v{skill.version || '1.0.0'}
                           </span>
                         </div>
-                        <div className="text-[11px] font-mono text-slate-400 truncate mt-0.5">
+                        <div className="ui-meta font-mono truncate mt-0.5">
                           {skill.id}
                         </div>
                       </div>
@@ -473,18 +476,18 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
 
                   {/* 适用工具清单 */}
                   {skill.tools && skill.tools.length > 0 && (
-                    <div className="flex items-center gap-1.5 flex-wrap mb-5 text-[11px]">
-                      <span className="text-slate-400 mr-0.5">{isZh ? '工具集:' : 'Tools:'}</span>
+                    <div className="flex items-center gap-1.5 flex-wrap mb-5 text-xs">
+                      <span className="ui-meta mr-0.5">{isZh ? '工具集:' : 'Tools:'}</span>
                       {skill.tools.slice(0, 5).map(t => (
                         <span
                           key={t}
-                          className="px-2 py-0.5 font-mono text-[10px] bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 rounded-md border border-slate-200/70 dark:border-slate-800"
+                          className="px-2 py-0.5 font-mono text-xs bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 rounded-md border border-slate-200/70 dark:border-slate-800"
                         >
                           {t}
                         </span>
                       ))}
                       {skill.tools.length > 5 && (
-                        <span className="text-slate-400 text-[10px] font-mono font-medium">+{skill.tools.length - 5}</span>
+                        <span className="ui-meta font-mono font-medium">+{skill.tools.length - 5}</span>
                       )}
                     </div>
                   )}
@@ -496,7 +499,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
                     <a
                       href={`/api/v1/skills/${skill.id}/download`}
                       download={`${skill.id}.zip`}
-                      className="px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 rounded-xl transition-colors inline-flex items-center gap-1.5 border border-emerald-200/80 dark:border-emerald-800/80 shadow-2xs"
+                      className="ui-btn ui-btn-sm border border-emerald-200/80 dark:border-emerald-800/80 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 shadow-2xs"
                       title={isZh ? '直接下载 .zip 压缩包' : 'Direct download .zip archive'}
                     >
                       <DownloadCloud className="w-3.5 h-3.5" />
@@ -504,21 +507,21 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
                     </a>
                     <button
                       onClick={() => { setManifestSkill(skill); setManifestTab('skill_md'); }}
-                      className="px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors inline-flex items-center gap-1.5 border border-slate-200/70 dark:border-slate-700/70 shadow-2xs cursor-pointer"
+                      className="ui-btn ui-btn-sm border border-slate-200/70 dark:border-slate-700/70 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 shadow-2xs"
                     >
                       <FileText className="w-3.5 h-3.5" />
                       <span>{isZh ? '查看 SOP' : 'View SOP'}</span>
                     </button>
                     <button
                       onClick={() => { setSelectedSkillForGuide(skill); setClientGuideModalOpen(true); }}
-                      className="px-3 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 rounded-xl transition-colors inline-flex items-center gap-1.5 border border-indigo-200/70 dark:border-indigo-800/70 shadow-2xs cursor-pointer"
+                      className="ui-btn ui-btn-sm border border-indigo-200/70 dark:border-indigo-800/70 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 shadow-2xs"
                     >
                       <Terminal className="w-3.5 h-3.5" />
                       <span>{isZh ? '接入' : 'Connect'}</span>
                     </button>
                     <button
                       onClick={() => handleOpenTest(skill)}
-                      className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                      className="ui-btn-ghost ui-btn-sm"
                     >
                       <Play className="w-3 h-3" />
                       <span>{isZh ? '演练' : 'Test'}</span>
@@ -528,7 +531,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
                   {isCustom && (
                     <button
                       onClick={() => handleDeleteSkill(skill.id)}
-                      className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                      className="ui-icon-btn hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40"
                       title={isZh ? '删除自定义技能' : 'Delete custom skill'}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -549,7 +552,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
             if (e.target === e.currentTarget) setClientGuideModalOpen(false);
           }}
         >
-          <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-[#0F1420] rounded-xl shadow-2xl border border-gray-200 dark:border-slate-800 max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-linear-to-br from-amber-500 to-orange-600 text-white rounded-lg">
@@ -559,7 +562,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
                   <h3 className="text-base font-bold text-gray-900 dark:text-white">
                     {isZh ? '智能体客户端接入示例' : 'Agent Client Integration Examples'}
                   </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="ui-meta">
                     {selectedSkillForGuide 
                       ? (isZh ? `将 [${selectedSkillForGuide.name}] 导入您的 Agent 编程环境` : `Import [${selectedSkillForGuide.name}] into your Agent environment`)
                       : (isZh ? '将 Agent Skills 规范集成到各大主流智能体客户端' : 'Integrate Agent Skills standards into major AI clients')}
@@ -568,7 +571,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
               </div>
               <button
                 onClick={() => setClientGuideModalOpen(false)}
-                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg"
+                className="ui-icon-btn"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -587,7 +590,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
                     <a
                       href={`/api/v1/skills/${currentId}/download`}
                       download={`${currentId}.zip`}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-sm transition-colors"
+                      className="ui-btn ui-btn-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
                     >
                       <DownloadCloud className="w-3.5 h-3.5" />
                       {isZh ? `一键下载 ${currentId}.zip` : `Download ${currentId}.zip`}
@@ -634,13 +637,13 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
                           <span>{isZh ? '步骤 1：下载并解压标准技能包至 Claude Code 技能目录' : 'Step 1: Download & unzip standard package to Claude Code skills dir'}</span>
                           <button
                             onClick={() => handleCopyText(`mkdir -p .claude/skills && curl -sL ${origin}/api/v1/skills/${currentId}/download -o ${currentId}.zip && unzip -q -o ${currentId}.zip -d .claude/skills/ && rm -f ${currentId}.zip`, 'cmd-claude-curl')}
-                            className="text-amber-600 hover:underline inline-flex items-center gap-1 text-[11px]"
+                            className="text-xs text-amber-600 dark:text-amber-400 hover:underline inline-flex items-center gap-1"
                           >
                             {copiedKey === 'cmd-claude-curl' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                             {isZh ? '复制一键命令' : 'Copy Command'}
                           </button>
                         </div>
-                        <pre className="p-2.5 bg-gray-900 text-gray-100 rounded-sm font-mono text-[11px] overflow-x-auto">
+                        <pre className="p-2.5 bg-gray-900 text-gray-100 rounded-sm font-mono text-xs overflow-x-auto">
 {`# ${isZh ? '一键下载解压标准包' : 'Quick download & unpack'} (${currentId}.zip)
 mkdir -p .claude/skills
 curl -sL ${origin}/api/v1/skills/${currentId}/download -o ${currentId}.zip
@@ -653,7 +656,7 @@ rm -f ${currentId}.zip`}
                         <div className="font-semibold text-gray-800 dark:text-gray-200">
                           {isZh ? '步骤 2：启动 Claude Code，智能体将自动索引并渐进式激活该技能' : 'Step 2: Launch Claude Code; agent will auto-index and activate skill'}
                         </div>
-                        <pre className="p-2.5 bg-gray-900 text-gray-100 rounded-sm font-mono text-[11px]">
+                        <pre className="p-2.5 bg-gray-900 text-gray-100 rounded-sm font-mono text-xs">
 {`claude
 # ${isZh ? '直接在对话中提出需求，Claude Code 会自动读取 .claude/skills/' + currentId + '/SKILL.md 标准流程执行！' : 'Prompt directly in chat; Claude Code auto-activates .claude/skills/' + currentId + '/SKILL.md!'}`}
                         </pre>
@@ -668,13 +671,13 @@ rm -f ${currentId}.zip`}
                           <span>{isZh ? '步骤 1：下载并解压标准技能包至 OpenCode 技能目录' : 'Step 1: Download & unzip package to OpenCode skills dir'}</span>
                           <button
                             onClick={() => handleCopyText(`mkdir -p .opencode/skills && curl -sL ${origin}/api/v1/skills/${currentId}/download -o ${currentId}.zip && unzip -q -o ${currentId}.zip -d .opencode/skills/ && rm -f ${currentId}.zip`, 'cmd-opencode-curl')}
-                            className="text-amber-600 hover:underline inline-flex items-center gap-1 text-[11px]"
+                            className="text-xs text-amber-600 dark:text-amber-400 hover:underline inline-flex items-center gap-1"
                           >
                             {copiedKey === 'cmd-opencode-curl' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                             {isZh ? '复制一键命令' : 'Copy Command'}
                           </button>
                         </div>
-                        <pre className="p-2.5 bg-gray-900 text-gray-100 rounded-sm font-mono text-[11px] overflow-x-auto">
+                        <pre className="p-2.5 bg-gray-900 text-gray-100 rounded-sm font-mono text-xs overflow-x-auto">
 {`# ${isZh ? '一键下载解压标准包' : 'Quick download & unpack'} (${currentId}.zip)
 mkdir -p .opencode/skills
 curl -sL ${origin}/api/v1/skills/${currentId}/download -o ${currentId}.zip
@@ -687,7 +690,7 @@ rm -f ${currentId}.zip`}
                         <div className="font-semibold text-gray-800 dark:text-gray-200">
                           {isZh ? '步骤 2：启动 OpenCode' : 'Step 2: Launch OpenCode'}
                         </div>
-                        <pre className="p-2.5 bg-gray-900 text-gray-100 rounded-sm font-mono text-[11px]">
+                        <pre className="p-2.5 bg-gray-900 text-gray-100 rounded-sm font-mono text-xs">
 {`opencode
 # ${isZh ? 'OpenCode 原生兼容 agentskills.io 开放标准，遇到触发词自动载入 SOP 并调用工具' : 'OpenCode natively adheres to agentskills.io, auto-loading SOP on keyword triggers'}`}
                         </pre>
@@ -701,13 +704,13 @@ rm -f ${currentId}.zip`}
                         <span>{isZh ? 'Python SDK (OpenAI / Codex API) 载入与网关调用示例：' : 'Python SDK (OpenAI / Codex API) Gateway Integration Example:'}</span>
                         <button
                           onClick={() => handleCopyText(`import os\nimport urllib.request\nimport zipfile\nimport pathlib\nfrom openai import OpenAI\n\n# 1. Pull & unzip skill archive\nskill_id = "${currentId}"\nzip_path = f"{skill_id}.zip"\nurllib.request.urlretrieve(f"${origin}/api/v1/skills/{skill_id}/download", zip_path)\nwith zipfile.ZipFile(zip_path, "r") as z:\n    z.extractall(".skills/")\nos.remove(zip_path)\n\n# 2. Read pure SKILL.md as System SOP\nskill_sop = pathlib.Path(f".skills/{skill_id}/SKILL.md").read_text(encoding="utf-8")\n\n# 3. Connect via airoute unified gateway\nclient = OpenAI(base_url="${origin}/v1", api_key="sk-airoute-key")\nresponse = client.chat.completions.create(\n    model="claude-3-7-sonnet",\n    messages=[\n        {"role": "system", "content": f"Follow this Skill SOP:\\n{skill_sop}"},\n        {"role": "user", "content": "Execute task following workflow specification"}\n    ]\n)\nprint(response.choices[0].message.content)`, 'cmd-codex')}
-                          className="text-amber-600 hover:underline inline-flex items-center gap-1 text-[11px]"
+                          className="text-xs text-amber-600 dark:text-amber-400 hover:underline inline-flex items-center gap-1"
                         >
                           {copiedKey === 'cmd-codex' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                           {isZh ? '复制代码' : 'Copy Code'}
                         </button>
                       </div>
-                      <pre className="p-3 bg-gray-900 text-gray-100 rounded-lg font-mono text-[11px] overflow-x-auto">
+                      <pre className="p-3 bg-gray-900 text-gray-100 rounded-lg font-mono text-xs overflow-x-auto">
 {`import os
 import urllib.request
 import zipfile
@@ -746,13 +749,13 @@ print(response.choices[0].message.content)`}
                           <span>{isZh ? 'Cursor / Cline 导入方案' : 'Cursor / Cline Import Options'}</span>
                           <button
                             onClick={() => handleCopyText(`mkdir -p .cursor/skills && curl -sL ${origin}/api/v1/skills/${currentId}/download -o ${currentId}.zip && unzip -q -o ${currentId}.zip -d .cursor/skills/ && rm -f ${currentId}.zip`, 'cmd-cursor')}
-                            className="text-amber-600 hover:underline inline-flex items-center gap-1 text-[11px]"
+                            className="text-xs text-amber-600 dark:text-amber-400 hover:underline inline-flex items-center gap-1"
                           >
                             {copiedKey === 'cmd-cursor' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                             {isZh ? '复制一键命令' : 'Copy Command'}
                           </button>
                         </div>
-                        <pre className="p-2.5 bg-gray-900 text-gray-100 rounded-sm font-mono text-[11px] overflow-x-auto">
+                        <pre className="p-2.5 bg-gray-900 text-gray-100 rounded-sm font-mono text-xs overflow-x-auto">
 {`# ${isZh ? '方案 A: 解压至 Cursor 技能目录' : 'Option A: Unpack to Cursor skills directory'}
 mkdir -p .cursor/skills
 curl -sL ${origin}/api/v1/skills/${currentId}/download -o ${currentId}.zip
@@ -789,7 +792,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
             if (e.target === e.currentTarget) setManifestSkill(null);
           }}
         >
-          <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-3xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-[#0F1420] rounded-xl shadow-2xl border border-gray-200 dark:border-slate-800 max-w-3xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             {/* 模态框头部 */}
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
@@ -803,7 +806,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
                       {manifestSkill.id}
                     </span>
                   </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="ui-meta">
                     {isZh ? '遵循 agentskills.io 开放标准的智能体 SOP 标准包与元数据契约' : 'Standard SOP package and metadata contract adhering to agentskills.io'}
                   </p>
                 </div>
@@ -827,7 +830,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
                 </button>
                 <button
                   onClick={() => setManifestSkill(null)}
-                  className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg"
+                  className="ui-icon-btn"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -886,7 +889,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
             {/* Tab 1: SKILL.md */}
             {manifestTab === 'skill_md' && (
               <div className="space-y-2">
-                <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 px-1">
+                <div className="flex items-center justify-between ui-meta px-1">
                   <span>{isZh ? '纯业务 SOP 指令契约 (不包含客户端下载逻辑，三级渐进披露规范)' : 'Pure business SOP contract (3-tier progressive disclosure)'}</span>
                   <span className="font-mono">{manifestSkill.manifest.length} {isZh ? '字符' : 'chars'}</span>
                 </div>
@@ -900,7 +903,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
             {manifestTab === 'bundle_tree' && (
               <div className="space-y-4">
                 {/* 存储后端与加速说明 */}
-                <div className="p-3 bg-linear-to-r from-gray-50 to-slate-100 dark:from-gray-900 dark:to-gray-850 rounded-xl border border-gray-200 dark:border-gray-800 flex items-start justify-between gap-3 text-xs">
+                <div className="p-3 bg-linear-to-r from-gray-50 to-slate-100 dark:from-gray-900 dark:to-[#0F1420] rounded-xl border border-gray-200 dark:border-gray-800 flex items-start justify-between gap-3 text-xs">
                   <div className="space-y-1">
                     <div className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
                       {storageStatus?.driver === 's3' ? (
@@ -915,13 +918,13 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
                         </>
                       )}
                     </div>
-                    <p className="text-gray-500 dark:text-gray-400 text-[11px]">
+                    <p className="ui-meta">
                       {storageStatus?.driver === 's3'
                         ? (isZh ? '下载请求由网关直接签发 AWS SigV4 预签名临时 URL，302 重定向直连 RustFS 高速传输，完全释放网关带宽。' : 'Download requests are signed with AWS SigV4 presigned URLs and redirected 302 to RustFS high-speed transfer, offloading gateway bandwidth.')
                         : (isZh ? '归档包由网关本地磁盘存储提供流式下载与持久化。配置 STORAGE_DRIVER=s3 可无缝切换至 RustFS 对象存储。' : 'Archive packages are streamed directly from gateway local disk. Set STORAGE_DRIVER=s3 to switch to RustFS.')}
                     </p>
                   </div>
-                  <span className="px-2 py-0.5 rounded-sm text-[10px] font-mono font-medium bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
+                  <span className="px-2 py-0.5 rounded-sm text-xs font-mono font-medium bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
                     S3 Key: skills/{manifestSkill.id}.zip
                   </span>
                 </div>
@@ -932,32 +935,32 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
                     <Folder className="w-4 h-4" />
                     <span>{manifestSkill.id}.zip ({isZh ? 'agentskills.io 标准封装包' : 'agentskills.io standard bundle'})</span>
                   </div>
-                  <div className="pl-4 space-y-1 text-gray-300 text-[11px]">
+                  <div className="pl-4 space-y-1 text-gray-300 text-xs">
                     <div className="text-blue-400 flex items-center gap-1.5">
                       <span>└── 📁 {manifestSkill.id}/</span>
                     </div>
                     <div className="pl-6 space-y-1 text-gray-300">
                       <div className="flex items-center justify-between text-emerald-300">
                         <span>├── 📄 SKILL.md</span>
-                        <span className="text-gray-500 text-[10px]">{isZh ? '# 核心 SOP 流程契约与三级执行阶段' : '# Core SOP contract & 3-stage execution'}</span>
+                        <span className="text-gray-400 text-xs">{isZh ? '# 核心 SOP 流程契约与三级执行阶段' : '# Core SOP contract & 3-stage execution'}</span>
                       </div>
                       <div className="flex items-center justify-between text-yellow-300">
                         <span>├── 📄 metadata.json</span>
-                        <span className="text-gray-500 text-[10px]">{isZh ? '# 技能描述、版本与作者元数据' : '# Skill description, version, and author metadata'}</span>
+                        <span className="text-gray-400 text-xs">{isZh ? '# 技能描述、版本与作者元数据' : '# Skill description, version, and author metadata'}</span>
                       </div>
                       <div className="text-blue-300">
                         <span>├── 📁 scripts/</span>
                       </div>
                       <div className="pl-6 flex items-center justify-between text-purple-300">
                         <span>│   └── ⚙️ run.sh</span>
-                        <span className="text-gray-500 text-[10px]">{isZh ? '# 可选本机自动化演练或 Hook 脚本' : '# Optional local rehearsal or hook script'}</span>
+                        <span className="text-gray-400 text-xs">{isZh ? '# 可选本机自动化演练或 Hook 脚本' : '# Optional local rehearsal or hook script'}</span>
                       </div>
                       <div className="text-blue-300">
                         <span>└── 📁 references/</span>
                       </div>
                       <div className="pl-6 flex items-center justify-between text-sky-300">
                         <span>    └── 📑 context.md</span>
-                        <span className="text-gray-500 text-[10px]">{isZh ? '# 补充上下文与规则详情' : '# Supplemental context & rule details'}</span>
+                        <span className="text-gray-400 text-xs">{isZh ? '# 补充上下文与规则详情' : '# Supplemental context & rule details'}</span>
                       </div>
                     </div>
                   </div>
@@ -969,13 +972,13 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
                     <span>{isZh ? '终端下载并解压命令 (Terminal Quickstart)' : 'Terminal Quickstart Download & Unzip'}</span>
                     <button
                       onClick={() => handleCopyText(`curl -sL ${origin}/api/v1/skills/${manifestSkill.id}/download -o ${manifestSkill.id}.zip && unzip -q -o ${manifestSkill.id}.zip -d skills/`, 'tree-curl')}
-                      className="text-amber-600 hover:underline inline-flex items-center gap-1 text-[11px]"
+                      className="text-xs text-amber-600 dark:text-amber-400 hover:underline inline-flex items-center gap-1"
                     >
                       {copiedKey === 'tree-curl' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                       {isZh ? '复制命令' : 'Copy Command'}
                     </button>
                   </div>
-                  <pre className="p-2 bg-gray-900 text-gray-200 rounded-sm font-mono text-[11px] overflow-x-auto">
+                  <pre className="p-2 bg-gray-900 text-gray-200 rounded-sm font-mono text-xs overflow-x-auto">
 {`curl -sL ${origin}/api/v1/skills/${manifestSkill.id}/download -o ${manifestSkill.id}.zip
 unzip -q -o ${manifestSkill.id}.zip -d skills/`}
                   </pre>
@@ -986,7 +989,7 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
             {/* Tab 3: metadata.json */}
             {manifestTab === 'metadata' && (
               <div className="space-y-2">
-                <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 px-1">
+                <div className="flex items-center justify-between ui-meta px-1">
                   <span>{isZh ? 'agentskills.io 元数据声明契约' : 'agentskills.io Metadata Contract'}</span>
                   <button
                     onClick={() => handleCopyText(JSON.stringify({
@@ -1004,7 +1007,7 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
                         driver: storageStatus?.driver || 'local'
                       }
                     }, null, 2), 'meta-json')}
-                    className="inline-flex items-center gap-1 text-amber-600 hover:underline"
+                    className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400 hover:underline"
                   >
                     {copiedKey === 'meta-json' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                     <span>{copiedKey === 'meta-json' ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制 JSON' : 'Copy JSON')}</span>
@@ -1054,7 +1057,7 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
             if (e.target === e.currentTarget) setTestModalSkill(null);
           }}
         >
-          <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-[#0F1420] rounded-xl shadow-2xl border border-gray-200 dark:border-slate-800 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-linear-to-br from-amber-500 to-orange-600 text-white rounded-lg">
@@ -1064,14 +1067,14 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
                   <h3 className="text-base font-bold text-gray-900 dark:text-white">
                     {isZh ? `模拟 SOP 执行演练: ${testModalSkill.name}` : `Simulated SOP Execution: ${testModalSkill.name}`}
                   </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="ui-meta">
                     {isZh ? '模拟智能体在此技能指引下的三级执行链路与输出' : 'Simulating Agent 3-tier execution trace and output under this skill'}
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setTestModalSkill(null)}
-                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg"
+                className="ui-icon-btn"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1079,14 +1082,14 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
 
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label className="ui-label">
                   {isZh ? '用户意图与输入场景 (Prompt / Scenario)' : 'User Intent & Scenario (Prompt / Scenario)'}
                 </label>
                 <textarea
                   rows="3"
                   value={testPrompt}
                   onChange={(e) => setTestPrompt(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  className="ui-field bg-gray-50 dark:bg-gray-900"
                 />
               </div>
 
@@ -1109,7 +1112,7 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
                   </div>
                   <div className="bg-gray-900 text-gray-100 p-3.5 rounded-xl font-mono text-xs overflow-x-auto space-y-1.5 border border-gray-800">
                     {testOutput.trace?.map((line, idx) => (
-                      <div key={idx} className="text-gray-300 text-[11px]">{line}</div>
+                      <div key={idx} className="text-gray-300 text-xs">{line}</div>
                     ))}
                     <div className="mt-2 pt-2 border-t border-gray-800 text-emerald-400 font-bold">
                       {testOutput.verdict}
@@ -1139,7 +1142,7 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
             if (e.target === e.currentTarget) setCreateModalOpen(false);
           }}
         >
-          <div className="bg-white dark:bg-gray-850 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-750 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-[#0F1420] rounded-xl shadow-2xl border border-gray-200 dark:border-slate-800 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-linear-to-br from-amber-500 to-orange-600 text-white rounded-lg">
@@ -1149,14 +1152,14 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
                   <h3 className="text-base font-bold text-gray-900 dark:text-white">
                     {isZh ? '新建自定义 Agent 技能' : 'Create Custom Agent Skill'}
                   </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="ui-meta">
                     {isZh ? '遵循 agentskills.io 规范编写自定义工作流 SOP' : 'Author custom workflow SOP adhering to agentskills.io standards'}
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setCreateModalOpen(false)}
-                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg"
+                className="ui-icon-btn"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1165,7 +1168,7 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
             <form onSubmit={handleCreateSkill} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="ui-label">
                     {isZh ? '技能 ID (如: api-designer) *' : 'Skill ID (e.g. api-designer) *'}
                   </label>
                   <input
@@ -1174,11 +1177,11 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
                     placeholder={isZh ? "如: api-designer" : "e.g. api-designer"}
                     value={newSkill.id}
                     onChange={(e) => setNewSkill({ ...newSkill, id: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                    className="ui-field bg-gray-50 dark:bg-gray-900"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="ui-label">
                     {isZh ? '技能名称 *' : 'Skill Name *'}
                   </label>
                   <input
@@ -1187,20 +1190,20 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
                     placeholder={isZh ? '如: OpenAPI 3.0 接口规范设计' : 'e.g. OpenAPI 3.0 API Design'}
                     value={newSkill.name}
                     onChange={(e) => setNewSkill({ ...newSkill, name: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                    className="ui-field bg-gray-50 dark:bg-gray-900"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="ui-label">
                     {isZh ? '分类领域' : 'Category'}
                   </label>
                   <select
                     value={newSkill.category}
                     onChange={(e) => setNewSkill({ ...newSkill, category: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                    className="ui-field bg-gray-50 dark:bg-gray-900"
                   >
                     <option value="dev">{isZh ? '研发工程 (dev)' : 'Dev Engineering (dev)'}</option>
                     <option value="test">{isZh ? '质量保障 (test)' : 'QA & TDD (test)'}</option>
@@ -1209,7 +1212,7 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="ui-label">
                     {isZh ? '依赖工具 (逗号分隔)' : 'Required Tools (comma separated)'}
                   </label>
                   <input
@@ -1217,13 +1220,13 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
                     placeholder={isZh ? "如: run_command, view_file" : "e.g. run_command, view_file"}
                     value={newSkill.tools}
                     onChange={(e) => setNewSkill({ ...newSkill, tools: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-mono"
+                    className="ui-field bg-gray-50 dark:bg-gray-900 font-mono"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label className="ui-label">
                   {isZh ? '简要描述与触发时机 *' : 'Description & Trigger Conditions *'}
                 </label>
                 <textarea
@@ -1232,12 +1235,12 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
                   placeholder={isZh ? '说明该技能的功能以及智能体在何时应当激活...' : 'Describe skill capabilities and trigger situations...'}
                   value={newSkill.description}
                   onChange={(e) => setNewSkill({ ...newSkill, description: e.target.value })}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white"
+                  className="ui-field bg-gray-50 dark:bg-gray-900"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label className="ui-label">
                   {isZh ? 'SKILL.md 规范内容 (Markdown)' : 'SKILL.md Specification (Markdown)'}
                 </label>
                 <textarea
@@ -1262,7 +1265,7 @@ allowed-tools:
                 <button
                   type="button"
                   onClick={() => setCreateModalOpen(false)}
-                  className="px-4 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200"
+                  className="px-4 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700"
                 >
                   {isZh ? '取消' : 'Cancel'}
                 </button>

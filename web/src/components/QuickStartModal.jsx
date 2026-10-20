@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, Copy, Check, Terminal, Code, Cpu, Sparkles, BookOpen } from 'lucide-react';
 import { getGatewayOrigin } from '../config';
 import useModalA11y from '../hooks/useModalA11y';
@@ -240,7 +240,7 @@ for chunk in llm.stream(messages):
               className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${
                 activeTab === 'cursor'
                   ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
-                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-500" />
@@ -251,7 +251,7 @@ for chunk in llm.stream(messages):
               className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${
                 activeTab === 'claude'
                   ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
-                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
               <Terminal className="w-3.5 h-3.5" />
@@ -262,7 +262,7 @@ for chunk in llm.stream(messages):
               className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${
                 activeTab === 'langchain'
                   ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
-                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
               <Cpu className="w-3.5 h-3.5" />
@@ -273,7 +273,7 @@ for chunk in llm.stream(messages):
               className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${
                 activeTab === 'python'
                   ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
-                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
               <Code className="w-3.5 h-3.5" />
@@ -284,7 +284,7 @@ for chunk in llm.stream(messages):
               className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${
                 activeTab === 'node'
                   ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
-                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
               <BookOpen className="w-3.5 h-3.5" />
@@ -295,7 +295,7 @@ for chunk in llm.stream(messages):
               className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${
                 activeTab === 'curl'
                   ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
-                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
               <Terminal className="w-3.5 h-3.5" />
@@ -306,7 +306,7 @@ for chunk in llm.stream(messages):
               className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${
                 activeTab === 'client'
                   ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60'
-                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
               <span>{isZh ? '桌面客户端' : 'Desktop Apps'}</span>

@@ -6,6 +6,9 @@ import (
 	"time"
 )
 
+const usageLogErrorSQL = `(COALESCE(status_code, 0) < 200 OR status_code >= 400 OR COALESCE(error_message, '') <> '')`
+const usageLogSuccessSQL = `(status_code >= 200 AND status_code < 400 AND COALESCE(error_message, '') = '')`
+
 // UsageLogRecord represents an audit log entry.
 type UsageLogRecord struct {
 	ID               int64     `json:"id"`
@@ -26,6 +29,8 @@ type UsageLogRecord struct {
 	DurationMs       int64     `json:"duration_ms"`
 	TTFTMs           int64     `json:"ttft_ms"`
 	StatusCode       int       `json:"status_code"`
+	UsageSource      string    `json:"usage_source"` // "upstream" (reported) or "estimated" (local fallback)
+	ErrorMessage     string    `json:"error_message,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 }
 
@@ -42,6 +47,16 @@ type LogFilter struct {
 	TenantID       string
 	APIKeys        []string
 	ScopeByAPIKeys bool
+	// Channel narrows to one upstream channel name.
+	Channel string
+	// Status is "success" | "error" | "" (all).
+	Status string
+	// Cache is "cached" | "uncached" | "" (all).
+	Cache string
+	// Latency is "fast" (<=1000ms) | "slow" (>1000ms) | "" (all), measured on duration_ms.
+	Latency string
+	// Keyword is a free-text match across trace/chat/session/model/channel/error.
+	Keyword string
 }
 
 // ListUsageLogs returns recent usage logs for audit and monitoring.
@@ -50,18 +65,11 @@ func (r *Repository) ListUsageLogs(limit int, offset int) ([]*UsageLogRecord, er
 }
 
 // ListUsageLogsWithFilter queries logs with flexible filters (time range, trace ID, session ID, model, tenant).
-func (r *Repository) ListUsageLogsWithFilter(f LogFilter) ([]*UsageLogRecord, error) {
-	if f.Limit <= 0 || f.Limit > 200 {
-		f.Limit = 50
-	}
-	if f.Offset < 0 {
-		f.Offset = 0
-	}
-	if f.ScopeByAPIKeys && len(f.APIKeys) == 0 {
-		return make([]*UsageLogRecord, 0), nil
-	}
-
-	query := `SELECT id, trace_id, COALESCE(chat_id, ''), COALESCE(session_id, ''), COALESCE(api_key, ''), COALESCE(tenant_id, ''), COALESCE(model, ''), COALESCE(channel, ''), prompt_tokens, completion_tokens, COALESCE(cached_tokens, 0), total_tokens, COALESCE(cost, 0.0), COALESCE(is_off_peak, 0), COALESCE(off_peak_discount, 1.0), duration_ms, ttft_ms, status_code, created_at FROM usage_logs WHERE 1=1`
+// buildUsageLogWhere assembles the WHERE clause and args shared by the page
+// query and the total-count query, so pagination always reflects the complete
+// filtered result set.
+func (r *Repository) buildUsageLogWhere(f LogFilter) (string, []interface{}) {
+	where := ""
 	var args []interface{}
 
 	var startClause, endClause string
@@ -74,31 +82,31 @@ func (r *Repository) ListUsageLogsWithFilter(f LogFilter) ([]*UsageLogRecord, er
 	}
 
 	if f.StartTime != "" {
-		query += startClause
+		where += startClause
 		args = append(args, f.StartTime)
 	}
 	if f.EndTime != "" {
-		query += endClause
+		where += endClause
 		args = append(args, f.EndTime)
 	}
 	if f.TraceID != "" {
-		query += ` AND (trace_id = ? OR trace_id LIKE ?)`
+		where += ` AND (trace_id = ? OR trace_id LIKE ?)`
 		args = append(args, f.TraceID, "%"+f.TraceID+"%")
 	}
 	if f.ChatID != "" {
-		query += ` AND (chat_id = ? OR chat_id LIKE ?)`
+		where += ` AND (chat_id = ? OR chat_id LIKE ?)`
 		args = append(args, f.ChatID, "%"+f.ChatID+"%")
 	}
 	if f.SessionID != "" {
-		query += ` AND (session_id = ? OR session_id LIKE ?)`
+		where += ` AND (session_id = ? OR session_id LIKE ?)`
 		args = append(args, f.SessionID, "%"+f.SessionID+"%")
 	}
 	if f.Model != "" {
-		query += ` AND model = ?`
+		where += ` AND model = ?`
 		args = append(args, f.Model)
 	}
 	if f.TenantID != "" {
-		query += ` AND tenant_id = ?`
+		where += ` AND tenant_id = ?`
 		args = append(args, f.TenantID)
 	}
 	if len(f.APIKeys) > 0 {
@@ -107,15 +115,69 @@ func (r *Repository) ListUsageLogsWithFilter(f LogFilter) ([]*UsageLogRecord, er
 			placeholders = append(placeholders, "?")
 			args = append(args, k)
 		}
-		query += ` AND api_key IN (` + strings.Join(placeholders, ",") + `)`
+		where += ` AND api_key IN (` + strings.Join(placeholders, ",") + `)`
+	}
+	if f.Channel != "" {
+		where += ` AND channel = ?`
+		args = append(args, f.Channel)
+	}
+	if f.Status == "success" {
+		where += ` AND ` + usageLogSuccessSQL
+	} else if f.Status == "error" {
+		where += ` AND ` + usageLogErrorSQL
+	}
+	if f.Cache == "cached" {
+		where += ` AND COALESCE(cached_tokens, 0) > 0`
+	} else if f.Cache == "uncached" {
+		where += ` AND COALESCE(cached_tokens, 0) = 0`
+	}
+	if f.Latency == "fast" {
+		where += ` AND COALESCE(duration_ms, 0) <= 1000`
+	} else if f.Latency == "slow" {
+		where += ` AND COALESCE(duration_ms, 0) > 1000`
+	}
+	if f.Keyword != "" {
+		// Free-text search must run in SQL: filtering only the loaded page
+		// silently misses every match living on another page.
+		like := "%" + f.Keyword + "%"
+		where += ` AND (trace_id LIKE ? OR COALESCE(chat_id,'') LIKE ? OR COALESCE(session_id,'') LIKE ? OR COALESCE(model,'') LIKE ? OR COALESCE(channel,'') LIKE ? OR COALESCE(error_message,'') LIKE ?)`
+		args = append(args, like, like, like, like, like, like)
+	}
+	return where, args
+}
+
+// ListUsageLogsWithFilter queries logs with flexible filters (time range, trace ID, session ID, model, tenant).
+func (r *Repository) ListUsageLogsWithFilter(f LogFilter) ([]*UsageLogRecord, error) {
+	logs, _, err := r.ListUsageLogsWithFilterAndCount(f)
+	return logs, err
+}
+
+// ListUsageLogsWithFilterAndCount also returns the total number of rows matching
+// the filter (ignoring LIMIT/OFFSET), so the UI can paginate the real result set.
+func (r *Repository) ListUsageLogsWithFilterAndCount(f LogFilter) ([]*UsageLogRecord, int64, error) {
+	if f.Limit <= 0 || f.Limit > 200 {
+		f.Limit = 50
+	}
+	if f.Offset < 0 {
+		f.Offset = 0
+	}
+	if f.ScopeByAPIKeys && len(f.APIKeys) == 0 {
+		return make([]*UsageLogRecord, 0), 0, nil
 	}
 
-	query += ` ORDER BY id DESC LIMIT ? OFFSET ?`
-	args = append(args, f.Limit, f.Offset)
+	where, whereArgs := r.buildUsageLogWhere(f)
+
+	var total int64
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM usage_logs WHERE 1=1`+where, whereArgs...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	query := `SELECT id, trace_id, COALESCE(chat_id, ''), COALESCE(session_id, ''), COALESCE(api_key, ''), COALESCE(tenant_id, ''), COALESCE(model, ''), COALESCE(channel, ''), prompt_tokens, completion_tokens, COALESCE(cached_tokens, 0), total_tokens, COALESCE(cost, 0.0), COALESCE(is_off_peak, 0), COALESCE(off_peak_discount, 1.0), duration_ms, ttft_ms, status_code, COALESCE(usage_source, 'upstream'), COALESCE(error_message, ''), created_at FROM usage_logs WHERE 1=1` + where + ` ORDER BY id DESC LIMIT ? OFFSET ?`
+	args := append(append([]interface{}{}, whereArgs...), f.Limit, f.Offset)
 
 	rows, err := r.db.Query(query, args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -124,14 +186,17 @@ func (r *Repository) ListUsageLogsWithFilter(f LogFilter) ([]*UsageLogRecord, er
 		var l UsageLogRecord
 		var isOff int
 		var createdAt time.Time
-		if err := rows.Scan(&l.ID, &l.TraceID, &l.ChatID, &l.SessionID, &l.APIKey, &l.TenantID, &l.Model, &l.Channel, &l.PromptTokens, &l.CompletionTokens, &l.CachedTokens, &l.TotalTokens, &l.Cost, &isOff, &l.OffPeakDiscount, &l.DurationMs, &l.TTFTMs, &l.StatusCode, &createdAt); err != nil {
-			return nil, err
+		if err := rows.Scan(&l.ID, &l.TraceID, &l.ChatID, &l.SessionID, &l.APIKey, &l.TenantID, &l.Model, &l.Channel, &l.PromptTokens, &l.CompletionTokens, &l.CachedTokens, &l.TotalTokens, &l.Cost, &isOff, &l.OffPeakDiscount, &l.DurationMs, &l.TTFTMs, &l.StatusCode, &l.UsageSource, &l.ErrorMessage, &createdAt); err != nil {
+			return nil, 0, err
 		}
 		l.IsOffPeak = isOff == 1
 		l.CreatedAt = createdAt
 		logs = append(logs, &l)
 	}
-	return logs, nil
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return logs, total, nil
 }
 
 // DeleteUsageLog deletes a single audit log by ID.

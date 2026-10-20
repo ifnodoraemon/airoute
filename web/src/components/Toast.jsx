@@ -1,4 +1,3 @@
-import React from 'react';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 
 export default function Toast({ toast, onClose }) {

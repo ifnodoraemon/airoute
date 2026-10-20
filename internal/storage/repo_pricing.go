@@ -2,6 +2,7 @@ package storage
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,11 +12,11 @@ import (
 type ModelPriceRecord struct {
 	ID              int64     `json:"id"`
 	Model           string    `json:"model"`
-	GroupName       string    `json:"group_name"`       // "default", "vip", "enterprise", etc.
-	PromptPrice     float64   `json:"prompt_price"`     // per 1,000,000 prompt tokens (CNY/USD)
-	CompletionPrice float64   `json:"completion_price"` // per 1,000,000 completion tokens
-	CacheReadPrice  float64   `json:"cache_read_price"` // per 1,000,000 cached tokens
-	FixedPrice      float64   `json:"fixed_price"`      // per request (e.g. image/video)
+	GroupName       string    `json:"group_name"`        // "default", "vip", "enterprise", etc.
+	PromptPrice     float64   `json:"prompt_price"`      // per 1,000,000 prompt tokens (CNY/USD)
+	CompletionPrice float64   `json:"completion_price"`  // per 1,000,000 completion tokens
+	CacheReadPrice  float64   `json:"cache_read_price"`  // per 1,000,000 cached tokens
+	FixedPrice      float64   `json:"fixed_price"`       // per request (e.g. image/video)
 	Currency        string    `json:"currency"`          // CNY or USD
 	OffPeakEnabled  bool      `json:"off_peak_enabled"`  // whether time-of-use discount is active
 	OffPeakMode     string    `json:"off_peak_mode"`     // "custom", "night", "none"
@@ -97,6 +98,9 @@ func (r *Repository) GetModelFallbacks() (map[string]string, error) {
 			m[src] = dst
 		}
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return m, nil
 }
 
@@ -172,15 +176,20 @@ func (r *Repository) GetModelPriceWithGroup(modelName, groupName string) (*Model
 	if err == nil {
 		return rec, nil
 	}
-	// Fallback to default group if specific group not found
+	// Only "not found" falls back to the default group; a database failure must
+	// surface instead of silently pricing the request with the default rate.
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
 	if groupName != "default" {
 		return r.GetModelPriceExact(modelName, "default")
 	}
 	return nil, sql.ErrNoRows
 }
 
-// SaveModelPrice inserts or updates pricing rates for a model within a specific group.
-func (r *Repository) SaveModelPrice(rec *ModelPriceRecord) error {
+// normalizeModelPrice applies the defaults every price row must have before it
+// is persisted. Shared by SaveModelPrice and the transactional route bundle.
+func normalizeModelPrice(rec *ModelPriceRecord) {
 	if rec.GroupName == "" {
 		rec.GroupName = "default"
 	}
@@ -202,6 +211,12 @@ func (r *Repository) SaveModelPrice(rec *ModelPriceRecord) error {
 	if rec.OffPeakDiscount <= 0 || rec.OffPeakDiscount > 1.0 {
 		rec.OffPeakDiscount = 0.5
 	}
+}
+
+// SaveModelPrice inserts or updates pricing rates for a model within a specific group.
+func (r *Repository) SaveModelPrice(rec *ModelPriceRecord) error {
+	normalizeModelPrice(rec)
+
 	offEnabled := 0
 	if rec.OffPeakEnabled {
 		offEnabled = 1
@@ -246,5 +261,3 @@ func (r *Repository) DeleteModelPriceWithGroup(modelName, groupName string) erro
 	_, err := r.db.Exec(`DELETE FROM model_prices WHERE model = ? AND group_name = ?`, modelName, groupName)
 	return err
 }
-
-

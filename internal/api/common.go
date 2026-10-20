@@ -1,7 +1,9 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"strings"
@@ -29,18 +31,29 @@ type AuditRecordParams struct {
 	Duration         time.Duration
 	TTFT             time.Duration
 	StatusCode       int
+	UsageSource      string // "upstream" (default) or "estimated" when tokens are locally approximated
+	ErrorMessage     string // populated for failed requests so the audit log explains the failure
+	BillableUnits    int
+	SkipBilling      bool
 }
 
 // RecordUsage executes the cross-cutting concern of calculating billing cost (with off-peak discount and cached tokens),
 // emitting telemetry metrics, injecting billing headers, and asynchronously recording audit logs.
 func RecordUsage(c *gin.Context, params AuditRecordParams) float64 {
+	cost, _, _ := recordUsage(c, params)
+	return cost
+}
+
+// recordUsage is the full-fidelity variant, also returning the saved cost and
+// cached token count so streaming handlers can emit them as a trailer.
+func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, int) {
 	var cost, savedCost float64
 	var isOffPeak bool
 	var offPeakDiscount float64 = 1.0
 	keyGroup := getKeyGroup(c)
 	success := params.StatusCode >= 200 && params.StatusCode < 400
 
-	if success && billing.GlobalEngine != nil {
+	if success && !params.SkipBilling && billing.GlobalEngine != nil {
 		cost, savedCost, _, isOffPeak, offPeakDiscount = billing.GlobalEngine.CalculateCostDetailedWithGroup(
 			params.Model,
 			keyGroup,
@@ -49,11 +62,29 @@ func RecordUsage(c *gin.Context, params AuditRecordParams) float64 {
 			params.CachedTokens,
 			time.Now(),
 		)
+		if params.BillableUnits > 1 {
+			price := billing.GlobalEngine.GetPriceWithGroup(params.Model, keyGroup)
+			if price != nil {
+				// Apply the same off-peak factor as the first unit so a single
+				// request is never billed with two different rates.
+				unit := price.FixedPrice
+				if isOffPeak {
+					unit *= offPeakDiscount
+				}
+				cost += float64(params.BillableUnits-1) * unit
+			}
+		}
 	}
 
 	totTokens := params.TotalTokens
 	if totTokens == 0 {
 		totTokens = params.PromptTokens + params.CompletionTokens
+	}
+
+	// Feed actual consumption back into the per-minute token budget so the next
+	// requests from this key are gated by real usage rather than an estimate.
+	if cfg := getAPIKeyConfig(c); cfg != nil && cfg.TPM > 0 {
+		middleware.GlobalTokenQuota.Consume(cfg.Key, cfg.TPM, totTokens)
 	}
 
 	telemetry.GlobalMetrics.RecordRequestWithModel(
@@ -84,13 +115,19 @@ func RecordUsage(c *gin.Context, params AuditRecordParams) float64 {
 			Cost:             cost,
 			IsOffPeak:        isOffPeak,
 			OffPeakDiscount:  offPeakDiscount,
-			DurationMs:       params.Duration.Milliseconds(),
-			TTFTMs:           params.TTFT.Milliseconds(),
+			DurationMs:       ceilMillis(params.Duration),
+			TTFTMs:           ceilMillis(params.TTFT),
 			StatusCode:       params.StatusCode,
+			UsageSource:      params.UsageSource,
+			ErrorMessage:     params.ErrorMessage,
 		})
 	}
 
-	if success && c != nil {
+	// Cost headers can only be emitted while the response head is still open.
+	// Streaming handlers call RecordUsage after the SSE stream has already been
+	// flushed, so writing headers there is a silent no-op; they emit the numbers
+	// as a trailing SSE comment instead (see writeStreamUsageTrailer).
+	if success && c != nil && !c.Writer.Written() {
 		c.Header("X-Airoute-Cost", fmt.Sprintf("%.6f", cost))
 		if isOffPeak {
 			c.Header("X-Airoute-Off-Peak", "true")
@@ -102,7 +139,23 @@ func RecordUsage(c *gin.Context, params AuditRecordParams) float64 {
 		}
 	}
 
-	return cost
+	return cost, savedCost, params.CachedTokens
+}
+
+// writeStreamUsageTrailer appends the billing metadata as an SSE comment so
+// streaming clients still receive it after the response head was flushed.
+// SSE comment lines start with ':' and are ignored by every compliant client.
+func writeStreamUsageTrailer(w io.Writer, flusher http.Flusher, cost, savedCost float64, cachedTokens int) {
+	if w == nil {
+		return
+	}
+	line := fmt.Sprintf(": airoute-cost=%.6f saved-cost=%.6f cached-tokens=%d\n\n", cost, savedCost, cachedTokens)
+	if _, err := io.WriteString(w, line); err != nil {
+		return
+	}
+	if flusher != nil {
+		flusher.Flush()
+	}
 }
 
 // RespondOpenAIError returns a standardized OpenAI API error JSON response.
@@ -198,6 +251,21 @@ func recordFailedRequest(c *gin.Context, sessionID, modelName string, dur time.D
 	})
 }
 
+// recordFailedRequestWithError also records why the request failed.
+func recordFailedRequestWithError(c *gin.Context, sessionID, modelName string, dur time.Duration, statusCode int, err error) {
+	msg := ""
+	if err != nil {
+		msg = err.Error()
+	}
+	RecordUsage(c, AuditRecordParams{
+		SessionID:    sessionID,
+		Model:        modelName,
+		Duration:     dur,
+		StatusCode:   statusCode,
+		ErrorMessage: msg,
+	})
+}
+
 // getAPIKeyConfig returns APIKeyConfig metadata bound to the context.
 func getAPIKeyConfig(c *gin.Context) *model.APIKeyConfig {
 	if c == nil {
@@ -211,7 +279,45 @@ func getAPIKeyConfig(c *gin.Context) *model.APIKeyConfig {
 	return nil
 }
 
-var sensitivePattern = regexp.MustCompile(`(?i)(key|token|secret|password|api[-_]?key)=([a-zA-Z0-9_\-\.]+)`)
+// estimateTokens is the single token-estimation heuristic used by every audit
+// path that has to approximate usage because the upstream did not report it.
+// ~4 bytes per token is the widely used rule of thumb for mixed English/JSON
+// payloads. Previously each handler divided by 3 or 4 locally, so the same
+// request could be billed differently depending on which endpoint served it.
+func estimateTokens(chars int) int {
+	return model.EstimateTokensFromChars(chars)
+}
+
+// estimateCanonicalPromptTokens approximates prompt tokens from the canonical
+// request when the upstream did not report usage. Only used for audit display.
+func estimateCanonicalPromptTokens(req *model.ChatCompletionRequest) int {
+	if req == nil {
+		return 0
+	}
+	chars := 0
+	for _, m := range req.Messages {
+		chars += len(m.GetContentString())
+	}
+	for _, t := range req.Tools {
+		if b, err := json.Marshal(t); err == nil {
+			chars += len(b)
+		}
+	}
+	return estimateTokens(chars)
+}
+
+// Credential patterns scrubbed from upstream error bodies before they are
+// returned to a downstream client. Upstream 401/400 responses routinely echo the
+// offending credential back ("Incorrect API key provided: sk-abc..."), and the
+// old key=value-only regex missed those entirely.
+//
+// Deliberately explicit rather than "any long random-looking word": error
+// messages also contain model names and chat IDs, which must stay readable.
+var (
+	sensitivePattern = regexp.MustCompile(`(?i)\b(api[-_]?key|access[-_]?token|secret|password|passwd)(["']?\s*[:=]\s*["']?)([^\s"',}\]]{4,})`)
+	bearerPattern    = regexp.MustCompile(`(?i)\b(bearer)\s+([A-Za-z0-9_\-\.\+=/]{8,})`)
+	providerKeyRegex = regexp.MustCompile(`\b(sk-[A-Za-z0-9_\-]{8,}|gsk_[A-Za-z0-9]{8,}|xai-[A-Za-z0-9]{8,}|hf_[A-Za-z0-9]{8,}|AIza[0-9A-Za-z_\-]{20,})`)
+)
 
 // sanitizeErrorMessage strips sensitive tokens/keys and credentials from error strings before returning to clients.
 func sanitizeErrorMessage(err error) string {
@@ -219,7 +325,24 @@ func sanitizeErrorMessage(err error) string {
 		return ""
 	}
 	msg := err.Error()
-	msg = sensitivePattern.ReplaceAllString(msg, "$1=REDACTED")
+	// Credential-shaped tokens first: once a label like "Authorization:" has been
+	// rewritten, the token after it would no longer be recognisable.
+	msg = bearerPattern.ReplaceAllString(msg, "$1 [REDACTED]")
+	msg = providerKeyRegex.ReplaceAllStringFunc(msg, func(s string) string {
+		switch {
+		case strings.HasPrefix(strings.ToLower(s), "sk-"):
+			return "sk-[REDACTED]"
+		case strings.HasPrefix(s, "AIza"):
+			return "AIza[REDACTED]"
+		default:
+			// gsk_ / xai- / hf_ keep their recognizable prefix.
+			if i := strings.IndexAny(s, "_-"); i > 0 {
+				return s[:i+1] + "[REDACTED]"
+			}
+			return "[REDACTED]"
+		}
+	})
+	msg = sensitivePattern.ReplaceAllString(msg, "$1$2[REDACTED]")
 	return msg
 }
 
@@ -227,11 +350,26 @@ func sanitizeErrorMessage(err error) string {
 func respondUpstreamDispatchError(c *gin.Context, sessionID, modelName string, dur time.Duration, err error) {
 	noUpstream := strings.Contains(err.Error(), "no upstream provider available")
 	if noUpstream {
-		recordFailedRequest(c, sessionID, modelName, dur, http.StatusNotFound)
+		RecordTrace(c, modelName, "", http.StatusNotFound, err.Error(), "", dur)
+		recordFailedRequestWithError(c, sessionID, modelName, dur, http.StatusNotFound, err)
 		RespondOpenAIError(c, http.StatusNotFound, fmt.Sprintf("The model '%s' does not exist or has no active upstream providers configured.", modelName), "invalid_request_error", "model_not_found")
 	} else {
-		recordFailedRequest(c, sessionID, modelName, dur, http.StatusBadGateway)
+		RecordTrace(c, modelName, "", http.StatusBadGateway, err.Error(), "", dur)
+		recordFailedRequestWithError(c, sessionID, modelName, dur, http.StatusBadGateway, err)
 		safeErr := sanitizeErrorMessage(err)
 		RespondOpenAIError(c, http.StatusBadGateway, safeErr, "gateway_error", "upstream_failure")
 	}
+}
+
+// ceilMillis converts a duration to milliseconds, rounding up so that a
+// sub-millisecond exchange still shows as 1ms instead of a misleading 0.
+func ceilMillis(d time.Duration) int64 {
+	if d <= 0 {
+		return 0
+	}
+	ms := d.Milliseconds()
+	if ms == 0 {
+		return 1
+	}
+	return ms
 }

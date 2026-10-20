@@ -66,4 +66,3 @@ func TestAutoProbe_OpenAIAndGPUStack(t *testing.T) {
 		t.Errorf("expected auto-detected protocols to include images, audio_speech, audio_transcription; got %v", res.Protocols)
 	}
 }
-

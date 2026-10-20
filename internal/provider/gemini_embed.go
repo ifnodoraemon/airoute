@@ -61,7 +61,7 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("gemini embed returned %d: %s", resp.StatusCode, string(body))
+			return nil, NewUpstreamError(channel.Name, resp.StatusCode, []byte(body))
 		}
 
 		var parsed struct {
@@ -77,7 +77,7 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 			Index:     0,
 			Embedding: parsed.Embedding.Values,
 		})
-		totalTokens = len(texts[0]) / 4
+		totalTokens = model.EstimateTokensFromChars(len(texts[0]))
 		if totalTokens == 0 {
 			totalTokens = 1
 		}
@@ -98,7 +98,7 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 		var bReq batchReq
 		modelPath := "models/" + strings.TrimPrefix(targetModel, "models/")
 		for _, t := range texts {
-			toks := len(t) / 4
+			toks := model.EstimateTokensFromChars(len(t))
 			if toks == 0 {
 				toks = 1
 			}
@@ -132,7 +132,7 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("gemini batchEmbed returned %d: %s", resp.StatusCode, string(body))
+			return nil, NewUpstreamError(channel.Name, resp.StatusCode, []byte(body))
 		}
 
 		var parsed struct {

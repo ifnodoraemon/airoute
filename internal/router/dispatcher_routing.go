@@ -12,9 +12,30 @@ type ContextKeySession string
 
 const ContextKeySessionID ContextKeySession = "airoute_session_id"
 
-// GetChannelsForModel returns matching channels for a given model, sorted by priority.
+// GetChannelsForModel returns matching channels for a given model, ordered for routing.
 func (d *Dispatcher) GetChannelsForModel(modelName string) []*model.ChannelConfig {
 	return d.GetChannelsForModelAndProtocolWithContext(context.Background(), modelName, "")
+}
+
+// ListChannelsForModel returns every channel that serves the model, in configured
+// order, WITHOUT running any selector. Routing selectors mutate shared state
+// (SWRR weights, half-open canary slots), so introspection endpoints such as
+// /api/v1/public/status or the admin console must use this variant.
+func (d *Dispatcher) ListChannelsForModel(modelName, proto string) []*model.ChannelConfig {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	matched := make([]*model.ChannelConfig, 0, 4)
+	for i := range d.channels {
+		ch := &d.channels[i]
+		if proto != "" && !ch.SupportsProtocol(proto) {
+			continue
+		}
+		if ch.SupportsModel(modelName) {
+			matched = append(matched, ch)
+		}
+	}
+	return matched
 }
 
 // GetChannelsForModelAndProtocol delegates to GetChannelsForModelAndProtocolWithContext.

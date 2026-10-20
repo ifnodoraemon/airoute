@@ -20,17 +20,80 @@ type AdminHandler struct {
 	dispatcher *router.Dispatcher
 	prober     *DownstreamProber
 	storage    storage.ArtifactStorage
+
+	// channels owns the channel business rules. Handlers delegate to it instead
+	// of interleaving validation, persistence and hot sync themselves.
+	channels *ChannelService
+
+	// routes owns the model-route save rules.
+	routes *RouteService
+
+	// pricing owns the model-pricing rules.
+	pricing *PricingService
+
+	// keyAccess owns the API key ownership rule behind the single-key endpoints.
+	keyAccess *KeyAccessRules
+
+	// keyCreation owns how a key request becomes a storable row.
+	keyCreation *KeyCreationRules
 }
 
 // NewAdminHandler creates an AdminHandler.
 func NewAdminHandler(repo *storage.Repository, sync *Synchronizer, dispatcher *router.Dispatcher) *AdminHandler {
 	ls, _ := storage.NewLocalStorage("data/storage")
+
+	// The interface conversions below are guarded on purpose. A nil
+	// *router.Dispatcher stored in a BreakerStatusReader is a non-nil interface,
+	// so the service's own nil check would pass and the first call would panic:
+	// GetBreakerStatus dereferences its receiver.
+	var store ChannelStore
+	if repo != nil {
+		store = repo
+	}
+	// RouteStore needs a different subset of the repository, so it gets its own
+	// guarded conversion rather than reusing the ChannelStore value.
+	var routeStore RouteStore
+	if repo != nil {
+		routeStore = repo
+	}
+	// Likewise for the pricing subset.
+	var pricingStore PricingStore
+	if repo != nil {
+		pricingStore = repo
+	}
+	// And the account lookup the key ownership rule needs.
+	var keyOwners KeyOwnerLookup
+	if repo != nil {
+		keyOwners = repo
+	}
+	var reloader ChannelReloader
+	if sync != nil {
+		reloader = sync
+	}
+	var routeSync RouteSync
+	if sync != nil {
+		routeSync = sync
+	}
+	var pricingSync PricingSync
+	if sync != nil {
+		pricingSync = sync
+	}
+	var breakers BreakerStatusReader
+	if dispatcher != nil {
+		breakers = dispatcher
+	}
+
 	return &AdminHandler{
-		repo:       repo,
-		sync:       sync,
-		dispatcher: dispatcher,
-		prober:     NewDownstreamProber(nil),
-		storage:    ls,
+		repo:        repo,
+		sync:        sync,
+		dispatcher:  dispatcher,
+		prober:      NewDownstreamProber(nil),
+		storage:     ls,
+		channels:    NewChannelService(store, reloader, breakers),
+		routes:      NewRouteService(routeStore, routeSync, globalPriceReloader{}),
+		pricing:     NewPricingService(pricingStore, pricingSync, globalPriceReloader{}, globalOffPeakEvaluator{}),
+		keyAccess:   NewKeyAccessRules(keyOwners),
+		keyCreation: NewKeyCreationRules(keyOwners),
 	}
 }
 
@@ -65,7 +128,6 @@ func cContext() context.Context {
 	return context.Background()
 }
 
-
 // GetRepo returns the underlying storage repository.
 func (h *AdminHandler) GetRepo() *storage.Repository {
 	if h == nil {
@@ -73,7 +135,6 @@ func (h *AdminHandler) GetRepo() *storage.Repository {
 	}
 	return h.repo
 }
-
 
 // ResolvePublicBaseURL dynamically resolves the public base URL of the gateway
 // prioritizing configuration/env (PUBLIC_URL, GATEWAY_PUBLIC_URL) or HTTP proxy headers.

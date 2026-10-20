@@ -80,7 +80,7 @@ func (p *GeminiProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("upstream gemini %s returned %d: %s", channel.Name, resp.StatusCode, string(bodyBytes))
+		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
 	}
 
 	var geminiResp GeminiResponse
@@ -101,7 +101,7 @@ func (p *GeminiProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 			if part.FunctionCall != nil {
 				argsBytes, _ := json.Marshal(part.FunctionCall.Args)
 				toolCalls = append(toolCalls, model.ToolCall{
-					ID:   fmt.Sprintf("call_%d_%s", time.Now().UnixNano(), part.FunctionCall.Name),
+					ID:   fmt.Sprintf("call_%d_%s", time.Now().UnixMicro(), part.FunctionCall.Name),
 					Type: "function",
 					Function: model.FunctionCall{
 						Name:      part.FunctionCall.Name,
@@ -120,11 +120,7 @@ func (p *GeminiProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 
 	var usage *model.Usage
 	if geminiResp.UsageMetadata != nil {
-		usage = &model.Usage{
-			PromptTokens:     geminiResp.UsageMetadata.PromptTokenCount,
-			CompletionTokens: geminiResp.UsageMetadata.CandidatesTokenCount,
-			TotalTokens:      geminiResp.UsageMetadata.TotalTokenCount,
-		}
+		usage = geminiUsageToModel(geminiResp.UsageMetadata)
 	}
 
 	return &model.ChatCompletionResponse{

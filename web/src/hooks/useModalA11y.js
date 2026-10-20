@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 /**
  * Custom hook to handle Modal accessibility & interactions:
@@ -6,17 +6,24 @@ import { useEffect } from 'react';
  * - Prevents background page scrolling while modal is open.
  * - Restores background page scrolling when modal unmounts or closes.
  *
+ * The close callback is read through a ref so callers can pass an inline
+ * function (for example an unsaved-changes guard) without re-registering the
+ * listener and re-locking body scroll on every render.
+ *
  * @param {boolean} isOpen - Whether the modal is currently open.
  * @param {function} onClose - Callback when the modal should close.
  */
 export function useModalA11y(isOpen, onClose) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKeyDown = (e) => {
       if (e.key === 'Escape' || e.key === 'Esc') {
         e.stopPropagation();
-        onClose?.();
+        closeRef.current?.();
       }
     };
 
@@ -30,7 +37,7 @@ export function useModalA11y(isOpen, onClose) {
       window.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = prevOverflow;
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 }
 
 export default useModalA11y;

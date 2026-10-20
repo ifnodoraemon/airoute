@@ -7,8 +7,8 @@ Airoute provides high-performance, unified API endpoints conforming to OpenAI st
 ## 1. Authentication & Rate Limiting
 
 Client requests to Data Plane endpoints under `/v1` require API key authentication via standard HTTP headers:
-- `Authorization: Bearer sk-nano-xxxx`
-- Or `x-api-key: sk-nano-xxxx`
+- `Authorization: Bearer sk-airoute-xxxx`
+- Or `x-api-key: sk-airoute-xxxx`
 
 If no API keys are configured, the gateway operates in open bypass mode (no authentication required).
 
@@ -24,7 +24,7 @@ If no API keys are configured, the gateway operates in open bypass mode (no auth
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/chat/completions \
-  -H "Authorization: Bearer sk-nano-xxxx" \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "deepseek-chat",
@@ -44,7 +44,7 @@ curl -X POST http://localhost:8080/v1/chat/completions \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/completions \
-  -H "Authorization: Bearer sk-nano-xxxx" \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "text-davinci-003",
@@ -61,7 +61,7 @@ curl -X POST http://localhost:8080/v1/completions \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/messages \
-  -H "x-api-key: sk-nano-xxxx" \
+  -H "x-api-key: sk-airoute-xxxx" \
   -H "anthropic-version: 2023-06-01" \
   -H "Content-Type: application/json" \
   -d '{
@@ -76,12 +76,12 @@ curl -X POST http://localhost:8080/v1/messages \
 ### 2.4 Anthropic Claude Token Counting
 - **Endpoint**: `POST /v1/messages/count_tokens`
 - **Supported Clients**: Anthropic SDKs (e.g. `client.messages.count_tokens(...)`), Agent token budget estimators.
-- **Protocol Adaptation**: Supports counting tokens for upstream Claude engines and estimates tokens for translated OpenAI/GPUStack upstreams.
+- **Accuracy**: Delegates counting to a native Anthropic upstream, including tools and image/document blocks. Returns `501` when no native Anthropic channel is configured; it does not claim a character-based estimate is an exact token count.
 
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/messages/count_tokens \
-  -H "x-api-key: sk-nano-xxxx" \
+  -H "x-api-key: sk-airoute-xxxx" \
   -H "anthropic-version: 2023-06-01" \
   -H "Content-Type: application/json" \
   -d '{
@@ -107,12 +107,12 @@ curl -X POST http://localhost:8080/v1/messages/count_tokens \
   - `GET /v1beta/models`
   - `GET /v1beta/models/:model`
 - **Supported Clients**: Google GenAI SDK (`@google/genai`, `google-generativeai`), Gemini CLI, Vertex AI compatible tooling.
-- **Protocol Adaptation**: Full-duplex protocol conversion translating Gemini SDK calls into upstream format (Gemini upstream zero-copy, or adapted to OpenAI/DeepSeek/Claude models).
+- **Protocol Adaptation**: Full-duplex protocol conversion translating Gemini SDK calls into upstream format (Gemini upstream forwarding, or adapted to OpenAI/DeepSeek/Claude models).
 
 #### Request Example (countTokens):
 ```bash
 curl -X POST http://localhost:8080/v1beta/models/gemini-4-argon:countTokens \
-  -H "Authorization: Bearer sk-nano-xxxx" \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "contents": [{"role": "user", "parts": [{"text": "Hello world!"}]}]
@@ -128,7 +128,7 @@ curl -X POST http://localhost:8080/v1beta/models/gemini-4-argon:countTokens \
 
 ### 2.6 DeepSeek-R1 / Reasoning Models Transparency
 - **Transparent Field**: `reasoning_content` in Chat Completions chunk and message objects.
-- **Stream Transparency**: Streaming chunks carrying reasoning tokens (such as DeepSeek-R1 thinking traces or OpenAI o1/o3 reasoning chunks) are forwarded transparently with zero-copy overhead without stripping thinking blocks.
+- **Stream handling**: OpenAI-compatible reasoning deltas are normalized in memory. Native Anthropic streams preserve signed thinking blocks; cross-protocol reasoning behavior depends on the target API and is not byte-for-byte passthrough.
 
 ---
 
@@ -141,7 +141,7 @@ curl -X POST http://localhost:8080/v1beta/models/gemini-4-argon:countTokens \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/images/generations \
-  -H "Authorization: Bearer sk-nano-xxxx" \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "flux-1.1-pro",
@@ -159,7 +159,7 @@ curl -X POST http://localhost:8080/v1/images/generations \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/audio/speech \
-  -H "Authorization: Bearer sk-nano-xxxx" \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "tts-1",
@@ -176,7 +176,7 @@ curl -X POST http://localhost:8080/v1/audio/speech \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/audio/transcriptions \
-  -H "Authorization: Bearer sk-nano-xxxx" \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
   -F "file=@/path/to/audio.mp3" \
   -F "model=whisper-large-v3-turbo"
 ```
@@ -189,7 +189,7 @@ curl -X POST http://localhost:8080/v1/audio/transcriptions \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/audio/translations \
-  -H "Authorization: Bearer sk-nano-xxxx" \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
   -F "file=@/path/to/french_speech.mp3" \
   -F "model=whisper-large-v3-turbo"
 ```
@@ -202,7 +202,7 @@ curl -X POST http://localhost:8080/v1/audio/translations \
 ```bash
 # 1. Submit task
 curl -X POST http://localhost:8080/v1/videos/generations \
-  -H "Authorization: Bearer sk-nano-xxxx" \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "cogvideox-5b",
@@ -214,7 +214,7 @@ curl -X POST http://localhost:8080/v1/videos/generations \
 
 # 2. Poll task status
 curl -X GET http://localhost:8080/v1/videos/tasks/video_task_123 \
-  -H "Authorization: Bearer sk-nano-xxxx"
+  -H "Authorization: Bearer sk-airoute-xxxx"
 ```
 
 ### 3.6 Vector Embeddings
@@ -225,7 +225,7 @@ curl -X GET http://localhost:8080/v1/videos/tasks/video_task_123 \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/embeddings \
-  -H "Authorization: Bearer sk-nano-xxxx" \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "text-embedding-3-small",
@@ -265,13 +265,13 @@ curl -X POST http://localhost:8080/v1/embeddings \
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/rerank \
-  -H "Authorization: Bearer sk-nano-xxxx" \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "bge-reranker-large",
     "query": "What is high availability in enterprise LLM gateways?",
     "documents": [
-      "Airoute provides zero-copy streaming and pre-first-token fallback.",
+      "Airoute streams responses and can retry before the first content chunk.",
       "The weather today in Tokyo is sunny with blooming cherry blossoms.",
       "Distributed databases using Raft consensus ensure strong consistency."
     ],
@@ -289,7 +289,7 @@ curl -X POST http://localhost:8080/v1/rerank \
       "index": 0,
       "relevance_score": 0.9856,
       "document": {
-        "text": "Airoute provides zero-copy streaming and pre-first-token fallback."
+        "text": "Airoute streams responses and can retry before the first content chunk."
       }
     },
     {

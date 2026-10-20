@@ -10,8 +10,14 @@ permissions:
   contents: write
 
 jobs:
+  # Binaries are only released once the quality gate has passed.
+  quality-gate:
+    name: Quality Gate
+    uses: ./.github/workflows/ci.yml
+
   build-release:
     name: Build & Release Binaries
+    needs: quality-gate
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -59,9 +65,12 @@ jobs:
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
           CGO_ENABLED: 0
+          # The binary's banner prints its own "v", so a tag like v1.2.3 must be
+          # passed as 1.2.3 or the version reads "vv1.2.3".
+          RELEASE_VERSION: ${{ github.ref_name }}
         run: |
           mkdir -p dist
-          go build -ldflags="-s -w -X main.Version=${{ github.ref_name }}" -o dist/${{ matrix.artifact_name }} ./cmd/airoute
+          go build -ldflags="-s -w -X main.Version=${RELEASE_VERSION#v}" -o dist/${{ matrix.artifact_name }} ./cmd/airoute
           cd dist
           if [ "${{ matrix.os }}" = "windows" ]; then
             zip ${{ matrix.artifact_name }}.zip ${{ matrix.artifact_name }}

@@ -24,7 +24,7 @@ const (
 func GenerateTraceID() string {
 	b := make([]byte, 12)
 	_, _ = rand.Read(b)
-	return fmt.Sprintf("tr-%x-%s", time.Now().UnixNano()%100000000, hex.EncodeToString(b))
+	return fmt.Sprintf("tr-%x-%s", time.Now().UnixMicro()%100000000, hex.EncodeToString(b))
 }
 
 // TraceMiddleware extracts or generates a distributed TraceID for every incoming request,

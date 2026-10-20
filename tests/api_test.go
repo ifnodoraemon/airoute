@@ -23,6 +23,9 @@ func setupTestEnvironment(t *testing.T) (*router.Dispatcher, *controlplane.Admin
 	}
 
 	repo := storage.NewRepository(db)
+	if err := repo.EnsureDefaultAdmin("admin", "test-admin-password"); err != nil {
+		t.Fatalf("seed admin: %v", err)
+	}
 	dispatcher := router.NewDispatcher(nil)
 	sync := controlplane.NewSynchronizer(repo, dispatcher)
 	adminHandler := controlplane.NewAdminHandler(repo, sync, dispatcher)
@@ -231,4 +234,3 @@ func TestAPI_ChatCompletions_ModelForbidden(t *testing.T) {
 }
 
 var _ = time.Now
-

@@ -249,3 +249,85 @@ func TestGeminiAdapter_ToolCalls(t *testing.T) {
 		t.Errorf("unexpected FunctionCall in Gemini response: %+v", fnCall)
 	}
 }
+
+func TestAnthropicAdapter_ArraySystemAndReasoning(t *testing.T) {
+	ad := NewAnthropicAdapter()
+
+	// 1. Array system with cache_control blocks and stop sequences
+	inbound := &model.AnthropicInboundRequest{
+		Model: "claude-3-7-sonnet",
+		System: []any{
+			map[string]any{
+				"type":          "text",
+				"text":          "You are an expert AI engineer.",
+				"cache_control": map[string]any{"type": "ephemeral"},
+			},
+			map[string]any{
+				"type": "text",
+				"text": "Answer concisely.",
+			},
+		},
+		StopSequences: []string{"END", "STOP"},
+		ToolChoice:    map[string]any{"type": "any"},
+		Messages: []model.AnthropicInboundMessage{
+			{Role: "user", Content: "Hello"},
+		},
+	}
+
+	canonical, err := ad.ToCanonical(context.Background(), inbound)
+	if err != nil {
+		t.Fatalf("ToCanonical failed: %v", err)
+	}
+
+	if len(canonical.Messages) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(canonical.Messages))
+	}
+	if canonical.Messages[0].Role != "system" {
+		t.Fatalf("expected system role, got %s", canonical.Messages[0].Role)
+	}
+	expectedSys := "You are an expert AI engineer.\n\nAnswer concisely."
+	if canonical.Messages[0].Content != expectedSys {
+		t.Fatalf("expected system content %q, got %q", expectedSys, canonical.Messages[0].Content)
+	}
+
+	if stops, ok := canonical.Stop.([]string); !ok || len(stops) != 2 || stops[0] != "END" {
+		t.Fatalf("expected StopSequences mapped to Stop, got %+v", canonical.Stop)
+	}
+	if canonical.ToolChoice != "required" {
+		t.Fatalf("expected tool_choice 'required', got %+v", canonical.ToolChoice)
+	}
+
+	// 2. FromCanonical with ReasoningContent (thinking)
+	finishStop := "stop"
+	canonResp := &model.ChatCompletionResponse{
+		ID:    "msg_test_reasoning",
+		Model: "deepseek-r1",
+		Choices: []model.ChatCompletionChoice{
+			{
+				Index: 0,
+				Message: model.ChatMessage{
+					Role:             "assistant",
+					ReasoningContent: "Thinking step 1... Done.",
+					Content:          "Final answer.",
+				},
+				FinishReason: &finishStop,
+			},
+		},
+	}
+
+	anthropicOut, err := ad.FromCanonical(context.Background(), canonResp)
+	if err != nil {
+		t.Fatalf("FromCanonical failed: %v", err)
+	}
+	outMap := anthropicOut.(map[string]any)
+	blocks := outMap["content"].([]map[string]any)
+	if len(blocks) != 2 {
+		t.Fatalf("expected 2 blocks (thinking + text), got %d: %+v", len(blocks), blocks)
+	}
+	if blocks[0]["type"] != "thinking" || blocks[0]["thinking"] != "Thinking step 1... Done." {
+		t.Fatalf("unexpected thinking block: %+v", blocks[0])
+	}
+	if blocks[1]["type"] != "text" || blocks[1]["text"] != "Final answer." {
+		t.Fatalf("unexpected text block: %+v", blocks[1])
+	}
+}

@@ -1,34 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Layers,
   Cpu,
   Shield,
   ShieldAlert,
-  Sliders,
-  Sparkles,
   ArrowRight,
   RefreshCw,
   Search,
   Check,
   Copy,
   Zap,
-  Clock,
-  MessageSquare,
-  Image as ImageIcon,
-  Volume2,
-  Mic,
-  Video,
-  Database,
-  Terminal,
-  Activity,
   Plus,
   Trash2,
-  DollarSign,
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
 import ModelRouteModal, { getChannelModels } from './ModelRouteModal';
 import { copyToClipboard as crossOriginCopy } from '../config';
+import useUrlFilters from '../hooks/useUrlFilters';
 
 export default function ModelRoutesManager({
   adminFetch,
@@ -36,13 +24,18 @@ export default function ModelRoutesManager({
   onNavigateToPlayground,
   setCurrentTab,
   lang = 'zh',
+  isAdmin = false,
   t
 }) {
   const isZh = lang === 'zh';
   const [modelRoutes, setModelRoutes] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedModality, setSelectedModality] = useState('all');
+  const [permissionDenied, setPermissionDenied] = useState(false);
+  // Filter state lives in the URL so a filtered route list survives module
+  // switches and can be shared as a link.
+  const [filters, setFilters, resetFilters] = useUrlFilters('routes', { q: '', modality: 'all' });
+  const searchQuery = filters.q;
+  const selectedModality = filters.modality || 'all';
   const [activeEditRoute, setActiveEditRoute] = useState(null);
   const [probingModel, setProbingModel] = useState(null);
   const [probeResults, setProbeResults] = useState({});
@@ -77,7 +70,16 @@ export default function ModelRoutesManager({
     }
   };
 
-  const fetchModelRoutes = async () => {
+  const fetchModelRoutes = useCallback(async () => {
+    // /admin/models/routes and /admin/channels are admin-only. Calling them as a
+    // regular user produced a wall of permission errors instead of a clear
+    // message, so fail fast with an explanation.
+    if (!isAdmin) {
+      setPermissionDenied(true);
+      setLoading(false);
+      return;
+    }
+    setPermissionDenied(false);
     setLoading(true);
     try {
       const [routesRes, channelsRes, pricesRes] = await Promise.all([
@@ -104,14 +106,15 @@ export default function ModelRoutesManager({
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAdmin, adminFetch, showToast, isZh]);
 
   const handleDeleteRoute = async (modelName) => {
     if (!window.confirm(isZh ? `确定删除模型 [${modelName}] 路由配置及其服务商绑定？` : `Delete route config and provider bindings for [${modelName}]?`)) {
       return;
     }
     try {
-      const res = await adminFetch(`/api/v1/admin/models/routes/${encodeURIComponent(modelName)}`, {
+      const query = new URLSearchParams({ model: modelName });
+      const res = await adminFetch(`/api/v1/admin/models/routes?${query}`, {
         method: 'DELETE'
       });
       const data = await res.json();
@@ -127,8 +130,13 @@ export default function ModelRoutesManager({
   };
 
   const handleOpenEdit = (route) => {
-    const price = pricingRates.find(p => p.model === route.model);
+    // Price rows are keyed by (model, group). Matching on model alone could pick
+    // a VIP/enterprise row and then write its rates into the default group.
+    const targetGroup = route.group_name || 'default';
+    const price = pricingRates.find(p => p.model === route.model && (p.group_name || 'default') === targetGroup)
+      || pricingRates.find(p => p.model === route.model && (p.group_name || 'default') === 'default');
     setActiveEditRoute({
+      group_name: targetGroup,
       ...route,
       prompt_price: price ? price.prompt_price : 2.0,
       completion_price: price ? price.completion_price : 8.0,
@@ -168,7 +176,7 @@ export default function ModelRoutesManager({
 
   useEffect(() => {
     fetchModelRoutes();
-  }, []);
+  }, [fetchModelRoutes]);
 
   const handleProbeRoute = async (modelName) => {
     setProbingModel(modelName);
@@ -203,6 +211,25 @@ export default function ModelRoutesManager({
 
   const spofRoutes = modelRoutes.filter(r => (r.providers || []).length <= 1);
 
+  // Facts we can actually derive from the loaded configuration. Provider count
+  // alone says nothing about health, so these feed a configuration summary
+  // rather than a resilience verdict.
+  const providerBindings = modelRoutes.reduce((sum, r) => sum + (r.providers || []).length, 0);
+  const boundChannelCount = new Set(modelRoutes.flatMap(r => (r.providers || []).map(p => p.channel_id))).size;
+  const modalityCount = new Set(modelRoutes.map(r => r.modality || 'chat')).size;
+  const fallbackRouteCount = modelRoutes.filter(r => r.fallback_model).length;
+  const probedModelCount = Object.keys(probeResults).filter(m => (probeResults[m] || []).length > 0).length;
+
+  const modalityTabs = [
+    { id: 'all', label: isZh ? '全部模态' : 'All' },
+    { id: 'chat', label: isZh ? '对话' : 'Chat' },
+    { id: 'images', label: isZh ? '生图' : 'Images' },
+    { id: 'videos', label: isZh ? '视频' : 'Video' },
+    { id: 'audio_speech', label: isZh ? '语音' : 'Audio' },
+    { id: 'embeddings', label: isZh ? '向量' : 'Embedding' }
+  ];
+  const selectedModalityLabel = (modalityTabs.find(tab => tab.id === selectedModality) || modalityTabs[0]).label;
+
   const filteredRoutes = modelRoutes.filter(r => {
     if (selectedModality !== 'all' && r.modality !== selectedModality) {
       return false;
@@ -232,6 +259,36 @@ export default function ModelRoutesManager({
   };
 
   const allModelNames = modelRoutes.map(r => r.model);
+
+  if (permissionDenied) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
+              {isZh ? '模型路由与分发' : 'Model Routes & Dispatch'}
+            </h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              {isZh ? '仅超级管理员可查看与配置集群路由拓扑' : 'Cluster routing topology is restricted to administrators'}
+            </p>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/60 dark:bg-amber-950/30 p-5 flex items-start space-x-3">
+          <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+          <div className="text-sm text-amber-800 dark:text-amber-200">
+            <p className="font-semibold">
+              {isZh ? '权限不足：无法加载模型路由配置' : 'Insufficient permissions to load model routes'}
+            </p>
+            <p className="mt-1 text-amber-700 dark:text-amber-300">
+              {isZh
+                ? '该页面依赖管理员接口 (/admin/models/routes 与 /admin/channels)。你仍可在「模型定价」查看自己的费率，或在「Playground」直接调用模型。'
+                : 'This page relies on admin-only endpoints. You can still review your own rates under Pricing, or call models from the Playground.'}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -268,17 +325,10 @@ export default function ModelRoutesManager({
       {/* Search & Modality Bar (Directly on canvas) */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
         <div className="inline-flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200/80 dark:border-slate-800 overflow-x-auto max-w-full">
-          {[
-            { id: 'all', label: isZh ? '全部模态' : 'All' },
-            { id: 'chat', label: isZh ? '对话' : 'Chat' },
-            { id: 'images', label: isZh ? '生图' : 'Images' },
-            { id: 'videos', label: isZh ? '视频' : 'Video' },
-            { id: 'audio_speech', label: isZh ? '语音' : 'Audio' },
-            { id: 'embeddings', label: isZh ? '向量' : 'Embedding' }
-          ].map(tab => (
+          {modalityTabs.map(tab => (
             <button
               key={tab.id}
-              onClick={() => setSelectedModality(tab.id)}
+              onClick={() => setFilters({ modality: tab.id })}
               className={`px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap transition cursor-pointer ${
                 selectedModality === tab.id
                   ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-semibold'
@@ -295,7 +345,7 @@ export default function ModelRoutesManager({
           <input
             type="text"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => setFilters({ q: e.target.value })}
             placeholder={isZh ? '搜索模型或服务商...' : 'Search model or provider...'}
             className="w-full bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-indigo-500 shadow-sm transition"
           />
@@ -326,43 +376,61 @@ export default function ModelRoutesManager({
         </div>
       )}
 
-      {/* AI Topology Resilience & Failover Audit */}
+      {/* Configuration summary: describes what is configured, not whether it works */}
       {modelRoutes.length > 0 && (
         <div className={`p-4 rounded-xl border text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
           spofRoutes.length > 0
             ? 'bg-amber-50/60 dark:bg-amber-950/20 border-amber-200/80 dark:border-amber-900/40 text-amber-900 dark:text-amber-200'
-            : 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-900/40 text-emerald-900 dark:text-emerald-200'
+            : 'bg-slate-50/60 dark:bg-slate-900/40 border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-300'
         }`}>
-          <div className="flex items-center space-x-2.5">
+          <div className="flex items-start space-x-2.5">
             <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-              spofRoutes.length > 0 ? 'bg-amber-100/80 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' : 'bg-emerald-100/80 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+              spofRoutes.length > 0 ? 'bg-amber-100/80 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
             }`}>
               <Shield className="w-4 h-4" />
             </div>
-            <div>
-              <div className="flex items-center space-x-2 font-semibold">
-                <span>{isZh ? 'AI 拓扑容灾健康度诊断' : 'AI Topology Resilience Audit'}</span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                  spofRoutes.length > 0 ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200' : 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200'
+            <div className="space-y-0.5">
+              <div className="flex flex-wrap items-center gap-2 font-semibold">
+                <span>{isZh ? '路由配置摘要' : 'Route Configuration Summary'}</span>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                  spofRoutes.length > 0
+                    ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                 }`}>
-                  {spofRoutes.length > 0 ? (isZh ? `${spofRoutes.length} 个模型存在单点风险` : `${spofRoutes.length} SPOF Risks`) : (isZh ? '高可用架构完善' : 'Resilient Architecture')}
+                  {spofRoutes.length > 0
+                    ? (isZh ? `配置层：${spofRoutes.length} 个模型仅单一服务商` : `Config: ${spofRoutes.length} single-provider`)
+                    : (isZh ? '配置层：均已配置备用服务商' : 'Config: all have backups')}
                 </span>
               </div>
               <p className="text-xs opacity-80 mt-0.5">
-                {spofRoutes.length > 0
+                {isZh
+                  ? `${modelRoutes.length} 条模型路由 · ${providerBindings} 条上游绑定（${boundChannelCount} 个渠道）· 覆盖 ${modalityCount} 类模态 · ${fallbackRouteCount} 条降级路由`
+                  : `${modelRoutes.length} routes · ${providerBindings} upstream bindings across ${boundChannelCount} channels · ${modalityCount} modalities · ${fallbackRouteCount} fallback routes`}
+              </p>
+              {spofRoutes.length > 0 && (
+                <p className="text-xs opacity-80 mt-0.5">
+                  {isZh
+                    ? `其中 ${spofRoutes.slice(0, 3).map(r => r.model).join(', ')} 仅绑定了单一上游，没有可切换的备用渠道。`
+                    : `${spofRoutes.slice(0, 3).map(r => r.model).join(', ')} bind a single upstream, so there is no backup channel to switch to.`}
+                </p>
+              )}
+              <p className="text-xs opacity-80 mt-0.5">
+                {probedModelCount > 0
                   ? (isZh
-                      ? `检测到部分模型（如 ${spofRoutes.slice(0, 3).map(r => r.model).join(', ')}）仅绑定了单一提供商。建议开启自动故障转移并挂载备用渠道。`
-                      : `Models (${spofRoutes.slice(0, 3).map(r => r.model).join(', ')}) lack fallback redundancy. Add backup providers for 99.9% uptime.`)
-                  : (isZh ? '所有模型路由均已挂载多级异构服务商与优先级保底策略，具备高并发零停机容灾能力。' : 'All routes configured with multi-tier providers and priority failover.')}
+                      ? `已在本页手动探测 ${probedModelCount} 个模型的下游连通性（结果为本次会话内实测），其余模型未验证。`
+                      : `Connectivity was manually probed for ${probedModelCount} model(s) in this session; the remaining models are unverified.`)
+                  : (isZh
+                      ? '尚未进行连通性探测，尚未进行故障切换演练——以上仅为已保存配置的统计，不代表服务健康状况。'
+                      : 'No connectivity probes or failover drills have been run — this counts saved configuration only and is not a health guarantee.')}
               </p>
             </div>
           </div>
           {spofRoutes.length > 0 && (
             <button
-              onClick={() => setActiveEditRoute(spofRoutes[0])}
+              onClick={() => handleOpenEdit(spofRoutes[0])}
               className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium text-xs shrink-0 cursor-pointer shadow-sm transition"
             >
-              {isZh ? `立即配置 [${spofRoutes[0].model}] 容灾` : `Fix [${spofRoutes[0].model}] Failover`}
+              {isZh ? `为 [${spofRoutes[0].model}] 配置备用服务商` : `Add backup for [${spofRoutes[0].model}]`}
             </button>
           )}
         </div>
@@ -371,9 +439,36 @@ export default function ModelRoutesManager({
       {/* 2. Model Routes Table (Clean Master-Detail Layout) */}
       <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl overflow-hidden shadow-sm">
         {filteredRoutes.length === 0 ? (
-          <div className="p-12 text-center flex flex-col items-center justify-center space-y-2">
+          <div className="p-12 text-center flex flex-col items-center justify-center space-y-3">
             <Cpu className="w-10 h-10 text-slate-300 dark:text-slate-600" />
-            <h4 className="font-medium text-xs text-slate-700 dark:text-slate-300">{isZh ? '暂无模型路由' : 'No Model Routes'}</h4>
+            {modelRoutes.length === 0 ? (
+              <>
+                <h4 className="font-medium text-sm text-slate-700 dark:text-slate-300">{isZh ? '尚未配置模型路由' : 'No model routes configured yet'}</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm">
+                  {isZh
+                    ? '新建模型路由后，即可为模型绑定上游服务商、分流权重与降级链路。'
+                    : 'Create a route to bind upstream providers, dispatch weights, and fallback chains to a model.'}
+                </p>
+                <button onClick={handleOpenCreate} className="ui-btn-primary ui-btn-sm">
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{isZh ? '新建模型路由' : 'New Model Route'}</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <Search className="w-10 h-10 text-slate-300 dark:text-slate-600" />
+                <h4 className="font-medium text-sm text-slate-700 dark:text-slate-300">{isZh ? '当前筛选没有匹配的路由' : 'No routes match the current filters'}</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md">
+                  {isZh
+                    ? `已配置的 ${modelRoutes.length} 条模型路由中，没有同时匹配关键词「${searchQuery || '全部'}」与模态「${selectedModalityLabel}」的项。`
+                    : `None of the ${modelRoutes.length} configured routes match "${searchQuery || 'all'}" under "${selectedModalityLabel}".`}
+                </p>
+                <button onClick={resetFilters} className="ui-btn-secondary ui-btn-sm">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>{isZh ? '清除筛选' : 'Clear filters'}</span>
+                </button>
+              </>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -439,7 +534,7 @@ export default function ModelRoutesManager({
                             >
                               {copiedModel === route.model ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                             </button>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${badge.color}`}>
+                            <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${badge.color}`}>
                               {badge.label}
                             </span>
                           </div>
@@ -466,7 +561,7 @@ export default function ModelRoutesManager({
                               return (
                                 <span
                                   key={p.channel_id}
-                                  className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-md border text-[11px] font-medium ${
+                                  className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-md border text-xs font-medium ${
                                     warnMsg
                                       ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200'
                                       : 'bg-slate-100 dark:bg-slate-800 border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-300'
@@ -482,7 +577,7 @@ export default function ModelRoutesManager({
                               );
                             })}
                             {(route.providers || []).length === 0 && (
-                              <span className="text-rose-500 text-[11px] font-medium">{isZh ? '未绑定上游' : 'No Upstream'}</span>
+                              <span className="text-rose-500 text-xs font-medium">{isZh ? '未绑定上游' : 'No Upstream'}</span>
                             )}
                           </div>
                         </td>
@@ -490,12 +585,12 @@ export default function ModelRoutesManager({
                         {/* Fallback */}
                         <td className="py-4 px-6 font-mono text-xs">
                           {route.fallback_model ? (
-                            <span className="inline-flex items-center space-x-1 text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 px-2 py-0.5 rounded-md text-[11px] font-medium">
+                            <span className="inline-flex items-center space-x-1 text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 px-2 py-0.5 rounded-md text-xs font-medium">
                               <Shield className="w-3 h-3 text-sky-600 dark:text-sky-400" />
                               <span>{isZh ? '降级: ' : 'Fallback: '}{route.fallback_model}</span>
                             </span>
                           ) : (
-                            <span className="text-slate-400 text-[11px] font-sans">{isZh ? '直通返回' : 'Direct Return'}</span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400 font-sans">{isZh ? '直通返回' : 'Direct Return'}</span>
                           )}
                         </td>
 
@@ -508,14 +603,14 @@ export default function ModelRoutesManager({
                                 e.stopPropagation();
                                 if (setCurrentTab) setCurrentTab('pricing');
                               }}
-                              className="flex items-center space-x-1.5 text-[11px] hover:text-indigo-600 dark:hover:text-indigo-400 transition cursor-pointer group text-left"
+                              className="flex items-center space-x-1.5 text-xs hover:text-indigo-600 dark:hover:text-indigo-400 transition cursor-pointer group text-left"
                               title={isZh ? '已配置专属定价，点击前往【定价管理】查看与编辑' : 'Click to view pricing'}
                             >
                               <span className="text-slate-700 dark:text-slate-300 font-mono tabular-nums font-semibold group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
                                 ¥{price.prompt_price.toFixed(1)}/¥{price.completion_price.toFixed(1)}
                               </span>
                               {price.off_peak_enabled !== false && (
-                                <span className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded font-medium text-[10px]">
+                                <span className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded font-medium text-xs">
                                   {isZh ? '闲时优惠' : 'Off-peak'}
                                 </span>
                               )}
@@ -528,7 +623,7 @@ export default function ModelRoutesManager({
                                 e.stopPropagation();
                                 if (setCurrentTab) setCurrentTab('pricing');
                               }}
-                              className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800 cursor-pointer transition text-left"
+                              className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-xs font-medium bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800 cursor-pointer transition text-left"
                               title={isZh ? '未配置专属费率，当前回退至系统基准定价 (¥2.0/¥8.0)。点击前往【定价管理】配置专属定价！' : 'No explicit price set, fallback to system default. Click to configure.'}
                             >
                               <ShieldAlert className="w-2.5 h-2.5 text-amber-500 shrink-0" />
@@ -585,7 +680,7 @@ export default function ModelRoutesManager({
 
                             <div className="border border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-[#0F1420] text-xs shadow-sm">
                               <table className="w-full text-left">
-                                <thead className="bg-slate-50/70 dark:bg-slate-900/70 text-slate-500 dark:text-slate-400 text-[11px] border-b border-slate-100 dark:border-slate-800">
+                                <thead className="bg-slate-50/70 dark:bg-slate-900/70 text-slate-500 dark:text-slate-400 text-xs border-b border-slate-100 dark:border-slate-800">
                                   <tr>
                                     <th className="py-2.5 px-4 font-semibold">{isZh ? '服务商名称' : 'Provider Name'}</th>
                                     <th className="py-2.5 px-4 font-semibold">{isZh ? '服务引擎' : 'Engine'}</th>
@@ -594,7 +689,7 @@ export default function ModelRoutesManager({
                                     <th className="py-2.5 px-4 font-semibold text-right">{isZh ? '健康状态 / 探测延迟' : 'Health / Latency'}</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono text-[11px]">
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono text-xs">
                                   {(route.providers || []).map((p) => {
                                     const probe = probes.find(pr => pr.channel_id === p.channel_id);
                                     return (
@@ -617,8 +712,8 @@ export default function ModelRoutesManager({
                                               {probe.latency_ms} ms ({probe.status})
                                             </span>
                                           ) : (
-                                            <span className="text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 text-[10px] font-medium">
-                                              {isZh ? '正常就绪' : 'Ready'}
+                                            <span className="text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-xs font-medium">
+                                              {isZh ? '未探测' : 'Not probed'}
                                             </span>
                                           )}
                                         </td>

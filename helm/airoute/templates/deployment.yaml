@@ -1,3 +1,6 @@
+{{- if and (or (gt (int .Values.replicaCount) 1) (and .Values.autoscaling.enabled (gt (int .Values.autoscaling.maxReplicas) 1))) (or (not .Values.database.existingSecret) .Values.persistence.enabled) -}}
+{{- fail "multi-replica deployment requires database.existingSecret (PostgreSQL) and persistence.enabled=false; SQLite WAL cannot be shared across pods" -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -5,6 +8,8 @@ metadata:
   labels:
     {{- include "airoute.labels" . | nindent 4 }}
 spec:
+  strategy:
+    type: Recreate
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
@@ -43,6 +48,24 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+          env:
+            - name: GATEWAY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.existingSecret | default (printf "%s-auth" (include "airoute.fullname" .)) | quote }}
+                  key: admin-password
+            - name: GATEWAY_ADMIN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.existingSecret | default (printf "%s-auth" (include "airoute.fullname" .)) | quote }}
+                  key: admin-secret
+            {{- if .Values.database.existingSecret }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret | quote }}
+                  key: url
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /health

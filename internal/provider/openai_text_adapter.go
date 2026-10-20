@@ -25,6 +25,46 @@ func buildCompletionURL(baseURL string) string {
 	return baseURL + "/completions"
 }
 
+// ErrTextAdapterUnsupported is returned when a request needs capabilities the
+// legacy /v1/completions protocol cannot express (tool calling, multimodal
+// input). It is deliberately NOT an *UpstreamError: the channel is healthy, the
+// protocol simply cannot carry the request, so the router should try another
+// channel and only surface this message if none can serve it.
+type ErrTextAdapterUnsupported struct {
+	Reason string
+}
+
+func (e *ErrTextAdapterUnsupported) Error() string {
+	return "text-completion channel cannot serve this request: " + e.Reason
+}
+
+// requiresChatCapabilities reports whether the request needs a chat-capable
+// upstream. Previously such requests were silently flattened into a plain
+// prompt: tool definitions were dropped (so the model could never call a tool)
+// and image parts were serialised as base64 text into the prompt, which blew up
+// the token count and usually overflowed the context window.
+func requiresChatCapabilities(req *model.ChatCompletionRequest) string {
+	if req == nil {
+		return ""
+	}
+	if len(req.Tools) > 0 {
+		return "request declares tools, which /v1/completions cannot express"
+	}
+	if tc, ok := req.ToolChoice.(string); ok && tc != "" && tc != "none" {
+		return "request sets tool_choice, which /v1/completions cannot express"
+	}
+	for _, m := range req.Messages {
+		parts := model.ParseMessageContent(m.Content)
+		for _, part := range parts {
+			switch part.Type {
+			case model.ContentPartImageURL, model.ContentPartInputAudio:
+				return "request contains non-text content, which /v1/completions cannot express"
+			}
+		}
+	}
+	return ""
+}
+
 func convertChatToPrompt(messages []model.ChatMessage) string {
 	var sb strings.Builder
 	for _, m := range messages {
@@ -46,6 +86,9 @@ func convertChatToPrompt(messages []model.ChatMessage) string {
 }
 
 func (p *OpenAIProvider) chatCompleteText(ctx context.Context, req *model.ChatCompletionRequest, channel *model.ChannelConfig, targetModel string) (*model.ChatCompletionResponse, error) {
+	if reason := requiresChatCapabilities(req); reason != "" {
+		return nil, &ErrTextAdapterUnsupported{Reason: reason}
+	}
 	prompt := convertChatToPrompt(req.Messages)
 	textReq := map[string]any{
 		"model":       targetModel,
@@ -80,7 +123,7 @@ func (p *OpenAIProvider) chatCompleteText(ctx context.Context, req *model.ChatCo
 		return nil, fmt.Errorf("read response body error: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("upstream %s returned status %d: %s", channel.Name, resp.StatusCode, string(bodyBytes))
+		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
 	}
 	var textResp struct {
 		ID      string `json:"id"`
@@ -117,13 +160,17 @@ func (p *OpenAIProvider) chatCompleteText(ctx context.Context, req *model.ChatCo
 }
 
 func (p *OpenAIProvider) chatCompleteTextStream(ctx context.Context, req *model.ChatCompletionRequest, channel *model.ChannelConfig, targetModel string) (<-chan *model.StreamEvent, error) {
+	if reason := requiresChatCapabilities(req); reason != "" {
+		return nil, &ErrTextAdapterUnsupported{Reason: reason}
+	}
 	prompt := convertChatToPrompt(req.Messages)
 	textReq := map[string]any{
-		"model":       targetModel,
-		"prompt":      prompt,
-		"stream":      true,
-		"temperature": req.Temperature,
-		"top_p":       req.TopP,
+		"model":          targetModel,
+		"prompt":         prompt,
+		"stream":         true,
+		"stream_options": &model.StreamOptions{IncludeUsage: true},
+		"temperature":    req.Temperature,
+		"top_p":          req.TopP,
 	}
 	if req.MaxTokens != nil {
 		textReq["max_tokens"] = *req.MaxTokens
@@ -149,25 +196,39 @@ func (p *OpenAIProvider) chatCompleteTextStream(ctx context.Context, req *model.
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return nil, fmt.Errorf("upstream %s returned status %d: %s", channel.Name, resp.StatusCode, string(bodyBytes))
+		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
 	}
 	eventChan := make(chan *model.StreamEvent, 64)
 	go func() {
 		defer resp.Body.Close()
 		defer close(eventChan)
 		reader := bufio.NewReader(resp.Body)
+
+		// send is context-aware: a bare channel send would block forever once
+		// the consumer (client / pipe) goes away, leaking this goroutine and the
+		// upstream response body for the lifetime of the process.
+		send := func(ev *model.StreamEvent) bool {
+			select {
+			case eventChan <- ev:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
+
 		for {
 			select {
 			case <-ctx.Done():
-				eventChan <- &model.StreamEvent{Err: ctx.Err()}
 				return
 			default:
 			}
 			line, err := reader.ReadBytes('\n')
-			if err != nil {
+			if err != nil && !(err == io.EOF && len(line) > 0) {
 				if err != io.EOF {
-					eventChan <- &model.StreamEvent{Err: err}
+					send(&model.StreamEvent{Err: err})
+					return
 				}
+				send(&model.StreamEvent{IsDone: true})
 				return
 			}
 			lineStr := strings.TrimSpace(string(line))
@@ -176,7 +237,7 @@ func (p *OpenAIProvider) chatCompleteTextStream(ctx context.Context, req *model.
 			}
 			dataContent := strings.TrimSpace(strings.TrimPrefix(lineStr, "data:"))
 			if dataContent == "[DONE]" {
-				eventChan <- &model.StreamEvent{IsDone: true}
+				send(&model.StreamEvent{IsDone: true})
 				return
 			}
 			var textChunk struct {
@@ -190,35 +251,40 @@ func (p *OpenAIProvider) chatCompleteTextStream(ctx context.Context, req *model.
 				Usage *model.Usage `json:"usage"`
 			}
 			if err := json.Unmarshal([]byte(dataContent), &textChunk); err != nil {
-				eventChan <- &model.StreamEvent{Raw: line}
+				if !send(&model.StreamEvent{Raw: line}) {
+					return
+				}
 				continue
 			}
-			deltaText := ""
-			var finishReason *string
-			if len(textChunk.Choices) > 0 {
-				deltaText = textChunk.Choices[0].Text
-				finishReason = textChunk.Choices[0].FinishReason
+
+			// Preserve every choice and its real index so `n > 1` keeps working
+			// through the text-completion adaptation (previously only choices[0]
+			// survived and was renumbered to 0).
+			choices := make([]model.ChunkChoice, 0, len(textChunk.Choices))
+			for _, ch := range textChunk.Choices {
+				choices = append(choices, model.ChunkChoice{
+					Index: ch.Index,
+					Delta: model.ChunkDelta{
+						Role:    "assistant",
+						Content: ch.Text,
+					},
+					FinishReason: ch.FinishReason,
+				})
+			}
+			if len(choices) == 0 {
+				// Usage-only trailer frame.
+				choices = []model.ChunkChoice{}
 			}
 			chatChunk := model.ChatCompletionChunk{
 				ID:      textChunk.ID,
 				Object:  "chat.completion.chunk",
 				Created: textChunk.Created,
 				Model:   req.Model,
-				Choices: []model.ChunkChoice{
-					{
-						Index: 0,
-						Delta: model.ChunkDelta{
-							Role:    "assistant",
-							Content: deltaText,
-						},
-						FinishReason: finishReason,
-					},
-				},
-				Usage: textChunk.Usage,
+				Choices: choices,
+				Usage:   textChunk.Usage,
 			}
-			eventChan <- &model.StreamEvent{
-				Chunk: &chatChunk,
-				Raw:   line,
+			if !send(&model.StreamEvent{Chunk: &chatChunk}) {
+				return
 			}
 		}
 	}()

@@ -62,21 +62,37 @@ func (d *Dispatcher) RegisterProvider(p provider.Provider) {
 	d.providers[p.Type()] = p
 }
 
+// swrrKeySeparator separates the model name from the channel name in the SWRR
+// weight map. It must not be ":" because both model and channel names may
+// contain colons, which made the old strings.Split(k, ":") prune check silently
+// skip those entries and leak them forever.
+const swrrKeySeparator = "\x00"
+
+// swrrKey builds the weight-map key for a (model, channel) pair.
+func swrrKey(modelName, channelName string) string {
+	return modelName + swrrKeySeparator + channelName
+}
+
 // UpdateChannels updates channel configurations dynamically and prunes obsolete weights.
 func (d *Dispatcher) UpdateChannels(channels []model.ChannelConfig) {
 	d.mu.Lock()
 	d.channels = channels
 	d.mu.Unlock()
 
-	activeNames := make(map[string]bool)
+	activeNames := make(map[string]bool, len(channels))
 	for _, ch := range channels {
 		activeNames[ch.Name] = true
 	}
 
 	d.wrrMu.Lock()
 	for k := range d.wrrWeights {
-		parts := strings.Split(k, ":")
-		if len(parts) == 2 && !activeNames[parts[1]] {
+		idx := strings.LastIndex(k, swrrKeySeparator)
+		if idx < 0 {
+			// Unrecognized legacy key shape: drop it rather than leak.
+			delete(d.wrrWeights, k)
+			continue
+		}
+		if !activeNames[k[idx+len(swrrKeySeparator):]] {
 			delete(d.wrrWeights, k)
 		}
 	}
@@ -111,13 +127,42 @@ func (d *Dispatcher) GetAllModelFallbacks() map[string]string {
 	return res
 }
 
+// getProviderForChannel selects the appropriate Provider implementation for a channel given the request.
+// If the request targets the Anthropic Messages protocol and the channel explicitly supports anthropic_messages,
+// the native Anthropic provider is used.
+func (d *Dispatcher) getProviderForChannel(ch *model.ChannelConfig, req *model.ChatCompletionRequest) (provider.Provider, bool) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	if req != nil && (req.AnthropicOriginal != nil || req.Protocol == "anthropic_messages") &&
+		(ch.Type == model.ProviderAnthropic || ch.HasExplicitProtocol("anthropic_messages")) {
+		if prov, ok := d.providers[model.ProviderAnthropic]; ok {
+			return prov, true
+		}
+	}
+
+	prov, exists := d.providers[ch.Type]
+	return prov, exists
+}
+
+// channelCallContext bounds a non-streaming upstream call by the channel's
+// configured timeout_seconds. The shared HTTP client intentionally has no
+// body deadline (long SSE streams need it), so without this the timeout field
+// was dead configuration for non-streaming requests.
+func channelCallContext(ctx context.Context, ch *model.ChannelConfig) (context.Context, context.CancelFunc) {
+	if ch != nil && ch.TimeoutSeconds > 0 {
+		return context.WithTimeout(ctx, time.Duration(ch.TimeoutSeconds)*time.Second)
+	}
+	return ctx, func() {}
+}
+
 // Dispatch executes non-streaming chat with automatic fallback.
 func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequest) (*model.ChatCompletionResponse, error) {
 	proto := "chat"
 	if req.Protocol != "" {
 		proto = req.Protocol
 	}
-	channels := d.ResolveCandidateChannels(ctx, req.Model, proto)
+	channels := d.candidateChannelsForRequest(ctx, req, proto)
 	if len(channels) == 0 {
 		if fb := d.GetModelFallback(req.Model); fb != "" && !strings.EqualFold(fb, req.Model) {
 			nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
@@ -145,13 +190,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 			continue
 		}
 
-		d.mu.RLock()
-		prov, exists := d.providers[ch.Type]
-		d.mu.RUnlock()
+		prov, exists := d.getProviderForChannel(ch, req)
 
 		if !exists {
 			lastErr = fmt.Errorf("unsupported provider type '%s' on channel %s", ch.Type, ch.Name)
 			telemetry.Logger.Warn("provider type not found", "channel", ch.Name, "type", ch.Type)
+			// CanExecute may have taken a half-open canary slot; hand it back or
+			// the channel stays locked out until the 2x-cooldown reset.
+			d.circuitBreaker.AbortCanary(ch.Name)
 			continue
 		}
 
@@ -163,7 +209,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		)
 
 		start := time.Now()
-		resp, err := prov.ChatComplete(ctx, req, ch)
+		callCtx, cancelCall := channelCallContext(ctx, ch)
+		resp, err := prov.ChatComplete(callCtx, req, ch)
+		cancelCall()
 		if err == nil {
 			promptTokens := 0
 			compTokens := 0
@@ -181,6 +229,27 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		}
 
 		lastErr = err
+		// A deterministic 4xx means the caller's payload is at fault: the same
+		// request would fail on every channel, so do not trip the breaker and do
+		// not replay it across the fleet.
+		if provider.IsClientError(err) {
+			telemetry.Logger.Warn("upstream rejected request with a client error, aborting fallback",
+				"channel", ch.Name,
+				"error", err.Error(),
+			)
+			d.circuitBreaker.AbortCanary(ch.Name)
+			return nil, err
+		}
+		if !provider.IsChannelFailure(err) {
+			// Unknown but non-fatal classification: try the next channel without
+			// charging the breaker.
+			telemetry.Logger.Warn("channel returned a non-health error, trying next channel without tripping breaker",
+				"channel", ch.Name,
+				"error", err.Error(),
+			)
+			attempted = append(attempted, ch.Name)
+			continue
+		}
 		attempted = append(attempted, d.recordChannelFailure(ch.Name, err, i+1))
 	}
 
@@ -202,6 +271,24 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 
 	telemetry.GlobalMetrics.RecordRequest(false, 0, 0, 0)
 	return nil, fmt.Errorf("all %d candidate channels failed for model %s. Last error: %w", len(channels), req.Model, lastErr)
+}
+
+func (d *Dispatcher) candidateChannelsForRequest(ctx context.Context, req *model.ChatCompletionRequest, proto string) []*model.ChannelConfig {
+	channels := d.ResolveCandidateChannels(ctx, req.Model, proto)
+	if !req.AnthropicNativeOnly {
+		return channels
+	}
+	native := make([]*model.ChannelConfig, 0, len(channels))
+	for _, channel := range channels {
+		if channel.Type == model.ProviderAnthropic || channel.HasExplicitProtocol("anthropic_messages") {
+			native = append(native, channel)
+		}
+	}
+	if len(native) > 0 {
+		return native
+	}
+	// Fall back to general channels capable of serving the model via protocol adaptation
+	return channels
 }
 
 // GetBreakerStatus returns the circuit breaker status of a channel.

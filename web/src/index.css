@@ -32,6 +32,115 @@
   }
 }
 
+/* ---------------------------------------------------------------------------
+   Shared UI primitives.
+
+   The console grew module by module, so inputs, buttons and meta text drifted
+   into slightly different radii, heights and greys. These classes are the
+   single source of truth for those details: prefer them over ad-hoc utility
+   stacks when touching a form, toolbar or table.
+   --------------------------------------------------------------------------- */
+@layer components {
+  /* ---- Form controls: one radius / height / focus treatment ---- */
+  .ui-field {
+    @apply w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0F1420]
+           px-3 py-2 text-xs leading-5 text-slate-800 dark:text-slate-100
+           placeholder-slate-400 dark:placeholder-slate-500 shadow-sm transition;
+  }
+  .ui-field:focus {
+    @apply outline-none border-indigo-500 ring-2 ring-indigo-500/15;
+  }
+  .ui-field:disabled {
+    @apply opacity-60 cursor-not-allowed;
+  }
+  /* Compact variant: pair with .ui-field for dense grids (priority/weight/timeout). */
+  .ui-field-sm {
+    @apply px-2.5 py-1.5;
+  }
+  .ui-label {
+    @apply block mb-1 text-xs font-medium text-slate-700 dark:text-slate-300;
+  }
+  .ui-label-sm {
+    @apply block mb-1 text-[11px] font-medium text-slate-500 dark:text-slate-400;
+  }
+
+  /* ---- Text hierarchy: supporting copy stays legible (>=12px, slate-500) ---- */
+  .ui-meta {
+    @apply text-xs text-slate-500 dark:text-slate-400;
+  }
+  .ui-meta-sm {
+    @apply text-xs text-slate-500 dark:text-slate-400;
+  }
+  .ui-section-title {
+    @apply text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400;
+  }
+
+  /* ---- Buttons: identical height, radius and disabled treatment ---- */
+  .ui-btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium
+           transition cursor-pointer select-none
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none;
+  }
+  .ui-btn-primary {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium
+           transition cursor-pointer select-none bg-slate-900 dark:bg-indigo-600 text-white
+           hover:bg-slate-800 dark:hover:bg-indigo-500 shadow-sm
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none;
+  }
+  .ui-btn-secondary {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium
+           transition cursor-pointer select-none border border-slate-200 dark:border-slate-800
+           bg-white dark:bg-[#0F1420] text-slate-700 dark:text-slate-300
+           hover:bg-slate-50 dark:hover:bg-slate-800/80 shadow-sm
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none;
+  }
+  .ui-btn-ghost {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium
+           transition cursor-pointer select-none text-slate-500 dark:text-slate-400
+           hover:text-slate-800 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none;
+  }
+  .ui-btn-danger {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium
+           transition cursor-pointer select-none bg-rose-600 text-white hover:bg-rose-500 shadow-sm
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none;
+  }
+  .ui-btn-sm {
+    @apply px-2.5 py-1.5;
+  }
+  .ui-icon-btn {
+    @apply inline-flex items-center justify-center rounded-lg p-1.5 text-slate-500 dark:text-slate-400
+           hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200
+           transition cursor-pointer;
+  }
+
+  /* ---- Surfaces & tables ---- */
+  .ui-card {
+    @apply bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl shadow-sm;
+  }
+  .ui-th {
+    @apply px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap;
+  }
+  .ui-td {
+    @apply px-4 py-3 text-xs text-slate-700 dark:text-slate-300 align-middle;
+  }
+  .ui-chip {
+    @apply inline-flex items-center gap-1 rounded-md border border-slate-200 dark:border-slate-800
+           bg-slate-50 dark:bg-slate-900/60 px-2 py-0.5 text-xs font-medium
+           text-slate-600 dark:text-slate-300;
+  }
+
+  /* ---- Dropdown panel (column pickers, overflow menus) ---- */
+  .ui-menu {
+    @apply absolute right-0 mt-2 z-30 min-w-[180px] rounded-xl border border-slate-200 dark:border-slate-800
+           bg-white dark:bg-[#0F1420] p-1.5 shadow-xl;
+  }
+  .ui-menu-item {
+    @apply flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300
+           hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer;
+  }
+}
+
 /* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;

@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/billing"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/router"
@@ -26,11 +28,18 @@ func NewMultimodalHandler(dispatcher *router.Dispatcher) *MultimodalHandler {
 // dispatchAndForward executes an UpstreamRequest via dispatcher, audits the usage,
 // and proxies headers + stream back to the downstream client (Template Method Pattern).
 func (h *MultimodalHandler) dispatchAndForward(c *gin.Context, upReq *router.UpstreamRequest, sessionID string, defaultContentType ...string) {
+	if upReq.Method != http.MethodGet && billing.GlobalEngine != nil && os.Getenv("GATEWAY_ALLOW_UNPRICED_MULTIMODAL") != "1" {
+		price := billing.GlobalEngine.GetPriceWithGroup(upReq.Model, getKeyGroup(c))
+		if price == nil || price.FixedPrice <= 0 {
+			RespondOpenAIError(c, http.StatusUnprocessableEntity, "Configure a positive fixed_price for this multimodal model before use", "invalid_request_error", "pricing_not_configured")
+			return
+		}
+	}
 	start := time.Now()
 	resp, err := h.dispatcher.DispatchHTTP(c.Request.Context(), upReq)
 	if err != nil {
 		recordFailedRequest(c, sessionID, upReq.Model, time.Since(start), http.StatusBadGateway)
-		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadGateway, gin.H{"error": sanitizeErrorMessage(err)})
 		return
 	}
 	defer resp.Stream.Close()
@@ -38,11 +47,13 @@ func (h *MultimodalHandler) dispatchAndForward(c *gin.Context, upReq *router.Ups
 	dur := time.Since(start)
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		RecordUsage(c, AuditRecordParams{
-			SessionID:  sessionID,
-			Channel:    resp.Channel,
-			Model:      upReq.Model,
-			Duration:   dur,
-			StatusCode: resp.StatusCode,
+			SessionID:     sessionID,
+			Channel:       resp.Channel,
+			Model:         upReq.Model,
+			Duration:      dur,
+			StatusCode:    resp.StatusCode,
+			BillableUnits: upReq.BillableUnits,
+			SkipBilling:   upReq.Method == http.MethodGet,
 		})
 	} else {
 		recordFailedRequest(c, sessionID, upReq.Model, dur, resp.StatusCode)
@@ -92,11 +103,12 @@ func (h *MultimodalHandler) HandleImageGenerations(c *gin.Context) {
 
 	sessionID := resolveGenericSessionID(c, "img")
 	h.dispatchAndForward(c, &router.UpstreamRequest{
-		Path:        "/v1/images/generations",
-		Method:      http.MethodPost,
-		Body:        bodyBytes,
-		ContentType: "application/json",
-		Model:       req.Model,
-		Protocol:    "images",
+		Path:          "/v1/images/generations",
+		Method:        http.MethodPost,
+		Body:          bodyBytes,
+		ContentType:   "application/json",
+		Model:         req.Model,
+		Protocol:      "images",
+		BillableUnits: max(1, req.N),
 	}, sessionID)
 }

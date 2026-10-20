@@ -34,36 +34,31 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 		Model:     c.Query("model"),
 		TenantID:  c.Query("tenant_id"),
 		ChatID:    c.Query("chat_id"),
+		// The console's search box and facet filters must be applied server-side;
+		// filtering only the loaded page silently hides matches on other pages.
+		Keyword: c.Query("q"),
+		Channel: c.Query("channel"),
+		Status:  c.Query("status"),
+		Cache:   c.Query("cache"),
+		Latency: c.Query("latency"),
 	}
 
+	// Non-admin callers are scoped to their own API keys. Fail-closed: when the
+	// user lookup fails, ScopeByAPIKeys stays set with an empty key list, and the
+	// repository then returns no rows (never the full admin view).
 	if claims, ok := GetClaimsFromContext(c); ok && claims.Role != "admin" {
-		// Fail-closed scoping: even if the user lookup fails, an empty
-		// key list must never widen to full (admin) visibility — the
-		// repository returns no rows when scope is set and keys are empty.
 		filter.ScopeByAPIKeys = true
-		user, _ := h.repo.GetUserByUsername(claims.Username)
-		if user != nil {
+		if user, _ := h.repo.GetUserByUsername(claims.Username); user != nil {
 			userKeys, _ := h.repo.ListAPIKeysByUser(user.ID)
-			// Scope to the user's own keys in SQL so that LIMIT/OFFSET
-			// pagination applies after filtering, not before.
+			// Scope in SQL so LIMIT/OFFSET pagination applies after filtering.
 			filter.APIKeys = make([]string, 0, len(userKeys))
 			for _, k := range userKeys {
 				filter.APIKeys = append(filter.APIKeys, k.Key)
 			}
 		}
-		logs, err := h.repo.ListUsageLogsWithFilter(filter)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		if logs == nil {
-			logs = make([]*storage.UsageLogRecord, 0)
-		}
-		c.JSON(http.StatusOK, gin.H{"code": 0, "data": logs})
-		return
 	}
 
-	logs, err := h.repo.ListUsageLogsWithFilter(filter)
+	logs, total, err := h.repo.ListUsageLogsWithFilterAndCount(filter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -71,7 +66,17 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 	if logs == nil {
 		logs = make([]*storage.UsageLogRecord, 0)
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": logs})
+	facets, err := h.repo.ListUsageLogFacets(filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if !shouldRevealKey(c) {
+		maskUsageLogKeys(logs)
+	}
+	// `total` is the size of the whole filtered result set, so the console can
+	// paginate honestly instead of assuming the current page is everything.
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": logs, "total": total, "limit": limit, "offset": offset, "facets": facets})
 }
 
 // DeleteLog deletes a single log by ID (admin only).
@@ -125,4 +130,35 @@ func (h *AdminHandler) ClearLogs(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "已清空所有调用日志"})
+}
+
+// shouldRevealKey reports whether the caller explicitly asked for unmasked keys.
+// Only super-admins may do so, and the decision is per request.
+func shouldRevealKey(c *gin.Context) bool {
+	if c.Query("reveal_key") != "true" && c.Query("reveal_key") != "1" {
+		return false
+	}
+	claims, ok := GetClaimsFromContext(c)
+	return ok && claims.Role == "admin"
+}
+
+// maskAPIKey renders a credential as prefix + last 4 characters so audit logs
+// never expose a complete key to the console or exported CSV.
+func maskAPIKey(key string) string {
+	if key == "" {
+		return ""
+	}
+	if len(key) <= 12 {
+		return "sk-***"
+	}
+	return key[:8] + "***" + key[len(key)-4:]
+}
+
+// maskUsageLogKeys masks every API key in a log page in place.
+func maskUsageLogKeys(logs []*storage.UsageLogRecord) {
+	for _, l := range logs {
+		if l != nil {
+			l.APIKey = maskAPIKey(l.APIKey)
+		}
+	}
 }

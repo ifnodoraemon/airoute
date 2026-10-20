@@ -129,6 +129,10 @@ func TestUserWallet_RedemptionAndRecharge(t *testing.T) {
 		Balance:      10.0,
 		GroupName:    "default",
 	})
+	// Admin tokens are validated against the users table, so seed the admin account.
+	if err := repo.CreateUser(&storage.UserRecord{Username: "admin", Role: "admin", Status: "active", Balance: 1000}); err != nil {
+		t.Fatalf("seed admin user failed: %v", err)
+	}
 
 	token, _ := controlplane.GenerateAdminToken("bob", "user", time.Hour)
 
@@ -550,7 +554,7 @@ func TestAPIKey_BudgetLimitEnforcement(t *testing.T) {
 	user, _ := repo.GetUserByUsername("budget-user")
 
 	// Create key with Budget: 10.0
-	vkKey := "sk-nano-budget-test"
+	vkKey := "sk-airoute-budget-test"
 	_ = repo.CreateAPIKey(&storage.APIKeyRecord{
 		Key:      vkKey,
 		TenantID: "budget-user",
@@ -629,7 +633,7 @@ func TestModelsEndpoint_AllowedModelsFiltering(t *testing.T) {
 	user, _ := repo.GetUserByUsername("model-user")
 
 	// Create key restricted to ONLY gpt-4o
-	vkKey := "sk-nano-model-filter"
+	vkKey := "sk-airoute-model-filter"
 	_ = repo.CreateAPIKey(&storage.APIKeyRecord{
 		Key:           vkKey,
 		TenantID:      "model-user",
@@ -719,4 +723,3 @@ func TestUser_SelfServiceChangePassword(t *testing.T) {
 		t.Fatalf("change password failed: %d %s", w.Code, w.Body.String())
 	}
 }
-

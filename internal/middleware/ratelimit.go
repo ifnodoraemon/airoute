@@ -120,6 +120,10 @@ func init() {
 		ticker := time.NewTicker(10 * time.Minute)
 		for range ticker.C {
 			GlobalRateLimiter.CleanupIdle(15 * time.Minute)
+			// The TPM tracker keeps one bucket per API key ever seen; without
+			// this sweep the map only ever grows (deleted/rotated keys leak
+			// forever).
+			GlobalTokenQuota.CleanupIdle(15 * time.Minute)
 		}
 	}()
 }
@@ -153,7 +157,30 @@ func RateLimitMiddleware() gin.HandlerFunc {
 		}
 
 		k, ok := kAny.(*model.APIKeyConfig)
-		if !ok || k.RPM <= 0 {
+		if !ok {
+			c.Next()
+			return
+		}
+
+		// Token-per-minute gate: reject before any upstream call when the key has
+		// already consumed its minute budget. RPM limiting below stays independent.
+		if k.TPM > 0 {
+			if !GlobalTokenQuota.Allow(k.Key, k.TPM) {
+				c.Header("X-RateLimit-Limit-Tokens", strconv.Itoa(k.TPM))
+				c.Header("Retry-After", "60")
+				c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+					"error": gin.H{
+						"message": "Token rate limit exceeded (TPM limit reached). Please slow down requests.",
+						"type":    "rate_limit_error",
+						"code":    "token_rate_limit_exceeded",
+					},
+				})
+				return
+			}
+			c.Header("X-RateLimit-Remaining-Tokens", strconv.Itoa(GlobalTokenQuota.Remaining(k.Key, k.TPM)))
+		}
+
+		if k.RPM <= 0 {
 			c.Next()
 			return
 		}

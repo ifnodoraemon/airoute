@@ -285,5 +285,3 @@ func Test_CleanLegacyTechDebt_OrphanKeysAndAdminExemption(t *testing.T) {
 		t.Fatalf("expected bob's balance to remain untouched at 100.0, but got %f", bobAfter.Balance)
 	}
 }
-
-

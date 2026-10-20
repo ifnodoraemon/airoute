@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"strings"
 	"time"
@@ -14,31 +15,56 @@ type UserRecord struct {
 	Username     string    `json:"username"`
 	Email        string    `json:"email"`
 	PasswordHash string    `json:"-"`
-	Role         string    `json:"role"`       // "admin" or "user"
-	Status       string    `json:"status"`     // "active" or "locked"
-	Balance      float64   `json:"balance"`    // Wallet balance in CNY
-	GroupName    string    `json:"group_name"` // "default", "vip", "enterprise"
+	Role         string    `json:"role"`          // "admin" or "user"
+	Status       string    `json:"status"`        // "active" or "locked"
+	Balance      float64   `json:"balance"`       // Wallet balance in CNY (legacy float mirror)
+	BalanceUnits int64     `json:"balance_units"` // Wallet balance in 1e-9 CNY (authoritative integer ledger)
+	GroupName    string    `json:"group_name"`    // "default", "vip", "enterprise"
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
+// resolveBalanceUnits prefers the integer ledger when it carries a non-zero value, or
+// when the legacy float and the mirror disagree because the mirror was updated
+// more recently.
+func (u *UserRecord) resolveBalanceUnits() {
+	if u == nil {
+		return
+	}
+	if u.BalanceUnits != 0 || u.Balance == 0 {
+		u.Balance = FromUnits(u.BalanceUnits)
+		return
+	}
+	u.BalanceUnits = ToUnits(u.Balance)
+}
+
 // GetUserByUsername finds a user by username or email.
 func (r *Repository) GetUserByUsername(username string) (*UserRecord, error) {
-	row := r.db.QueryRow(`SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE username = ? OR email = ?`, username, username)
+	row := r.db.QueryRow(`SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE username = ? OR email = ?`, username, username)
 	var u UserRecord
-	if err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.Balance, &u.GroupName, &u.CreatedAt, &u.UpdatedAt); err != nil {
+	if err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.Balance, &u.BalanceUnits, &u.GroupName, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		return nil, err
 	}
+	u.resolveBalanceUnits()
 	return &u, nil
 }
 
 // GetUserByID finds a user by primary key ID.
 func (r *Repository) GetUserByID(id int64) (*UserRecord, error) {
-	row := r.db.QueryRow(`SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE id = ?`, id)
+	return r.GetUserByIDContext(context.Background(), id)
+}
+
+// GetUserByIDContext is GetUserByID bound to a caller context/deadline.
+func (r *Repository) GetUserByIDContext(ctx context.Context, id int64) (*UserRecord, error) {
+	if r == nil || r.db == nil {
+		return nil, sql.ErrNoRows
+	}
+	row := r.db.QueryRowContext(ctx, `SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE id = ?`, id)
 	var u UserRecord
-	if err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.Balance, &u.GroupName, &u.CreatedAt, &u.UpdatedAt); err != nil {
+	if err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.Balance, &u.BalanceUnits, &u.GroupName, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		return nil, err
 	}
+	u.resolveBalanceUnits()
 	return &u, nil
 }
 
@@ -47,11 +73,12 @@ func (r *Repository) GetUserByEmail(email string) (*UserRecord, error) {
 	if r == nil || r.db == nil || strings.TrimSpace(email) == "" {
 		return nil, sql.ErrNoRows
 	}
-	row := r.db.QueryRow(`SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE email = ?`, strings.TrimSpace(email))
+	row := r.db.QueryRow(`SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE email = ?`, strings.TrimSpace(email))
 	var u UserRecord
-	if err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.Balance, &u.GroupName, &u.CreatedAt, &u.UpdatedAt); err != nil {
+	if err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.Balance, &u.BalanceUnits, &u.GroupName, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		return nil, err
 	}
+	u.resolveBalanceUnits()
 	return &u, nil
 }
 
@@ -66,8 +93,8 @@ func (r *Repository) CreateUser(u *UserRecord) error {
 	if u.GroupName == "" {
 		u.GroupName = "default"
 	}
-	id, err := r.db.InsertGetID(`INSERT INTO users (username, email, password_hash, role, status, balance, group_name, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-		u.Username, u.Email, u.PasswordHash, u.Role, u.Status, u.Balance, u.GroupName)
+	id, err := r.db.InsertGetID(`INSERT INTO users (username, email, password_hash, role, status, balance, balance_units, group_name, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		u.Username, u.Email, u.PasswordHash, u.Role, u.Status, u.Balance, ToUnits(u.Balance), u.GroupName)
 	if err != nil {
 		return err
 	}
@@ -89,13 +116,13 @@ func (r *Repository) UpdateUserStatus(username, status string) error {
 
 // UpdateUserBalance adjusts a user's wallet balance by a delta amount.
 func (r *Repository) UpdateUserBalance(username string, delta float64) error {
-	_, err := r.db.Exec(`UPDATE users SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, delta, username)
+	_, err := r.db.Exec(`UPDATE users SET balance = balance + ?, balance_units = COALESCE(balance_units, 0) + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, delta, ToUnits(delta), username)
 	return err
 }
 
 // SetUserBalance sets an exact wallet balance for a user.
 func (r *Repository) SetUserBalance(username string, balance float64) error {
-	_, err := r.db.Exec(`UPDATE users SET balance = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, balance, username)
+	_, err := r.db.Exec(`UPDATE users SET balance = ?, balance_units = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, balance, ToUnits(balance), username)
 	return err
 }
 
@@ -122,13 +149,13 @@ func (r *Repository) DeductUserBalance(userID int64, cost float64) error {
 	if userID <= 0 || cost <= 0 {
 		return nil
 	}
-	_, err := r.db.Exec(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND role != 'admin'`, cost, userID)
+	_, err := r.db.Exec(`UPDATE users SET balance = balance - ?, balance_units = COALESCE(balance_units, 0) - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND role != 'admin'`, cost, ToUnits(cost), userID)
 	return err
 }
 
 // ListUsers returns all registered users without password hashes.
 func (r *Repository) ListUsers() ([]*UserRecord, error) {
-	rows, err := r.db.Query(`SELECT id, username, COALESCE(email, ''), COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(group_name, 'default'), created_at, updated_at FROM users ORDER BY id ASC`)
+	rows, err := r.db.Query(`SELECT id, username, COALESCE(email, ''), COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users ORDER BY id ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -137,10 +164,14 @@ func (r *Repository) ListUsers() ([]*UserRecord, error) {
 	var list []*UserRecord
 	for rows.Next() {
 		var u UserRecord
-		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.Role, &u.Status, &u.Balance, &u.GroupName, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.Role, &u.Status, &u.Balance, &u.BalanceUnits, &u.GroupName, &u.CreatedAt, &u.UpdatedAt); err != nil {
 			return nil, err
 		}
+		u.resolveBalanceUnits()
 		list = append(list, &u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return list, nil
 }

@@ -5,9 +5,12 @@ import (
 )
 
 // SeedDefaultSkills ensures standard open Agent Skills exist, complying with agentskills.io standard.
+// It only ever inserts missing built-ins; it must never delete or overwrite
+// user-created skills, because it runs on read paths.
 func (r *Repository) SeedDefaultSkills() error {
-	// Clean up legacy skills to keep it clean and focused
-	_, _ = r.db.Exec(`DELETE FROM system_skills WHERE id NOT IN ('git-workflow', 'test-driven-development', 'browser-automation', 'security-audit') AND id NOT LIKE 'skill_%' AND id NOT LIKE 'custom_%'`)
+	if r.GetSetting("skills_seeded_v1", "") == "1" {
+		return nil
+	}
 
 	defaults := []SkillRecord{
 		{
@@ -165,16 +168,9 @@ allowed-tools:
 		_, _ = r.db.Exec(`
 			INSERT INTO system_skills (id, name, description, category, tools, loading_mode, manifest, author, version, enabled, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-			ON CONFLICT(id) DO UPDATE SET
-				name = excluded.name,
-				description = excluded.description,
-				category = excluded.category,
-				tools = excluded.tools,
-				loading_mode = excluded.loading_mode,
-				manifest = excluded.manifest,
-				author = excluded.author,
-				version = excluded.version
+			ON CONFLICT(id) DO NOTHING
 		`, s.ID, s.Name, s.Description, s.Category, string(toolsJSON), s.LoadingMode, s.Manifest, s.Author, s.Version, enabledInt)
 	}
+	_ = r.SetSetting("skills_seeded_v1", "1")
 	return nil
 }

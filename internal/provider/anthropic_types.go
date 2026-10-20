@@ -11,14 +11,19 @@ type AnthropicTool struct {
 
 // AnthropicRequest represents the Anthropic Messages API payload.
 type AnthropicRequest struct {
-	Model       string             `json:"model"`
-	Messages    []AnthropicMessage `json:"messages"`
-	System      string             `json:"system,omitempty"`
-	MaxTokens   int                `json:"max_tokens"`
-	Temperature *float64           `json:"temperature,omitempty"`
-	TopP        *float64           `json:"top_p,omitempty"`
-	Stream      bool               `json:"stream,omitempty"`
-	Tools       []AnthropicTool    `json:"tools,omitempty"`
+	Model         string             `json:"model"`
+	Messages      []AnthropicMessage `json:"messages"`
+	System        any                `json:"system,omitempty"`
+	MaxTokens     int                `json:"max_tokens"`
+	Temperature   *float64           `json:"temperature,omitempty"`
+	TopP          *float64           `json:"top_p,omitempty"`
+	Stream        bool               `json:"stream,omitempty"`
+	Tools         []any              `json:"tools,omitempty"`
+	ToolChoice    any                `json:"tool_choice,omitempty"`
+	StopSequences []string           `json:"stop_sequences,omitempty"`
+	TopK          *int               `json:"top_k,omitempty"`
+	Thinking      any                `json:"thinking,omitempty"`
+	Metadata      any                `json:"metadata,omitempty"`
 }
 
 // AnthropicMessage represents a turn in Claude Messages API.
@@ -29,17 +34,23 @@ type AnthropicMessage struct {
 
 // AnthropicContentBlock represents a multimodal or tool use content block.
 type AnthropicContentBlock struct {
-	Type  string          `json:"type"`
-	Text  string          `json:"text,omitempty"`
-	ID    string          `json:"id,omitempty"`
-	Name  string          `json:"name,omitempty"`
-	Input json.RawMessage `json:"input,omitempty"`
+	Type      string          `json:"type"`
+	Text      string          `json:"text,omitempty"`
+	Thinking  string          `json:"thinking,omitempty"`
+	Signature string          `json:"signature,omitempty"`
+	ID        string          `json:"id,omitempty"`
+	Name      string          `json:"name,omitempty"`
+	Input     json.RawMessage `json:"input,omitempty"`
 }
 
 // AnthropicUsage represents token consumption stats.
+// InputTokens excludes prompt-cache reads/creations; those are reported separately
+// and must be added to obtain the total prompt token count.
 type AnthropicUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	InputTokens              int `json:"input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
 }
 
 // AnthropicResponse represents Claude Messages API non-streaming response.

@@ -13,6 +13,13 @@ func ensureSQLiteColumn(db *sql.DB, table, col, colType string) {
 	}
 }
 
+// sqliteColumnExists reports whether a column is present on a table.
+func sqliteColumnExists(db *sql.DB, table, col string) bool {
+	var count int
+	_ = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM pragma_table_info('%s') WHERE name='%s';", table, col)).Scan(&count)
+	return count > 0
+}
+
 // migrate creates required tables if they don't exist for SQLite.
 func (db *DB) migrate() error {
 	migrations := []Migration{
@@ -374,6 +381,101 @@ func (db *DB) migrate() error {
 					CREATE INDEX IF NOT EXISTS idx_usage_channel_created ON usage_logs(channel, created_at);
 				`)
 				return err
+			},
+		},
+		{
+			Version: 11,
+			Name:    "add_usage_source_to_usage_logs",
+			Up: func(db *DB) error {
+				ensureSQLiteColumn(db.DB, "usage_logs", "usage_source", "TEXT DEFAULT 'upstream'")
+				return nil
+			},
+		},
+		{
+			Version: 12,
+			Name:    "add_integer_money_columns",
+			Up: func(db *DB) error {
+				// Money is mirrored as integer 1e-9 CNY units so that
+				// accumulation never drifts. The legacy REAL columns remain the
+				// display source while both are written in the same transaction.
+				ensureSQLiteColumn(db.DB, "users", "balance_units", "INTEGER DEFAULT 0")
+				ensureSQLiteColumn(db.DB, "api_keys", "used_cost_units", "INTEGER DEFAULT 0")
+				ensureSQLiteColumn(db.DB, "api_keys", "budget_units", "INTEGER DEFAULT 0")
+				ensureSQLiteColumn(db.DB, "usage_logs", "cost_units", "INTEGER DEFAULT 0")
+				_, _ = db.DB.Exec(`UPDATE users SET balance_units = CAST(ROUND(balance * 1000000000) AS INTEGER) WHERE balance_units = 0 AND balance <> 0;`)
+				_, _ = db.DB.Exec(`UPDATE api_keys SET used_cost_units = CAST(ROUND(used_cost * 1000000000) AS INTEGER), budget_units = CAST(ROUND(budget * 1000000000) AS INTEGER) WHERE used_cost_units = 0 AND used_cost <> 0;`)
+				return nil
+			},
+		},
+		{
+			Version: 14,
+			Name:    "add_error_message_to_usage_logs",
+			Up: func(db *DB) error {
+				ensureSQLiteColumn(db.DB, "usage_logs", "error_message", "TEXT DEFAULT ''")
+				return nil
+			},
+		},
+		{
+			Version: 13,
+			Name:    "create_request_traces",
+			Up: func(db *DB) error {
+				_, err := db.DB.Exec(`
+					CREATE TABLE IF NOT EXISTS request_traces (
+						id INTEGER PRIMARY KEY AUTOINCREMENT,
+						trace_id TEXT NOT NULL,
+						chat_id TEXT DEFAULT '',
+						session_id TEXT DEFAULT '',
+						api_key TEXT DEFAULT '',
+						tenant_id TEXT DEFAULT '',
+						model TEXT DEFAULT '',
+						channel TEXT DEFAULT '',
+						status_code INTEGER DEFAULT 0,
+						error_message TEXT DEFAULT '',
+						request_snippet TEXT DEFAULT '',
+						response_snippet TEXT DEFAULT '',
+						duration_ms INTEGER DEFAULT 0,
+						created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+					);
+					CREATE INDEX IF NOT EXISTS idx_trace_trace_id ON request_traces(trace_id);
+					CREATE INDEX IF NOT EXISTS idx_trace_chat_id ON request_traces(chat_id);
+					CREATE INDEX IF NOT EXISTS idx_trace_session ON request_traces(session_id);
+					CREATE INDEX IF NOT EXISTS idx_trace_created ON request_traces(created_at);
+				`)
+				return err
+			},
+		},
+		{
+			// Forward-only repair for the same defect as the PostgreSQL version 15
+			// migration: version 12 was edited in place from *_nano to *_units
+			// after it had already been applied, so upgraded databases kept the
+			// legacy columns and never received *_units.
+			Version: 15,
+			Name:    "repair_integer_money_units_columns",
+			Up: func(db *DB) error {
+				ensureSQLiteColumn(db.DB, "users", "balance_units", "INTEGER DEFAULT 0")
+				ensureSQLiteColumn(db.DB, "api_keys", "used_cost_units", "INTEGER DEFAULT 0")
+				ensureSQLiteColumn(db.DB, "api_keys", "budget_units", "INTEGER DEFAULT 0")
+				ensureSQLiteColumn(db.DB, "usage_logs", "cost_units", "INTEGER DEFAULT 0")
+
+				// Backfill from the legacy *_nano mirrors when present.
+				if sqliteColumnExists(db.DB, "users", "balance_nano") {
+					_, _ = db.DB.Exec(`UPDATE users SET balance_units = balance_nano WHERE balance_units = 0 AND balance_nano <> 0;`)
+				}
+				if sqliteColumnExists(db.DB, "api_keys", "used_cost_nano") {
+					_, _ = db.DB.Exec(`UPDATE api_keys SET used_cost_units = used_cost_nano WHERE used_cost_units = 0 AND used_cost_nano <> 0;`)
+				}
+				if sqliteColumnExists(db.DB, "api_keys", "budget_nano") {
+					_, _ = db.DB.Exec(`UPDATE api_keys SET budget_units = budget_nano WHERE budget_units = 0 AND budget_nano <> 0;`)
+				}
+				if sqliteColumnExists(db.DB, "usage_logs", "cost_nano") {
+					_, _ = db.DB.Exec(`UPDATE usage_logs SET cost_units = cost_nano WHERE cost_units = 0 AND cost_nano <> 0;`)
+				}
+
+				// Remaining legacy rows that predate both mirrors.
+				_, _ = db.DB.Exec(`UPDATE users SET balance_units = CAST(ROUND(balance * 1000000000) AS INTEGER) WHERE balance_units = 0 AND balance <> 0;`)
+				_, _ = db.DB.Exec(`UPDATE api_keys SET used_cost_units = CAST(ROUND(used_cost * 1000000000) AS INTEGER) WHERE used_cost_units = 0 AND used_cost <> 0;`)
+				_, _ = db.DB.Exec(`UPDATE api_keys SET budget_units = CAST(ROUND(budget * 1000000000) AS INTEGER) WHERE budget_units = 0 AND budget <> 0;`)
+				return nil
 			},
 		},
 	}

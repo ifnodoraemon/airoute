@@ -205,12 +205,38 @@ func (cb *CircuitBreaker) getOrCreateStatusLocked(name string) *BreakerStatus {
 }
 
 // CanExecute checks if an upstream provider is healthy or allowed to test recovery.
+//
+// WARNING: this is a *mutating* admission check. In half-open state it consumes
+// a canary slot, and it may flip an OPEN breaker to HALF-OPEN. Never call it from
+// read-only paths (routing introspection, /api/v1/public/status, load balancing);
+// use Healthy for those instead.
 func (cb *CircuitBreaker) CanExecute(name string) bool {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
 	status := cb.getOrCreateStatusLocked(name)
 	return status.handler.CanExecute(status, cb, time.Now())
+}
+
+// Healthy reports whether a channel is currently considered usable, without
+// mutating breaker state: it neither consumes a canary slot nor promotes an
+// OPEN breaker to HALF-OPEN.
+func (cb *CircuitBreaker) Healthy(name string) bool {
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
+
+	status, exists := cb.breakers[name]
+	if !exists {
+		return true
+	}
+	switch status.State {
+	case StateOpen:
+		return time.Since(status.LastStateChange) >= cb.cooldownDuration
+	case StateHalfOpen:
+		return status.CanaryInFlight < cb.maxCanaryProbes
+	default:
+		return true
+	}
 }
 
 // RecordSuccess marks a successful execution, resetting breaker to healthy Closed state.
@@ -252,11 +278,6 @@ func (cb *CircuitBreaker) AbortCanary(name string) {
 	}
 }
 
-// ReleaseCanary is an alias for AbortCanary for semantic clarity.
-func (cb *CircuitBreaker) ReleaseCanary(name string) {
-	cb.AbortCanary(name)
-}
-
 // GetStatus returns the current state of a provider's circuit breaker.
 func (cb *CircuitBreaker) GetStatus(name string) CircuitState {
 	cb.mu.RLock()
@@ -267,5 +288,3 @@ func (cb *CircuitBreaker) GetStatus(name string) CircuitState {
 	}
 	return StateClosed
 }
-
-

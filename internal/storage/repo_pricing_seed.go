@@ -49,7 +49,6 @@ func (r *Repository) SeedDefaultModelPrices() error {
 		{Model: "gemini-4-argon", PromptPrice: 18.0, CompletionPrice: 72.0, CacheReadPrice: 4.5, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: false, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
 		{Model: "gemini-3.8-flash", PromptPrice: 1.0, CompletionPrice: 4.0, CacheReadPrice: 0.25, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: false, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
 		{Model: "gemini-3.5-flash-lite", PromptPrice: 0.4, CompletionPrice: 1.6, CacheReadPrice: 0.1, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: false, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
-		{Model: "gemini-nano-banana-2.1", PromptPrice: 2.0, CompletionPrice: 8.0, CacheReadPrice: 0.5, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: false, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
 		{Model: "gemini-2.0-flash", PromptPrice: 0.7, CompletionPrice: 2.8, CacheReadPrice: 0.175, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: false, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
 		{Model: "gemini-1.5-pro", PromptPrice: 9.0, CompletionPrice: 36.0, CacheReadPrice: 2.25, FixedPrice: 0, Currency: "CNY", OffPeakEnabled: false, OffPeakStart: "00:00", OffPeakEnd: "08:30", OffPeakDiscount: 0.5},
 

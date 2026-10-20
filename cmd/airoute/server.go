@@ -71,17 +71,24 @@ func runServer(args []string) {
 
 	// Security and deployment warnings on startup
 	isRelease := os.Getenv("GIN_MODE") == "release" || cfg.Server.LogLevel == "warn" || cfg.Server.LogLevel == "error"
-	adminSecret := os.Getenv("GATEWAY_ADMIN_SECRET")
-	if adminSecret == "" {
-		adminSecret = os.Getenv("JWT_SECRET")
+	if issues := productionSecurityIssues(cfg); len(issues) > 0 {
+		for _, issue := range issues {
+			telemetry.Logger.Warn("SECURITY WARNING: "+issue, "remediation", "set GATEWAY_ADMIN_SECRET and GATEWAY_ADMIN_PASSWORD to strong random values")
+		}
+		if isRelease {
+			telemetry.Logger.Error("refusing to start: insecure default credentials detected in release mode; set GATEWAY_ADMIN_SECRET and GATEWAY_ADMIN_PASSWORD")
+			os.Exit(1)
+		}
 	}
-	if isRelease {
-		if adminSecret == "" || adminSecret == "airoute-secret-key-change-me" {
-			telemetry.Logger.Warn("SECURITY WARNING: Using default or empty GATEWAY_ADMIN_SECRET in production release mode! Set a strong secret via GATEWAY_ADMIN_SECRET environment variable.")
-		}
-		if os.Getenv("STRIPE_WEBHOOK_SECRET") == "" {
-			telemetry.Logger.Warn("SECURITY WARNING: STRIPE_WEBHOOK_SECRET is unset in production release mode. Stripe payment webhooks will be rejected.")
-		}
+	if isRelease && os.Getenv("STRIPE_WEBHOOK_SECRET") == "" {
+		telemetry.Logger.Warn("SECURITY WARNING: STRIPE_WEBHOOK_SECRET is unset in production release mode. Stripe payment webhooks will be rejected.")
+	}
+	// Without a shared secret the HMAC signing key is generated randomly per
+	// process: every restart invalidates all issued tokens, and in a multi-replica
+	// cluster a token minted by one node is rejected by every other node.
+	if os.Getenv("GATEWAY_ADMIN_SECRET") == "" {
+		telemetry.Logger.Warn("CONFIGURATION WARNING: GATEWAY_ADMIN_SECRET is unset; using a per-process random signing key. " +
+			"User sessions will not survive a restart and will not be valid across cluster replicas.")
 	}
 	if !strings.HasPrefix(dataSource, "postgres://") && !strings.HasPrefix(dataSource, "postgresql://") {
 		if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
@@ -150,6 +157,10 @@ func runServer(args []string) {
 	// Initialize Real-Time Model Pricing & Prompt-Cache Billing Engine
 	billing.InitGlobalEngine(repo)
 
+	// Initialize redacted request/response trace archiving for troubleshooting
+	traceCapture := storage.InitTraceCapture(repo)
+	defer traceCapture.Stop()
+
 	// Initialize Control Plane Synchronizer & load state into Data Plane memory
 	synchronizer := controlplane.NewSynchronizer(repo, dispatcher)
 	if err := synchronizer.ReloadFromDB(); err != nil {
@@ -192,10 +203,13 @@ func runServer(args []string) {
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	srv := &http.Server{
-		Addr:         addr,
-		Handler:      engine,
-		ReadTimeout:  time.Duration(cfg.Server.ReadTimeoutSec) * time.Second,
-		WriteTimeout: time.Duration(cfg.Server.WriteTimeoutSec) * time.Second,
+		Addr:              addr,
+		Handler:           engine,
+		ReadTimeout:       time.Duration(cfg.Server.ReadTimeoutSec) * time.Second,
+		ReadHeaderTimeout: 15 * time.Second,
+		WriteTimeout:      time.Duration(cfg.Server.WriteTimeoutSec) * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1 MiB of headers is far beyond any legitimate request
 	}
 
 	// Run server in background goroutine

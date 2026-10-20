@@ -15,6 +15,11 @@ RUN npm run build
 # ==============================================================================
 FROM golang:1.26-alpine AS go-builder
 
+# Injected so the binary reports the same version as the image tag it is
+# published under (see .github/workflows/docker.yml). The default keeps a plain
+# `docker build .` working without build arguments.
+ARG VERSION=dev
+
 WORKDIR /app
 
 RUN apk add --no-cache git ca-certificates tzdata
@@ -30,7 +35,9 @@ COPY web/web.go web/web.go
 COPY --from=web-builder /app/web/dist web/dist
 
 # Build statically linked binary
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/airoute ./cmd/airoute
+RUN CGO_ENABLED=0 GOOS=linux go build \
+      -ldflags="-s -w -X main.Version=${VERSION}" \
+      -o /bin/airoute ./cmd/airoute
 
 # ==============================================================================
 # Stage 3: Minimal Production Image

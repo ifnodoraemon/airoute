@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -81,7 +82,10 @@ func (h *Handler) HandleMetrics(c *gin.Context) {
 }
 
 // HandlePublicStatus handles GET /api/v1/public/status for public status page.
+// Set GATEWAY_PUBLIC_STATUS=false to hide the model catalog from anonymous
+// visitors (the endpoint then reports only overall availability).
 func (h *Handler) HandlePublicStatus(c *gin.Context) {
+	exposeModels := !strings.EqualFold(os.Getenv("GATEWAY_PUBLIC_STATUS"), "false")
 	models := h.dispatcher.GetAllSupportedModels()
 	type publicModelStatus struct {
 		Model     string `json:"model"`
@@ -94,7 +98,9 @@ func (h *Handler) HandlePublicStatus(c *gin.Context) {
 	allHealthy := true
 
 	for _, m := range models {
-		channels := h.dispatcher.GetChannelsForModel(m)
+		// Read-only listing: GetChannelsForModel would run the SWRR/affinity
+		// selector and mutate load-balancing state from an anonymous endpoint.
+		channels := h.dispatcher.ListChannelsForModel(m, "")
 		healthyCount := 0
 		for _, ch := range channels {
 			if h.dispatcher.GetBreakerStatus(ch.Name) != "OPEN" {
@@ -110,12 +116,14 @@ func (h *Handler) HandlePublicStatus(c *gin.Context) {
 
 		modality := router.InferModality(m)
 
-		modelStatuses = append(modelStatuses, publicModelStatus{
-			Model:     m,
-			Modality:  modality,
-			Status:    st,
-			LatencyMs: 0,
-		})
+		if exposeModels {
+			modelStatuses = append(modelStatuses, publicModelStatus{
+				Model:     m,
+				Modality:  modality,
+				Status:    st,
+				LatencyMs: 0,
+			})
+		}
 	}
 
 	overallStatus := "operational"
@@ -132,7 +140,6 @@ func (h *Handler) HandlePublicStatus(c *gin.Context) {
 		"code": 0,
 		"data": gin.H{
 			"status":                     overallStatus,
-			"uptime_pct":                 99.99,
 			"public_url":                 baseURL,
 			"models":                     modelStatuses,
 			"models_count":               len(models),

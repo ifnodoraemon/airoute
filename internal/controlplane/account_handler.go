@@ -2,6 +2,7 @@ package controlplane
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,8 +25,16 @@ func (h *AdminHandler) Login(c *gin.Context) {
 		return
 	}
 
+	clientIP := c.ClientIP()
+	if ok, retry := globalLoginGuard.check(req.Username, clientIP); !ok {
+		c.Header("Retry-After", strconv.Itoa(int(retry.Seconds())+1))
+		c.JSON(http.StatusTooManyRequests, gin.H{"code": 429, "error": "登录失败次数过多，请稍后再试"})
+		return
+	}
+
 	user, err := h.repo.GetUserByUsername(req.Username)
 	if err != nil || user == nil {
+		globalLoginGuard.failure(req.Username, clientIP)
 		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "用户名或密码错误"})
 		return
 	}
@@ -36,9 +45,11 @@ func (h *AdminHandler) Login(c *gin.Context) {
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+		globalLoginGuard.failure(req.Username, clientIP)
 		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "用户名或密码错误"})
 		return
 	}
+	globalLoginGuard.success(req.Username, clientIP)
 
 	expiryHours := config.GetGlobalConfig().GetTokenExpiryHours()
 	token, err := GenerateAdminToken(user.Username, user.Role, time.Duration(expiryHours)*time.Hour)
@@ -53,6 +64,10 @@ func (h *AdminHandler) Login(c *gin.Context) {
 			isDefaultPass = true
 		}
 	}
+
+	// Browser sessions use an HttpOnly cookie so the token is not reachable from
+	// JavaScript; API clients keep using the Bearer token in the body.
+	SetSessionCookies(c, token)
 
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
@@ -168,4 +183,11 @@ func (h *AdminHandler) ChangePassword(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "密码修改成功，请使用新密码重新登录"})
+}
+
+// Logout clears the browser session cookies. The stateless token itself remains
+// valid until expiry, so browsers should rely on the cookie being removed.
+func (h *AdminHandler) Logout(c *gin.Context) {
+	ClearSessionCookies(c)
+	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "已安全退出"})
 }

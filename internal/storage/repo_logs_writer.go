@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"time"
 )
@@ -29,8 +30,33 @@ func normalizeUsageLog(log *UsageLogRecord) {
 	log.APIKey = clampRunes(log.APIKey, 255)
 }
 
+// truncateError keeps persisted error strings bounded (2 KiB).
+func truncateError(msg string) string {
+	if len(msg) <= 2048 {
+		return msg
+	}
+	cut := 2048
+	for cut > 0 && (msg[cut]&0xC0) == 0x80 {
+		cut--
+	}
+	return msg[:cut]
+}
+
+// normalizeUsageSource clamps the usage provenance marker to a known value.
+func normalizeUsageSource(src string) string {
+	if src == "estimated" {
+		return "estimated"
+	}
+	return "upstream"
+}
+
 // RecordUsageLog records an audit log and updates key quota/cost atomically.
 func (r *Repository) RecordUsageLog(log *UsageLogRecord) error {
+	return r.RecordUsageLogContext(context.Background(), log)
+}
+
+// RecordUsageLogContext is RecordUsageLog bound to a context/deadline.
+func (r *Repository) RecordUsageLogContext(ctx context.Context, log *UsageLogRecord) error {
 	normalizeUsageLog(log)
 	isOff := 0
 	if log.IsOffPeak {
@@ -44,11 +70,11 @@ func (r *Repository) RecordUsageLog(log *UsageLogRecord) error {
 		if log.SessionID != "" {
 			log.TraceID = log.SessionID
 		} else {
-			log.TraceID = fmt.Sprintf("tr-%x", time.Now().UnixNano())
+			log.TraceID = fmt.Sprintf("tr-%x", time.Now().UnixMicro())
 		}
 	}
 
-	tx, err := r.db.Begin()
+	tx, err := r.db.BeginTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -57,24 +83,30 @@ func (r *Repository) RecordUsageLog(log *UsageLogRecord) error {
 	}()
 
 	keyVal := log.APIKey
+	usageSource := normalizeUsageSource(log.UsageSource)
 
 	if !log.CreatedAt.IsZero() {
-		_, err = tx.Exec(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, log.CreatedAt.UTC().Format("2006-01-02 15:04:05"))
+		_, err = tx.Exec(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, cost_units, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, usage_source, error_message, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, ToUnits(log.Cost), isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, usageSource, truncateError(log.ErrorMessage), log.CreatedAt.UTC().Format("2006-01-02 15:04:05"))
 	} else {
-		_, err = tx.Exec(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode)
+		_, err = tx.Exec(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, cost_units, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, usage_source, error_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, ToUnits(log.Cost), isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, usageSource, truncateError(log.ErrorMessage))
 	}
 	if err != nil {
 		return err
 	}
 
 	if keyVal != "" && (log.Cost > 0 || log.TotalTokens > 0) {
-		_, _ = tx.Exec(r.db.Rebind(`UPDATE api_keys SET used_cost = used_cost + ?, used_tokens = used_tokens + ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?`),
-			log.Cost, log.TotalTokens, keyVal)
+		if _, err := tx.Exec(r.db.Rebind(`UPDATE api_keys SET used_cost = used_cost + ?, used_cost_units = COALESCE(used_cost_units, 0) + ?, used_tokens = used_tokens + ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?`),
+			log.Cost, ToUnits(log.Cost), log.TotalTokens, keyVal); err != nil {
+			return err
+		}
 		if log.Cost > 0 {
-			res, _ := tx.Exec(r.db.Rebind(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT user_id FROM api_keys WHERE key = ?) AND role != 'admin'`),
-				log.Cost, keyVal)
+			res, err := tx.Exec(r.db.Rebind(`UPDATE users SET balance = balance - ?, balance_units = COALESCE(balance_units, 0) - ?, updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT user_id FROM api_keys WHERE key = ?) AND role != 'admin'`),
+				log.Cost, ToUnits(log.Cost), keyVal)
+			if err != nil {
+				return err
+			}
 			if res != nil {
 				affected, _ := res.RowsAffected()
 				if affected == 0 && log.TenantID != "" {
@@ -83,15 +115,19 @@ func (r *Repository) RecordUsageLog(log *UsageLogRecord) error {
 					if err := row.Scan(&isOwnerAdmin); err == nil && isOwnerAdmin {
 						// Admin keys are exempt from balance deduction; do not fallback to tenant
 					} else {
-						_, _ = tx.Exec(r.db.Rebind(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`),
-							log.Cost, log.TenantID, log.TenantID)
+						if _, err := tx.Exec(r.db.Rebind(`UPDATE users SET balance = balance - ?, balance_units = COALESCE(balance_units, 0) - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`),
+							log.Cost, ToUnits(log.Cost), log.TenantID, log.TenantID); err != nil {
+							return err
+						}
 					}
 				}
 			}
 		}
 	} else if log.TenantID != "" && log.Cost > 0 {
-		_, _ = tx.Exec(r.db.Rebind(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`),
-			log.Cost, log.TenantID, log.TenantID)
+		if _, err := tx.Exec(r.db.Rebind(`UPDATE users SET balance = balance - ?, balance_units = COALESCE(balance_units, 0) - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`),
+			log.Cost, ToUnits(log.Cost), log.TenantID, log.TenantID); err != nil {
+			return err
+		}
 	}
 
 	return tx.Commit()
@@ -99,17 +135,25 @@ func (r *Repository) RecordUsageLog(log *UsageLogRecord) error {
 
 // BatchRecordUsageLogs writes multiple usage logs in a single atomic transaction with aggregated cost updates.
 func (r *Repository) BatchRecordUsageLogs(logs []*UsageLogRecord) error {
+	return r.BatchRecordUsageLogsContext(context.Background(), logs)
+}
+
+// BatchRecordUsageLogsContext is BatchRecordUsageLogs bound to a context.
+// Background writers must use a deadline: without one a stalled database pins
+// the flush goroutine forever, the in-memory queue fills up, and request
+// completion starts blocking on backpressure.
+func (r *Repository) BatchRecordUsageLogsContext(ctx context.Context, logs []*UsageLogRecord) error {
 	if len(logs) == 0 {
 		return nil
-	}
-	if len(logs) == 1 {
-		return r.RecordUsageLog(logs[0])
 	}
 	for _, log := range logs {
 		normalizeUsageLog(log)
 	}
+	if len(logs) == 1 {
+		return r.RecordUsageLogContext(ctx, logs[0])
+	}
 
-	tx, err := r.db.Begin()
+	tx, err := r.db.BeginTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -122,8 +166,8 @@ func (r *Repository) BatchRecordUsageLogs(logs []*UsageLogRecord) error {
 	keyTenantMap := make(map[string]string)
 	orphanTenantCostMap := make(map[string]float64)
 
-	insertWithTimeSQL := r.db.Rebind(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-	insertSQL := r.db.Rebind(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	insertWithTimeSQL := r.db.Rebind(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, cost_units, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, usage_source, error_message, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	insertSQL := r.db.Rebind(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, cost_units, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, usage_source, error_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 
 	stmtWithTime, err := tx.Prepare(insertWithTimeSQL)
 	if err != nil {
@@ -153,15 +197,16 @@ func (r *Repository) BatchRecordUsageLogs(logs []*UsageLogRecord) error {
 			if log.SessionID != "" {
 				log.TraceID = log.SessionID
 			} else {
-				log.TraceID = fmt.Sprintf("tr-%x", time.Now().UnixNano())
+				log.TraceID = fmt.Sprintf("tr-%x", time.Now().UnixMicro())
 			}
 		}
 
 		keyVal := log.APIKey
+		usageSource := normalizeUsageSource(log.UsageSource)
 		if !log.CreatedAt.IsZero() {
-			_, err = stmtWithTime.Exec(log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, log.CreatedAt.UTC().Format("2006-01-02 15:04:05"))
+			_, err = stmtWithTime.Exec(log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, ToUnits(log.Cost), isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, usageSource, truncateError(log.ErrorMessage), log.CreatedAt.UTC().Format("2006-01-02 15:04:05"))
 		} else {
-			_, err = stmt.Exec(log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode)
+			_, err = stmt.Exec(log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, ToUnits(log.Cost), isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, usageSource, truncateError(log.ErrorMessage))
 		}
 		if err != nil {
 			return err
@@ -179,26 +224,32 @@ func (r *Repository) BatchRecordUsageLogs(logs []*UsageLogRecord) error {
 	}
 
 	// Aggregated batch update for API keys
-	updateKeySQL := r.db.Rebind(`UPDATE api_keys SET used_cost = used_cost + ?, used_tokens = used_tokens + ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?`)
+	updateKeySQL := r.db.Rebind(`UPDATE api_keys SET used_cost = used_cost + ?, used_cost_units = COALESCE(used_cost_units, 0) + ?, used_tokens = used_tokens + ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?`)
 	updateKeyStmt, err := tx.Prepare(updateKeySQL)
-	if err == nil {
-		defer updateKeyStmt.Close()
-		for k, cost := range keyCostMap {
-			tokens := keyTokensMap[k]
-			if cost > 0 || tokens > 0 {
-				_, _ = updateKeyStmt.Exec(cost, tokens, k)
+	if err != nil {
+		return err
+	}
+	defer updateKeyStmt.Close()
+	for k, cost := range keyCostMap {
+		tokens := keyTokensMap[k]
+		if cost > 0 || tokens > 0 {
+			if _, err := updateKeyStmt.Exec(cost, ToUnits(cost), tokens, k); err != nil {
+				return err
 			}
 		}
 	}
 
 	// Aggregated batch update for user wallet balances
-	updateUserSQL := r.db.Rebind(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT user_id FROM api_keys WHERE key = ?) AND role != 'admin'`)
+	updateUserSQL := r.db.Rebind(`UPDATE users SET balance = balance - ?, balance_units = COALESCE(balance_units, 0) - ?, updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT user_id FROM api_keys WHERE key = ?) AND role != 'admin'`)
 	updateUserStmt, err := tx.Prepare(updateUserSQL)
-	if err == nil {
-		defer updateUserStmt.Close()
+	if err != nil {
+		return err
+	}
+	defer updateUserStmt.Close()
+	{
 		for k, cost := range keyCostMap {
 			if cost > 0 {
-				res, _ := updateUserStmt.Exec(cost, k)
+				res, _ := updateUserStmt.Exec(cost, ToUnits(cost), k)
 				if res != nil {
 					affected, _ := res.RowsAffected()
 					if affected == 0 {
@@ -220,10 +271,12 @@ func (r *Repository) BatchRecordUsageLogs(logs []*UsageLogRecord) error {
 
 	// Deduct for orphan or keyless tenant requests exactly once
 	if len(orphanTenantCostMap) > 0 {
-		fallbackSQL := r.db.Rebind(`UPDATE users SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`)
+		fallbackSQL := r.db.Rebind(`UPDATE users SET balance = balance - ?, balance_units = COALESCE(balance_units, 0) - ?, updated_at = CURRENT_TIMESTAMP WHERE (username = ? OR email = ?) AND role != 'admin'`)
 		for tenantID, tCost := range orphanTenantCostMap {
 			if tCost > 0 {
-				_, _ = tx.Exec(fallbackSQL, tCost, tenantID, tenantID)
+				if _, err := tx.Exec(fallbackSQL, tCost, ToUnits(tCost), tenantID, tenantID); err != nil {
+					return err
+				}
 			}
 		}
 	}

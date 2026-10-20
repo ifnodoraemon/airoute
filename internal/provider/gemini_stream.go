@@ -42,7 +42,7 @@ func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return nil, fmt.Errorf("upstream gemini %s returned %d: %s", channel.Name, resp.StatusCode, string(bodyBytes))
+		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
 	}
 
 	eventChan := make(chan *model.StreamEvent, 64)
@@ -52,7 +52,7 @@ func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 		defer close(eventChan)
 
 		reader := bufio.NewReader(resp.Body)
-		msgID := fmt.Sprintf("chatcmpl-gemini-%d", time.Now().UnixNano())
+		msgID := fmt.Sprintf("chatcmpl-gemini-%d", time.Now().UnixMicro())
 		created := time.Now().Unix()
 
 		sendEvent := func(ev *model.StreamEvent) bool {
@@ -112,7 +112,7 @@ func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 					if part.FunctionCall != nil {
 						argsBytes, _ := json.Marshal(part.FunctionCall.Args)
 						toolCalls = append(toolCalls, model.ToolCall{
-							ID:   fmt.Sprintf("call_%d_%s", time.Now().UnixNano(), part.FunctionCall.Name),
+							ID:   fmt.Sprintf("call_%d_%s", time.Now().UnixMicro(), part.FunctionCall.Name),
 							Type: "function",
 							Function: model.FunctionCall{
 								Name:      part.FunctionCall.Name,
@@ -137,11 +137,7 @@ func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 
 			var usage *model.Usage
 			if geminiChunk.UsageMetadata != nil {
-				usage = &model.Usage{
-					PromptTokens:     geminiChunk.UsageMetadata.PromptTokenCount,
-					CompletionTokens: geminiChunk.UsageMetadata.CandidatesTokenCount,
-					TotalTokens:      geminiChunk.UsageMetadata.TotalTokenCount,
-				}
+				usage = geminiUsageToModel(geminiChunk.UsageMetadata)
 			}
 
 			chunk := &model.ChatCompletionChunk{

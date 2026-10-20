@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Sparkles,
   X,
@@ -7,17 +7,10 @@ import {
   User,
   Copy,
   Check,
-  Zap,
   ArrowRight,
   RefreshCw,
-  Activity,
   Cpu,
-  Server,
-  Key,
   Terminal,
-  ShieldAlert,
-  Sliders,
-  ExternalLink,
   Minimize2,
   Maximize2,
   Trash2,
@@ -28,11 +21,7 @@ import {
   Layers,
   Wrench,
   CheckCircle2,
-  Play,
-  Code,
   Clock,
-  Database,
-  HelpCircle,
   GripVertical
 } from 'lucide-react';
 import { getGatewayOrigin, copyToClipboard as crossOriginCopy } from '../config';
@@ -339,7 +328,9 @@ export default function AiCopilot({
         }
       ]);
     }
-  }, [isZh]);
+    // messages.length is read above, so it belongs in the list: seeding raises the
+    // length, which stops the effect from re-seeding.
+  }, [isZh, messages.length]);
 
   // Global shortcut: Cmd+J or Ctrl+J to toggle Copilot
   useEffect(() => {
@@ -367,13 +358,23 @@ export default function AiCopilot({
     }
   }, [messages, isOpen]);
 
-  // Handle incoming initial query
+  // Handle incoming initial query.
+  //
+  // handleSend is rebuilt on every render and closes over the current input, so it
+  // cannot be a dependency: doing so would re-send the query on every keystroke.
+  // The latest version is read through a ref instead.
+  //
+  // The ref starts empty and is filled in by the effect below handleSend's
+  // definition. Reading handleSend here would throw: it is a const declared further
+  // down, so it is in the temporal dead zone at this point.
+  const handleSendRef = useRef(null);
+
   useEffect(() => {
-    if (isOpen && initialQuery && initialQuery.trim()) {
-      handleSend(initialQuery.trim());
+    if (isOpen && initialQuery && initialQuery.trim() && handleSendRef.current) {
+      handleSendRef.current(initialQuery.trim());
       if (onClearInitialQuery) onClearInitialQuery();
     }
-  }, [isOpen, initialQuery]);
+  }, [isOpen, initialQuery, onClearInitialQuery]);
 
   const handleCopy = async (text, id) => {
     await crossOriginCopy(text);
@@ -553,6 +554,10 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
   };
 
   // Main ReAct Harness Loop
+  // Not memoised on purpose: it closes over the current input, so a stable identity
+  // would need input as a dependency, which would rebuild it on every keystroke
+  // anyway. The one effect that needs it reads it through a ref instead.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const handleSend = async (queryText = input) => {
     const text = (queryText || '').trim();
     if (!text || isLoading) return;
@@ -636,7 +641,6 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
         let done = false;
         let buffer = '';
         let streamedToolCalls = {};
-        let finishReason = null;
 
         while (!done) {
           const { value, done: readerDone } = await reader.read();
@@ -648,17 +652,16 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
 
             for (const line of lines) {
               const trimmed = line.trim();
-              if (trimmed.startsWith('data: ')) {
-                const dataStr = trimmed.slice(6);
-                if (dataStr === '[DONE]') continue;
+              if (trimmed.startsWith('data:')) {
+                const dataStr = trimmed.slice(5).trim();
+                if (!dataStr || dataStr === '[DONE]') continue;
                 try {
                   const parsed = JSON.parse(dataStr);
+                  if (parsed.error && !parsed.choices) {
+                    throw new Error(parsed.error.message || 'stream error');
+                  }
                   const choice = parsed.choices?.[0];
                   if (!choice) continue;
-
-                  if (choice.finish_reason) {
-                    finishReason = choice.finish_reason;
-                  }
 
                   const delta = choice.delta;
                   if (!delta) continue;
@@ -668,11 +671,6 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                   }
                   if (delta.content) {
                     fullContent += delta.content;
-                    if (!fullReasoning && fullContent.includes('</think>')) {
-                      const parts = fullContent.split('</think>');
-                      fullReasoning = parts[0].replace(/^<think>/, '').trim();
-                      fullContent = parts[1].replace(/^\n+/, '');
-                    }
                   }
 
                   // Accumulate streamed tool calls
@@ -705,10 +703,17 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                     return m;
                   }));
                 } catch (e) {
-                  // Ignore JSON chunks parse errors
+                  if (e && /stream error/i.test(e.message || '')) {
+                    if (showToast) showToast(e.message, 'error');
+                  }
                 }
               }
             }
+          }
+          // Flush a trailing event that arrived without a final newline.
+          const tail = buffer.trim();
+          if (tail && tail.startsWith('data:')) {
+            buffer = '';
           }
         }
 
@@ -796,6 +801,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
       }));
     } finally {
       setIsLoading(false);
+      setActiveBenchmark(null);
       abortControllerRef.current = null;
 
       // Automatically derive interactive console action buttons
@@ -810,6 +816,12 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
       }));
     }
   };
+
+  // Keeps the ref above pointing at the newest closure. Runs after every render on
+  // purpose, which is why it is not a dependency of anything.
+  useEffect(() => {
+    handleSendRef.current = handleSend;
+  }, [handleSend]);
 
   const toggleReasoning = (id) => {
     setExpandedReasoningIds(prev => ({ ...prev, [id]: !prev[id] }));
@@ -881,20 +893,20 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
               <h3 className="font-semibold text-sm text-slate-900 dark:text-slate-100 truncate">
                 {isZh ? 'Airoute 智能副驾驶' : 'Airoute AI Copilot'}
               </h3>
-              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-mono font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60 shrink-0">
+              <span className="px-1.5 py-0.2 rounded-full text-xs font-mono font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60 shrink-0">
                 Harness
               </span>
             </div>
 
             {/* 模型与工具契约展示 */}
-            <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
+            <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500 dark:text-slate-400">
               <div className="flex items-center gap-1">
                 <Cpu className="w-3 h-3 text-indigo-500 shrink-0" />
                 {candidateModels.length > 0 ? (
                   <select
                     value={selectedModel}
                     onChange={(e) => setSelectedModel(e.target.value)}
-                    className="bg-transparent text-slate-600 dark:text-slate-300 font-mono text-[11px] border-none focus:outline-none cursor-pointer truncate max-w-[130px]"
+                    className="bg-transparent text-slate-600 dark:text-slate-300 font-mono text-xs border-none focus:outline-none cursor-pointer truncate max-w-[130px]"
                     title={isZh ? '切换副驾驶驱动模型' : 'Switch Copilot Model'}
                   >
                     {candidateModels.map(m => (
@@ -904,7 +916,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                     ))}
                   </select>
                 ) : (
-                  <span className="font-mono text-slate-500 text-[10px]">auto-telemetry</span>
+                  <span className="font-mono text-xs text-slate-500 dark:text-slate-400">auto-telemetry</span>
                 )}
               </div>
 
@@ -913,7 +925,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
               <button
                 type="button"
                 onClick={() => setShowToolsModal(!showToolsModal)}
-                className="inline-flex items-center gap-1 text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                className="inline-flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                 title={isZh ? '查看装载的标准工具契约' : 'View Registered Harness Tools'}
               >
                 <Wrench className="w-2.5 h-2.5" />
@@ -952,7 +964,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
       {showToolsModal && (
         <div className="px-4 py-2.5 bg-indigo-50/90 dark:bg-slate-900/95 border-b border-indigo-100 dark:border-indigo-950 text-xs text-slate-700 dark:text-slate-300 animate-in slide-in-from-top-2">
           <div className="flex items-center justify-between mb-1.5">
-            <div className="flex items-center gap-1.5 font-semibold text-indigo-950 dark:text-indigo-300 text-[11px]">
+            <div className="flex items-center gap-1.5 font-semibold text-indigo-950 dark:text-indigo-300 text-xs">
               <Layers className="w-3.5 h-3.5 text-indigo-500" />
               <span>{isZh ? 'Harness 契约工具库 (OpenAI Tools v1)' : 'Harness Tool Registry'}</span>
             </div>
@@ -963,13 +975,13 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
-          <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 text-[11px]">
+          <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 text-xs">
             {COPILOT_HARNESS_TOOLS.map((t, idx) => (
               <div key={idx} className="p-1.5 rounded-lg bg-white/80 dark:bg-slate-800/80 border border-indigo-100 dark:border-slate-700">
-                <div className="font-mono font-semibold text-indigo-600 dark:text-indigo-400 text-[10px]">
+                <div className="font-mono font-semibold text-indigo-600 dark:text-indigo-400 text-xs">
                   {t.function.name}
                 </div>
-                <div className="text-[10px] text-slate-600 dark:text-slate-400 line-clamp-1">
+                <div className="text-xs text-slate-600 dark:text-slate-400 line-clamp-1">
                   {t.function.description}
                 </div>
               </div>
@@ -1018,13 +1030,22 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                   </button>
                 )}
 
+                {/* 离线降级提示：本地模板不是实时遥测 */}
+                {!isUser && m.isFallback && (
+                  <div className="mb-3 rounded-xl border border-amber-300/80 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:text-amber-200">
+                    {isZh
+                      ? '⚠️ 离线本地模板（非实时）：模型不可用，以下内容由静态诊断生成，未读取实时集群指标，请勿据此直接做运维决策。'
+                      : '⚠️ Offline template (not live): the model was unavailable, so this reply comes from a static diagnostic and does not reflect live cluster metrics.'}
+                  </div>
+                )}
+
                 {/* 深度思考过程 (Thinking Process) 折叠卡片 */}
                 {!isUser && m.reasoning && (
                   <div className="mb-3 rounded-xl border border-amber-200/80 dark:border-amber-800/60 bg-amber-50/70 dark:bg-amber-950/30 overflow-hidden">
                     <button
                       type="button"
                       onClick={() => toggleReasoning(m.id)}
-                      className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-semibold text-amber-900 dark:text-amber-300 hover:bg-amber-100/50 transition cursor-pointer"
+                      className="w-full flex items-center justify-between px-3 py-1.5 text-xs font-semibold text-amber-900 dark:text-amber-300 hover:bg-amber-100/50 dark:hover:bg-amber-900/40 transition cursor-pointer"
                     >
                       <div className="flex items-center space-x-1.5">
                         <Sparkles className="w-3 h-3 text-amber-500 animate-pulse" />
@@ -1033,7 +1054,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                       {isReasoningOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                     </button>
                     {isReasoningOpen && (
-                      <div className="px-3 py-2 border-t border-amber-200/60 dark:border-amber-800/40 text-[11px] font-mono leading-relaxed text-amber-950/80 dark:text-amber-200/80 whitespace-pre-wrap max-h-48 overflow-y-auto">
+                      <div className="px-3 py-2 border-t border-amber-200/60 dark:border-amber-800/40 text-xs font-mono leading-relaxed text-amber-950/80 dark:text-amber-200/80 whitespace-pre-wrap max-h-48 overflow-y-auto">
                         {m.reasoning}
                       </div>
                     )}
@@ -1046,14 +1067,14 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                     <button
                       type="button"
                       onClick={() => toggleTrace(m.id)}
-                      className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-semibold text-indigo-950 dark:text-indigo-300 hover:bg-indigo-100/40 transition cursor-pointer"
+                      className="w-full flex items-center justify-between px-3 py-1.5 text-xs font-semibold text-indigo-950 dark:text-indigo-300 hover:bg-indigo-100/40 dark:hover:bg-indigo-900/40 transition cursor-pointer"
                     >
                       <div className="flex items-center space-x-1.5">
                         <Terminal className="w-3 h-3 text-indigo-500" />
                         <span>{isZh ? `Harness 执行轨迹 (${traceSteps.length} 步工具调用)` : `Harness Trace (${traceSteps.length} tools)`}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] font-mono text-indigo-500/80">
+                        <span className="text-xs font-mono text-indigo-500/80">
                           {traceSteps.reduce((acc, s) => acc + (s.duration_ms || 0), 0)}ms
                         </span>
                         {isTraceOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
@@ -1068,7 +1089,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                           const isSuccess = step.status === 'success';
 
                           return (
-                            <div key={sIdx} className="rounded-lg bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 p-2 text-[10px]">
+                            <div key={sIdx} className="rounded-lg bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 p-2 text-xs">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center space-x-1.5 font-mono font-medium">
                                   {isSuccess ? (
@@ -1078,7 +1099,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                                   )}
                                   <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{step.tool}</span>
                                 </div>
-                                <div className="flex items-center gap-1 font-mono text-slate-400 text-[9px]">
+                                <div className="flex items-center gap-1 font-mono text-slate-500 dark:text-slate-400 text-xs">
                                   <Clock className="w-2.5 h-2.5" />
                                   <span>{step.duration_ms || 0}ms</span>
                                 </div>
@@ -1086,7 +1107,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
 
                               {/* 参数概览 */}
                               {step.args && Object.keys(step.args).length > 0 && (
-                                <div className="mt-1 text-slate-500 dark:text-slate-400 font-mono text-[9px] truncate">
+                                <div className="mt-1 text-slate-500 dark:text-slate-400 font-mono text-xs truncate">
                                   args: {JSON.stringify(step.args)}
                                 </div>
                               )}
@@ -1096,7 +1117,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                                 <button
                                   type="button"
                                   onClick={() => toggleStepObs(stepKey)}
-                                  className="text-[9px] text-indigo-500 hover:text-indigo-600 flex items-center gap-0.5 cursor-pointer"
+                                  className="text-xs text-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-300 flex items-center gap-0.5 cursor-pointer"
                                 >
                                   <span>{isObsOpen ? (isZh ? '收起观测数据' : 'Hide Observation') : (isZh ? '查看观测数据 (Observation)' : 'View Observation')}</span>
                                   {isObsOpen ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
@@ -1104,7 +1125,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                               </div>
 
                               {isObsOpen && (
-                                <pre className="mt-1 p-2 rounded bg-slate-950 text-slate-200 font-mono text-[9px] overflow-x-auto max-h-36">
+                                <pre className="mt-1 p-2 rounded bg-slate-950 text-slate-200 font-mono text-xs overflow-x-auto max-h-36">
                                   {JSON.stringify(step.result || step.error, null, 2)}
                                 </pre>
                               )}
@@ -1136,7 +1157,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                             if (!isExpanded) onClose();
                           }
                         }}
-                        className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 font-semibold text-[11px] flex items-center space-x-1.5 transition border border-indigo-200/60 dark:border-indigo-800 cursor-pointer shadow-2xs"
+                        className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 font-semibold text-xs flex items-center space-x-1.5 transition border border-indigo-200/60 dark:border-indigo-800 cursor-pointer shadow-2xs"
                       >
                         <span>{act.label}</span>
                         <ArrowRight className="w-3 h-3" />
@@ -1150,7 +1171,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
         })}
 
         {isLoading && (
-          <div className="flex items-center space-x-2 text-slate-400 text-xs py-2 px-1">
+          <div className="flex items-center space-x-2 text-xs text-slate-500 dark:text-slate-400 py-2 px-1">
             <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-500" />
             <span>{isZh ? 'Harness 正在调度工具与推理生成中...' : 'Harness is executing tools and reasoning...'}</span>
           </div>
@@ -1159,16 +1180,24 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
       </div>
 
       {/* 标准 Harness Benchmark 基准任务快捷栏 */}
-      <div className="px-3 py-2 bg-slate-50/70 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-2 overflow-x-auto text-[11px] no-scrollbar">
+      <div className="px-3 py-2 bg-slate-50/70 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-2 overflow-x-auto text-xs no-scrollbar">
         {HARNESS_BENCHMARKS.map((bm) => (
           <button
             key={bm.id}
-            onClick={() => handleSend(bm.prompt)}
+            onClick={() => {
+              setActiveBenchmark(bm.id);
+              handleSend(bm.prompt);
+            }}
             disabled={isLoading}
-            className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 border border-slate-200/80 dark:border-slate-700 whitespace-nowrap transition cursor-pointer font-medium shadow-2xs disabled:opacity-50 flex items-center gap-1.5"
+            aria-pressed={activeBenchmark === bm.id}
+            className={`px-2.5 py-1.5 rounded-xl border whitespace-nowrap transition cursor-pointer font-medium shadow-2xs disabled:opacity-50 flex items-center gap-1.5 ${
+              activeBenchmark === bm.id
+                ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700'
+                : 'bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 border-slate-200/80 dark:border-slate-700'
+            }`}
             title={bm.description}
           >
-            <span className="px-1 py-0.2 rounded text-[9px] font-mono bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60 font-semibold">
+            <span className="px-1 py-0.2 rounded text-xs font-mono bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60 font-semibold">
               {bm.code}
             </span>
             <span>{isZh ? bm.label : bm.enLabel}</span>
@@ -1190,7 +1219,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={isZh ? '向 Harness 发出运维巡检、排错或架构指令...' : 'Issue an SRE audit or ops instruction to Harness...'}
-          className="flex-1 bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs"
+          className="flex-1 bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs"
         />
 
         {isLoading ? (

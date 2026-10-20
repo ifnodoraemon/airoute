@@ -252,3 +252,30 @@ func TestModelRulePatternMatching(t *testing.T) {
 		t.Fatalf("expected default lenient, got %s", lvlDef)
 	}
 }
+
+func TestAnthropicValidation_ArraySystem(t *testing.T) {
+	req := &model.AnthropicInboundRequest{
+		Model: "claude-3-7-sonnet",
+		System: []any{
+			map[string]any{"type": "text", "text": "Base instructions"},
+		},
+		Messages: []model.AnthropicInboundMessage{
+			{Role: "system", Content: "Appended instructions"},
+			{Role: "user", Content: "Hello"},
+		},
+		MaxTokens: 1000,
+	}
+
+	res := ValidateAnthropic(req, nil, LevelLenient)
+	if !res.Valid {
+		t.Fatalf("expected validation to pass, got error: %v", res.Error)
+	}
+
+	expected := "Base instructions\n\nAppended instructions"
+	if req.GetSystemPrompt() != expected {
+		t.Fatalf("expected merged system prompt %q, got %q", expected, req.GetSystemPrompt())
+	}
+	if len(req.Messages) != 1 || req.Messages[0].Role != "user" {
+		t.Fatalf("expected system message moved from messages, remaining: %+v", req.Messages)
+	}
+}

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
-	"github.com/ifnodoraemon/airoute/internal/provider"
 )
 
 // ProbeRequest contains connection parameters for probing downstream services.
@@ -41,7 +40,7 @@ type DownstreamProber struct {
 // NewDownstreamProber creates a DownstreamProber.
 func NewDownstreamProber(client *http.Client) *DownstreamProber {
 	if client == nil {
-		client = provider.SharedDefaultHTTPClient
+		client = safeProbeClient(15 * time.Second)
 	}
 	return &DownstreamProber{client: client}
 }
@@ -142,10 +141,17 @@ func (p *DownstreamProber) probeOpenAICompatible(ctx context.Context, baseURL, a
 			lastErr = err
 			continue
 		}
-		defer resp.Body.Close()
+		// Consume and close each response immediately: `defer` inside this loop
+		// would hold every candidate connection open until the probe returns.
+		// The read is bounded so a hostile endpoint cannot exhaust memory.
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		resp.Body.Close()
+		if readErr != nil {
+			lastErr = readErr
+			continue
+		}
 
 		if resp.StatusCode == http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
 			var parsed struct {
 				Data []struct {
 					ID string `json:"id"`

@@ -1,8 +1,8 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { X, Copy, Check, Activity, Key, AlertCircle, Trash2, Sparkles, ArrowRight } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { X, Copy, Check, Activity, AlertCircle, Trash2, Sparkles, ArrowRight } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
 
-export default function LogDetailModal({ log, prices: initialPrices = [], onClose, onCopy, onFilterBySession, onDeleteLog, onNavigate, lang = 'zh', t }) {
+export default function LogDetailModal({ log, prices: initialPrices = [], onClose, onCopy, onFilterBySession, onDeleteLog, onNavigate, onOpenTrace, lang = 'zh', t }) {
   useModalA11y(!!log, onClose);
 
   const isZh = lang === 'zh';
@@ -39,7 +39,20 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
   };
 
   const isSuccess = log ? log.status_code >= 200 && log.status_code < 300 : false;
+  // Evidence flags used by the remediation panel below. They must live at
+  // component scope: the classification block is an IIFE, so anything declared
+  // inside it is invisible to the JSX.
+  const errorMessage = (log && log.error_message ? String(log.error_message) : '').trim();
+  const hasUpstreamDetail = errorMessage.length > 0;
+  const isErrorLog = !!log && ((log.status_code || 200) >= 400 || hasUpstreamDetail);
 
+  // Heuristic remediation hint.
+  //
+  // This is derived ONLY from the HTTP status code and the captured error text,
+  // so it must be presented as a *possible* cause with a suggested next step —
+  // not as a verified root cause. The upstream error message (shown separately)
+  // is the authoritative evidence; the classification below cannot see the
+  // upstream's actual reason.
   const rca = (() => {
     if (!log) return null;
     const code = log.status_code || 200;
@@ -65,7 +78,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
       return {
         type: 'warning',
         badge: '429 Rate Limit',
-        title: isZh ? '根因剖析: 上游服务商速率限制 (TPM/RPM Throttling)' : 'RCA: Upstream Rate Limit (TPM/RPM)',
+        title: isZh ? '可能原因: 上游限流 (TPM/RPM)' : 'Likely Cause: Upstream Rate Limit (TPM/RPM)',
         summary: isZh
           ? `上游渠道 [${log.channel || '默认'}] 的请求频率或单分钟 Token 消耗达到限额。建议在【模型路由】中为模型 [${log.model}] 挂载第二家服务商作为降级容灾渠道，或在【通道管理】中增加备用 Key 轮询。`
           : `Upstream channel [${log.channel || 'Default'}] hit rate limits. Recommended action: configure a secondary fallback provider for [${log.model}] in Model Routes, or add backup keys in Channels.`,
@@ -78,7 +91,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
       return {
         type: 'error',
         badge: 'Context / Parameter',
-        title: isZh ? '根因剖析: 上下文超限或模型参数不兼容' : 'RCA: Context Overflow or Parameter Mismatch',
+        title: isZh ? '可能原因: 上下文超限或参数不兼容' : 'Likely Cause: Context Overflow or Parameter Mismatch',
         summary: isZh
           ? `传入 Prompt 超过模型 [${log.model}] 的最大 Token 窗口，或携带了模型不支持的参数。建议开启 Prompt 压缩截断，或将路由升级为 128k/1M 上下文长文本模型。`
           : `Prompt tokens exceed the maximum context window of [${log.model}], or unsupported parameters were sent. Truncate conversation history or route to a long-context model.`,
@@ -91,7 +104,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
       return {
         type: 'error',
         badge: 'Auth Failure',
-        title: isZh ? '根因剖析: 上游凭证失效或权限拒绝' : 'RCA: Upstream Credential Revoked / Unauthorized',
+        title: isZh ? '可能原因: 上游凭证失效或权限拒绝' : 'Likely Cause: Upstream Credential Invalid / Unauthorized',
         summary: isZh
           ? `上游通道 [${log.channel || '渠道'}] 绑定的 API 密钥已失效、服务商余额欠费或账号被封禁。请前往【通道管理】更新密钥并执行连通性探测。`
           : `The API key for upstream channel [${log.channel || 'Channel'}] is invalid, expired, or out of balance. Update upstream API key in Channels and re-probe.`,
@@ -104,7 +117,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
       return {
         type: 'error',
         badge: 'Upstream Timeout',
-        title: isZh ? '根因剖析: 上游网关握手超时' : 'RCA: Gateway Timeout or Network Unreachable',
+        title: isZh ? '可能原因: 上游超时或网络不可达' : 'Likely Cause: Upstream Timeout or Network Unreachable',
         summary: isZh
           ? `网关向上游发起推理请求时超时。若该模型为复杂思维链推理（如 DeepSeek-R1 / o1），建议在【通道管理】中延长超时时间至 90s~120s，并开启断路器保护。`
           : `Upstream request timed out. For deep reasoning models, increase channel timeout to 90s-120s in Channel settings and keep circuit breaker enabled.`,
@@ -116,7 +129,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
     return {
       type: 'error',
       badge: `HTTP ${code}`,
-      title: isZh ? '根因剖析: 上游内部异常' : 'RCA: Upstream Internal Failure',
+      title: isZh ? '可能原因: 上游返回异常状态' : 'Likely Cause: Upstream Returned an Error Status',
       summary: isZh
         ? `上游服务商返回非预期状态码。已触发链路追踪 Trace ID，建议检查上游日志或在模型路由中将权重调度转移至其他稳定渠道。`
         : `Unexpected response from upstream provider. Shift traffic weight to other active channels in Model Routes.`,
@@ -174,25 +187,25 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
           {/* Top key metric cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-800/70">
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">{isZh ? '请求模型' : 'Model'}</span>
+              <span className="ui-meta block font-medium">{isZh ? '请求模型' : 'Model'}</span>
               <span className="text-xs font-mono font-semibold text-slate-900 dark:text-white truncate block mt-1">
                 {log.model || '-'}
               </span>
             </div>
             <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-800/70">
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">{isZh ? '路由渠道' : 'Channel'}</span>
+              <span className="ui-meta block font-medium">{isZh ? '路由渠道' : 'Channel'}</span>
               <span className="text-xs font-medium text-slate-900 dark:text-white truncate block mt-1 font-mono">
                 {log.channel || (isZh ? '直通/多源' : 'Direct / Multi')}
               </span>
             </div>
             <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-800/70">
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">{isZh ? '首字延迟 (TTFT)' : 'TTFT Latency'}</span>
+              <span className="ui-meta block font-medium">{isZh ? '首字延迟 (TTFT)' : 'TTFT Latency'}</span>
               <span className="text-xs font-mono tabular-nums font-semibold text-amber-600 dark:text-amber-400 block mt-1">
                 {log.ttft_ms ? `${log.ttft_ms} ms` : '-'}
               </span>
             </div>
             <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-800/70">
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">{isZh ? '总执行耗时' : 'Total Duration'}</span>
+              <span className="ui-meta block font-medium">{isZh ? '总执行耗时' : 'Total Duration'}</span>
               <span className="text-xs font-mono tabular-nums font-semibold text-slate-900 dark:text-white block mt-1">
                 {log.duration_ms} ms
               </span>
@@ -253,6 +266,17 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                   >
                     <Copy className="w-3 h-3" />
                   </button>
+                  {onOpenTrace && (
+                    <button
+                      onClick={() => {
+                        onOpenTrace(log.chat_id);
+                        onClose();
+                      }}
+                      className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-[11px] font-medium transition cursor-pointer"
+                    >
+                      {isZh ? '查看快照' : 'Snapshot'}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -302,6 +326,11 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                 {isZh ? '未缓存输入: ' : 'Uncached: '}<strong className="text-slate-900 dark:text-white font-semibold">{Math.max(0, (log.prompt_tokens || 0) - (log.cached_tokens || 0)).toLocaleString()}</strong> ·
                 {isZh ? ' 输出: ' : ' Output: '}<strong className="text-slate-900 dark:text-white font-semibold">{(log.completion_tokens || 0).toLocaleString()}</strong> ·
                 {isZh ? ' 缓存: ' : ' Cached: '}<strong className="text-amber-600 dark:text-amber-400 font-semibold">{(log.cached_tokens || 0).toLocaleString()}</strong>
+                {log.usage_source === 'estimated' && (
+                  <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 align-middle">
+                    {isZh ? '估算' : 'estimated'}
+                  </span>
+                )}
               </span>
             </div>
             <div className="p-3.5 flex justify-between">
@@ -311,7 +340,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                   ¥{(log.cost || 0).toFixed(4)}
                 </span>
                 {log.is_off_peak && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                     {isZh ? `闲时 (${Math.round((log.off_peak_discount || 0.5) * 10)}折)` : `Off-peak (${Math.round((1 - (log.off_peak_discount || 0.5)) * 100)}% off)`}
                   </span>
                 )}
@@ -320,7 +349,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                     {isZh ? `缓存: ${log.cached_tokens} Tokens` : `Cache: ${log.cached_tokens} Tokens`}
                   </span>
                 ) : (
-                  <span className="text-slate-400 text-[11px] font-sans">{isZh ? '未命中缓存' : 'Cache miss'}</span>
+                  <span className="ui-meta font-sans">{isZh ? '未命中缓存' : 'Cache miss'}</span>
                 )}
               </div>
             </div>
@@ -401,7 +430,9 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
             </div>
           )}
 
-          {/* AI Root Cause Analysis & Auto-Remediation (AI RCA) */}
+          {/* Heuristic remediation hint derived from the status code. The
+              upstream's own error message is the authoritative evidence and is
+              rendered below it when present. */}
           {rca && (
             <div className={`p-4 rounded-xl border text-xs ${
               rca.type === 'success'
@@ -422,6 +453,21 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                 </span>
               </div>
               <p className="leading-relaxed opacity-90">{rca.summary}</p>
+              {hasUpstreamDetail && (
+                <div className="mt-2.5 pt-2.5 border-t border-current/10">
+                  <span className="block text-xs font-semibold uppercase tracking-wide opacity-75 mb-1">
+                    {isZh ? '上游原始错误（权威依据）' : 'Upstream error (authoritative)'}
+                  </span>
+                  <code className="block font-mono text-[11px] break-all opacity-90">{errorMessage}</code>
+                </div>
+              )}
+              {!hasUpstreamDetail && isErrorLog && (
+                <p className="mt-2 text-xs opacity-75">
+                  {isZh
+                    ? '本次请求未记录上游错误详情，以上仅为基于状态码的推测，不能作为根因结论。'
+                    : 'No upstream error detail was recorded for this request; the above is inferred from the status code only.'}
+                </p>
+              )}
               {rca.actionLabel && onNavigate && (
                 <div className="mt-3 pt-2.5 border-t border-slate-200/60 dark:border-slate-800/60 flex justify-end">
                   <button

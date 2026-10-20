@@ -28,16 +28,17 @@ func (a *AnthropicAdapter) ToCanonical(ctx context.Context, input any) (*model.C
 	}
 
 	var canonicalMsgs []model.ChatMessage
-	if req.System != "" {
+	if sys := req.GetSystemPrompt(); sys != "" {
 		canonicalMsgs = append(canonicalMsgs, model.ChatMessage{
 			Role:    "system",
-			Content: req.System,
+			Content: sys,
 		})
 	}
 
 	for _, msg := range req.Messages {
 		if blocks, ok := msg.Content.([]any); ok {
 			var textParts []string
+			var thinkingParts []string
 			var toolCalls []model.ToolCall
 			var hasToolResult bool
 			var contentParts []model.ContentPart
@@ -57,6 +58,10 @@ func (a *AnthropicAdapter) ToCanonical(ctx context.Context, input any) (*model.C
 						Type: "text",
 						Text: t,
 					})
+				case "thinking":
+					if th, ok := m["thinking"].(string); ok && th != "" {
+						thinkingParts = append(thinkingParts, th)
+					}
 				case "image":
 					hasImage = true
 					if src, ok := m["source"].(map[string]any); ok {
@@ -108,11 +113,13 @@ func (a *AnthropicAdapter) ToCanonical(ctx context.Context, input any) (*model.C
 				}
 			}
 
+			reasoningContent := strings.Join(thinkingParts, "\n")
 			if hasToolResult {
 				if len(textParts) > 0 {
 					canonicalMsgs = append(canonicalMsgs, model.ChatMessage{
-						Role:    msg.Role,
-						Content: strings.Join(textParts, "\n"),
+						Role:             msg.Role,
+						Content:          strings.Join(textParts, "\n"),
+						ReasoningContent: reasoningContent,
 					})
 				}
 				continue
@@ -120,15 +127,17 @@ func (a *AnthropicAdapter) ToCanonical(ctx context.Context, input any) (*model.C
 
 			if hasImage {
 				canonicalMsgs = append(canonicalMsgs, model.ChatMessage{
-					Role:      msg.Role,
-					Content:   contentParts,
-					ToolCalls: toolCalls,
+					Role:             msg.Role,
+					Content:          contentParts,
+					ReasoningContent: reasoningContent,
+					ToolCalls:        toolCalls,
 				})
 			} else {
 				canonicalMsgs = append(canonicalMsgs, model.ChatMessage{
-					Role:      msg.Role,
-					Content:   strings.Join(textParts, "\n"),
-					ToolCalls: toolCalls,
+					Role:             msg.Role,
+					Content:          strings.Join(textParts, "\n"),
+					ReasoningContent: reasoningContent,
+					ToolCalls:        toolCalls,
 				})
 			}
 		} else {
@@ -161,15 +170,58 @@ func (a *AnthropicAdapter) ToCanonical(ctx context.Context, input any) (*model.C
 		}
 	}
 
+	var stop any
+	if len(req.StopSequences) > 0 {
+		stop = req.StopSequences
+	}
+
+	// OpenAI-compatible upstreams only emit the final usage chunk when the
+	// request opts in via stream_options.include_usage. Without it, streaming
+	// logs end up with zero prompt/cached tokens even though the upstream knows
+	// the real numbers.
+	var streamOptions *model.StreamOptions
+	if req.Stream {
+		streamOptions = &model.StreamOptions{IncludeUsage: true}
+	}
+
 	return &model.ChatCompletionRequest{
-		Model:       req.Model,
-		Messages:    canonicalMsgs,
-		Temperature: req.Temperature,
-		TopP:        req.TopP,
-		MaxTokens:   maxTokens,
-		Stream:      req.Stream,
-		Tools:       canonicalTools,
+		Model:               req.Model,
+		Messages:            canonicalMsgs,
+		Temperature:         req.Temperature,
+		TopP:                req.TopP,
+		MaxTokens:           maxTokens,
+		Stream:              req.Stream,
+		StreamOptions:       streamOptions,
+		Tools:               canonicalTools,
+		ToolChoice:          convertAnthropicToolChoice(req.ToolChoice),
+		Stop:                stop,
+		Protocol:            "anthropic_messages",
+		AnthropicOriginal:   req,
+		AnthropicNativeOnly: requiresNativeAnthropic(req),
 	}, nil
+}
+
+func requiresNativeAnthropic(req *model.AnthropicInboundRequest) bool {
+	if req.Thinking != nil || req.TopK != nil || req.Metadata != nil {
+		return true
+	}
+	// Cache-control annotations and signed reasoning cannot survive conversion
+	// through a different provider's request schema.
+	for _, item := range append(append([]any{req.System}, req.Tools...), messagesAsAny(req.Messages)...) {
+		encoded, err := json.Marshal(item)
+		if err == nil && (strings.Contains(string(encoded), `"cache_control"`) || strings.Contains(string(encoded), `"signature"`) || strings.Contains(string(encoded), `"redacted_thinking"`)) {
+			return true
+		}
+	}
+	return false
+}
+
+func messagesAsAny(messages []model.AnthropicInboundMessage) []any {
+	items := make([]any, 0, len(messages))
+	for _, message := range messages {
+		items = append(items, message.Content)
+	}
+	return items
 }
 
 func (a *AnthropicAdapter) FromCanonical(ctx context.Context, resp *model.ChatCompletionResponse) (any, error) {
@@ -177,11 +229,17 @@ func (a *AnthropicAdapter) FromCanonical(ctx context.Context, resp *model.ChatCo
 		return nil, fmt.Errorf("empty canonical response")
 	}
 
-	var contentBlocks []map[string]any
+	contentBlocks := make([]map[string]any, 0)
 	stopReason := "end_turn"
 
 	if len(resp.Choices) > 0 {
 		choice := resp.Choices[0]
+		if choice.Message.ReasoningContent != "" {
+			contentBlocks = append(contentBlocks, map[string]any{
+				"type":     "thinking",
+				"thinking": choice.Message.ReasoningContent,
+			})
+		}
 		if replyText := choice.Message.GetContentString(); replyText != "" {
 			contentBlocks = append(contentBlocks, map[string]any{
 				"type": "text",
@@ -213,6 +271,13 @@ func (a *AnthropicAdapter) FromCanonical(ctx context.Context, resp *model.ChatCo
 		}
 	}
 
+	if len(contentBlocks) == 0 {
+		contentBlocks = append(contentBlocks, map[string]any{
+			"type": "text",
+			"text": "",
+		})
+	}
+
 	inputTokens := 0
 	outputTokens := 0
 	if resp.Usage != nil {
@@ -232,4 +297,37 @@ func (a *AnthropicAdapter) FromCanonical(ctx context.Context, resp *model.ChatCo
 			"output_tokens": outputTokens,
 		},
 	}, nil
+}
+
+func convertAnthropicToolChoice(tc any) any {
+	if tc == nil {
+		return nil
+	}
+	if s, ok := tc.(string); ok {
+		switch s {
+		case "any":
+			return "required"
+		default:
+			return s
+		}
+	}
+	if m, ok := tc.(map[string]any); ok {
+		tcType, _ := m["type"].(string)
+		switch tcType {
+		case "auto":
+			return "auto"
+		case "any":
+			return "required"
+		case "tool":
+			if name, ok := m["name"].(string); ok {
+				return map[string]any{
+					"type": "function",
+					"function": map[string]any{
+						"name": name,
+					},
+				}
+			}
+		}
+	}
+	return tc
 }

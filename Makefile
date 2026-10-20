@@ -1,30 +1,66 @@
 export PATH := /usr/local/go/bin:$(PATH)
 
-.PHONY: all build run test test-e2e test-e2e-go tidy clean
+.PHONY: all build build-web run test test-web test-integration test-e2e test-e2e-go tidy clean
 
 APP_NAME = airoute
 BIN_DIR = bin
 ENTRY = ./cmd/airoute
 CONFIG = configs/config.yaml
 
+# Reported by the version command and the startup banner. Derived from git so a
+# locally built binary identifies its revision instead of the baked-in default.
+# The leading "v" of a tag is stripped because the banner prints its own.
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo dev)
+LDFLAGS = -X main.Version=$(VERSION)
+
 all: build
 
-build-web:
+build-web: web/node_modules
 	@echo "==> Building React Web UI..."
+	@cd web && npm run build
+
+# Declared as file targets so a fresh clone bootstraps itself in the right order
+# (dependencies, then the bundle) and repeat runs do nothing.
+web/node_modules: web/package.json web/package-lock.json
+	@echo "==> Installing Web UI dependencies..."
+	@cd web && npm ci
+
+# The gateway embeds the console (see web/web.go) and dist is not tracked, so it
+# must exist before anything compiles the Go packages. `build` and `run` rebuild
+# the UI unconditionally so a stale bundle is never shipped or served; the Go
+# tests only need the package to compile, so they use this file target.
+web/dist/index.html: web/node_modules
+	@echo "==> Web UI is not built yet; building it before the Go build..."
 	@cd web && npm run build
 
 build: build-web
 	@mkdir -p $(BIN_DIR)
-	@echo "==> Building $(APP_NAME) single binary..."
-	go build -o $(BIN_DIR)/$(APP_NAME) $(ENTRY)
+	@echo "==> Building $(APP_NAME) single binary ($(VERSION))..."
+	go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(APP_NAME) $(ENTRY)
 
-run:
+run: build-web
 	@echo "==> Running $(APP_NAME)..."
 	go run $(ENTRY) -config $(CONFIG)
 
-test:
+test: web/dist/index.html
 	@echo "==> Running tests..."
 	go test -v -race ./...
+
+test-web:
+	@echo "==> Running Web UI tests..."
+	@cd web && npm run test
+
+# Integration tests need a real PostgreSQL and Redis. They skip themselves when
+# the DSNs below are unset, so this target checks first rather than reporting a
+# misleading pass. Start the dependencies with:
+#   docker run -d -p 5432:5432 -e POSTGRES_USER=airoute -e POSTGRES_PASSWORD=airoute \
+#     -e POSTGRES_DB=airoute postgres:16-alpine
+#   docker run -d -p 6379:6379 redis:7-alpine
+test-integration:
+	@test -n "$(AIROUTE_TEST_DATABASE_URL)" || { echo "AIROUTE_TEST_DATABASE_URL is required"; exit 1; }
+	@test -n "$(AIROUTE_TEST_REDIS_URL)" || { echo "AIROUTE_TEST_REDIS_URL is required"; exit 1; }
+	@echo "==> Running integration tests (PostgreSQL + Redis)..."
+	go test -race -tags=integration ./internal/storage/ ./internal/distributed/
 
 test-e2e:
 	@echo "==> Running End-to-End (E2E) integration tests..."

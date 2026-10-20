@@ -39,7 +39,7 @@ func (h *AdminHandler) CreateStripeRechargeSession(c *gin.Context) {
 		currency = "CNY"
 	}
 
-	orderNo := fmt.Sprintf("REC%s%d", time.Now().Format("20060102150405"), time.Now().UnixNano()%1000)
+	orderNo := fmt.Sprintf("REC%s%d", time.Now().Format("20060102150405"), time.Now().UnixMicro()%1000)
 
 	order := &storage.RechargeOrderRecord{
 		OrderNo:  orderNo,
@@ -167,7 +167,7 @@ func (h *AdminHandler) SandboxRecharge(c *gin.Context) {
 	}
 
 	if req.OrderNo == "" {
-		req.OrderNo = fmt.Sprintf("SANDBOX%d", time.Now().UnixNano()%1000000)
+		req.OrderNo = fmt.Sprintf("SANDBOX%d", time.Now().UnixMicro()%1000000)
 	}
 
 	// Create or complete order
@@ -192,6 +192,9 @@ func (h *AdminHandler) SandboxRecharge(c *gin.Context) {
 	if u != nil {
 		newBal = u.Balance
 	}
+	// Credit the data-plane snapshot immediately; the wallet check runs against
+	// that snapshot on every inference request.
+	h.syncDataPlane()
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":        0,

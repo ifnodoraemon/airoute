@@ -91,15 +91,15 @@ func TestZeroTouchSessionAffinity(t *testing.T) {
 	t.Logf("Turn 1 automatically generated zero-touch Session ID: %s", sessionID)
 
 	cookies := w1.Result().Cookies()
-	var nanoCookie *http.Cookie
+	var sessionCookie *http.Cookie
 	for _, c := range cookies {
-		if c.Name == "nano_session" {
-			nanoCookie = c
+		if c.Name == "airoute_llm_session" {
+			sessionCookie = c
 			break
 		}
 	}
-	if nanoCookie == nil {
-		t.Fatalf("Expected nano_session cookie to be set, but was not found")
+	if sessionCookie == nil {
+		t.Fatalf("Expected airoute_llm_session cookie to be set, but was not found")
 	}
 
 	totalTurn1A := atomic.LoadInt64(&nodeAHits)
@@ -166,7 +166,7 @@ func TestZeroTouchSessionAffinity(t *testing.T) {
 	turn3Bytes, _ := json.Marshal(turn3Body)
 	req3 := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(turn3Bytes))
 	req3.Header.Set("Content-Type", "application/json")
-	req3.AddCookie(nanoCookie)
+	req3.AddCookie(sessionCookie)
 	w3 := httptest.NewRecorder()
 
 	r.ServeHTTP(w3, req3)

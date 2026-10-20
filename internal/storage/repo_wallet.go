@@ -59,6 +59,9 @@ func (r *Repository) ListRedemptionCodes() ([]*RedemptionCodeRecord, error) {
 		}
 		list = append(list, &rec)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return list, nil
 }
 
@@ -103,9 +106,12 @@ func (r *Repository) RedeemCode(code, username string) (*RedemptionCodeRecord, e
 	}
 
 	// Credit user balance
-	_, err = tx.Exec(r.db.Rebind(`UPDATE users SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`), rec.Amount, username)
+	credited, err := tx.Exec(r.db.Rebind(`UPDATE users SET balance = balance + ?, balance_units = COALESCE(balance_units, 0) + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`), rec.Amount, ToUnits(rec.Amount), username)
 	if err != nil {
 		return nil, fmt.Errorf("充值到账户余额失败: %w", err)
+	}
+	if affected, _ := credited.RowsAffected(); affected == 0 {
+		return nil, fmt.Errorf("充值失败: 用户不存在 (%s)", username)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -175,14 +181,23 @@ func (r *Repository) CompleteRechargeOrder(orderNo string) (*RechargeOrderRecord
 		return &rec, nil // Already completed (idempotent)
 	}
 
-	_, err = tx.Exec(`UPDATE recharge_orders SET status = 'paid', updated_at = CURRENT_TIMESTAMP WHERE id = ?`, rec.ID)
+	// Atomic state transition: only the transaction that flips pending -> paid
+	// credits the wallet, so concurrent webhook retries cannot double-credit.
+	res, err := tx.Exec(`UPDATE recharge_orders SET status = 'paid', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status <> 'paid'`, rec.ID)
 	if err != nil {
 		return nil, err
 	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		rec.Status = "paid"
+		return &rec, nil
+	}
 
-	_, err = tx.Exec(`UPDATE users SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, rec.Amount, rec.Username)
+	credit, err := tx.Exec(`UPDATE users SET balance = balance + ?, balance_units = COALESCE(balance_units, 0) + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, rec.Amount, ToUnits(rec.Amount), rec.Username)
 	if err != nil {
 		return nil, err
+	}
+	if affected, _ := credit.RowsAffected(); affected == 0 {
+		return nil, fmt.Errorf("充值失败: 用户不存在 (%s)", rec.Username)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -215,6 +230,8 @@ func (r *Repository) ListRechargeOrders(username string) ([]*RechargeOrderRecord
 		}
 		list = append(list, &rec)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return list, nil
 }
-

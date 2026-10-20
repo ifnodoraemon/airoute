@@ -8,11 +8,11 @@ import (
 
 func TestSeparateReasoningInResponse(t *testing.T) {
 	tests := []struct {
-		name          string
-		inputContent  string
-		inputReason   string
-		expectedCont  string
-		expectedReas  string
+		name         string
+		inputContent string
+		inputReason  string
+		expectedCont string
+		expectedReas string
 	}{
 		{
 			name:         "GPUStack style with ending think tag",

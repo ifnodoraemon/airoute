@@ -59,7 +59,7 @@ func (h *Handler) HandleModelDetail(c *gin.Context) {
 		return
 	}
 
-	channels := h.dispatcher.GetChannelsForModel(modelID)
+	channels := h.dispatcher.ListChannelsForModel(modelID, "")
 	if len(channels) == 0 {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": gin.H{

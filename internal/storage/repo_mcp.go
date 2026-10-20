@@ -13,7 +13,7 @@ type MCPServerRecord struct {
 	Category    string   `json:"category"`  // ops, dev, search, db, productivity, storage
 	Transport   string   `json:"transport"` // sse, stdio, http
 	Endpoint    string   `json:"endpoint"`
-	Status      string   `json:"status"`    // online, active, standby
+	Status      string   `json:"status"` // online, active, standby
 	Author      string   `json:"author"`
 	Version     string   `json:"version"`
 	Tools       []string `json:"tools"`
@@ -50,6 +50,9 @@ func (r *Repository) ListMCPServers() ([]*MCPServerRecord, error) {
 		_ = json.Unmarshal([]byte(promptsStr), &s.Prompts)
 		_ = json.Unmarshal([]byte(resourcesStr), &s.Resources)
 		list = append(list, &s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return list, nil
 }
@@ -138,4 +141,3 @@ func (r *Repository) DeleteMCPServer(id string) error {
 	_, err := r.db.Exec(`DELETE FROM system_mcp_servers WHERE id = ?`, id)
 	return err
 }
-

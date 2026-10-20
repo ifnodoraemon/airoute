@@ -9,8 +9,8 @@ import (
 // ResponseRequest represents the OpenAI Responses API (/v1/responses) request payload.
 type ResponseRequest struct {
 	Model              string            `json:"model"`
-	Input              any               `json:"input"`                     // string or []ChatMessage or []map[string]any
-	Instructions       string            `json:"instructions,omitempty"`    // system instructions
+	Input              any               `json:"input"`                  // string or []ChatMessage or []map[string]any
+	Instructions       string            `json:"instructions,omitempty"` // system instructions
 	PreviousResponseID string            `json:"previous_response_id,omitempty"`
 	User               string            `json:"user,omitempty"`
 	Stream             bool              `json:"stream,omitempty"`
@@ -140,7 +140,7 @@ func ConvertChatResponseToResponseResult(chatResp *ChatCompletionResponse) *Resp
 	if len(resID) > 9 && resID[:9] == "chatcmpl-" {
 		resID = "resp_" + resID[9:]
 	} else if resID == "" {
-		resID = fmt.Sprintf("resp_%d", time.Now().UnixNano())
+		resID = fmt.Sprintf("resp_%d", time.Now().UnixMicro())
 	}
 
 	var outputItems []ResponseOutputItem

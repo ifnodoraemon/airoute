@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/distributed"
@@ -14,17 +15,25 @@ import (
 )
 
 const (
-	RedisLogStreamKey = "nano:stream:logs"
-	RedisLogGroup     = "nano_log_group"
+	RedisLogStreamKey = "airoute:stream:logs"
+	RedisLogGroup     = "airoute_log_group"
+
+	// logWriteTimeout bounds a single database flush of buffered usage logs.
+	// Billing batches are small; anything slower than this is a database problem
+	// that must surface as a retry rather than as a wedged worker.
+	logWriteTimeout = 10 * time.Second
 )
 
 // AsyncLogger buffers and batches usage log records to prevent blocking the data plane.
 // It supports distributed Redis Streams queueing across multi-node clusters,
-// with graceful fallback to an ultra-fast in-memory buffered channel.
+// with a bounded in-memory buffer that applies backpressure instead of
+// silently dropping billing records when the database is unavailable.
 type AsyncLogger struct {
 	repo       *Repository
 	ch         chan *UsageLogRecord
 	stopCh     chan struct{}
+	stopOnce   sync.Once
+	stopped    atomic.Bool
 	wg         sync.WaitGroup
 	batchSize  int
 	flushTimer time.Duration
@@ -69,7 +78,8 @@ func InitAsyncLogger(repo *Repository, bufferSize, batchSize int, flushInterval 
 	return al
 }
 
-// Record queues a usage log record asynchronously without blocking.
+// Record queues a usage log record asynchronously. When the local buffer is
+// full it waits for space so a database outage cannot silently lose billing.
 // In distributed mode, writes directly to Redis Streams for cluster-wide log aggregation;
 // gracefully falls back to local memory buffer if Redis is not configured or fails.
 func (al *AsyncLogger) Record(rec *UsageLogRecord) {
@@ -82,7 +92,7 @@ func (al *AsyncLogger) Record(rec *UsageLogRecord) {
 		if rec.SessionID != "" {
 			rec.TraceID = rec.SessionID
 		} else {
-			rec.TraceID = fmt.Sprintf("tr-%x", time.Now().UnixNano())
+			rec.TraceID = fmt.Sprintf("tr-%x", time.Now().UnixMicro())
 		}
 	}
 
@@ -105,10 +115,14 @@ func (al *AsyncLogger) Record(rec *UsageLogRecord) {
 	if al.ch == nil {
 		return
 	}
+	if al.stopped.Load() {
+		telemetry.Logger.Warn("async logger already stopped; dropping log record", "trace_id", rec.TraceID)
+		return
+	}
 	select {
 	case al.ch <- rec:
-	default:
-		telemetry.Logger.Warn("async usage log buffer full, dropping log record to preserve data plane performance")
+	case <-al.stopCh:
+		telemetry.Logger.Error("usage log submitted after logger stopped", "trace_id", rec.TraceID)
 	}
 }
 
@@ -117,7 +131,10 @@ func (al *AsyncLogger) Stop() {
 	if al == nil {
 		return
 	}
-	close(al.stopCh)
+	al.stopOnce.Do(func() {
+		al.stopped.Store(true)
+		close(al.stopCh)
+	})
 	al.wg.Wait()
 }
 
@@ -129,12 +146,36 @@ func (al *AsyncLogger) worker() {
 
 	var batch []*UsageLogRecord
 
-	flush := func() {
+	failures := 0
+	const maxFailures = 5
+	flush := func() bool {
 		if len(batch) == 0 {
-			return
+			return true
 		}
-		_ = al.repo.BatchRecordUsageLogs(batch)
+		// Bound each flush: an unbounded wait would wedge this worker, fill the
+		// queue and eventually block request completion on backpressure.
+		flushCtx, cancel := context.WithTimeout(context.Background(), logWriteTimeout)
+		err := al.repo.BatchRecordUsageLogsContext(flushCtx, batch)
+		cancel()
+		if err != nil {
+			failures++
+			telemetry.Logger.Error("failed to persist usage logs",
+				"error", err.Error(), "count", len(batch), "attempt", failures)
+			if failures >= maxFailures {
+				// Give up on this batch rather than letting memory grow without
+				// bound; the records are surfaced loudly so they can be
+				// reconciled from the Redis stream or upstream provider bills.
+				telemetry.Logger.Error("dropping unpersistable usage log batch after repeated failures",
+					"count", len(batch), "attempts", failures)
+				batch = batch[:0]
+				failures = 0
+				return true
+			}
+			return false
+		}
 		batch = batch[:0]
+		failures = 0
+		return true
 	}
 
 	for {
@@ -155,7 +196,12 @@ func (al *AsyncLogger) worker() {
 				case rec := <-al.ch:
 					batch = append(batch, rec)
 				default:
-					flush()
+					for attempt := 0; attempt < 3 && !flush(); attempt++ {
+						time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
+					}
+					if len(batch) > 0 {
+						telemetry.Logger.Error("usage logs remain unpersisted at shutdown", "count", len(batch))
+					}
 					return
 				}
 			}
@@ -204,7 +250,9 @@ func (al *AsyncLogger) redisStreamWorker(client *distributed.Client) {
 		if len(streamBatch) > 0 {
 			var writeErr error
 			for attempt := 1; attempt <= 3; attempt++ {
-				writeErr = al.repo.BatchRecordUsageLogs(streamBatch)
+				writeCtx, cancel := context.WithTimeout(ctx, logWriteTimeout)
+				writeErr = al.repo.BatchRecordUsageLogsContext(writeCtx, streamBatch)
+				cancel()
 				if writeErr == nil {
 					break
 				}

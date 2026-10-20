@@ -65,10 +65,11 @@ func ValidateAnthropic(req *model.AnthropicInboundRequest, rule *config.ModelVal
 				return res
 			}
 			sysContent := extractStringContent(msg.Content)
-			if req.System == "" {
+			currSys := req.GetSystemPrompt()
+			if currSys == "" {
 				req.System = sysContent
 			} else {
-				req.System += "\n\n" + sysContent
+				req.System = currSys + "\n\n" + sysContent
 			}
 			res.AddWarning("moved system prompt from messages to top-level 'system' parameter")
 			continue
@@ -200,21 +201,8 @@ func extractStringContent(content any) string {
 	if content == nil {
 		return ""
 	}
-	if s, ok := content.(string); ok {
+	if s := model.ExtractAnthropicContentString(content); s != "" {
 		return s
-	}
-	if blocks, ok := content.([]any); ok {
-		var sb strings.Builder
-		for _, b := range blocks {
-			if m, ok := b.(map[string]any); ok {
-				if m["type"] == "text" {
-					if t, ok := m["text"].(string); ok {
-						sb.WriteString(t)
-					}
-				}
-			}
-		}
-		return sb.String()
 	}
 	b, _ := json.Marshal(content)
 	return string(b)
