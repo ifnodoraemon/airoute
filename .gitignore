@@ -26,6 +26,12 @@ data/*.db-shm
 node_modules/
 web/node_modules/
 
+# Built by `make build-web`. The gateway embeds it at compile time (see
+# web/web.go), so it must exist before the Go build, but it is a build artifact:
+# committing it made every UI change churn dozens of files and let the shipped
+# bundle drift from the source.
+web/dist/
+
 # IDE & OS
 .idea/
 .vscode/

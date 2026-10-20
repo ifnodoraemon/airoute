@@ -11,6 +11,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// The console is embedded so the gateway ships as one self-contained binary.
+//
+// dist/ is a build artifact and is deliberately not tracked by git, so it has to
+// exist before this package compiles. Run `make build-web` (or
+// `cd web && npm ci && npm run build`) first. Without it the compiler stops here
+// with "pattern dist/*: no matching files found", which does not say what to do.
+//
 //go:embed dist/*
 var distFS embed.FS
 
