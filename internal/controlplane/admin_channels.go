@@ -101,6 +101,9 @@ func (h *AdminHandler) CreateChannel(c *gin.Context) {
 
 	created, err := h.channels.Create(c.Request.Context(), req.toRecord())
 	if err != nil {
+		if writeHotReloadWarning(c, err, gin.H{"data": created}) {
+			return
+		}
 		writeChannelError(c, err, "创建渠道失败")
 		return
 	}
@@ -123,6 +126,9 @@ func (h *AdminHandler) UpdateChannel(c *gin.Context) {
 
 	updated, err := h.channels.Update(c.Request.Context(), id, req.toRecord())
 	if err != nil {
+		if writeHotReloadWarning(c, err, gin.H{"data": updated}) {
+			return
+		}
 		writeChannelError(c, err, "更新渠道失败")
 		return
 	}
@@ -138,6 +144,9 @@ func (h *AdminHandler) DeleteChannel(c *gin.Context) {
 	}
 
 	if err := h.channels.Delete(c.Request.Context(), id); err != nil {
+		if writeHotReloadWarning(c, err, nil) {
+			return
+		}
 		writeChannelError(c, err, "删除渠道失败")
 		return
 	}
@@ -153,6 +162,9 @@ func (h *AdminHandler) BatchDeleteChannels(c *gin.Context) {
 	}
 	n, err := h.channels.BatchDelete(c.Request.Context(), ids)
 	if err != nil {
+		if writeHotReloadWarning(c, err, gin.H{"deleted_count": n}) {
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -167,6 +179,9 @@ func (h *AdminHandler) BatchStatusChannels(c *gin.Context) {
 	}
 	n, err := h.channels.BatchStatus(c.Request.Context(), req.IDs, req.Status)
 	if err != nil {
+		if writeHotReloadWarning(c, err, gin.H{"updated_count": n}) {
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

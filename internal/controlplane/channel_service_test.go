@@ -576,14 +576,16 @@ func TestChannelServiceWorksWithoutOptionalDependencies(t *testing.T) {
 	}
 }
 
-func TestChannelServiceSurvivesReloadFailure(t *testing.T) {
-	// A failed broadcast must not fail the request: the write already committed.
+func TestChannelServiceReportsSavedButNotApplied(t *testing.T) {
+	// A failed reload is distinguished from a rejected write.
 	store := newFakeChannelStore()
 	reloader := &fakeReloader{err: errors.New("redis unreachable")}
 	svc := NewChannelService(store, reloader, nil)
 
-	if _, err := svc.Create(context.Background(), validChannel()); err != nil {
-		t.Fatalf("Create returned the reload error: %v", err)
+	rec, err := svc.Create(context.Background(), validChannel())
+	var hot *HotReloadError
+	if !errors.As(err, &hot) || rec == nil || store.channels[rec.ID] == nil {
+		t.Fatalf("want committed channel plus hot-reload warning, got %v, %v", rec, err)
 	}
 	if reloader.calls != 1 {
 		t.Errorf("reload calls = %d, want 1", reloader.calls)

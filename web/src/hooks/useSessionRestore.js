@@ -17,9 +17,13 @@ import { getStoredToken } from '../api/session';
  * @param {Function} options.onRestored called with the restored user profile
  * @param {Function} options.onExpired  called when the session is not usable
  */
-export function useSessionRestore({ onRestored, onExpired }) {
+export function useSessionRestore({ onRestored, onExpired, onSettled, getSessionGeneration }) {
   const restoredRef = useRef(onRestored);
   const expiredRef = useRef(onExpired);
+  const optionsRef = useRef({ onSettled, getSessionGeneration });
+  useEffect(() => {
+    optionsRef.current = { onSettled, getSessionGeneration };
+  }, [onSettled, getSessionGeneration]);
 
   useEffect(() => {
     restoredRef.current = onRestored;
@@ -31,18 +35,27 @@ export function useSessionRestore({ onRestored, onExpired }) {
 
   // Runs once: the indirections above are what keep it current.
   useEffect(() => {
+    const controller = new AbortController();
+    const generation = optionsRef.current.getSessionGeneration?.();
+    const isCurrent = () => !controller.signal.aborted &&
+      generation === optionsRef.current.getSessionGeneration?.();
     const savedToken = getStoredToken();
     const headers = savedToken ? { Authorization: `Bearer ${savedToken}` } : {};
 
-    fetch('/api/v1/auth/me', { headers, credentials: 'same-origin' })
+    fetch('/api/v1/auth/me', { headers, credentials: 'same-origin', signal: controller.signal })
       .then((res) => (res.ok ? res.json() : { code: 401 }))
       .then((data) => {
+        if (!isCurrent()) return;
         if (data.code === 0 && data.data) {
           restoredRef.current(data.data.user || data.data);
         } else {
           expiredRef.current();
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (isCurrent()) optionsRef.current.onSettled?.();
+      });
+    return () => controller.abort();
   }, []);
 }

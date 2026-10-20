@@ -56,7 +56,11 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
       const res = await adminFetch('/api/v1/user/wallet');
       const data = await res.json();
       if (res.ok && data.code === 0 && data.data) {
-        setWalletData(data.data);
+        setWalletData((previous) => ({
+          ...previous, ...data.data,
+          group_name: data.data.group_name || 'default',
+          orders: Array.isArray(data.data.orders) ? data.data.orders : [],
+        }));
         if (onUserUpdated) {
           onUserUpdated(data.data);
         }

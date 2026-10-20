@@ -30,6 +30,7 @@ export default function DashboardView({
   fetchLogs,
   showToast,
   setCurrentTab,
+  onNavigateToErrors,
   setShowChannelModal,
   setActiveLogDetail,
   adminUser,
@@ -77,7 +78,7 @@ export default function DashboardView({
         buckets[index].requests += 1;
         buckets[index].tokens += l.total_tokens || 0;
         buckets[index].costs += l.cost || 0;
-        if (l.status_code >= 400) {
+        if ((l.status_code >= 400 || (l.status_code ?? 200) < 200 || l.error_message)) {
           buckets[index].errors += 1;
         }
         if (l.ttft_ms && l.ttft_ms > 0) {
@@ -112,7 +113,7 @@ export default function DashboardView({
   const error4xx = stats.client_error_requests || 0;
   const error5xx = stats.server_error_requests || 0;
   const totalErrorRequests = error4xx + error5xx;
-  const errorLogs = useMemo(() => (logs || []).filter(l => l && l.status_code >= 400), [logs]);
+  const errorLogs = useMemo(() => (logs || []).filter(l => l && (l.status_code >= 400 || (l.status_code ?? 200) < 200 || l.error_message)), [logs]);
   const success2xx = stats.success_requests || 0;
   const slaAvailability = totalRequests > 0 ? ((success2xx / totalRequests) * 100).toFixed(2) : '—';
 
@@ -298,7 +299,7 @@ export default function DashboardView({
       ));
       if (ch && providerMap[ch.id]) {
         providerMap[ch.id].totalCalls += 1;
-        if (l.status_code >= 400) providerMap[ch.id].errors += 1;
+        if ((l.status_code >= 400 || (l.status_code ?? 200) < 200 || l.error_message)) providerMap[ch.id].errors += 1;
         if (l.ttft_ms) providerMap[ch.id].ttfts.push(l.ttft_ms);
       }
     });
@@ -445,7 +446,7 @@ export default function DashboardView({
         ? `基于当前页 ${errorLogs.length} 条失败样本聚类，共 ${errorCodeEntries.length} 种状态码。`
         : `Clustered from ${errorLogs.length} failed rows on the current page across ${errorCodeEntries.length} status codes.`,
       actionLabel: isZh ? '查看日志' : 'View logs',
-      onAction: () => setCurrentTab?.('logs')
+      onAction: () => onNavigateToErrors ? onNavigateToErrors() : setCurrentTab?.('logs')
     });
   }
 
@@ -457,9 +458,9 @@ export default function DashboardView({
       title: isZh
         ? `最近 ${attention.recentTotal} 条日志中有 ${attention.failed} 条失败`
         : `${attention.failed} of the last ${attention.recentTotal} logged requests failed`,
-      detail: isZh ? '统计范围仅限当前页日志样本，不代表全站错误率。' : 'Sample covers the current log page only — not a site-wide error rate.',
+      detail: isZh ? '统计覆盖全部调用日志，点击查看全部异常记录。' : 'Counts cover all invocation logs. View all failed requests.',
       actionLabel: isZh ? '查看日志' : 'View logs',
-      onAction: () => setCurrentTab?.('logs')
+      onAction: () => onNavigateToErrors ? onNavigateToErrors() : setCurrentTab?.('logs')
     });
   }
 
@@ -499,7 +500,7 @@ export default function DashboardView({
               title={isZh ? '打开全链路动态路由与容灾演练' : 'Open visual routing & failover topology'}
             >
               <Layers className="w-3.5 h-3.5 text-slate-400" />
-              <span>{isZh ? '容灾拓扑动态图' : 'Routing Topology'}</span>
+              <span>{isZh ? '运行时容灾拓扑' : 'Live Routing Topology'}</span>
             </button>
           )}
 
@@ -1004,10 +1005,10 @@ export default function DashboardView({
 
             <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/70">
               <span className="ui-meta font-medium block">
-                {isZh ? '容灾漂移平均耗时' : 'Failover MTTR'}
+                {isZh ? '容灾运行状态' : 'Live failover state'}
               </span>
               <div className="text-lg font-semibold text-slate-900 dark:text-slate-100 font-mono tabular-nums mt-0.5">
-                24 ms
+                <button type="button" className="ui-btn-ghost ui-btn-sm text-indigo-600" onClick={onOpenTopology}>{isZh ? '查看实时拓扑' : 'View live topology'}</button>
               </div>
             </div>
           </div>

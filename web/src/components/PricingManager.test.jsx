@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import PricingManager from './PricingManager';
 
 // The regression this file exists for: the gateway used to send
@@ -32,14 +32,15 @@ function modelsResponse() {
 }
 
 function renderPricing(rows, extra = {}) {
+  const showToast = vi.fn();
   const adminFetch = vi.fn(async (url) => {
     if (String(url).includes('/admin/models')) return modelsResponse();
     return pricingResponse(rows, extra);
   });
   const utils = render(
-    <PricingManager adminFetch={adminFetch} showToast={vi.fn()} isAdmin lang="zh" />
+    <PricingManager adminFetch={adminFetch} showToast={showToast} isAdmin lang="zh" />
   );
-  return { ...utils, adminFetch };
+  return { ...utils, adminFetch, showToast };
 }
 
 const offPeakRow = {
@@ -67,6 +68,18 @@ const standardRow = {
 };
 
 describe('PricingManager off-peak display', () => {
+  it('shows saved-but-not-applied warnings instead of a successful reload toast', async () => {
+    const { adminFetch, showToast } = renderPricing([offPeakRow]);
+    await screen.findByText('gpt-x');
+    adminFetch.mockImplementation(async (url, options) => {
+      if (options?.method === 'POST') return { ok: true, status: 202, json: async () => ({ code: 0, warning: '配置已保存，但热加载未完全生效' }) };
+      return String(url).includes('/admin/models') ? modelsResponse() : pricingResponse([offPeakRow]);
+    });
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存定价' }));
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('配置已保存，但热加载未完全生效', 'warning'));
+    expect(showToast.mock.calls.some(([, tone]) => tone === 'success')).toBe(false);
+  });
   // The effective-rate cell renders "输入 ¥5.00 / 输出 ¥10.00" as one string, so
   // matching the whole phrase identifies that column. Matching a bare number does
   // not: the table has other columns showing the list price.

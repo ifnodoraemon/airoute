@@ -261,6 +261,15 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 
 				case "message_delta":
 					if u, ok := eventMap["usage"].(map[string]any); ok {
+						if in, ok := u["input_tokens"].(float64); ok {
+							inputTokens = int(in)
+						}
+						if cached, ok := u["cache_read_input_tokens"].(float64); ok {
+							cacheReadTokens = int(cached)
+						}
+						if created, ok := u["cache_creation_input_tokens"].(float64); ok {
+							cacheCreationTokens = int(created)
+						}
 						if out, ok := u["output_tokens"].(float64); ok {
 							outputTokens = int(out)
 						}

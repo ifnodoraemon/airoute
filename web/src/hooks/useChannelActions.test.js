@@ -34,6 +34,15 @@ describe('useChannelActions', () => {
     vi.unstubAllGlobals();
   });
 
+  it('shows a committed channel reload warning and refreshes the saved record', async () => {
+    globalThis.fetch.mockResolvedValue(jsonResponse({ code: 0, warning: '渠道已保存，但未生效' }, 202));
+    const { result, showToast, refresh } = setup();
+    act(() => result.current.setNewChannel(previous => ({ ...previous, name: 'gpu', base_url: 'https://gpu.example' })));
+    await act(async () => { await result.current.handleCreateChannel({ preventDefault() {} }); });
+    expect(showToast).toHaveBeenCalledWith('渠道已保存，但未生效', 'warning');
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
   it('opens the create form empty', () => {
     const { result } = setup();
 

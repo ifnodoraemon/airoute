@@ -187,6 +187,7 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 			if !open {
 				// Stream finished
 				finalizeCompletion()
+				recordOnce.Do(func() { recordStreamEnd(http.StatusOK) })
 				if textBlockOpened || toolBlockOpened {
 					fmt.Fprintf(w, "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":%d}\n\n", currentBlockIndex)
 				}
@@ -199,7 +200,9 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 						"stop_sequence": nil,
 					},
 					"usage": gin.H{
-						"output_tokens": totalCompTokens,
+						"input_tokens":            max(0, totalPromptTokens-totalCachedTokens),
+						"cache_read_input_tokens": totalCachedTokens,
+						"output_tokens":           totalCompTokens,
 					},
 				}
 				deltaBytes, _ := json.Marshal(deltaEvent)
@@ -331,9 +334,9 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 						usageSource = "upstream"
 						upstreamUsageSeen = true
 					}
-					totalPromptTokens = event.Chunk.Usage.PromptTokens
-					totalCompTokens = event.Chunk.Usage.CompletionTokens
-					totalCachedTokens = event.Chunk.Usage.GetCachedTokens()
+					totalPromptTokens = max(totalPromptTokens, event.Chunk.Usage.PromptTokens)
+					totalCompTokens = max(totalCompTokens, event.Chunk.Usage.CompletionTokens)
+					totalCachedTokens = max(totalCachedTokens, event.Chunk.Usage.GetCachedTokens())
 				}
 			}
 		}
@@ -408,6 +411,15 @@ func (h *Handler) handleNativeAnthropicStream(c *gin.Context, stream <-chan *mod
 			} else if event.NativeAnthropicType == "message_delta" {
 				if usage, ok := payload["usage"].(map[string]any); ok {
 					outputTokens = intFromJSONNumber(usage["output_tokens"])
+					if value, exists := usage["input_tokens"]; exists {
+						inputTokens = intFromJSONNumber(value)
+					}
+					if value, exists := usage["cache_read_input_tokens"]; exists {
+						cachedReadTokens = intFromJSONNumber(value)
+					}
+					if value, exists := usage["cache_creation_input_tokens"]; exists {
+						cacheCreationTokens = intFromJSONNumber(value)
+					}
 				}
 			}
 			event.NativeAnthropicEvent, _ = json.Marshal(payload)

@@ -90,8 +90,7 @@ func (s *ChannelService) Create(ctx context.Context, rec *storage.ChannelRecord)
 	if err := s.store.CreateChannel(rec); err != nil {
 		return nil, err
 	}
-	s.reload(ctx, "channel_created")
-	return rec, nil
+	return rec, s.reload(ctx, "channel_created")
 }
 
 // Update merges a partial update onto the stored channel and persists it.
@@ -118,8 +117,7 @@ func (s *ChannelService) Update(ctx context.Context, id int64, patch *storage.Ch
 		return nil, err
 	}
 
-	s.reload(ctx, "channel_updated")
-	return updated, nil
+	return updated, s.reload(ctx, "channel_updated")
 }
 
 // Delete removes a channel and reloads the data plane.
@@ -127,8 +125,7 @@ func (s *ChannelService) Delete(ctx context.Context, id int64) error {
 	if err := s.store.DeleteChannel(id); err != nil {
 		return err
 	}
-	s.reload(ctx, "channel_deleted")
-	return nil
+	return s.reload(ctx, "channel_deleted")
 }
 
 // BatchDelete removes several channels and reloads once.
@@ -137,8 +134,7 @@ func (s *ChannelService) BatchDelete(ctx context.Context, ids []int64) (int64, e
 	if err != nil {
 		return 0, err
 	}
-	s.reload(ctx, "channels_batch_deleted")
-	return n, nil
+	return n, s.reload(ctx, "channels_batch_deleted")
 }
 
 // BatchStatus toggles several channels and reloads once.
@@ -147,22 +143,20 @@ func (s *ChannelService) BatchStatus(ctx context.Context, ids []int64, status st
 	if err != nil {
 		return 0, err
 	}
-	s.reload(ctx, "channels_batch_status_updated")
-	return n, nil
+	return n, s.reload(ctx, "channels_batch_status_updated")
 }
 
 // reload pushes the change into the data plane.
 //
-// The broadcast error is deliberately discarded, matching the handlers this
-// replaced: the write has already committed, so failing the request would report
-// an error for a change that did happen. It is a real gap — a failed hot reload
-// leaves memory on an older configuration while the API reports success — and it
-// is what the configuration-version work has to close.
-func (s *ChannelService) reload(ctx context.Context, reason string) {
+// The write has committed: report delayed application separately from rejection.
+func (s *ChannelService) reload(ctx context.Context, reason string) error {
 	if s.reloader == nil {
-		return
+		return nil
 	}
-	_ = s.reloader.ReloadAndBroadcast(ctx, reason)
+	if err := s.reloader.ReloadAndBroadcast(ctx, reason); err != nil {
+		return &HotReloadError{Stage: "渠道配置", Err: err}
+	}
+	return nil
 }
 
 // validateNewChannel enforces the fields a channel cannot be created without.

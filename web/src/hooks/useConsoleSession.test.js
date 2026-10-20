@@ -209,6 +209,16 @@ describe('useConsoleSession', () => {
   });
 
   describe('profile updates', () => {
+    it('does not revive an ended session or replace a different signed-in user', () => {
+      const { result } = setup();
+      act(() => result.current.signIn({ username: 'old-user', role: 'admin' }));
+      act(() => result.current.signOutLocal());
+      act(() => result.current.refreshUser({ username: 'old-user', role: 'admin' }));
+      expect(result.current.adminUser).toBeNull();
+      act(() => result.current.signIn({ username: 'new-user', role: 'user' }));
+      act(() => result.current.refreshUser({ username: 'old-user', role: 'admin' }));
+      expect(result.current.adminUser.username).toBe('new-user');
+    });
     it('refreshes the profile without touching the credential', () => {
       const { result } = setup();
       act(() => {

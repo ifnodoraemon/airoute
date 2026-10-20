@@ -66,12 +66,17 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 	if logs == nil {
 		logs = make([]*storage.UsageLogRecord, 0)
 	}
+	facets, err := h.repo.ListUsageLogFacets(filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	if !shouldRevealKey(c) {
 		maskUsageLogKeys(logs)
 	}
 	// `total` is the size of the whole filtered result set, so the console can
 	// paginate honestly instead of assuming the current page is everything.
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": logs, "total": total, "limit": limit, "offset": offset})
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": logs, "total": total, "limit": limit, "offset": offset, "facets": facets})
 }
 
 // DeleteLog deletes a single log by ID (admin only).

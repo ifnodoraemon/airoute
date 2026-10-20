@@ -34,6 +34,7 @@ export function useLogsData({ filters, showToast, isZh }) {
   const [logTotal, setLogTotal] = useState(0);
   const [logOffset, setLogOffset] = useState(0);
   const [logLoading, setLogLoading] = useState(false);
+  const [logFacets, setLogFacets] = useState({ models: [], channels: [] });
   const [selectedLogIds, setSelectedLogIds] = useState([]);
 
   // Mirror of logOffset for the polling interval: the interval closure captures the
@@ -45,6 +46,7 @@ export function useLogsData({ filters, showToast, isZh }) {
   // flight still resolves, and without this it would write the previous account's
   // audit rows back into the cleared table.
   const generationRef = useRef(0);
+  const requestRef = useRef(0);
 
   // Mirror of the whole filter object so a poll always reads the current facets
   // rather than the ones captured when its closure was created.
@@ -56,6 +58,7 @@ export function useLogsData({ filters, showToast, isZh }) {
   const fetchLogs = useCallback(async (override = {}, overrideToken) => {
     const opts = overrideToken ? { token: overrideToken } : {};
     const generation = generationRef.current;
+    const request = ++requestRef.current;
     const current = filtersRef.current || {};
     setLogLoading(true);
     try {
@@ -109,12 +112,13 @@ export function useLogsData({ filters, showToast, isZh }) {
 
       const res = await apiFetch(`/api/v1/admin/logs?${p.toString()}`, opts);
       const data = await res.json();
-      if (generation !== generationRef.current) {
+      if (generation !== generationRef.current || request !== requestRef.current) {
         // The session was cleared while this page was in the air.
         return false;
       }
-      if (data.code === 0) {
+      if (res.ok && data.code === 0) {
         setLogs(data.data || []);
+        setLogFacets(data.facets || { models: [], channels: [] });
         // Total rows for the current filter, used for honest pagination.
         setLogTotal(typeof data.total === 'number' ? data.total : (data.data || []).length);
         return true;
@@ -124,7 +128,7 @@ export function useLogsData({ filters, showToast, isZh }) {
       console.error('Fetch logs failed:', e);
       return false;
     } finally {
-      setLogLoading(false);
+      if (generation === generationRef.current && request === requestRef.current) setLogLoading(false);
     }
     // The four date/range values are dependencies on purpose: see the note at the
     // top of this file.
@@ -187,6 +191,8 @@ export function useLogsData({ filters, showToast, isZh }) {
   // observe the previous account's audit trail.
   const reset = useCallback(() => {
     generationRef.current += 1;
+    requestRef.current += 1;
+    setLogFacets({ models: [], channels: [] });
     setLogs([]);
     setLogTotal(0);
     logOffsetRef.current = 0;
@@ -261,6 +267,7 @@ export function useLogsData({ filters, showToast, isZh }) {
     logTotal,
     logOffset,
     logLoading,
+    logFacets,
     fetchLogs,
     fetchAllLogsForExport,
     goToOffset,

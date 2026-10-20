@@ -3,6 +3,7 @@ package controlplane
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -56,6 +57,16 @@ func decodeEnvelope(t *testing.T, w *httptest.ResponseRecorder) map[string]inter
 }
 
 const validChannelBody = `{"name":"chan-a","type":"openai","base_url":"http://a.invalid","api_key":"secret","models":["m1"],"priority":3,"weight":7,"status":"active"}`
+
+func TestCreateChannelCommittedReloadWarning(t *testing.T) {
+	store := newFakeChannelStore()
+	handler := &AdminHandler{channels: NewChannelService(store, &fakeReloader{err: errors.New("reload offline")}, nil)}
+	w := invokeChannel(t, handler.CreateChannel, http.MethodPost, validChannelBody, "")
+	envelope := decodeEnvelope(t, w)
+	if w.Code != http.StatusAccepted || envelope["code"] != float64(0) || envelope["warning"] == nil || envelope["data"] == nil || store.createCalls != 1 {
+		t.Fatalf("want committed record and 202 warning, got %d %s", w.Code, w.Body.String())
+	}
+}
 
 func TestCreateChannelHTTPContract(t *testing.T) {
 	handler, repo := newChannelTestHandler(t)

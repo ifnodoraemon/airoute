@@ -60,6 +60,7 @@ export default function LogsView({
   logFilter,
   setLogFilter,
   logFilters,
+  logFacets = { models: [], channels: [] },
   setLogFilters,
   fetchLogs,
   logLoading,
@@ -165,45 +166,23 @@ export default function LogsView({
     if (showToast) showToast(isZh ? `${type} 已复制到剪贴板` : `${type} copied to clipboard`, 'success');
   };
 
-  // Extract distinct models and channels from filteredLogs for multi-condition dropdowns
+  // Facets cover the caller's entire audit history, including deleted channels.
+  // Keep a selected deep-link value visible even if no rows currently match it.
   const availableModels = useMemo(() => {
-    const set = new Set();
-    (filteredLogs || []).forEach(l => { if (l.model) set.add(l.model); });
+    const set = new Set(logFacets.models || []);
+    if (modelFilter !== 'all') set.add(modelFilter);
     return Array.from(set).sort();
-  }, [filteredLogs]);
+  }, [logFacets.models, modelFilter]);
 
   const availableChannels = useMemo(() => {
-    const set = new Set();
-    (filteredLogs || []).forEach(l => { if (l.channel) set.add(l.channel); });
+    const set = new Set(logFacets.channels || []);
+    if (channelFilter !== 'all') set.add(channelFilter);
     return Array.from(set).sort();
-  }, [filteredLogs]);
+  }, [logFacets.channels, channelFilter]);
 
-  // Multi-condition combined filtering across model, channel, status, cache, and latency
-  const displayedLogs = useMemo(() => {
-    return (filteredLogs || []).filter((log) => {
-      const code = log.status_code || 200;
-
-      // 1. Status Filter
-      if (statusFilter === 'success' && (code >= 400 || log.error_message)) return false;
-      if (statusFilter === 'error' && code < 400 && !log.error_message) return false;
-
-      // 2. Model Filter
-      if (modelFilter !== 'all' && log.model !== modelFilter) return false;
-
-      // 3. Channel Filter
-      if (channelFilter !== 'all' && log.channel !== channelFilter) return false;
-
-      // 4. Cache Filter
-      if (cacheFilter === 'cached' && (log.cached_tokens || 0) <= 0) return false;
-      if (cacheFilter === 'uncached' && (log.cached_tokens || 0) > 0) return false;
-
-      // 5. Latency Filter
-      if (latencyFilter === 'fast' && (log.duration_ms || 0) >= 500) return false;
-      if (latencyFilter === 'slow' && (log.duration_ms || 0) < 2000) return false;
-
-      return true;
-    });
-  }, [filteredLogs, statusFilter, modelFilter, channelFilter, cacheFilter, latencyFilter]);
+  // SQL owns filtering and pagination. A second filter here used different
+  // latency thresholds and could hide rows included in the server's total.
+  const displayedLogs = filteredLogs;
 
   const hasActiveFilters = modelFilter !== 'all' ||
     channelFilter !== 'all' ||
@@ -616,7 +595,7 @@ export default function LogsView({
               >
                 <option value="all">{isZh ? '全部状态 (2xx/4xx/5xx)' : 'All Statuses'}</option>
                 <option value="success">{isZh ? '● 仅成功 (2xx)' : 'Success Only'}</option>
-                <option value="error">{isZh ? '▲ 仅异常 (≥400)' : 'Errors Only'}</option>
+                <option value="error">{isZh ? '▲ 仅异常（含流中断）' : 'Errors (including stream failures)'}</option>
               </select>
             </div>
 
@@ -703,7 +682,7 @@ export default function LogsView({
 
             {latencyFilter !== 'all' && (
               <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200/70 dark:border-sky-800 text-xs">
-                <span>{latencyFilter === 'fast' ? '<500ms' : '≥2s'}</span>
+                <span>{latencyFilter === 'fast' ? '≤1s' : '>1s'}</span>
                 <button onClick={() => setLatencyFilter('all')} className="hover:text-rose-500 cursor-pointer" title={isZh ? '清除耗时筛选' : 'Clear latency filter'}>
                   <X className="w-3 h-3" />
                 </button>

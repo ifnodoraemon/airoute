@@ -11,7 +11,10 @@ function jsonResponse(body, status = 200) {
 }
 
 function setup({ user = { username: 'alice', role: 'user', balance: 100 }, ...props } = {}) {
-  const adminFetch = vi.fn(async () => jsonResponse({ code: 0, data: {} }));
+  const adminFetch = vi.fn(async (url) => jsonResponse({
+    code: 0,
+    data: url.endsWith('/wallet') ? { ...user, group_name: 'default', orders: [] } : {},
+  }));
   const handlers = {
     adminFetch,
     showToast: vi.fn(),

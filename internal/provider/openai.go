@@ -174,6 +174,7 @@ func (p *OpenAIProvider) chatCompleteStream(ctx context.Context, req *model.Chat
 	clonedReq := *req
 	clonedReq.Model = targetModel
 	clonedReq.Stream = true
+	clonedReq.StreamOptions = &model.StreamOptions{IncludeUsage: true}
 	stripReasoningContent(clonedReq.Messages)
 
 	payloadBytes, err := json.Marshal(clonedReq)
@@ -261,7 +262,7 @@ func (p *OpenAIProvider) chatCompleteStream(ctx context.Context, req *model.Chat
 			}
 
 			line, err := reader.ReadBytes('\n')
-			if err != nil {
+			if err != nil && !(err == io.EOF && len(line) > 0) {
 				if err != io.EOF {
 					sendEvent(&model.StreamEvent{Err: err})
 					return

@@ -147,8 +147,8 @@ func TestUpdateModelRouteStageMessages(t *testing.T) {
 			name:        "apply failure reports the data plane did not reload",
 			store:       &fakeRouteStore{prices: map[string]*storage.ModelPriceRecord{}},
 			sync:        &fakeRouteSync{err: errors.New("boom")},
-			wantStatus:  http.StatusInternalServerError,
-			wantMessage: "数据面热重载失败: boom",
+			wantStatus:  http.StatusAccepted,
+			wantMessage: "配置已保存，但热加载未完全生效（模型路由）：boom",
 		},
 	}
 
@@ -162,7 +162,21 @@ func TestUpdateModelRouteStageMessages(t *testing.T) {
 			if w.Code != tc.wantStatus {
 				t.Fatalf("status = %d, want %d (body: %s)", w.Code, tc.wantStatus, w.Body.String())
 			}
-			if msg := routeError(t, w); msg != tc.wantMessage {
+			msg := routeError(t, w)
+			if w.Code == http.StatusAccepted {
+				var body struct {
+					Code    int    `json:"code"`
+					Warning string `json:"warning"`
+				}
+				if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+					t.Fatal(err)
+				}
+				if body.Code != 0 {
+					t.Fatalf("committed write code = %d", body.Code)
+				}
+				msg = body.Warning
+			}
+			if msg != tc.wantMessage {
 				t.Errorf("error = %q, want %q", msg, tc.wantMessage)
 			}
 		})

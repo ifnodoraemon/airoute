@@ -249,7 +249,7 @@ export default function ModelRouteModal({
       const data = await res.json();
 
       if (res.ok && data.code === 0) {
-        showToast(isZh ? `模型 [${targetModel}] 路由配置已保存并完成热重载！` : `Model [${targetModel}] route configuration saved and reloaded!`, 'success');
+        showToast(data.warning || (isZh ? `模型 [${targetModel}] 路由配置已保存并完成热重载！` : `Model [${targetModel}] route configuration saved and reloaded!`), data.warning ? 'warning' : 'success');
         onSaveSuccess();
         onClose();
       } else {

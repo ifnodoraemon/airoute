@@ -24,13 +24,7 @@ func writePricingError(c *gin.Context, err error, fallback string) {
 	// The write committed but the in-memory state did not follow. Answering "failed"
 	// would send the operator to re-enter a rate that is already saved; answering
 	// plain success would hide that traffic is still priced by the previous rate.
-	var hot *HotReloadError
-	if errors.As(err, &hot) {
-		c.JSON(http.StatusAccepted, gin.H{
-			"code":    0,
-			"warning": "配置已保存，但热加载未完全生效（" + hot.Stage + "）：" + hot.Err.Error(),
-			"message": "定价已保存，热加载未完全生效",
-		})
+	if writeHotReloadWarning(c, err, nil) {
 		return
 	}
 	if fallback == "" {

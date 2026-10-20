@@ -36,17 +36,9 @@ import { useConsoleData } from './hooks/useConsoleData';
 import { useLogsData, LOG_PAGE_SIZE } from './hooks/useLogsData';
 import { useChannelActions } from './hooks/useChannelActions';
 import { useKeyActions } from './hooks/useKeyActions';
-import { getStoredToken, getStoredUser } from './api/session';
+import { getConsoleRoute } from './lib/consoleRoute';
 
-// Lazy loaded views and heavy modals for code splitting and fast initial bundle loading
-// The tabs that make up the console. Module scope on purpose: as an array literal
-// inside the component it was rebuilt on every render, which made it useless as a
-// dependency and unstable as a memo key.
-const ALL_CONSOLE_TABS = [
-  'dashboard', 'models', 'pricing', 'channels', 'reconciliation',
-  'keys', 'wallet', 'logs', 'skills', 'mcp', 'users', 'playground', 'docs'
-];
-
+// Lazy loaded views and heavy modals for code splitting and fast initial loading.
 const QuickStartModal = lazy(() => import('./components/QuickStartModal'));
 const LogDetailModal = lazy(() => import('./components/LogDetailModal'));
 const CurlExportModal = lazy(() => import('./components/CurlExportModal'));
@@ -102,61 +94,7 @@ export default function App() {
     useUiPreferences({ translations });
   const { toast, showToast, dismissToast } = useToast();
 
-  const getRouteFromURL = useCallback(() => {
-    if (typeof window === 'undefined') return { viewMode: 'landing', tab: 'dashboard', authTab: 'login' };
-    const rawHash = window.location.hash.replace(/^#\/?/, '').trim().toLowerCase();
-    const searchParams = new URLSearchParams(window.location.search);
-    const tabParam = (searchParams.get('tab') || '').toLowerCase();
-    const route = rawHash || tabParam || '';
-    const token = getStoredToken();
-    const savedUser = getStoredUser();
-    let role = 'user';
-    if (savedUser?.role) {
-      role = savedUser.role;
-    } else if (token) {
-      role = 'user';
-    }
-    const defaultTab = role === 'admin' ? 'dashboard' : 'wallet';
-
-    if (route === 'status' || route === 'service-status') {
-      return { viewMode: 'status', tab: defaultTab, authTab: 'login' };
-    }
-
-    if (route === 'auth' || route === 'login') {
-      return { viewMode: 'auth', tab: defaultTab, authTab: 'login' };
-    }
-    if (route === 'register') {
-      return { viewMode: 'auth', tab: defaultTab, authTab: 'register' };
-    }
-
-    if (!route || route === 'landing' || route === 'home' || ['features', 'multimodal'].includes(route)) {
-      return { viewMode: 'landing', tab: defaultTab, authTab: 'login' };
-    }
-
-    if (route === 'console') {
-      if (token) {
-        return { viewMode: 'console', tab: defaultTab, authTab: 'login' };
-      } else {
-        return { viewMode: 'auth', tab: defaultTab, authTab: 'login' };
-      }
-    }
-
-    if (ALL_CONSOLE_TABS.includes(route)) {
-      if (token) {
-        const adminOnlyTabs = ['channels', 'reconciliation', 'users', 'skills', 'mcp', 'dashboard'];
-        if (role !== 'admin' && adminOnlyTabs.includes(route)) {
-          return { viewMode: 'console', tab: 'wallet', authTab: 'login' };
-        }
-        return { viewMode: 'console', tab: route, authTab: 'login' };
-      } else {
-        return { viewMode: 'landing', tab: defaultTab, authTab: 'login' };
-      }
-    }
-
-    return { viewMode: 'landing', tab: defaultTab, authTab: 'login' };
-  }, []);
-
-  const initialRoute = getRouteFromURL();
+  const initialRoute = getConsoleRoute(window.location);
 
   // View mode: 'landing' (公共门户首页), 'console' (工作台), 'status' (对外状态页), 'auth' (认证页)
   // The session state machine. App supplies the UI reaction to each transition
@@ -167,6 +105,9 @@ export default function App() {
     adminUser,
     authTab,
     credentialToken,
+    restoringSession,
+    getSessionGeneration,
+    finishSessionRestore,
     setViewMode,
     setAuthTab,
     signIn,
@@ -230,7 +171,12 @@ export default function App() {
 
   // Restore the browser session from the HttpOnly cookie instead of trusting
   // a long-lived token in localStorage.
-  useSessionRestore({ onRestored: handleSessionRestored, onExpired: handleSessionExpired });
+  useSessionRestore({
+    onRestored: handleSessionRestored,
+    onExpired: handleSessionExpired,
+    onSettled: finishSessionRestore,
+    getSessionGeneration,
+  });
 
   // Query gateway public status to resolve canonical external gateway URL
   useEffect(() => {
@@ -323,7 +269,7 @@ export default function App() {
   // be a pair of closures defined in this component (adminFetch/adminJSON) that
   // every view had to receive through props; the props below are kept so existing
   // views retain their contract.
-  useApiSession({ token: adminToken, onUnauthorized: handleUnauthorized });
+  useApiSession({ token: adminToken, onUnauthorized: handleUnauthorized, getSessionGeneration });
 
   // Clear every piece of tenant-scoped data so a following session (or React
   // DevTools) cannot observe the previous account's channels, keys or logs.
@@ -359,12 +305,15 @@ export default function App() {
 
   const fetchUserProfile = async () => {
     // The marker is not a credential; the hook strips it.
-    const tok = credentialToken || getStoredToken();
+    const tok = credentialToken;
+    const generation = getSessionGeneration();
     try {
       const res = await fetch('/api/v1/user/me', {
-        headers: { 'Authorization': `Bearer ${tok}` }
+        headers: tok ? { Authorization: `Bearer ${tok}` } : {},
+        credentials: 'same-origin'
       });
       const data = await res.json();
+      if (generation !== getSessionGeneration()) return;
       if (res.ok && data.code === 0 && data.data) {
         refreshUser(data.data, { token: tok });
       } else if (res.status === 401) {
@@ -390,8 +339,13 @@ export default function App() {
     expandSidebar,
   } = useConsoleChrome({ initialTab: initialRoute.tab });
 
+  const getRouteFromURL = useCallback(() => getConsoleRoute(window.location, {
+    pending: restoringSession, user: adminUser, token: adminToken,
+  }), [restoringSession, adminUser, adminToken]);
+
   // Synchronize browser address bar URL hash with active view and tab
   useEffect(() => {
+    if (restoringSession) return;
     let targetHash = '';
     if (viewMode === 'landing') {
       if (window.location.hash && window.location.hash !== '#/' && window.location.hash !== '#/landing') {
@@ -411,7 +365,7 @@ export default function App() {
     if (targetHash && window.location.hash !== targetHash) {
       window.history.replaceState(null, '', targetHash);
     }
-  }, [viewMode, currentTab, authTab, setCurrentTab, setAuthTab]);
+  }, [viewMode, currentTab, authTab, setCurrentTab, setAuthTab, restoringSession]);
 
   // Browser Back / Forward. Defined at component scope rather than inside the
   // effect so it can be memoised: a hook may not be called from within a callback.
@@ -439,13 +393,13 @@ export default function App() {
   // 'pricing' stays (GET /admin/pricing is available to any authenticated key
   // owner) but its write actions are hidden for non-admins.
   useEffect(() => {
-    if (adminUser && adminUser.role !== 'admin') {
+    if (!restoringSession && adminUser && adminUser.role !== 'admin') {
       const allowedTabs = ['wallet', 'keys', 'playground', 'pricing', 'logs', 'docs'];
       if (!allowedTabs.includes(currentTab)) {
         setCurrentTab('wallet');
       }
     }
-  }, [adminUser, currentTab, setCurrentTab]);
+  }, [adminUser, currentTab, setCurrentTab, restoringSession]);
 
   // The console's tenant-scoped data and its loader live in one hook. The loader
   // is aliased to fetchData so the twenty-odd existing call sites — including the
@@ -499,6 +453,7 @@ export default function App() {
     logTotal,
     logOffset,
     logLoading,
+    logFacets,
     fetchLogs,
     fetchAllLogsForExport,
     goToOffset,
@@ -555,9 +510,8 @@ export default function App() {
   // Bounded so a pathological filter cannot pull an unbounded result set.
 
   useEffect(() => {
-    if (!adminToken || viewMode !== 'console') return;
+    if (restoringSession || !adminToken || viewMode !== 'console') return;
     fetchData();
-    fetchLogs();
     const interval = setInterval(() => {
       fetchData();
       // The dashboard aggregates its stats from logs, so it needs them refreshed
@@ -570,26 +524,19 @@ export default function App() {
     return () => clearInterval(interval);
     // timeRange/sessionFilter are dependencies so the polling closure always
     // reads the current filters instead of the ones present at mount time.
-  }, [currentTab, adminToken, viewMode, timeRange, sessionFilter, fetchData, fetchLogs]);
+  }, [currentTab, adminToken, viewMode, timeRange, sessionFilter, fetchData, fetchLogs, restoringSession]);
 
+  // One owner for filter-driven loads. Debouncing also prevents a click and
+  // several effects from issuing competing copies of the same query.
   useEffect(() => {
-    if (currentTab === 'logs' || currentTab === 'dashboard') {
-      resetOffset();
-      fetchLogs({ offset: 0 });
-    }
-  }, [currentTab, timeRange, sessionFilter, fetchLogs, resetOffset]);
-
-  // Keyword / facet changes are filtered on the server, so they must trigger a
-  // refetch (debounced to avoid a request per keystroke).
-  useEffect(() => {
-    if (currentTab !== 'logs' && currentTab !== 'dashboard') return undefined;
+    if (restoringSession || !adminToken || viewMode !== 'console' ||
+        (currentTab !== 'logs' && currentTab !== 'dashboard')) return undefined;
     const timer = setTimeout(() => {
       resetOffset();
-      fetchLogs({ offset: 0, q: logFilters.q });
+      fetchLogs({ offset: 0 });
     }, 350);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [logFilters.q, logFilters.model, logFilters.channel, logFilters.status, logFilters.cache, logFilters.latency]);
+  }, [logFilters, currentTab, viewMode, fetchLogs, resetOffset, restoringSession, adminToken]);
 
   // Server-side pagination for audit logs (offset-based, page size above).
   const handleLogPageChange = (newOffset) => {
@@ -622,6 +569,8 @@ export default function App() {
   // result set. Re-filtering here would be wrong (it would hide rows the server
   // matched on fields the client does not check, e.g. error_message).
   const filteredLogs = logs;
+
+  if (restoringSession && viewMode === 'console') return <ViewLoader />;
 
   if (viewMode === 'landing') {
     return (
@@ -1328,6 +1277,7 @@ export default function App() {
             </button>
 
             {/* Visual Topology Modal Trigger */}
+            {adminUser?.role === 'admin' && (
             <button
               onClick={() => setShowTopologyModal(true)}
               className="hidden sm:flex text-xs px-3 py-1.5 rounded-lg bg-white dark:bg-[#0F1420] hover:bg-slate-50 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 font-medium items-center space-x-1.5 transition border border-slate-200/70 dark:border-slate-800/80 shadow-sm cursor-pointer"
@@ -1336,6 +1286,7 @@ export default function App() {
               <Layers className="w-3.5 h-3.5 text-slate-400" />
               <span>{isZh ? '容灾拓扑' : 'Topology'}</span>
             </button>
+            )}
 
             {/* Theme Toggle Button */}
             <button
@@ -1439,6 +1390,11 @@ export default function App() {
             {currentTab === 'dashboard' && (
               <DashboardView
                 stats={stats}
+                onNavigateToErrors={() => {
+                  setLogFilters({ q: '', range: 'all', start: '', end: '', session: '', model: 'all', channel: 'all', status: 'error', cache: 'all', latency: 'all' });
+                  resetOffset();
+                  setCurrentTab('logs');
+                }}
                 channels={channels}
                 logs={logs}
                 channelLatencies={channelLatencies}
@@ -1565,6 +1521,7 @@ export default function App() {
                 logFilter={logFilter}
                 setLogFilter={setLogFilter}
                 logFilters={logFilters}
+                logFacets={logFacets}
                 setLogFilters={setLogFilters}
                 fetchLogs={fetchLogs}
                 logLoading={logLoading}
@@ -1758,14 +1715,16 @@ export default function App() {
 
         {/* Visual Routing Topology & Failover Modal */}
         <VisualTopologyModal
-          isOpen={showTopologyModal}
+          isOpen={showTopologyModal && adminUser?.role === 'admin'}
           onClose={() => setShowTopologyModal(false)}
-          channels={channels}
-          modelRoutes={modelRoutes}
-          onTestChannel={handleTestChannel}
-          showToast={showToast}
+          adminFetch={apiFetch}
+          onViewLogs={(model, trace = '') => {
+            setLogFilters({ q: trace, range: 'all', start: '', end: '', session: '', model, channel: 'all', status: 'all', cache: 'all', latency: 'all' });
+            resetOffset();
+            setCurrentTab('logs');
+          }}
+          onManageRoutes={() => setCurrentTab('models')}
           lang={lang}
-          t={t}
         />
 
         {/* Redacted request/response snapshots for a trace id */}

@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import LogsView from './LogsView';
 
 // LogsView is the audit table. Two things here are worth pinning: the filters are
-// applied client-side to the page the server returned, and the pagination guard
+// applied by the server, facets cover the whole history, and the pagination guard
 // has to work whether or not the gateway reported a total.
 
 function log(over = {}) {
@@ -130,73 +130,25 @@ describe('LogsView', () => {
     });
   });
 
-  describe('client-side filters', () => {
-    const rows = [
-      log({ id: 1, model: 'gpt-6', channel: 'c1', status_code: 200 }),
-      log({ id: 2, model: 'claude-5', channel: 'c2', status_code: 500, error_message: 'boom' }),
-      log({ id: 3, model: 'gpt-6', channel: 'c2', status_code: 429, error_message: 'rate' }),
-    ];
-
-    it('shows every row when no filter is applied', () => {
-      setup({ filteredLogs: rows, logsLength: 3 });
-
-      expect(screen.getByText(/本页 3 条/)).toBeInTheDocument();
+  it('renders the server page without applying a conflicting latency filter', () => {
+    setup({
+      filteredLogs: [log({ duration_ms: 800 })], logsLength: 1,
+      logFilters: { model: 'all', channel: 'all', status: 'all', cache: 'all', latency: 'fast' },
     });
-
-    it('filters to failures only', () => {
-      setup({
-        filteredLogs: rows, logsLength: 3,
-        logFilters: { q: '', range: 'all', start: '', end: '', session: '', model: 'all', channel: 'all', status: 'error', cache: 'all', latency: 'all' },
-      });
-
-      expect(screen.getByText(/本页 2 条/)).toBeInTheDocument();
-    });
-
-    it('filters to successes only', () => {
-      setup({
-        filteredLogs: rows, logsLength: 3,
-        logFilters: { q: '', range: 'all', start: '', end: '', session: '', model: 'all', channel: 'all', status: 'success', cache: 'all', latency: 'all' },
-      });
-
-      expect(screen.getByText(/本页 1 条/)).toBeInTheDocument();
-    });
-
-    it('treats a row with an error message as a failure even on a 2xx', () => {
-      setup({
-        filteredLogs: [log({ id: 1, status_code: 200, error_message: 'upstream reset' })], logsLength: 1,
-        logFilters: { q: '', range: 'all', start: '', end: '', session: '', model: 'all', channel: 'all', status: 'success', cache: 'all', latency: 'all' },
-      });
-
-      expect(screen.getByText(/本页 0 条/)).toBeInTheDocument();
-    });
-
-    it('filters by cache hits', () => {
-      setup({
-        filteredLogs: [log({ id: 1, cached_tokens: 100 }), log({ id: 2, cached_tokens: 0 })], logsLength: 2,
-        logFilters: { q: '', range: 'all', start: '', end: '', session: '', model: 'all', channel: 'all', status: 'all', cache: 'cached', latency: 'all' },
-      });
-
-      expect(screen.getByText(/本页 1 条/)).toBeInTheDocument();
-    });
-
-    it('filters by channel', () => {
-      setup({
-        filteredLogs: rows, logsLength: 3,
-        logFilters: { q: '', range: 'all', start: '', end: '', session: '', model: 'all', channel: 'c2', status: 'all', cache: 'all', latency: 'all' },
-      });
-
-      expect(screen.getByText(/本页 2 条/)).toBeInTheDocument();
-    });
+    expect(screen.getByText(/本页 1 条/)).toBeInTheDocument();
   });
 
-  it('offers the models it saw as filter options', () => {
-    setup({ filteredLogs: [log({ id: 1, model: 'gpt-6' }), log({ id: 2, model: 'claude-5' })], logsLength: 2 });
+  it('offers global models and channels even when the current page is empty', () => {
+    setup({ filteredLogs: [], logFacets: { models: ['gpt-6', 'claude-5'], channels: ['old-gpustack', 'new-channel'] } });
     fireEvent.click(screen.getByRole('button', { name: /更多筛选/ }));
-
-    // The facet list is derived from the loaded page.
     const options = screen.getAllByRole('option').map((o) => o.textContent);
-    expect(options).toContain('gpt-6');
-    expect(options).toContain('claude-5');
+    expect(options).toEqual(expect.arrayContaining(['gpt-6', 'claude-5', 'old-gpustack', 'new-channel']));
+  });
+
+  it('keeps a selected channel visible when no logs match', () => {
+    setup({ logFilters: { model: 'all', channel: 'deleted-provider', status: 'error', cache: 'all', latency: 'all' } });
+    fireEvent.click(screen.getByRole('button', { name: /更多筛选/ }));
+    expect(screen.getByRole('option', { name: 'deleted-provider' }).selected).toBe(true);
   });
 
   it('keeps the filter panel collapsed until it is asked for', () => {

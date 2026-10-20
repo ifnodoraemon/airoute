@@ -313,6 +313,35 @@ describe('useLogsData in-flight invalidation', () => {
     vi.unstubAllGlobals();
   });
 
+  it('keeps the newest page and its global facets when requests complete out of order', async () => {
+    const resolve = [];
+    globalThis.fetch.mockImplementation(() => new Promise((done) => resolve.push(done)));
+    const { result } = renderHook(() => useLogsData({ filters: filters() }));
+    let older, newer;
+    act(() => { older = result.current.fetchLogs({ offset: 0 }); });
+    act(() => { newer = result.current.fetchLogs({ offset: 50 }); });
+    await act(async () => {
+      resolve[1]({ ok: true, json: async () => ({ code: 0, data: [{ id: 51 }], total: 100, facets: { models: ['m'], channels: ['historic'] } }) });
+      await newer;
+    });
+    await act(async () => { resolve[0](logResponse([{ id: 1 }], 100)); await older; });
+    expect(result.current.logOffset).toBe(50);
+    expect(result.current.logs).toEqual([{ id: 51 }]);
+    expect(result.current.logFacets.channels).toEqual(['historic']);
+  });
+
+  it('does not clear the newer request loading state when an older request finishes', async () => {
+    const resolve = [];
+    globalThis.fetch.mockImplementation(() => new Promise((done) => resolve.push(done)));
+    const { result } = renderHook(() => useLogsData({ filters: filters() }));
+    let older, newer;
+    act(() => { older = result.current.fetchLogs(); newer = result.current.fetchLogs({ offset: 50 }); });
+    await act(async () => { resolve[0](logResponse([], 0)); await older; });
+    expect(result.current.logLoading).toBe(true);
+    await act(async () => { resolve[1](logResponse([{ id: 51 }], 100)); await newer; });
+    expect(result.current.logLoading).toBe(false);
+  });
+
   it('does not write back audit rows that arrived after a reset', async () => {
     let release;
     const gate = new Promise((resolve) => {
