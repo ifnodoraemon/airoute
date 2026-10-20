@@ -1,20 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  DollarSign,
-  Sparkles,
   Plus,
   RefreshCw,
-  Edit3,
   Trash2,
   AlertCircle,
-  Clock,
   Moon,
-  Sun,
   X,
-  Check,
   CheckCircle2,
   Calendar,
-  Zap,
+  Clock,
   Info,
   ArrowRight
 } from 'lucide-react';
@@ -145,6 +139,9 @@ export default function PricingManager({
   const [showModal, setShowModal] = useState(false);
   useModalA11y(showModal, () => setShowModal(false));
   const [editingPrice, setEditingPrice] = useState(null);
+  // The gateway reports its own clock because off-peak windows are evaluated in
+  // the gateway's time zone, not the browser's. The header renders these next to
+  // the rate table so "off-peak active" is interpretable.
   const [serverTime, setServerTime] = useState('');
   const [serverWeekday, setServerWeekday] = useState('');
   const [isWeekend, setIsWeekend] = useState(false);
@@ -170,7 +167,10 @@ export default function PricingManager({
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
-  const fetchPrices = async () => {
+  // Wrapped so the mount effect can depend on it without re-running every render.
+  // Its own dependencies are the props it reads, all of which are stable in
+  // practice: the parent passes a module-level fetch and a memoised toast.
+  const fetchPrices = useCallback(async () => {
     setLoading(true);
     try {
       const [res, modelsRes] = await Promise.all([
@@ -198,7 +198,7 @@ export default function PricingManager({
     } finally {
       setLoading(false);
     }
-  };
+  }, [adminFetch, showToast, isZh]);
 
   const availableGroups = React.useMemo(() => {
     const set = new Set(['default']);
@@ -287,7 +287,7 @@ export default function PricingManager({
 
   useEffect(() => {
     fetchPrices();
-  }, []);
+  }, [fetchPrices]);
 
   const handleOpenAdd = () => {
     setEditingPrice(null);
@@ -632,6 +632,19 @@ export default function PricingManager({
           </div>
         )}
 
+        {(serverTime || serverWeekday) && (
+          <div className="mb-4 flex items-center space-x-2 text-xs text-slate-500 dark:text-slate-400">
+            <Clock className="w-3.5 h-3.5" />
+            <span>
+              {isZh ? '计费服务器时间' : 'Billing server time'}: {serverWeekday} {serverTime}
+              {isWeekend ? (isZh ? '（周末）' : ' (weekend)') : ''}
+            </span>
+            <span className="text-slate-400 dark:text-slate-600">
+              {isZh ? '离峰判定以服务器时区为准' : 'Off-peak is judged in the server time zone'}
+            </span>
+          </div>
+        )}
+
         {unroutedPrices.length > 0 && (
           <div className="mb-4 p-3 rounded-xl border border-indigo-200/80 dark:border-indigo-800/60 bg-indigo-50/70 dark:bg-indigo-950/30 flex items-center justify-between text-xs animate-in fade-in">
             <div className="flex items-center space-x-2 text-indigo-950 dark:text-indigo-200 min-w-0">
@@ -935,6 +948,29 @@ export default function PricingManager({
                     <option key={m} value={m} />
                   ))}
                 </datalist>
+                {/* The placeholder promised "click below to select", but no such row
+                    existed: handleSelectModelCandidate was written and never wired.
+                    It prefills a rate that suits the model's kind, which is the
+                    part an operator cannot guess. */}
+                {!editingPrice && unpricedModels.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {unpricedModels.slice(0, 8).map(m => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => handleSelectModelCandidate(m)}
+                        className={`px-2 py-1 rounded-lg text-xs font-mono border transition cursor-pointer ${
+                          formData.model === m
+                            ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700'
+                            : 'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
+                        }`}
+                        title={isZh ? '按模型类型预填建议费率' : 'Prefill a suggested rate for this model kind'}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Field: User Group Tier */}

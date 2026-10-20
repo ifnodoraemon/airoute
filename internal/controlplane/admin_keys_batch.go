@@ -8,37 +8,15 @@ import (
 )
 
 // filterAuthorizedKeyIDs scopes batch operations to keys owned by the current non-admin user.
+//
+// The scoping rule lives in KeyAccessRules; this only renders its decision.
 func (h *AdminHandler) filterAuthorizedKeyIDs(c *gin.Context, requestedIDs []int64) ([]int64, bool) {
-	claims, ok := GetClaimsFromContext(c)
-	if !ok || claims.Role == "admin" {
-		return requestedIDs, true
-	}
-
-	user, _ := h.repo.GetUserByUsername(claims.Username)
-	if user == nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "用户不存在"})
+	ids, access := h.keyAccess.FilterAuthorizedIDs(currentKeyClaims(c), requestedIDs)
+	if !access.Allowed {
+		writeKeyAccessDenial(c, access)
 		return nil, false
 	}
-	userKeys, err := h.repo.ListAPIKeysByUser(user.ID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return nil, false
-	}
-	allowedMap := make(map[int64]bool, len(userKeys))
-	for _, k := range userKeys {
-		allowedMap[k.ID] = true
-	}
-	var filteredIDs []int64
-	for _, id := range requestedIDs {
-		if allowedMap[id] {
-			filteredIDs = append(filteredIDs, id)
-		}
-	}
-	if len(filteredIDs) == 0 {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权操作所选密钥"})
-		return nil, false
-	}
-	return filteredIDs, true
+	return ids, true
 }
 
 // BatchDeleteAPIKeys deletes multiple API keys.

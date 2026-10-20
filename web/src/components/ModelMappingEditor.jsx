@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ArrowRight, Plus, X, GitMerge, ChevronDown, ChevronUp } from 'lucide-react';
 
 let idCounter = 0;

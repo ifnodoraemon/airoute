@@ -1,8 +1,7 @@
 import { toCSV } from '../config';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   DollarSign,
-  Coins,
   Download,
   RefreshCw,
   Search,
@@ -12,13 +11,10 @@ import {
   Calendar,
   Server,
   Activity,
-  CheckCircle2,
-  AlertCircle,
   Clock,
   Sparkles,
   Layers,
   Cpu,
-  ArrowRight,
   Filter,
   X,
   RotateCcw
@@ -44,7 +40,7 @@ export default function SupplierReconciliationView({
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedSuppliers, setExpandedSuppliers] = useState({});
 
-  const getTimeRangeDates = (preset) => {
+  const getTimeRangeDates = useCallback((preset) => {
     const now = new Date();
     const pad = (n) => String(n).padStart(2, '0');
     const format = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
@@ -70,9 +66,9 @@ export default function SupplierReconciliationView({
       return { start: customStart, end: customEnd };
     }
     return { start: '', end: '' };
-  };
+  }, [customStart, customEnd]);
 
-  const fetchReconciliation = async () => {
+  const fetchReconciliation = useCallback(async () => {
     setLoading(true);
     try {
       const range = getTimeRangeDates(timePreset);
@@ -94,11 +90,11 @@ export default function SupplierReconciliationView({
     } finally {
       setLoading(false);
     }
-  };
+  }, [adminFetch, showToast, isZh, getTimeRangeDates, timePreset, channelFilter, modelFilter]);
 
   useEffect(() => {
     fetchReconciliation();
-  }, [timePreset, channelFilter, modelFilter]);
+  }, [fetchReconciliation, timePreset, channelFilter, modelFilter]);
 
   const toggleExpand = (channelName) => {
     setExpandedSuppliers(prev => ({

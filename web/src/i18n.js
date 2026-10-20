@@ -1,7 +1,7 @@
 // Internationalization (i18n) Dictionary & Context for Airoute
 // Clean, professional, product-first terminology for both Chinese and English
 
-import React, { createContext } from 'react';
+import { createContext } from 'react';
 
 export const translations = {
   zh: {

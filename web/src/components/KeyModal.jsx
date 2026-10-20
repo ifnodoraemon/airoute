@@ -1,4 +1,3 @@
-import React from 'react';
 import { X, Loader2 } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
 import useFormDirty from '../hooks/useFormDirty';

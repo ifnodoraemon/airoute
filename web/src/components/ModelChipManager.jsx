@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Tag, Plus, X, Trash2, List, Grid, Search } from 'lucide-react';
 
 export default function ModelChipManager({ models = [], onChange, lang = 'zh' }) {
@@ -17,7 +17,12 @@ export default function ModelChipManager({ models = [], onChange, lang = 'zh' })
   // Sync rawText with modelList when not editing in text mode
   useEffect(() => {
     if (!isTextMode) {
-      setRawText(modelList.join('\n'));
+      // Derived here rather than read from modelList: that value is rebuilt on
+      // every render, so depending on it would loop.
+      const list = Array.isArray(models)
+        ? models
+        : (typeof models === 'string' ? models.split(',').map(s => s.trim()).filter(Boolean) : []);
+      setRawText(list.join('\n'));
     }
   }, [models, isTextMode]);
 

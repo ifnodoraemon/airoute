@@ -142,3 +142,79 @@ docker exec airoute-1 /app/airoute skills list
      go test -count=1 ./...
      ```
    - 严禁提交任何会导致 `go test` 报错或带有未解决并发数据竞争（Data Race）的代码。
+
+### 5.1 本地门禁（与 CI 同源）
+
+`.github/workflows/quality-gate.yml` 是"什么算通过"的**唯一定义**，`ci.yml` / `docker.yml` / `release.yml` 都复用它。本地对应命令：
+
+```bash
+# Go 侧：竞态检测 + 全量测试（CI 使用 -race，本地也应如此）
+go test -race -count=1 ./...
+
+# 真实 PostgreSQL / Redis 集群路径（需要容器，未配置 DSN 时自动跳过）
+make test-integration
+
+# 前端：lint（带告警基线）+ 单元/组件测试 + 构建
+cd web && npm run lint && npm run test && npm run build
+```
+
+**顺序有依赖**：Go 编译经由 `web/web.go` 的 `//go:embed dist/*` 传递依赖前端产物，因此必须先构建前端。`make build` / `make test` 已自动处理；直接调用 `go build` 的脚本需要自行先跑 `make build-web`。
+
+### 5.2 集成测试必须进真实集群路径
+
+仅靠内存实现（SQLite + 本地缓存）无法覆盖 PostgreSQL 方言分支、`FOR UPDATE` 行锁语义与 Redis 广播路径。凡涉及这些分支的改动，必须在 `-tags=integration` 下验证：
+
+```bash
+AIROUTE_TEST_DATABASE_URL='postgres://...' \
+AIROUTE_TEST_REDIS_URL='redis://...' \
+go test -race -tags=integration ./internal/storage/ ./internal/distributed/
+```
+
+**未配置 DSN 时集成测试会静默跳过**，因此"本地全绿"不等于"集成路径已验证"——改动相关代码时必须显式提供 DSN。
+
+### 5.3 变异测试：证明测试真的能失败
+
+新增或修改测试后，必须**故意把被测代码改坏**，确认测试失败，再恢复并校验源文件字节一致：
+
+```bash
+cp file.go /tmp/file.bak
+# ... 应用变异 ...
+go test -run TestX ./...        # 必须失败
+cp /tmp/file.bak file.go
+sha256sum -c <<< "$(sha256sum file.go)"
+```
+
+要求：
+
+- 变异必须**确实应用成功**（用断言或先确认代码已改），否则"测试通过"是假象。
+- 变异应命中**该测试声称守护的那条性质**，而不是顺带触发别的失败。
+- 安全规则（鉴权、租户隔离、额度）必须做 **fail-open 变异**：让规则放行所有调用者，确认测试能捕获。
+
+### 5.4 契约测试：把线协议钉死
+
+请求/响应结构体的 JSON 字段名是**对外契约**，用反射做机器可校验的清单（见 `internal/controlplane/contract_test.go`）：
+
+- 管理端请求体不得直接绑定数据库 Record（客户端可注入 `id` / `created_at` / `used_cost` 等输出专用列）。
+- 前端读取的字段名必须与后端发送的一致。历史上 `PricingManager` 读 `is_currently_off_peak` 而后端发 `is_current_off_peak`，导致离峰折扣列**永远显示原价**且无任何报错。
+- 改名任一侧都必须同时改另一侧，且两侧各有测试守护。
+
+### 5.5 前端告警基线（棘轮，非目标）
+
+前端 lint 采用**棘轮**策略：`eslint src --max-warnings N`，N 为当前基线，只允许下降。
+
+- 基线只能**收紧**，不得上调。
+- 新增告警会直接使门禁失败——这是刻意设计。
+- 现存告警是**待办清单**，不是可忽略的噪声。清理前先确认它代表的是死代码还是**未接完的功能**；后者应补全而非删除。
+
+JSX 中的标识符引用由 `react/jsx-uses-vars` 识别。缺少该规则会让每个仅用于渲染的组件都被误报为未使用变量（曾产生 448 条误报）。
+
+### 5.6 并发与数据竞争
+
+- 任何涉及共享状态的改动必须以 `-race` 验证。
+- 跨事务的"读取—修改—写入"必须收进单个事务（参见 `PatchChannel`、`ApplyModelRouteBundle`）：事务外的读取会让并发编辑被静默回滚。
+- 新增跨进程共享状态时，补充**真实并发写入者**的测试，而非只测串行路径。
+
+### 5.7 注释必须与实现一致
+
+审查中反复发现注释描述的行为与实际代码不符（例如声称"Up 与版本记录在同一事务提交"而实际是两条独立语句；声称"清除每项租户数据"而漏清三项）。**注释是契约的一部分**：改动行为时必须同步注释，发现不符的注释应按缺陷处理。
+

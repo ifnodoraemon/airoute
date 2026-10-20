@@ -1,29 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Layers,
   Cpu,
   Shield,
   ShieldAlert,
-  Sliders,
-  Sparkles,
   ArrowRight,
   RefreshCw,
   Search,
   Check,
   Copy,
   Zap,
-  Clock,
-  MessageSquare,
-  Image as ImageIcon,
-  Volume2,
-  Mic,
-  Video,
-  Database,
-  Terminal,
-  Activity,
   Plus,
   Trash2,
-  DollarSign,
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
@@ -83,7 +70,7 @@ export default function ModelRoutesManager({
     }
   };
 
-  const fetchModelRoutes = async () => {
+  const fetchModelRoutes = useCallback(async () => {
     // /admin/models/routes and /admin/channels are admin-only. Calling them as a
     // regular user produced a wall of permission errors instead of a clear
     // message, so fail fast with an explanation.
@@ -119,7 +106,7 @@ export default function ModelRoutesManager({
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAdmin, adminFetch, showToast, isZh]);
 
   const handleDeleteRoute = async (modelName) => {
     if (!window.confirm(isZh ? `确定删除模型 [${modelName}] 路由配置及其服务商绑定？` : `Delete route config and provider bindings for [${modelName}]?`)) {
@@ -188,7 +175,7 @@ export default function ModelRoutesManager({
 
   useEffect(() => {
     fetchModelRoutes();
-  }, []);
+  }, [fetchModelRoutes]);
 
   const handleProbeRoute = async (modelName) => {
     setProbingModel(modelName);

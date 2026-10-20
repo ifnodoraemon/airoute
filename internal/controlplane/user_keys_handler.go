@@ -1,14 +1,10 @@
 package controlplane
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
 // ListUserKeys returns API keys owned by current user.
@@ -58,47 +54,13 @@ func (h *AdminHandler) CreateUserKey(c *gin.Context) {
 	var req CreateUserKeyRequest
 	_ = c.ShouldBindJSON(&req)
 
-	if len(req.AllowedModels) == 0 {
-		req.AllowedModels = []string{"*"}
-	}
-	rpm := req.RPM
-	if rpm < 0 {
-		rpm = 0
-	}
-	tenantID := strings.TrimSpace(req.TenantID)
-	if tenantID == "" {
-		tenantID = strings.TrimSpace(req.Name)
-	}
-	if tenantID == "" {
-		tenantID = user.Username
-	}
-	budget := req.Budget
-	if budget < 0 {
-		budget = 0
-	}
-	tpm := req.TPM
-	if tpm <= 0 {
-		tpm = 100000
-	}
-
-	keyBytes := make([]byte, 16)
-	if _, err := rand.Read(keyBytes); err != nil {
+	newKey, err := GenerateAPIKey()
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "安全随机源不可用，无法生成密钥"})
 		return
 	}
-	newKey := "sk-airoute-" + hex.EncodeToString(keyBytes)
 
-	rec := &storage.APIKeyRecord{
-		Key:           newKey,
-		TenantID:      tenantID,
-		UserID:        user.ID,
-		GroupName:     user.GroupName,
-		AllowedModels: req.AllowedModels,
-		RPM:           rpm,
-		TPM:           tpm,
-		Budget:        budget,
-		Status:        "active",
-	}
+	rec := PlanUserKey(user, req, newKey)
 
 	if err := h.repo.CreateAPIKey(rec); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "创建 API 密钥失败: " + err.Error()})

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X, RefreshCw, AlertTriangle } from 'lucide-react';
 
 // TraceSnapshotModal shows the redacted request/response snapshot archived for a

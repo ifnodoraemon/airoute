@@ -2,7 +2,6 @@ package controlplane
 
 import (
 	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -225,13 +224,13 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 		}
 
 		// Create default API key
-		keyBytes := make([]byte, 16)
-		if _, err := rand.Read(keyBytes); err != nil {
+		newKey, err := GenerateAPIKey()
+		if err != nil {
 			h.oauthError(c, http.StatusInternalServerError, "安全随机源不可用，无法生成密钥")
 			return
 		}
 		_ = h.repo.CreateAPIKey(&storage.APIKeyRecord{
-			Key:           "sk-airoute-" + hex.EncodeToString(keyBytes),
+			Key:           newKey,
 			TenantID:      username,
 			UserID:        user.ID,
 			GroupName:     "default",

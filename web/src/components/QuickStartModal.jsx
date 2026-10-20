@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, Copy, Check, Terminal, Code, Cpu, Sparkles, BookOpen } from 'lucide-react';
 import { getGatewayOrigin } from '../config';
 import useModalA11y from '../hooks/useModalA11y';

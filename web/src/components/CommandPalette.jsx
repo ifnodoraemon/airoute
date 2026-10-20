@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Search,
-  ArrowRight,
   BarChart3,
   History,
   Cpu,
@@ -11,9 +10,7 @@ import {
   ShieldCheck,
   Wallet,
   Terminal,
-  Bot,
   Plus,
-  RefreshCw,
   Globe,
   LogOut,
   ExternalLink,

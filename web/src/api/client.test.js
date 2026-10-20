@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { apiFetch, apiJSON, configureApiClient, resetApiClient } from './client';
+import { apiFetch, apiJSON, configureApiClient, resetApiClient, extractErrorMessage } from './client';
 import { SESSION_MARKER } from './session';
 
 function jsonResponse(body, { status = 200, ok } = {}) {
@@ -188,5 +188,60 @@ describe('apiJSON', () => {
 
     await expect(apiJSON('/api/v1/admin/keys')).rejects.toThrow('unauthorized');
     expect(unauthorized).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces the message from the data plane error shape', async () => {
+    // Auth and rate-limit middleware answer with the OpenAI-style object. Reading
+    // data.error as a string rendered "[object Object]" and hid the explanation.
+    globalThis.fetch.mockResolvedValue(jsonResponse({
+      error: { message: 'Incorrect or unauthorized API key provided.', type: 'authentication_error', code: 'invalid_api_key' },
+    }, { status: 401 }));
+
+    await expect(apiJSON('/v1/models')).rejects.toThrow('Incorrect or unauthorized API key provided.');
+  });
+
+  it('surfaces the data plane message for a non-zero envelope code too', async () => {
+    globalThis.fetch.mockResolvedValue(jsonResponse({
+      code: 429,
+      error: { message: 'Rate limit exceeded', type: 'rate_limit_error', code: 'rate_limited' },
+    }));
+
+    await expect(apiJSON('/v1/models')).rejects.toThrow('Rate limit exceeded');
+  });
+
+  it('falls back to the status when the body carries no usable message', async () => {
+    globalThis.fetch.mockResolvedValue(jsonResponse({ error: { type: 'x' } }, { status: 502 }));
+
+    await expect(apiJSON('/v1/models')).rejects.toThrow('HTTP 502');
+  });
+});
+
+describe('extractErrorMessage', () => {
+  it('reads the admin string shape', () => {
+    expect(extractErrorMessage({ error: '保存失败' }, 'fallback')).toBe('保存失败');
+  });
+
+  it('reads the data plane object shape', () => {
+    expect(extractErrorMessage({ error: { message: 'rate limited', type: 't', code: 'c' } }, 'fallback'))
+      .toBe('rate limited');
+  });
+
+  it('reads a top-level message', () => {
+    expect(extractErrorMessage({ message: 'plain' }, 'fallback')).toBe('plain');
+  });
+
+  it('never renders an object', () => {
+    // The regression this guards: an object without a usable message used to be
+    // stringified into "[object Object]".
+    const got = extractErrorMessage({ error: { type: 'authentication_error' } }, 'HTTP 401');
+    expect(got).toBe('HTTP 401');
+    expect(got).not.toContain('[object');
+  });
+
+  it('falls back for a null body, an empty object and blank strings', () => {
+    expect(extractErrorMessage(null, 'HTTP 500')).toBe('HTTP 500');
+    expect(extractErrorMessage({}, 'HTTP 500')).toBe('HTTP 500');
+    expect(extractErrorMessage({ error: '' }, 'HTTP 500')).toBe('HTTP 500');
+    expect(extractErrorMessage({ error: { message: '' } }, 'HTTP 500')).toBe('HTTP 500');
   });
 });

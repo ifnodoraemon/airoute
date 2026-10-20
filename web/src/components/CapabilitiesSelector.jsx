@@ -1,4 +1,3 @@
-import React from 'react';
 import { Layers, MessageSquare, Zap, Terminal, Sparkles, Image, Volume2, Mic, Cpu, Sliders, Video } from 'lucide-react';
 
 const CAPABILITIES = [

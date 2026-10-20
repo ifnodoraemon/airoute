@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Key,
   Plus,
@@ -11,11 +11,9 @@ import {
   Eye,
   EyeOff,
   FileSpreadsheet,
-  Terminal,
-  ShieldAlert,
-  Zap
+  Terminal
 } from 'lucide-react';
-import { getGatewayOrigin, copyToClipboard, toCSV } from '../config';
+import { getGatewayOrigin, toCSV } from '../config';
 import useTableControls from '../hooks/useTableControls';
 import useUrlFilters from '../hooks/useUrlFilters';
 import { SortableTh, ColumnToggle } from './TableControls';
@@ -217,7 +215,6 @@ export default function KeysView({
   };
 
   const activeCount = keys.filter(k => k.status !== 'disabled').length;
-  const totalCost = keys.reduce((acc, k) => acc + Number(k.used_cost || 0), 0);
 
   return (
     <div className="space-y-8">

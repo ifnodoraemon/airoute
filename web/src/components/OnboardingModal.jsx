@@ -1,20 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   X,
   Sparkles,
   Key,
-  Cpu,
-  Code2,
   Terminal,
-  CheckCircle2,
   Copy,
   Check,
   ArrowRight,
   Play,
-  RefreshCw,
-  Zap,
-  ShieldCheck,
-  ExternalLink
+  RefreshCw
 } from 'lucide-react';
 import { getGatewayOrigin } from '../config';
 import useModalA11y from '../hooks/useModalA11y';

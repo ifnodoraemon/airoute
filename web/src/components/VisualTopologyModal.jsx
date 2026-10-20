@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   X,
   Server,
@@ -6,13 +6,9 @@ import {
   Layers,
   Shield,
   ShieldAlert,
-  ArrowRight,
   Zap,
-  RefreshCw,
-  Activity,
   AlertTriangle,
   CheckCircle2,
-  Play,
   RotateCcw
 } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';

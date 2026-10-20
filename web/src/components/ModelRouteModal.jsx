@@ -10,7 +10,6 @@ import {
   DollarSign,
   Shield,
   Layers,
-  Moon,
   Edit3
 } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, Sparkles, RefreshCw, Search, Eye, EyeOff, Loader2 } from 'lucide-react';
 import ModelChipManager from './ModelChipManager';
 import ModelMappingEditor from './ModelMappingEditor';

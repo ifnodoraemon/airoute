@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, Copy, Check, Terminal } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
 

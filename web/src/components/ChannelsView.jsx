@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import {
   Server,
   Activity,
@@ -9,12 +9,6 @@ import {
   Edit3,
   RefreshCw,
   Search,
-  Filter,
-  ShieldAlert,
-  CheckCircle2,
-  AlertTriangle,
-  Cpu,
-  Layers,
   Coins
 } from 'lucide-react';
 import useTableControls from '../hooks/useTableControls';
@@ -192,7 +186,6 @@ export default function ChannelsView({
     [baseChannels, statusFilter, healthFilter, channelLatencies]
   );
 
-  const activeChannels = channels.filter(ch => ch.status === 'active');
   const openBreakers = channels.filter(ch => String(ch.breaker_status || '').toUpperCase() === 'OPEN');
 
   // ---- Sorting + column visibility -----------------------------------------

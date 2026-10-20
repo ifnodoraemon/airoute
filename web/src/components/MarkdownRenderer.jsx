@@ -8,7 +8,6 @@ import {
   AlertTriangle,
   ShieldAlert,
   ExternalLink,
-  ChevronRight,
   Square,
   CheckSquare,
   FileCode,

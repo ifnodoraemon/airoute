@@ -1,21 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Wallet,
   CreditCard,
   Gift,
   Plus,
   RefreshCw,
-  CheckCircle2,
-  AlertCircle,
   Copy,
   Trash2,
-  ExternalLink,
   Zap,
   ArrowRight,
-  ShieldCheck,
   Clock,
-  Sparkles,
-  DollarSign
+  Sparkles
 } from 'lucide-react';
 import { copyToClipboard } from '../config';
 import useModalA11y from '../hooks/useModalA11y';
@@ -54,7 +49,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
   const [genName, setGenName] = useState(() => (isZh ? '额度兑换卡' : 'Gift Card'));
   const [generating, setGenerating] = useState(false);
 
-  const fetchWallet = async () => {
+  const fetchWallet = useCallback(async () => {
     if (!adminFetch) return;
     setLoading(true);
     try {
@@ -74,9 +69,9 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
     } finally {
       setLoading(false);
     }
-  };
+  }, [adminFetch, onBalanceUpdate, onUserUpdated]);
 
-  const fetchRedemptions = async () => {
+  const fetchRedemptions = useCallback(async () => {
     if (!adminFetch || !isAdmin) return;
     try {
       const res = await adminFetch('/api/v1/admin/redemptions');
@@ -87,14 +82,14 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
     } catch (err) {
       console.error('fetch redemptions err:', err);
     }
-  };
+  }, [isAdmin, adminFetch]);
 
   useEffect(() => {
     fetchWallet();
     if (isAdmin) {
       fetchRedemptions();
     }
-  }, []);
+  }, [fetchWallet, fetchRedemptions, isAdmin]);
 
   useEffect(() => {
     if (adminUser) {
@@ -106,7 +101,8 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
         group_name: adminUser.group_name || prev.group_name
       }));
     }
-  }, [adminUser?.balance, adminUser?.role, adminUser?.status, adminUser?.group_name]);
+    // Depends on the object, not its fields: the body reads adminUser itself.
+  }, [adminUser]);
 
   const handleRedeem = async (e) => {
     if (e) e.preventDefault();

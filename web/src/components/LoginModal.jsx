@@ -10,9 +10,7 @@ import {
   RefreshCw,
   Eye,
   EyeOff,
-  CheckCircle2,
-  Sparkles,
-  ShieldCheck
+  CheckCircle2
 } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
 

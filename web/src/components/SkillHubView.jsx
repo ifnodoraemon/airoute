@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Sparkles,
+  RefreshCw,
   BookOpen,
   FileText,
   Check,
@@ -10,17 +11,10 @@ import {
   Trash2,
   Play,
   X,
-  ExternalLink,
   ShieldCheck,
-  Cpu,
-  Layers,
   Terminal,
-  Activity,
   Code2,
   Workflow,
-  HelpCircle,
-  AlertCircle,
-  FileCode,
   DownloadCloud,
   CheckCircle2,
   GitBranch,
@@ -79,7 +73,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
   const [copiedKey, setCopiedKey] = useState('');
   const origin = getGatewayOrigin();
 
-  const fetchSkills = async () => {
+  const fetchSkills = useCallback(async () => {
     if (!adminFetch) return;
     setLoading(true);
     try {
@@ -95,9 +89,9 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
     } finally {
       setLoading(false);
     }
-  };
+  }, [adminFetch]);
 
-  const fetchStorageStatus = async () => {
+  const fetchStorageStatus = useCallback(async () => {
     if (!adminFetch) return;
     try {
       const res = await adminFetch('/api/v1/admin/storage/status');
@@ -110,12 +104,12 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
     } catch (err) {
       console.warn('Failed to load storage status:', err);
     }
-  };
+  }, [adminFetch]);
 
   useEffect(() => {
     fetchSkills();
     fetchStorageStatus();
-  }, []);
+  }, [fetchSkills, fetchStorageStatus]);
 
   const handleToggleSkill = async (skillId, currentEnabled) => {
     if (!adminFetch) return;
@@ -404,7 +398,16 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
       </div>
 
       {/* 技能卡片列表 */}
-      {filteredSkills.length === 0 ? (
+      {loading && skills.length === 0 ? (
+        // Without this the list rendered "No matching Agent Skills found" while the
+        // first request was still in flight, which reads as a broken catalogue.
+        <div className="p-16 text-center bg-white dark:bg-[#0F1420] rounded-2xl border border-slate-200 dark:border-slate-800">
+          <RefreshCw className="w-8 h-8 text-indigo-500 mx-auto mb-3 animate-spin" />
+          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+            {isZh ? '正在加载 Agent 技能…' : 'Loading Agent Skills…'}
+          </p>
+        </div>
+      ) : filteredSkills.length === 0 ? (
         <div className="p-16 text-center bg-white dark:bg-[#0F1420] rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
           <Sparkles className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
           <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">

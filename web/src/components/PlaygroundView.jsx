@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   MessageSquare,
   Image as ImageIcon,
@@ -11,11 +11,7 @@ import {
   Key,
   Code,
   Terminal,
-  Play,
   RefreshCw,
-  Trash2,
-  Copy,
-  Check,
   Download,
   FileAudio,
   Send,
@@ -24,9 +20,7 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
-  Zap,
-  DollarSign,
-  Plus
+  Zap
 } from 'lucide-react';
 import { getGatewayOrigin, copyToClipboard as crossOriginCopy } from '../config';
 import MarkdownRenderer from './MarkdownRenderer';
@@ -1565,6 +1559,9 @@ Execute the following mission with precision, maintainability, and zero speculat
                       <div className="ui-meta font-mono space-x-2">
                         <span>TTFT: {arenaTTFTB ? `${arenaTTFTB}ms` : '-'}</span>
                         <span>{isZh ? '速度' : 'Speed'}: {arenaTokensPerSecB ? `${arenaTokensPerSecB}tps` : '-'}</span>
+                        {/* The single-model view reports the total duration; the
+                            arena collected it for B and never showed it. */}
+                        <span>{isZh ? '总耗时' : 'Duration'}: {arenaDurationB ? `${arenaDurationB}ms` : '-'}</span>
                       </div>
                     </div>
                     {arenaReasoningB && (

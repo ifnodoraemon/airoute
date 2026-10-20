@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Sparkles,
   X,
@@ -7,17 +7,10 @@ import {
   User,
   Copy,
   Check,
-  Zap,
   ArrowRight,
   RefreshCw,
-  Activity,
   Cpu,
-  Server,
-  Key,
   Terminal,
-  ShieldAlert,
-  Sliders,
-  ExternalLink,
   Minimize2,
   Maximize2,
   Trash2,
@@ -28,11 +21,7 @@ import {
   Layers,
   Wrench,
   CheckCircle2,
-  Play,
-  Code,
   Clock,
-  Database,
-  HelpCircle,
   GripVertical
 } from 'lucide-react';
 import { getGatewayOrigin, copyToClipboard as crossOriginCopy } from '../config';
@@ -339,7 +328,9 @@ export default function AiCopilot({
         }
       ]);
     }
-  }, [isZh]);
+    // messages.length is read above, so it belongs in the list: seeding raises the
+    // length, which stops the effect from re-seeding.
+  }, [isZh, messages.length]);
 
   // Global shortcut: Cmd+J or Ctrl+J to toggle Copilot
   useEffect(() => {
@@ -367,13 +358,24 @@ export default function AiCopilot({
     }
   }, [messages, isOpen]);
 
-  // Handle incoming initial query
+  // Handle incoming initial query.
+  //
+  // handleSend is rebuilt on every render and closes over the current input, so it
+  // cannot be a dependency: doing so would re-send the query on every keystroke.
+  // The latest version is read through a ref instead.
+  const handleSendRef = useRef(handleSend);
+  useEffect(() => {
+    handleSendRef.current = handleSend;
+    // Runs after every render on purpose: the point is to keep the ref pointing at
+    // the newest closure.
+  }, [handleSend]);
+
   useEffect(() => {
     if (isOpen && initialQuery && initialQuery.trim()) {
-      handleSend(initialQuery.trim());
+      handleSendRef.current(initialQuery.trim());
       if (onClearInitialQuery) onClearInitialQuery();
     }
-  }, [isOpen, initialQuery]);
+  }, [isOpen, initialQuery, onClearInitialQuery]);
 
   const handleCopy = async (text, id) => {
     await crossOriginCopy(text);
@@ -553,6 +555,10 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
   };
 
   // Main ReAct Harness Loop
+  // Not memoised on purpose: it closes over the current input, so a stable identity
+  // would need input as a dependency, which would rebuild it on every keystroke
+  // anyway. The one effect that needs it reads it through a ref instead.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const handleSend = async (queryText = input) => {
     const text = (queryText || '').trim();
     if (!text || isLoading) return;
@@ -636,7 +642,6 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
         let done = false;
         let buffer = '';
         let streamedToolCalls = {};
-        let finishReason = null;
 
         while (!done) {
           const { value, done: readerDone } = await reader.read();
@@ -658,10 +663,6 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                   }
                   const choice = parsed.choices?.[0];
                   if (!choice) continue;
-
-                  if (choice.finish_reason) {
-                    finishReason = choice.finish_reason;
-                  }
 
                   const delta = choice.delta;
                   if (!delta) continue;
@@ -801,6 +802,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
       }));
     } finally {
       setIsLoading(false);
+      setActiveBenchmark(null);
       abortControllerRef.current = null;
 
       // Automatically derive interactive console action buttons
@@ -1177,9 +1179,17 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
         {HARNESS_BENCHMARKS.map((bm) => (
           <button
             key={bm.id}
-            onClick={() => handleSend(bm.prompt)}
+            onClick={() => {
+              setActiveBenchmark(bm.id);
+              handleSend(bm.prompt);
+            }}
             disabled={isLoading}
-            className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 border border-slate-200/80 dark:border-slate-700 whitespace-nowrap transition cursor-pointer font-medium shadow-2xs disabled:opacity-50 flex items-center gap-1.5"
+            aria-pressed={activeBenchmark === bm.id}
+            className={`px-2.5 py-1.5 rounded-xl border whitespace-nowrap transition cursor-pointer font-medium shadow-2xs disabled:opacity-50 flex items-center gap-1.5 ${
+              activeBenchmark === bm.id
+                ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700'
+                : 'bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 border-slate-200/80 dark:border-slate-700'
+            }`}
             title={bm.description}
           >
             <span className="px-1 py-0.2 rounded text-xs font-mono bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60 font-semibold">

@@ -1,37 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Cpu,
   Server,
   Globe,
   Terminal,
-  Play,
   Check,
   Copy,
   Plus,
   Trash2,
   Search,
   X,
-  Activity,
   RefreshCw,
   Layers,
-  ExternalLink,
-  ShieldCheck,
   Database,
   Code2,
   Sparkles,
   Send,
   Radio,
-  Wrench,
-  ArrowRight,
   BookOpen,
   AlertCircle,
   FileCode,
-  Zap,
   CheckCircle2,
   Lock,
   Boxes
 } from 'lucide-react';
-import { getGatewayOrigin, resolveGatewayUrl, copyToClipboard } from '../config';
+import { resolveGatewayUrl, copyToClipboard } from '../config';
 import useModalA11y from '../hooks/useModalA11y';
 
 const TOOL_TEMPLATES = {
@@ -228,13 +221,13 @@ export default function McpIntegrationView({ adminFetch, adminToken, keys = [], 
   const [copiedKey, setCopiedKey] = useState('');
 
   // Token Management
-  const getInitialToken = () => {
+  const getInitialToken = useCallback(() => {
     if (keys && keys.length > 0) {
       const active = keys.find(k => k.status === 'active' || k.status === 1 || !k.status);
       return active ? active.key : keys[0].key;
     }
     return adminToken || '';
-  };
+  }, [keys, adminToken]);
 
   const [probeToken, setProbeToken] = useState('');
   const [configToken, setConfigToken] = useState('');
@@ -244,7 +237,9 @@ export default function McpIntegrationView({ adminFetch, adminToken, keys = [], 
     const initTok = getInitialToken();
     if (!probeToken && initTok) setProbeToken(initTok);
     if (!configToken && initTok) setConfigToken(initTok);
-  }, [keys, adminToken]);
+    // The guards above make the extra dependencies harmless: once a token is set,
+    // re-running cannot overwrite it.
+  }, [keys, adminToken, getInitialToken, probeToken, configToken]);
 
   // MCP Master Switch & Stats
   const [mcpSettings, setMcpSettings] = useState({
@@ -293,11 +288,10 @@ export default function McpIntegrationView({ adminFetch, adminToken, keys = [], 
   useModalA11y(addServerModalOpen, () => setAddServerModalOpen(false));
   useModalA11y(probeModalOpen, () => setProbeModalOpen(false));
 
-  const origin = getGatewayOrigin();
   const sseUrl = resolveGatewayUrl(mcpSettings?.sse_endpoint || '/mcp/sse');
   const messagesUrl = resolveGatewayUrl(mcpSettings?.messages_endpoint || '/mcp/messages');
 
-  const fetchServersAndSettings = async () => {
+  const fetchServersAndSettings = useCallback(async () => {
     if (!adminFetch) return;
     setLoading(true);
     try {
@@ -323,11 +317,11 @@ export default function McpIntegrationView({ adminFetch, adminToken, keys = [], 
     } finally {
       setLoading(false);
     }
-  };
+  }, [adminFetch]);
 
   useEffect(() => {
     fetchServersAndSettings();
-  }, []);
+  }, [fetchServersAndSettings]);
 
   const handleToggleGlobalMcp = async () => {
     if (!adminFetch || togglingGlobal) return;

@@ -1,24 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users,
   UserPlus,
   Shield,
-  ShieldCheck,
   Key,
   Trash2,
   Lock,
   Unlock,
   RefreshCw,
   Search,
-  CheckCircle2,
   AlertCircle,
   Eye,
   EyeOff,
   UserCheck,
-  X,
   Sparkles,
-  DollarSign,
-  Tag,
   Coins
 } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
@@ -117,7 +112,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
 
   const [pricingGroups, setPricingGroups] = useState([]);
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     if (!adminFetch) return;
     setLoading(true);
     try {
@@ -133,7 +128,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
     } finally {
       setLoading(false);
     }
-  };
+  }, [adminFetch, showToast, isZh]);
 
   useEffect(() => {
     fetchUsers();
@@ -149,7 +144,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
         })
         .catch(() => {});
     }
-  }, []);
+  }, [fetchUsers, adminFetch]);
 
   const allAvailableGroups = React.useMemo(() => {
     const set = new Set(['default']);

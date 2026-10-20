@@ -68,8 +68,11 @@ func (db *DB) runMigrations(migrations []Migration) error {
 		}
 
 		telemetry.Logger.Info("applying database migration", "version", m.Version, "name", m.Name, "dialect", db.Dialect())
-		// Up + version record are committed together: a crash between them would
-		// otherwise replay the DDL on the next start.
+		// Up and the version record are two separate statements rather than one
+		// transaction; see applyMigration below. A crash between them replays the
+		// migration on the next start, which is safe because every migration is
+		// written to be idempotent. This comment used to claim the two were
+		// committed together, which they never were.
 		if err := db.applyMigration(m); err != nil {
 			return fmt.Errorf("migration %d (%s) failed: %w", m.Version, m.Name, err)
 		}

@@ -9,8 +9,7 @@ import {
   Wallet,
   Eye,
   EyeOff,
-  Server,
-  Sparkles
+  Server
 } from 'lucide-react';
 import { getGatewayBaseUrl, copyToClipboard } from '../config';
 import useModalA11y from '../hooks/useModalA11y';

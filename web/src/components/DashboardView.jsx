@@ -1,35 +1,19 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Activity,
   Zap,
   Server,
   Layers,
-  Sparkles,
   RefreshCw,
   Plus,
   Clock,
   DollarSign,
-  Shield,
   Play,
-  History,
   AlertTriangle,
-  TrendingUp,
-  Cpu,
-  BarChart3,
   CheckCircle2,
   AlertCircle,
-  PieChart,
-  Flame,
-  ArrowUpRight,
-  ShieldCheck,
-  Percent,
-  Compass,
-  Target,
-  Gauge,
-  Award,
-  Copy,
-  Check,
-  Bot
+  FileText,
+  Flame
 } from 'lucide-react';
 import { copyToClipboard } from '../config';
 
@@ -131,9 +115,6 @@ export default function DashboardView({
   const errorLogs = useMemo(() => (logs || []).filter(l => l && l.status_code >= 400), [logs]);
   const success2xx = stats.success_requests || 0;
   const slaAvailability = totalRequests > 0 ? ((success2xx / totalRequests) * 100).toFixed(2) : '—';
-  // `logs` is still used for page-scoped breakdowns; label them as such.
-  const totalLogs = (logs || []).length;
-  const pageScoped = totalRequests > (logs || []).length;
 
   // 2b. ACTIONABLE SIGNALS for the "needs attention" strip.
   // Derived only from data already held in props — no extra requests.
@@ -440,6 +421,28 @@ export default function DashboardView({
       onAction: () => setCurrentTab?.('channels')
     });
   }
+  // Error codes, clustered. The histogram was computed and never rendered, so the
+  // operator could see that requests failed but not with what status.
+  const errorCodeEntries = Object.entries(errorCountByCode)
+    .map(([code, count]) => ({ code, count }))
+    .sort((a, b) => b.count - a.count);
+  if (errorCodeEntries.length > 0) {
+    const top = errorCodeEntries.slice(0, 3);
+    attentionItems.push({
+      key: 'error-codes',
+      tone: 'warn',
+      icon: AlertTriangle,
+      title: isZh
+        ? `失败状态码分布：${top.map(e => `${e.code}×${e.count}`).join('、')}`
+        : `Failure status codes: ${top.map(e => `${e.code}×${e.count}`).join(', ')}`,
+      detail: isZh
+        ? `基于当前页 ${errorLogs.length} 条失败样本聚类，共 ${errorCodeEntries.length} 种状态码。`
+        : `Clustered from ${errorLogs.length} failed rows on the current page across ${errorCodeEntries.length} status codes.`,
+      actionLabel: isZh ? '查看日志' : 'View logs',
+      onAction: () => setCurrentTab?.('logs')
+    });
+  }
+
   if (attention.failed > 0) {
     attentionItems.push({
       key: 'failures',
@@ -493,6 +496,21 @@ export default function DashboardView({
               <span>{isZh ? '容灾拓扑动态图' : 'Routing Topology'}</span>
             </button>
           )}
+
+          {/* The executive report was written but never reachable: no button called
+              it, so the generator and its copied-state indicator were both dead. */}
+          <button
+            onClick={handleExportExecutiveReport}
+            className="ui-btn-secondary"
+            title={isZh ? '复制一份包含 KPI、SLA 与建议的 Markdown 运营报告' : 'Copy a Markdown operations report with KPIs, SLA and recommendations'}
+          >
+            <FileText className="w-3.5 h-3.5 text-slate-400" />
+            <span>
+              {copiedReport
+                ? (isZh ? '已复制报告' : 'Report copied')
+                : (isZh ? '导出运营报告' : 'Export Report')}
+            </span>
+          </button>
 
           <div className="flex items-center gap-2">
             <button
