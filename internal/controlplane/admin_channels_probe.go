@@ -128,6 +128,16 @@ func (h *AdminHandler) TestChannel(c *gin.Context) {
 		return
 	}
 
+	if resp == nil || len(resp.Choices) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"code":       1,
+			"success":    false,
+			"latency_ms": latencyMs,
+			"error":      "上游返回了空的 choices 数组，无法验证生成结果",
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"code":       0,
 		"success":    true,

@@ -15,7 +15,7 @@ func (h *MCPHandler) executeOpsTools(ctx context.Context, name string, args map[
 	switch name {
 	case "airoute_cluster_status":
 		if h.repo != nil {
-			if h.repo.CountActiveKeys() > 0 {
+			if h.repo.CountAPIKeys() > 0 {
 				apiKey, _ := ctx.Value(contextKeyCallerKey).(string)
 				if apiKey == "" {
 					if k, ok := args["api_key"].(string); ok && k != "" {
@@ -133,7 +133,7 @@ func (h *MCPHandler) executeOpsTools(ctx context.Context, name string, args map[
 		sessionID, _ := args["session_id"].(string)
 
 		// Tenant isolation & access control:
-		if h.repo.CountActiveKeys() > 0 && callerKeyRec == nil {
+		if h.repo.CountAPIKeys() > 0 && callerKeyRec == nil {
 			return "Error: Authentication required to query global logs. Please provide a valid API key.", true, true
 		}
 

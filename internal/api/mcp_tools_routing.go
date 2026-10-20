@@ -167,7 +167,7 @@ func (h *MCPHandler) executeRoutingTools(ctx context.Context, name string, args 
 					return "Error: Invalid or disabled API key provided", true, true
 				}
 				callerKeyRec = kRec
-			} else if h.repo.CountActiveKeys() > 0 {
+			} else if h.repo.CountAPIKeys() > 0 {
 				return "Error: Authentication required for airoute_chat. Please provide a valid API key via Authorization header, ?apiKey= query param, or 'api_key' argument.", true, true
 			}
 		}

@@ -145,6 +145,17 @@ func (d *Dispatcher) getProviderForChannel(ch *model.ChannelConfig, req *model.C
 	return prov, exists
 }
 
+// channelCallContext bounds a non-streaming upstream call by the channel's
+// configured timeout_seconds. The shared HTTP client intentionally has no
+// body deadline (long SSE streams need it), so without this the timeout field
+// was dead configuration for non-streaming requests.
+func channelCallContext(ctx context.Context, ch *model.ChannelConfig) (context.Context, context.CancelFunc) {
+	if ch != nil && ch.TimeoutSeconds > 0 {
+		return context.WithTimeout(ctx, time.Duration(ch.TimeoutSeconds)*time.Second)
+	}
+	return ctx, func() {}
+}
+
 // Dispatch executes non-streaming chat with automatic fallback.
 func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequest) (*model.ChatCompletionResponse, error) {
 	proto := "chat"
@@ -198,7 +209,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		)
 
 		start := time.Now()
-		resp, err := prov.ChatComplete(ctx, req, ch)
+		callCtx, cancelCall := channelCallContext(ctx, ch)
+		resp, err := prov.ChatComplete(callCtx, req, ch)
+		cancelCall()
 		if err == nil {
 			promptTokens := 0
 			compTokens := 0

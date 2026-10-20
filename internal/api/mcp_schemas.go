@@ -255,13 +255,13 @@ func getBuiltinMCPTools() []gin.H {
 		},
 		{
 			"name":        "read_query",
-			"description": "Execute safe read-only SQL queries on relational databases (PostgreSQL/SQLite) with automatic compliance audit",
+			"description": "Execute a read-only SQL SELECT/EXPLAIN query over a small allowlisted set of non-sensitive gateway tables (usage_logs, model_prices, model_fallbacks). Administrator API key required; mutating statements, sensitive tables and multiple statements are rejected.",
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
 					"query": gin.H{
 						"type":        "string",
-						"description": "Read-only SQL SELECT statement to execute",
+						"description": "Single read-only SELECT/WITH/EXPLAIN statement over an allowlisted table",
 					},
 				},
 				"required": []string{"query"},
@@ -269,7 +269,7 @@ func getBuiltinMCPTools() []gin.H {
 		},
 		{
 			"name":        "list_tables",
-			"description": "Enumerate table names and schema metadata in connected database",
+			"description": "Enumerate the non-sensitive gateway tables exposed to MCP SQL tools (administrator API key required)",
 			"inputSchema": gin.H{
 				"type":       "object",
 				"properties": gin.H{},
@@ -277,13 +277,13 @@ func getBuiltinMCPTools() []gin.H {
 		},
 		{
 			"name":        "describe_table",
-			"description": "Inspect table schema structure, column types, and constraints",
+			"description": "Inspect the column schema of an allowlisted, non-sensitive gateway table (administrator API key required)",
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
 					"table_name": gin.H{
 						"type":        "string",
-						"description": "Target table name",
+						"description": "Allowlisted table name (usage_logs, model_prices, model_fallbacks)",
 					},
 				},
 				"required": []string{"table_name"},

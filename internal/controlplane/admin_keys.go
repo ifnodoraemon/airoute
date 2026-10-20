@@ -50,24 +50,30 @@ func (h *AdminHandler) CreateAPIKey(c *gin.Context) {
 	if claims, ok := GetClaimsFromContext(c); ok {
 		if claims.Role != "admin" {
 			user, _ := h.repo.GetUserByUsername(claims.Username)
-			if user != nil {
-				rec.UserID = user.ID
-				userGroup := strings.ToLower(strings.TrimSpace(user.GroupName))
-				if userGroup == "" {
-					userGroup = "default"
-				}
-				reqGroup := strings.ToLower(strings.TrimSpace(rec.GroupName))
-				if reqGroup == "" {
-					reqGroup = userGroup
-				}
-				if reqGroup != "default" && reqGroup != userGroup {
-					c.JSON(http.StatusForbidden, gin.H{
-						"error": fmt.Sprintf("无权使用分组 [%s]，您的账号保障分组等级为 [%s]", reqGroup, userGroup),
-					})
-					return
-				}
-				rec.GroupName = reqGroup
+			if user == nil {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "账户不存在或暂时无法验证，请重新登录"})
+				return
 			}
+			rec.UserID = user.ID
+			// Tenant identity and ownership are server-owned. Accepting them from
+			// the body let a regular user mint keys under another tenant (e.g.
+			// tenant_id "admin") and attribute usage to someone else.
+			rec.TenantID = user.Username
+			userGroup := strings.ToLower(strings.TrimSpace(user.GroupName))
+			if userGroup == "" {
+				userGroup = "default"
+			}
+			reqGroup := strings.ToLower(strings.TrimSpace(rec.GroupName))
+			if reqGroup == "" {
+				reqGroup = userGroup
+			}
+			if reqGroup != "default" && reqGroup != userGroup {
+				c.JSON(http.StatusForbidden, gin.H{
+					"error": fmt.Sprintf("无权使用分组 [%s]，您的账号保障分组等级为 [%s]", reqGroup, userGroup),
+				})
+				return
+			}
+			rec.GroupName = reqGroup
 		} else {
 			if rec.UserID <= 0 {
 				adminUser, _ := h.repo.GetUserByUsername(claims.Username)
@@ -89,11 +95,16 @@ func (h *AdminHandler) CreateAPIKey(c *gin.Context) {
 		}
 	}
 
-	// Credentials are secrets: never accept a weak client-supplied value.
-	// Anything shorter than 16 chars or containing unexpected characters is
-	// replaced by a crypto/rand key generated here.
+	// Credentials are secrets: never accept a weak client-supplied value, and
+	// never accept a client-chosen value from a non-admin at all. Anything
+	// shorter than 16 chars or containing unexpected characters is replaced by
+	// a crypto/rand key generated here.
+	callerIsAdmin := false
+	if claims, ok := GetClaimsFromContext(c); ok && claims.Role == "admin" {
+		callerIsAdmin = true
+	}
 	rec.Key = strings.TrimSpace(rec.Key)
-	if len(rec.Key) < 16 || !isWellFormedAPIKey(rec.Key) {
+	if !callerIsAdmin || len(rec.Key) < 16 || !isWellFormedAPIKey(rec.Key) {
 		b := make([]byte, 16)
 		if _, err := rand.Read(b); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "安全随机源不可用，无法生成密钥"})
@@ -120,7 +131,7 @@ func (h *AdminHandler) CreateAPIKey(c *gin.Context) {
 		return
 	}
 
-	_ = h.sync.ReloadAndBroadcast(c.Request.Context(), "api_key_created")
+	h.syncDataPlane("api_key_created")
 
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": rec, "message": "API 密钥已成功创建并同步"})
 }
@@ -128,7 +139,14 @@ func (h *AdminHandler) CreateAPIKey(c *gin.Context) {
 // checkKeyOwnership verifies whether the caller has rights to access or mutate the given API key.
 func (h *AdminHandler) checkKeyOwnership(c *gin.Context, keyRecord *storage.APIKeyRecord, forbiddenMsg string) (*storage.UserRecord, bool, bool) {
 	claims, ok := GetClaimsFromContext(c)
-	if !ok || claims.Role == "admin" {
+	if !ok || claims == nil {
+		// Fail closed: an unauthenticated context must never be mistaken for an
+		// administrator. All current routes are behind the auth middleware, so
+		// this is defence in depth.
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "请先登录账号"})
+		return nil, false, false
+	}
+	if claims.Role == "admin" {
 		return nil, true, true
 	}
 	user, _ := h.repo.GetUserByUsername(claims.Username)
@@ -181,7 +199,9 @@ func (h *AdminHandler) UpdateAPIKey(c *gin.Context) {
 		return
 	}
 
-	if req.TenantID != nil {
+	// Tenant identity is server-owned for regular users: accepting a new value
+	// here would let them re-label a key as another tenant (e.g. "admin").
+	if req.TenantID != nil && isAdmin {
 		existing.TenantID = *req.TenantID
 	}
 	if req.AllowedModels != nil {
@@ -227,7 +247,7 @@ func (h *AdminHandler) UpdateAPIKey(c *gin.Context) {
 		return
 	}
 
-	_ = h.sync.ReloadAndBroadcast(c.Request.Context(), "api_key_updated")
+	h.syncDataPlane("api_key_updated")
 
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": existing, "message": "API 密钥已成功更新"})
 }
@@ -256,7 +276,7 @@ func (h *AdminHandler) DeleteAPIKey(c *gin.Context) {
 		return
 	}
 
-	_ = h.sync.ReloadAndBroadcast(c.Request.Context(), "api_key_deleted")
+	h.syncDataPlane("api_key_deleted")
 
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "API 密钥已成功删除"})
 }

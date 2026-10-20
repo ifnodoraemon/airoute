@@ -14,7 +14,6 @@ import {
   Sparkles,
   ShieldCheck
 } from 'lucide-react';
-import { resolveGatewayUrl } from '../config';
 import useModalA11y from '../hooks/useModalA11y';
 
 export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh', t }) {
@@ -171,18 +170,20 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
   // 1-Click OAuth Login (GitHub / Google)
   const handleOAuthLogin = async (provider) => {
     setError('');
-    const clientId = provider === 'github' ? window.__AIR_GITHUB_CLIENT_ID : window.__AIR_GOOGLE_CLIENT_ID;
-    if (clientId) {
-      if (provider === 'github') {
-        window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&scope=user:email`;
+    try {
+      // Always start the flow on the server: it mints the signed, cookie-bound
+      // OAuth `state` that the callback now requires. Building the authorize
+      // URL here bypassed that and the callback was rejected as CSRF.
+      const res = await fetch(`/api/v1/auth/oauth/${provider}`, { credentials: 'same-origin' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.auth_url) {
+        window.location.href = data.auth_url;
         return;
       }
-      if (provider === 'google') {
-        window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&response_type=code&scope=openid%20email%20profile&redirect_uri=${encodeURIComponent(resolveGatewayUrl('/api/v1/auth/oauth/google/callback'))}`;
-        return;
-      }
+      setError(data.error || (isZh ? `企业未配置 ${provider.toUpperCase()} 登录通道` : `${provider.toUpperCase()} SSO login is not configured`));
+    } catch (err) {
+      setError((isZh ? 'OAuth 异常: ' : 'OAuth error: ') + err.message);
     }
-    setError(isZh ? `企业 OAuth 登录需在服务端环境配置 ${provider.toUpperCase()}_CLIENT_ID 与密钥。当前请使用企业账号密码登录。` : `Enterprise OAuth requires ${provider.toUpperCase()}_CLIENT_ID configured on server. Please use credentials login.`);
   };
 
   if (!isOpen) return null;

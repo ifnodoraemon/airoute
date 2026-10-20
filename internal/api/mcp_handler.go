@@ -33,10 +33,13 @@ type mcpContextKey string
 
 const contextKeyCallerKey mcpContextKey = "mcp_caller_key"
 
-// authenticateCaller verifies that the caller has a valid active API key when keys are active.
+// authenticateCaller verifies that the caller has a valid active API key once
+// any key has been registered. Open mode is only for a deployment that has
+// never created a key: otherwise disabling every key would silently reopen MCP
+// to anonymous callers (and with it tools/list, skills and remote MCP servers).
 func (h *MCPHandler) authenticateCaller(key string) (*storage.APIKeyRecord, error) {
-	if h.repo == nil || h.repo.CountActiveKeys() == 0 {
-		return nil, nil // Open mode when no keys are configured
+	if h.repo == nil || h.repo.CountAPIKeys() == 0 {
+		return nil, nil // Open mode only when no key has ever been created
 	}
 	if key == "" {
 		return nil, fmt.Errorf("API key required for MCP access")
@@ -85,7 +88,7 @@ func (h *MCPHandler) HandleMCPMessages(c *gin.Context) {
 			return
 		}
 		reqCtx = context.WithValue(reqCtx, contextKeyCallerKey, callerKey)
-	} else if h.repo != nil && h.repo.CountActiveKeys() > 0 {
+	} else if h.repo != nil && h.repo.CountAPIKeys() > 0 {
 		// Once the gateway has issued API keys, MCP must not be reachable
 		// anonymously: tools/list would otherwise enumerate skills and remote
 		// MCP servers to unauthenticated callers.

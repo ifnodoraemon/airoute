@@ -174,6 +174,16 @@ export default function PlaygroundView({
   const [ttsSpeed] = useState(1.0);
   const [ttsInput, setTtsInput] = useState(isZh ? '欢迎使用 Airoute 企业级大模型与多模态网关系统。' : 'Welcome to Airoute enterprise LLM and multimodal gateway system.');
   const [ttsAudioUrl, setTtsAudioUrl] = useState(null);
+  // Mirror of the synthesised audio object URL so unmount can release it. The
+  // setter below only revokes the *previous* URL; without this cleanup, leaving
+  // the view leaked one Blob URL per TTS generation.
+  const ttsAudioUrlRef = useRef(null);
+  useEffect(() => {
+    ttsAudioUrlRef.current = ttsAudioUrl;
+  }, [ttsAudioUrl]);
+  useEffect(() => () => {
+    if (ttsAudioUrlRef.current) URL.revokeObjectURL(ttsAudioUrlRef.current);
+  }, []);
 
   // STT (audio transcription)
   const [sttModel, setSttModel] = useState(sttModels[0] || '');
@@ -433,11 +443,20 @@ Execute the following mission with precision, maintainability, and zero speculat
 
   // Run chat invocation
   const handleRunChat = async () => {
-    if (!chatInput.trim() && messages.length === 0) return;
-    const currentInput = chatInput.trim() || messages[messages.length - 1]?.content || '';
-    if (!currentInput) return;
+    const typed = chatInput.trim();
+    let newMessages;
+    if (typed) {
+      newMessages = [...messages, { role: 'user', content: typed }];
+    } else {
+      // Nothing typed: re-run the existing conversation. The previous code took
+      // the last message's content and appended it again, sending the same user
+      // turn twice. Only a conversation ending in a user turn can be re-run.
+      const last = messages[messages.length - 1];
+      if (!last || last.role !== 'user') return;
+      newMessages = messages;
+    }
+    if (newMessages.length === 0) return;
 
-    const newMessages = [...messages, { role: 'user', content: currentInput }];
     setMessages(newMessages);
     setChatInput('');
     setPlayLoading(true);

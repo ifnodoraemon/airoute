@@ -439,7 +439,7 @@ export default function ModelRoutesManager({
           </div>
           {spofRoutes.length > 0 && (
             <button
-              onClick={() => setActiveEditRoute(spofRoutes[0])}
+              onClick={() => handleOpenEdit(spofRoutes[0])}
               className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium text-xs shrink-0 cursor-pointer shadow-sm transition"
             >
               {isZh ? `为 [${spofRoutes[0].model}] 配置备用服务商` : `Add backup for [${spofRoutes[0].model}]`}

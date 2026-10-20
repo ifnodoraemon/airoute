@@ -249,6 +249,19 @@ func (r *Repository) CountActiveKeys() int {
 	return count
 }
 
+// CountAPIKeys returns the total number of API keys ever registered, including
+// disabled ones. Authentication gates use this instead of CountActiveKeys so a
+// deployment whose keys are all disabled does not silently fall back to the
+// "no keys configured" open mode.
+func (r *Repository) CountAPIKeys() int {
+	if r == nil || r.db == nil {
+		return 0
+	}
+	var count int
+	_ = r.db.QueryRow(`SELECT COUNT(*) FROM api_keys`).Scan(&count)
+	return count
+}
+
 // ToModelAPIKeys converts database APIKeyRecords to Data Plane model.APIKeyConfigs with full in-memory quota snapshots.
 func (r *Repository) ToModelAPIKeys() ([]model.APIKeyConfig, error) {
 	records, err := r.ListAPIKeys()

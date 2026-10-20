@@ -16,6 +16,9 @@ import (
 // The in-memory snapshot already carries the quota data; the database read is a
 // consistency check, not something worth blocking a request (or the shared
 // SQLite connection) for.
+//
+// Deliberately uncached: budget/quota changes written outside this process must
+// be observed by the very next request, which a TTL cache would mask.
 const authStorageTimeout = 2 * time.Second
 
 const (

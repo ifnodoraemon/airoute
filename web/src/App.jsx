@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import {
   Activity,
   Zap,
@@ -60,6 +60,15 @@ import {
   Split
 } from 'lucide-react';
 import Toast from './components/Toast';
+import { apiFetch, apiJSON } from './api/client';
+import { useApiSession } from './hooks/useApiSession';
+import {
+  SESSION_MARKER,
+  getStoredToken,
+  getStoredUser,
+  setStoredAuth,
+  clearStoredAuth,
+} from './api/session';
 
 // Lazy loaded views and heavy modals for code splitting and fast initial bundle loading
 const QuickStartModal = lazy(() => import('./components/QuickStartModal'));
@@ -75,10 +84,6 @@ const AccountManageModal = lazy(() => import('./components/AccountManageModal'))
 const ModelRoutesManager = lazy(() => import('./components/ModelRoutesManager'));
 const TraceSnapshotModal = lazy(() => import('./components/TraceSnapshotModal'));
 
-// Placeholder kept in the adminToken state while the real credential lives in an
-// HttpOnly cookie. It only signals "there is a session"; it is never sent as a
-// bearer token (requests rely on the cookie via credentials: 'same-origin').
-const SESSION_MARKER = '__cookie_session__';
 const ServiceStatus = lazy(() => import('./components/ServiceStatus'));
 const PricingManager = lazy(() => import('./components/PricingManager'));
 const SkillHubView = lazy(() => import('./components/SkillHubView'));
@@ -148,61 +153,20 @@ export default function App() {
   const [toast, setToast] = useState({ show: false, message: '', type: 'info' });
   const toastTimerRef = useRef(null);
 
-  const showToast = (message, type = 'info') => {
+  // Stable identity: the request layer registers this in an effect, and a new
+  // function on every render would re-register the client on every render.
+  const showToast = useCallback((message, type = 'info') => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast({ show: true, message, type });
     toastTimerRef.current = setTimeout(() => {
       setToast(prev => ({ ...prev, show: false }));
     }, 3200);
-  };
+  }, []);
 
   const ALL_CONSOLE_TABS = [
     'dashboard', 'models', 'pricing', 'channels', 'reconciliation',
     'keys', 'wallet', 'logs', 'skills', 'mcp', 'users', 'playground', 'docs'
   ];
-
-  const getStoredToken = () => {
-    if (typeof window === 'undefined') return '';
-    return localStorage.getItem('airoute_token') || localStorage.getItem('airoute_admin_token') || '';
-  };
-
-  const getStoredUser = () => {
-    if (typeof window === 'undefined') return null;
-    const raw = localStorage.getItem('airoute_user') || localStorage.getItem('airoute_admin_user');
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return null;
-    }
-  };
-
-  const setStoredAuth = (_token, user) => {
-    if (typeof window === 'undefined') return;
-    // The session token lives in an HttpOnly cookie; only profile hints are
-    // persisted locally. The legacy key is removed on login/logout so an XSS
-    // cannot read a long-lived credential out of localStorage.
-    localStorage.removeItem('airoute_token');
-    localStorage.removeItem('airoute_admin_token');
-    if (user) {
-      const userStr = typeof user === 'string' ? user : JSON.stringify(user);
-      localStorage.setItem('airoute_user', userStr);
-    }
-  };
-
-  const readCSRFCookie = () => {
-    if (typeof document === 'undefined') return '';
-    const match = document.cookie.match(/(?:^|;\s*)airoute_csrf=([^;]+)/);
-    return match ? decodeURIComponent(match[1]) : '';
-  };
-
-  const clearStoredAuth = () => {
-    if (typeof window === 'undefined') return;
-    localStorage.removeItem('airoute_token');
-    localStorage.removeItem('airoute_admin_token');
-    localStorage.removeItem('airoute_user');
-    localStorage.removeItem('airoute_admin_user');
-  };
 
   const getRouteFromURL = () => {
     if (typeof window === 'undefined') return { viewMode: 'landing', tab: 'dashboard', authTab: 'login' };
@@ -311,6 +275,11 @@ export default function App() {
           // token empty, so the console looked logged out and stopped polling.
           setAdminToken(SESSION_MARKER);
           setStoredAuth('', user);
+          // A valid cookie session makes the auth page pointless. This is the
+          // route an OAuth grant lands on (#/login + ?oauth_code=...), and the
+          // route a browser refresh restores, since the URL no longer carries a
+          // readable token.
+          setViewMode(prev => (prev === 'auth' ? 'console' : prev));
         } else {
           setAdminToken('');
           setAdminUser(null);
@@ -335,50 +304,94 @@ export default function App() {
       .catch(() => {});
   }, []);
 
-  // Authenticated fetch helper for Control Plane APIs
-  const adminFetch = async (url, options = {}) => {
-    const headers = { ...(options.headers || {}) };
-    const effectiveToken = options.token || adminToken;
-    // SESSION_MARKER is only a "logged in" flag; the real credential is the
-    // HttpOnly cookie. Sending it as a bearer token would make the server
-    // validate it (and reject it) before falling back to the cookie.
-    if (effectiveToken && effectiveToken !== SESSION_MARKER) {
-      headers['Authorization'] = `Bearer ${effectiveToken}`;
-    }
-    const csrf = readCSRFCookie();
-    if (csrf) {
-      headers['X-CSRF-Token'] = csrf;
+  // Complete the browser OAuth redirect. The gateway returns a single-use
+  // exchange code (never the session token itself) plus, on failure, an error
+  // message. Exchange it for the HttpOnly cookie session and then strip both
+  // parameters from the URL so a refresh or a shared link cannot replay them.
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('oauth_code');
+    const oauthError = params.get('oauth_error');
+    if (!code && !oauthError) return undefined;
+
+    const stripParams = () => {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('oauth_code');
+      url.searchParams.delete('oauth_error');
+      const search = url.searchParams.toString();
+      window.history.replaceState({}, '', url.pathname + (search ? `?${search}` : '') + url.hash);
+    };
+
+    if (oauthError) {
+      stripParams();
+      showToast(oauthError, 'error');
+      return undefined;
     }
 
-    const res = await fetch(url, { ...options, headers, credentials: 'same-origin' });
-    if (res.status === 401 && viewMode === 'console' && effectiveToken) {
-      setAdminToken('');
-      setAdminUser(null);
-      clearStoredAuth();
-      setShowLoginModal(true);
-      showToast(isZh ? '登录凭证已失效，请重新登录' : 'Session expired, please login again', 'warning');
-    }
-    return res;
-  };
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/v1/auth/oauth-exchange', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ code }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.code !== 0) {
+          throw new Error(data.error || (isZh ? 'OAuth 登录失败' : 'OAuth sign-in failed'));
+        }
+        const user = data.data?.user;
+        setStoredAuth('', user);
+        setAdminToken(SESSION_MARKER);
+        setAdminUser(user);
+        setCurrentTab(user?.role === 'admin' ? 'dashboard' : 'wallet');
+        setViewMode('console');
+        setShowLoginModal(false);
+        showToast(
+          isZh ? `欢迎回来，${user?.username || ''}！` : `Welcome back, ${user?.username || ''}!`,
+          'success'
+        );
+        fetchData();
+        fetchLogs();
+      } catch (e) {
+        if (!cancelled) {
+          showToast(
+            (isZh ? 'OAuth 登录失败: ' : 'OAuth sign-in failed: ') + e.message,
+            'error'
+          );
+        }
+      } finally {
+        stripParams();
+      }
+    })();
 
-  // Authenticated fetch helper that also treats application-level failures as
-  // errors. Mutating flows must never report success for a rejected request.
-  const adminJSON = async (url, options = {}) => {
-    const res = await adminFetch(url, options);
-    let data = null;
-    try {
-      data = await res.json();
-    } catch (e) {
-      data = null;
-    }
-    if (!res.ok) {
-      throw new Error((data && (data.error || data.message)) || `HTTP ${res.status}`);
-    }
-    if (data && typeof data.code === 'number' && data.code !== 0) {
-      throw new Error(data.error || data.message || `Request failed with code ${data.code}`);
-    }
-    return data;
-  };
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Tear the session down when the gateway rejects the credential. This policy
+  // stays in the shell because it is UI behaviour; the request layer only reports
+  // that a 401 happened.
+  const handleUnauthorized = useCallback(({ token: usedToken }) => {
+    // Only a console session holding a credential is torn down here; the landing
+    // and auth pages also make unauthenticated calls.
+    if (viewMode !== 'console' || !usedToken) return;
+    setAdminToken('');
+    setAdminUser(null);
+    clearStoredAuth();
+    setShowLoginModal(true);
+    showToast(isZh ? '登录凭证已失效，请重新登录' : 'Session expired, please login again', 'warning');
+  }, [viewMode, isZh, showToast]);
+
+  // Bind the shared request layer (src/api/client.js) to this session. It used to
+  // be a pair of closures defined in this component (adminFetch/adminJSON) that
+  // every view had to receive through props; the props below are kept so existing
+  // views retain their contract.
+  useApiSession({ token: adminToken, onUnauthorized: handleUnauthorized });
 
   // Clear every piece of tenant-scoped data so a following session (or React
   // DevTools) cannot observe the previous account's channels, keys or logs.
@@ -517,12 +530,21 @@ export default function App() {
   const [logLoading, setLogLoading] = useState(false);
   // Log filters are mirrored into the URL query string (`logs.*`) so a filtered
   // audit view survives switching modules and can be shared as a link.
+  // Every audit-log facet lives here (single source of truth) so fetchLogs can
+  // send it to the server. Previously the facets lived in LogsView's own
+  // useUrlFilters instance, so App never saw them and filtered only the loaded
+  // page in memory — silently hiding matches on other pages.
   const [logFilters, setLogFilters] = useUrlFilters('logs', {
     q: '',
     range: 'all', // 'all' | '1h' | 'today' | '7d' | 'custom'
     start: '',
     end: '',
     session: '',
+    model: 'all',
+    channel: 'all',
+    status: 'all',
+    cache: 'all',
+    latency: 'all',
   });
   const logFilter = logFilters.q;
   const setLogFilter = (value) => setLogFilters({ q: value });
@@ -604,7 +626,7 @@ export default function App() {
     const opts = overrideToken ? { token: overrideToken } : {};
     let failed = false;
     const getJSON = (url) =>
-      adminFetch(url, opts)
+      apiFetch(url, opts)
         .then((r) => {
           if (r.status >= 500) failed = true;
           return r.json();
@@ -615,12 +637,20 @@ export default function App() {
         });
 
     try {
+      // /admin/channels and /admin/models/routes are super-admin only. Calling
+      // them from a regular user's 8s poll produced a permanent 403 storm, so
+      // only request them when the session actually holds that role. The role
+      // is read from storage as a fallback because fetchData can run in the same
+      // tick as setAdminUser, before the state update is visible here.
+      const role = adminUser?.role || getStoredUser()?.role;
+      const isAdminSession = role === 'admin';
+      const skipped = Promise.resolve({ code: 0, data: [] });
       const [chRes, keyRes, statsRes, mRes, routesRes, pricingRes] = await Promise.all([
-        getJSON('/api/v1/admin/channels'),
+        isAdminSession ? getJSON('/api/v1/admin/channels') : skipped,
         getJSON('/api/v1/admin/keys'),
         getJSON('/api/v1/admin/stats/overview'),
         getJSON('/api/v1/admin/models'),
-        getJSON('/api/v1/admin/models/routes'),
+        isAdminSession ? getJSON('/api/v1/admin/models/routes') : skipped,
         getJSON('/api/v1/admin/pricing'),
       ]);
 
@@ -693,6 +723,7 @@ export default function App() {
       const kw = override.q !== undefined ? override.q : logFiltersRef.current.q;
       if (kw && kw.trim()) p.set('q', kw.trim());
       const facets = logFiltersRef.current;
+      if (facets.model && facets.model !== 'all') p.set('model', facets.model);
       if (facets.channel && facets.channel !== 'all') p.set('channel', facets.channel);
       if (facets.status && facets.status !== 'all') p.set('status', facets.status);
       if (facets.cache && facets.cache !== 'all') p.set('cache', facets.cache);
@@ -713,7 +744,7 @@ export default function App() {
         if (et) p.set('end_time', new Date(et).toISOString());
       }
 
-      const res = await adminFetch(`/api/v1/admin/logs?${p.toString()}`, opts);
+      const res = await apiFetch(`/api/v1/admin/logs?${p.toString()}`, opts);
       const data = await res.json();
       if (data.code === 0) {
         setLogs(data.data || []);
@@ -742,6 +773,7 @@ export default function App() {
       p.set('offset', String(offset));
       const facets = logFiltersRef.current;
       if (facets.q && facets.q.trim()) p.set('q', facets.q.trim());
+      if (facets.model && facets.model !== 'all') p.set('model', facets.model);
       if (facets.channel && facets.channel !== 'all') p.set('channel', facets.channel);
       if (facets.status && facets.status !== 'all') p.set('status', facets.status);
       if (facets.cache && facets.cache !== 'all') p.set('cache', facets.cache);
@@ -757,7 +789,7 @@ export default function App() {
         if (facets.end) p.set('end_time', new Date(facets.end).toISOString());
       }
 
-      const res = await adminFetch(`/api/v1/admin/logs?${p.toString()}`);
+      const res = await apiFetch(`/api/v1/admin/logs?${p.toString()}`);
       const data = await res.json();
       if (!res.ok || data.code !== 0) break;
       const batch = data.data || [];
@@ -774,7 +806,10 @@ export default function App() {
     fetchLogs();
     const interval = setInterval(() => {
       fetchData();
-      if (currentTab === 'dashboard' || currentTab === 'logs') {
+      // The dashboard aggregates its stats from logs, so it needs them refreshed
+      // here. On the logs tab LogsView owns the cadence: its "pause auto-refresh"
+      // switch would otherwise be overridden by this 8s loop.
+      if (currentTab === 'dashboard') {
         fetchLogs();
       }
     }, 8000);
@@ -801,7 +836,7 @@ export default function App() {
     }, 350);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [logFilters.q, logFilters.channel, logFilters.status, logFilters.cache, logFilters.latency]);
+  }, [logFilters.q, logFilters.model, logFilters.channel, logFilters.status, logFilters.cache, logFilters.latency]);
 
   // Server-side pagination for audit logs (offset-based, page size above).
   const handleLogPageChange = (newOffset) => {
@@ -820,7 +855,7 @@ export default function App() {
     setProbing(true);
     setProbeAlert(null);
     try {
-      const res = await adminFetch('/api/v1/admin/channels/probe', {
+      const res = await apiFetch('/api/v1/admin/channels/probe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1096,7 +1131,7 @@ export default function App() {
     const results = {};
     await Promise.all(channels.map(async (ch) => {
       try {
-        const res = await adminFetch(`/api/v1/admin/channels/${ch.id}/test`, { method: 'POST' });
+        const res = await apiFetch(`/api/v1/admin/channels/${ch.id}/test`, { method: 'POST' });
         const data = await res.json();
         results[ch.id] = {
           latency_ms: data.latency_ms || 0,
@@ -1165,14 +1200,14 @@ export default function App() {
     setSubmittingChannel(true);
     try {
       if (editingChannelId) {
-        await adminJSON(`/api/v1/admin/channels/${editingChannelId}`, {
+        await apiJSON(`/api/v1/admin/channels/${editingChannelId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
         showToast(isZh ? 'Provider 更新成功，内存已热重载' : 'Provider updated successfully, memory hot-reloaded', 'success');
       } else {
-        await adminJSON('/api/v1/admin/channels', {
+        await apiJSON('/api/v1/admin/channels', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -1231,7 +1266,7 @@ export default function App() {
   const handleDeleteChannel = async (id) => {
     if (!window.confirm(isZh ? '确认注销该模型提供商 (Provider)？' : 'Are you sure you want to remove this Provider?')) return;
     try {
-      await adminJSON(`/api/v1/admin/channels/${id}`, { method: 'DELETE' });
+      await apiJSON(`/api/v1/admin/channels/${id}`, { method: 'DELETE' });
       showToast(isZh ? 'Provider 已注销，内存已原子更新' : 'Provider removed, memory atomically updated', 'info');
       fetchData();
     } catch (err) {
@@ -1243,7 +1278,7 @@ export default function App() {
   const handleTestChannel = async (ch) => {
     setTestingId(ch.id);
     try {
-      const res = await adminFetch(`/api/v1/admin/channels/${ch.id}/test`, { method: 'POST' });
+      const res = await apiFetch(`/api/v1/admin/channels/${ch.id}/test`, { method: 'POST' });
       const data = await res.json();
       if (data.code === 0) {
         setChannelLatencies(prev => ({
@@ -1270,7 +1305,7 @@ export default function App() {
     if (selectedLogIds.length === 0) return;
     if (!window.confirm(isZh ? `确认批量删除选中的 ${selectedLogIds.length} 条调用日志？` : `Confirm delete selected ${selectedLogIds.length} request logs?`)) return;
     try {
-      const res = await adminFetch('/api/v1/admin/logs/batch-delete', {
+      const res = await apiFetch('/api/v1/admin/logs/batch-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: selectedLogIds })
@@ -1291,7 +1326,7 @@ export default function App() {
   const handleClearLogs = async () => {
     if (!window.confirm(isZh ? '⚠️ 确认清空所有调用日志？此操作无法撤销！' : '⚠️ Confirm clear all request logs? This action cannot be undone!')) return;
     try {
-      const res = await adminFetch('/api/v1/admin/logs/clear', { method: 'POST' });
+      const res = await apiFetch('/api/v1/admin/logs/clear', { method: 'POST' });
       const data = await res.json();
       if (res.ok && data.code === 0) {
         showToast(isZh ? '已清空全部调用历史日志' : 'All request logs cleared', 'success');
@@ -1307,7 +1342,7 @@ export default function App() {
 
   const handleDeleteSingleLog = async (id) => {
     try {
-      const res = await adminFetch(`/api/v1/admin/logs/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/v1/admin/logs/${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (res.ok && data.code === 0) {
         showToast(isZh ? '已删除该条调用日志' : 'Request log deleted', 'success');
@@ -1326,7 +1361,7 @@ export default function App() {
     if (selectedKeyIds.length === 0) return;
     if (!window.confirm(isZh ? `确认批量注销选中的 ${selectedKeyIds.length} 个 API 密钥？` : `Confirm revoke selected ${selectedKeyIds.length} API keys?`)) return;
     try {
-      const res = await adminFetch('/api/v1/admin/keys/batch-delete', {
+      const res = await apiFetch('/api/v1/admin/keys/batch-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: selectedKeyIds })
@@ -1347,7 +1382,7 @@ export default function App() {
   const handleBatchStatusKeys = async (status) => {
     if (selectedKeyIds.length === 0) return;
     try {
-      const res = await adminFetch('/api/v1/admin/keys/batch-status', {
+      const res = await apiFetch('/api/v1/admin/keys/batch-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: selectedKeyIds, status })
@@ -1370,7 +1405,7 @@ export default function App() {
     if (selectedChannelIds.length === 0) return;
     if (!window.confirm(isZh ? `确认批量删除选中的 ${selectedChannelIds.length} 个服务商渠道？` : `Confirm delete selected ${selectedChannelIds.length} channels?`)) return;
     try {
-      const res = await adminFetch('/api/v1/admin/channels/batch-delete', {
+      const res = await apiFetch('/api/v1/admin/channels/batch-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: selectedChannelIds })
@@ -1388,18 +1423,26 @@ export default function App() {
     }
   };
 
-  const handleBatchStatusChannels = async (status) => {
-    if (selectedChannelIds.length === 0) return;
+  // `overrideIds` lets a single row act on itself (ChannelsView passes
+  // [ch.id]); without it the batch handler only looked at the checkbox
+  // selection, so a single-row toggle either did nothing or changed a
+  // different, unrelated set of channels.
+  const handleBatchStatusChannels = async (status, overrideIds) => {
+    const targetIds = Array.isArray(overrideIds) && overrideIds.length > 0
+      ? overrideIds
+      : selectedChannelIds;
+    if (targetIds.length === 0) return;
     try {
-      const res = await adminFetch('/api/v1/admin/channels/batch-status', {
+      const res = await apiFetch('/api/v1/admin/channels/batch-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: selectedChannelIds, status })
+        body: JSON.stringify({ ids: targetIds, status })
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
         showToast(data.message || (isZh ? '批量更新状态成功' : 'Batch update status successful'), 'success');
-        setSelectedChannelIds([]);
+        // Only the checkbox-driven flow owns the selection.
+        if (!Array.isArray(overrideIds)) setSelectedChannelIds([]);
         fetchData();
       } else {
         showToast(data.error || (isZh ? '更新失败' : 'Update failed'), 'error');
@@ -1434,7 +1477,7 @@ export default function App() {
     }
     setSubmittingKey(true);
     try {
-      const res = await adminFetch('/api/v1/admin/keys', {
+      const res = await apiFetch('/api/v1/admin/keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newKey),
@@ -1459,7 +1502,7 @@ export default function App() {
   // Handle Key Group Update
   const handleUpdateKeyGroup = async (keyId, newGroup) => {
     try {
-      const res = await adminFetch(`/api/v1/admin/keys/${keyId}`, {
+      const res = await apiFetch(`/api/v1/admin/keys/${keyId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ group_name: newGroup }),
@@ -1480,7 +1523,7 @@ export default function App() {
   const handleDeleteKey = async (id) => {
     if (!window.confirm(isZh ? '确认注销该客户端访问密钥？' : 'Are you sure you want to revoke this API key?')) return;
     try {
-      await adminJSON(`/api/v1/admin/keys/${id}`, { method: 'DELETE' });
+      await apiJSON(`/api/v1/admin/keys/${id}`, { method: 'DELETE' });
       showToast(isZh ? '客户端访问密钥已注销' : 'Client API key revoked', 'info');
       fetchData();
     } catch (err) {
@@ -1493,7 +1536,7 @@ export default function App() {
     const nextStatus = k.status === 'disabled' ? 'active' : 'disabled';
     const actionText = nextStatus === 'active' ? (isZh ? '启用' : 'enable') : (isZh ? '禁用/停用' : 'disable');
     try {
-      await adminJSON(`/api/v1/admin/keys/${k.id}`, {
+      await apiJSON(`/api/v1/admin/keys/${k.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus }),
@@ -1651,7 +1694,7 @@ export default function App() {
               channels={channels}
               onRefresh={fetchData}
               probeLatencies={channelLatencies}
-              adminFetch={adminFetch}
+              adminFetch={apiFetch}
               showToast={showToast}
               onBatchProbe={handleBatchPing}
               batchTesting={batchTesting}
@@ -2381,7 +2424,7 @@ export default function App() {
             {currentTab === 'models' && (
               <ModelRoutesManager
                 isAdmin={adminUser?.role === 'admin'}
-                adminFetch={adminFetch}
+                adminFetch={apiFetch}
                 showToast={showToast}
                 lang={lang}
                 t={t}
@@ -2401,7 +2444,7 @@ export default function App() {
             {/* 1.6. MODEL PRICING & RATES TAB */}
             {currentTab === 'pricing' && (
               <PricingManager
-                adminFetch={adminFetch}
+                adminFetch={apiFetch}
                 showToast={showToast}
                 stats={stats}
                 isAdmin={adminUser?.role === 'admin'}
@@ -2441,7 +2484,7 @@ export default function App() {
             {/* 2.5. SUPPLIER RECONCILIATION TAB */}
             {currentTab === 'reconciliation' && (
               <SupplierReconciliationView
-                adminFetch={adminFetch}
+                adminFetch={apiFetch}
                 showToast={showToast}
                 onNavigateToLogs={(channelName) => {
                   setLogFilter(channelName);
@@ -2482,6 +2525,8 @@ export default function App() {
                 setSessionFilter={setSessionFilter}
                 logFilter={logFilter}
                 setLogFilter={setLogFilter}
+                logFilters={logFilters}
+                setLogFilters={setLogFilters}
                 fetchLogs={fetchLogs}
                 logLoading={logLoading}
                 handleClearLogs={handleClearLogs}
@@ -2504,6 +2549,7 @@ export default function App() {
                 setActiveLogDetail={setActiveLogDetail}
                 showToast={showToast}
                 handleDeleteSingleLog={handleDeleteSingleLog}
+                isAdmin={adminUser?.role === 'admin'}
                 lang={lang}
                 t={t}
               />
@@ -2512,7 +2558,7 @@ export default function App() {
             {/* 5. SKILL HUB TAB */}
             {currentTab === 'skills' && (
               <SkillHubView
-                adminFetch={adminFetch}
+                adminFetch={apiFetch}
                 onCopy={(txt) => {
                   copyToClipboard(txt);
                 }}
@@ -2525,7 +2571,7 @@ export default function App() {
             {/* 6. MCP HUB TAB */}
             {currentTab === 'mcp' && (
               <McpIntegrationView
-                adminFetch={adminFetch}
+                adminFetch={apiFetch}
                 adminToken={adminToken}
                 keys={keys}
                 onCopy={(txt) => {
@@ -2542,7 +2588,7 @@ export default function App() {
               <UserManagementView
                 adminUser={adminUser}
                 adminToken={adminToken}
-                adminFetch={adminFetch}
+                adminFetch={apiFetch}
                 showToast={showToast}
                 lang={lang}
                 t={t}
@@ -2554,7 +2600,7 @@ export default function App() {
               <WalletManagementView
                 adminUser={adminUser}
                 adminToken={adminToken}
-                adminFetch={adminFetch}
+                adminFetch={apiFetch}
                 showToast={showToast}
                 onUserUpdated={(updatedUser) => {
                   setAdminUser(prev => {
@@ -2584,7 +2630,7 @@ export default function App() {
                 models={models}
                 modelRoutes={modelRoutes}
                 prices={prices}
-                adminFetch={adminFetch}
+                adminFetch={apiFetch}
                 showToast={showToast}
                 initialModel={playModel}
                 initialModality={playModality}
@@ -2641,7 +2687,7 @@ export default function App() {
           onClose={() => setShowAccountModal(false)}
           adminUser={adminUser}
           adminToken={adminToken}
-          adminFetch={adminFetch}
+          adminFetch={apiFetch}
           showToast={showToast}
           lang={lang}
           t={t}
@@ -2703,7 +2749,7 @@ export default function App() {
             traceId={traceSnapshotId}
             onClose={() => setTraceSnapshotId('')}
             lang={lang}
-            adminFetch={adminFetch}
+            adminFetch={apiFetch}
           />
         )}
 
@@ -2764,7 +2810,7 @@ export default function App() {
           t={t}
           showToast={showToast}
           adminUser={adminUser}
-          adminFetch={adminFetch}
+          adminFetch={apiFetch}
           initialQuery={copilotInitialQuery}
           onClearInitialQuery={() => setCopilotInitialQuery('')}
         />

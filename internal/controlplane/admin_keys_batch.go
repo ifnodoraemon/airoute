@@ -58,7 +58,7 @@ func (h *AdminHandler) BatchDeleteAPIKeys(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	_ = h.sync.ReloadAndBroadcast(c.Request.Context(), "keys_batch_deleted")
+	h.syncDataPlane("keys_batch_deleted")
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": fmt.Sprintf("已批量注销 %d 个 API 访问密钥", n), "deleted_count": n})
 }
 
@@ -79,7 +79,7 @@ func (h *AdminHandler) BatchStatusAPIKeys(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	_ = h.sync.ReloadAndBroadcast(c.Request.Context(), "keys_batch_status_updated")
+	h.syncDataPlane("keys_batch_status_updated")
 	action := "启用"
 	if req.Status == "disabled" {
 		action = "停用"

@@ -49,6 +49,9 @@ func (h *AdminHandler) UpdateUserStatus(c *gin.Context) {
 	if status == "locked" {
 		msg = fmt.Sprintf("已成功锁定用户 [%s]，该用户无法再调用 API 或登录", targetUsername)
 	}
+	// Locking a user must take effect on the data plane immediately, not after
+	// the next periodic sync window.
+	h.syncDataPlane()
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": msg})
 }
 
@@ -92,6 +95,7 @@ func (h *AdminHandler) UpdateUserBalance(c *gin.Context) {
 	if u != nil {
 		newBal = u.Balance
 	}
+	h.syncDataPlane()
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    0,
@@ -124,6 +128,8 @@ func (h *AdminHandler) UpdateUserGroup(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "更新分组失败: " + err.Error()})
 		return
 	}
+
+	h.syncDataPlane()
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    0,
@@ -182,6 +188,7 @@ func (h *AdminHandler) UpdateUserRole(c *gin.Context) {
 	if role == "user" {
 		roleLabel = "普通用户"
 	}
+	h.syncDataPlane()
 	c.JSON(http.StatusOK, gin.H{
 		"code":    0,
 		"message": fmt.Sprintf("已成功将用户 [%s] 的角色变更为 [%s]", targetUsername, roleLabel),

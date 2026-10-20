@@ -137,6 +137,8 @@ func (h *AdminHandler) StripeWebhook(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "订单处理失败: " + err.Error()})
 				return
 			}
+			// Reflect the credited balance in data-plane memory right away.
+			h.syncDataPlane()
 		}
 	}
 

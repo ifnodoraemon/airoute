@@ -296,13 +296,19 @@ export default function DashboardView({
         totalCalls: 0,
         errors: 0,
         ttfts: [],
-        latencyMs: channelLatencies[ch.id]?.latencyMs || null,
+        latencyMs: channelLatencies[ch.id]?.latency_ms ?? null,
         breakerStatus: ch.breaker_status || 'CLOSED'
       };
     });
     (logs || []).forEach(l => {
       if (!l) return;
-      const ch = (channels || []).find(c => c && (c.name === l.channel_name || c.id === l.channel_id));
+      // Audit-log rows carry the upstream channel name in `channel`; tolerate
+      // the older `channel_name` / id spellings too.
+      const ch = (channels || []).find(c => c && (
+        c.name === l.channel ||
+        (l.channel_name && c.name === l.channel_name) ||
+        (l.channel_id != null && c.id === l.channel_id)
+      ));
       if (ch && providerMap[ch.id]) {
         providerMap[ch.id].totalCalls += 1;
         if (l.status_code >= 400) providerMap[ch.id].errors += 1;
@@ -342,7 +348,7 @@ export default function DashboardView({
 - **累计调用量**：${totalCalls.toLocaleString()} 次
 - **Token 总吞吐**：${(stats.total_tokens || 0).toLocaleString()} Tokens (输入占比 ${tokenMetrics.promptPct}%, 输出占比 ${tokenMetrics.compPct}%)
 - **首字时延 SLA (TTFT)**：平均 ${avgTtft}ms (P50: ${fmtPct(percentiles.p50)}, P90: ${fmtPct(percentiles.p90)}, P99: ${fmtPct(percentiles.p99)}; 样本 ${percentiles.sampled}/${percentiles.total})
-- **接入上游通道**：${channels.length} 个服务商 (活跃: ${channels.filter(c => c.status === 'active').length} 个, 熔断: ${channels.filter(c => c.breaker_status === 'open').length} 个)
+- **接入上游通道**：${channels.length} 个服务商 (活跃: ${channels.filter(c => c.status === 'active').length} 个, 熔断: ${channels.filter(c => ['OPEN', 'HALF-OPEN'].includes(String(c.breaker_status || '').toUpperCase())).length} 个)
 
 ## 2. FinOps 成本优化与缓存成效
 - **Prompt Caching 命中**：累计命中识别 ${logs.filter(l => l.cached_tokens > 0).length} 次
@@ -363,7 +369,7 @@ export default function DashboardView({
 - **Total Invocations**: ${totalCalls.toLocaleString()}
 - **Token Throughput**: ${(stats.total_tokens || 0).toLocaleString()} Tokens (Prompt: ${tokenMetrics.promptPct}%, Completion: ${tokenMetrics.compPct}%)
 - **TTFT SLA Latency**: Avg ${avgTtft}ms (P50: ${fmtPct(percentiles.p50)}, P90: ${fmtPct(percentiles.p90)}, P99: ${fmtPct(percentiles.p99)}; ${percentiles.sampled}/${percentiles.total} samples)
-- **Upstream Channels**: ${channels.length} providers (${channels.filter(c => c.status === 'active').length} active, ${channels.filter(c => c.breaker_status === 'open').length} tripped)
+- **Upstream Channels**: ${channels.length} providers (${channels.filter(c => c.status === 'active').length} active, ${channels.filter(c => ['OPEN', 'HALF-OPEN'].includes(String(c.breaker_status || '').toUpperCase())).length} tripped)
 
 ## 2. FinOps Cost Optimization
 - **Prompt Cache Hits**: ${logs.filter(l => l.cached_tokens > 0).length} requests accelerated
@@ -1212,7 +1218,7 @@ export default function DashboardView({
                       {log.model}
                     </td>
                     <td className="py-3.5 px-6 text-slate-500 font-mono text-xs">
-                      {log.channel_name || (isZh ? '默认通道' : 'Default')}
+                      {log.channel || log.channel_name || (isZh ? '默认通道' : 'Default')}
                     </td>
                     <td className="py-3.5 px-6">
                       <span

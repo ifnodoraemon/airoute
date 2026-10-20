@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   History,
   Search,
@@ -17,7 +17,6 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { copyToClipboard, toCSV } from '../config';
-import useUrlFilters from '../hooks/useUrlFilters';
 
 // Same-day rows show time only; older days get a compact date prefix.
 const formatLogTime = (iso) => {
@@ -60,6 +59,8 @@ export default function LogsView({
   setSessionFilter,
   logFilter,
   setLogFilter,
+  logFilters,
+  setLogFilters,
   fetchLogs,
   logLoading,
   handleClearLogs,
@@ -82,20 +83,29 @@ export default function LogsView({
   setActiveLogDetail,
   showToast,
   handleDeleteSingleLog,
+  isAdmin = false,
   lang = 'zh',
   t
 }) {
   const isZh = lang === 'zh';
   const [copiedId, setCopiedId] = useState('');
-  const [autoRefreshInterval, setAutoRefreshInterval] = useState(0); // 0 (off), 5, 10, 30
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState(10); // 0 (off), 5, 10, 30
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // Multi-condition combined filters live in the URL (`logs.<key>`) so a filtered
-  // view survives module switches and can be shared as a link. The keyword (`q`)
-  // and the server-side timeRange / sessionFilter stay owned by App.jsx, which
-  // persists them under the same `logs.` namespace.
-  const [filters, setFilters, resetUrlFilters] = useUrlFilters('logs', {
+  // The combined facet filters are owned by App.jsx: it is the component that
+  // builds the server-side query (and persists them in the URL under `logs.*`).
+  // Keeping a second useUrlFilters instance here meant App never saw the values,
+  // so model/channel/status/cache/latency only trimmed the already-loaded page.
+  const filters = logFilters || {
+    model: 'all',
+    channel: 'all',
+    status: 'all',
+    cache: 'all',
+    latency: 'all',
+  };
+  const setFilters = setLogFilters || (() => {});
+  const resetUrlFilters = () => setFilters({
     model: 'all',
     channel: 'all',
     status: 'all',
@@ -119,14 +129,23 @@ export default function LogsView({
   // The keyword search is owned by App.jsx (which does the filtering and keeps
   // `logs.q` in the URL), so there is nothing to mirror here.
 
-  // Handle auto-refresh interval
+  // Handle auto-refresh interval.
+  //
+  // fetchLogs is a plain function defined by App, so its identity changes on
+  // every App render (the 8s data poll re-renders constantly). Depending on it
+  // here restarted the timer before it could ever fire, which silently disabled
+  // auto-refresh. Keep it in a ref and depend only on the chosen interval.
+  const fetchLogsRef = useRef(fetchLogs);
   useEffect(() => {
-    if (!autoRefreshInterval || autoRefreshInterval <= 0) return;
+    fetchLogsRef.current = fetchLogs;
+  }, [fetchLogs]);
+  useEffect(() => {
+    if (!autoRefreshInterval || autoRefreshInterval <= 0) return undefined;
     const timer = setInterval(() => {
-      fetchLogs();
+      fetchLogsRef.current();
     }, autoRefreshInterval * 1000);
     return () => clearInterval(timer);
-  }, [autoRefreshInterval, fetchLogs]);
+  }, [autoRefreshInterval]);
 
   // Close the overflow menu on Escape (a backdrop handles outside clicks).
   useEffect(() => {
@@ -455,18 +474,21 @@ export default function LogsView({
 
                   <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
 
-                  {/* Destructive action, visually separated from the rest */}
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false);
-                      handleClearLogs();
-                    }}
-                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
-                    title={isZh ? '清空全部审计调用日志（需确认）' : 'Clear all audit logs (ask for confirmation)'}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>{isZh ? '清空全部日志' : 'Clear all logs'}</span>
-                  </button>
+                  {/* Destructive action, visually separated from the rest. Only
+                      super-admins may clear the audit trail. */}
+                  {isAdmin && (
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        handleClearLogs();
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+                      title={isZh ? '清空全部审计调用日志（需确认）' : 'Clear all audit logs (ask for confirmation)'}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>{isZh ? '清空全部日志' : 'Clear all logs'}</span>
+                    </button>
+                  )}
                 </div>
               </>
             )}
@@ -625,8 +647,8 @@ export default function LogsView({
                 className="ui-field ui-field-sm cursor-pointer"
               >
                 <option value="all">{isZh ? '全部耗时区间' : 'All Latencies'}</option>
-                <option value="fast">{isZh ? '⚡ 极速请求 (<500ms)' : 'Fast (<500ms)'}</option>
-                <option value="slow">{isZh ? '🐢 慢请求 (≥2000ms)' : 'Slow (≥2s)'}</option>
+                <option value="fast">{isZh ? '⚡ 极速请求 (≤1s)' : 'Fast (≤1s)'}</option>
+                <option value="slow">{isZh ? '🐢 慢请求 (>1s)' : 'Slow (>1s)'}</option>
               </select>
             </div>
           </div>
@@ -733,8 +755,8 @@ export default function LogsView({
         </div>
       )}
 
-      {/* Batch Action Bar */}
-      {selectedLogIds.length > 0 && (
+      {/* Batch Action Bar (admin-only destructive actions) */}
+      {isAdmin && selectedLogIds.length > 0 && (
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800/60 px-5 py-3 rounded-xl animate-in fade-in gap-3">
           <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-900 dark:text-indigo-200">
             <span>{isZh ? `已选中 ${selectedLogIds.length} 条调用日志` : `Selected ${selectedLogIds.length} log entries`}</span>
@@ -764,18 +786,20 @@ export default function LogsView({
             <thead className="sticky top-0 z-20 shadow-2xs">
               <tr className="text-slate-500 dark:text-slate-400 text-xs uppercase font-medium tracking-wide">
                 <th className="py-3 px-3 w-10 text-center sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800">
-                  <input
-                    type="checkbox"
-                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                    checked={displayedLogs.length > 0 && selectedLogIds.length === displayedLogs.length}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedLogIds(displayedLogs.map((l) => l.id));
-                      } else {
-                        setSelectedLogIds([]);
-                      }
-                    }}
-                  />
+                  {isAdmin && (
+                    <input
+                      type="checkbox"
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      checked={displayedLogs.length > 0 && selectedLogIds.length === displayedLogs.length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedLogIds(displayedLogs.map((l) => l.id));
+                        } else {
+                          setSelectedLogIds([]);
+                        }
+                      }}
+                    />
+                  )}
                 </th>
                 <th className="py-3 px-3 font-semibold sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800">{isZh ? '时间' : 'Time'}</th>
                 <th className="py-3 px-3 font-semibold sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800">{isZh ? '链路 / Trace' : 'Trace / Session'}</th>
@@ -801,21 +825,23 @@ export default function LogsView({
                     onClick={() => setActiveLogDetail(log)}
                     className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition cursor-pointer group"
                   >
-                    {/* 1. Checkbox */}
+                    {/* 1. Checkbox (selection drives admin batch deletion) */}
                     <td className="py-3 px-3 text-center" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                        checked={selectedLogIds.includes(log.id)}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          if (e.target.checked) {
-                            setSelectedLogIds((prev) => [...prev, log.id]);
-                          } else {
-                            setSelectedLogIds((prev) => prev.filter((x) => x !== log.id));
-                          }
-                        }}
-                      />
+                      {isAdmin && (
+                        <input
+                          type="checkbox"
+                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                          checked={selectedLogIds.includes(log.id)}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            if (e.target.checked) {
+                              setSelectedLogIds((prev) => [...prev, log.id]);
+                            } else {
+                              setSelectedLogIds((prev) => prev.filter((x) => x !== log.id));
+                            }
+                          }}
+                        />
+                      )}
                     </td>
 
                     {/* 2. Request Time */}
@@ -1000,16 +1026,18 @@ export default function LogsView({
                       <span className="text-xs text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition font-medium">
                         {isZh ? '详情 →' : 'Detail →'}
                       </span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteSingleLog(log.id);
-                        }}
-                        className="p-1 text-slate-400 hover:text-rose-600 transition rounded-md hover:bg-rose-50 dark:hover:bg-rose-950/50 inline-flex items-center align-middle cursor-pointer"
-                        title={isZh ? '删除此记录' : 'Delete log'}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteSingleLog(log.id);
+                          }}
+                          className="p-1 text-slate-400 hover:text-rose-600 transition rounded-md hover:bg-rose-50 dark:hover:bg-rose-950/50 inline-flex items-center align-middle cursor-pointer"
+                          title={isZh ? '删除此记录' : 'Delete log'}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );

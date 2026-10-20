@@ -192,6 +192,9 @@ func (h *AdminHandler) SandboxRecharge(c *gin.Context) {
 	if u != nil {
 		newBal = u.Balance
 	}
+	// Credit the data-plane snapshot immediately; the wallet check runs against
+	// that snapshot on every inference request.
+	h.syncDataPlane()
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":        0,
