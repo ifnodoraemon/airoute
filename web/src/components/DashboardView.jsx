@@ -256,9 +256,15 @@ export default function DashboardView({
     const remainingBudgetPct = actualErrors === 0 
       ? 100 
       : Math.max(0, Math.min(100, Math.round(((allowedErrors - actualErrors) / allowedErrors) * 100)));
+    // No traffic means the SLA is unknown, not perfect. parseFloat('—') is NaN, and
+    // `NaN || 100` used to report a flawless error budget for a gateway that had
+    // served nothing at all.
+    const parsedSla = parseFloat(slaAvailability);
+    const slaKnown = Number.isFinite(parsedSla);
     return {
       targetSla,
-      actualSla: parseFloat(slaAvailability) || 100,
+      actualSla: slaKnown ? parsedSla : null,
+      slaKnown,
       allowedErrors,
       actualErrors,
       remainingBudgetPct
@@ -321,7 +327,7 @@ export default function DashboardView({
 
 **生成时间**：${new Date().toLocaleString()}
 **高可用集群架构**：双活双节点负载均衡 (Active-Active HA)
-**整体 SLA 可用性**：${slaAvailability}% (目标: 99.9%, 基于全部 ${totalRequests} 次请求)
+**整体 SLA 可用性**：${slaAvailability}${slaAvailability === '—' ? '' : '%'} (目标: 99.9%, 基于全部 ${totalRequests} 次请求)
 
 ---
 
@@ -342,7 +348,7 @@ export default function DashboardView({
 
 **Generated**: ${new Date().toLocaleString()}
 **Cluster Architecture**: Active-Active Dual-Node HA
-**SLA Availability**: ${slaAvailability}% (Target: 99.9%, over all ${totalRequests} requests)
+**SLA Availability**: ${slaAvailability}${slaAvailability === '—' ? '' : '%'} (Target: 99.9%, over all ${totalRequests} requests)
 
 ---
 
@@ -610,7 +616,7 @@ export default function DashboardView({
           </div>
           <div className="ui-meta mt-2 flex items-center gap-1.5 font-mono">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-            <span>SLA {slaAvailability}%</span>
+            <span>SLA {slaAvailability}{slaAvailability === '—' ? '' : '%'}</span>
           </div>
         </div>
 
@@ -862,7 +868,7 @@ export default function DashboardView({
             <span className="ui-meta font-medium block">{isZh ? '服务可用率 (SLA)' : 'SLA Availability'}</span>
             <div className="flex items-baseline gap-1.5 mt-1">
               <span className="text-lg font-semibold text-emerald-600 dark:text-emerald-400 font-mono tabular-nums">
-                {slaAvailability}%
+                {slaAvailability}{slaAvailability === '—' ? '' : '%'}
               </span>
               <span className="ui-meta font-normal">{(totalRequests > 0 ? totalErrorRequests : errorLogs.length)} {isZh ? '次异常' : 'errors'}</span>
             </div>
@@ -992,7 +998,7 @@ export default function DashboardView({
                 {isZh ? '当前实际可用率' : 'Actual Availability'}
               </span>
               <div className="text-lg font-semibold text-emerald-600 dark:text-emerald-400 font-mono tabular-nums mt-0.5">
-                {slaAvailability}%
+                {slaAvailability}{slaAvailability === '—' ? '' : '%'}
               </div>
             </div>
 
