@@ -223,3 +223,9 @@ JSX 中的标识符引用由 `react/jsx-uses-vars` 识别。缺少该规则会�
 ## 五、版本递进约束
 
 后续开发和发布必须遵循 [版本与发布规范](RELEASE_GUIDE.md)：兼容修复升 PATCH，兼容新能力升 MINOR，兼容性破坏升 MAJOR；一次发布按最高变更级别定版本。已有正式标签不得覆盖。数据库迁移序号和 API 路径版本独立管理。提交前执行 `sh scripts/build-version.sh`，确保 Go、前端与构建版本一致。
+
+## 六、依赖升级约束
+
+升级项目直接依赖和实际使用的间接依赖后，必须整理锁文件，并执行前端 lint、测试、生产构建、Go 竞态测试及受影响的数据库或 Redis 集成测试。不要为升级版本号使用 `--force` 或 `--legacy-peer-deps` 绕过兼容范围，也不要额外引入项目未使用的依赖测试工具。
+
+截至 2026-10-20，`eslint-plugin-react@7.37.5` 的 [peerDependencies](https://github.com/jsx-eslint/eslint-plugin-react/blob/v7.37.5/package.json) 仅支持到 ESLint 9，因此暂时保留 ESLint / `@eslint/js` 9.39.5。插件发布兼容版本后再成套升级 ESLint 10；其余前端直接依赖和 `go.mod` 中实际使用的 Go 依赖已在本轮更新并验证。
