@@ -11,12 +11,33 @@ permissions:
   packages: write
 
 jobs:
+  # The image is only built once the same checks that gate CI have passed.
+  # Previously this workflow pushed straight to GHCR, so a failing test or lint
+  # error still produced a published image.
+  quality-gate:
+    name: Quality Gate
+    uses: ./.github/workflows/ci.yml
+
   docker:
     name: Build & Push Container Image
+    needs: quality-gate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      # The binary reports this string, so it has to match the tag that the
+      # metadata step derives from the same ref: a tag push reports X.Y.Z (as the
+      # release binaries do), anything else identifies its commit. The tag's
+      # leading "v" is stripped because the binary's banner prints its own.
+      - name: Resolve build version
+        id: version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=dev-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up QEMU for Multi-Architecture Emulation
         uses: docker/setup-qemu-action@v3
@@ -52,5 +73,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.value }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

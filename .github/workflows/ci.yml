@@ -1,16 +1,36 @@
 name: CI Quality Gate & Automated Testing
 
+# This workflow is the single definition of the checks a change must pass.
+#
+# It is deliberately NOT a thin caller of a separate reusable workflow. A called
+# workflow's job names are prefixed with the calling job's name, so routing CI
+# through one turned the required check "Build & Race Detector Tests" into
+# "Quality Gate / Build & Race Detector Tests" — a rename that silently invalidates
+# branch protection, because the required context no longer exists.
+#
+# Keeping the jobs here means the checks report under their original names on push
+# and pull request, while docker.yml and release.yml still call this workflow and
+# gate their publish jobs on it. One definition, unchanged check names.
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   lint-and-test:
     name: Build & Race Detector Tests
     runs-on: ubuntu-latest
+    # The steps stay in one job, in this order, on purpose. `go test ./...`
+    # compiles package web, whose //go:embed dist/* needs web/dist to exist, so
+    # the frontend build has to run before the Go build. Splitting web and Go
+    # into parallel jobs would make the Go job silently depend on the dist
+    # directory committed to the repository instead of a freshly built one.
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -30,6 +50,11 @@ jobs:
           cd web
           npm ci
           npm run lint
+
+      - name: Test Web UI (request layer, hooks, components)
+        run: |
+          cd web
+          npm run test
 
       - name: Build Web UI Frontend
         run: |
@@ -63,3 +88,54 @@ jobs:
       - name: Validate Kubernetes Helm Chart
         run: |
           helm lint helm/airoute
+
+  integration:
+    name: Integration Tests (PostgreSQL + Redis)
+    runs-on: ubuntu-latest
+    # The unit suite only ever opens SQLite and never connects to Redis, so the
+    # PostgreSQL migration set, the '?' -> '$N' placeholder rebinding and the
+    # cluster broadcast paths were never executed by CI. Real service containers
+    # close that gap; the tests skip themselves when their DSN variables are
+    # unset, so this job is also safe to run locally without them.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: airoute
+          POSTGRES_PASSWORD: airoute
+          POSTGRES_DB: airoute
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U airoute -d airoute"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      # Scoped to the packages that own integration tests on purpose: ./... would
+      # re-run the entire unit suite and pull in package web, whose //go:embed
+      # dist/* needs the frontend to have been built first.
+      - name: Run Integration Tests
+        env:
+          AIROUTE_TEST_DATABASE_URL: postgres://airoute:airoute@localhost:5432/airoute?sslmode=disable
+          AIROUTE_TEST_REDIS_URL: redis://localhost:6379/0
+        run: |
+          go test -race -tags=integration ./internal/storage/ ./internal/distributed/
