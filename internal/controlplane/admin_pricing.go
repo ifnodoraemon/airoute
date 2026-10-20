@@ -116,7 +116,11 @@ func (h *AdminHandler) SavePricingRate(c *gin.Context) {
 
 // DeletePricingRate removes pricing for a model (optionally within a group).
 func (h *AdminHandler) DeletePricingRate(c *gin.Context) {
-	if err := h.pricing.DeleteRate(c.Request.Context(), c.Param("model"), c.Query("group")); err != nil {
+	modelName := c.Param("model")
+	if modelName == "" {
+		modelName = c.Query("model")
+	}
+	if err := h.pricing.DeleteRate(c.Request.Context(), modelName, c.Query("group")); err != nil {
 		writePricingError(c, err, "删除模型定价失败")
 		return
 	}

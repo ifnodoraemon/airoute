@@ -68,6 +68,31 @@ const standardRow = {
 };
 
 describe('PricingManager off-peak display', () => {
+  it('preserves the complete model and group when deleting pricing', async () => {
+    const model = 'vendor/team/模型 +%2F?#&';
+    const group = 'vip +&/组';
+    const { adminFetch, showToast } = renderPricing([{ ...offPeakRow, model, group_name: group }]);
+    await screen.findByText(model);
+    adminFetch.mockImplementation(async (_url, options) => (
+      options?.method === 'DELETE'
+        ? { ok: true, json: async () => ({ code: 0 }) }
+        : pricingResponse([])
+    ));
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    try {
+      fireEvent.click(screen.getByRole('button', { name: '删除', exact: true }));
+      await waitFor(() => expect(showToast).toHaveBeenCalledWith(`已删除 [${group}] 组模型 [${model}] 定价规则`, 'success'));
+      const [target] = adminFetch.mock.calls.find(([, options]) => options?.method === 'DELETE');
+      const url = new URL(target, window.location.origin);
+      expect(url.pathname).toBe('/api/v1/admin/pricing');
+      expect(url.searchParams.get('model')).toBe(model);
+      expect(url.searchParams.get('group')).toBe(group);
+      await waitFor(() => expect(screen.queryByText(model)).not.toBeInTheDocument());
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
   it('shows saved-but-not-applied warnings instead of a successful reload toast', async () => {
     const { adminFetch, showToast } = renderPricing([offPeakRow]);
     await screen.findByText('gpt-x');

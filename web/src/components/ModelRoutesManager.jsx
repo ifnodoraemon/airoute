@@ -113,7 +113,8 @@ export default function ModelRoutesManager({
       return;
     }
     try {
-      const res = await adminFetch(`/api/v1/admin/models/routes/${encodeURIComponent(modelName)}`, {
+      const query = new URLSearchParams({ model: modelName });
+      const res = await adminFetch(`/api/v1/admin/models/routes?${query}`, {
         method: 'DELETE'
       });
       const data = await res.json();

@@ -388,7 +388,8 @@ export default function PricingManager({
       return;
     }
     try {
-      const res = await adminFetch(`/api/v1/admin/pricing/${encodeURIComponent(model)}?group=${encodeURIComponent(groupName || 'default')}`, {
+      const query = new URLSearchParams({ model, group: groupName || 'default' });
+      const res = await adminFetch(`/api/v1/admin/pricing?${query}`, {
         method: 'DELETE'
       });
       const data = await res.json();

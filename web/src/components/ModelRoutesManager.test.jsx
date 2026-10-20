@@ -140,6 +140,27 @@ describe('ModelRoutesManager', () => {
     });
   });
 
+  it('deletes the complete model identifier and refreshes the route list', async () => {
+    const model = 'vendor/team/模型 +%2F?#&';
+    const { adminFetch, showToast } = setup({ routes: [route({ model })] });
+    await screen.findByText(model);
+    adminFetch.mockImplementation(async (_url, options) => (
+      options?.method === 'DELETE' ? jsonResponse({ code: 0 }) : jsonResponse({ code: 0, data: [] })
+    ));
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    try {
+      fireEvent.click(screen.getByTitle('删除路由'));
+      await waitFor(() => expect(showToast).toHaveBeenCalledWith(`已删除模型 [${model}] 路由`, 'success'));
+      const [target] = adminFetch.mock.calls.find(([, options]) => options?.method === 'DELETE');
+      const url = new URL(target, window.location.origin);
+      expect(url.pathname).toBe('/api/v1/admin/models/routes');
+      expect(url.searchParams.get('model')).toBe(model);
+      await waitFor(() => expect(screen.queryByText(model)).not.toBeInTheDocument());
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
   describe('modality badges', () => {
     it('labels each modality it knows', async () => {
       setup({

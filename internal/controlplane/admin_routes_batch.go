@@ -52,7 +52,11 @@ func unbindModelsFromChannels(repo *storage.Repository, modelSet map[string]bool
 
 // DeleteModelRoute removes a model from all upstream channels and fallback definitions.
 func (h *AdminHandler) DeleteModelRoute(c *gin.Context) {
-	modelName := strings.TrimSpace(c.Param("model"))
+	modelName := c.Param("model")
+	if modelName == "" {
+		modelName = c.Query("model")
+	}
+	modelName = strings.TrimSpace(modelName)
 	if modelName == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "模型标识为必填项"})
 		return
