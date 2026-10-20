@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/ifnodoraemon/airoute/internal/buildinfo"
 )
 
-// Version is dynamically populated at build time via -ldflags="-X main.Version=vX.Y.Z"
-var Version = "0.1.0"
+// Version is dynamically populated at build time via -ldflags="-X main.Version=X.Y.Z"
+var Version = buildinfo.DefaultVersion
 
 // ANSI color codes
 const (
@@ -46,6 +48,7 @@ func resolveDefaultCLIEndpoint() string {
 }
 
 func main() {
+	buildinfo.Version = Version
 	if len(os.Args) < 2 {
 		// Default action with no arguments: start the gateway server
 		runServer(nil)

@@ -38,10 +38,8 @@ type ModelProviderInfo struct {
 	Status           string   `json:"status"`
 	ConversionNeeded bool     `json:"conversion_needed"`
 	ConversionType   string   `json:"conversion_type"`
-	// SharedModelCount is how many models this channel serves. Weight and
-	// priority are channel-wide settings, so editing them for one model also
-	// changes every other model on the same channel; the console uses this to
-	// warn before saving.
+	// SharedModelCount describes capabilities; route-local weights and priorities
+	// can be edited independently of these other models.
 	SharedModelCount int `json:"shared_model_count"`
 }
 
@@ -73,7 +71,7 @@ func (d *Dispatcher) GetModelRoutes() []*ModelRouteDetail {
 		var matched []*model.ChannelConfig
 		for i := range channels {
 			if channels[i].SupportsModel(m) {
-				matched = append(matched, &channels[i])
+				matched = append(matched, channels[i].ForModel(m))
 			}
 		}
 

@@ -4,202 +4,125 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/ifnodoraemon/airoute/internal/model"
 )
 
-// ChannelRoutingUpdate describes a change to one channel's routing, expressed as a
-// delta rather than a replacement row.
-//
-// This distinction is load-bearing. A replacement row is built from a read taken
-// before the transaction, so two administrators who each add a different model to
-// the same shared channel would overwrite one another: the second save writes the
-// model list it read, and the first administrator's model disappears. A delta is
-// applied to the row as it exists inside the transaction, so concurrent additions
-// to different models both survive.
-type ChannelRoutingUpdate struct {
-	ID int64
-	// AddModels are model names the channel must serve. Adding one it already
-	// serves is a no-op, which is what makes concurrent adds commutative.
-	AddModels []string
-	// RemoveModels are model names the channel must stop serving.
-	RemoveModels []string
-	// SetMapping are model_mapping entries to write.
-	SetMapping map[string]string
-	// RemoveMapping are model_mapping keys to delete.
-	RemoveMapping []string
-	// Priority and Weight are applied only when positive: zero means "leave it",
-	// matching the form, where an unset field must not reset a stored value.
-	Priority int
-	Weight   int
-}
+type ModelRouteProvider = model.RouteProvider
 
-// ModelRouteBundle is everything a single "save model route" action must apply:
-// the cross-model fallback rule, the pricing row for one group, and the routing
-// changes for the channels that serve the model.
-//
-// It exists so the whole action commits or rolls back as one unit. Previously
-// the handler wrote these three concerns through three independent
-// transactions: if pricing or channel persistence failed, the fallback (or the
-// price) had already been committed and the operator saw an error while the
-// configuration was left half-applied.
+// ModelRouteBundle commits route policy, fallback and optional pricing together.
+// Providers nil leaves the existing policy intact (or inherits channel defaults
+// for a new route); an empty, non-nil list explicitly selects no providers.
 type ModelRouteBundle struct {
-	Model string
-	// FallbackModel empty means "remove the fallback rule for Model".
+	Model         string
 	FallbackModel string
-	// Price nil means "pricing was not part of this request".
-	Price *ModelPriceRecord
-	// Channels carries routing deltas. Each is applied to the channel as it exists
-	// inside the transaction, so a concurrent edit to any field — including the
-	// model list — survives. Naming a channel that no longer exists aborts the
-	// whole bundle.
-	Channels []ChannelRoutingUpdate
+	Price         *ModelPriceRecord
+	Providers     []ModelRouteProvider
 }
 
-// ApplyModelRouteBundle writes the whole route change in one transaction.
+func createModelRoutesTable(db *DB) error {
+	_, err := db.DB.Exec(`CREATE TABLE IF NOT EXISTS model_routes (
+  model TEXT PRIMARY KEY,
+  disabled INTEGER NOT NULL DEFAULT 0,
+  providers TEXT,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+ )`)
+	return err
+}
+
+// ApplyModelRouteBundle never writes channel capabilities or channel defaults.
 func (r *Repository) ApplyModelRouteBundle(ctx context.Context, b *ModelRouteBundle) error {
 	if b == nil || strings.TrimSpace(b.Model) == "" {
 		return nil
 	}
-
 	tx, err := r.db.BeginTx(ctx)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
-	// 1. Fallback rule.
+	defer func() { _ = tx.Rollback() }()
 	if b.FallbackModel != "" {
-		if _, err := tx.Exec(`
-			INSERT INTO model_fallbacks (model, fallback_model, enabled, updated_at)
-			VALUES (?, ?, 1, CURRENT_TIMESTAMP)
-			ON CONFLICT(model) DO UPDATE SET fallback_model = excluded.fallback_model, enabled = 1, updated_at = CURRENT_TIMESTAMP
-		`, b.Model, b.FallbackModel); err != nil {
-			return err
-		}
+		_, err = tx.Exec(`INSERT INTO model_fallbacks (model, fallback_model, enabled, updated_at)
+   VALUES (?, ?, 1, CURRENT_TIMESTAMP)
+   ON CONFLICT(model) DO UPDATE SET fallback_model=excluded.fallback_model, enabled=1, updated_at=CURRENT_TIMESTAMP`, b.Model, b.FallbackModel)
 	} else {
-		if _, err := tx.Exec(`DELETE FROM model_fallbacks WHERE model = ?`, b.Model); err != nil {
-			return err
-		}
+		_, err = tx.Exec(`DELETE FROM model_fallbacks WHERE model=?`, b.Model)
 	}
-
-	// 2. Pricing row for the requested group.
+	if err != nil {
+		return err
+	}
 	if b.Price != nil {
 		if err := upsertModelPriceTx(tx, b.Price); err != nil {
 			return err
 		}
 	}
-
-	// 3. Channel rows.
-	//
-	// Each row is re-read inside the transaction and only the fields the
-	// model-route editor owns are taken from the caller's copy. Writing the whole
-	// row from the caller's earlier read would also reset name, base_url, api_key,
-	// protocols, timeout and status to whatever they held at read time, silently
-	// undoing a concurrent edit to a field the route change has no opinion about —
-	// the channel modal and the route editor are different screens, edited by
-	// different people.
-	for _, u := range b.Channels {
-		current, err := getChannelTx(tx, u.ID)
-		if err != nil {
-			if errors.Is(err, ErrChannelNotFound) {
-				// The plan was built from a read taken before this transaction, so
-				// the channel can have been deleted in between. Failing rolls the
-				// whole change back rather than silently applying a partial plan:
-				// the operator asked for a route change that can no longer be
-				// applied as specified.
-				return fmt.Errorf("planned channel %d no longer exists: %w", u.ID, err)
+	var providers any
+	if b.Providers != nil {
+		// Validate within the transaction: a channel may disappear after planning.
+		for _, p := range b.Providers {
+			if _, err := getChannelTx(tx, p.ChannelID); err != nil {
+				return fmt.Errorf("route channel %d is unavailable: %w", p.ChannelID, err)
 			}
+		}
+		raw, err := json.Marshal(b.Providers)
+		if err != nil {
 			return err
 		}
-
-		// Apply the delta to the row as it exists now, then write only if that
-		// actually changed something. Writing unconditionally would turn every
-		// route save into a write of every channel row.
-		if !applyChannelRoutingUpdate(current, u) {
-			continue
-		}
-
-		if err := updateChannelTx(tx, current); err != nil {
-			return err
-		}
+		providers = string(raw)
 	}
-
+	_, err = tx.Exec(`INSERT INTO model_routes (model, disabled, providers) VALUES (?, 0, ?)
+  ON CONFLICT(model) DO UPDATE SET disabled=0,
+   providers=COALESCE(excluded.providers, model_routes.providers), updated_at=CURRENT_TIMESTAMP`, b.Model, providers)
+	if err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
-// applyChannelRoutingUpdate folds a routing delta into rec and reports whether
-// anything changed.
-func applyChannelRoutingUpdate(rec *ChannelRecord, u ChannelRoutingUpdate) bool {
-	changed := false
-
-	if len(u.AddModels) > 0 {
-		present := make(map[string]bool, len(rec.Models))
-		for _, m := range rec.Models {
-			present[m] = true
+// DeleteModelRoutes suppresses automatic routes durably without changing the
+// channel catalog. The tombstone is cleared by an explicit route save.
+func (r *Repository) DeleteModelRoutes(ctx context.Context, models []string) error {
+	tx, err := r.db.BeginTx(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, name := range models {
+		if _, err := tx.Exec(`INSERT INTO model_routes (model, disabled, providers) VALUES (?, 1, NULL)
+   ON CONFLICT(model) DO UPDATE SET disabled=1, providers=NULL, updated_at=CURRENT_TIMESTAMP`, name); err != nil {
+			return err
 		}
-		for _, m := range u.AddModels {
-			if m == "" || present[m] {
-				continue
+		if _, err := tx.Exec(`DELETE FROM model_fallbacks WHERE model=?`, name); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (r *Repository) ListModelRouteRules() (map[string]model.ModelRouteRule, error) {
+	rows, err := r.db.Query(`SELECT model, disabled, providers FROM model_routes`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	rules := make(map[string]model.ModelRouteRule)
+	for rows.Next() {
+		var name string
+		var disabled int
+		var raw sql.NullString
+		if err := rows.Scan(&name, &disabled, &raw); err != nil {
+			return nil, err
+		}
+		rule := model.ModelRouteRule{Disabled: disabled != 0}
+		if raw.Valid {
+			if err := json.Unmarshal([]byte(raw.String), &rule.Providers); err != nil {
+				return nil, fmt.Errorf("decode route %q: %w", name, err)
 			}
-			rec.Models = append(rec.Models, m)
-			present[m] = true
-			changed = true
 		}
+		rules[name] = rule
 	}
-
-	if len(u.RemoveModels) > 0 {
-		drop := make(map[string]bool, len(u.RemoveModels))
-		for _, m := range u.RemoveModels {
-			drop[m] = true
-		}
-		kept := make([]string, 0, len(rec.Models))
-		for _, m := range rec.Models {
-			if drop[m] {
-				changed = true
-				continue
-			}
-			kept = append(kept, m)
-		}
-		rec.Models = kept
-	}
-
-	if len(u.SetMapping) > 0 {
-		if rec.ModelMapping == nil {
-			rec.ModelMapping = make(map[string]string, len(u.SetMapping))
-		}
-		for k, v := range u.SetMapping {
-			if rec.ModelMapping[k] == v {
-				continue
-			}
-			rec.ModelMapping[k] = v
-			changed = true
-		}
-	}
-
-	if len(u.RemoveMapping) > 0 {
-		for _, k := range u.RemoveMapping {
-			if _, exists := rec.ModelMapping[k]; !exists {
-				continue
-			}
-			delete(rec.ModelMapping, k)
-			changed = true
-		}
-	}
-
-	if u.Priority > 0 && rec.Priority != u.Priority {
-		rec.Priority = u.Priority
-		changed = true
-	}
-	if u.Weight > 0 && rec.Weight != u.Weight {
-		rec.Weight = u.Weight
-		changed = true
-	}
-
-	return changed
+	return rules, rows.Err()
 }
 
 // upsertModelPriceTx mirrors SaveModelPrice but participates in a transaction.

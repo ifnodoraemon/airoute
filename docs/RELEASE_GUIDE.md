@@ -1,102 +1,63 @@
-# Airoute Release & Versioning Specification (发布与版本管理规范)
+# 版本与发布规范
 
-本文档制定了 Airoute 项目在 GitHub 上的标准化 Release 与 Git Tag 生命周期管理流程，遵循 **Semantic Versioning 2.0.0 (语义化版本规范)** 与云原生工程最佳实践。
+本规范适用于后续代码开发、二进制、容器镜像和前端包。
 
----
+## 当前基线
 
-## 1. 语义化版本规则 (SemVer 2.0.0)
+仓库已发布 `v1.0.0`，该标签不得移动或重新发布。真实容灾拓扑和独立模型路由属于向后兼容的新能力，下一正式版本定为 **v1.1.0**。发布前的主分支构建标识为 `1.1.0-dev+g<提交号>`，不将尚未发布的提交冒充成原来的 `1.0.0`。
 
-版本号格式定义为：`vMAJOR.MINOR.PATCH`（例如：`v1.0.0`）
+## 递进原则
 
-| 版本类型 | 升级原则 | 示例场景 | 升级前缀 |
-| :--- | :--- | :--- | :--- |
-| **MAJOR (主版本)** | 包含不向后兼容的重大架构重构或契约变更 | 数据库 Schema 不兼容变更、网关协议核心契约废弃 | `v2.0.0` |
-| **MINOR (次版本)** | 向后兼容的新特性、新协议支持或重大工程优化 | 新增模型格式校验引擎、新增自研适配器模式、高精度财务计费改造 | `v1.1.0` |
-| **PATCH (修订版本)** | 向后兼容的 Bug 修复、安全加固或长尾边缘情况处理 | 修复某上游 Provider 流式 index 漏传、浮点数舍入微调 | `v1.0.1` |
+使用 `MAJOR.MINOR.PATCH`，Git 标签加 `v`，程序和包版本不加 `v`。
 
----
+| 级别 | 何时递增 | 示例 | 递增结果 |
+| --- | --- | --- | --- |
+| PATCH 修订 | 保持兼容的缺陷修复、性能优化、依赖修复或样式调整 | 修复删除路由 404、筛选漏记录、token 统计错误 | `1.0.0 → 1.0.1` |
+| MINOR 次版本 | 向后兼容的新能力、可选配置、接口或工作流 | 增加真实容灾拓扑、独立路由策略 | `1.0.3 → 1.1.0` |
+| MAJOR 主版本 | 用户必须修改调用方式、配置或数据，才能继续使用的兼容性破坏 | 移除公开接口、改变必填字段或进行无法兼容升级的数据改造 | `1.4.2 → 2.0.0` |
 
-## 2. 自动化发布流水线 (CI/CD Matrix)
+- 一次发布包含多项变更时，按其中最高级别定版本；MINOR 递增时 PATCH 归零，MAJOR 递增时 MINOR 和 PATCH 归零。
+- 不按提交次数、修改文件数量、开发天数或重构规模递增正式版本。内部重构若无用户可见变化且保持兼容，不单独触发 MINOR；文档和测试变更不必单独发版。
+- 数据库新增表或字段且支持现有数据升级，不自动视为 MAJOR。数据库迁移序号独立递增；迁移序号与产品版本号不得混用。
+- `/v1` 等协议路径与产品版本独立。产品升到 `1.1.0` 不代表需要改 API 地址。
+- 已发布的版本、标签和同名发布资产不可覆盖、回退或复用。发布后发现问题使用更高版本修复；回滚部署只切换已存在的旧构建。
 
-当向 GitHub 仓库推送符合 `v*` 或 `v*.*.*` 格式的 Git Tag 时，GitHub Actions 会自动触发以下流水线：
+## 开发版、候选版与正式版
 
-```mermaid
-flowchart TD
-    Tag["Push Git Tag (e.g. v1.0.0)"] --> ActionRelease[".github/workflows/release.yml"]
-    Tag --> ActionDocker[".github/workflows/docker.yml"]
+| 构建 | 格式 | 用途 |
+| --- | --- | --- |
+| 开发版 | `1.1.0-dev+gabc1234` | 未正式发版的提交；本地有未提交修改时追加 `.dirty` |
+| 候选版 | `1.1.0-rc.1`、`1.1.0-rc.2` | 计划发布内容的验收；候选编号从 1 递增 |
+| 正式版 | `1.1.0` | 已验证、提交并用不可变标签标记的版本 |
 
-    subgraph CrossPlatform ["Release Binaries"]
-        ActionRelease --> BuildLinux["Linux amd64 / arm64"]
-        ActionRelease --> BuildDarwin["macOS amd64 / arm64 (Apple Silicon)"]
-        ActionRelease --> BuildWin["Windows amd64 (.exe)"]
-        BuildLinux --> Artifacts["Upload tar.gz / zip assets"]
-        BuildDarwin --> Artifacts
-        BuildWin --> Artifacts
-        Artifacts --> GHRelease["Create Official GitHub Release"]
-    end
+`+g<提交号>` 是构建元数据，不构成另一个正式版本。候选版发现缺陷后增加候选编号；正式发布后修复用 PATCH，不能继续复用旧候选版或正式标签。
 
-    subgraph ContainerRegistry ["Docker Images"]
-        ActionDocker --> MultiArch["Buildx Multi-Arch (amd64 + arm64)"]
-        MultiArch --> GHCR["Push to ghcr.io/ifnodoraemon/airoute:v1.0.0, :latest"]
-    end
-```
+## 版本来源与校验
 
----
+`internal/buildinfo/version.go` 的 `BaseVersion` 表示下一计划版本，`web/package.json` 及锁文件中的项目版本必须与它一致。未注入链接参数的 Go 构建显示 `<BaseVersion>-dev`。
 
-## 3. 标准发版操作流程 (Standard Release Workflow)
+`sh scripts/build-version.sh` 为 Makefile、镜像 CI 和二进制发布统一解析构建版本。CI 会拒绝 Go 与前端基线不一致、标签与基线不一致以及非法候选编号。Dockerfile 的默认开发版本也应同步调整。`/health`、`/v1`、`/v1beta` 和 CLI 报告同一构建版本。
 
-### 第一步：全量单元与集成测试验证
-确保本地代码库测试 100% 通过且工作区干净：
-```bash
-go test -count=1 ./...
-```
+调整版本时：先按本规范确定下一目标版本，再同步修改上述来源并提交。不要仅为使版本显示成新数字而移动已有标签。
 
-### 第二步：提交代码并推送到主分支
-遵循 [Conventional Commits](https://www.conventionalcommits.org/) 规范编写提交信息：
-```bash
-git add .
-git commit -m "feat(validator): introduce precision engineering, protocol adapters, and default-off validation"
-git push origin main
-```
+## 发布步骤
 
-### 第三步：打附注标签 (Annotated Git Tag)
-必须创建带有详细发布摘要的 Annotated Tag（避免使用轻量级标签）：
-```bash
-# 创建带有说明的发布标签
-git tag -a v1.0.0 -m "Release v1.0.0: Production-grade multi-protocol AI gateway with precision engineering and protocol adapters"
+1. 确定版本级别，更新版本来源、变更说明和必要的升级注意事项。
+2. 完成前端 lint、测试、生产构建，Go 竞态测试和相关 PostgreSQL / Redis 集成测试；CI 必须通过。
+3. 提交并推送，确认工作区干净且待发布内容在同一提交。
+4. 需要验收时先创建新的附注候选标签；正式发版时创建新的附注正式标签。示例：
 
-# 推送 Tag 到远程仓库以触发自动化发布
-git push origin v1.0.0
-```
-
-### 第四步：GitHub Release 发布记录 (Release Notes)
-流水线完成编译后，可通过 GitHub 网页控制台或 `gh` 命令行工具撰写 Release Notes：
-```markdown
-## What's Changed
-### 🌟 New Features & Enhancements
-- **Protocol Validation Engine**: Configurable OpenAI, Anthropic, and Gemini schema validation (defaults to `off` with granular per-model and per-key overrides).
-- **Precision Engineering**: 8-decimal fixed-point billing rounding, overdraft pre-reserve protection, P50/P90/P99 latency histogram telemetry.
-- **Design Patterns Refactoring**: Implemented Protocol Adapter Pattern for bi-directional protocol transformation and State Pattern for Circuit Breaker.
-- **Terminology Normalization**: Unified all internal references from VirtualKey to standard APIKey.
-
-### 📦 Artifacts
-- Cross-platform standalone binaries (Linux, macOS, Windows).
-- Multi-architecture container image: `ghcr.io/ifnodoraemon/airoute:v1.0.0`
-```
-
----
-
-## 4. 应急与热修复分支策略 (Hotfix & Rollback)
-
-若生产环境已发布的 `v1.0.0` 出现紧急缺陷：
-1. 基于该 Tag 创建修复分支：
    ```bash
-   git checkout -b hotfix/v1.0.1 v1.0.0
+   git tag -a v1.1.0 -m "Release v1.1.0: live failover topology and independent model routes"
+   git push origin v1.1.0
    ```
-2. 修复并经过测试后，打补丁标签：
-   ```bash
-   git commit -m "fix(billing): correct precision rounding edge case"
-   git tag -a v1.0.1 -m "Hotfix v1.0.1: Fix precision rounding edge case"
-   git push origin v1.0.1
-   ```
-3. 将修复合并回 `main` 主分支保持同步。
+
+5. 标签触发 `.github/workflows/release.yml` 和 `.github/workflows/docker.yml`；两者均在质量检查通过后发布产物。核对 CLI、健康接口、镜像版本和发布说明一致后更新服务。
+
+本地构建容器时保留版本信息：
+
+```bash
+docker compose build --build-arg VERSION="$(sh scripts/build-version.sh)" gateway-1 gateway-2
+```
+
+升级到独立路由存储只新增迁移 16 的 `model_routes` 表。旧版程序会忽略新路由策略，回滚前应评估已删除或修改的路由是否会恢复旧行为；不要为回滚应用而删除数据库或迁移记录。

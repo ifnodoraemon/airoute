@@ -478,6 +478,7 @@ func (db *DB) migrate() error {
 				return nil
 			},
 		},
+		{Version: 16, Name: "independent_model_routes", Up: createModelRoutesTable},
 	}
 	return db.runMigrations(migrations)
 }

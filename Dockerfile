@@ -18,7 +18,7 @@ FROM golang:1.26-alpine AS go-builder
 # Injected so the binary reports the same version as the image tag it is
 # published under (see .github/workflows/docker.yml). The default keeps a plain
 # `docker build .` working without build arguments.
-ARG VERSION=dev
+ARG VERSION=1.1.0-dev
 
 WORKDIR /app
 

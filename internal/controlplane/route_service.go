@@ -45,8 +45,8 @@ func (e *RouteStageError) Error() string { return e.Err.Error() }
 func (e *RouteStageError) Unwrap() error { return e.Err }
 
 // RouteService owns the model-route save rules: what a valid request is, how the
-// price row for the edited group is derived from a partial update, which channel
-// rows have to change, and how the change reaches the data plane.
+// price row for the edited group is derived from a partial update, which providers
+// are bound to this route, and how the change reaches the data plane.
 //
 // Both of the computations below used to be private methods on AdminHandler, so
 // the only way to exercise them was through an HTTP request against a live
@@ -66,7 +66,7 @@ func NewRouteService(store RouteStore, sync RouteSync, prices PriceReloader) *Ro
 
 // UpdateModelRoute persists a route change and refreshes the data plane.
 //
-// The write is transactional: fallback, pricing and channel rows commit together
+// The write is transactional: fallback, pricing and independent route rows commit together
 // or not at all. The refresh steps that follow are NOT part of that transaction.
 // A failure after commit is returned as RouteStageApply so the HTTP adapter
 // reports "saved, pending application" separately from a rejected write.
@@ -92,11 +92,11 @@ func (s *RouteService) UpdateModelRoute(ctx context.Context, req *UpdateModelRou
 	}
 	bundle.Price = price
 
-	channelRows, err := s.collectChannelUpdatesForModel(model, req.ProviderUpdates)
+	providers, err := s.collectRouteProviders(req.ProviderUpdates)
 	if err != nil {
 		return &RouteStageError{Stage: RouteStageCollect, Err: err}
 	}
-	bundle.Channels = channelRows
+	bundle.Providers = providers
 
 	if err := s.store.ApplyModelRouteBundle(ctx, bundle); err != nil {
 		return &RouteStageError{Stage: RouteStagePersist, Err: err}
@@ -238,55 +238,49 @@ func (s *RouteService) buildRoutePricing(req *UpdateModelRouteRequest) (*storage
 	return rec, nil
 }
 
-// collectChannelUpdatesForModel computes the channel rows that must change for a
-// model route, WITHOUT writing them: the caller commits them together with the
-// fallback and pricing rows in one transaction.
-//
-// A channel listed in providerUpdates is opted in (model added, mapping set);
-// every other channel is opted out (model and mapping removed). A channel whose
-// row would not actually change is not returned at all, so an unchanged channel
-// is never rewritten.
-func (s *RouteService) collectChannelUpdatesForModel(modelName string, providerUpdates []ModelProviderUpdate) ([]storage.ChannelRoutingUpdate, error) {
-	desiredProviders := make(map[int64]ModelProviderUpdate, len(providerUpdates))
-	for _, pu := range providerUpdates {
-		desiredProviders[pu.ChannelID] = pu
-	}
-
+// collectRouteProviders plans route-local providers; channel records
+// are read only to validate IDs and resolve inherited scheduling defaults.
+func (s *RouteService) collectRouteProviders(providerUpdates []ModelProviderUpdate) ([]storage.ModelRouteProvider, error) {
 	allChannels, err := s.store.ListChannels()
 	if err != nil {
 		return nil, err
 	}
-
-	// Every channel is described as a delta, including the ones that already look
-	// right: "ensure this model is present" is idempotent, so applying it inside the
-	// transaction cannot lose a model another administrator added in the meantime.
-	// A replacement list built from this read could, which is the bug this shape
-	// exists to prevent.
-	updates := make([]storage.ChannelRoutingUpdate, 0, len(allChannels))
-	for _, ch := range allChannels {
-		pu, isDesired := desiredProviders[ch.ID]
-
-		u := storage.ChannelRoutingUpdate{ID: ch.ID}
-		if isDesired {
-			u.AddModels = []string{modelName}
-			if pu.Priority > 0 {
-				u.Priority = pu.Priority
-			}
-			if pu.Weight > 0 {
-				u.Weight = pu.Weight
-			}
-			if pu.MappedModel != "" && pu.MappedModel != modelName {
-				u.SetMapping = map[string]string{modelName: pu.MappedModel}
-			} else {
-				u.RemoveMapping = []string{modelName}
-			}
-		} else {
-			u.RemoveModels = []string{modelName}
-			u.RemoveMapping = []string{modelName}
-		}
-		updates = append(updates, u)
+	if providerUpdates == nil {
+		return nil, nil
 	}
-	return updates, nil
+	byID := make(map[int64]*storage.ChannelRecord, len(allChannels))
+	for _, ch := range allChannels {
+		byID[ch.ID] = ch
+	}
+	providers := make([]storage.ModelRouteProvider, 0, len(providerUpdates))
+	seen := make(map[int64]bool)
+	for _, p := range providerUpdates {
+		ch := byID[p.ChannelID]
+		if ch == nil {
+			return nil, &ValidationError{Message: "所选渠道不存在，请刷新后重试"}
+		}
+		if seen[p.ChannelID] {
+			return nil, &ValidationError{Message: "同一路由不能重复绑定渠道"}
+		}
+		seen[p.ChannelID] = true
+		priority, weight := p.Priority, p.Weight
+		if priority <= 0 {
+			priority = ch.Priority
+		}
+		if weight <= 0 {
+			weight = ch.Weight
+		}
+		if priority <= 0 {
+			priority = 1
+		}
+		if weight <= 0 {
+			weight = 10
+		}
+		providers = append(providers, storage.ModelRouteProvider{
+			ChannelID: p.ChannelID, Priority: priority, Weight: weight, MappedModel: strings.TrimSpace(p.MappedModel),
+		})
+	}
+	return providers, nil
 }
 
 // globalPriceReloader adapts the package-level billing engine to PriceReloader.

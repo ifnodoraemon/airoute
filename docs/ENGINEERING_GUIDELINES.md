@@ -105,7 +105,7 @@ Airoute 生产与标准测试环境采用 **Docker Compose 高可用容器集群
 
 ```bash
 # 1. 重新构建容器镜像（基于多阶段编译 Dockerfile）
-docker compose build gateway-1 gateway-2
+docker compose build --build-arg VERSION="$(sh scripts/build-version.sh)" gateway-1 gateway-2
 
 # 2. 滚动热重载网关容器
 docker compose up -d gateway-1 gateway-2
@@ -218,3 +218,8 @@ JSX 中的标识符引用由 `react/jsx-uses-vars` 识别。缺少该规则会�
 
 审查中反复发现注释描述的行为与实际代码不符（例如声称"Up 与版本记录在同一事务提交"而实际是两条独立语句；声称"清除每项租户数据"而漏清三项）。**注释是契约的一部分**：改动行为时必须同步注释，发现不符的注释应按缺陷处理。
 
+
+
+## 五、版本递进约束
+
+后续开发和发布必须遵循 [版本与发布规范](RELEASE_GUIDE.md)：兼容修复升 PATCH，兼容新能力升 MINOR，兼容性破坏升 MAJOR；一次发布按最高变更级别定版本。已有正式标签不得覆盖。数据库迁移序号和 API 路径版本独立管理。提交前执行 `sh scripts/build-version.sh`，确保 Go、前端与构建版本一致。

@@ -35,6 +35,9 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Validate version metadata
+        run: sh scripts/build-version.sh
+
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:

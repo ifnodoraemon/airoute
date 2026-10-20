@@ -32,7 +32,7 @@ func (d *Dispatcher) ListChannelsForModel(modelName, proto string) []*model.Chan
 			continue
 		}
 		if ch.SupportsModel(modelName) {
-			matched = append(matched, ch)
+			matched = append(matched, ch.ForModel(modelName))
 		}
 	}
 	return matched
@@ -55,7 +55,7 @@ func (d *Dispatcher) GetChannelsForModelAndProtocolWithContext(ctx context.Conte
 			continue
 		}
 		if ch.SupportsModel(modelName) {
-			matched = append(matched, ch)
+			matched = append(matched, ch.ForModel(modelName))
 		}
 	}
 	d.mu.RUnlock()
@@ -130,10 +130,19 @@ func (d *Dispatcher) GetAllSupportedModels() []string {
 	modelSet := make(map[string]struct{})
 	for _, ch := range d.channels {
 		for _, m := range ch.Models {
-			modelSet[m] = struct{}{}
+			if ch.SupportsModel(m) {
+				modelSet[m] = struct{}{}
+			}
 		}
 		for alias := range ch.ModelMapping {
-			modelSet[alias] = struct{}{}
+			if ch.SupportsModel(alias) {
+				modelSet[alias] = struct{}{}
+			}
+		}
+		for name, rule := range ch.RouteRules {
+			if !rule.Disabled {
+				modelSet[name] = struct{}{}
+			}
 		}
 	}
 

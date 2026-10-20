@@ -150,7 +150,8 @@ describe('ModelRoutesManager', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     try {
       fireEvent.click(screen.getByTitle('删除路由'));
-      await waitFor(() => expect(showToast).toHaveBeenCalledWith(`已删除模型 [${model}] 路由`, 'success'));
+      expect(confirm).toHaveBeenCalledWith(expect.stringContaining('渠道支持的模型配置将保留'));
+      await waitFor(() => expect(showToast).toHaveBeenCalledWith(`已删除模型 [${model}] 路由，渠道模型配置已保留`, 'success'));
       const [target] = adminFetch.mock.calls.find(([, options]) => options?.method === 'DELETE');
       const url = new URL(target, window.location.origin);
       expect(url.pathname).toBe('/api/v1/admin/models/routes');

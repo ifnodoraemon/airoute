@@ -7,10 +7,8 @@ BIN_DIR = bin
 ENTRY = ./cmd/airoute
 CONFIG = configs/config.yaml
 
-# Reported by the version command and the startup banner. Derived from git so a
-# locally built binary identifies its revision instead of the baked-in default.
-# The leading "v" of a tag is stripped because the banner prints its own.
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo dev)
+# Resolve releases and development builds consistently with CI.
+VERSION ?= $(shell sh scripts/build-version.sh)
 LDFLAGS = -X main.Version=$(VERSION)
 
 all: build
@@ -40,7 +38,7 @@ build: build-web
 
 run: build-web
 	@echo "==> Running $(APP_NAME)..."
-	go run $(ENTRY) -config $(CONFIG)
+	go run -ldflags "$(LDFLAGS)" $(ENTRY) -config $(CONFIG)
 
 test: web/dist/index.html
 	@echo "==> Running tests..."

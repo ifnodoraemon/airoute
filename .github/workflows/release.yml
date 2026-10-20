@@ -41,6 +41,12 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Resolve build version
+        id: version
+        run: |
+          build_version=$(sh scripts/build-version.sh)
+          echo "value=$build_version" >> "$GITHUB_OUTPUT"
+
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
@@ -67,7 +73,7 @@ jobs:
           CGO_ENABLED: 0
           # The binary's banner prints its own "v", so a tag like v1.2.3 must be
           # passed as 1.2.3 or the version reads "vv1.2.3".
-          RELEASE_VERSION: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ steps.version.outputs.value }}
         run: |
           mkdir -p dist
           go build -ldflags="-s -w -X main.Version=${RELEASE_VERSION#v}" -o dist/${{ matrix.artifact_name }} ./cmd/airoute

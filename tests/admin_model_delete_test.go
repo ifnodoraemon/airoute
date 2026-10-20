@@ -1,8 +1,10 @@
 package tests
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -80,8 +82,8 @@ func TestAPI_DeleteModelRouteIdentifiers(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, channels, 2)
 			for _, ch := range channels {
-				require.Equal(t, []string{"keep-model"}, ch.Models)
-				require.Equal(t, map[string]string{"keep-model": "keep-upstream"}, ch.ModelMapping)
+				require.Equal(t, []string{tc.model, "keep-model"}, ch.Models)
+				require.Equal(t, map[string]string{tc.model: "upstream-model", "keep-model": "keep-upstream"}, ch.ModelMapping)
 			}
 			fallbacks, err := repo.GetModelFallbacks()
 			require.NoError(t, err)
@@ -138,4 +140,63 @@ func TestAPI_DeleteModelRequiresAdminAndIdentifier(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAPI_IndependentRouteLifecycle(t *testing.T) {
+	repo, dispatcher, sync, engine, token := setupModelDeleteTest(t)
+	ch := &storage.ChannelRecord{Name: "capabilities", Type: "openai", BaseURL: "http://upstream.invalid",
+		Models: []string{"upstream-a", "upstream-b"}, Priority: 1, Weight: 10, Status: "active"}
+	require.NoError(t, repo.CreateChannel(ch))
+	before, err := repo.GetChannel(ch.ID)
+	require.NoError(t, err)
+	require.NoError(t, sync.ReloadAndBroadcast(context.Background(), "test_seed"))
+	require.Len(t, dispatcher.GetChannelsForModel("upstream-a"), 1, "capabilities initially generate automatic routes")
+
+	save := func(name string) {
+		body, err := json.Marshal(controlplane.UpdateModelRouteRequest{
+			Model: name, ProviderUpdates: []controlplane.ModelProviderUpdate{{
+				ChannelID: ch.ID, Priority: 3, Weight: 21, MappedModel: "upstream-a",
+			}},
+		})
+		require.NoError(t, err)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/models/routes", bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		engine.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	}
+	save("public/alias")
+	bound := dispatcher.GetChannelsForModel("public/alias")
+	require.Len(t, bound, 1)
+	require.Equal(t, 21, bound[0].Weight)
+	require.Equal(t, 3, bound[0].Priority)
+	require.Equal(t, "upstream-a", bound[0].GetUpstreamModel("public/alias"))
+	require.Equal(t, 10, dispatcher.GetChannelsForModel("upstream-b")[0].Weight)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/models/routes/batch-delete", bytes.NewBufferString(`{"models":["public/alias","upstream-a"]}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Empty(t, dispatcher.GetChannelsForModel("public/alias"))
+	require.Empty(t, dispatcher.GetChannelsForModel("upstream-a"))
+	after, err := repo.GetChannel(ch.ID)
+	require.NoError(t, err)
+	require.Equal(t, before, after, "single and batch route operations must not touch the channel")
+
+	// A second replica/restarted process must load the same suppression policy.
+	restarted := router.NewDispatcher(nil)
+	require.NoError(t, controlplane.NewSynchronizer(repo, restarted).ReloadFromDB())
+	require.Empty(t, restarted.GetChannelsForModel("upstream-a"))
+	require.Len(t, restarted.GetChannelsForModel("upstream-b"), 1)
+	for _, route := range restarted.GetModelRoutes() {
+		require.NotContains(t, []string{"public/alias", "upstream-a"}, route.Model)
+	}
+	save("public/alias")
+	require.Len(t, dispatcher.GetChannelsForModel("public/alias"), 1, "explicit creation restores a route")
+	after, err = repo.GetChannel(ch.ID)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
 }

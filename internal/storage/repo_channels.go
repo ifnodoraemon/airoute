@@ -264,12 +264,17 @@ func (r *Repository) ToModelChannels() ([]model.ChannelConfig, error) {
 	if err != nil {
 		return nil, err
 	}
+	rules, err := r.ListModelRouteRules()
+	if err != nil {
+		return nil, err
+	}
 	var res []model.ChannelConfig
 	for _, rec := range records {
 		if rec.Status != "active" {
 			continue
 		}
 		res = append(res, model.ChannelConfig{
+			RouteRules:     rules,
 			ID:             rec.ID,
 			Name:           rec.Name,
 			Type:           rec.Type,

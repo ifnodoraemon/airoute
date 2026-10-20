@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/buildinfo"
 	"github.com/ifnodoraemon/airoute/internal/config"
 	"github.com/ifnodoraemon/airoute/internal/controlplane"
 	"github.com/ifnodoraemon/airoute/internal/router"
@@ -18,7 +19,7 @@ func (h *Handler) HandleHealth(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":    "healthy",
 		"service":   "airoute",
-		"version":   "0.1.0",
+		"version":   buildinfo.Version,
 		"timestamp": time.Now().Unix(),
 	})
 }
@@ -28,7 +29,7 @@ func (h *Handler) HandleV1Info(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"service": "airoute",
 		"status":  "operational",
-		"version": "0.1.0",
+		"version": buildinfo.Version,
 		"message": "Airoute High-Performance AI Router & Multimodal Gateway API v1",
 		"protocols": []string{
 			"OpenAI Chat Completions (/v1/chat/completions)",
@@ -67,7 +68,7 @@ func (h *Handler) HandleV1BetaInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"service": "airoute",
 		"status":  "operational",
-		"version": "0.1.0",
+		"version": buildinfo.Version,
 		"message": "Airoute Google Gemini Protocol Ingress v1beta",
 		"endpoints": gin.H{
 			"models": "/v1beta/models",

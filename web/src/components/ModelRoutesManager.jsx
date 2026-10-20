@@ -48,7 +48,7 @@ export default function ModelRoutesManager({
 
   const handleBatchDeleteRoutes = async () => {
     if (selectedModels.length === 0) return;
-    if (!window.confirm(isZh ? `确定批量删除选中的 ${selectedModels.length} 个模型路由配置？` : `Delete selected ${selectedModels.length} model route configs?`)) {
+    if (!window.confirm(isZh ? `确定批量删除选中的 ${selectedModels.length} 个模型路由配置？渠道支持的模型配置将保留。` : `Delete selected ${selectedModels.length} model route configs? Channel capabilities will be retained.`)) {
       return;
     }
     try {
@@ -59,7 +59,7 @@ export default function ModelRoutesManager({
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(data.message || (isZh ? '已批量删除模型路由' : 'Selected model routes deleted'), 'success');
+        showToast(data.warning || data.message || (isZh ? '已批量删除模型路由' : 'Selected model routes deleted'), data.warning ? 'warning' : 'success');
         setSelectedModels([]);
         fetchModelRoutes();
       } else {
@@ -109,7 +109,7 @@ export default function ModelRoutesManager({
   }, [isAdmin, adminFetch, showToast, isZh]);
 
   const handleDeleteRoute = async (modelName) => {
-    if (!window.confirm(isZh ? `确定删除模型 [${modelName}] 路由配置及其服务商绑定？` : `Delete route config and provider bindings for [${modelName}]?`)) {
+    if (!window.confirm(isZh ? `确定删除模型 [${modelName}] 路由配置？渠道支持的模型配置将保留。` : `Delete route config for [${modelName}]? Channel capabilities will be retained.`)) {
       return;
     }
     try {
@@ -119,7 +119,7 @@ export default function ModelRoutesManager({
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        showToast(isZh ? `已删除模型 [${modelName}] 路由` : `Deleted route for [${modelName}]`, 'success');
+        showToast(data.warning || (isZh ? `已删除模型 [${modelName}] 路由，渠道模型配置已保留` : `Deleted route for [${modelName}]; channel capabilities retained`), data.warning ? 'warning' : 'success');
         fetchModelRoutes();
       } else {
         showToast(data.error || (isZh ? '删除失败' : 'Failed to delete route'), 'warning');
@@ -299,7 +299,7 @@ export default function ModelRoutesManager({
             {isZh ? '模型路由与分发' : 'Model Routes & Dispatch'}
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            {isZh ? '配置各模型的上游服务商权重绑定、故障平滑降级与定价策略' : 'Configure provider weights, fallback chains, and pricing rates for AI models'}
+            {isZh ? '配置各模型的路由绑定、故障降级与定价；渠道模型库独立保留' : 'Configure provider weights, fallback chains, and pricing rates for AI models'}
           </p>
         </div>
 

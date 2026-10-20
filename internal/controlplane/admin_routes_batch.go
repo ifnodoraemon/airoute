@@ -6,92 +6,57 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
-// unbindModelsFromChannels disassociates a set of models from all channels and removes their fallback entries.
-func unbindModelsFromChannels(repo *storage.Repository, modelSet map[string]bool) error {
-	if repo == nil || len(modelSet) == 0 {
-		return nil
-	}
-
-	allChannels, err := repo.ListChannels()
-	if err == nil {
-		for _, ch := range allChannels {
-			changed := false
-			var newModels []string
-			for _, m := range ch.Models {
-				if modelSet[m] {
-					changed = true
-				} else {
-					newModels = append(newModels, m)
-				}
-			}
-			if changed {
-				ch.Models = newModels
-			}
-			if ch.ModelMapping != nil {
-				for m := range modelSet {
-					if _, ok := ch.ModelMapping[m]; ok {
-						delete(ch.ModelMapping, m)
-						changed = true
-					}
-				}
-			}
-			if changed {
-				_ = repo.UpdateChannel(ch)
-			}
-		}
-	}
-
-	for m := range modelSet {
-		_ = repo.DeleteModelFallback(m)
-	}
-	return nil
-}
-
-// DeleteModelRoute removes a model from all upstream channels and fallback definitions.
+// DeleteModelRoute removes a route policy and suppresses automatic recreation.
+// The channel's supported models, aliases, credentials and defaults are retained.
 func (h *AdminHandler) DeleteModelRoute(c *gin.Context) {
-	modelName := c.Param("model")
-	if modelName == "" {
-		modelName = c.Query("model")
+	name := c.Param("model")
+	if name == "" {
+		name = c.Query("model")
 	}
-	modelName = strings.TrimSpace(modelName)
-	if modelName == "" {
+	name = strings.TrimSpace(name)
+	if name == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "模型标识为必填项"})
 		return
 	}
-
-	_ = unbindModelsFromChannels(h.repo, map[string]bool{modelName: true})
-
-	if err := h.sync.ReloadAndBroadcast(c.Request.Context(), "model_route_deleted"); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "数据面热重载失败: " + err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "模型路由及上下游绑定已成功删除"})
+	h.deleteModelRoutes(c, []string{name})
 }
 
-// BatchDeleteModelRoutes deletes routes for multiple models.
 func (h *AdminHandler) BatchDeleteModelRoutes(c *gin.Context) {
 	var req struct {
 		Models []string `json:"models"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil || len(req.Models) == 0 {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请提供待删除模型列表"})
 		return
 	}
-
-	modelSet := make(map[string]bool)
+	models := make([]string, 0, len(req.Models))
+	seen := make(map[string]bool)
 	for _, m := range req.Models {
-		t := strings.TrimSpace(m)
-		if t != "" {
-			modelSet[t] = true
+		m = strings.TrimSpace(m)
+		if m != "" && !seen[m] {
+			models = append(models, m)
+			seen[m] = true
 		}
 	}
+	if len(models) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请提供待删除模型列表"})
+		return
+	}
+	h.deleteModelRoutes(c, models)
+}
 
-	_ = unbindModelsFromChannels(h.repo, modelSet)
-
-	h.syncDataPlane("models_batch_deleted")
-	c.JSON(http.StatusOK, gin.H{"code": 0, "message": fmt.Sprintf("已批量删除 %d 个模型路由及其服务商绑定", len(modelSet))})
+func (h *AdminHandler) deleteModelRoutes(c *gin.Context, models []string) {
+	if err := h.repo.DeleteModelRoutes(c.Request.Context(), models); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除模型路由失败: " + err.Error()})
+		return
+	}
+	if h.sync != nil {
+		if err := h.sync.ReloadAndBroadcast(c.Request.Context(), "model_routes_deleted"); err != nil {
+			writeHotReloadWarning(c, &HotReloadError{Stage: "模型路由删除", Err: err}, nil)
+			return
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "message": fmt.Sprintf("已删除 %d 个模型路由，渠道模型配置已保留", len(models))})
 }

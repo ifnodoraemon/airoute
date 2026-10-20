@@ -283,144 +283,64 @@ func TestRouteServiceRejectsInvalidOffPeakSlots(t *testing.T) {
 	}
 }
 
-// --- channel collection --------------------------------------------------
+// --- independent provider bindings ---------------------------------------
 
 func TestRouteServiceCollectChannelUpdates(t *testing.T) {
 	store := newFakeRouteStore()
 	store.channels = []*storage.ChannelRecord{
-		// Opted in: already serves the model, but weight changes.
-		{ID: 1, Name: "opted-in-weight", Models: []string{"gpt-x"}, Priority: 1, Weight: 5},
-		// Opted in: does not serve the model yet, and maps it elsewhere.
-		{ID: 2, Name: "opted-in-new", Models: []string{"other"}, Priority: 1, Weight: 5},
-		// Opted in: already exactly as requested.
-		{ID: 3, Name: "already-correct", Models: []string{"gpt-x"}, Priority: 2, Weight: 9,
-			ModelMapping: map[string]string{"gpt-x": "upstream-x"}},
-		// Not listed: serves the model and must be opted out.
-		{ID: 4, Name: "opted-out", Models: []string{"gpt-x", "keep"}, Priority: 1, Weight: 5,
-			ModelMapping: map[string]string{"gpt-x": "old", "keep": "keep"}},
-		// Not listed and unaffected.
-		{ID: 5, Name: "untouched", Models: []string{"other"}, Priority: 1, Weight: 5},
+		{ID: 1, Name: "chosen", Models: []string{"gpt-x"}, Priority: 4, Weight: 8},
+		{ID: 2, Name: "untouched", Models: []string{"gpt-x"}, Priority: 1, Weight: 10},
 	}
 	svc := NewRouteService(store, nil, nil)
-
-	updates, err := svc.collectChannelUpdatesForModel("gpt-x", []ModelProviderUpdate{
-		{ChannelID: 1, Weight: 11},
-		{ChannelID: 2, MappedModel: "upstream-x"},
-		{ChannelID: 3, Priority: 2, Weight: 9, MappedModel: "upstream-x"},
+	providers, err := svc.collectRouteProviders([]ModelProviderUpdate{
+		{ChannelID: 1, Weight: 11, MappedModel: "gpt-x"},
 	})
 	if err != nil {
-		t.Fatalf("collectChannelUpdatesForModel: %v", err)
+		t.Fatal(err)
 	}
-
-	byID := map[int64]storage.ChannelRoutingUpdate{}
-	for _, u := range updates {
-		byID[u.ID] = u
+	if len(providers) != 1 || providers[0].ChannelID != 1 || providers[0].Priority != 4 || providers[0].Weight != 11 || providers[0].MappedModel != "gpt-x" {
+		t.Fatalf("unexpected route providers: %+v", providers)
 	}
-
-	// Every channel is described. "Ensure the model is present" is idempotent, so
-	// stating it for a channel that already satisfies it costs nothing and cannot
-	// lose a model another administrator added in between. The storage layer skips
-	// the write when a delta turns out to be a no-op.
-	if len(updates) != len(store.channels) {
-		t.Fatalf("updates = %d, want one per channel (%d)", len(updates), len(store.channels))
-	}
-
-	one := byID[1]
-	if one.Weight != 11 {
-		t.Errorf("channel 1 weight = %d, want 11", one.Weight)
-	}
-	if len(one.AddModels) != 1 || one.AddModels[0] != "gpt-x" {
-		t.Errorf("channel 1 AddModels = %v, want [gpt-x]", one.AddModels)
-	}
-
-	two := byID[2]
-	if len(two.AddModels) != 1 || two.AddModels[0] != "gpt-x" {
-		t.Errorf("channel 2 AddModels = %v, want [gpt-x]", two.AddModels)
-	}
-	if two.SetMapping["gpt-x"] != "upstream-x" {
-		t.Errorf("channel 2 SetMapping = %v, want gpt-x -> upstream-x", two.SetMapping)
-	}
-
-	three := byID[3]
-	if len(three.RemoveMapping) != 0 {
-		t.Errorf("channel 3 should keep its mapping, got RemoveMapping = %v", three.RemoveMapping)
-	}
-	if three.SetMapping["gpt-x"] != "upstream-x" {
-		t.Errorf("channel 3 SetMapping = %v", three.SetMapping)
-	}
-
-	four := byID[4]
-	if len(four.RemoveModels) != 1 || four.RemoveModels[0] != "gpt-x" {
-		t.Errorf("opted-out channel RemoveModels = %v, want [gpt-x]", four.RemoveModels)
-	}
-	if len(four.RemoveMapping) != 1 || four.RemoveMapping[0] != "gpt-x" {
-		t.Errorf("opted-out channel RemoveMapping = %v, want [gpt-x]", four.RemoveMapping)
-	}
-	// The delta names only gpt-x, so the unrelated "keep" mapping is never touched.
-	for _, k := range four.RemoveMapping {
-		if k == "keep" {
-			t.Error("the delta would remove an unrelated mapping")
-		}
-	}
-
-	five := byID[5]
-	if len(five.RemoveModels) != 1 || five.RemoveModels[0] != "gpt-x" {
-		t.Errorf("untouched channel RemoveModels = %v, want [gpt-x]", five.RemoveModels)
+	if store.channels[0].Weight != 8 || len(store.channels[0].Models) != 1 {
+		t.Fatal("planning mutated channel capabilities or defaults")
 	}
 }
 
 func TestRouteServiceCollectIgnoresNonPositivePriorityAndWeight(t *testing.T) {
-	// 0 means "leave as is" (the same convention the channel rules use), so a
-	// provider update of 0 must not zero out a live routing weight.
 	store := newFakeRouteStore()
-	store.channels = []*storage.ChannelRecord{
-		{ID: 1, Name: "chan", Models: []string{"gpt-x"}, Priority: 4, Weight: 8},
-	}
+	store.channels = []*storage.ChannelRecord{{ID: 1, Priority: 4, Weight: 8}}
 	svc := NewRouteService(store, nil, nil)
-
-	updates, err := svc.collectChannelUpdatesForModel("gpt-x", []ModelProviderUpdate{
-		{ChannelID: 1, Priority: 0, Weight: 0},
-	})
+	providers, err := svc.collectRouteProviders([]ModelProviderUpdate{{ChannelID: 1}})
 	if err != nil {
-		t.Fatalf("collectChannelUpdatesForModel: %v", err)
+		t.Fatal(err)
 	}
-	if len(updates) != 1 {
-		t.Fatalf("updates = %d, want 1", len(updates))
-	}
-	// The delta omits both values, so the stored 4/8 survive. Carrying them as
-	// zeroes would reset a live routing weight, which is what this pins.
-	if updates[0].Priority != 0 || updates[0].Weight != 0 {
-		t.Errorf("delta carried Priority=%d Weight=%d, want both unset",
-			updates[0].Priority, updates[0].Weight)
-	}
-	// And the model itself is still requested, so a concurrent removal cannot win.
-	if len(updates[0].AddModels) != 1 || updates[0].AddModels[0] != "gpt-x" {
-		t.Errorf("AddModels = %v, want [gpt-x]", updates[0].AddModels)
+	if providers[0].Priority != 4 || providers[0].Weight != 8 {
+		t.Fatalf("inherited defaults lost: %+v", providers)
 	}
 }
 
-func TestRouteServiceCollectClearsMappingWhenMappedModelIsEmpty(t *testing.T) {
-	store := newFakeRouteStore()
-	store.channels = []*storage.ChannelRecord{
-		{ID: 1, Name: "chan", Models: []string{"gpt-x"}, Priority: 1, Weight: 5,
-			ModelMapping: map[string]string{"gpt-x": "upstream-x"}},
+func TestRouteServiceCollectDistinguishesOmittedAndEmptyProviders(t *testing.T) {
+	svc := NewRouteService(newFakeRouteStore(), nil, nil)
+	omitted, err := svc.collectRouteProviders(nil)
+	if err != nil || omitted != nil {
+		t.Fatalf("omitted policy = %+v, %v", omitted, err)
 	}
-	svc := NewRouteService(store, nil, nil)
+	empty, err := svc.collectRouteProviders([]ModelProviderUpdate{})
+	if err != nil || empty == nil || len(empty) != 0 {
+		t.Fatalf("empty policy = %+v, %v", empty, err)
+	}
+}
 
-	updates, err := svc.collectChannelUpdatesForModel("gpt-x", []ModelProviderUpdate{{ChannelID: 1}})
-	if err != nil {
-		t.Fatalf("collectChannelUpdatesForModel: %v", err)
-	}
-	if len(updates) != 1 {
-		t.Fatalf("updates = %d, want 1", len(updates))
-	}
-	// An empty MappedModel means "no remap", so the delta asks for the mapping key
-	// to be dropped rather than rewriting a mapping map.
-	if len(updates[0].RemoveMapping) != 1 || updates[0].RemoveMapping[0] != "gpt-x" {
-		t.Errorf("RemoveMapping = %v, want [gpt-x]", updates[0].RemoveMapping)
-	}
-	if len(updates[0].SetMapping) != 0 {
-		t.Errorf("SetMapping = %v, want empty", updates[0].SetMapping)
+func TestRouteServiceCollectRejectsMissingOrDuplicateChannels(t *testing.T) {
+	store := newFakeRouteStore()
+	store.channels = []*storage.ChannelRecord{{ID: 1}}
+	svc := NewRouteService(store, nil, nil)
+	for _, providers := range [][]ModelProviderUpdate{{{ChannelID: 2}}, {{ChannelID: 1}, {ChannelID: 1}}} {
+		_, err := svc.collectRouteProviders(providers)
+		var validation *ValidationError
+		if !errors.As(err, &validation) {
+			t.Fatalf("invalid binding was accepted: %v", err)
+		}
 	}
 }
 

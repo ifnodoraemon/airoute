@@ -164,12 +164,12 @@ func TestPostgresApplyModelRouteBundleIsAtomic(t *testing.T) {
 		Model:         model,
 		FallbackModel: model + "-fallback",
 		Price:         &ModelPriceRecord{Model: model, GroupName: "default", PromptPrice: 1, CompletionPrice: 2},
-		Channels: []ChannelRoutingUpdate{
+		Providers: []ModelRouteProvider{
 			// Step 3a: a legitimate update the transaction applies before the
 			// failure.
-			{ID: first.ID, AddModels: []string{model + "-extra"}, Priority: 2, Weight: 20},
+			{ChannelID: first.ID, Priority: 2, Weight: 20},
 			// Step 3b: a channel that does not exist, which aborts the change.
-			{ID: second.ID + 100000, AddModels: []string{model}},
+			{ChannelID: second.ID + 100000},
 		},
 	}
 	if err := repo.ApplyModelRouteBundle(context.Background(), bundle); err == nil {
@@ -365,60 +365,12 @@ func TestPostgresPatchChannelSerializesConcurrentWriters(t *testing.T) {
 	}
 }
 
-// TestPostgresKeepsConcurrentModelAdds is the reported race on the dialect that
-// serves production traffic.
-//
-// Two administrators add different models to the same shared channel, each planning
-// from the same read. A replacement list would let the second save drop the first
-// administrator's model; a delta applied inside the transaction keeps both. The
-// SQLite test proves the logic, this proves the PostgreSQL path — including the
-// FOR UPDATE read that only exists there.
-func TestPostgresKeepsConcurrentModelAdds(t *testing.T) {
+// The same independence and deletion scenario must hold on the production dialect.
+func TestPostgresIndependentRoutePolicies(t *testing.T) {
 	db, err := OpenDB(testPostgresURL(t))
 	if err != nil {
-		t.Fatalf("open postgres: %v", err)
+		t.Fatal(err)
 	}
 	defer db.Close()
-	repo := NewRepository(db)
-
-	ch := &ChannelRecord{
-		Name: "pg-shared-" + itSuffix(), Type: "openai", BaseURL: "http://pg.invalid",
-		APIKey: "k", Models: []string{"pg-base"}, Priority: 1, Weight: 10, Status: "active",
-	}
-	if err := repo.CreateChannel(ch); err != nil {
-		t.Fatalf("create channel: %v", err)
-	}
-
-	// Both administrators read the channel before either commits.
-	if _, err := repo.GetChannel(ch.ID); err != nil {
-		t.Fatalf("GetChannel: %v", err)
-	}
-
-	if err := repo.ApplyModelRouteBundle(context.Background(), &ModelRouteBundle{
-		Model:    "pg-model-a",
-		Channels: []ChannelRoutingUpdate{{ID: ch.ID, AddModels: []string{"pg-model-a"}}},
-	}); err != nil {
-		t.Fatalf("apply A: %v", err)
-	}
-
-	if err := repo.ApplyModelRouteBundle(context.Background(), &ModelRouteBundle{
-		Model:    "pg-model-b",
-		Channels: []ChannelRoutingUpdate{{ID: ch.ID, AddModels: []string{"pg-model-b"}}},
-	}); err != nil {
-		t.Fatalf("apply B: %v", err)
-	}
-
-	stored, err := repo.GetChannel(ch.ID)
-	if err != nil {
-		t.Fatalf("reload channel: %v", err)
-	}
-	got := map[string]bool{}
-	for _, m := range stored.Models {
-		got[m] = true
-	}
-	for _, want := range []string{"pg-base", "pg-model-a", "pg-model-b"} {
-		if !got[want] {
-			t.Errorf("model %q was lost on postgres; channel serves %v", want, stored.Models)
-		}
-	}
+	verifyIndependentRoutePolicies(t, NewRepository(db), itSuffix())
 }

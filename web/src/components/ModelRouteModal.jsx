@@ -83,7 +83,6 @@ export default function ModelRouteModal({
       // Preserve a real weight (including 0 / small values); the old `|| 50`
       // silently rewrote any falsy weight to 50 on every save.
       weight: p.weight ?? 50,
-      shared_model_count: p.shared_model_count ?? 0,
       mapped_model: p.mapped_model || modelRoute?.model || ''
     }));
   });
@@ -479,15 +478,10 @@ export default function ModelRouteModal({
                           <span
                             className="ui-meta"
                             title={isZh
-                              ? '权重与优先级是「渠道级」配置：修改后会影响该渠道上承载的所有模型，而不是仅当前模型。'
-                              : 'Weight and priority are channel-wide: changing them affects every model this channel serves, not just this model.'}
+                              ? '权重与优先级仅作用于当前模型路由，不修改渠道默认配置或其他模型路由。'
+                              : 'Weight and priority apply only to this model route; channel defaults and other routes are retained.'}
                           >
                             {isZh ? '权重:' : 'Weight:'}
-                            {p.shared_model_count > 1 && (
-                              <span className="ml-1 text-xs text-amber-600 dark:text-amber-400">
-                                {isZh ? `(渠道级, 影响 ${p.shared_model_count} 个模型)` : `(channel-wide, ${p.shared_model_count} models)`}
-                              </span>
-                            )}
                           </span>
                           <input
                             type="number"

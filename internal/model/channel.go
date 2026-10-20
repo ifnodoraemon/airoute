@@ -20,18 +20,20 @@ const (
 
 // ChannelConfig defines an upstream endpoint configuration.
 type ChannelConfig struct {
-	ID             int64             `yaml:"id,omitempty" json:"id,omitempty"`
-	Name           string            `yaml:"name" json:"name"`
-	Type           ProviderType      `yaml:"type" json:"type"`
-	BaseURL        string            `yaml:"base_url" json:"base_url"`
-	APIKey         string            `yaml:"api_key" json:"api_key"`
-	Models         []string          `yaml:"models" json:"models"`                                   // supported models in this channel
-	ModelMapping   map[string]string `yaml:"model_mapping,omitempty" json:"model_mapping,omitempty"` // incoming model -> actual upstream model
-	Protocols      []string          `yaml:"protocols,omitempty" json:"protocols,omitempty"`         // supported protocols: openai_chat, openai_text, anthropic_messages
-	Priority       int               `yaml:"priority" json:"priority"`                               // lower number means higher priority (e.g. 1 is primary, 2 is fallback)
-	Weight         int               `yaml:"weight" json:"weight"`                                   // weight for load balancing among same priority
-	TimeoutSeconds int               `yaml:"timeout_seconds" json:"timeout_seconds"`
-	Status         string            `yaml:"status,omitempty" json:"status,omitempty"`
+	// RouteRules is an immutable runtime snapshot loaded separately from channels.
+	RouteRules     map[string]ModelRouteRule `yaml:"-" json:"-"`
+	ID             int64                     `yaml:"id,omitempty" json:"id,omitempty"`
+	Name           string                    `yaml:"name" json:"name"`
+	Type           ProviderType              `yaml:"type" json:"type"`
+	BaseURL        string                    `yaml:"base_url" json:"base_url"`
+	APIKey         string                    `yaml:"api_key" json:"api_key"`
+	Models         []string                  `yaml:"models" json:"models"`                                   // supported models in this channel
+	ModelMapping   map[string]string         `yaml:"model_mapping,omitempty" json:"model_mapping,omitempty"` // incoming model -> actual upstream model
+	Protocols      []string                  `yaml:"protocols,omitempty" json:"protocols,omitempty"`         // supported protocols: openai_chat, openai_text, anthropic_messages
+	Priority       int                       `yaml:"priority" json:"priority"`                               // lower number means higher priority (e.g. 1 is primary, 2 is fallback)
+	Weight         int                       `yaml:"weight" json:"weight"`                                   // weight for load balancing among same priority
+	TimeoutSeconds int                       `yaml:"timeout_seconds" json:"timeout_seconds"`
+	Status         string                    `yaml:"status,omitempty" json:"status,omitempty"`
 }
 
 // SupportsProtocol checks whether this channel supports the requested inbound/outbound protocol.
@@ -121,6 +123,9 @@ func (c *ChannelConfig) HasExplicitProtocol(proto string) bool {
 
 // SupportsModel checks if this channel can service the requested model (supporting cascading models, wildcards, and prefix stripping).
 func (c *ChannelConfig) SupportsModel(requestedModel string) bool {
+	if _, allowed, overridden := c.routeProvider(requestedModel); overridden {
+		return allowed
+	}
 	// 1. Exact match or wildcard in Models list
 	for _, m := range c.Models {
 		if m == "*" || m == requestedModel {
@@ -164,6 +169,12 @@ func (c *ChannelConfig) SupportsModel(requestedModel string) bool {
 // GetUpstreamModel returns the mapped upstream model name if specified, otherwise the requested model.
 // Supports cascading models, unlimited slashes, wildcard prefixes (e.g. "yy/*": "*"), and channel prefix stripping.
 func (c *ChannelConfig) GetUpstreamModel(requestedModel string) string {
+	if p, allowed, _ := c.routeProvider(requestedModel); allowed {
+		if p.MappedModel != "" {
+			return p.MappedModel
+		}
+		return requestedModel
+	}
 	if c.ModelMapping != nil {
 		// 1. Exact match
 		if actual, ok := c.ModelMapping[requestedModel]; ok && actual != "" {
