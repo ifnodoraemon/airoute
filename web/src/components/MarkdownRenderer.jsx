@@ -570,7 +570,12 @@ export default function MarkdownRenderer({ content = '' }) {
     let text = content;
     const tripleBackticks = (text.match(/```/g) || []).length;
     if (tripleBackticks % 2 !== 0) {
-      text += '\n```';
+      // Close the fence that the stream has not finished yet. The newline is added
+      // only when the text does not already end with one: appending "\n```"
+      // unconditionally put an extra blank line inside the code block, which the
+      // block's own line counter then reported ("4 lines" for three lines of code).
+      if (!text.endsWith('\n')) text += '\n';
+      text += '```';
     }
     return text;
   }, [content]);
