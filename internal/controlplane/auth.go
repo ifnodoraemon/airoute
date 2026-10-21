@@ -65,6 +65,8 @@ func (h *AdminHandler) AdminAuthMiddleware() gin.HandlerFunc {
 		} else if cookieToken := sessionTokenFromCookie(c); cookieToken != "" {
 			token = cookieToken
 			cookieAuth = true
+		} else if qToken := c.Query("token"); qToken != "" {
+			token = qToken
 		}
 
 		if token == "" {

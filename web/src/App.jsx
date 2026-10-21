@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import {
   Zap,
   Server,
@@ -306,7 +306,10 @@ export default function App() {
     showToast(isZh ? '已安全退出账号' : 'Successfully logged out', 'info');
   };
 
-  const fetchUserProfile = async () => {
+  const inFlightProfileRef = useRef(false);
+  const fetchUserProfile = useCallback(async () => {
+    if (inFlightProfileRef.current) return;
+    inFlightProfileRef.current = true;
     // The marker is not a credential; the hook strips it.
     const tok = credentialToken;
     const generation = getSessionGeneration();
@@ -322,8 +325,11 @@ export default function App() {
       } else if (res.status === 401) {
         endSession({ notify: true });
       }
-    } catch (e) {}
-  };
+    } catch (e) {
+    } finally {
+      inFlightProfileRef.current = false;
+    }
+  }, [credentialToken, getSessionGeneration, refreshUser, endSession]);
 
   const {
     activeQuickKey, setActiveQuickKey,
@@ -1621,12 +1627,10 @@ export default function App() {
                 adminFetch={apiFetch}
                 showToast={showToast}
                 onUserUpdated={(updatedUser) => {
-                  patchUser(updatedUser);
-                  fetchUserProfile();
+                  if (updatedUser) patchUser(updatedUser);
                 }}
                 onBalanceUpdate={(newBal) => {
-                  patchUser({ balance: newBal });
-                  fetchUserProfile();
+                  if (newBal !== undefined) patchUser({ balance: newBal });
                 }}
                 lang={lang}
                 t={t}

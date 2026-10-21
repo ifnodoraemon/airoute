@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Wallet,
   CreditCard,
@@ -49,6 +49,13 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
   const [genName, setGenName] = useState(() => (isZh ? '额度兑换卡' : 'Gift Card'));
   const [generating, setGenerating] = useState(false);
 
+  const onUserUpdatedRef = useRef(onUserUpdated);
+  const onBalanceUpdateRef = useRef(onBalanceUpdate);
+  useEffect(() => {
+    onUserUpdatedRef.current = onUserUpdated;
+    onBalanceUpdateRef.current = onBalanceUpdate;
+  });
+
   const fetchWallet = useCallback(async () => {
     if (!adminFetch) return;
     setLoading(true);
@@ -61,11 +68,11 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
           group_name: data.data.group_name || 'default',
           orders: Array.isArray(data.data.orders) ? data.data.orders : [],
         }));
-        if (onUserUpdated) {
-          onUserUpdated(data.data);
+        if (onUserUpdatedRef.current) {
+          onUserUpdatedRef.current(data.data);
         }
-        if (onBalanceUpdate && data.data.balance !== undefined) {
-          onBalanceUpdate(data.data.balance);
+        if (onBalanceUpdateRef.current && data.data.balance !== undefined) {
+          onBalanceUpdateRef.current(data.data.balance);
         }
       }
     } catch (err) {
@@ -73,7 +80,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
     } finally {
       setLoading(false);
     }
-  }, [adminFetch, onBalanceUpdate, onUserUpdated]);
+  }, [adminFetch]);
 
   const fetchRedemptions = useCallback(async () => {
     if (!adminFetch || !isAdmin) return;

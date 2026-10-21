@@ -14,9 +14,11 @@ import {
   RotateCcw,
   SlidersHorizontal,
   MoreHorizontal,
-  ChevronDown
+  ChevronDown,
+  Terminal
 } from 'lucide-react';
 import { copyToClipboard, toCSV } from '../config';
+import SystemLogConsole from './SystemLogConsole';
 
 // Same-day rows show time only; older days get a compact date prefix.
 const formatLogTime = (iso) => {
@@ -93,6 +95,7 @@ export default function LogsView({
   const [autoRefreshInterval, setAutoRefreshInterval] = useState(10); // 0 (off), 5, 10, 30
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [logViewMode, setLogViewMode] = useState('inference'); // 'inference' | 'system'
 
   // The combined facet filters are owned by App.jsx: it is the component that
   // builds the server-side query (and persists them in the URL under `logs.*`).
@@ -324,7 +327,7 @@ export default function LogsView({
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
               {isZh ? '对话审计与请求日志' : 'Audit Logs & Traces'}
             </h1>
-            {autoRefreshInterval > 0 && (
+            {logViewMode === 'inference' && autoRefreshInterval > 0 && (
               <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-xs font-mono font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>{autoRefreshInterval}s {isZh ? '轮询中' : 'polling'}</span>
@@ -338,9 +341,55 @@ export default function LogsView({
           </p>
         </div>
 
-        {/* Primary controls stay visible: keyword search + refresh. Export, clear
-            logs and the heavier filter selects live in the panel / overflow menu. */}
-        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+        {/* Tab switcher: Inference Audit vs System Runtime Console */}
+        {isAdmin && (
+          <div className="flex items-center space-x-1 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200/80 dark:border-slate-700/80 shrink-0">
+            <button
+              onClick={() => setLogViewMode('inference')}
+              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                logViewMode === 'inference'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+              }`}
+            >
+              <History className="w-3.5 h-3.5 text-indigo-500" />
+              <span>{isZh ? '业务调用审计流水' : 'Inference Logs'}</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                {logTotal || displayedLogs.length}
+              </span>
+            </button>
+            <button
+              onClick={() => setLogViewMode('system')}
+              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                logViewMode === 'system'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+              }`}
+            >
+              <Terminal className="w-3.5 h-3.5 text-emerald-500" />
+              <span>{isZh ? '网关内核运行日志' : 'Gateway System Logs'}</span>
+              <span className="flex h-1.5 w-1.5 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+              </span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {logViewMode === 'system' ? (
+        <SystemLogConsole
+          lang={lang}
+          t={t}
+          showToast={showToast}
+          initialTraceId={sessionFilter || ''}
+        />
+      ) : (
+        <>
+          {/* Primary controls stay visible: keyword search + refresh. Export, clear
+              logs and the heavier filter selects live in the panel / overflow menu. */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
           {/* Active Chat/Session/Trace Filter Tag */}
           {sessionFilter && (
             <div className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800 text-xs text-indigo-700 dark:text-indigo-300 animate-in fade-in">
@@ -1097,6 +1146,8 @@ export default function LogsView({
           </div>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

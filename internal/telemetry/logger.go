@@ -26,8 +26,9 @@ func InitLogger(levelStr string) {
 		level = slog.LevelInfo
 	}
 
-	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	jsonHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: level,
 	})
-	Logger = slog.New(handler)
+	broadcastHandler := NewBroadcastHandler(jsonHandler, GlobalRingBuffer, level)
+	Logger = slog.New(broadcastHandler)
 }

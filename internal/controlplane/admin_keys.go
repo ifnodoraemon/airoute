@@ -8,17 +8,25 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
-// ListAPIKeys returns all API keys (scoped to current user if non-admin).
+// ListAPIKeys returns API keys belonging to the current user.
+// Administrators manage their own keys by default; other users' private keys are strictly isolated.
+// An administrator can explicitly pass ?scope=all if a platform-wide audit is requested.
 func (h *AdminHandler) ListAPIKeys(c *gin.Context) {
-	if claims, ok := GetClaimsFromContext(c); ok && claims.Role != "admin" {
-		user, err := h.repo.GetUserByUsername(claims.Username)
-		if err != nil || user == nil {
-			// Never fall through to the global key list: an unresolvable account
-			// must fail closed instead of exposing other tenants' credentials.
-			c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "账户不存在或暂时无法验证，请重新登录"})
-			return
-		}
-		keys, err := h.repo.ListAPIKeysByUser(user.ID)
+	claims, ok := GetClaimsFromContext(c)
+	if !ok || claims == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "请先登录管理员账号 (未提供凭证)"})
+		return
+	}
+
+	user, err := h.repo.GetUserByUsername(claims.Username)
+	if err != nil || user == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "账户不存在或暂时无法验证，请重新登录"})
+		return
+	}
+
+	// If super-admin explicitly requests global audit scope:
+	if claims.Role == "admin" && c.Query("scope") == "all" {
+		keys, err := h.repo.ListAPIKeys()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -27,11 +35,29 @@ func (h *AdminHandler) ListAPIKeys(c *gin.Context) {
 		return
 	}
 
-	keys, err := h.repo.ListAPIKeys()
+	// Default: strictly scoped to caller's own keys
+	keys, err := h.repo.ListAPIKeysByUser(user.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// For admin user (e.g. root), also include unassigned legacy keys (user_id == 0)
+	if claims.Role == "admin" {
+		allKeys, err := h.repo.ListAPIKeys()
+		if err == nil {
+			existingMap := make(map[int64]bool)
+			for _, k := range keys {
+				existingMap[k.ID] = true
+			}
+			for _, k := range allKeys {
+				if k.UserID == 0 && !existingMap[k.ID] {
+					keys = append(keys, k)
+				}
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": keys})
 }
 

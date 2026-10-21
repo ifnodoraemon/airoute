@@ -743,38 +743,11 @@ export default function DashboardView({
       <section className="space-y-2.5">
         <div className="flex items-center justify-between">
           <h3 className="ui-section-title">{isZh ? '需要关注' : 'Needs attention'}</h3>
-          {dismissedAttentions.length > 0 && (
-            <button
-              onClick={handleResetDismissed}
-              className="text-xs text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition cursor-pointer"
-              title={isZh ? '恢复已忽略的关注项' : 'Restore dismissed attention items'}
-            >
-              {isZh ? `已忽略 ${dismissedAttentions.length} 项 (重置恢复)` : `Reset ${dismissedAttentions.length} dismissed`}
-            </button>
-          )}
         </div>
 
         {(() => {
           const visibleAttentionItems = attentionItems.filter(item => !dismissedAttentions.includes(item.key));
           if (visibleAttentionItems.length === 0) {
-            if (attentionItems.length > 0) {
-              return (
-                <div className="flex items-center justify-between rounded-xl border border-l-2 border-emerald-200/70 dark:border-emerald-900/60 border-l-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <span className="text-xs font-semibold text-emerald-900 dark:text-emerald-100">
-                      {isZh ? '所有关注项已处理或已忽略' : 'All attention items acknowledged'}
-                    </span>
-                  </div>
-                  <button
-                    onClick={handleResetDismissed}
-                    className="text-xs text-emerald-700 dark:text-emerald-300 underline cursor-pointer hover:text-emerald-900"
-                  >
-                    {isZh ? '重新显示' : 'Show again'}
-                  </button>
-                </div>
-              );
-            }
             return (
               <div className="flex items-start gap-3 rounded-xl border border-l-2 border-emerald-200/70 dark:border-emerald-900/60 border-l-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 px-4 py-3">
                 <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />

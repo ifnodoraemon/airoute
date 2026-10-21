@@ -173,6 +173,8 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 				{
 					// Admin-only infrastructure inspection (topology/storage/MCP secrets)
 					adminOnly.GET("/system/middlewares", adminHandler.GetSystemMiddlewares)
+					adminOnly.GET("/system/logs", adminHandler.GetSystemLogs)
+					adminOnly.GET("/system/logs/stream", adminHandler.StreamSystemLogs)
 					adminOnly.GET("/models/routes", adminHandler.GetModelRoutes)
 					adminOnly.GET("/models/topology", adminHandler.GetRoutingTopology)
 					adminOnly.POST("/models/topology/probe", adminHandler.ValidateRoutingChannel)

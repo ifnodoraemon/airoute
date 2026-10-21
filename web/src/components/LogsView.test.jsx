@@ -165,4 +165,13 @@ describe('LogsView', () => {
     expect(screen.getByText(/1 on this page/)).toBeInTheDocument();
     expect(screen.getByText(/500 matching in total/)).toBeInTheDocument();
   });
+
+  it('allows administrator to toggle between inference audit and system runtime logs', () => {
+    setup({ isAdmin: true });
+    expect(screen.getByText('业务调用审计流水')).toBeInTheDocument();
+    expect(screen.getByText('网关内核运行日志')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('网关内核运行日志'));
+    expect(screen.getByText(/网关系统运行日志 \(Live Tail\)/)).toBeInTheDocument();
+  });
 });

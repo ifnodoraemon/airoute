@@ -1,5 +1,19 @@
 import { useState, useMemo, useEffect } from 'react';
-import { X, Copy, Check, Activity, AlertCircle, Trash2, Sparkles, ArrowRight } from 'lucide-react';
+import {
+  X,
+  Copy,
+  Check,
+  Activity,
+  AlertCircle,
+  Trash2,
+  Sparkles,
+  ArrowRight,
+  Terminal,
+  Zap,
+  Play,
+  Layers,
+  Clock
+} from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
 
 export default function LogDetailModal({ log, prices: initialPrices = [], onClose, onCopy, onFilterBySession, onDeleteLog, onNavigate, onOpenTrace, lang = 'zh', t }) {
@@ -7,6 +21,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
 
   const isZh = lang === 'zh';
   const [copied, setCopied] = useState(false);
+  const [copiedCurl, setCopiedCurl] = useState(false);
   const [localPrices, setLocalPrices] = useState(initialPrices);
 
   useEffect(() => {
@@ -36,6 +51,41 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
     onCopy(JSON.stringify(log, null, 2));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const waterfall = useMemo(() => {
+    if (!log) return null;
+    const dur = log.duration_ms || 0;
+    const ttft = log.ttft_ms || 0;
+    const gen = dur > ttft && ttft > 0 ? dur - ttft : (dur > 0 ? dur : 0);
+    const ttftPct = dur > 0 ? Math.min(100, Math.round((ttft / dur) * 100)) : 0;
+    const genPct = dur > 0 ? Math.max(0, 100 - ttftPct) : 0;
+
+    let tps = null;
+    if (log.completion_tokens && log.completion_tokens > 0 && gen > 0) {
+      tps = ((log.completion_tokens * 1000) / gen).toFixed(1);
+    }
+    return { dur, ttft, gen, ttftPct, genPct, tps };
+  }, [log]);
+
+  const handleCopyCurl = () => {
+    if (!log) return;
+    const origin = window.location.origin;
+    const model = log.model || 'gpt-4o';
+    const key = log.api_key || 'YOUR_API_KEY';
+    const curl = `curl -X POST "${origin}/v1/chat/completions" \\
+  -H "Authorization: Bearer ${key}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "${model}",
+    "messages": [
+      {"role": "user", "content": "Ping test diagnostic"}
+    ],
+    "stream": true
+  }'`;
+    onCopy(curl);
+    setCopiedCurl(true);
+    setTimeout(() => setCopiedCurl(false), 2000);
   };
 
   const isSuccess = log ? log.status_code >= 200 && log.status_code < 300 : false;
@@ -110,6 +160,19 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
           : `The API key for upstream channel [${log.channel || 'Channel'}] is invalid, expired, or out of balance. Update upstream API key in Channels and re-probe.`,
         actionLabel: isZh ? '前往【通道管理】更新密钥' : 'Update Channel Key',
         actionTab: 'channels'
+      };
+    }
+
+    if (code === 404 || errStr.includes('not found') || errStr.includes('no route') || errStr.includes('model not found')) {
+      return {
+        type: 'error',
+        badge: '404 Route / Model Missing',
+        title: isZh ? '可能原因: 模型路由未配置或上游模型不存在' : 'Likely Cause: Model Route Missing or Upstream Model 404',
+        summary: isZh
+          ? `客户端请求的模型 [${log.model}] 在网关中没有可用的健康通道映射，或上游渠道返回 404。请在【模型路由】中核查该模型的分流配置与健康通道。`
+          : `Requested model [${log.model}] has no active route or upstream returned 404. Check Model Routes for channel bindings.`,
+        actionLabel: isZh ? '前往【模型路由】核查映射' : 'Review Model Routes',
+        actionTab: 'models'
       };
     }
 
@@ -211,6 +274,110 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
               </span>
             </div>
           </div>
+
+          {/* Quick Troubleshooting Actions Toolbar */}
+          <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-slate-100/70 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800">
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 px-1">
+              {isZh ? '快捷排障:' : 'Diagnostics:'}
+            </span>
+            <button
+              onClick={handleCopyCurl}
+              className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium border border-slate-200/80 dark:border-slate-700 transition flex items-center space-x-1.5 shadow-2xs cursor-pointer"
+              title={isZh ? '复制终端可复现的 cURL 请求指令' : 'Copy reproducible cURL command'}
+            >
+              {copiedCurl ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Terminal className="w-3.5 h-3.5 text-indigo-500" />}
+              <span>{copiedCurl ? (isZh ? '已复制 cURL 指令' : 'cURL Copied') : (isZh ? '复制 cURL 重现指令' : 'Copy cURL')}</span>
+            </button>
+
+            {onNavigate && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onNavigate('playground');
+                }}
+                className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium border border-slate-200/80 dark:border-slate-700 transition flex items-center space-x-1.5 shadow-2xs cursor-pointer"
+                title={isZh ? '在 Playground 演练测试此模型' : 'Test this model in Playground'}
+              >
+                <Play className="w-3.5 h-3.5 text-emerald-500" />
+                <span>{isZh ? 'Playground 演练' : 'Playground Replay'}</span>
+              </button>
+            )}
+
+            {log.trace_id && onFilterBySession && (
+              <button
+                onClick={() => {
+                  onFilterBySession(log.trace_id);
+                  onClose();
+                }}
+                className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium border border-slate-200/80 dark:border-slate-700 transition flex items-center space-x-1.5 shadow-2xs cursor-pointer"
+                title={isZh ? '在调用日志中锁定该 Trace ID' : 'Filter by this Trace ID'}
+              >
+                <Activity className="w-3.5 h-3.5 text-amber-500" />
+                <span>{isZh ? '追踪全链路' : 'Trace Flow'}</span>
+              </button>
+            )}
+          </div>
+
+          {/* Latency Waterfall & TPS Speed Breakdown */}
+          {waterfall && waterfall.dur > 0 && (
+            <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-slate-800 dark:text-slate-200 flex items-center space-x-1.5">
+                  <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>{isZh ? '时延瀑布与解码速率' : 'Latency Waterfall & TPS'}</span>
+                </span>
+                {waterfall.tps && (
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold ${
+                    Number(waterfall.tps) >= 50
+                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                      : Number(waterfall.tps) >= 15
+                      ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
+                      : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                  }`}>
+                    {Number(waterfall.tps) >= 50 ? '⚡ ' : Number(waterfall.tps) >= 15 ? '🟢 ' : '🐢 '}
+                    {waterfall.tps} tok/s {isZh ? '解码速率' : 'TPS'}
+                  </span>
+                )}
+              </div>
+
+              {/* Progress bar */}
+              <div className="w-full h-2.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex">
+                {waterfall.ttftPct > 0 && (
+                  <div
+                    style={{ width: `${waterfall.ttftPct}%` }}
+                    className="h-full bg-amber-500 transition-all duration-300"
+                    title={`TTFT: ${waterfall.ttft}ms (${waterfall.ttftPct}%)`}
+                  />
+                )}
+                {waterfall.genPct > 0 && (
+                  <div
+                    style={{ width: `${waterfall.genPct}%` }}
+                    className="h-full bg-indigo-500 transition-all duration-300"
+                    title={`Generation: ${waterfall.gen}ms (${waterfall.genPct}%)`}
+                  />
+                )}
+              </div>
+
+              {/* Legend & Summary */}
+              <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                <div className="flex items-center space-x-3">
+                  <span className="flex items-center space-x-1">
+                    <span className="w-2 h-2 rounded-xs bg-amber-500" />
+                    <span>{isZh ? '首字延迟(TTFT): ' : 'TTFT: '}</span>
+                    <strong className="text-slate-700 dark:text-slate-300 font-mono">{waterfall.ttft}ms</strong>
+                    <span>({waterfall.ttftPct}%)</span>
+                  </span>
+                  <span className="flex items-center space-x-1">
+                    <span className="w-2 h-2 rounded-xs bg-indigo-500" />
+                    <span>{isZh ? '流式解码: ' : 'Generation: '}</span>
+                    <strong className="text-slate-700 dark:text-slate-300 font-mono">{waterfall.gen}ms</strong>
+                    <span>({waterfall.genPct}%)</span>
+                  </span>
+                </div>
+                <span className="font-mono">{waterfall.dur}ms</span>
+              </div>
+            </div>
+          )}
 
           {/* Details list */}
           <div className="rounded-xl border border-slate-200/70 dark:border-slate-800/80 divide-y divide-slate-100 dark:divide-slate-800/70 overflow-hidden text-xs">
