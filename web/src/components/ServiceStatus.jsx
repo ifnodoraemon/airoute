@@ -223,8 +223,8 @@ export default function ServiceStatus({
             onClick={() => setAutoRefresh(!autoRefresh)}
             className={`flex items-center space-x-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition cursor-pointer ${
               autoRefresh
-                ? 'bg-white/90 dark:bg-[#0F1420]/90 border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-200 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800'
-                : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400'
+                ? 'bg-white dark:bg-[#191B1F] border-[#E4E6E9] dark:border-[#2C3038] text-[#202124] dark:text-[#F1F2F4] shadow-2xs hover:bg-[#F0F1F2] dark:hover:bg-[#22252B]'
+                : 'bg-[#F0F1F2] dark:bg-[#22252B] border-[#E4E6E9] dark:border-[#2C3038] text-[#656B75] dark:text-[#A1A7B0]'
             }`}
             title={autoRefresh ? (isZh ? '点击暂停自动刷新' : 'Click to pause auto refresh') : (isZh ? '点击恢复 30 秒自动刷新' : 'Click to resume 30s auto refresh')}
           >
@@ -232,13 +232,13 @@ export default function ServiceStatus({
               <>
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>{isZh ? `自动刷新: ${countdown}s` : `Auto: ${countdown}s`}</span>
-                <Pause className="w-3 h-3 text-slate-400 ml-0.5" />
+                <Pause className="w-3 h-3 text-[#656B75] dark:text-[#A1A7B0] ml-0.5" />
               </>
             ) : (
               <>
                 <span className="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600"></span>
                 <span>{isZh ? '已暂停' : 'Paused'}</span>
-                <Play className="w-3 h-3 text-slate-500 dark:text-slate-400 ml-0.5" />
+                <Play className="w-3 h-3 text-[#656B75] dark:text-[#A1A7B0] ml-0.5" />
               </>
             )}
           </button>

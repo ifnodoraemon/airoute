@@ -206,12 +206,12 @@ export default function AuthPage({
   };
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-slate-50 via-indigo-50/30 to-slate-100 dark:from-[#0A0D14] dark:via-[#0A0D14] dark:to-[#0A0D14] flex flex-col justify-between py-10 px-4 sm:px-6 lg:px-8 selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-[#F7F7F5] dark:bg-[#111214] text-[#202124] dark:text-[#F1F2F4] flex flex-col justify-between py-10 px-4 sm:px-6 lg:px-8 selection:bg-[#355CFF] selection:text-white">
       {/* Top Bar with Brand & Back */}
       <div className="max-w-md w-full mx-auto flex items-center justify-between">
         <button
           onClick={onBackHome}
-          className="inline-flex items-center space-x-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition py-2 px-3 rounded-xl hover:bg-white/80 dark:hover:bg-slate-800/80 cursor-pointer"
+          className="inline-flex items-center space-x-1.5 text-xs font-semibold text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4] transition py-2 px-3 rounded-xl hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{isZh ? '返回产品门户' : 'Back to Portal'}</span>
@@ -222,42 +222,42 @@ export default function AuthPage({
             <button
               onClick={toggleLang}
               type="button"
-              className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white/90 dark:bg-[#0F1420]/90 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 dark:hover:border-indigo-500/60 shadow-sm transition cursor-pointer"
+              className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] text-[#202124] dark:text-[#F1F2F4] hover:text-[#355CFF] dark:hover:text-[#91A7FF] shadow-2xs transition cursor-pointer"
             >
-              <Globe className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <Globe className="w-3.5 h-3.5 text-[#355CFF] dark:text-[#91A7FF]" />
               <span>{isZh ? 'EN' : '中'}</span>
             </button>
           )}
 
           <div className="flex items-center space-x-2">
-            <div className="w-7 h-7 rounded-lg bg-slate-900 dark:bg-indigo-600 flex items-center justify-center text-white shadow-sm">
+            <div className="w-7 h-7 rounded-lg bg-[#355CFF] flex items-center justify-center text-white shadow-2xs">
               <Zap className="w-4 h-4 fill-white" />
             </div>
-            <span className="font-semibold text-sm text-slate-900 dark:text-slate-100 tracking-tight">Airoute</span>
+            <span className="font-bold text-sm text-[#202124] dark:text-[#F1F2F4] tracking-tight">Airoute</span>
           </div>
         </div>
       </div>
 
       {/* Main Card Container */}
       <div className="max-w-md w-full mx-auto my-auto">
-        <div className="bg-white/95 dark:bg-[#0F1420]/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800/90 rounded-2xl p-8 shadow-xl shadow-slate-200/50 dark:shadow-slate-950/50 space-y-6">
+        <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-8 shadow-xl shadow-slate-900/5 dark:shadow-black/20 space-y-6">
           {/* Header */}
           <div className="text-center space-y-1.5">
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+            <h2 className="text-2xl font-bold text-[#202124] dark:text-[#F1F2F4] tracking-tight">
               {activeTab === 'login' ? (isZh ? '欢迎回来' : 'Welcome Back') : (isZh ? '账号注册' : 'Create Account')}
             </h2>
           </div>
 
           {/* Tab Switcher */}
           {sysConfig.allow_registration && (
-            <div className="flex p-1 bg-slate-100/90 dark:bg-slate-900/60 rounded-lg">
+            <div className="flex p-1 bg-[#F0F1F2] dark:bg-[#22252B] rounded-lg border border-[#E4E6E9] dark:border-[#2C3038]">
               <button
                 type="button"
                 onClick={() => setActiveTab('login')}
                 className={`flex-1 py-2 text-xs font-semibold rounded-md transition cursor-pointer ${
                   activeTab === 'login'
-                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                    ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-2xs'
+                    : 'text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
                 }`}
               >
                 {isZh ? '账号登录' : 'Sign In'}
@@ -267,8 +267,8 @@ export default function AuthPage({
                 onClick={() => setActiveTab('register')}
                 className={`flex-1 py-2 text-xs font-semibold rounded-md transition cursor-pointer ${
                   activeTab === 'register'
-                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                    ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-2xs'
+                    : 'text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
                 }`}
               >
                 {isZh ? '新用户注册' : 'Register'}
@@ -341,7 +341,7 @@ export default function AuthPage({
               <button
                 type="submit"
                 disabled={loading}
-                className="ui-btn-primary w-full py-3 bg-indigo-600 hover:bg-indigo-500 dark:bg-indigo-600 dark:hover:bg-indigo-500"
+                className="ui-btn-primary w-full py-3 bg-[#355CFF] hover:bg-[#2B4CE0] text-white shadow-xs"
               >
                 {loading ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
@@ -458,7 +458,7 @@ export default function AuthPage({
               <button
                 type="submit"
                 disabled={loading}
-                className="ui-btn-primary w-full py-3 bg-indigo-600 hover:bg-indigo-500 dark:bg-indigo-600 dark:hover:bg-indigo-500"
+                className="ui-btn-primary w-full py-3 bg-[#355CFF] hover:bg-[#2B4CE0] text-white shadow-xs"
               >
                 {loading ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
@@ -476,11 +476,11 @@ export default function AuthPage({
           {(sysConfig.oauth_github_enabled || sysConfig.oauth_google_enabled) && (
             <div className="pt-2">
               <div className="relative flex py-2 items-center">
-                <div className="grow border-t border-slate-200 dark:border-slate-800"></div>
+                <div className="grow border-t border-[#E4E6E9] dark:border-[#2C3038]"></div>
                 <span className="shrink mx-3 ui-meta font-medium">
                   {isZh ? '企业第三方单点登录' : 'Enterprise SSO Login'}
                 </span>
-                <div className="grow border-t border-slate-200 dark:border-slate-800"></div>
+                <div className="grow border-t border-[#E4E6E9] dark:border-[#2C3038]"></div>
               </div>
 
               <div className="grid grid-cols-2 gap-3 mt-3">

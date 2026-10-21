@@ -58,6 +58,15 @@ func (h *AdminHandler) CreateStripeRechargeSession(c *gin.Context) {
 	}
 
 	if stripeKey != "" {
+		stripeBase := os.Getenv("STRIPE_API_BASE")
+		if stripeBase == "" {
+			stripeBase = os.Getenv("STRIPE_BASE_URL")
+		}
+		if stripeBase == "" {
+			stripeBase = "https://api.stripe.com"
+		}
+		stripeEndpoint := fmt.Sprintf("%s/v1/checkout/sessions", strings.TrimRight(stripeBase, "/"))
+
 		data := url.Values{}
 		data.Set("success_url", successURL)
 		data.Set("cancel_url", fmt.Sprintf("%s/app/?tab=wallet&recharge=cancel", baseURL))
@@ -69,57 +78,85 @@ func (h *AdminHandler) CreateStripeRechargeSession(c *gin.Context) {
 		data.Set("line_items[0][price_data][product_data][name]", fmt.Sprintf("Airoute 钱包充值 (¥%.2f)", req.Amount))
 		data.Set("line_items[0][quantity]", "1")
 
-		httpReq, _ := http.NewRequest("POST", "https://api.stripe.com/v1/checkout/sessions", strings.NewReader(data.Encode()))
+		httpReq, err := http.NewRequest("POST", stripeEndpoint, strings.NewReader(data.Encode()))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "构造支付请求失败，请稍后重试"})
+			return
+		}
 		httpReq.Header.Set("Authorization", "Bearer "+stripeKey)
 		httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 		resp, err := http.DefaultClient.Do(httpReq)
-		if err == nil && resp.StatusCode == http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			var stripeRes struct {
-				ID  string `json:"id"`
-				URL string `json:"url"`
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{
+				"code":  502,
+				"error": fmt.Sprintf("支付服务通信异常: %v。线上充值暂不可用，请使用兑换券充值或稍后重试。", err),
+			})
+			return
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{
+				"code":  502,
+				"error": "读取支付服务响应失败。线上充值暂不可用，请使用兑换券充值或稍后重试。",
+			})
+			return
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			var stripeErr struct {
+				Error struct {
+					Message string `json:"message"`
+				} `json:"error"`
 			}
-			_ = json.Unmarshal(body, &stripeRes)
-			order.StripeSessionID = stripeRes.ID
-			_ = h.repo.CreateRechargeOrder(order)
-
-			c.JSON(http.StatusOK, gin.H{
-				"code":         0,
-				"order_no":     orderNo,
-				"checkout_url": stripeRes.URL,
-				"session_id":   stripeRes.ID,
+			_ = json.Unmarshal(body, &stripeErr)
+			errMsg := stripeErr.Error.Message
+			if errMsg == "" {
+				errMsg = fmt.Sprintf("HTTP %d", resp.StatusCode)
+			}
+			c.JSON(http.StatusBadGateway, gin.H{
+				"code":  502,
+				"error": fmt.Sprintf("支付服务通道返回错误 (%s)。线上充值暂不可用，请使用兑换券充值或联系管理员。", errMsg),
 			})
 			return
 		}
-	}
 
-	isTestOrDev := gin.Mode() == gin.TestMode || strings.HasSuffix(os.Args[0], ".test") || strings.EqualFold(os.Getenv("ENABLE_SANDBOX_RECHARGE"), "true")
-
-	if stripeKey == "" {
-		if !strings.EqualFold(claims.Role, "admin") && !isTestOrDev {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"code":  503,
-				"error": "系统尚未配置 Stripe 线上收款通道 (缺少 STRIPE_API_KEY)。请联系管理员使用卡密兑换或对公结算。",
+		var stripeRes struct {
+			ID  string `json:"id"`
+			URL string `json:"url"`
+		}
+		if err := json.Unmarshal(body, &stripeRes); err != nil || stripeRes.URL == "" {
+			c.JSON(http.StatusBadGateway, gin.H{
+				"code":  502,
+				"error": "支付服务响应数据解析失败。线上充值暂不可用，请使用兑换券充值或稍后重试。",
 			})
 			return
 		}
+
+		order.StripeSessionID = stripeRes.ID
+		if err := h.repo.CreateRechargeOrder(order); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"code":  500,
+				"error": "创建充值订单记录失败，支付流程已终止。未产生有效账单且未扣款，请使用兑换券充值或联系管理员。",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"code":         0,
+			"order_no":     orderNo,
+			"checkout_url": stripeRes.URL,
+			"session_id":   stripeRes.ID,
+		})
+		return
 	}
 
-	// Simulated / Sandbox Stripe Mode (accessible to admins or in dev/test mode)
-	order.StripeSessionID = "cs_simulated_" + orderNo
-	_ = h.repo.CreateRechargeOrder(order)
-
-	simulatedCheckoutURL := fmt.Sprintf("/api/v1/user/wallet/recharge/sandbox?order_no=%s&amount=%.2f", orderNo, req.Amount)
-
-	c.JSON(http.StatusOK, gin.H{
-		"code":         0,
-		"order_no":     orderNo,
-		"checkout_url": simulatedCheckoutURL,
-		"session_id":   order.StripeSessionID,
-		"mode":         "sandbox_simulation",
-		"message":      "已启用测试快捷充值通道",
+	// Online payment gateway is not configured: strictly reject, no sandbox fallback.
+	c.JSON(http.StatusServiceUnavailable, gin.H{
+		"code":  503,
+		"error": "系统尚未配置线上收款通道。当前不支持在线支付，请使用额度兑换券进行充值或联系管理员。",
 	})
 }
 
@@ -137,10 +174,10 @@ func (h *AdminHandler) SandboxRecharge(c *gin.Context) {
 	}
 
 	isTestOrDev := gin.Mode() == gin.TestMode || strings.HasSuffix(os.Args[0], ".test") || strings.EqualFold(os.Getenv("ENABLE_SANDBOX_RECHARGE"), "true")
-	if !strings.EqualFold(claims.Role, "admin") && !isTestOrDev {
+	if !isTestOrDev {
 		c.JSON(http.StatusForbidden, gin.H{
 			"code":  403,
-			"error": "生产安全模式下已禁用沙箱充值。请使用企业兑换码或正规结算通道。",
+			"error": "充值沙箱与模拟支付已停用。系统不支持模拟充值，请使用额度兑换券进行充值。",
 		})
 		return
 	}

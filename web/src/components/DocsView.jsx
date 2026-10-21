@@ -43,11 +43,11 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
           onClick={() => setDocsSection('architecture')}
           className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition cursor-pointer ${
             docsSection === 'architecture'
-              ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/60'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              ? 'bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] font-bold border border-[#355CFF]/30 dark:border-[#91A7FF]/30'
+              : 'text-[#656B75] dark:text-[#A1A7B0] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
           }`}
         >
-          <Shield className="w-3.5 h-3.5 text-indigo-500" />
+          <Shield className="w-3.5 h-3.5 text-[#355CFF] dark:text-[#91A7FF]" />
           <span>{isZh ? '核心架构与高可用设计' : 'Architecture & HA'}</span>
         </button>
 
@@ -55,8 +55,8 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
           onClick={() => setDocsSection('philosophy')}
           className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition cursor-pointer ${
             docsSection === 'philosophy'
-              ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-bold border border-amber-200 dark:border-amber-800/60'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 font-bold border border-amber-500/30'
+              : 'text-[#656B75] dark:text-[#A1A7B0] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
           }`}
         >
           <Sparkles className="w-3.5 h-3.5 text-amber-500" />
@@ -67,8 +67,8 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
           onClick={() => setDocsSection('quickstart')}
           className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition cursor-pointer ${
             docsSection === 'quickstart'
-              ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/60'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              ? 'bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] font-bold border border-[#355CFF]/30 dark:border-[#91A7FF]/30'
+              : 'text-[#656B75] dark:text-[#A1A7B0] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
           }`}
         >
           <Code className="w-3.5 h-3.5" />
@@ -79,8 +79,8 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
           onClick={() => setDocsSection('claude')}
           className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition cursor-pointer ${
             docsSection === 'claude'
-              ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/60'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              ? 'bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] font-bold border border-[#355CFF]/30 dark:border-[#91A7FF]/30'
+              : 'text-[#656B75] dark:text-[#A1A7B0] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
           }`}
         >
           <Terminal className="w-3.5 h-3.5" />
@@ -91,8 +91,8 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
           onClick={() => setDocsSection('multimodal')}
           className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition cursor-pointer ${
             docsSection === 'multimodal'
-              ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/60'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              ? 'bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] font-bold border border-[#355CFF]/30 dark:border-[#91A7FF]/30'
+              : 'text-[#656B75] dark:text-[#A1A7B0] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
           }`}
         >
           <ImageIcon className="w-3.5 h-3.5" />
@@ -103,8 +103,8 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
           onClick={() => setDocsSection('cascading')}
           className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition cursor-pointer ${
             docsSection === 'cascading'
-              ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/60'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              ? 'bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] font-bold border border-[#355CFF]/30 dark:border-[#91A7FF]/30'
+              : 'text-[#656B75] dark:text-[#A1A7B0] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
           }`}
         >
           <Layers className="w-3.5 h-3.5" />
@@ -115,8 +115,8 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
           onClick={() => setDocsSection('rerank')}
           className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition cursor-pointer ${
             docsSection === 'rerank'
-              ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/60'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              ? 'bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] font-bold border border-[#355CFF]/30 dark:border-[#91A7FF]/30'
+              : 'text-[#656B75] dark:text-[#A1A7B0] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
           }`}
         >
           <Sliders className="w-3.5 h-3.5" />
@@ -127,8 +127,8 @@ export default function DocsView({ showToast, lang = 'zh', t }) {
           onClick={() => setDocsSection('deploy')}
           className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition cursor-pointer ${
             docsSection === 'deploy'
-              ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/60'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              ? 'bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] font-bold border border-[#355CFF]/30 dark:border-[#91A7FF]/30'
+              : 'text-[#656B75] dark:text-[#A1A7B0] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
           }`}
         >
           <Server className="w-3.5 h-3.5" />

@@ -152,50 +152,17 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
 
     setRecharging(true);
     try {
-      if (rechargeMethod === 'sandbox') {
-        const res = await adminFetch('/api/v1/user/wallet/recharge/sandbox', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ amount: finalAmount })
-        });
-        const data = await res.json();
-        if (res.ok && data.code === 0) {
-          showToast(data.message || (isZh ? '充值成功！额度已实时到账' : 'Recharge successful! Balance credited'), 'success');
-          fetchWallet();
-        } else {
-          showToast(data.error || (isZh ? '充值处理失败' : 'Recharge failed'), 'error');
-        }
+      // Stripe Checkout
+      const res = await adminFetch('/api/v1/user/wallet/recharge/stripe/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: finalAmount, currency: 'CNY' })
+      });
+      const data = await res.json();
+      if (res.ok && data.code === 0 && data.checkout_url) {
+        window.location.href = data.checkout_url;
       } else {
-        // Stripe Checkout
-        const res = await adminFetch('/api/v1/user/wallet/recharge/stripe/session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ amount: finalAmount, currency: 'CNY' })
-        });
-        const data = await res.json();
-        if (res.ok && data.code === 0 && data.checkout_url) {
-          if (data.mode === 'sandbox_simulation') {
-            if (isAdmin || walletData?.is_admin) {
-              showToast(isZh ? 'Stripe 生产密钥未配置，已转入管理员沙箱测试通道' : 'Stripe secret not configured, redirected to admin sandbox', 'info');
-              const simRes = await adminFetch('/api/v1/user/wallet/recharge/sandbox', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ order_no: data.order_no, amount: finalAmount })
-              });
-              const simData = await simRes.json();
-              if (simRes.ok && simData.code === 0) {
-                showToast(isZh ? `[测试沙箱] 模拟充值成功！已入账 ¥${finalAmount.toFixed(2)}` : `[Sandbox] Simulated top-up successful! Credited ¥${finalAmount.toFixed(2)}`, 'success');
-                fetchWallet();
-              }
-            } else {
-              showToast(isZh ? '企业未配置在线支付通道，请使用兑换码充值或联系管理员' : 'Online payment not configured, please use gift card or contact admin', 'warning');
-            }
-          } else {
-            window.location.href = data.checkout_url;
-          }
-        } else {
-          showToast(data.error || (isZh ? '创建 Stripe 支付会话失败' : 'Failed to create Stripe checkout session'), 'error');
-        }
+        showToast(data.error || (isZh ? '在线支付通道暂不可用，请使用额度兑换券进行充值' : 'Online payment unavailable, please use gift cards to redeem balance'), 'error');
       }
     } catch (err) {
       showToast((isZh ? '充值请求异常: ' : 'Recharge error: ') + err.message, 'error');
@@ -498,16 +465,10 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
 
             {/* Select Channel */}
             <div className="space-y-3 pt-2">
-              <label className="block text-xs font-semibold text-[#202124] dark:text-[#F1F2F4]">{isZh ? '选择支付通道' : 'Select Payment Gateway'}</label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <button
-                  type="button"
-                  onClick={() => setRechargeMethod('stripe')}
-                  className={`p-4 rounded-xl border text-left transition cursor-pointer flex items-start space-x-3 ${
-                    rechargeMethod === 'stripe'
-                      ? 'bg-[#EEF2FF]/70 dark:bg-[#242D48]/60 border-[#355CFF] ring-1 ring-[#355CFF]/30'
-                      : 'bg-white dark:bg-[#191B1F] border-[#E4E6E9] dark:border-[#2C3038] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B]'
-                  }`}
+              <label className="block text-xs font-semibold text-[#202124] dark:text-[#F1F2F4]">{isZh ? '支付通道' : 'Payment Gateway'}</label>
+              <div className="max-w-md">
+                <div
+                  className="p-4 rounded-xl border border-[#355CFF] bg-[#EEF2FF]/70 dark:bg-[#242D48]/60 ring-1 ring-[#355CFF]/30 flex items-start space-x-3"
                 >
                   <div className="w-8 h-8 rounded-lg bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] flex items-center justify-center shrink-0">
                     <CreditCard className="w-4 h-4" />
@@ -517,32 +478,9 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                       <span>{isZh ? 'Stripe 国际信用卡 / 企业网银' : 'Stripe Cards & Global Pay'}</span>
                       <span className="text-xs px-2 py-0.5 bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] rounded-md font-medium whitespace-nowrap">{isZh ? '官方渠道' : 'Official'}</span>
                     </div>
-                    <div className="ui-meta mt-1">{isZh ? '支持 Visa, MasterCard, 微信/支付宝跨境结算' : 'Supports Visa, MasterCard, Alipay/WeChat cross-border'}</div>
+                    <div className="ui-meta mt-1">{isZh ? '支持 Visa, MasterCard, 微信/支付宝跨境结算；未配置或通道异常时请使用上方兑换券' : 'Supports Visa, MasterCard, Alipay/WeChat. If unconfigured, please use gift card above'}</div>
                   </div>
-                </button>
-
-                {(isAdmin || walletData?.is_admin) && (
-                  <button
-                    type="button"
-                    onClick={() => setRechargeMethod('sandbox')}
-                    className={`p-4 rounded-xl border text-left transition cursor-pointer flex items-start space-x-3 ${
-                      rechargeMethod === 'sandbox'
-                        ? 'bg-amber-500/10 dark:bg-amber-500/20 border-amber-500 ring-1 ring-amber-500/30'
-                        : 'bg-white dark:bg-[#191B1F] border-[#E4E6E9] dark:border-[#2C3038] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B]'
-                    }`}
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-                      <Zap className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="font-semibold text-xs text-[#202124] dark:text-[#F1F2F4] flex items-center space-x-2">
-                        <span>{isZh ? '管理员沙箱测试通道' : 'Admin Sandbox Simulation'}</span>
-                        <span className="text-xs px-2 py-0.5 bg-amber-500/10 text-amber-700 dark:text-amber-300 rounded-md font-medium whitespace-nowrap">{isZh ? '仅开发/管理' : 'Dev/Admin'}</span>
-                      </div>
-                      <div className="ui-meta mt-1">{isZh ? '仅超级管理员可在测试环境中用于快速联调额度' : 'Super admins only for simulated testing in local/dev'}</div>
-                    </div>
-                  </button>
-                )}
+                </div>
               </div>
             </div>
 

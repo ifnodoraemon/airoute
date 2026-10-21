@@ -121,10 +121,11 @@ describe('WalletManagementView', () => {
   });
 
   describe('payment method', () => {
-    it('offers the sandbox channel to an administrator', () => {
+    it('does not offer simulated sandbox channel to an administrator', () => {
       setup({ user: { username: 'root', role: 'admin', balance: 0 } });
 
-      expect(screen.getByText(/沙箱|Sandbox/)).toBeInTheDocument();
+      expect(screen.queryByText(/沙箱|Sandbox/)).not.toBeInTheDocument();
+      expect(screen.getByText(/Stripe/)).toBeInTheDocument();
     });
   });
 

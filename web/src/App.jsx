@@ -74,8 +74,8 @@ const AiCopilot = lazy(() => import('./components/AiCopilot'));
 
 function ViewLoader() {
   return (
-    <div className="flex flex-col items-center justify-center p-16 text-slate-400">
-      <div className="w-7 h-7 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+    <div className="flex flex-col items-center justify-center p-16 text-[#656B75] dark:text-[#A1A7B0]">
+      <div className="w-7 h-7 border-2 border-[#355CFF] border-t-transparent rounded-full animate-spin mb-3"></div>
       <span className="text-xs font-medium tracking-wide">Loading module...</span>
     </div>
   );
@@ -586,7 +586,7 @@ export default function App() {
   if (viewMode === 'landing') {
     return (
       <I18nContext.Provider value={{ lang, setLang, toggleLang, t }}>
-        <div className="min-h-screen bg-slate-50 dark:bg-[#0A0D14] text-slate-800 dark:text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
+        <div className="min-h-screen bg-[#F7F7F5] dark:bg-[#111214] text-[#202124] dark:text-[#F1F2F4] font-sans selection:bg-[#355CFF] selection:text-white">
           <Toast toast={toast} onClose={dismissToast} />
           <Suspense fallback={<ViewLoader />}>
             <LandingPage
@@ -647,7 +647,7 @@ export default function App() {
   if (viewMode === 'auth') {
     return (
       <I18nContext.Provider value={{ lang, setLang, toggleLang, t }}>
-        <div className="min-h-screen bg-slate-50 dark:bg-[#0A0D14] text-slate-800 dark:text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
+        <div className="min-h-screen bg-[#F7F7F5] dark:bg-[#111214] text-[#202124] dark:text-[#F1F2F4] font-sans selection:bg-[#355CFF] selection:text-white">
           <Toast toast={toast} onClose={dismissToast} />
           <Suspense fallback={<ViewLoader />}>
             <AuthPage
@@ -673,7 +673,7 @@ export default function App() {
   if (viewMode === 'status') {
     return (
       <I18nContext.Provider value={{ lang, setLang, toggleLang, t }}>
-        <div className="min-h-screen bg-slate-50 dark:bg-[#0A0D14] text-slate-800 dark:text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
+        <div className="min-h-screen bg-[#F7F7F5] dark:bg-[#111214] text-[#202124] dark:text-[#F1F2F4] font-sans selection:bg-[#355CFF] selection:text-white">
           <Toast toast={toast} onClose={dismissToast} />
           <Suspense fallback={<ViewLoader />}>
             <ServiceStatus
@@ -1335,7 +1335,7 @@ export default function App() {
               <div className="flex items-center space-x-2 shrink-0">
                 <button
                   onClick={() => setCurrentTab('wallet')}
-                  className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white text-xs font-medium rounded-lg shadow-sm transition cursor-pointer"
+                  className="ui-btn-primary cursor-pointer"
                 >
                   {isZh ? '前往充值 / 兑换卡密 →' : 'Top up / Redeem Card →'}
                 </button>

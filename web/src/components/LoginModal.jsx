@@ -193,15 +193,15 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
+      <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <div className="flex items-center justify-between border-b border-[#E4E6E9] dark:border-[#2C3038] pb-3">
           <div className="flex items-center space-x-2.5">
-            <div className="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200">
-              <Key className="w-4 h-4 text-slate-700 dark:text-slate-200" />
+            <div className="w-9 h-9 rounded-lg bg-[#EEF2FF] dark:bg-[#242D48] border border-[#355CFF]/30 dark:border-[#91A7FF]/30 flex items-center justify-center text-[#355CFF] dark:text-[#91A7FF]">
+              <Key className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-semibold text-base text-slate-900 dark:text-slate-100 tracking-tight">
+              <h3 className="font-semibold text-base text-[#202124] dark:text-[#F1F2F4] tracking-tight">
                 {isZh ? 'Airoute 统一门户' : 'Airoute Portal'}
               </h3>
               <p className="ui-meta">{isZh ? '统一身份验证与额度管理' : 'Unified Auth & Quota Management'}</p>
@@ -209,7 +209,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
+            className="p-1.5 hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] rounded-lg text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4] transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -217,7 +217,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
 
         {/* Tab Switcher */}
         {sysConfig.allow_registration ? (
-          <div className="grid grid-cols-2 gap-2 bg-slate-100 dark:bg-slate-900 p-1 rounded-lg text-xs font-semibold">
+          <div className="grid grid-cols-2 gap-2 bg-[#F0F1F2] dark:bg-[#22252B] p-1 rounded-lg text-xs font-semibold border border-[#E4E6E9] dark:border-[#2C3038]">
             <button
               type="button"
               onClick={() => {
@@ -227,8 +227,8 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
               }}
               className={`py-2 rounded-md transition cursor-pointer ${
                 activeTab === 'login'
-                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm'
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100'
+                  ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-2xs'
+                  : 'text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
               }`}
             >
               {isZh ? '账号登录' : 'Sign In'}
@@ -242,8 +242,8 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
               }}
               className={`py-2 rounded-md transition cursor-pointer flex items-center justify-center ${
                 activeTab === 'register'
-                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm'
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100'
+                  ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-2xs'
+                  : 'text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
               }`}
             >
               <span>{isZh ? '注册账号' : 'Register'}</span>
@@ -314,7 +314,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
               <button
                 type="submit"
                 disabled={loading}
-                className="ui-btn-primary w-full gap-2 bg-indigo-600 hover:bg-indigo-700 font-bold shadow-md hover:shadow-lg"
+                className="ui-btn-primary w-full gap-2 font-bold shadow-xs"
               >
                 {loading ? (
                   <>
@@ -473,7 +473,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
               <button
                 type="submit"
                 disabled={loading}
-                className="ui-btn-primary w-full gap-2 bg-linear-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 font-bold shadow-md hover:shadow-lg"
+                className="ui-btn-primary w-full gap-2 font-bold shadow-xs"
               >
                 {loading ? (
                   <>
