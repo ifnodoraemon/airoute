@@ -89,4 +89,26 @@ func TestGetStatsTimeSeries(t *testing.T) {
 	if dataScoped.ModalityStats["audio"] != 1 {
 		t.Fatalf("expected 1 audio request, got %d", dataScoped.ModalityStats["audio"])
 	}
+
+	// 4. Test 7d buckets have unique labels
+	data7d, err := repo.GetStatsTimeSeries("7d", nil)
+	if err != nil {
+		t.Fatalf("GetStatsTimeSeries 7d failed: %v", err)
+	}
+	if len(data7d.Buckets) != 14 {
+		t.Fatalf("expected 14 buckets, got %d", len(data7d.Buckets))
+	}
+	labels := make(map[string]bool)
+	for _, b := range data7d.Buckets {
+		if labels[b.Label] {
+			t.Fatalf("duplicate bucket label in 7d series: %s", b.Label)
+		}
+		labels[b.Label] = true
+	}
+
+	// 5. Test empty structure generator
+	emptyData := NewEmptyTimeSeriesData("24h")
+	if len(emptyData.Buckets) != 24 || emptyData.Percentiles.Sampled != 0 || emptyData.Percentiles.Total != 0 {
+		t.Fatalf("unexpected empty time series data: %+v", emptyData)
+	}
 }

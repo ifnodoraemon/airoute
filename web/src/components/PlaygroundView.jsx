@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { getGatewayOrigin, copyToClipboard as crossOriginCopy } from '../config';
 import MarkdownRenderer from './MarkdownRenderer';
+import { inferClientModality } from '../lib/modelModality';
 
 export default function PlaygroundView({
   keys = [],
@@ -61,17 +62,6 @@ export default function PlaygroundView({
   };
 
   const selectedKeyObj = keys.find(k => k.key === (isCustomKey ? customKeyInput.trim() : (playApiKey === '__none__' ? '' : playApiKey)));
-
-  const inferClientModality = (m) => {
-    const lower = (m || '').toLowerCase();
-    if (lower.includes('rerank') || lower.includes('bge-reranker')) return 'rerank';
-    if (lower.includes('embed') || lower.includes('bge-') || lower.includes('text-embedding')) return 'embeddings';
-    if (lower.includes('tts') || lower.includes('speech') || lower.includes('voice') || lower.includes('cosyvoice')) return 'audio_speech';
-    if (lower.includes('whisper') || lower.includes('sensevoice') || lower.includes('transcription') || lower.includes('asr')) return 'audio_transcription';
-    if (lower.includes('sora') || lower.includes('cogvideox') || lower.includes('kling') || lower.includes('video')) return 'videos';
-    if (lower.includes('image') || lower.includes('dall-e') || lower.includes('flux') || lower.includes('stable-diffusion')) return 'images';
-    return 'chat';
-  };
 
   const getPlaygroundModels = (modality) => {
     let list = [];
@@ -209,7 +199,7 @@ export default function PlaygroundView({
     : 'Bind multiple channels to one model with weights and priorities in Model Routes.\nPython list comprehensions build new lists quickly.\nThe tri-state breaker bypasses a failing channel automatically.');
   const [rerankResult, setRerankResult] = useState(null);
 
-  // Sync initial model
+  // Sync initial model across chat and multimodal categories
   useEffect(() => {
     if (chatModels.length > 0 && !chatModels.includes(playModel)) {
       setPlayModel(chatModels[0]);
@@ -217,7 +207,33 @@ export default function PlaygroundView({
     if (chatModels.length > 1 && !chatModels.includes(arenaModelB)) {
       setArenaModelB(chatModels[1]);
     }
-  }, [chatModels, playModel, arenaModelB]);
+    if (imgModels.length > 0 && !imgModels.includes(imgModel)) {
+      setImgModel(imgModels[0]);
+    }
+    if (ttsModels.length > 0 && !ttsModels.includes(ttsModel)) {
+      setTtsModel(ttsModels[0]);
+    }
+    if (sttModels.length > 0 && !sttModels.includes(sttModel)) {
+      setSttModel(sttModels[0]);
+    }
+    if (videoModels.length > 0 && !videoModels.includes(videoModel)) {
+      setVideoModel(videoModels[0]);
+    }
+    if (embedModels.length > 0 && !embedModels.includes(embedModel)) {
+      setEmbedModel(embedModels[0]);
+    }
+    if (rerankModels.length > 0 && !rerankModels.includes(rerankModel)) {
+      setRerankModel(rerankModels[0]);
+    }
+  }, [
+    chatModels, playModel, arenaModelB,
+    imgModels, imgModel,
+    ttsModels, ttsModel,
+    sttModels, sttModel,
+    videoModels, videoModel,
+    embedModels, embedModel,
+    rerankModels, rerankModel
+  ]);
 
   const copyToClipboard = async (txt, label = '') => {
     await crossOriginCopy(txt);

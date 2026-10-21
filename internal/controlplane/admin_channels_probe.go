@@ -2,8 +2,10 @@ package controlplane
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -82,6 +84,17 @@ func (h *AdminHandler) TestChannel(c *gin.Context) {
 	testModel := "gpt-3.5-turbo"
 	if len(target.Models) > 0 {
 		testModel = target.Models[0]
+		// Prefer a chat-capable model if the channel has a mixed catalog
+		for _, m := range target.Models {
+			lower := strings.ToLower(m)
+			if !strings.Contains(lower, "embed") && !strings.Contains(lower, "bge") &&
+				!strings.Contains(lower, "image") && !strings.Contains(lower, "dall-e") &&
+				!strings.Contains(lower, "whisper") && !strings.Contains(lower, "tts") &&
+				!strings.Contains(lower, "video") {
+				testModel = m
+				break
+			}
+		}
 	}
 
 	chCfg := model.ChannelConfig{
@@ -106,6 +119,32 @@ func (h *AdminHandler) TestChannel(c *gin.Context) {
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
+
+	// If the targeted test model is an embedding model and provider supports it, test embedding
+	if embedProv, ok := prov.(provider.EmbeddingProvider); ok {
+		lowerModel := strings.ToLower(testModel)
+		if strings.Contains(lowerModel, "embed") || strings.Contains(lowerModel, "bge") {
+			start := time.Now()
+			embResp, err := embedProv.Embed(ctx, &model.EmbeddingRequest{Model: testModel, Input: "ping"}, &chCfg)
+			latencyMs := time.Since(start).Milliseconds()
+			if err != nil {
+				c.JSON(http.StatusOK, gin.H{
+					"code":       1,
+					"success":    false,
+					"latency_ms": latencyMs,
+					"error":      err.Error(),
+				})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{
+				"code":       0,
+				"success":    true,
+				"latency_ms": latencyMs,
+				"response":   fmt.Sprintf("Embedding generated successfully (%d items)", len(embResp.Data)),
+			})
+			return
+		}
+	}
 
 	testReq := &model.ChatCompletionRequest{
 		Model: testModel,

@@ -87,7 +87,7 @@ export default function DashboardView({
       const label = timeframe === '1h' 
         ? bucketTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         : timeframe === '7d'
-        ? `${bucketTime.getMonth() + 1}/${bucketTime.getDate()}`
+        ? `${bucketTime.getMonth() + 1}/${bucketTime.getDate()} ${String(bucketTime.getHours()).padStart(2, '0')}:00`
         : `${bucketTime.getHours()}:00`;
       return {
         label,
@@ -390,7 +390,7 @@ export default function DashboardView({
 
 ## 2. FinOps 成本优化与缓存成效
 - **Prompt Caching 命中**：累计命中识别 ${logs.filter(l => l.cached_tokens > 0).length} 次
-- **闲时优惠覆盖**：夜间/周末闲时请求享受 5 折优惠，大幅削减峰值推理成本
+- **闲时优惠覆盖**：夜间/周末闲时请求享受时段费率折扣，大幅削减峰值推理成本
 
 ## 3. 架构优化与行动建议
 1. 建议持续保持高频核心模型（如 DeepSeek-R1 / Claude 3.5）的多通道优先级冗余配置。
@@ -411,7 +411,7 @@ export default function DashboardView({
 
 ## 2. FinOps Cost Optimization
 - **Prompt Cache Hits**: ${logs.filter(l => l.cached_tokens > 0).length} requests accelerated
-- **Off-Peak Economics**: 50% discount during off-peak windows
+- **Off-Peak Economics**: Time-of-use rate optimization during off-peak windows
 
 ## 3. Recommendations
 1. Maintain redundant fallback routes for top reasoning models.
@@ -813,18 +813,23 @@ export default function DashboardView({
                   strokeLinejoin="round"
                 />
               )}
-              {chartSvgData.pointsArr.map((pt, i) => (
-                <circle
-                  key={i}
-                  cx={pt.x}
-                  cy={pt.y}
-                  r={hoveredBucket?.label === pt.bucket.label ? "4.5" : "2"}
-                  fill={hoveredBucket?.label === pt.bucket.label ? "#ffffff" : "#6366f1"}
-                  stroke="#6366f1"
-                  strokeWidth="2"
-                  className="transition-all duration-150"
-                />
-              ))}
+              {chartSvgData.pointsArr.map((pt, i) => {
+                const isHovered = hoveredBucket?.timestamp != null
+                  ? hoveredBucket.timestamp === pt.bucket.timestamp
+                  : hoveredBucket?.label === pt.bucket.label;
+                return (
+                  <circle
+                    key={i}
+                    cx={pt.x}
+                    cy={pt.y}
+                    r={isHovered ? "4.5" : "2"}
+                    fill={isHovered ? "#ffffff" : "#6366f1"}
+                    stroke="#6366f1"
+                    strokeWidth="2"
+                    className="transition-all duration-150"
+                  />
+                );
+              })}
             </svg>
           </div>
 

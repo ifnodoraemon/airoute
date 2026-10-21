@@ -37,6 +37,8 @@ type TimeSeriesData struct {
 	ModalityStats map[string]int64    `json:"modality_stats"`
 }
 
+const maxTsCacheEntries = 128
+
 var (
 	tsCacheMu sync.RWMutex
 	tsCache   = make(map[string]struct {
@@ -45,13 +47,66 @@ var (
 	})
 )
 
+// NewEmptyTimeSeriesData constructs an initialized empty TimeSeriesData structure for the given timeframe.
+func NewEmptyTimeSeriesData(timeframe string) *TimeSeriesData {
+	if timeframe != "1h" && timeframe != "7d" {
+		timeframe = "24h"
+	}
+	var numBuckets int
+	var interval time.Duration
+	switch timeframe {
+	case "1h":
+		numBuckets = 12
+		interval = 5 * time.Minute
+	case "7d":
+		numBuckets = 14
+		interval = 12 * time.Hour
+	default:
+		timeframe = "24h"
+		numBuckets = 24
+		interval = 1 * time.Hour
+	}
+
+	now := time.Now()
+	buckets := make([]*TimeSeriesBucket, numBuckets)
+	for i := 0; i < numBuckets; i++ {
+		bTime := now.Add(-time.Duration(numBuckets-1-i) * interval)
+		var label string
+		switch timeframe {
+		case "1h":
+			label = bTime.Format("15:04")
+		case "7d":
+			label = fmt.Sprintf("%d/%d %02d:00", bTime.Month(), bTime.Day(), bTime.Hour())
+		default:
+			label = fmt.Sprintf("%02d:00", bTime.Hour())
+		}
+		buckets[i] = &TimeSeriesBucket{
+			Label:     label,
+			Timestamp: bTime.UnixMilli(),
+		}
+	}
+
+	return &TimeSeriesData{
+		Timeframe:   timeframe,
+		Buckets:     buckets,
+		Percentiles: LatencyPercentiles{Sampled: 0, Total: 0},
+		ModalityStats: map[string]int64{
+			"chat": 0, "images": 0, "audio": 0, "video": 0, "embeddings": 0, "rerank": 0,
+		},
+	}
+}
+
 // GetStatsTimeSeries returns aggregated time-series buckets and true percentiles across all logs in the timeframe.
 func (r *Repository) GetStatsTimeSeries(timeframe string, keys []string) (*TimeSeriesData, error) {
 	if timeframe != "1h" && timeframe != "7d" {
 		timeframe = "24h"
 	}
 
-	cacheKey := fmt.Sprintf("%s:%s", timeframe, strings.Join(keys, ","))
+	sortedKeys := make([]string, len(keys))
+	copy(sortedKeys, keys)
+	sort.Strings(sortedKeys)
+	cacheKey := fmt.Sprintf("%s:%s", timeframe, strings.Join(sortedKeys, ","))
+
 	tsCacheMu.RLock()
 	if entry, ok := tsCache[cacheKey]; ok && time.Since(entry.at) < 3*time.Second {
 		tsCacheMu.RUnlock()
@@ -86,9 +141,9 @@ func (r *Repository) GetStatsTimeSeries(timeframe string, keys []string) (*TimeS
 		case "1h":
 			label = bTime.Format("15:04")
 		case "7d":
-			label = fmt.Sprintf("%d/%d", bTime.Month(), bTime.Day())
+			label = fmt.Sprintf("%d/%d %02d:00", bTime.Month(), bTime.Day(), bTime.Hour())
 		default:
-			label = fmt.Sprintf("%d:00", bTime.Hour())
+			label = fmt.Sprintf("%02d:00", bTime.Hour())
 		}
 		buckets[i] = &TimeSeriesBucket{
 			Label:     label,
@@ -98,19 +153,13 @@ func (r *Repository) GetStatsTimeSeries(timeframe string, keys []string) (*TimeS
 	}
 
 	startTime := now.Add(-time.Duration(numBuckets) * interval)
-	var where string
 	var args []interface{}
-
-	if r.db.Dialect() == "postgres" {
-		where = "WHERE created_at >= ?"
-	} else {
-		where = "WHERE datetime(created_at) >= datetime(?)"
-	}
+	where := "WHERE created_at >= ?"
 	args = append(args, startTime.UTC().Format("2006-01-02 15:04:05"))
 
-	if len(keys) > 0 {
-		placeholders := make([]string, len(keys))
-		for i, k := range keys {
+	if len(sortedKeys) > 0 {
+		placeholders := make([]string, len(sortedKeys))
+		for i, k := range sortedKeys {
 			placeholders[i] = "?"
 			args = append(args, k)
 		}
@@ -126,6 +175,7 @@ func (r *Repository) GetStatsTimeSeries(timeframe string, keys []string) (*TimeS
 	defer rows.Close()
 
 	var allTTFTs []int64
+	var totalRequests int64
 	modalityCounts := map[string]int64{
 		"chat": 0, "images": 0, "audio": 0, "video": 0, "embeddings": 0, "rerank": 0,
 	}
@@ -151,6 +201,7 @@ func (r *Repository) GetStatsTimeSeries(timeframe string, keys []string) (*TimeS
 		diff := now.Sub(*t)
 		idx := numBuckets - 1 - int(diff/interval)
 		if idx >= 0 && idx < numBuckets {
+			totalRequests++
 			buckets[idx].Requests++
 			buckets[idx].Tokens += totalTokens
 			buckets[idx].Costs += cost
@@ -159,15 +210,11 @@ func (r *Repository) GetStatsTimeSeries(timeframe string, keys []string) (*TimeS
 			}
 			if ttftMs > 0 {
 				bucketTTFTs[idx] = append(bucketTTFTs[idx], ttftMs)
+				allTTFTs = append(allTTFTs, ttftMs)
 			}
+			mod := inferModalityCategory(model)
+			modalityCounts[mod]++
 		}
-
-		if ttftMs > 0 {
-			allTTFTs = append(allTTFTs, ttftMs)
-		}
-
-		mod := inferModalityCategory(model)
-		modalityCounts[mod]++
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate timeseries rows error: %w", err)
@@ -185,7 +232,7 @@ func (r *Repository) GetStatsTimeSeries(timeframe string, keys []string) (*TimeS
 
 	percentiles := LatencyPercentiles{
 		Sampled: int64(len(allTTFTs)),
-		Total:   int64(len(allTTFTs)),
+		Total:   totalRequests,
 	}
 	if len(allTTFTs) > 0 {
 		sort.Slice(allTTFTs, func(i, j int) bool { return allTTFTs[i] < allTTFTs[j] })
@@ -212,6 +259,22 @@ func (r *Repository) GetStatsTimeSeries(timeframe string, keys []string) (*TimeS
 	}
 
 	tsCacheMu.Lock()
+	if len(tsCache) >= maxTsCacheEntries {
+		// Prune expired entries
+		nowTime := time.Now()
+		for k, v := range tsCache {
+			if nowTime.Sub(v.at) > 3*time.Second {
+				delete(tsCache, k)
+			}
+		}
+		// If still full, purge all
+		if len(tsCache) >= maxTsCacheEntries {
+			tsCache = make(map[string]struct {
+				data *TimeSeriesData
+				at   time.Time
+			})
+		}
+	}
 	tsCache[cacheKey] = struct {
 		data *TimeSeriesData
 		at   time.Time
@@ -223,19 +286,19 @@ func (r *Repository) GetStatsTimeSeries(timeframe string, keys []string) (*TimeS
 
 func inferModalityCategory(modelName string) string {
 	lower := strings.ToLower(modelName)
-	if strings.Contains(lower, "rerank") {
+	if strings.Contains(lower, "rerank") || strings.Contains(lower, "bge-reranker") {
 		return "rerank"
 	}
-	if strings.Contains(lower, "embed") || strings.Contains(lower, "bge-m3") || strings.Contains(lower, "text-embedding") {
+	if strings.Contains(lower, "embed") || strings.Contains(lower, "bge-") || strings.Contains(lower, "text-embedding") {
 		return "embeddings"
 	}
-	if strings.Contains(lower, "image") || strings.Contains(lower, "dall-e") || strings.Contains(lower, "flux") || strings.Contains(lower, "stable-diffusion") {
+	if strings.Contains(lower, "image") || strings.Contains(lower, "dall-e") || strings.Contains(lower, "flux") || strings.Contains(lower, "midjourney") || strings.Contains(lower, "stable-diffusion") || strings.Contains(lower, "seedream") || strings.Contains(lower, "sdxl") {
 		return "images"
 	}
-	if strings.Contains(lower, "tts") || strings.Contains(lower, "speech") || strings.Contains(lower, "whisper") || strings.Contains(lower, "audio") || strings.Contains(lower, "voice") || strings.Contains(lower, "cosyvoice") {
+	if strings.Contains(lower, "tts") || strings.Contains(lower, "speech") || strings.Contains(lower, "whisper") || strings.Contains(lower, "audio") || strings.Contains(lower, "voice") || strings.Contains(lower, "cosyvoice") || strings.Contains(lower, "sensevoice") || strings.Contains(lower, "transcription") || strings.Contains(lower, "asr") {
 		return "audio"
 	}
-	if strings.Contains(lower, "video") || strings.Contains(lower, "sora") || strings.Contains(lower, "kling") || strings.Contains(lower, "wan") || strings.Contains(lower, "cogvideox") {
+	if strings.Contains(lower, "video") || strings.Contains(lower, "sora") || strings.Contains(lower, "kling") || strings.Contains(lower, "wan") || strings.Contains(lower, "cogvideox") || strings.Contains(lower, "seedance") || strings.Contains(lower, "luma") || strings.Contains(lower, "runway") || strings.Contains(lower, "pika") || strings.Contains(lower, "vidu") {
 		return "video"
 	}
 	return "chat"

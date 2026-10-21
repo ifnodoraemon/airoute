@@ -2,6 +2,7 @@ package controlplane
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -125,6 +126,39 @@ func TestBatchBindingAndAuth(t *testing.T) {
 		}
 		if w2.Code != http.StatusForbidden {
 			t.Fatalf("expected 403, got %d", w2.Code)
+		}
+	})
+
+	t.Run("GetStatsTimeSeries non-admin with zero keys returns empty timeseries", func(t *testing.T) {
+		bob := &storage.UserRecord{
+			Username:     "bob",
+			PasswordHash: "hash",
+			Role:         "user",
+			GroupName:    "default",
+			Status:       "active",
+		}
+		if err := repo.CreateUser(bob); err != nil {
+			t.Fatalf("failed to create user bob: %v", err)
+		}
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request, _ = http.NewRequest("GET", "/api/v1/admin/stats/timeseries?timeframe=24h", nil)
+		c.Set("admin_claims", &AdminClaims{Username: "bob", Role: "user"})
+
+		handler.GetStatsTimeSeries(c)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+		var resp struct {
+			Code int                     `json:"code"`
+			Data *storage.TimeSeriesData `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal error: %v", err)
+		}
+		if resp.Data == nil || len(resp.Data.Buckets) != 24 || resp.Data.Percentiles.Sampled != 0 || resp.Data.Percentiles.Total != 0 {
+			t.Fatalf("expected empty 24 buckets and 0 samples for user with no keys, got %+v", resp.Data)
 		}
 	})
 }

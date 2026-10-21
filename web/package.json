@@ -8,8 +8,8 @@
     "build": "vite build --configLoader runner",
     "preview": "vite preview",
     "lint": "eslint src --max-warnings 0",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "vitest run --configLoader runner",
+    "test:watch": "vitest --configLoader runner"
   },
   "dependencies": {
     "lucide-react": "^1.60.0",

@@ -408,14 +408,6 @@ func (db *DB) migrate() error {
 			},
 		},
 		{
-			Version: 14,
-			Name:    "add_error_message_to_usage_logs",
-			Up: func(db *DB) error {
-				ensureSQLiteColumn(db.DB, "usage_logs", "error_message", "TEXT DEFAULT ''")
-				return nil
-			},
-		},
-		{
 			Version: 13,
 			Name:    "create_request_traces",
 			Up: func(db *DB) error {
@@ -442,6 +434,14 @@ func (db *DB) migrate() error {
 					CREATE INDEX IF NOT EXISTS idx_trace_created ON request_traces(created_at);
 				`)
 				return err
+			},
+		},
+		{
+			Version: 14,
+			Name:    "add_error_message_to_usage_logs",
+			Up: func(db *DB) error {
+				ensureSQLiteColumn(db.DB, "usage_logs", "error_message", "TEXT DEFAULT ''")
+				return nil
 			},
 		},
 		{

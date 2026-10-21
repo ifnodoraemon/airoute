@@ -277,8 +277,9 @@ func (e *BillingEngine) CalculateCostDetailedWithGroup(modelName, groupName stri
 	isOffPeak, discount = e.IsOffPeak(p, t)
 	if isOffPeak {
 		discountedTokenCost := tokenCost * discount
-		offPeakSaved := tokenCost - discountedTokenCost
-		cost = discountedTokenCost + p.FixedPrice
+		discountedFixedCost := p.FixedPrice * discount
+		offPeakSaved := (tokenCost - discountedTokenCost) + (p.FixedPrice - discountedFixedCost)
+		cost = discountedTokenCost + discountedFixedCost
 		totalSaved = cacheSaved + offPeakSaved
 	} else {
 		cost = tokenCost + p.FixedPrice

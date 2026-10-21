@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/ifnodoraemon/airoute/internal/api"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/router"
 )
@@ -124,5 +125,21 @@ func TestCascadingAndUnrestrictedModelMapping(t *testing.T) {
 	}
 	if receivedUpstreamModel != "xxx/xx" {
 		t.Fatalf("expected upstream to receive 'xxx/xx', got '%s'", receivedUpstreamModel)
+	}
+
+	// Case 5: HTTP GET /v1/models/deepseek-ai/DeepSeek-V3 multi-segment path resolution
+	testRouter := api.SetupRouter(dispatcher, nil)
+	w := httptest.NewRecorder()
+	httpReq, _ := http.NewRequest(http.MethodGet, "/v1/models/deepseek-ai/DeepSeek-V3", nil)
+	testRouter.ServeHTTP(w, httpReq)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected GET /v1/models/deepseek-ai/DeepSeek-V3 to return 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var modelResp model.ModelItem
+	if err := json.Unmarshal(w.Body.Bytes(), &modelResp); err != nil {
+		t.Fatalf("failed to parse model detail response: %v", err)
+	}
+	if modelResp.ID != "deepseek-ai/DeepSeek-V3" {
+		t.Fatalf("expected model ID 'deepseek-ai/DeepSeek-V3', got '%s'", modelResp.ID)
 	}
 }

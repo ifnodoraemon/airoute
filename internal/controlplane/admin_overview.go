@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/config"
 	"github.com/ifnodoraemon/airoute/internal/distributed"
+	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
 // GetStatsOverview returns dashboard overview metrics. Super-admins see the
@@ -66,6 +67,11 @@ func (h *AdminHandler) GetStatsTimeSeries(c *gin.Context) {
 		keys, err := h.repo.ListAPIKeysByUser(user.ID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if len(keys) == 0 {
+			// Fail-closed: user owns no keys, return empty time series without exposing cluster logs
+			c.JSON(http.StatusOK, gin.H{"code": 0, "data": storage.NewEmptyTimeSeriesData(timeframe)})
 			return
 		}
 		for _, k := range keys {

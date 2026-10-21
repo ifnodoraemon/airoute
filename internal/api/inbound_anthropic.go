@@ -190,8 +190,13 @@ func (h *Handler) handleAnthropicUnary(c *gin.Context, reqCtx context.Context, r
 		usagePayload["cache_read_input_tokens"] = cachedTokens
 	}
 
+	msgID := resp.ID
+	if !strings.HasPrefix(msgID, "msg_") {
+		msgID = "msg_" + msgID
+	}
+
 	anthropicResp := gin.H{
-		"id":          fmt.Sprintf("msg_%s", resp.ID),
+		"id":          msgID,
 		"type":        "message",
 		"role":        "assistant",
 		"model":       req.Model,

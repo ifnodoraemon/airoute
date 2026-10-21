@@ -42,7 +42,7 @@ run: build-web
 
 test: web/dist/index.html
 	@echo "==> Running tests..."
-	go test -v -race ./...
+	go test -v -race $$(go list ./... | grep -v '/web/node_modules')
 
 test-web:
 	@echo "==> Running Web UI tests..."

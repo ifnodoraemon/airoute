@@ -70,6 +70,7 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 		httpReq, err := http.NewRequestWithContext(ctx, req.Method, targetURL, bytes.NewReader(targetBody))
 		if err != nil {
 			lastErr = err
+			d.circuitBreaker.AbortCanary(ch.Name)
 			continue
 		}
 
@@ -189,6 +190,7 @@ func (d *Dispatcher) DispatchEmbedding(ctx context.Context, req *model.Embedding
 		embedProv, ok := prov.(provider.EmbeddingProvider)
 		if !ok {
 			lastErr = fmt.Errorf("provider '%s' on channel %s does not support embedding", ch.Type, ch.Name)
+			d.circuitBreaker.AbortCanary(ch.Name)
 			continue
 		}
 		resp, err = embedProv.Embed(ctx, req, ch)
@@ -253,6 +255,7 @@ func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankReques
 		rerankProv, ok := prov.(provider.RerankProvider)
 		if !ok {
 			lastErr = fmt.Errorf("provider '%s' on channel %s does not support reranking", ch.Type, ch.Name)
+			d.circuitBreaker.AbortCanary(ch.Name)
 			continue
 		}
 

@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -34,9 +35,9 @@ func (h *Handler) HandleModels(c *gin.Context) {
 	})
 }
 
-// HandleModelDetail handles GET /v1/models/:model.
+// HandleModelDetail handles GET /v1/models/*model.
 func (h *Handler) HandleModelDetail(c *gin.Context) {
-	modelID := c.Param("model")
+	modelID := strings.TrimPrefix(c.Param("model"), "/")
 	if modelID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": gin.H{

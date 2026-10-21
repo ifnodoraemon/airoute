@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { getGatewayOrigin, copyToClipboard as crossOriginCopy } from '../config';
 import MarkdownRenderer from './MarkdownRenderer';
+import { inferClientModality } from '../lib/modelModality';
 import {
   COPILOT_HARNESS_TOOLS,
   HARNESS_BENCHMARKS,
@@ -271,18 +272,6 @@ export default function AiCopilot({
 
   const origin = getGatewayOrigin();
   const baseUrl = origin ? `${origin}/v1` : '/v1';
-
-  // Discover candidate chat models
-  const inferClientModality = (m) => {
-    const lower = (m || '').toLowerCase();
-    if (lower.includes('rerank') || lower.includes('bge-reranker')) return 'rerank';
-    if (lower.includes('embed') || lower.includes('bge-') || lower.includes('text-embedding')) return 'embeddings';
-    if (lower.includes('tts') || lower.includes('speech') || lower.includes('voice')) return 'audio_speech';
-    if (lower.includes('whisper') || lower.includes('transcription') || lower.includes('asr')) return 'audio_transcription';
-    if (lower.includes('sora') || lower.includes('video')) return 'videos';
-    if (lower.includes('image') || lower.includes('dall-e') || lower.includes('flux')) return 'images';
-    return 'chat';
-  };
 
   const candidateModels = useMemo(() => {
     let list = [];
