@@ -77,6 +77,31 @@ export default function DashboardView({
     try { localStorage.removeItem('airoute_dismissed_attention'); } catch {}
   };
 
+  const [recentLogs, setRecentLogs] = useState([]);
+  const [recentLogsLoading, setRecentLogsLoading] = useState(false);
+
+  const fetchRecentLogs = useCallback(async (keyOverride) => {
+    try {
+      setRecentLogsLoading(true);
+      const targetKey = keyOverride !== undefined ? keyOverride : selectedKey;
+      const fetcher = adminFetch || apiFetch;
+      const url = `/api/v1/admin/logs?limit=10${targetKey ? `&key=${encodeURIComponent(targetKey)}` : ''}`;
+      const res = await fetcher(url);
+      if (res && res.ok) {
+        const json = await res.json();
+        if (json && json.code === 0 && Array.isArray(json.data)) {
+          setRecentLogs(json.data);
+          return true;
+        }
+      }
+    } catch {
+      // Fallback gracefully
+    } finally {
+      setRecentLogsLoading(false);
+    }
+    return false;
+  }, [selectedKey, adminFetch]);
+
   const fetchTimeseries = useCallback(async (keyOverride) => {
     try {
       const targetKey = keyOverride !== undefined ? keyOverride : selectedKey;
@@ -118,6 +143,7 @@ export default function DashboardView({
     if (onSelectKey) onSelectKey(k);
     fetchTimeseries(k);
     fetchDrilldownStats(k);
+    fetchRecentLogs(k);
   };
 
   useEffect(() => {
@@ -125,12 +151,14 @@ export default function DashboardView({
       setSelectedKey(propSelectedKey);
       fetchTimeseries(propSelectedKey);
       fetchDrilldownStats(propSelectedKey);
+      fetchRecentLogs(propSelectedKey);
     }
   }, [propSelectedKey]);
 
   useEffect(() => {
     fetchTimeseries();
-  }, [fetchTimeseries]);
+    fetchRecentLogs();
+  }, [fetchTimeseries, fetchRecentLogs]);
 
   const effectiveStats = keyStats || stats;
   const currentRPM = effectiveStats.current_rpm ?? timeseriesData?.current_rpm ?? 0;
@@ -539,8 +567,8 @@ export default function DashboardView({
     if (refreshing) return;
     setRefreshing(true);
     try {
-      const [a, b, c] = await Promise.all([fetchData?.(), fetchLogs?.(), fetchTimeseries()]);
-      const ok = a !== false && b !== false && c !== false;
+      const [a, b, c, d] = await Promise.all([fetchData?.(), fetchLogs?.(), fetchTimeseries(), fetchRecentLogs()]);
+      const ok = a !== false && b !== false && c !== false && d !== false;
       if (ok) showToast?.(isZh ? '遥测数据已更新' : 'Telemetry refreshed', 'success');
       else showToast?.(isZh ? '部分数据刷新失败，请检查网络或后端服务' : 'Some data failed to refresh — check the network or backend', 'error');
     } catch (e) {
@@ -1635,81 +1663,102 @@ export default function DashboardView({
       <div className="ui-card overflow-hidden">
         <div className="p-6 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
           <div>
-            <h3 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
-              {isZh ? '最近调用流水' : 'Recent Inbound Audit Stream'}
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
+                {isZh ? '最近调用流水' : 'Recent Inbound Audit Stream'}
+              </h3>
+              <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">
+                TOP 10
+              </span>
+            </div>
             <p className="ui-meta mt-0.5">
-              {isZh ? '实时推理请求与首字延迟审计记录' : 'Live request stream with TTFT latency and status'}
+              {selectedKey
+                ? (isZh ? '当前所选密钥的最新调用流水记录（不受日志筛选器影响）' : 'Latest invocations for selected key (unaffected by audit log filters)')
+                : (isZh ? '系统最新请求审计流水（按时间倒序，不受日志筛选器影响）' : 'Latest system request stream in reverse chronological order')}
             </p>
           </div>
           <button
             onClick={() => setCurrentTab('logs')}
             className="text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
           >
-            {isZh ? `全部审计日志 (${logs.length}) →` : `All Audit Logs (${logs.length}) →`}
+            {isZh ? '查看全部调用日志 →' : 'All Audit Logs →'}
           </button>
         </div>
 
-        {logs.length === 0 ? (
-          <div className="p-8 text-center ui-meta">
-            {isZh ? '暂无请求记录' : 'No request logs recorded yet'}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800/80 text-slate-500 dark:text-slate-400 text-xs font-medium">
-                  <th className="py-3 px-6">{isZh ? '时间' : 'Timestamp'}</th>
-                  <th className="py-3 px-6">{isZh ? '调用方' : 'Client'}</th>
-                  <th className="py-3 px-6">{isZh ? '模型' : 'Model'}</th>
-                  <th className="py-3 px-6">{isZh ? '渠道' : 'Channel'}</th>
-                  <th className="py-3 px-6">{isZh ? '状态' : 'Status'}</th>
-                  <th className="py-3 px-6">{isZh ? '首字 / 耗时' : 'TTFT / Latency'}</th>
-                  <th className="py-3 px-6">{isZh ? 'Token 消耗' : 'Tokens'}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70 text-xs">
-                {logs.slice(0, 6).map((log) => (
-                  <tr
-                    key={log.id}
-                    onClick={() => setActiveLogDetail && setActiveLogDetail(log)}
-                    className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 cursor-pointer transition"
-                  >
-                    <td className="py-3.5 px-6 font-mono text-slate-500 dark:text-slate-400 text-xs">
-                      {new Date(log.created_at).toLocaleTimeString()}
-                    </td>
-                    <td className="py-3.5 px-6 font-medium text-slate-800 dark:text-slate-200">
-                      {log.tenant_id || 'anonymous'}
-                    </td>
-                    <td className="py-3.5 px-6 font-mono font-medium text-slate-900 dark:text-white">
-                      {log.model}
-                    </td>
-                    <td className="py-3.5 px-6 text-slate-500 font-mono text-xs">
-                      {log.channel || log.channel_name || (isZh ? '默认通道' : 'Default')}
-                    </td>
-                    <td className="py-3.5 px-6">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded font-mono text-[11px] font-medium ${
-                          log.status_code >= 200 && log.status_code < 300
-                            ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60'
-                            : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/60'
-                        }`}
-                      >
-                        {log.status_code}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-6 font-mono tabular-nums text-slate-600 dark:text-slate-300">
-                      {log.ttft_ms} ms / {log.duration_ms} ms
-                    </td>
-                    <td className="py-3.5 px-6 font-mono tabular-nums text-slate-600 dark:text-slate-300">
-                      {log.total_tokens}
-                    </td>
+        {(() => {
+          const displayLogs = recentLogs.length > 0 ? recentLogs : (logs || []).slice(0, 10);
+          if (recentLogsLoading && recentLogs.length === 0) {
+            return (
+              <div className="p-8 text-center ui-meta flex items-center justify-center gap-2">
+                <RefreshCw className="w-4 h-4 animate-spin text-slate-400" />
+                <span>{isZh ? '正在加载最新流水...' : 'Loading recent stream...'}</span>
+              </div>
+            );
+          }
+          if (displayLogs.length === 0) {
+            return (
+              <div className="p-8 text-center ui-meta">
+                {isZh ? '暂无请求记录' : 'No request logs recorded yet'}
+              </div>
+            );
+          }
+          return (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-100 dark:border-slate-800/80 text-slate-500 dark:text-slate-400 text-xs font-medium">
+                    <th className="py-3 px-6">{isZh ? '时间' : 'Timestamp'}</th>
+                    <th className="py-3 px-6">{isZh ? '调用方' : 'Client'}</th>
+                    <th className="py-3 px-6">{isZh ? '模型' : 'Model'}</th>
+                    <th className="py-3 px-6">{isZh ? '渠道' : 'Channel'}</th>
+                    <th className="py-3 px-6">{isZh ? '状态' : 'Status'}</th>
+                    <th className="py-3 px-6">{isZh ? '首字 / 耗时' : 'TTFT / Latency'}</th>
+                    <th className="py-3 px-6">{isZh ? 'Token 消耗' : 'Tokens'}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70 text-xs">
+                  {displayLogs.map((log) => (
+                    <tr
+                      key={log.id}
+                      onClick={() => setActiveLogDetail && setActiveLogDetail(log)}
+                      className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 cursor-pointer transition"
+                    >
+                      <td className="py-3.5 px-6 font-mono text-slate-500 dark:text-slate-400 text-xs">
+                        {new Date(log.created_at).toLocaleTimeString()}
+                      </td>
+                      <td className="py-3.5 px-6 font-medium text-slate-800 dark:text-slate-200">
+                        {log.tenant_id || (log.api_key ? (log.api_key.length > 12 ? `${log.api_key.slice(0, 8)}...` : log.api_key) : 'anonymous')}
+                      </td>
+                      <td className="py-3.5 px-6 font-mono font-medium text-slate-900 dark:text-white">
+                        {log.model}
+                      </td>
+                      <td className="py-3.5 px-6 text-slate-500 font-mono text-xs">
+                        {log.channel || log.channel_name || (isZh ? '默认通道' : 'Default')}
+                      </td>
+                      <td className="py-3.5 px-6">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded font-mono text-[11px] font-medium ${
+                            log.status_code >= 200 && log.status_code < 300
+                              ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60'
+                              : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/60'
+                          }`}
+                        >
+                          {log.status_code}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-6 font-mono tabular-nums text-slate-600 dark:text-slate-300">
+                        {log.ttft_ms > 0 ? `${log.ttft_ms}ms` : '—'} / {log.duration_ms ? `${log.duration_ms}ms` : '—'}
+                      </td>
+                      <td className="py-3.5 px-6 font-mono tabular-nums text-slate-600 dark:text-slate-300">
+                        {(log.total_tokens || 0).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

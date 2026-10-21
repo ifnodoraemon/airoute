@@ -26,8 +26,10 @@ import {
   Moon,
   Menu,
   PanelLeftClose,
-  PanelLeft
+  PanelLeft,
+  Megaphone
 } from 'lucide-react';
+import AnnouncementBanner from './components/AnnouncementBanner';
 import Toast from './components/Toast';
 import { apiFetch } from './api/client';
 import { useApiSession } from './hooks/useApiSession';
@@ -67,6 +69,7 @@ const PlaygroundView = lazy(() => import('./components/PlaygroundView'));
 const DocsView = lazy(() => import('./components/DocsView'));
 const OnboardingModal = lazy(() => import('./components/OnboardingModal'));
 const VisualTopologyModal = lazy(() => import('./components/VisualTopologyModal'));
+const AnnouncementModal = lazy(() => import('./components/AnnouncementModal'));
 const AiCopilot = lazy(() => import('./components/AiCopilot'));
 
 function ViewLoader() {
@@ -330,6 +333,7 @@ export default function App() {
     reset: resetSelections,
   } = useConsoleSelections();
   const [dashboardSelectedKey, setDashboardSelectedKey] = useState('');
+  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
   const {
     sidebarCollapsed,
     mobileMenuOpen, setMobileMenuOpen,
@@ -1299,6 +1303,18 @@ export default function App() {
               <span>{t.langToggle}</span>
             </button>
 
+            {/* Admin Announcement Trigger */}
+            {adminUser?.role === 'admin' && (
+              <button
+                onClick={() => setShowAnnouncementModal(true)}
+                className="hidden sm:flex items-center space-x-1.5 text-xs text-slate-700 dark:text-slate-300 font-medium px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#0F1420] hover:bg-slate-50 dark:hover:bg-slate-800/80 border border-slate-200/70 dark:border-slate-800/80 shadow-sm transition cursor-pointer"
+                title={isZh ? '发布或编辑系统级全员公告' : 'Publish or edit system announcement'}
+              >
+                <Megaphone className="w-3.5 h-3.5 text-indigo-500" />
+                <span>{isZh ? '发布公告' : 'Announcement'}</span>
+              </button>
+            )}
+
             {/* Account info & actions */}
             <div className="flex items-center space-x-2 pl-2 border-l border-slate-200 dark:border-slate-800">
               <button
@@ -1320,6 +1336,9 @@ export default function App() {
             </div>
           </div>
         </header>
+
+        {/* Global System Announcement Banner */}
+        <AnnouncementBanner lang={lang} adminFetch={apiFetch} />
 
         <div className="px-4 sm:px-6 lg:px-8 xl:px-10 py-7 max-w-[1536px] w-full mx-auto space-y-7">
           {/* Default Password Security Warning Banner for Admins */}
@@ -1739,6 +1758,17 @@ export default function App() {
             onClose={() => setTraceSnapshotId('')}
             lang={lang}
             adminFetch={apiFetch}
+          />
+        )}
+
+        {/* System Announcement Publish Modal */}
+        {showAnnouncementModal && adminUser?.role === 'admin' && (
+          <AnnouncementModal
+            isOpen={showAnnouncementModal}
+            onClose={() => setShowAnnouncementModal(false)}
+            adminFetch={apiFetch}
+            showToast={showToast}
+            lang={lang}
           />
         )}
 

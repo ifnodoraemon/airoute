@@ -58,6 +58,26 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 		}
 	}
 
+	if targetKey := c.Query("key"); targetKey != "" {
+		if claims, ok := GetClaimsFromContext(c); ok && claims.Role != "admin" {
+			allowed := false
+			for _, k := range filter.APIKeys {
+				if k == targetKey {
+					allowed = true
+					break
+				}
+			}
+			if allowed {
+				filter.APIKeys = []string{targetKey}
+			} else {
+				filter.APIKeys = []string{"__no_access__"}
+			}
+		} else {
+			filter.ScopeByAPIKeys = true
+			filter.APIKeys = []string{targetKey}
+		}
+	}
+
 	logs, total, err := h.repo.ListUsageLogsWithFilterAndCount(filter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

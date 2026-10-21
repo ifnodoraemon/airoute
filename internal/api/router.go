@@ -121,6 +121,9 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 		// Public Skill Bundle Download (agentskills.io ZIP format)
 		r.GET("/api/v1/skills/:id/download", adminHandler.DownloadSkillZip)
 
+		// Public Announcement endpoint
+		r.GET("/api/v1/announcement", adminHandler.GetAnnouncement)
+
 		// Regular User Self-Service APIs
 		userGroup := r.Group("/api/v1/user")
 		userGroup.Use(adminHandler.AdminAuthMiddleware())
@@ -162,6 +165,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 				protected.GET("/skills/:id/download", adminHandler.DownloadSkillZip)
 				protected.GET("/mcp/settings", adminHandler.GetMCPSettings)
 				protected.GET("/logs", adminHandler.ListLogs)
+				protected.GET("/announcement", adminHandler.GetAnnouncement)
 
 				// Protected super-admin operations
 				adminOnly := protected.Group("")
@@ -228,6 +232,9 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 					adminOnly.DELETE("/logs/:id", adminHandler.DeleteLog)
 					adminOnly.POST("/logs/batch-delete", adminHandler.BatchDeleteLogs)
 					adminOnly.POST("/logs/clear", adminHandler.ClearLogs)
+
+					adminOnly.GET("/announcement/config", adminHandler.GetAdminAnnouncement)
+					adminOnly.POST("/announcement", adminHandler.SaveAnnouncement)
 				}
 			}
 		}
