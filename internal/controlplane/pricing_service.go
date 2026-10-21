@@ -56,10 +56,11 @@ type EnrichedPrice struct {
 // it because the console renders "is off-peak right now" against the server's
 // time zone rather than the browser's.
 type PricingOverview struct {
-	Rates         []EnrichedPrice
-	ServerTime    string
-	ServerWeekday string
-	IsWeekend     bool
+	Rates            []EnrichedPrice    `json:"rates"`
+	GroupMultipliers map[string]float64 `json:"group_multipliers"`
+	ServerTime       string             `json:"server_time"`
+	ServerWeekday    string             `json:"server_weekday"`
+	IsWeekend        bool               `json:"is_weekend"`
 }
 
 // PricingService owns the pricing rules: what a saveable rate is, which row a
@@ -131,11 +132,17 @@ func (s *PricingService) Overview() (*PricingOverview, error) {
 	}
 
 	weekday := nowCST.Weekday()
+	multipliers := map[string]float64{"default": 1.0, "vip": 0.8, "enterprise": 1.5}
+	if billing.GlobalEngine != nil {
+		multipliers = billing.GlobalEngine.GetGroupMultipliers()
+	}
+
 	return &PricingOverview{
-		Rates:         enriched,
-		ServerTime:    nowCST.Format("15:04:05"),
-		ServerWeekday: weekday.String(),
-		IsWeekend:     weekday == time.Saturday || weekday == time.Sunday,
+		Rates:            enriched,
+		GroupMultipliers: multipliers,
+		ServerTime:       nowCST.Format("15:04:05"),
+		ServerWeekday:    weekday.String(),
+		IsWeekend:        weekday == time.Saturday || weekday == time.Sunday,
 	}, nil
 }
 

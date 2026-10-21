@@ -17,8 +17,9 @@ import (
 func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, canonicalReq *model.ChatCompletionRequest, modelName, sessionID string, start time.Time) {
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, canonicalReq)
 	if err != nil {
-		recordFailedRequest(c, sessionID, canonicalReq.Model, time.Since(start), http.StatusBadGateway)
-		RespondGeminiError(c, http.StatusBadGateway, sanitizeErrorMessage(err), "UNAVAILABLE")
+		statusCode, _, _, _ := resolveUpstreamFailureStatus(err)
+		recordFailedRequestWithError(c, sessionID, canonicalReq.Model, time.Since(start), statusCode, err)
+		RespondGeminiError(c, statusCode, sanitizeErrorMessage(err), "UNAVAILABLE")
 		return
 	}
 

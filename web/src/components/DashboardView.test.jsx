@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import DashboardView from './DashboardView';
 
 // DashboardView is props-driven and computes every number it shows: the SLA
@@ -154,6 +154,36 @@ describe('DashboardView', () => {
     setup({ logs: [{ id: 1, status_code: 200, model: 'gpt-6' }] });
 
     expect(screen.queryByText(/失败状态码分布/)).not.toBeInTheDocument();
+  });
+
+  it('renders real-time RPM, TPM, and req/s telemetry', () => {
+    setup({
+      stats: {
+        total_requests: 120,
+        current_rpm: 60,
+        current_tpm: 12000,
+        peak_rpm: 90,
+        peak_tpm: 18000
+      }
+    });
+
+    // 60 RPM / 60s = 1.0 req/s
+    expect(screen.getByText('1.0')).toBeInTheDocument();
+    expect(screen.getAllByText('req/s').length).toBeGreaterThan(0);
+    expect(screen.getByText(/60 RPM/)).toBeInTheDocument();
+    expect(screen.getByText(/12,000/)).toBeInTheDocument();
+  });
+
+  it('allows dismissing attention items', () => {
+    localStorage.clear();
+    setup({ channels: [{ id: 1, name: 'c1', status: 'active', breaker_status: 'OPEN' }] });
+    expect(screen.getByText(/断路器已触发/)).toBeInTheDocument();
+
+    const dismissBtn = screen.getByTitle('忽略此项关注');
+    fireEvent.click(dismissBtn);
+
+    // Item dismissed
+    expect(screen.queryByText(/断路器已触发/)).not.toBeInTheDocument();
   });
 
   it('renders in English when asked', () => {

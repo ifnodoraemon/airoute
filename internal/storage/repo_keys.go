@@ -28,6 +28,9 @@ type APIKeyRecord struct {
 	UserID           int64     `json:"user_id"`
 	Status           string    `json:"status"`
 	FormatValidation string    `json:"format_validation,omitempty"`
+	UserStatus       string    `json:"-"`
+	UserRole         string    `json:"-"`
+	UserBalance      float64   `json:"-"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
@@ -173,10 +176,10 @@ func (r *Repository) GetAPIKeyByKeyContext(ctx context.Context, key string) (*AP
 	if r == nil || r.db == nil {
 		return nil, sql.ErrNoRows
 	}
-	row := r.db.QueryRowContext(ctx, `SELECT id, key, tenant_id, COALESCE(allowed_models, ''), rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE key = ?`, key)
+	row := r.db.QueryRowContext(ctx, `SELECT k.id, k.key, k.tenant_id, COALESCE(k.allowed_models, ''), k.rpm, k.tpm, k.budget, k.used_tokens, COALESCE(k.used_cost, 0.0), COALESCE(k.budget_units, 0), COALESCE(k.used_cost_units, 0), COALESCE(k.group_name, 'default'), COALESCE(k.user_id, 0), k.status, COALESCE(k.format_validation, ''), k.created_at, k.updated_at, COALESCE(u.status, ''), COALESCE(u.role, ''), COALESCE(u.balance, 0.0) FROM api_keys k LEFT JOIN users u ON (k.user_id > 0 AND u.id = k.user_id) OR (COALESCE(k.user_id, 0) = 0 AND k.tenant_id != '' AND u.username = k.tenant_id) WHERE k.key = ?`, key)
 	var rec APIKeyRecord
 	var allowedJSON string
-	if err := row.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.BudgetUnits, &rec.UsedCostUnits, &rec.GroupName, &rec.UserID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+	if err := row.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.BudgetUnits, &rec.UsedCostUnits, &rec.GroupName, &rec.UserID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt, &rec.UserStatus, &rec.UserRole, &rec.UserBalance); err != nil {
 		return nil, err
 	}
 	if allowedJSON != "" {

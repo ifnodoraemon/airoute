@@ -10,6 +10,7 @@ export default function KeyModal({
   newKey,
   setNewKey,
   pricingGroups = ['default'],
+  groupMultipliers = {},
   adminUser,
   onSubmit,
   submitting = false,
@@ -92,13 +93,13 @@ export default function KeyModal({
                           : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
                       }`}
                     >
-                      {g === 'default'
-                        ? (isZh ? '默认组 (default)' : 'Default (default)')
-                        : g === 'vip'
-                        ? (isZh ? 'VIP组 (vip)' : 'VIP (vip)')
-                        : g === 'enterprise'
-                        ? (isZh ? '企业组 (enterprise)' : 'Enterprise (enterprise)')
-                        : `${g} ${isZh ? '组' : 'Group'}`}
+                      {(() => {
+                        const mult = groupMultipliers?.[g] ?? (g === 'vip' ? 0.8 : g === 'enterprise' ? 1.5 : 1.0);
+                        if (g === 'default') return isZh ? `默认组 (1.0x 官方基准)` : `Default (1.0x)`;
+                        if (g === 'vip') return isZh ? `VIP组 (${mult}x · ${Math.round(mult * 10)}折)` : `VIP (${mult}x)`;
+                        if (g === 'enterprise') return isZh ? `企业组 (${mult}x 保障)` : `Enterprise (${mult}x)`;
+                        return `${g} (${mult}x)`;
+                      })()}
                     </button>
                   ))}
                 </div>
@@ -138,7 +139,7 @@ export default function KeyModal({
                       }`}
                     >
                       <div className="text-xs font-bold text-amber-600 dark:text-amber-400">
-                        {adminUser.group_name.toUpperCase()} {isZh ? '专属保障组' : 'Tier Group'}
+                        {adminUser.group_name.toUpperCase()} {isZh ? `专属保障组 (${groupMultipliers?.[adminUser.group_name] ?? 0.8}x)` : `Tier Group (${groupMultipliers?.[adminUser.group_name] ?? 0.8}x)`}
                       </div>
                       <div className="ui-meta mt-0.5">
                         {isZh ? '享受您账号签约的特权与优惠费率' : 'Enjoy your account negotiated discount rates'}

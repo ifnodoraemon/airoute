@@ -1,6 +1,7 @@
 package billing
 
 import (
+	"encoding/json"
 	"math"
 	"sort"
 	"strings"
@@ -16,9 +17,10 @@ var GlobalEngine *BillingEngine
 
 // BillingEngine manages model pricing rates and real-time cost calculation.
 type BillingEngine struct {
-	repo   *storage.Repository
-	mu     sync.RWMutex
-	prices map[string]*storage.ModelPriceRecord
+	repo             *storage.Repository
+	mu               sync.RWMutex
+	prices           map[string]*storage.ModelPriceRecord
+	groupMultipliers map[string]float64
 	// wildcard lists every "*"-suffixed pattern as "group:prefix", sorted by
 	// prefix length descending so the most specific rule always wins instead of
 	// depending on Go's randomized map iteration order.
@@ -36,8 +38,9 @@ type wildcardRule struct {
 // NewEngine creates and initializes a BillingEngine with persisted pricing rates.
 func NewEngine(repo *storage.Repository) *BillingEngine {
 	e := &BillingEngine{
-		repo:   repo,
-		prices: make(map[string]*storage.ModelPriceRecord),
+		repo:             repo,
+		prices:           make(map[string]*storage.ModelPriceRecord),
+		groupMultipliers: map[string]float64{"default": 1.0, "vip": 0.8, "enterprise": 1.5},
 		deflt: &storage.ModelPriceRecord{
 			Model:           "*",
 			PromptPrice:     2.0, // Default benchmark ¥2.00 / 1M prompt
@@ -110,12 +113,85 @@ func (e *BillingEngine) ReloadPrices() error {
 		return wildcards[i].prefix < wildcards[j].prefix
 	})
 
+	multipliers := map[string]float64{"default": 1.0, "vip": 0.8, "enterprise": 1.5}
+	if e.repo != nil {
+		raw := e.repo.GetSetting("billing_group_multipliers", "")
+		if raw != "" {
+			_ = json.Unmarshal([]byte(raw), &multipliers)
+		}
+	}
+	if _, ok := multipliers["default"]; !ok {
+		multipliers["default"] = 1.0
+	}
+
 	e.mu.Lock()
 	e.prices = m
 	e.wildcard = wildcards
+	e.groupMultipliers = multipliers
 	e.mu.Unlock()
 
-	telemetry.Logger.Info("reloaded model pricing engine", "rules_count", len(list))
+	telemetry.Logger.Info("reloaded model pricing engine", "rules_count", len(list), "groups_count", len(multipliers))
+	return nil
+}
+
+// GetGroupMultiplier returns the billing rate multiplier for a group (defaults to 1.0).
+func (e *BillingEngine) GetGroupMultiplier(groupName string) float64 {
+	if e == nil {
+		return 1.0
+	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	grp := strings.ToLower(strings.TrimSpace(groupName))
+	if grp == "" || grp == "default" {
+		return 1.0
+	}
+	if mult, ok := e.groupMultipliers[grp]; ok && mult > 0 {
+		return mult
+	}
+	return 1.0
+}
+
+// GetGroupMultipliers returns a copy of all configured group multipliers.
+func (e *BillingEngine) GetGroupMultipliers() map[string]float64 {
+	if e == nil {
+		return map[string]float64{"default": 1.0}
+	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	res := make(map[string]float64, len(e.groupMultipliers))
+	for k, v := range e.groupMultipliers {
+		res[k] = v
+	}
+	if _, ok := res["default"]; !ok {
+		res["default"] = 1.0
+	}
+	return res
+}
+
+// SetGroupMultipliers updates in-memory group multipliers and persists to repository.
+func (e *BillingEngine) SetGroupMultipliers(multipliers map[string]float64) error {
+	if e == nil {
+		return nil
+	}
+	clean := make(map[string]float64)
+	clean["default"] = 1.0
+	for k, v := range multipliers {
+		grp := strings.ToLower(strings.TrimSpace(k))
+		if grp != "" && v > 0 {
+			clean[grp] = v
+		}
+	}
+	e.mu.Lock()
+	e.groupMultipliers = clean
+	e.mu.Unlock()
+
+	if e.repo != nil {
+		b, err := json.Marshal(clean)
+		if err == nil {
+			return e.repo.SetSetting("billing_group_multipliers", string(b))
+		}
+		return err
+	}
 	return nil
 }
 
@@ -267,23 +343,47 @@ func (e *BillingEngine) CalculateCostDetailedWithGroup(modelName, groupName stri
 	promptCost := (float64(uncachedPrompt) * p.PromptPrice) / 1_000_000.0
 	cachedCost := (float64(cachedTokens) * p.CacheReadPrice) / 1_000_000.0
 	compCost := (float64(completionTokens) * p.CompletionPrice) / 1_000_000.0
-	tokenCost := promptCost + cachedCost + compCost
+	baseTokenCost := promptCost + cachedCost + compCost
 
 	if cachedTokens > 0 && p.PromptPrice > p.CacheReadPrice {
 		cacheSaved = (float64(cachedTokens) * (p.PromptPrice - p.CacheReadPrice)) / 1_000_000.0
 	}
 
+	// Group Multiplier Evaluation:
+	// A pricing group scales base rates by a multiplier (e.g. vip: 0.8x, enterprise: 1.5x).
+	// If the price record is not a group-specific override (i.e. it resolved to the
+	// default base rate or standard fallback), apply the group multiplier.
+	grp := strings.ToLower(strings.TrimSpace(groupName))
+	multiplier := 1.0
+	if grp != "" && grp != "default" {
+		pGrp := strings.ToLower(strings.TrimSpace(p.GroupName))
+		if pGrp != grp {
+			multiplier = e.GetGroupMultiplier(grp)
+			if multiplier <= 0 {
+				multiplier = 1.0
+			}
+		}
+	}
+
+	groupedTokenCost := baseTokenCost * multiplier
+	groupedFixedCost := p.FixedPrice * multiplier
+
+	groupSaved := 0.0
+	if multiplier < 1.0 {
+		groupSaved = (baseTokenCost + p.FixedPrice) * (1.0 - multiplier)
+	}
+
 	// Time-of-Use Off-Peak Discount Evaluation
 	isOffPeak, discount = e.IsOffPeak(p, t)
 	if isOffPeak {
-		discountedTokenCost := tokenCost * discount
-		discountedFixedCost := p.FixedPrice * discount
-		offPeakSaved := (tokenCost - discountedTokenCost) + (p.FixedPrice - discountedFixedCost)
+		discountedTokenCost := groupedTokenCost * discount
+		discountedFixedCost := groupedFixedCost * discount
+		offPeakSaved := (groupedTokenCost - discountedTokenCost) + (groupedFixedCost - discountedFixedCost)
 		cost = discountedTokenCost + discountedFixedCost
-		totalSaved = cacheSaved + offPeakSaved
+		totalSaved = cacheSaved + groupSaved + offPeakSaved
 	} else {
-		cost = tokenCost + p.FixedPrice
-		totalSaved = cacheSaved
+		cost = groupedTokenCost + groupedFixedCost
+		totalSaved = cacheSaved + groupSaved
 		discount = 1.0
 	}
 

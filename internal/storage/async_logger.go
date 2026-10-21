@@ -119,10 +119,18 @@ func (al *AsyncLogger) Record(rec *UsageLogRecord) {
 		telemetry.Logger.Warn("async logger already stopped; dropping log record", "trace_id", rec.TraceID)
 		return
 	}
+	timer := time.NewTimer(500 * time.Millisecond)
+	defer timer.Stop()
 	select {
 	case al.ch <- rec:
 	case <-al.stopCh:
 		telemetry.Logger.Error("usage log submitted after logger stopped", "trace_id", rec.TraceID)
+	case <-timer.C:
+		telemetry.Logger.Error("async logger buffer full and flush stalled; dropping log record to prevent gateway freeze",
+			"trace_id", rec.TraceID,
+			"model", rec.Model,
+			"buffer_capacity", cap(al.ch),
+		)
 	}
 }
 

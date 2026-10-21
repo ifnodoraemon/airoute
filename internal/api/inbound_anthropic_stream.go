@@ -3,9 +3,9 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -26,19 +26,15 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, canonicalReq)
 	if err != nil {
-		statusCode := http.StatusBadGateway
-		errType := "api_error"
-		if strings.Contains(err.Error(), "no upstream provider available") {
-			statusCode = http.StatusNotFound
-			errType = "not_found_error"
-		}
-		recordFailedRequest(c, sessionID, canonicalReq.Model, time.Since(start), statusCode)
+		statusCode, errType, _, _ := resolveUpstreamFailureStatus(err)
+		recordFailedRequestWithError(c, sessionID, canonicalReq.Model, time.Since(start), statusCode, err)
 		RespondAnthropicError(c, statusCode, sanitizeErrorMessage(err), errType)
 		return
 	}
 	firstEvent, open := <-streamChan
 	if !open || firstEvent == nil {
-		recordFailedRequest(c, sessionID, req.Model, time.Since(start), http.StatusBadGateway)
+		streamErr := errors.New("upstream stream closed before response")
+		recordFailedRequestWithError(c, sessionID, req.Model, time.Since(start), http.StatusBadGateway, streamErr)
 		RespondAnthropicError(c, http.StatusBadGateway, "upstream stream closed before response", "api_error")
 		return
 	}

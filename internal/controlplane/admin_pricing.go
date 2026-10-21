@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/billing"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
@@ -34,7 +35,7 @@ func writePricingError(c *gin.Context, err error, fallback string) {
 	c.JSON(http.StatusInternalServerError, gin.H{"error": fallback + ": " + err.Error()})
 }
 
-// GetPricingRates returns all model pricing rates and cache savings benchmark.
+// GetPricingRates returns all model pricing rates, group multipliers, and cache savings benchmark.
 func (h *AdminHandler) GetPricingRates(c *gin.Context) {
 	overview, err := h.pricing.Overview()
 	if err != nil {
@@ -43,11 +44,12 @@ func (h *AdminHandler) GetPricingRates(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"code":           0,
-		"data":           overview.Rates,
-		"server_time":    overview.ServerTime,
-		"server_weekday": overview.ServerWeekday,
-		"is_weekend":     overview.IsWeekend,
+		"code":              0,
+		"data":              overview.Rates,
+		"group_multipliers": overview.GroupMultipliers,
+		"server_time":       overview.ServerTime,
+		"server_weekday":    overview.ServerWeekday,
+		"is_weekend":        overview.IsWeekend,
 	})
 }
 
@@ -146,4 +148,43 @@ func (h *AdminHandler) BatchDeletePricingRates(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": fmt.Sprintf("已批量删除 %d 个模型计费费率", n)})
+}
+
+// GetPricingGroups returns all configured pricing groups and their rate multipliers.
+func (h *AdminHandler) GetPricingGroups(c *gin.Context) {
+	multipliers := map[string]float64{"default": 1.0, "vip": 0.8, "enterprise": 1.5}
+	if billing.GlobalEngine != nil {
+		multipliers = billing.GlobalEngine.GetGroupMultipliers()
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"code": 0,
+		"data": multipliers,
+	})
+}
+
+// SavePricingGroups updates pricing group multipliers.
+func (h *AdminHandler) SavePricingGroups(c *gin.Context) {
+	var req map[string]float64
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数格式错误: " + err.Error()})
+		return
+	}
+	if billing.GlobalEngine != nil {
+		if err := billing.GlobalEngine.SetGroupMultipliers(req); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "保存分组倍率失败: " + err.Error()})
+			return
+		}
+	}
+	if h.sync != nil {
+		_ = h.sync.ReloadAndBroadcast(c.Request.Context(), "pricing_groups_updated")
+	}
+	res := map[string]float64{"default": 1.0}
+	if billing.GlobalEngine != nil {
+		res = billing.GlobalEngine.GetGroupMultipliers()
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"code":    0,
+		"message": "分组计费倍率已保存并实时生效",
+		"data":    res,
+	})
 }

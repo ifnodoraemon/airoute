@@ -156,6 +156,15 @@ func channelCallContext(ctx context.Context, ch *model.ChannelConfig) (context.C
 	return ctx, func() {}
 }
 
+// isFatalClientPayloadError checks if the error is a deterministic client request syntax/payload
+// error (400, 422, 413) that would fail identically on every channel, rather than a node-specific 404.
+func isFatalClientPayloadError(err error) bool {
+	if ue, ok := provider.AsUpstreamError(err); ok {
+		return ue.Status == 400 || ue.Status == 422 || ue.Status == 413
+	}
+	return false
+}
+
 // Dispatch executes non-streaming chat with automatic fallback.
 func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequest) (*model.ChatCompletionResponse, error) {
 	proto := "chat"
@@ -229,11 +238,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		}
 
 		lastErr = err
-		// A deterministic 4xx means the caller's payload is at fault: the same
-		// request would fail on every channel, so do not trip the breaker and do
-		// not replay it across the fleet.
-		if provider.IsClientError(err) {
-			telemetry.Logger.Warn("upstream rejected request with a client error, aborting fallback",
+		// A deterministic payload error means the caller's request is at fault (400, 422, 413):
+		// the same request would fail on every channel, so do not trip the breaker and do not fan out.
+		// Note: 404 from a single channel means this node does not host the model; we fall through to next channels.
+		if isFatalClientPayloadError(err) {
+			telemetry.Logger.Warn("upstream rejected request with a deterministic client error, aborting fallback",
 				"channel", ch.Name,
 				"error", err.Error(),
 			)

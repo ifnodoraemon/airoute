@@ -157,6 +157,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 				protected.GET("/stats/timeseries", adminHandler.GetStatsTimeSeries)
 				protected.GET("/models", adminHandler.ListModels)
 				protected.GET("/pricing", adminHandler.GetPricingRates)
+				protected.GET("/pricing/groups", adminHandler.GetPricingGroups)
 				protected.GET("/skills", adminHandler.ListSkills)
 				protected.GET("/skills/:id/download", adminHandler.DownloadSkillZip)
 				protected.GET("/mcp/settings", adminHandler.GetMCPSettings)
@@ -208,6 +209,8 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 					adminOnly.POST("/models/routes/probe", adminHandler.ProbeModelRoute)
 
 					adminOnly.POST("/pricing", adminHandler.SavePricingRate)
+					adminOnly.POST("/pricing/groups", adminHandler.SavePricingGroups)
+					adminOnly.PUT("/pricing/groups", adminHandler.SavePricingGroups)
 					adminOnly.DELETE("/pricing", adminHandler.DeletePricingRate)
 					adminOnly.DELETE("/pricing/:model", adminHandler.DeletePricingRate)
 					adminOnly.POST("/pricing/batch-delete", adminHandler.BatchDeletePricingRates)
@@ -230,6 +233,8 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 		}
 	}
 
+	mmHandler := NewMultimodalHandler(dispatcher)
+
 	// OpenAI & Anthropic v1 Data Plane API group
 	v1 := r.Group("/v1")
 	v1.Use(middleware.AuthMiddleware())
@@ -250,7 +255,6 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 		v1.POST("/messages/count_tokens", handler.HandleAnthropicCountTokens)
 
 		// Multimodal Ingress (Image, Audio TTS/STT/Translation, Video)
-		mmHandler := NewMultimodalHandler(dispatcher)
 		v1.POST("/images/generations", mmHandler.HandleImageGenerations)
 		v1.POST("/audio/speech", mmHandler.HandleAudioSpeech)
 		v1.POST("/audio/transcriptions", mmHandler.HandleAudioTranscriptions)
@@ -285,6 +289,14 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 		rootDataPlane.POST("/rerank", handler.HandleRerank)
 		rootDataPlane.POST("/messages", handler.HandleAnthropicMessages)
 		rootDataPlane.POST("/messages/count_tokens", handler.HandleAnthropicCountTokens)
+
+		// Multimodal Root Ingress parity
+		rootDataPlane.POST("/images/generations", mmHandler.HandleImageGenerations)
+		rootDataPlane.POST("/audio/speech", mmHandler.HandleAudioSpeech)
+		rootDataPlane.POST("/audio/transcriptions", mmHandler.HandleAudioTranscriptions)
+		rootDataPlane.POST("/audio/translations", mmHandler.HandleAudioTranslations)
+		rootDataPlane.POST("/videos/generations", mmHandler.HandleVideoGenerations)
+		rootDataPlane.GET("/videos/tasks/:id", mmHandler.HandleVideoTask)
 	}
 
 	return r

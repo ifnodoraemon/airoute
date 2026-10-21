@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/billing"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
@@ -262,5 +263,50 @@ func TestSavePricingRateStorageFailureMessage(t *testing.T) {
 	}
 	if msg, _ := decodeBody(t, w)["error"].(string); msg != "保存模型定价失败: boom" {
 		t.Errorf("error = %q, want the documented prefix", msg)
+	}
+}
+
+func TestPricingGroupMultipliersEndpoints(t *testing.T) {
+	prevEngine := billing.GlobalEngine
+	defer func() { billing.GlobalEngine = prevEngine }()
+
+	handler, repo := newPricingTestHandler(t)
+	billing.InitGlobalEngine(repo)
+
+	// 1. Get pricing groups
+	w := invokePricing(t, handler.GetPricingGroups, http.MethodGet, "", "/api/v1/admin/pricing/groups", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	body := decodeBody(t, w)
+	data, ok := body["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected data object, got %v", body["data"])
+	}
+	if data["default"] != 1.0 {
+		t.Errorf("expected default=1.0, got %v", data["default"])
+	}
+
+	// 2. Save custom group multipliers
+	payload := `{"default": 1.0, "vip": 0.75, "enterprise": 1.6, "custom_tier": 0.5}`
+	wSave := invokePricing(t, handler.SavePricingGroups, http.MethodPost, payload, "/api/v1/admin/pricing/groups", nil)
+	if wSave.Code != http.StatusOK {
+		t.Fatalf("save status = %d, want 200", wSave.Code)
+	}
+	saveBody := decodeBody(t, wSave)
+	saveData, _ := saveBody["data"].(map[string]interface{})
+	if saveData["vip"] != 0.75 || saveData["custom_tier"] != 0.5 {
+		t.Errorf("saved multipliers mismatch: %v", saveData)
+	}
+
+	// 3. Overview should include group_multipliers
+	wOverview := invokePricing(t, handler.GetPricingRates, http.MethodGet, "", "/api/v1/admin/pricing", nil)
+	overviewBody := decodeBody(t, wOverview)
+	gm, ok := overviewBody["group_multipliers"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("overview missing group_multipliers: %v", overviewBody)
+	}
+	if gm["vip"] != 0.75 {
+		t.Errorf("overview group_multipliers vip = %v, want 0.75", gm["vip"])
 	}
 }

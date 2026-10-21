@@ -1,4 +1,4 @@
-import { useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import {
   Zap,
   Server,
@@ -329,6 +329,7 @@ export default function App() {
     curlExportCmd, setCurlExportCmd,
     reset: resetSelections,
   } = useConsoleSelections();
+  const [dashboardSelectedKey, setDashboardSelectedKey] = useState('');
   const {
     sidebarCollapsed,
     mobileMenuOpen, setMobileMenuOpen,
@@ -412,6 +413,7 @@ export default function App() {
     modelRoutes,
     prices,
     pricingGroups,
+    groupMultipliers,
     playModel,
     setPlayModel,
     refresh: fetchData,
@@ -1276,17 +1278,7 @@ export default function App() {
               </kbd>
             </button>
 
-            {/* Visual Topology Modal Trigger */}
-            {adminUser?.role === 'admin' && (
-            <button
-              onClick={() => setShowTopologyModal(true)}
-              className="hidden sm:flex text-xs px-3 py-1.5 rounded-lg bg-white dark:bg-[#0F1420] hover:bg-slate-50 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 font-medium items-center space-x-1.5 transition border border-slate-200/70 dark:border-slate-800/80 shadow-sm cursor-pointer"
-              title={isZh ? '查看可视化路由拓扑与容灾流程' : 'View Visual Routing Topology & Failover'}
-            >
-              <Layers className="w-3.5 h-3.5 text-slate-400" />
-              <span>{isZh ? '容灾拓扑' : 'Topology'}</span>
-            </button>
-            )}
+
 
             {/* Theme Toggle Button */}
             <button
@@ -1410,6 +1402,9 @@ export default function App() {
                 setActiveLogDetail={setActiveLogDetail}
                 adminUser={adminUser}
                 adminFetch={apiFetch}
+                keys={keys}
+                selectedKey={dashboardSelectedKey}
+                onSelectKey={setDashboardSelectedKey}
                 onOpenTopology={() => setShowTopologyModal(true)}
                 lang={lang}
                 t={t}
@@ -1448,6 +1443,8 @@ export default function App() {
                 t={t}
                 modelRoutes={modelRoutes}
                 setCurrentTab={setCurrentTab}
+                groupMultipliers={groupMultipliers}
+                onUpdateGroupMultipliers={fetchData}
               />
             )}
 
@@ -1508,7 +1505,12 @@ export default function App() {
                 handleUpdateKeyGroup={handleUpdateKeyGroup}
                 adminUser={adminUser}
                 pricingGroups={pricingGroups}
+                groupMultipliers={groupMultipliers}
                 onNavigateToPricing={() => setCurrentTab('pricing')}
+                onNavigateToDashboard={(keyStr) => {
+                  setDashboardSelectedKey(keyStr);
+                  setCurrentTab('dashboard');
+                }}
                 lang={lang}
                 t={t}
               />
@@ -1662,6 +1664,7 @@ export default function App() {
           newKey={newKey}
           setNewKey={setNewKey}
           pricingGroups={pricingGroups}
+          groupMultipliers={groupMultipliers}
           adminUser={adminUser}
           onSubmit={handleCreateKey}
           submitting={submittingKey}

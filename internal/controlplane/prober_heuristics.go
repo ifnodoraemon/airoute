@@ -37,7 +37,7 @@ func validateProbeURL(targetURL string) error {
 
 	blockPrivate := os.Getenv("GATEWAY_BLOCK_PRIVATE_PROBE") == "true"
 	blockLoopback := os.Getenv("GATEWAY_BLOCK_LOOPBACK_PROBE") == "true"
-	if !blockPrivate && !blockLoopback && !strings.EqualFold(hostname, "localhost") {
+	if !blockPrivate && !blockLoopback {
 		return nil
 	}
 
@@ -48,12 +48,11 @@ func validateProbeURL(targetURL string) error {
 	if len(ips) == 0 {
 		return fmt.Errorf("host %s resolved to no addresses", hostname)
 	}
-	loopbackOnly := blockLoopback || strings.EqualFold(hostname, "localhost")
 	for _, ip := range ips {
 		if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
 			return fmt.Errorf("probing link-local/unspecified address (%s) is forbidden", ip.String())
 		}
-		if ip.IsLoopback() && loopbackOnly {
+		if ip.IsLoopback() && blockLoopback {
 			return fmt.Errorf("probing loopback address (%s) is forbidden (set GATEWAY_BLOCK_LOOPBACK_PROBE=false to allow)", ip.String())
 		}
 		if ip.IsPrivate() && blockPrivate && !ip.IsLoopback() {

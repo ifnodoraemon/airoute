@@ -28,6 +28,30 @@ const (
 	ContextKeyUserRecord   = "user_record"
 )
 
+// auditAuthFailure logs client-side authentication rejection into the audit table so 401s/402s are visible to operators.
+func auditAuthFailure(c *gin.Context, rawKey string, statusCode int, errMsg string) {
+	if storage.GlobalAsyncLogger == nil {
+		return
+	}
+	maskedKey := ""
+	if len(rawKey) > 8 {
+		maskedKey = rawKey[:6] + "..." + rawKey[len(rawKey)-2:]
+	} else if rawKey != "" {
+		maskedKey = "***"
+	}
+	traceID := c.GetString("trace_id")
+	if traceID == "" {
+		traceID = c.GetHeader("x-request-id")
+	}
+	storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
+		TraceID:      traceID,
+		APIKey:       maskedKey,
+		StatusCode:   statusCode,
+		ErrorMessage: errMsg,
+		UsageSource:  "gateway_auth",
+	})
+}
+
 // AuthMiddleware authenticates incoming requests via Bearer API keys.
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -66,6 +90,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		if rawKey == "" {
+			auditAuthFailure(c, "", http.StatusUnauthorized, "Missing authentication key")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error": gin.H{
 					"message": "Missing authentication key. Please provide 'Authorization: Bearer <key>', 'x-api-key: <key>', 'x-goog-api-key: <key>', or query parameter '?key=<key>'",
@@ -78,6 +103,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		matchedKey := cfg.GetAPIKey(rawKey)
 
 		if matchedKey == nil {
+			auditAuthFailure(c, rawKey, http.StatusUnauthorized, "Incorrect or unauthorized API key provided")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error": gin.H{
 					"message": "Incorrect or unauthorized API key provided.",
@@ -92,6 +118,7 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		// 1. Key status check (pure in-memory)
 		if effectiveKey.Status != "" && effectiveKey.Status != "active" {
+			auditAuthFailure(c, rawKey, http.StatusUnauthorized, "The API key has been revoked or disabled")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error": gin.H{
 					"message": "The API key has been revoked or disabled.",
@@ -106,6 +133,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		// 1e-9-unit mirror when available so repeated float accumulation cannot
 		// drift across the budget boundary.
 		if budgetExceeded(effectiveKey.BudgetUnits, effectiveKey.UsedCostUnits, effectiveKey.Budget, effectiveKey.UsedCost) {
+			auditAuthFailure(c, rawKey, http.StatusPaymentRequired, "This API key has exceeded its assigned quota budget limit")
 			c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
 				"error": gin.H{
 					"message": "This API key has exceeded its assigned quota budget limit.",
@@ -127,6 +155,7 @@ func AuthMiddleware() gin.HandlerFunc {
 			cancel()
 			if keyRec != nil {
 				if keyRec.Status != "" && keyRec.Status != "active" {
+					auditAuthFailure(c, rawKey, http.StatusUnauthorized, "The API key has been revoked or disabled")
 					c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 						"error": gin.H{
 							"message": "The API key has been revoked or disabled.",
@@ -159,6 +188,11 @@ func AuthMiddleware() gin.HandlerFunc {
 				}
 				if keyRec.UserID > 0 {
 					effectiveKey.UserID = keyRec.UserID
+				}
+				if keyRec.UserStatus != "" {
+					effectiveKey.UserStatus = keyRec.UserStatus
+					effectiveKey.UserRole = keyRec.UserRole
+					effectiveKey.UserBalance = keyRec.UserBalance
 				}
 			}
 		}

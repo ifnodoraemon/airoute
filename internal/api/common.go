@@ -13,6 +13,7 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/billing"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/provider"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
@@ -238,6 +239,30 @@ func getRequestAPIKey(c *gin.Context) string {
 	return c.GetString(middleware.ContextKeyAPIKey)
 }
 
+// extractChannelFromError inspects an upstream dispatch failure to identify which channel failed.
+func extractChannelFromError(err error) string {
+	if err == nil {
+		return ""
+	}
+	if ue, ok := provider.AsUpstreamError(err); ok && ue.Channel != "" {
+		return ue.Channel
+	}
+	msg := err.Error()
+	if idx := strings.Index(msg, "upstream "); idx != -1 {
+		rest := msg[idx+len("upstream "):]
+		if sp := strings.IndexAny(rest, " :"); sp != -1 {
+			return rest[:sp]
+		}
+	}
+	if idx := strings.Index(msg, "channel "); idx != -1 {
+		rest := msg[idx+len("channel "):]
+		if sp := strings.IndexAny(rest, " :"); sp != -1 {
+			return rest[:sp]
+		}
+	}
+	return ""
+}
+
 // recordFailedRequest audits an unsuccessful API dispatch with zero tokens and the designated status code.
 func recordFailedRequest(c *gin.Context, sessionID, modelName string, dur time.Duration, statusCode int) {
 	RecordUsage(c, AuditRecordParams{
@@ -251,15 +276,18 @@ func recordFailedRequest(c *gin.Context, sessionID, modelName string, dur time.D
 	})
 }
 
-// recordFailedRequestWithError also records why the request failed.
+// recordFailedRequestWithError also records why the request failed and which upstream channel was involved.
 func recordFailedRequestWithError(c *gin.Context, sessionID, modelName string, dur time.Duration, statusCode int, err error) {
 	msg := ""
+	channel := ""
 	if err != nil {
 		msg = err.Error()
+		channel = extractChannelFromError(err)
 	}
 	RecordUsage(c, AuditRecordParams{
 		SessionID:    sessionID,
 		Model:        modelName,
+		Channel:      channel,
 		Duration:     dur,
 		StatusCode:   statusCode,
 		ErrorMessage: msg,
@@ -346,19 +374,65 @@ func sanitizeErrorMessage(err error) string {
 	return msg
 }
 
-// respondUpstreamDispatchError uniformly formats and audits upstream routing failures.
-func respondUpstreamDispatchError(c *gin.Context, sessionID, modelName string, dur time.Duration, err error) {
-	noUpstream := strings.Contains(err.Error(), "no upstream provider available")
-	if noUpstream {
-		RecordTrace(c, modelName, "", http.StatusNotFound, err.Error(), "", dur)
-		recordFailedRequestWithError(c, sessionID, modelName, dur, http.StatusNotFound, err)
-		RespondOpenAIError(c, http.StatusNotFound, fmt.Sprintf("The model '%s' does not exist or has no active upstream providers configured.", modelName), "invalid_request_error", "model_not_found")
-	} else {
-		RecordTrace(c, modelName, "", http.StatusBadGateway, err.Error(), "", dur)
-		recordFailedRequestWithError(c, sessionID, modelName, dur, http.StatusBadGateway, err)
-		safeErr := sanitizeErrorMessage(err)
-		RespondOpenAIError(c, http.StatusBadGateway, safeErr, "gateway_error", "upstream_failure")
+// resolveUpstreamFailureStatus extracts the authentic underlying status code, error types,
+// and failing channel from an upstream dispatch error, preventing misleading 502 masks.
+func resolveUpstreamFailureStatus(err error) (statusCode int, errType string, errCode string, channel string) {
+	statusCode = http.StatusBadGateway
+	errType = "gateway_error"
+	errCode = "upstream_failure"
+	channel = extractChannelFromError(err)
+
+	if err == nil {
+		return statusCode, errType, errCode, channel
 	}
+
+	// 1. Direct or wrapped UpstreamError extraction
+	if ue, ok := provider.AsUpstreamError(err); ok {
+		if ue.Channel != "" {
+			channel = ue.Channel
+		}
+		if ue.Status > 0 {
+			switch ue.Status {
+			case http.StatusNotFound:
+				return http.StatusNotFound, "invalid_request_error", "model_not_found", channel
+			case http.StatusTooManyRequests:
+				return http.StatusTooManyRequests, "rate_limit_error", "upstream_rate_limited", channel
+			case http.StatusUnauthorized:
+				return http.StatusBadGateway, "gateway_error", "upstream_unauthorized", channel
+			case http.StatusForbidden:
+				return http.StatusBadGateway, "gateway_error", "upstream_forbidden", channel
+			case http.StatusBadRequest:
+				return http.StatusBadRequest, "invalid_request_error", "invalid_payload", channel
+			case http.StatusUnprocessableEntity:
+				return http.StatusUnprocessableEntity, "invalid_request_error", "unprocessable_entity", channel
+			default:
+				if ue.Status >= 500 {
+					return ue.Status, "gateway_error", "upstream_server_error", channel
+				}
+			}
+		}
+	}
+
+	// 2. Text heuristics for unclassified errors
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "no upstream provider available") || strings.Contains(msg, "status 404") || strings.Contains(msg, "model not found") {
+		return http.StatusNotFound, "invalid_request_error", "model_not_found", channel
+	}
+	if strings.Contains(msg, "status 429") || strings.Contains(msg, "rate limit") {
+		return http.StatusTooManyRequests, "rate_limit_error", "upstream_rate_limited", channel
+	}
+
+	return statusCode, errType, errCode, channel
+}
+
+// respondUpstreamDispatchError uniformly formats and audits upstream routing failures,
+// preserving the authentic underlying status code and failing channel.
+func respondUpstreamDispatchError(c *gin.Context, sessionID, modelName string, dur time.Duration, err error) {
+	statusCode, errType, errCode, channel := resolveUpstreamFailureStatus(err)
+	RecordTrace(c, modelName, channel, statusCode, err.Error(), "", dur)
+	recordFailedRequestWithError(c, sessionID, modelName, dur, statusCode, err)
+	safeErr := sanitizeErrorMessage(err)
+	RespondOpenAIError(c, statusCode, safeErr, errType, errCode)
 }
 
 // ceilMillis converts a duration to milliseconds, rounding up so that a

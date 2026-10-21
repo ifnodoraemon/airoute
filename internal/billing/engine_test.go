@@ -142,3 +142,63 @@ func TestValidateSlotsOverlap(t *testing.T) {
 		t.Fatal("expected error for cross-midnight overlapping morning, got nil")
 	}
 }
+
+func TestCalculateCostWithGroupMultipliers(t *testing.T) {
+	loc, _ := time.LoadLocation("Asia/Shanghai")
+	peakTime := time.Date(2026, 9, 23, 14, 0, 0, 0, loc)
+
+	engine := &BillingEngine{
+		prices: map[string]*storage.ModelPriceRecord{
+			"default:gpt-base": {
+				Model:           "gpt-base",
+				GroupName:       "default",
+				PromptPrice:     10.0,
+				CompletionPrice: 20.0,
+			},
+			"vip:gpt-override": {
+				Model:           "gpt-override",
+				GroupName:       "vip",
+				PromptPrice:     5.0,
+				CompletionPrice: 10.0,
+			},
+			"default:gpt-override": {
+				Model:           "gpt-override",
+				GroupName:       "default",
+				PromptPrice:     10.0,
+				CompletionPrice: 20.0,
+			},
+		},
+		groupMultipliers: map[string]float64{
+			"default":    1.0,
+			"vip":        0.8,
+			"enterprise": 1.5,
+		},
+	}
+
+	// 1M prompt + 1M completion on gpt-base:
+	// Base cost = 10 + 20 = 30 CNY
+
+	// Case 1: default group -> 30 CNY, saved 0
+	cost, saved, _, isOff, _ := engine.CalculateCostDetailedWithGroup("gpt-base", "default", 1_000_000, 1_000_000, 0, peakTime)
+	if isOff || cost != 30.0 || saved != 0.0 {
+		t.Fatalf("expected cost=30.0, saved=0.0 for default, got cost=%f, saved=%f", cost, saved)
+	}
+
+	// Case 2: vip group on base model (no explicit vip rule) -> inherits base * 0.8 -> 24 CNY, saved 6 CNY
+	costVip, savedVip, _, _, _ := engine.CalculateCostDetailedWithGroup("gpt-base", "vip", 1_000_000, 1_000_000, 0, peakTime)
+	if costVip != 24.0 || savedVip != 6.0 {
+		t.Fatalf("expected cost=24.0, saved=6.0 for vip multiplier, got cost=%f, saved=%f", costVip, savedVip)
+	}
+
+	// Case 3: enterprise group on base model -> inherits base * 1.5 -> 45 CNY, saved 0
+	costEnt, savedEnt, _, _, _ := engine.CalculateCostDetailedWithGroup("gpt-base", "enterprise", 1_000_000, 1_000_000, 0, peakTime)
+	if costEnt != 45.0 || savedEnt != 0.0 {
+		t.Fatalf("expected cost=45.0, saved=0.0 for enterprise, got cost=%f, saved=%f", costEnt, savedEnt)
+	}
+
+	// Case 4: explicit vip override exists -> uses explicit override rate without multiplying again
+	costOverride, _, _, _, _ := engine.CalculateCostDetailedWithGroup("gpt-override", "vip", 1_000_000, 1_000_000, 0, peakTime)
+	if costOverride != 15.0 {
+		t.Fatalf("expected cost=15.0 for explicit vip override (5 + 10), got %f", costOverride)
+	}
+}

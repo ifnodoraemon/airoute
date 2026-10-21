@@ -160,8 +160,9 @@ func (h *Handler) HandleGeminiAction(c *gin.Context) {
 func (h *Handler) handleGeminiUnary(c *gin.Context, reqCtx context.Context, canonicalReq *model.ChatCompletionRequest, modelName, sessionID string, start time.Time) {
 	resp, err := h.dispatcher.Dispatch(reqCtx, canonicalReq)
 	if err != nil {
-		recordFailedRequest(c, sessionID, canonicalReq.Model, time.Since(start), http.StatusBadGateway)
-		RespondGeminiError(c, http.StatusBadGateway, sanitizeErrorMessage(err), "UNAVAILABLE")
+		statusCode, _, _, _ := resolveUpstreamFailureStatus(err)
+		recordFailedRequestWithError(c, sessionID, canonicalReq.Model, time.Since(start), statusCode, err)
+		RespondGeminiError(c, statusCode, sanitizeErrorMessage(err), "UNAVAILABLE")
 		return
 	}
 

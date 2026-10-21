@@ -40,6 +40,7 @@ type AdminHandler struct {
 
 // NewAdminHandler creates an AdminHandler.
 func NewAdminHandler(repo *storage.Repository, sync *Synchronizer, dispatcher *router.Dispatcher) *AdminHandler {
+	EnsureAdminSecret(repo)
 	ls, _ := storage.NewLocalStorage("data/storage")
 
 	// The interface conversions below are guarded on purpose. A nil

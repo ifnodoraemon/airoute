@@ -299,6 +299,24 @@ func (p *OpenAIProvider) chatCompleteStream(ctx context.Context, req *model.Chat
 				}
 				continue
 			}
+
+			// Intercept upstream error events emitted in data frames (e.g. rate limit or overload)
+			if strings.Contains(dataContent, `"error"`) && len(chunk.Choices) == 0 {
+				var errResp struct {
+					Error struct {
+						Message string `json:"message"`
+						Type    string `json:"type"`
+						Code    any    `json:"code"`
+					} `json:"error"`
+				}
+				if json.Unmarshal([]byte(dataContent), &errResp) == nil && errResp.Error.Message != "" {
+					sendEvent(&model.StreamEvent{
+						Err: fmt.Errorf("upstream stream error [%s]: %s", errResp.Error.Type, errResp.Error.Message),
+					})
+					return
+				}
+			}
+
 			chunk.Model = req.Model
 
 			processedChunks := reasoningAdapter.ProcessChunk(&chunk)

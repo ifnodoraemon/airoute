@@ -92,20 +92,9 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 func (h *Handler) handleAnthropicUnary(c *gin.Context, reqCtx context.Context, req *AnthropicInboundRequest, canonicalReq *model.ChatCompletionRequest, sessionID string, start time.Time) {
 	resp, err := h.dispatcher.Dispatch(reqCtx, canonicalReq)
 	if err != nil {
-		statusCode := http.StatusBadGateway
-		errType := "api_error"
-		if strings.Contains(err.Error(), "no upstream provider available") {
-			statusCode = http.StatusNotFound
-			errType = "not_found_error"
-		}
-		recordFailedRequest(c, sessionID, canonicalReq.Model, time.Since(start), statusCode)
-		c.JSON(statusCode, gin.H{
-			"type": "error",
-			"error": gin.H{
-				"type":    errType,
-				"message": sanitizeErrorMessage(err),
-			},
-		})
+		statusCode, errType, _, _ := resolveUpstreamFailureStatus(err)
+		recordFailedRequestWithError(c, sessionID, canonicalReq.Model, time.Since(start), statusCode, err)
+		RespondAnthropicError(c, statusCode, sanitizeErrorMessage(err), errType)
 		return
 	}
 	if len(resp.NativeAnthropicResponse) > 0 {

@@ -216,6 +216,9 @@ func (r *Repository) UpdateChannel(rec *ChannelRecord) error {
 // DeleteChannel deletes a channel by ID.
 func (r *Repository) DeleteChannel(id int64) error {
 	_, err := r.db.Exec(`DELETE FROM channels WHERE id=?`, id)
+	if err == nil {
+		r.pruneChannelsFromModelRoutes(id)
+	}
 	return err
 }
 
@@ -235,7 +238,62 @@ func (r *Repository) BatchDeleteChannels(ids []int64) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	r.pruneChannelsFromModelRoutes(ids...)
 	return res.RowsAffected()
+}
+
+func (r *Repository) pruneChannelsFromModelRoutes(ids ...int64) {
+	if r == nil || r.db == nil || len(ids) == 0 {
+		return
+	}
+	idSet := make(map[int64]bool, len(ids))
+	for _, id := range ids {
+		idSet[id] = true
+	}
+	rows, err := r.db.Query(`SELECT model, providers FROM model_routes WHERE providers IS NOT NULL AND providers != ''`)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	type routeUpdate struct {
+		model     string
+		providers any
+	}
+	var updates []routeUpdate
+
+	for rows.Next() {
+		var m, provJSON string
+		if err := rows.Scan(&m, &provJSON); err != nil {
+			continue
+		}
+		var provs []model.RouteProvider
+		if err := json.Unmarshal([]byte(provJSON), &provs); err != nil {
+			continue
+		}
+		var kept []model.RouteProvider
+		changed := false
+		for _, p := range provs {
+			if idSet[p.ChannelID] {
+				changed = true
+			} else {
+				kept = append(kept, p)
+			}
+		}
+		if changed {
+			var newProv any
+			if len(kept) > 0 {
+				if b, err := json.Marshal(kept); err == nil {
+					newProv = string(b)
+				}
+			}
+			updates = append(updates, routeUpdate{model: m, providers: newProv})
+		}
+	}
+
+	for _, u := range updates {
+		_, _ = r.db.Exec(`UPDATE model_routes SET providers = ?, updated_at = CURRENT_TIMESTAMP WHERE model = ?`, u.providers, u.model)
+	}
 }
 
 // BatchUpdateChannelStatus updates status ('active'/'disabled') for multiple channels.

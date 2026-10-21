@@ -71,9 +71,10 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 				d.circuitBreaker.AbortCanary(ch.Name)
 				return nil, ctx.Err()
 			}
-			// Client mistakes (bad payload, unknown model) fail identically on
-			// every channel: do not trip the breaker and do not fan out.
-			if provider.IsClientError(err) {
+			// Client syntax/schema errors (400, 422, 413) fail identically on every channel:
+			// do not trip the breaker and do not fan out.
+			// Node-specific 404 (model missing on this instance) falls through to next candidate channel.
+			if isFatalClientPayloadError(err) {
 				d.circuitBreaker.AbortCanary(ch.Name)
 				return nil, err
 			}
@@ -135,7 +136,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 				d.circuitBreaker.AbortCanary(ch.Name)
 				return nil, ctx.Err()
 			}
-			if provider.IsClientError(firstErr) {
+			if isFatalClientPayloadError(firstErr) {
 				d.circuitBreaker.AbortCanary(ch.Name)
 				return nil, firstErr
 			}

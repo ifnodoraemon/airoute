@@ -43,8 +43,9 @@ func (h *Handler) HandleRerank(c *gin.Context) {
 
 	resp, err := h.dispatcher.DispatchRerank(c.Request.Context(), &req)
 	if err != nil {
-		recordFailedRequest(c, sessionID, req.Model, time.Since(start), http.StatusBadGateway)
-		RespondOpenAIError(c, http.StatusBadGateway, sanitizeErrorMessage(err), "gateway_error", "upstream_failure")
+		statusCode, errType, errCode, _ := resolveUpstreamFailureStatus(err)
+		recordFailedRequestWithError(c, sessionID, req.Model, time.Since(start), statusCode, err)
+		RespondOpenAIError(c, statusCode, sanitizeErrorMessage(err), errType, errCode)
 		return
 	}
 

@@ -13,7 +13,11 @@ import {
   CheckCircle2,
   AlertCircle,
   FileText,
-  Flame
+  Flame,
+  Key,
+  Gauge,
+  X,
+  Sliders
 } from 'lucide-react';
 import { copyToClipboard } from '../config';
 import { apiFetch } from '../api/client';
@@ -22,6 +26,7 @@ export default function DashboardView({
   stats = {},
   channels = [],
   logs = [],
+  keys = [],
   channelLatencies = {},
   testingId,
   batchTesting,
@@ -37,21 +42,47 @@ export default function DashboardView({
   adminUser,
   onOpenTopology,
   adminFetch,
+  selectedKey: propSelectedKey,
+  onSelectKey,
   lang = 'zh',
   t
 }) {
   const isZh = lang === 'zh';
-  const [chartMetric, setChartMetric] = useState('requests'); // 'requests' | 'tokens' | 'latency' | 'errors'
+  const [chartMetric, setChartMetric] = useState('requests'); // 'requests' | 'tokens' | 'latency' | 'errors' | 'rpm' | 'tpm'
   const [timeframe, setTimeframe] = useState('24h'); // '1h' | '24h' | '7d'
   const [hoveredBucket, setHoveredBucket] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState(null);
   const [timeseriesData, setTimeseriesData] = useState(null);
-
-  const fetchTimeseries = useCallback(async () => {
+  const [selectedKey, setSelectedKey] = useState(propSelectedKey || '');
+  const [keyStats, setKeyStats] = useState(null);
+  const [dismissedAttentions, setDismissedAttentions] = useState(() => {
     try {
+      return JSON.parse(localStorage.getItem('airoute_dismissed_attention') || '[]');
+    } catch {
+      return [];
+    }
+  });
+
+  const handleDismissAttention = (itemKey) => {
+    setDismissedAttentions(prev => {
+      const next = [...new Set([...prev, itemKey])];
+      try { localStorage.setItem('airoute_dismissed_attention', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
+  const handleResetDismissed = () => {
+    setDismissedAttentions([]);
+    try { localStorage.removeItem('airoute_dismissed_attention'); } catch {}
+  };
+
+  const fetchTimeseries = useCallback(async (keyOverride) => {
+    try {
+      const targetKey = keyOverride !== undefined ? keyOverride : selectedKey;
       const fetcher = adminFetch || apiFetch;
-      const res = await fetcher(`/api/v1/admin/stats/timeseries?timeframe=${timeframe}`);
+      const url = `/api/v1/admin/stats/timeseries?timeframe=${timeframe}${targetKey ? `&key=${encodeURIComponent(targetKey)}` : ''}`;
+      const res = await fetcher(url);
       if (res && res.ok) {
         const json = await res.json();
         if (json && json.code === 0 && json.data) {
@@ -63,18 +94,62 @@ export default function DashboardView({
       // Graceful fallback to client-side logs aggregation
     }
     return false;
-  }, [timeframe, adminFetch]);
+  }, [timeframe, selectedKey, adminFetch]);
+
+  const fetchDrilldownStats = useCallback(async (targetKey) => {
+    if (!targetKey) {
+      setKeyStats(null);
+      return;
+    }
+    try {
+      const fetcher = adminFetch || apiFetch;
+      const res = await fetcher(`/api/v1/admin/stats/overview?key=${encodeURIComponent(targetKey)}`);
+      if (res && res.ok) {
+        const json = await res.json();
+        if (json && json.code === 0 && json.data) {
+          setKeyStats(json.data);
+        }
+      }
+    } catch {}
+  }, [adminFetch]);
+
+  const handleSelectKeyDrilldown = (k) => {
+    setSelectedKey(k);
+    if (onSelectKey) onSelectKey(k);
+    fetchTimeseries(k);
+    fetchDrilldownStats(k);
+  };
+
+  useEffect(() => {
+    if (propSelectedKey !== undefined && propSelectedKey !== selectedKey) {
+      setSelectedKey(propSelectedKey);
+      fetchTimeseries(propSelectedKey);
+      fetchDrilldownStats(propSelectedKey);
+    }
+  }, [propSelectedKey]);
 
   useEffect(() => {
     fetchTimeseries();
   }, [fetchTimeseries]);
+
+  const effectiveStats = keyStats || stats;
+  const currentRPM = effectiveStats.current_rpm ?? timeseriesData?.current_rpm ?? 0;
+  const currentTPM = effectiveStats.current_tpm ?? timeseriesData?.current_tpm ?? 0;
+  const peakRPM = timeseriesData?.peak_rpm ?? effectiveStats.peak_rpm ?? 0;
+  const peakTPM = timeseriesData?.peak_tpm ?? effectiveStats.peak_tpm ?? 0;
+
+  const activeKeyObj = useMemo(() => {
+    return (keys || []).find(k => k.key === selectedKey);
+  }, [keys, selectedKey]);
 
   // 1. DYNAMIC HOURLY TIME-SERIES AGGREGATION FROM SERVER OR LOGS FALLBACK
   const timeBuckets = useMemo(() => {
     if (timeseriesData && Array.isArray(timeseriesData.buckets) && timeseriesData.buckets.length > 0 && timeseriesData.timeframe === timeframe) {
       return timeseriesData.buckets.map(b => ({
         ...b,
-        avgTtft: b.avgTtft || (stats.avg_ttft_ms || 180)
+        avgTtft: typeof b.avgTtft === 'number' ? b.avgTtft : 0,
+        rpm: typeof b.rpm === 'number' ? b.rpm : 0,
+        tpm: typeof b.tpm === 'number' ? b.tpm : 0
       }));
     }
 
@@ -96,7 +171,9 @@ export default function DashboardView({
         tokens: 0,
         errors: 0,
         ttfts: [],
-        costs: 0
+        costs: 0,
+        rpm: 0,
+        tpm: 0
       };
     });
 
@@ -118,11 +195,14 @@ export default function DashboardView({
       }
     });
 
+    const mins = Math.max(1, intervalMs / (60 * 1000));
     return buckets.map(b => ({
       ...b,
-      avgTtft: b.ttfts.length ? Math.round(b.ttfts.reduce((a, c) => a + c, 0) / b.ttfts.length) : (stats.avg_ttft_ms || 180)
+      avgTtft: b.ttfts.length ? Math.round(b.ttfts.reduce((a, c) => a + c, 0) / b.ttfts.length) : 0,
+      rpm: Math.round(b.requests / mins),
+      tpm: Math.round(b.tokens / mins)
     }));
-  }, [timeseriesData, logs, timeframe, stats.avg_ttft_ms]);
+  }, [timeseriesData, logs, timeframe]);
 
   // Max value for scaling SVG chart bars/lines
   const maxMetricVal = useMemo(() => {
@@ -131,6 +211,8 @@ export default function DashboardView({
       if (!b) return;
       if (chartMetric === 'requests' && b.requests > max) max = b.requests;
       if (chartMetric === 'tokens' && b.tokens > max) max = b.tokens;
+      if (chartMetric === 'rpm' && (b.rpm || 0) > max) max = b.rpm;
+      if (chartMetric === 'tpm' && (b.tpm || 0) > max) max = b.tpm;
       if (chartMetric === 'latency' && b.avgTtft > max) max = b.avgTtft;
       if (chartMetric === 'errors' && b.errors > max) max = b.errors;
     });
@@ -208,9 +290,32 @@ export default function DashboardView({
       });
     }
     const total = promptTokens + completionTokens || stats.total_tokens || 1;
-    const promptPct = Math.round((promptTokens / total) * 100);
-    const compPct = Math.round((completionTokens / total) * 100);
-    return { promptTokens, completionTokens, promptPct, compPct };
+    const rawPromptPct = (promptTokens / total) * 100;
+    const rawCompPct = (completionTokens / total) * 100;
+
+    let promptPctStr = '';
+    let compPctStr = '';
+    if (completionTokens > 0 && rawCompPct < 1) {
+      compPctStr = rawCompPct < 0.1 ? '<0.1%' : `${rawCompPct.toFixed(1)}%`;
+      promptPctStr = rawCompPct < 0.1 ? '>99.9%' : `${(100 - parseFloat(rawCompPct.toFixed(1))).toFixed(1)}%`;
+    } else if (promptTokens > 0 && rawPromptPct < 1) {
+      promptPctStr = rawPromptPct < 0.1 ? '<0.1%' : `${rawPromptPct.toFixed(1)}%`;
+      compPctStr = rawPromptPct < 0.1 ? '>99.9%' : `${(100 - parseFloat(rawPromptPct.toFixed(1))).toFixed(1)}%`;
+    } else {
+      const roundedComp = Math.round(rawCompPct);
+      const roundedPrompt = 100 - roundedComp;
+      promptPctStr = `${roundedPrompt}%`;
+      compPctStr = `${roundedComp}%`;
+    }
+
+    return {
+      promptTokens,
+      completionTokens,
+      promptPct: Math.round(rawPromptPct),
+      compPct: Math.round(rawCompPct),
+      promptPctStr,
+      compPctStr,
+    };
   }, [logs, stats.prompt_tokens, stats.completion_tokens, stats.total_tokens]);
 
   // 5. CALCULATE TRUE PERCENTILES (P50, P90, P99)
@@ -279,6 +384,10 @@ export default function DashboardView({
         ? b.requests 
         : chartMetric === 'tokens' 
         ? b.tokens 
+        : chartMetric === 'rpm'
+        ? (b.rpm || 0)
+        : chartMetric === 'tpm'
+        ? (b.tpm || 0)
         : chartMetric === 'latency' 
         ? b.avgTtft 
         : b.errors;
@@ -384,7 +493,7 @@ export default function DashboardView({
 
 ## 1. 核心关键指标 (KPIs)
 - **累计调用量**：${totalCalls.toLocaleString()} 次
-- **Token 总吞吐**：${(stats.total_tokens || 0).toLocaleString()} Tokens (输入占比 ${tokenMetrics.promptPct}%, 输出占比 ${tokenMetrics.compPct}%)
+- **Token 总吞吐**：${(stats.total_tokens || 0).toLocaleString()} Tokens (输入占比 ${tokenMetrics.promptPctStr}, 输出占比 ${tokenMetrics.compPctStr})
 - **首字时延 SLA (TTFT)**：平均 ${avgTtft}ms (P50: ${fmtPct(percentiles.p50)}, P90: ${fmtPct(percentiles.p90)}, P99: ${fmtPct(percentiles.p99)}; 样本 ${percentiles.sampled}/${percentiles.total})
 - **接入上游通道**：${channels.length} 个服务商 (活跃: ${channels.filter(c => c.status === 'active').length} 个, 熔断: ${channels.filter(c => ['OPEN', 'HALF-OPEN'].includes(String(c.breaker_status || '').toUpperCase())).length} 个)
 
@@ -405,7 +514,7 @@ export default function DashboardView({
 
 ## 1. Core KPIs
 - **Total Invocations**: ${totalCalls.toLocaleString()}
-- **Token Throughput**: ${(stats.total_tokens || 0).toLocaleString()} Tokens (Prompt: ${tokenMetrics.promptPct}%, Completion: ${tokenMetrics.compPct}%)
+- **Token Throughput**: ${(stats.total_tokens || 0).toLocaleString()} Tokens (Prompt: ${tokenMetrics.promptPctStr}, Completion: ${tokenMetrics.compPctStr})
 - **TTFT SLA Latency**: Avg ${avgTtft}ms (P50: ${fmtPct(percentiles.p50)}, P90: ${fmtPct(percentiles.p90)}, P99: ${fmtPct(percentiles.p99)}; ${percentiles.sampled}/${percentiles.total} samples)
 - **Upstream Channels**: ${channels.length} providers (${channels.filter(c => c.status === 'active').length} active, ${channels.filter(c => ['OPEN', 'HALF-OPEN'].includes(String(c.breaker_status || '').toUpperCase())).length} tripped)
 
@@ -604,54 +713,312 @@ export default function DashboardView({
 
       {/* 2. NEEDS ATTENTION — what needs action, shown before the totals */}
       <section className="space-y-2.5">
-        <h3 className="ui-section-title">{isZh ? '需要关注' : 'Needs attention'}</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="ui-section-title">{isZh ? '需要关注' : 'Needs attention'}</h3>
+          {dismissedAttentions.length > 0 && (
+            <button
+              onClick={handleResetDismissed}
+              className="text-xs text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition cursor-pointer"
+              title={isZh ? '恢复已忽略的关注项' : 'Restore dismissed attention items'}
+            >
+              {isZh ? `已忽略 ${dismissedAttentions.length} 项 (重置恢复)` : `Reset ${dismissedAttentions.length} dismissed`}
+            </button>
+          )}
+        </div>
 
-        {attentionItems.length === 0 ? (
-          <div className="flex items-start gap-3 rounded-xl border border-l-2 border-emerald-200/70 dark:border-emerald-900/60 border-l-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 px-4 py-3">
-            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+        {(() => {
+          const visibleAttentionItems = attentionItems.filter(item => !dismissedAttentions.includes(item.key));
+          if (visibleAttentionItems.length === 0) {
+            if (attentionItems.length > 0) {
+              return (
+                <div className="flex items-center justify-between rounded-xl border border-l-2 border-emerald-200/70 dark:border-emerald-900/60 border-l-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <span className="text-xs font-semibold text-emerald-900 dark:text-emerald-100">
+                      {isZh ? '所有关注项已处理或已忽略' : 'All attention items acknowledged'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleResetDismissed}
+                    className="text-xs text-emerald-700 dark:text-emerald-300 underline cursor-pointer hover:text-emerald-900"
+                  >
+                    {isZh ? '重新显示' : 'Show again'}
+                  </button>
+                </div>
+              );
+            }
+            return (
+              <div className="flex items-start gap-3 rounded-xl border border-l-2 border-emerald-200/70 dark:border-emerald-900/60 border-l-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 px-4 py-3">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-xs font-semibold text-emerald-900 dark:text-emerald-100">
+                    {isZh ? '运行正常' : 'All clear'}
+                  </div>
+                  <p className="ui-meta mt-0.5">
+                    {attention.recentTotal > 0
+                      ? (isZh
+                        ? `${channels.length} 个渠道的断路器均未触发，最近 ${attention.recentTotal} 条日志中没有失败请求。`
+                        : `No breaker tripped across ${channels.length} channel(s), and no failed request among the last ${attention.recentTotal} logged calls.`)
+                      : (isZh
+                        ? `已配置 ${channels.length} 个渠道且断路器均未触发；暂无请求日志可判断成功率。`
+                        : `${channels.length} channel(s) configured with no tripped breaker; no request logs yet to judge success rate.`)}
+                  </p>
+                  <p className="ui-meta mt-1">
+                    {isZh ? '数据为最近一次探测结果。' : 'Based on the most recent probe.'}
+                  </p>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+              {visibleAttentionItems.map(item => {
+                const tone = attentionTones[item.tone];
+                const ItemIcon = item.icon;
+                return (
+                  <div key={item.key} className={`rounded-xl border border-l-2 px-3.5 py-3 flex flex-col relative group ${tone.card}`}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDismissAttention(item.key);
+                      }}
+                      className="absolute top-2 right-2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-md transition opacity-70 group-hover:opacity-100 cursor-pointer"
+                      title={isZh ? '忽略此项关注' : 'Dismiss notice'}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                    <div className="flex items-start gap-2 pr-5">
+                      <ItemIcon className={`w-4 h-4 shrink-0 mt-0.5 ${tone.icon}`} />
+                      <span className={`text-xs font-semibold leading-5 ${tone.title}`}>{item.title}</span>
+                    </div>
+                    <p className="ui-meta mt-1 flex-1">{item.detail}</p>
+                    {item.actionLabel && (
+                      <button
+                        onClick={() => {
+                          handleDismissAttention(item.key);
+                          item.onAction?.();
+                        }}
+                        className="ui-btn-ghost ui-btn-sm -ml-2.5 mt-1 self-start text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
+                      >
+                        {item.actionLabel} →
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+      </section>
+
+      {/* 2.5 REAL-TIME TELEMETRY COCKPIT & KEY DRILLDOWN */}
+      <section className="ui-card p-5 bg-gradient-to-br from-indigo-500/5 via-transparent to-purple-500/5 border-indigo-100 dark:border-indigo-900/40">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800/80">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+              <Gauge className="w-5 h-5" />
+            </div>
             <div>
-              <div className="text-xs font-semibold text-emerald-900 dark:text-emerald-100">
-                {isZh ? '运行正常' : 'All clear'}
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-semibold text-slate-900 dark:text-white">
+                  {selectedKey
+                    ? (isZh ? `密钥实时速率遥测 · ${activeKeyObj?.tenant_id || activeKeyObj?.name || selectedKey.slice(0, 16)}` : `Key Telemetry · ${activeKeyObj?.tenant_id || activeKeyObj?.name || selectedKey.slice(0, 16)}`)
+                    : (adminUser?.role === 'admin'
+                        ? (isZh ? '全平台实时速率遥测 (Platform Telemetry)' : 'Platform Real-time Telemetry')
+                        : (isZh ? '我的密钥聚合实时遥测 (Account Telemetry)' : 'My Keys Real-time Telemetry')
+                      )
+                  }
+                </h3>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-medium bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  LIVE 60s
+                </span>
               </div>
               <p className="ui-meta mt-0.5">
-                {attention.recentTotal > 0
-                  ? (isZh
-                    ? `${channels.length} 个渠道的断路器均未触发，最近 ${attention.recentTotal} 条日志中没有失败请求。`
-                    : `No breaker tripped across ${channels.length} channel(s), and no failed request among the last ${attention.recentTotal} logged calls.`)
-                  : (isZh
-                    ? `已配置 ${channels.length} 个渠道且断路器均未触发；暂无请求日志可判断成功率。`
-                    : `${channels.length} channel(s) configured with no tripped breaker; no request logs yet to judge success rate.`)}
-              </p>
-              <p className="ui-meta mt-1">
-                {isZh ? '数据为最近一次探测结果。' : 'Based on the most recent probe.'}
+                {selectedKey
+                  ? (isZh ? '正在监测当前指定 API 密钥的近60秒真实速率与限流配额水位' : 'Monitoring real-time traffic and quota utilization for selected API key')
+                  : (isZh ? '全平台实时滑动窗口 (近60秒) 吞吐速率与历史峰值遥测' : 'Platform-wide 60s sliding window throughput rate and peak telemetry')
+                }
               </p>
             </div>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-            {attentionItems.map(item => {
-              const tone = attentionTones[item.tone];
-              const ItemIcon = item.icon;
-              return (
-                <div key={item.key} className={`rounded-xl border border-l-2 px-3.5 py-3 flex flex-col ${tone.card}`}>
-                  <div className="flex items-start gap-2">
-                    <ItemIcon className={`w-4 h-4 shrink-0 mt-0.5 ${tone.icon}`} />
-                    <span className={`text-xs font-semibold leading-5 ${tone.title}`}>{item.title}</span>
-                  </div>
-                  <p className="ui-meta mt-1 flex-1">{item.detail}</p>
-                  {item.actionLabel && (
-                    <button
-                      onClick={item.onAction}
-                      className="ui-btn-ghost ui-btn-sm -ml-2.5 mt-1 self-start text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
-                    >
-                      {item.actionLabel} →
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+
+          {/* Drill-down selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
+              {isZh ? '下钻分析:' : 'Drill-down:'}
+            </span>
+            <div className="relative min-w-[220px]">
+              <select
+                value={selectedKey}
+                onChange={(e) => handleSelectKeyDrilldown(e.target.value)}
+                className="ui-field ui-field-sm font-mono text-xs w-full pr-8 cursor-pointer"
+              >
+                <option value="">
+                  {adminUser?.role === 'admin' 
+                    ? (isZh ? '🌐 全平台聚合遥测 (Platform Overall)' : '🌐 All Platform Telemetry')
+                    : (isZh ? '👤 我的全量密钥聚合 (My Keys Overall)' : '👤 All My Keys Telemetry')}
+                </option>
+                {(keys || []).map(k => (
+                  <option key={k.id || k.key} value={k.key}>
+                    🔑 {k.tenant_id || k.name || k.key.slice(0, 12)} {k.rpm ? `(${k.rpm} RPM)` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {selectedKey && (
+              <button
+                onClick={() => handleSelectKeyDrilldown('')}
+                className="ui-btn-secondary ui-btn-sm"
+                title={isZh ? '返回全局大盘' : 'Reset drill-down'}
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>{isZh ? '重置' : 'Reset'}</span>
+              </button>
+            )}
           </div>
-        )}
+        </div>
+
+        {/* 3 Telemetry Speedometers */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+          {/* Card 1: Requests per sec & RPM */}
+          <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                <span className="font-medium">{isZh ? '实时请求速率 (RPS / RPM)' : 'Real-time RPS / RPM'}</span>
+                <span className="font-mono text-indigo-600 dark:text-indigo-400">
+                  {currentRPM} RPM
+                </span>
+              </div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-3xl font-bold font-mono text-slate-900 dark:text-white tracking-tight">
+                  {(currentRPM / 60).toFixed(1)}
+                </span>
+                <span className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                  req/s
+                </span>
+              </div>
+            </div>
+            
+            <div className="mt-3 pt-2.5 border-t border-slate-200/50 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between">
+              <span>{isZh ? '周期峰值' : 'Peak RPM'}: <strong className="font-mono text-slate-700 dark:text-slate-200">{peakRPM}</strong> RPM</span>
+              {activeKeyObj?.rpm ? (
+                <span className="font-mono text-xs">
+                  {isZh ? '限流水位' : 'Limit'}: {Math.min(100, Math.round((currentRPM / activeKeyObj.rpm) * 100))}%
+                </span>
+              ) : null}
+            </div>
+
+            {/* Quota Progress Bar if key has RPM limit */}
+            {activeKeyObj?.rpm > 0 && (
+              <div className="mt-2 w-full bg-slate-200 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    currentRPM >= activeKeyObj.rpm
+                      ? 'bg-rose-500'
+                      : currentRPM >= activeKeyObj.rpm * 0.8
+                      ? 'bg-amber-500'
+                      : 'bg-indigo-500'
+                  }`}
+                  style={{ width: `${Math.min(100, (currentRPM / activeKeyObj.rpm) * 100)}%` }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Card 2: Tokens per min (TPM) */}
+          <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                <span className="font-medium">{isZh ? '实时 Token 吞吐 (TPM)' : 'Real-time TPM'}</span>
+                <span className="font-mono text-purple-600 dark:text-purple-400">
+                  {currentTPM >= 1000 ? `${(currentTPM / 1000).toFixed(1)}k` : currentTPM} /min
+                </span>
+              </div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-3xl font-bold font-mono text-slate-900 dark:text-white tracking-tight">
+                  {currentTPM.toLocaleString()}
+                </span>
+                <span className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                  Tokens/min
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-3 pt-2.5 border-t border-slate-200/50 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between">
+              <span>{isZh ? '周期峰值' : 'Peak TPM'}: <strong className="font-mono text-slate-700 dark:text-slate-200">{peakTPM.toLocaleString()}</strong> TPM</span>
+              <span className="font-mono text-xs">
+                ~{Math.round(currentTPM / 60)} tok/s
+              </span>
+            </div>
+
+            {/* Quota Progress Bar if key has TPM limit */}
+            {activeKeyObj?.tpm > 0 && (
+              <div className="mt-2 w-full bg-slate-200 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    currentTPM >= activeKeyObj.tpm
+                      ? 'bg-rose-500'
+                      : currentTPM >= activeKeyObj.tpm * 0.8
+                      ? 'bg-amber-500'
+                      : 'bg-purple-500'
+                  }`}
+                  style={{ width: `${Math.min(100, (currentTPM / activeKeyObj.tpm) * 100)}%` }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Card 3: Key Status / Overall Concurrency Summary */}
+          <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                <span className="font-medium">
+                  {selectedKey ? (isZh ? '密钥运行状态与分组' : 'Key Status & Group') : (isZh ? '网关并发健康度' : 'Gateway Concurrency')}
+                </span>
+                <Sliders className="w-3.5 h-3.5 text-slate-400" />
+              </div>
+              {selectedKey ? (
+                <div className="mt-2 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
+                      activeKeyObj?.status === 'disabled'
+                        ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                        : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${activeKeyObj?.status === 'disabled' ? 'bg-rose-500' : 'bg-emerald-500'}`} />
+                      {activeKeyObj?.status === 'disabled' ? (isZh ? '已停用' : 'Disabled') : (isZh ? '运行中' : 'Active')}
+                    </span>
+                    <span className="font-mono text-xs px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                      {activeKeyObj?.group_name || 'default'} 组
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                    {isZh ? '消耗额度' : 'Spent'}: ¥{Number(activeKeyObj?.used_cost || 0).toFixed(4)}
+                    {Number(activeKeyObj?.budget) > 0 ? ` / ¥${Number(activeKeyObj.budget).toFixed(2)}` : ` (${isZh ? '不限预算' : 'No cap'})`}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-2">
+                  <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white">
+                    {channels.filter(c => c.status === 'active').length} <span className="text-sm font-normal text-slate-500 dark:text-slate-400">/ {channels.length} {isZh ? '渠道在线' : 'channels active'}</span>
+                  </div>
+                  <div className="ui-meta mt-1">
+                    {attention.tripped === 0
+                      ? (isZh ? '全链路断路器健康闭合' : 'All circuit breakers closed')
+                      : (isZh ? `${attention.tripped} 个渠道触发断路保护` : `${attention.tripped} breaker(s) open`)}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-3 pt-2.5 border-t border-slate-200/50 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between">
+              <span>{isZh ? '调用成功率' : 'Success Rate'}: <strong className="font-mono text-emerald-600 dark:text-emerald-400">{slaAvailability}{slaAvailability === '—' ? '' : '%'}</strong></span>
+              <span className="font-mono">TTFT ~{Math.round(stats.avg_ttft_ms || 0)}ms</span>
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* 3. CORE TELEMETRY KPIS (4 CARDS) */}
@@ -665,9 +1032,12 @@ export default function DashboardView({
           <div className="mt-2 text-2xl font-semibold font-mono tabular-nums tracking-tight text-slate-900 dark:text-white">
             {(stats.total_requests || 0).toLocaleString()}
           </div>
-          <div className="ui-meta mt-2 flex items-center gap-1.5 font-mono">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-            <span>SLA {slaAvailability}{slaAvailability === '—' ? '' : '%'}</span>
+          <div className="ui-meta mt-2 flex items-center justify-between font-mono">
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+              <span>SLA {slaAvailability}{slaAvailability === '—' ? '' : '%'}</span>
+            </div>
+            <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{(currentRPM / 60).toFixed(1)} req/s</span>
           </div>
         </div>
 
@@ -680,8 +1050,9 @@ export default function DashboardView({
           <div className="mt-2 text-2xl font-semibold font-mono tabular-nums tracking-tight text-slate-900 dark:text-white">
             {(stats.total_tokens || 0).toLocaleString()}
           </div>
-          <div className="ui-meta mt-2 font-mono">
-            Prompt {tokenMetrics.promptPct}% · Comp {tokenMetrics.compPct}%
+          <div className="ui-meta mt-2 flex items-center justify-between font-mono">
+            <span>Prompt {tokenMetrics.promptPctStr} · Comp {tokenMetrics.compPctStr}</span>
+            <span className="text-purple-600 dark:text-purple-400 font-semibold">{currentTPM >= 1000 ? `${(currentTPM / 1000).toFixed(1)}k` : currentTPM} TPM</span>
           </div>
         </div>
 
@@ -742,6 +1113,18 @@ export default function DashboardView({
                 className={`px-3 py-1 rounded-md transition ${chartMetric === 'tokens' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
               >
                 {isZh ? 'Token 吞吐' : 'Tokens'}
+              </button>
+              <button
+                onClick={() => setChartMetric('rpm')}
+                className={`px-3 py-1 rounded-md transition ${chartMetric === 'rpm' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+              >
+                {isZh ? '实时 RPM' : 'RPM'}
+              </button>
+              <button
+                onClick={() => setChartMetric('tpm')}
+                className={`px-3 py-1 rounded-md transition ${chartMetric === 'tpm' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+              >
+                {isZh ? '实时 TPM' : 'TPM'}
               </button>
               <button
                 onClick={() => setChartMetric('latency')}
@@ -838,13 +1221,13 @@ export default function DashboardView({
             <div className="absolute top-2 right-2 bg-slate-900/90 dark:bg-slate-800/95 text-white text-xs px-3 py-1.5 rounded-lg border border-slate-700 shadow-md pointer-events-none z-10 flex items-center gap-3">
               <span className="font-mono text-slate-300">{hoveredBucket.label}</span>
               <span className="font-semibold text-indigo-300 font-mono">
-                {isZh ? '请求' : 'Reqs'}: {hoveredBucket.requests}
+                {isZh ? '请求' : 'Reqs'}: {hoveredBucket.requests} ({((hoveredBucket.rpm ?? 0) / 60).toFixed(1)} req/s · {hoveredBucket.rpm ?? 0} RPM)
               </span>
               <span className="font-semibold text-sky-300 font-mono">
-                Tokens: {hoveredBucket.tokens}
+                Tokens: {hoveredBucket.tokens.toLocaleString()} ({hoveredBucket.tpm ?? 0} TPM)
               </span>
               <span className="font-semibold text-amber-300 font-mono">
-                TTFT: {hoveredBucket.avgTtft}ms
+                TTFT: {hoveredBucket.avgTtft > 0 ? `${hoveredBucket.avgTtft}ms` : (isZh ? '无样本' : 'n/a')}
               </span>
               {hoveredBucket.errors > 0 && (
                 <span className="font-semibold text-rose-400 font-mono">
@@ -861,6 +1244,10 @@ export default function DashboardView({
                 ? bucket.requests 
                 : chartMetric === 'tokens' 
                 ? bucket.tokens 
+                : chartMetric === 'rpm'
+                ? (bucket.rpm || 0)
+                : chartMetric === 'tpm'
+                ? (bucket.tpm || 0)
                 : chartMetric === 'latency' 
                 ? bucket.avgTtft 
                 : bucket.errors;

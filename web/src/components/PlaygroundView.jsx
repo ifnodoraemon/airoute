@@ -126,9 +126,7 @@ export default function PlaygroundView({
   const [showSystemPrompt, setShowSystemPrompt] = useState(false);
 
   // Chat conversation history & streaming output
-  const [messages, setMessages] = useState([
-    { role: 'user', content: isZh ? '请简要介绍 Airoute 企业级大模型与多模态网关的核心架构优势。' : 'Briefly introduce the architectural advantages of Airoute LLM and multimodal gateway.' }
-  ]);
+  const [messages, setMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [playLoading, setPlayLoading] = useState(false);
   // `playStopped` records a user-initiated cancellation so the UI can show a
@@ -153,7 +151,7 @@ export default function PlaygroundView({
 
   // Multimodal sub-states
   const [imgModel, setImgModel] = useState(imgModels[0] || '');
-  const [imgPrompt, setImgPrompt] = useState(isZh ? '极简未来数据中心机房，幽蓝光纤与量子矩阵，8k 渲染' : 'Minimalist futuristic data center, cyan optical fiber and quantum matrix, 8k render');
+  const [imgPrompt, setImgPrompt] = useState('');
   const [imgSize, setImgSize] = useState('1024x1024');
   const [imgQuality] = useState('standard');
   const [imgResult, setImgResult] = useState(null);
@@ -161,7 +159,7 @@ export default function PlaygroundView({
   const [ttsModel, setTtsModel] = useState(ttsModels[0] || '');
   const [ttsVoice, setTtsVoice] = useState('alloy');
   const [ttsSpeed] = useState(1.0);
-  const [ttsInput, setTtsInput] = useState(isZh ? '欢迎使用 Airoute 企业级大模型与多模态网关系统。' : 'Welcome to Airoute enterprise LLM and multimodal gateway system.');
+  const [ttsInput, setTtsInput] = useState('');
   const [ttsAudioUrl, setTtsAudioUrl] = useState(null);
   // Mirror of the synthesised audio object URL so unmount can release it. The
   // setter below only revokes the *previous* URL; without this cleanup, leaving
@@ -182,21 +180,19 @@ export default function PlaygroundView({
 
   // Video generation (async task + polling)
   const [videoModel, setVideoModel] = useState(videoModels[0] || '');
-  const [videoPrompt, setVideoPrompt] = useState(isZh ? '无人机掠过云海之上的雪山群峰，电影级运镜' : 'Drone flying over snow peaks above a sea of clouds, cinematic');
+  const [videoPrompt, setVideoPrompt] = useState('');
   const [videoResult, setVideoResult] = useState(null);
   const [videoTaskId, setVideoTaskId] = useState('');
 
   // Embeddings
   const [embedModel, setEmbedModel] = useState(embedModels[0] || '');
-  const [embedInput, setEmbedInput] = useState(isZh ? 'Airoute 统一协议网关\n第二行文本用于批量向量化' : 'Airoute unified protocol gateway\nSecond line for batch embedding');
+  const [embedInput, setEmbedInput] = useState('');
   const [embedResult, setEmbedResult] = useState(null);
 
   // Rerank
   const [rerankModel, setRerankModel] = useState(rerankModels[0] || '');
-  const [rerankQuery, setRerankQuery] = useState(isZh ? '如何配置上游渠道的故障降级？' : 'How do I configure upstream failover?');
-  const [rerankDocs, setRerankDocs] = useState(isZh
-    ? '在模型路由中为同一模型绑定多个渠道并设置权重与优先级。\nPython 的列表推导式可以快速生成新列表。\n三态熔断器在连续失败后自动旁路异常渠道。'
-    : 'Bind multiple channels to one model with weights and priorities in Model Routes.\nPython list comprehensions build new lists quickly.\nThe tri-state breaker bypasses a failing channel automatically.');
+  const [rerankQuery, setRerankQuery] = useState('');
+  const [rerankDocs, setRerankDocs] = useState('');
   const [rerankResult, setRerankResult] = useState(null);
 
   // Sync initial model across chat and multimodal categories
@@ -503,6 +499,7 @@ Execute the following mission with precision, maintainability, and zero speculat
       let firstByteTime = null;
       let fullContent = '';
       let fullReasoning = '';
+      let serverReportedTokens = 0;
 
       try {
         const request = buildChatRequest(targetModel, payloadMessages);
@@ -549,6 +546,9 @@ Execute the following mission with precision, maintainability, and zero speculat
               if (parsed.error && !parsed.choices) {
                 throw new Error(parsed.error.message || 'stream error');
               }
+              if (parsed.usage?.completion_tokens) {
+                serverReportedTokens = parsed.usage.completion_tokens;
+              }
               applyChunk(parsed);
             } catch (e) {
               if (e && /stream error/i.test(e.message || '')) {
@@ -577,6 +577,9 @@ Execute the following mission with precision, maintainability, and zero speculat
           const data = await res.json();
           firstByteTime = Date.now();
           setTTFT(firstByteTime - startTime);
+          if (data.usage?.completion_tokens) {
+            serverReportedTokens = data.usage.completion_tokens;
+          }
           const choice = data.choices?.[0];
           if (choice?.message?.reasoning_content) {
             fullReasoning = choice.message.reasoning_content;
@@ -588,10 +591,10 @@ Execute the following mission with precision, maintainability, and zero speculat
 
         const totalMs = Date.now() - startTime;
         setDuration(totalMs);
-        const estTokens = fullContent.length * 0.75;
+        const tokensCount = serverReportedTokens > 0 ? serverReportedTokens : (fullContent.length * 0.75);
         const activeSec = (totalMs - (firstByteTime ? firstByteTime - startTime : 0)) / 1000;
         if (activeSec > 0.1) {
-          setTPS((estTokens / activeSec).toFixed(1));
+          setTPS((tokensCount / activeSec).toFixed(1));
         }
 
         return { content: fullContent, reasoning: fullReasoning };
@@ -1472,6 +1475,14 @@ Execute the following mission with precision, maintainability, and zero speculat
               {playMode === 'single' ? (
                 /* Single Model Chat View */
                 <div className="flex-1 overflow-y-auto space-y-4 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800/80 bg-slate-50/60 dark:bg-slate-900/40">
+                  {messages.length === 0 && !playLoading && !playOutput && !playReasoningOutput && (
+                    <div className="h-full min-h-[240px] flex flex-col items-center justify-center text-center py-16 text-slate-400 dark:text-slate-500">
+                      <MessageSquare className="w-10 h-10 mb-3 opacity-30 stroke-1" />
+                      <p className="text-xs font-medium">{isZh ? '输入提示词开始调试演练' : 'Enter a prompt to start testing'}</p>
+                      <p className="text-[11px] opacity-75 mt-1">{isZh ? '支持流式输出、深度思维链解析与多模型竞技场对比' : 'Supports streaming responses, reasoning traces, and model arena'}</p>
+                    </div>
+                  )}
+
                   {/* Messages Bubble Stream */}
                   {messages.map((msg, idx) => (
                     <div

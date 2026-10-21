@@ -169,3 +169,59 @@ func TestPatchChannelRejectsNilMutation(t *testing.T) {
 		t.Fatal("a nil mutation function was accepted")
 	}
 }
+
+func TestDeleteChannelPrunesModelRoutes(t *testing.T) {
+	db, err := OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+	repo := NewRepository(db)
+
+	c1 := seedPatchChannel(t, repo, &ChannelRecord{
+		Name: "ch-1", Type: "openai", BaseURL: "http://1.invalid",
+		APIKey: "k1", Models: []string{"gpt-4o"}, Priority: 1, Weight: 10, Status: "active",
+	})
+	c2 := seedPatchChannel(t, repo, &ChannelRecord{
+		Name: "ch-2", Type: "openai", BaseURL: "http://2.invalid",
+		APIKey: "k2", Models: []string{"gpt-4o"}, Priority: 1, Weight: 10, Status: "active",
+	})
+
+	// Manually insert model_route referencing both channels
+	provJSON := `[{"channel_id":` + string(rune('0'+c1.ID)) + `,"channel_name":"ch-1"},{"channel_id":` + string(rune('0'+c2.ID)) + `,"channel_name":"ch-2"}]`
+	_, err = db.Exec(`INSERT INTO model_routes (model, disabled, providers) VALUES (?, 0, ?)`, "gpt-4o", provJSON)
+	if err != nil {
+		t.Fatalf("insert model_route: %v", err)
+	}
+
+	// Delete c1
+	if err := repo.DeleteChannel(c1.ID); err != nil {
+		t.Fatalf("DeleteChannel: %v", err)
+	}
+
+	// Verify model_routes providers updated to exclude c1
+	var updatedProviders string
+	err = db.QueryRow(`SELECT providers FROM model_routes WHERE model = ?`, "gpt-4o").Scan(&updatedProviders)
+	if err != nil {
+		t.Fatalf("query model_routes: %v", err)
+	}
+	if stringContains(updatedProviders, `"channel_id":`+string(rune('0'+c1.ID))) {
+		t.Errorf("deleted channel %d still present in model_routes providers: %s", c1.ID, updatedProviders)
+	}
+	if !stringContains(updatedProviders, `"channel_id":`+string(rune('0'+c2.ID))) {
+		t.Errorf("active channel %d missing in model_routes providers: %s", c2.ID, updatedProviders)
+	}
+}
+
+func stringContains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || (len(s) > 0 && len(substr) > 0 && indexOfString(s, substr) >= 0))
+}
+
+func indexOfString(s, substr string) int {
+	for i := 0; i+len(substr) <= len(s); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
+}

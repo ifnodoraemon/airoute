@@ -10,7 +10,12 @@ import {
   Calendar,
   Clock,
   Info,
-  ArrowRight
+  ArrowRight,
+  Layers,
+  Percent,
+  Sliders,
+  Settings2,
+  Tag
 } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
 
@@ -131,13 +136,23 @@ export default function PricingManager({
   lang = 'zh',
   t,
   modelRoutes = [],
-  setCurrentTab
+  setCurrentTab,
+  groupMultipliers,
+  onUpdateGroupMultipliers
 }) {
   const isZh = lang === 'zh';
+  const [pricingSubTab, setPricingSubTab] = useState('models'); // 'models' | 'groups'
+  const [localGroupMultipliers, setLocalGroupMultipliers] = useState(groupMultipliers || { default: 1.0, vip: 0.8, enterprise: 1.5 });
+  const [savingGroups, setSavingGroups] = useState(false);
+  const [showAddGroupModal, setShowAddGroupModal] = useState(false);
+  const [newGroupInputKey, setNewGroupInputKey] = useState('');
+  const [newGroupInputMultiplier, setNewGroupInputMultiplier] = useState(0.8);
+  const [tierPreviewGroup, setTierPreviewGroup] = useState('default');
   const [prices, setPrices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   useModalA11y(showModal, () => setShowModal(false));
+  useModalA11y(showAddGroupModal, () => setShowAddGroupModal(false));
   const [editingPrice, setEditingPrice] = useState(null);
   // The gateway reports its own clock because off-peak windows are evaluated in
   // the gateway's time zone, not the browser's. The header renders these next to
@@ -180,6 +195,9 @@ export default function PricingManager({
       const data = await res.json();
       if (res.ok && data.code === 0) {
         setPrices(data.data || []);
+        if (data.group_multipliers && typeof data.group_multipliers === 'object') {
+          setLocalGroupMultipliers(data.group_multipliers);
+        }
         if (data.server_time) setServerTime(data.server_time);
         if (data.server_weekday) setServerWeekday(data.server_weekday);
         if (data.is_weekend !== undefined) setIsWeekend(data.is_weekend);
@@ -200,13 +218,96 @@ export default function PricingManager({
     }
   }, [adminFetch, showToast, isZh]);
 
+  useEffect(() => {
+    if (groupMultipliers && typeof groupMultipliers === 'object') {
+      setLocalGroupMultipliers(groupMultipliers);
+    }
+  }, [groupMultipliers]);
+
   const availableGroups = React.useMemo(() => {
     const set = new Set(['default']);
+    if (localGroupMultipliers && typeof localGroupMultipliers === 'object') {
+      Object.keys(localGroupMultipliers).forEach(g => {
+        if (g) set.add(g.trim().toLowerCase());
+      });
+    }
     prices.forEach(p => {
       if (p.group_name) set.add(p.group_name.trim().toLowerCase());
     });
     return Array.from(set);
-  }, [prices]);
+  }, [prices, localGroupMultipliers]);
+
+  const handleSaveGroupMultipliers = async (newMultipliers) => {
+    const payload = newMultipliers || localGroupMultipliers;
+    setSavingGroups(true);
+    try {
+      const res = await adminFetch('/api/v1/admin/pricing/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (res.ok && data.code === 0) {
+        if (data.data) {
+          setLocalGroupMultipliers(data.data);
+        }
+        showToast(isZh ? '分组折扣定价已保存并全网实时生效' : 'Group discount tiers saved and active in real-time', 'success');
+        if (onUpdateGroupMultipliers) onUpdateGroupMultipliers();
+      } else {
+        showToast((isZh ? '保存分组倍率失败: ' : 'Failed to save group multipliers: ') + (data.error || '未知错误'), 'error');
+      }
+    } catch (err) {
+      showToast((isZh ? '网络请求异常: ' : 'Network error: ') + err.message, 'error');
+    } finally {
+      setSavingGroups(false);
+    }
+  };
+
+  const handleUpdateSingleMultiplier = (g, mult) => {
+    const val = parseFloat(mult);
+    if (isNaN(val) || val <= 0) return;
+    setLocalGroupMultipliers(prev => ({
+      ...prev,
+      [g]: Math.round(val * 100) / 100
+    }));
+  };
+
+  const handleDeleteGroupTier = (g) => {
+    if (g === 'default') {
+      showToast(isZh ? '默认基准组不可删除' : 'Default tier cannot be deleted', 'warning');
+      return;
+    }
+    if (!window.confirm(isZh ? `确定删除计费分组 [${g}]？该组下的密钥后续将回退至默认 1.0x 基准价。` : `Delete group tier [${g}]?`)) {
+      return;
+    }
+    const copy = { ...localGroupMultipliers };
+    delete copy[g];
+    setLocalGroupMultipliers(copy);
+    handleSaveGroupMultipliers(copy);
+  };
+
+  const handleCreateNewGroupTier = (e) => {
+    e.preventDefault();
+    const cleanKey = newGroupInputKey.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    if (!cleanKey) {
+      showToast(isZh ? '请输入有效的分组标识符 (英文小写/数字/下划线)' : 'Enter valid group identifier', 'warning');
+      return;
+    }
+    const mult = parseFloat(newGroupInputMultiplier);
+    if (isNaN(mult) || mult <= 0) {
+      showToast(isZh ? '请输入有效的折扣倍数 (> 0)' : 'Enter valid multiplier (> 0)', 'warning');
+      return;
+    }
+    const updated = {
+      ...localGroupMultipliers,
+      [cleanKey]: Math.round(mult * 100) / 100
+    };
+    setLocalGroupMultipliers(updated);
+    setShowAddGroupModal(false);
+    setNewGroupInputKey('');
+    setNewGroupInputMultiplier(0.8);
+    handleSaveGroupMultipliers(updated);
+  };
 
   const filteredPrices = React.useMemo(() => {
     if (groupFilter === 'all') return prices;
@@ -231,6 +332,51 @@ export default function PricingManager({
     const configured = new Set(prices.filter(p => (p.group_name || 'default') === curGroup).map(p => p.model));
     return (platformModels || []).filter(m => !configured.has(m));
   }, [platformModels, prices, formData.group_name]);
+
+  const candidateModels = React.useMemo(() => {
+    const curGroup = formData.group_name || 'default';
+    const configuredInGroup = new Set(prices.filter(p => (p.group_name || 'default') === curGroup).map(p => p.model));
+    const list = [];
+    const seen = new Set();
+
+    // 1. Unpriced platform models in this group first
+    unpricedModels.forEach(m => {
+      if (!seen.has(m) && m !== '*') {
+        seen.add(m);
+        list.push({ model: m, isUnpriced: true });
+      }
+    });
+
+    // 2. Models from mounted routes
+    (modelRoutes || []).forEach(r => {
+      if (r?.model && !seen.has(r.model) && r.model !== '*') {
+        seen.add(r.model);
+        list.push({ model: r.model, isUnpriced: !configuredInGroup.has(r.model) });
+      }
+    });
+
+    // 3. Platform models
+    (platformModels || []).forEach(m => {
+      if (!seen.has(m) && m !== '*') {
+        seen.add(m);
+        list.push({ model: m, isUnpriced: !configuredInGroup.has(m) });
+      }
+    });
+
+    // 4. Popular preset models if candidate list is short
+    const popularPresets = [
+      'deepseek-chat', 'deepseek-reasoner', 'deepseek-v4.1-flash',
+      'gpt-4o', 'gpt-4o-mini', 'claude-3-7-sonnet', 'qwen-max', 'qwen-plus'
+    ];
+    popularPresets.forEach(m => {
+      if (!seen.has(m) && list.length < 12) {
+        seen.add(m);
+        list.push({ model: m, isPreset: true, isUnpriced: !configuredInGroup.has(m) });
+      }
+    });
+
+    return list;
+  }, [unpricedModels, modelRoutes, platformModels, prices, formData.group_name]);
 
   const getGroupBadge = (group) => {
     const g = (group || 'default').toLowerCase();
@@ -520,7 +666,7 @@ export default function PricingManager({
             {isZh ? '模型定价' : 'Model Pricing'}
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            {isZh ? '配置与管理各模型、协议的按量计费与分组费率规则' : 'Configure token pricing and rate rules across models and tiers'}
+            {isZh ? '配置与管理官方参考基准定价与业务分组折扣倍率' : 'Configure official baseline token pricing and tier discount multipliers'}
           </p>
         </div>
 
@@ -543,6 +689,41 @@ export default function PricingManager({
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-indigo-600' : ''}`} />
           </button>
         </div>
+      </div>
+
+      {/* 1.5 Sub Navigation: Model Baseline Pricing vs Group Discount Tiers */}
+      <div className="flex items-center space-x-2 border-b border-slate-200/80 dark:border-slate-800 pb-2">
+        <button
+          type="button"
+          onClick={() => setPricingSubTab('models')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+            pricingSubTab === 'models'
+              ? 'bg-slate-900 dark:bg-indigo-600 text-white shadow-sm'
+              : 'bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          <span>{isZh ? '模型官方基准定价' : 'Model Base Rates'}</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-700/80 dark:bg-indigo-700/80 text-white font-mono">
+            {prices.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPricingSubTab('groups')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+            pricingSubTab === 'groups'
+              ? 'bg-slate-900 dark:bg-indigo-600 text-white shadow-sm'
+              : 'bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+          }`}
+        >
+          <Percent className="w-4 h-4" />
+          <span>{isZh ? '分组折扣定价' : 'Group Discount Tiers'}</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-700/80 dark:bg-indigo-700/80 text-white font-mono">
+            {Object.keys(localGroupMultipliers).length}
+          </span>
+        </button>
       </div>
 
       {/* Batch Action Bar (Admin only) */}
@@ -570,43 +751,86 @@ export default function PricingManager({
       )}
 
       {/* 2. Rates Table (High Whitespace & Clean) */}
-      <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl shadow-sm overflow-hidden">
-        {/* Group Filter Tabs */}
-        <div className="flex flex-wrap items-center gap-2 px-6 pt-5 pb-3 border-b border-slate-100 dark:border-slate-800">
-          <span className="text-xs text-slate-400 font-medium mr-1">{isZh ? '价格分组:' : 'Price Group:'}</span>
-          {[
-            { id: 'all', label: isZh ? '全部规则' : 'All Rules' },
-            ...availableGroups.map(g => ({
-              id: g,
-              label: g === 'default' 
-                ? (isZh ? '默认组 (default)' : 'Default (default)')
-                : g === 'vip' 
-                  ? (isZh ? 'VIP组 (vip)' : 'VIP (vip)')
-                  : g === 'enterprise' 
-                    ? (isZh ? '企业组 (enterprise)' : 'Enterprise (enterprise)')
-                    : `${g} ${isZh ? '组' : 'Tier'}`
-            }))
-          ].map(tab => {
-            const count = tab.id === 'all' ? prices.length : prices.filter(p => (p.group_name || 'default') === tab.id).length;
-            const isActive = groupFilter === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => { setGroupFilter(tab.id); setSelectedKeys([]); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer flex items-center space-x-1.5 ${
-                  isActive
-                    ? 'bg-slate-900 dark:bg-indigo-600 text-white shadow-sm'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200/80 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-              >
-                <span>{tab.label}</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-slate-800 dark:bg-indigo-700/80 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'}`}>
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+      {pricingSubTab === 'models' && (
+        <div className="space-y-4">
+          {/* Architecture Guidance Banner */}
+          <div className="p-3.5 rounded-2xl border border-indigo-100 dark:border-indigo-900/60 bg-indigo-50/60 dark:bg-indigo-950/30 flex items-start sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center space-x-2.5 text-indigo-950 dark:text-indigo-200 min-w-0">
+              <Info className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5 sm:mt-0" />
+              <span>
+                {isZh
+                  ? '模型定价统一定义供应商官方基准单价（Prompt / Completion / 缓存与闲时规则）。业务分组（VIP 8折、企业 1.5倍等）在此基准上按折扣倍数自动换算生效，无需为每个分组重复配置相同模型。'
+                  : 'Model rates define official baseline prices. Group tiers automatically inherit these rates multiplied by their discount factor.'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPricingSubTab('groups')}
+              className="shrink-0 text-indigo-600 dark:text-indigo-400 font-semibold hover:underline inline-flex items-center space-x-1 cursor-pointer"
+            >
+              <span>{isZh ? '配置分组倍率' : 'Configure Multipliers'}</span>
+              <ArrowRight className="w-3 h-3" />
+            </button>
+          </div>
+
+          <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl shadow-sm overflow-hidden">
+            {/* Group Filter Tabs & Tier Preview */}
+            <div className="flex flex-wrap items-center justify-between gap-2 px-6 pt-5 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-slate-400 font-medium mr-1">{isZh ? '价格分组:' : 'Price Group:'}</span>
+                {[
+                  { id: 'all', label: isZh ? '全部规则' : 'All Rules' },
+                  ...availableGroups.map(g => ({
+                    id: g,
+                    label: g === 'default' 
+                      ? (isZh ? '默认组 (default)' : 'Default (default)')
+                      : g === 'vip' 
+                        ? (isZh ? 'VIP组 (vip)' : 'VIP (vip)')
+                        : g === 'enterprise' 
+                          ? (isZh ? '企业组 (enterprise)' : 'Enterprise (enterprise)')
+                          : `${g} ${isZh ? '组' : 'Tier'}`
+                  }))
+                ].map(tab => {
+                  const count = tab.id === 'all' ? prices.length : prices.filter(p => (p.group_name || 'default') === tab.id).length;
+                  const isActive = groupFilter === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => { setGroupFilter(tab.id); setSelectedKeys([]); }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer flex items-center space-x-1.5 ${
+                        isActive
+                          ? 'bg-slate-900 dark:bg-indigo-600 text-white shadow-sm'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200/80 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      <span>{tab.label}</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-slate-800 dark:bg-indigo-700/80 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'}`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Rate Preview Tier Selector */}
+              <div className="flex items-center space-x-2">
+                <span className="text-xs text-slate-400 font-medium">{isZh ? '折算生效预览:' : 'Preview Tier:'}</span>
+                <select
+                  value={tierPreviewGroup}
+                  onChange={(e) => setTierPreviewGroup(e.target.value)}
+                  className="text-xs font-semibold py-1 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  <option value="default">{isZh ? '官方基准定价 (1.0x)' : 'Official Baseline (1.0x)'}</option>
+                  {Object.entries(localGroupMultipliers).filter(([g]) => g !== 'default').map(([g, mult]) => (
+                    <option key={g} value={g}>
+                      {g === 'vip' ? (isZh ? `VIP组 (${mult}x · ${Math.round(mult * 10)}折)` : `VIP (${mult}x)`)
+                        : g === 'enterprise' ? (isZh ? `企业组 (${mult}x)` : `Enterprise (${mult}x)`)
+                        : `${g} (${mult}x)`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
         {/* Route <-> Pricing Matching Banners */}
         {unpricedRoutes.length > 0 && (
@@ -848,26 +1072,35 @@ export default function PricingManager({
 
                       {/* Live effective rate */}
                       <td className="py-4 px-4 font-mono">
-                        {isOff ? (
-                          <div className="space-y-0.5">
-                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-bold">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                              <span>{isZh ? `优惠 ${Math.round(discount * 10)}折 生效中` : `${Math.round((1 - discount) * 100)}% Off Active`}</span>
-                            </span>
-                            <div className="text-xs text-emerald-700 dark:text-emerald-400 font-bold">
-                              {isZh ? '输入' : 'Prompt'} {currencySym}{effPrompt.toFixed(2)} / {isZh ? '输出' : 'Output'} {currencySym}{effComp.toFixed(2)}
+                        {(() => {
+                          const previewMult = tierPreviewGroup !== 'default' ? (localGroupMultipliers[tierPreviewGroup] ?? 1.0) : 1.0;
+                          const showTierTag = tierPreviewGroup !== 'default' && previewMult !== 1.0;
+                          const calcPrompt = Math.round(effPrompt * previewMult * 1e6) / 1e6;
+                          const calcComp = Math.round(effComp * previewMult * 1e6) / 1e6;
+
+                          return isOff ? (
+                            <div className="space-y-0.5">
+                              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-bold">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <span>{isZh ? `优惠 ${Math.round(discount * 10)}折 生效中` : `${Math.round((1 - discount) * 100)}% Off Active`}</span>
+                                {showTierTag && <span className="text-[10px] ml-1 font-sans opacity-85">({tierPreviewGroup} {previewMult}x)</span>}
+                              </span>
+                              <div className="text-xs text-emerald-700 dark:text-emerald-400 font-bold">
+                                {isZh ? '输入' : 'Prompt'} {currencySym}{calcPrompt.toFixed(2)} / {isZh ? '输出' : 'Output'} {currencySym}{calcComp.toFixed(2)}
+                              </div>
                             </div>
-                          </div>
-                        ) : (
-                          <div className="space-y-0.5">
-                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium">
-                              <span>{isZh ? '基准单价' : 'Standard Rate'}</span>
-                            </span>
-                            <div className="text-xs text-slate-700 dark:text-slate-300 font-medium">
-                              {isZh ? '输入' : 'Prompt'} {currencySym}{effPrompt.toFixed(2)} / {isZh ? '输出' : 'Output'} {currencySym}{effComp.toFixed(2)}
+                          ) : (
+                            <div className="space-y-0.5">
+                              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium">
+                                <span>{isZh ? '基准单价' : 'Standard Rate'}</span>
+                                {showTierTag && <span className="text-[10px] ml-1 font-sans text-indigo-600 dark:text-indigo-400 font-bold">({tierPreviewGroup} {previewMult}x)</span>}
+                              </span>
+                              <div className="text-xs text-slate-700 dark:text-slate-300 font-medium">
+                                {isZh ? '输入' : 'Prompt'} {currencySym}{calcPrompt.toFixed(2)} / {isZh ? '输出' : 'Output'} {currencySym}{calcComp.toFixed(2)}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
                       </td>
 
                       {/* Actions */}
@@ -895,6 +1128,247 @@ export default function PricingManager({
           </div>
         )}
       </div>
+    </div>
+  )}
+
+      {/* 2.5 Group Discount Tiers Management View */}
+      {pricingSubTab === 'groups' && (
+        <div className="space-y-6">
+          {/* Architecture Banner */}
+          <div className="bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-transparent border border-indigo-200/80 dark:border-indigo-800/60 rounded-2xl p-5 shadow-xs">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center space-x-2 text-indigo-950 dark:text-indigo-200 font-semibold text-sm">
+                  <Sliders className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <span>{isZh ? '业务分组折扣定价体系' : 'Group Discount & Tier Pricing'}</span>
+                </div>
+                <div className="text-xs text-slate-600 dark:text-slate-400 font-mono">
+                  {isZh
+                    ? '扣费公式: 实际调用单价 = 官方模型基准单价 × 密钥所属分组倍率 (× 闲时时段折扣)'
+                    : 'Charge Formula: Base Model Rate * Group Multiplier (* Off-Peak Discount)'}
+                </div>
+              </div>
+
+              {isAdmin && (
+                <div className="flex items-center space-x-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddGroupModal(true)}
+                    className="px-3.5 py-2 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-700 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{isZh ? '新建分组' : 'New Group Tier'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={savingGroups}
+                    onClick={() => handleSaveGroupMultipliers()}
+                    className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition cursor-pointer disabled:opacity-50"
+                  >
+                    <span>{savingGroups ? (isZh ? '保存中...' : 'Saving...') : (isZh ? '保存全部倍率' : 'Save Multipliers')}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Group Tiers Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Object.entries(localGroupMultipliers).map(([grp, mult]) => {
+              const isDefault = grp === 'default';
+              const isVip = grp === 'vip';
+              const isEnterprise = grp === 'enterprise';
+              const discountPercent = Math.round((1 - mult) * 100);
+
+              return (
+                <div
+                  key={grp}
+                  className="bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4 hover:border-indigo-300 dark:hover:border-indigo-700 transition flex flex-col justify-between"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <span className="font-bold text-slate-900 dark:text-slate-100 text-sm font-mono">
+                            {grp.toUpperCase()}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${getGroupBadge(grp).className}`}>
+                            {getGroupBadge(grp).label}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                          {isDefault
+                            ? (isZh ? '官方基准参考价 (100% 基线)' : 'Official Baseline (100%)')
+                            : isVip
+                            ? (isZh ? 'VIP专享优惠，全模型适用' : 'VIP Discount Tier')
+                            : isEnterprise
+                            ? (isZh ? '企业专属保障，含高并发与SLA' : 'Enterprise Tier with SLA')
+                            : (isZh ? '自定义业务折扣组' : 'Custom Discount Group')}
+                        </div>
+                      </div>
+
+                      {!isDefault && isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteGroupTier(grp)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                          title={isZh ? '删除该分组' : 'Delete Group'}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Multiplier display & adjustments */}
+                    <div className="bg-slate-50 dark:bg-slate-900/60 rounded-xl p-3 border border-slate-100 dark:border-slate-800/80 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                          {isZh ? '计费倍数 (Multiplier)' : 'Rate Multiplier'}
+                        </span>
+                        <div className="flex items-center space-x-1.5">
+                          {isDefault ? (
+                            <span className="font-mono font-bold text-sm text-slate-700 dark:text-slate-300">
+                              1.00x
+                            </span>
+                          ) : (
+                            <div className="flex items-center space-x-1">
+                              <input
+                                type="number"
+                                step="0.05"
+                                min="0.01"
+                                max="10"
+                                disabled={!isAdmin}
+                                value={mult}
+                                onChange={(e) => handleUpdateSingleMultiplier(grp, e.target.value)}
+                                className="w-20 px-2 py-1 text-right font-mono font-bold text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                              />
+                              <span className="text-xs font-mono text-slate-400">x</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400">
+                          {isZh ? '折算比例:' : 'Ratio:'}
+                        </span>
+                        <span className={`font-semibold ${mult < 1.0 ? 'text-emerald-600 dark:text-emerald-400' : mult > 1.0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-600 dark:text-slate-300'}`}>
+                          {mult === 1.0
+                            ? (isZh ? '官方基准 (100%)' : 'Standard 100%')
+                            : mult < 1.0
+                            ? (isZh ? `${Math.round(mult * 10)}折优惠 (-${discountPercent}%)` : `${discountPercent}% Discount`)
+                            : (isZh ? `${Math.round(mult * 100)}% 上浮 (+${Math.round((mult - 1) * 100)}%)` : `+${Math.round((mult - 1) * 100)}% Surcharge`)}
+                        </span>
+                      </div>
+
+                      {!isDefault && isAdmin && (
+                        <div className="pt-2 flex flex-wrap gap-1 border-t border-slate-200/60 dark:border-slate-800/60">
+                          {[0.5, 0.7, 0.8, 0.9, 1.0, 1.2, 1.5].map((preset) => (
+                            <button
+                              key={preset}
+                              type="button"
+                              onClick={() => handleUpdateSingleMultiplier(grp, preset)}
+                              className={`px-2 py-0.5 rounded text-[10px] font-mono font-medium transition cursor-pointer ${
+                                mult === preset
+                                  ? 'bg-indigo-600 text-white font-bold'
+                                  : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                              }`}
+                            >
+                              {preset}x
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Add Group Modal */}
+          {showAddGroupModal && (
+            <div
+              className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setShowAddGroupModal(false);
+              }}
+            >
+              <div className="bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in zoom-in-95">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
+                    {isZh ? '新建计费分组' : 'New Pricing Group Tier'}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddGroupModal(false)}
+                    className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 transition"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleCreateNewGroupTier} className="space-y-4 text-xs">
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                      {isZh ? '分组英文标识 (Group ID)' : 'Group Identifier'} <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder={isZh ? '如 partner / test_tier / svip' : 'e.g. partner / svip'}
+                      value={newGroupInputKey}
+                      onChange={(e) => setNewGroupInputKey(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                    <div className="ui-meta mt-1">
+                      {isZh ? '仅支持小写字母、数字、下划线及连字符' : 'Lowercase letters, digits, hyphen, underscore only'}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                      {isZh ? '费率倍数 (Multiplier)' : 'Multiplier'} <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="number"
+                        step="0.05"
+                        min="0.01"
+                        max="10"
+                        required
+                        value={newGroupInputMultiplier}
+                        onChange={(e) => setNewGroupInputMultiplier(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
+                      <span className="font-mono text-slate-400">x</span>
+                    </div>
+                    <div className="ui-meta mt-1">
+                      {isZh ? '0.8 为 8折，1.5 为 1.5倍。该分组密钥将按此倍率乘以官方基准单价扣费。' : 'Base model prices will be multiplied by this factor.'}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end space-x-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddGroupModal(false)}
+                      className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 rounded-xl text-xs hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                    >
+                      {isZh ? '取消' : 'Cancel'}
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-sm transition"
+                    >
+                      {isZh ? '确认添加' : 'Add Group'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 3. Flexible Multi-Slot Edit / Add Modal */}
       {showModal && (
@@ -953,23 +1427,39 @@ export default function PricingManager({
                     existed: handleSelectModelCandidate was written and never wired.
                     It prefills a rate that suits the model's kind, which is the
                     part an operator cannot guess. */}
-                {!editingPrice && unpricedModels.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {unpricedModels.slice(0, 8).map(m => (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => handleSelectModelCandidate(m)}
-                        className={`px-2 py-1 rounded-lg text-xs font-mono border transition cursor-pointer ${
-                          formData.model === m
-                            ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700'
-                            : 'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
-                        }`}
-                        title={isZh ? '按模型类型预填建议费率' : 'Prefill a suggested rate for this model kind'}
-                      >
-                        {m}
-                      </button>
-                    ))}
+                {!editingPrice && candidateModels.length > 0 && (
+                  <div className="mt-2.5 space-y-1.5">
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center justify-between">
+                      <span>{isZh ? '快捷选择模型 (点击自动适配建议费率):' : 'Quick Select (auto-prefill rate):'}</span>
+                      {candidateModels.some(c => c.isUnpriced) && (
+                        <span className="text-amber-600 dark:text-amber-400 text-[10px] flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block animate-pulse" />
+                          {isZh ? '含未配费率模型' : 'Unpriced available'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-0.5">
+                      {candidateModels.map(({ model: m, isUnpriced }) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => handleSelectModelCandidate(m)}
+                          className={`px-2 py-1 rounded-lg text-xs font-mono border transition cursor-pointer flex items-center space-x-1.5 ${
+                            formData.model === m
+                              ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700 font-semibold shadow-xs'
+                              : isUnpriced
+                              ? 'bg-amber-50/70 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/80 hover:border-amber-400'
+                              : 'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
+                          }`}
+                          title={isUnpriced ? (isZh ? '当前组尚未配置该模型专属费率' : 'Unpriced in this group') : (isZh ? '点击自动填入并预设费率' : 'Click to select and prefill rate')}
+                        >
+                          <span>{m}</span>
+                          {isUnpriced && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block shrink-0" title={isZh ? '待配置专属费率' : 'Unpriced'} />
+                          )}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -977,8 +1467,13 @@ export default function PricingManager({
               {/* Field: User Group Tier */}
               <div>
                 <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                  {isZh ? '适用用户组 (Group Tier)' : 'Target Group Tier'} <span className="text-rose-500">*</span>
+                  {isZh ? '定价范围与分组 (Scope)' : 'Pricing Scope'} <span className="text-rose-500">*</span>
                 </label>
+                <div className="ui-meta mb-1.5 text-slate-500 dark:text-slate-400">
+                  {isZh
+                    ? '推荐保留为 [默认官方基准 (default)]。所有业务分组（如 VIP 8折、企业组 1.5倍）自动按倍率继承此单价；仅当此模型在某分组需特殊单独议价覆盖时才选择特定组。'
+                    : 'Recommended: Default (default). All groups automatically inherit via their multiplier.'}
+                </div>
                 {editingPrice ? (
                   <div className="flex items-center space-x-2 py-1">
                     <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${getGroupBadge(formData.group_name).className}`}>

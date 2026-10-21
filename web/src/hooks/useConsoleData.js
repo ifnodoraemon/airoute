@@ -20,6 +20,7 @@ export function useConsoleData({ adminUser }) {
   const [stats, setStats] = useState({});
   const [prices, setPrices] = useState([]);
   const [pricingGroups, setPricingGroups] = useState(['default']);
+  const [groupMultipliers, setGroupMultipliers] = useState({ default: 1.0, vip: 0.8, enterprise: 1.5 });
   const [modelRoutes, setModelRoutes] = useState([]);
   const [models, setModels] = useState([]);
   const [playModel, setPlayModel] = useState('');
@@ -56,6 +57,7 @@ export function useConsoleData({ adminUser }) {
     setStats({});
     setPrices([]);
     setPricingGroups(['default']);
+    setGroupMultipliers({ default: 1.0, vip: 0.8, enterprise: 1.5 });
     setModelRoutes([]);
     setModels([]);
     setPlayModel('');
@@ -116,6 +118,12 @@ export function useConsoleData({ adminUser }) {
       if (pricingRes.code === 0 && Array.isArray(pricingRes.data)) {
         setPrices(pricingRes.data);
         const grpSet = new Set(['default']);
+        if (pricingRes.group_multipliers && typeof pricingRes.group_multipliers === 'object') {
+          setGroupMultipliers(pricingRes.group_multipliers);
+          Object.keys(pricingRes.group_multipliers).forEach((g) => {
+            if (g) grpSet.add(g.trim().toLowerCase());
+          });
+        }
         pricingRes.data.forEach((p) => {
           if (p.group_name) grpSet.add(p.group_name.trim().toLowerCase());
         });
@@ -153,6 +161,8 @@ export function useConsoleData({ adminUser }) {
     stats,
     prices,
     pricingGroups,
+    groupMultipliers,
+    setGroupMultipliers,
     modelRoutes,
     models,
     playModel,

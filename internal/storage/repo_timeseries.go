@@ -18,6 +18,8 @@ type TimeSeriesBucket struct {
 	Errors    int64   `json:"errors"`
 	AvgTTFT   int64   `json:"avgTtft"`
 	Costs     float64 `json:"costs"`
+	RPM       int64   `json:"rpm"`
+	TPM       int64   `json:"tpm"`
 }
 
 // LatencyPercentiles represents latency distribution statistics.
@@ -29,9 +31,13 @@ type LatencyPercentiles struct {
 	Total   int64  `json:"total"`
 }
 
-// TimeSeriesData contains the time-series buckets, percentiles, and modality distribution.
+// TimeSeriesData contains the time-series buckets, percentiles, real-time rates, and modality distribution.
 type TimeSeriesData struct {
 	Timeframe     string              `json:"timeframe"`
+	CurrentRPM    int64               `json:"current_rpm"`
+	CurrentTPM    int64               `json:"current_tpm"`
+	PeakRPM       int64               `json:"peak_rpm"`
+	PeakTPM       int64               `json:"peak_tpm"`
 	Buckets       []*TimeSeriesBucket `json:"buckets"`
 	Percentiles   LatencyPercentiles  `json:"percentiles"`
 	ModalityStats map[string]int64    `json:"modality_stats"`
@@ -179,6 +185,9 @@ func (r *Repository) GetStatsTimeSeries(timeframe string, keys []string) (*TimeS
 	modalityCounts := map[string]int64{
 		"chat": 0, "images": 0, "audio": 0, "video": 0, "embeddings": 0, "rerank": 0,
 	}
+	minuteReqs := make(map[int64]int64)
+	minuteTokens := make(map[int64]int64)
+	var currentRPM, currentTPM int64
 
 	for rows.Next() {
 		var rawTime interface{}
@@ -196,6 +205,14 @@ func (r *Repository) GetStatsTimeSeries(timeframe string, keys []string) (*TimeS
 		t := parseSQLTime(rawTime)
 		if t == nil {
 			continue
+		}
+
+		minKey := t.Unix() / 60
+		minuteReqs[minKey]++
+		minuteTokens[minKey] += totalTokens
+		if now.Sub(*t) <= 60*time.Second && now.Sub(*t) >= 0 {
+			currentRPM++
+			currentTPM += totalTokens
 		}
 
 		diff := now.Sub(*t)
@@ -220,13 +237,32 @@ func (r *Repository) GetStatsTimeSeries(timeframe string, keys []string) (*TimeS
 		return nil, fmt.Errorf("iterate timeseries rows error: %w", err)
 	}
 
+	intervalMinutes := int64(interval / time.Minute)
+	if intervalMinutes <= 0 {
+		intervalMinutes = 1
+	}
+
 	for i := 0; i < numBuckets; i++ {
+		buckets[i].RPM = int64(math.Round(float64(buckets[i].Requests) / float64(intervalMinutes)))
+		buckets[i].TPM = int64(math.Round(float64(buckets[i].Tokens) / float64(intervalMinutes)))
 		if len(bucketTTFTs[i]) > 0 {
 			var sum int64
 			for _, v := range bucketTTFTs[i] {
 				sum += v
 			}
 			buckets[i].AvgTTFT = sum / int64(len(bucketTTFTs[i]))
+		}
+	}
+
+	var peakRPM, peakTPM int64
+	for _, reqCount := range minuteReqs {
+		if reqCount > peakRPM {
+			peakRPM = reqCount
+		}
+	}
+	for _, tokCount := range minuteTokens {
+		if tokCount > peakTPM {
+			peakTPM = tokCount
 		}
 	}
 
@@ -253,6 +289,10 @@ func (r *Repository) GetStatsTimeSeries(timeframe string, keys []string) (*TimeS
 
 	res := &TimeSeriesData{
 		Timeframe:     timeframe,
+		CurrentRPM:    currentRPM,
+		CurrentTPM:    currentTPM,
+		PeakRPM:       peakRPM,
+		PeakTPM:       peakTPM,
 		Buckets:       buckets,
 		Percentiles:   percentiles,
 		ModalityStats: modalityCounts,

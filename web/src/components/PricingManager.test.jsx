@@ -179,4 +179,29 @@ describe('PricingManager off-peak display', () => {
 
     expect(rowText('gpt-x')).toContain('输入 ¥10.00 / 输出 ¥20.00');
   });
+
+  it('renders the group discount tiers tab and displays group multipliers', async () => {
+    const { adminFetch } = renderPricing([standardRow], {
+      group_multipliers: { default: 1.0, vip: 0.8, enterprise: 1.5 }
+    });
+
+    await waitFor(() => expect(screen.getByText('gpt-y')).toBeInTheDocument());
+
+    // Click on the Group Discount Tiers sub-tab
+    const groupTabBtn = screen.getByRole('button', { name: /分组折扣定价/ });
+    expect(groupTabBtn).toBeInTheDocument();
+    fireEvent.click(groupTabBtn);
+
+    // Should render the group discount header and group cards
+    await waitFor(() => expect(screen.getByText('业务分组折扣定价体系')).toBeInTheDocument());
+    expect(screen.getByText('DEFAULT')).toBeInTheDocument();
+    expect(screen.getByText('VIP')).toBeInTheDocument();
+    expect(screen.getByText('ENTERPRISE')).toBeInTheDocument();
+    expect(screen.getByText(/8折优惠/)).toBeInTheDocument();
+
+    // Switch back to model rates
+    const modelTabBtn = screen.getByRole('button', { name: /模型官方基准定价/ });
+    fireEvent.click(modelTabBtn);
+    await waitFor(() => expect(screen.getByText('gpt-y')).toBeInTheDocument());
+  });
 });

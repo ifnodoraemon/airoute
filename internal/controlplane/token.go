@@ -11,10 +11,14 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
 var (
+	adminSecretMu sync.RWMutex
 	// Secure shared secret across cluster replicas for stateless HMAC token verification.
 	// Reads GATEWAY_ADMIN_SECRET, falling back to a cryptographically secure random secret.
 	adminSecret = func() []byte {
@@ -30,6 +34,47 @@ var (
 		return []byte(sec)
 	}()
 )
+
+func getAdminSecret() []byte {
+	adminSecretMu.RLock()
+	defer adminSecretMu.RUnlock()
+	return adminSecret
+}
+
+// SetAdminSecret updates the runtime HMAC signing secret.
+func SetAdminSecret(sec []byte) {
+	if len(sec) == 0 {
+		return
+	}
+	adminSecretMu.Lock()
+	defer adminSecretMu.Unlock()
+	adminSecret = sec
+}
+
+// EnsureAdminSecret ensures that cluster replicas share a single stable HMAC secret.
+// If GATEWAY_ADMIN_SECRET is not provided, it attempts to load or generate a persisted
+// secret from the system_settings table.
+func EnsureAdminSecret(repo *storage.Repository) {
+	if os.Getenv("GATEWAY_ADMIN_SECRET") != "" || repo == nil {
+		return
+	}
+	const settingKey = "admin_jwt_secret"
+	stored := repo.GetSetting(settingKey, "")
+	if stored != "" {
+		SetAdminSecret([]byte(stored))
+		return
+	}
+	b := make([]byte, 32)
+	var generated string
+	if _, err := rand.Read(b); err == nil {
+		generated = hex.EncodeToString(b)
+	} else {
+		generated = fmt.Sprintf("airoute-rnd-%d", time.Now().UnixMicro())
+	}
+	_ = repo.SetSetting(settingKey, generated)
+	finalSecret := repo.GetSetting(settingKey, generated)
+	SetAdminSecret([]byte(finalSecret))
+}
 
 // AdminClaims holds stateless token payload.
 type AdminClaims struct {
@@ -50,7 +95,7 @@ func GenerateAdminToken(username, role string, duration time.Duration) (string, 
 		return "", err
 	}
 	payloadB64 := base64.RawURLEncoding.EncodeToString(data)
-	mac := hmac.New(sha256.New, adminSecret)
+	mac := hmac.New(sha256.New, getAdminSecret())
 	mac.Write([]byte(payloadB64))
 	sigHex := hex.EncodeToString(mac.Sum(nil))
 	return fmt.Sprintf("%s.%s", payloadB64, sigHex), nil
@@ -64,7 +109,7 @@ func VerifyAdminToken(token string) (*AdminClaims, error) {
 	}
 	payloadB64, sigHex := parts[0], parts[1]
 
-	mac := hmac.New(sha256.New, adminSecret)
+	mac := hmac.New(sha256.New, getAdminSecret())
 	mac.Write([]byte(payloadB64))
 	expectedSig := hex.EncodeToString(mac.Sum(nil))
 

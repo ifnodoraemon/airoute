@@ -15,7 +15,9 @@ import (
 
 // GetStatsOverview returns dashboard overview metrics. Super-admins see the
 // whole cluster; regular users only see aggregates for their own API keys.
+// When query param "key" is supplied, metrics are scoped to that specific key.
 func (h *AdminHandler) GetStatsOverview(c *gin.Context) {
+	keyParam := strings.TrimSpace(c.Query("key"))
 	claims, ok := GetClaimsFromContext(c)
 	if ok && claims.Role != "admin" {
 		user, err := h.repo.GetUserByUsername(claims.Username)
@@ -28,11 +30,31 @@ func (h *AdminHandler) GetStatsOverview(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		ownedMap := make(map[string]bool, len(keys))
 		names := make([]string, 0, len(keys))
 		for _, k := range keys {
+			ownedMap[k.Key] = true
 			names = append(names, k.Key)
 		}
+		if keyParam != "" {
+			if !ownedMap[keyParam] {
+				c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "无权查看该密钥指标"})
+				return
+			}
+			names = []string{keyParam}
+		}
 		stats, err := h.repo.GetStatsOverviewForKeys(names)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "data": stats})
+		return
+	}
+
+	// Super-admin path
+	if keyParam != "" {
+		stats, err := h.repo.GetStatsOverviewForKeys([]string{keyParam})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -50,11 +72,13 @@ func (h *AdminHandler) GetStatsOverview(c *gin.Context) {
 }
 
 // GetStatsTimeSeries returns bucketed time series metrics and true latency percentiles across the cluster.
+// Supports drill-down to a single key via "key" query param.
 func (h *AdminHandler) GetStatsTimeSeries(c *gin.Context) {
 	timeframe := c.DefaultQuery("timeframe", "24h")
 	if timeframe != "1h" && timeframe != "24h" && timeframe != "7d" {
 		timeframe = "24h"
 	}
+	keyParam := strings.TrimSpace(c.Query("key"))
 
 	var keyNames []string
 	claims, ok := GetClaimsFromContext(c)
@@ -74,9 +98,21 @@ func (h *AdminHandler) GetStatsTimeSeries(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"code": 0, "data": storage.NewEmptyTimeSeriesData(timeframe)})
 			return
 		}
+		ownedMap := make(map[string]bool, len(keys))
 		for _, k := range keys {
+			ownedMap[k.Key] = true
 			keyNames = append(keyNames, k.Key)
 		}
+		if keyParam != "" {
+			if !ownedMap[keyParam] {
+				c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "无权查看该密钥时序数据"})
+				return
+			}
+			keyNames = []string{keyParam}
+		}
+	} else if keyParam != "" {
+		// Super-admin drilling down into a specific key
+		keyNames = []string{keyParam}
 	}
 
 	data, err := h.repo.GetStatsTimeSeries(timeframe, keyNames)

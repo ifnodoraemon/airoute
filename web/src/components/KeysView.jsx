@@ -11,7 +11,8 @@ import {
   Eye,
   EyeOff,
   FileSpreadsheet,
-  Terminal
+  Terminal,
+  Activity
 } from 'lucide-react';
 import { getGatewayOrigin, toCSV } from '../config';
 import useTableControls from '../hooks/useTableControls';
@@ -44,7 +45,9 @@ export default function KeysView({
   handleUpdateKeyGroup,
   adminUser,
   pricingGroups = [],
+  groupMultipliers = {},
   onNavigateToPricing,
+  onNavigateToDashboard,
   showToast,
   onNavigateToPlayground,
   lang = 'zh',
@@ -86,26 +89,27 @@ export default function KeysView({
 
   const getGroupBadge = (group) => {
     const g = (group || 'default').toLowerCase();
+    const mult = groupMultipliers?.[g] ?? (g === 'vip' ? 0.8 : g === 'enterprise' ? 1.5 : 1.0);
     if (g === 'vip') {
       return {
-        label: isZh ? 'VIP 组' : 'VIP Group',
+        label: isZh ? `VIP 组 · ${mult}x` : `VIP · ${mult}x`,
         className: 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/60'
       };
     }
     if (g === 'enterprise') {
       return {
-        label: isZh ? '企业组' : 'Enterprise Group',
+        label: isZh ? `企业组 · ${mult}x` : `Enterprise · ${mult}x`,
         className: 'bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-800/60'
       };
     }
     if (g === 'default') {
       return {
-        label: isZh ? '默认组' : 'Default Group',
+        label: isZh ? '默认组 · 1.0x' : 'Default · 1.0x',
         className: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
       };
     }
     return {
-      label: isZh ? `${group} 组` : `${group} Group`,
+      label: isZh ? `${group} 组 · ${mult}x` : `${group} · ${mult}x`,
       className: 'bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-300 border-sky-200 dark:border-sky-800/60'
     };
   };
@@ -115,16 +119,19 @@ export default function KeysView({
       const set = new Set(['default']);
       (pricingGroups || []).forEach(g => set.add(g));
       if (currentKeyGroup) set.add(currentKeyGroup);
-      return Array.from(set).map(g => ({
-        id: g,
-        label: g === 'default'
-          ? (isZh ? '默认组 (default)' : 'Default (default)')
-          : g === 'vip'
-          ? (isZh ? 'VIP 组 (vip)' : 'VIP Group (vip)')
-          : g === 'enterprise'
-          ? (isZh ? '企业组 (enterprise)' : 'Enterprise (enterprise)')
-          : (isZh ? `${g} 组` : `${g} Group`)
-      }));
+      return Array.from(set).map(g => {
+        const mult = groupMultipliers?.[g] ?? (g === 'vip' ? 0.8 : g === 'enterprise' ? 1.5 : 1.0);
+        return {
+          id: g,
+          label: g === 'default'
+            ? (isZh ? '默认组 (default · 1.0x 基准)' : 'Default (1.0x)')
+            : g === 'vip'
+            ? (isZh ? `VIP 组 (vip · ${mult}x 8折)` : `VIP (${mult}x)`)
+            : g === 'enterprise'
+            ? (isZh ? `企业组 (enterprise · ${mult}x)` : `Enterprise (${mult}x)`)
+            : (isZh ? `${g} 组 (${mult}x)` : `${g} Group (${mult}x)`)
+        };
+      });
     }
     if (userGuaranteedGroup) {
       const set = new Set(['default', userGuaranteedGroup]);
@@ -537,6 +544,14 @@ export default function KeysView({
                           </td>
                         )}
                         <td className="ui-td text-right whitespace-nowrap space-x-1.5">
+                          <button
+                            onClick={() => onNavigateToDashboard && onNavigateToDashboard(k.key)}
+                            className="text-xs px-2.5 py-1 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60 font-medium transition inline-flex items-center space-x-1 cursor-pointer"
+                            title={isZh ? '进入大盘查看该 Key 的实时 RPM / TPM 速率遥测' : 'View real-time RPM/TPM telemetry'}
+                          >
+                            <Activity className="w-3 h-3 text-indigo-500" />
+                            <span className="hidden lg:inline">{isZh ? '遥测' : 'Telemetry'}</span>
+                          </button>
                           <button
                             onClick={() => copyCurlSnippet(k.key)}
                             className="text-xs px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium transition inline-flex items-center space-x-1 cursor-pointer"

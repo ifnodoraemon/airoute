@@ -20,6 +20,10 @@ type StatsOverview struct {
 	ActiveKeys        int     `json:"active_keys"`
 	AvgTTFTMs         float64 `json:"avg_ttft_ms"`
 	AvgDurationMs     float64 `json:"avg_duration_ms"`
+	CurrentRPM        int64   `json:"current_rpm"` // Real-time requests in the last 60 seconds
+	CurrentTPM        int64   `json:"current_tpm"` // Real-time tokens in the last 60 seconds
+	PeakRPM           int64   `json:"peak_rpm"`    // Peak RPM in recent timeframe
+	PeakTPM           int64   `json:"peak_tpm"`    // Peak TPM in recent timeframe
 	// Status breakdown across ALL usage logs (not just the page the console
 	// happens to have loaded). The dashboard used to compute its SLA and error
 	// figures from the 50-row log page, which made them meaningless.
@@ -105,6 +109,10 @@ func (r *Repository) GetStatsOverview() (*StatsOverview, error) {
 	_ = r.db.QueryRow(`SELECT COUNT(*) FROM channels WHERE status='active'`).Scan(&stats.ActiveChannels)
 	_ = r.db.QueryRow(`SELECT COUNT(*) FROM api_keys WHERE status='active'`).Scan(&stats.ActiveKeys)
 
+	// Real-time RPM & TPM over the trailing 60 seconds
+	oneMinAgo := time.Now().Add(-60 * time.Second).UTC().Format("2006-01-02 15:04:05")
+	_ = r.db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(total_tokens), 0) FROM usage_logs WHERE created_at >= ?`, oneMinAgo).Scan(&stats.CurrentRPM, &stats.CurrentTPM)
+
 	r.statsMu.Lock()
 	r.statsCache = stats
 	r.statsCacheAt = time.Now()
@@ -164,5 +172,12 @@ func (r *Repository) GetStatsOverviewForKeys(keys []string) (*StatsOverview, err
 	}
 	activeQuery := fmt.Sprintf(`SELECT COUNT(*) FROM api_keys WHERE status='active' AND key IN (%s)`, clause)
 	_ = r.db.QueryRow(activeQuery, args...).Scan(&stats.ActiveKeys)
+
+	// Real-time RPM & TPM over trailing 60s for scoped keys
+	oneMinAgo := time.Now().Add(-60 * time.Second).UTC().Format("2006-01-02 15:04:05")
+	rtQuery := fmt.Sprintf(`SELECT COUNT(*), COALESCE(SUM(total_tokens), 0) FROM usage_logs WHERE created_at >= ? AND api_key IN (%s)`, clause)
+	rtArgs := append([]any{oneMinAgo}, args...)
+	_ = r.db.QueryRow(rtQuery, rtArgs...).Scan(&stats.CurrentRPM, &stats.CurrentTPM)
+
 	return stats, nil
 }
