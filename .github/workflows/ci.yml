@@ -33,7 +33,7 @@ jobs:
     # directory committed to the repository instead of a freshly built one.
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Validate version metadata
         run: sh scripts/build-version.sh
@@ -125,7 +125,7 @@ jobs:
           --health-retries 10
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Go
         uses: actions/setup-go@v5
