@@ -263,19 +263,19 @@ export default function ChannelsView({
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center space-x-3">
-            <h2 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
+            <h2 className="ui-page-title">
               {isZh ? '服务商管理' : 'Channel Providers'}
             </h2>
-            <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+            <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0]">
               {channels.length} {isZh ? '个节点' : 'nodes'}
             </span>
             {openBreakers.length > 0 && (
-              <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200/60 dark:border-rose-900/40">
+              <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
                 {openBreakers.length} {isZh ? '个熔断' : 'tripped'}
               </span>
             )}
           </div>
-          <p className="ui-meta mt-1">
+          <p className="ui-page-subtitle mt-1">
             {isZh
               ? '管理 GPUStack、商业厂商大模型上游凭证与负载权重'
               : 'Manage provider credentials, health checks, and circuit-breaker weights'}
@@ -286,14 +286,14 @@ export default function ChannelsView({
           {onNavigateToReconciliation && (
             <button
               onClick={onNavigateToReconciliation}
-              className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 rounded-lg text-xs font-medium shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
+              className="ui-btn-secondary"
             >
-              <Coins className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <Coins className="w-3.5 h-3.5 text-[#355CFF] dark:text-[#91A7FF]" />
               <span>{isZh ? '供应商整体对账' : 'Supplier Reconciliation'}</span>
             </button>
           )}
           <button onClick={handleBatchPing} disabled={batchTesting || channels.length === 0} className="ui-btn-secondary">
-            <Activity className={`w-3.5 h-3.5 text-slate-400 ${batchTesting ? 'animate-spin text-indigo-500' : ''}`} />
+            <Activity className={`w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0] ${batchTesting ? 'animate-spin text-[#355CFF]' : ''}`} />
             <span>{batchTesting ? (isZh ? '巡检中...' : 'Probing...') : (isZh ? '全量体检' : 'Probe All Health')}</span>
           </button>
           <button onClick={openNewChannelModal} className="ui-btn-primary">
@@ -307,7 +307,7 @@ export default function ChannelsView({
       <div className="flex flex-col gap-2.5 text-xs">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[180px] max-w-sm">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+            <Search className="w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0] absolute left-3 top-2.5" />
             <input
               type="text"
               value={searchQuery}
@@ -333,8 +333,8 @@ export default function ChannelsView({
           </select>
 
           {/* Enablement filter: only on/off, says nothing about health. */}
-          <div className="inline-flex items-center bg-slate-100 dark:bg-slate-800/60 p-0.5 rounded-lg border border-slate-200/60 dark:border-slate-800/60">
-            <span className="hidden sm:inline px-1.5 text-xs text-slate-500 dark:text-slate-400">
+          <div className="inline-flex items-center bg-[#F0F1F2] dark:bg-[#22252B] p-0.5 rounded-lg border border-[#E4E6E9] dark:border-[#2C3038]">
+            <span className="hidden sm:inline px-1.5 text-xs text-[#656B75] dark:text-[#A1A7B0]">
               {isZh ? '启用' : 'Enabled'}
             </span>
             <button type="button" onClick={() => setFilters({ status: 'all' })} className={statusChipClass('all')}>
@@ -350,7 +350,7 @@ export default function ChannelsView({
 
           {/* Health filter: breaker state + last probe result, counted honestly. */}
           <label className="inline-flex items-center gap-1.5">
-            <span className="text-xs text-slate-500 dark:text-slate-400">{isZh ? '健康' : 'Health'}</span>
+            <span className="text-xs text-[#656B75] dark:text-[#A1A7B0]">{isZh ? '健康' : 'Health'}</span>
             <select
               value={healthFilter}
               onChange={(e) => setFilters({ health: e.target.value })}
@@ -386,11 +386,11 @@ export default function ChannelsView({
 
       {/* 3. Channels Table Content */}
       {channels.length === 0 ? (
-        <div className="bg-white dark:bg-[#0F1420] border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center flex flex-col items-center justify-center space-y-3">
-          <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800/80 flex items-center justify-center text-slate-400 shadow-sm">
+        <div className="ui-card border-dashed p-12 text-center flex flex-col items-center justify-center space-y-3">
+          <div className="w-12 h-12 rounded-xl bg-[#F0F1F2] dark:bg-[#22252B] flex items-center justify-center text-[#656B75] dark:text-[#A1A7B0] shadow-2xs">
             <Server className="w-6 h-6" />
           </div>
-          <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-100">{isZh ? '暂无模型服务商' : 'No Upstream Providers'}</h4>
+          <h4 className="font-semibold text-sm text-[#202124] dark:text-[#F1F2F4]">{isZh ? '暂无模型服务商' : 'No Upstream Providers'}</h4>
           <p className="ui-meta max-w-sm">
             {isZh
               ? '接入服务商以挂载算力端点，支持 GPUStack、阿里云百炼、火山方舟、OpenAI 等任意兼容接口。'
@@ -406,8 +406,8 @@ export default function ChannelsView({
       ) : (
         <div className="space-y-3">
           {selectedChannelIds.length > 0 && (
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 px-5 py-3 rounded-xl animate-in fade-in gap-3">
-              <div className="flex items-center space-x-2 text-xs font-medium text-slate-800 dark:text-slate-200">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#EEF2FF] dark:bg-[#242D48] border border-[#355CFF]/30 dark:border-[#91A7FF]/30 px-5 py-3 rounded-xl animate-in fade-in gap-3">
+              <div className="flex items-center space-x-2 text-xs font-semibold text-[#355CFF] dark:text-[#91A7FF]">
                 <span>{isZh ? `已选中 ${selectedChannelIds.length} 个服务商` : `Selected ${selectedChannelIds.length} channels`}</span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -428,15 +428,15 @@ export default function ChannelsView({
             </div>
           )}
 
-          <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl overflow-hidden shadow-sm">
+          <div className="ui-card overflow-hidden">
             <div className="overflow-x-auto w-full">
               <table className="w-full text-left border-collapse min-w-[380px]">
               <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800/80">
+                <tr className="border-b border-[#E4E6E9] dark:border-[#2C3038] bg-[#F7F7F5] dark:bg-[#191B1F]">
                   <th scope="col" className="ui-th w-10 px-2 text-center sm:px-4">
                     <input
                       type="checkbox"
-                      className="rounded border-slate-300 text-slate-900 focus:ring-slate-500 cursor-pointer"
+                      className="rounded border-[#E4E6E9] text-[#355CFF] focus:ring-[#355CFF] cursor-pointer"
                       aria-label={isZh ? '全选当前列表' : 'Select all visible channels'}
                       checked={allVisibleSelected}
                       onChange={(e) => {
@@ -477,7 +477,7 @@ export default function ChannelsView({
                   <th scope="col" className="ui-th text-right">{isZh ? '操作' : 'Actions'}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70 text-xs">
+              <tbody className="divide-y divide-[#E4E6E9]/60 dark:divide-[#2C3038]/60 text-xs">
                 {visibleChannels.map((ch) => {
                   const probe = channelLatencies[ch.id];
                   const health = getChannelHealth(ch, channelLatencies);
@@ -489,11 +489,11 @@ export default function ChannelsView({
                       : (isZh ? '本次会话未探测' : 'not probed in this session'),
                   ].join(' · ');
                   return (
-                    <tr key={ch.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition">
+                    <tr key={ch.id} className="ui-tr-hover">
                       <td className="ui-td w-10 px-2 text-center sm:px-4">
                         <input
                           type="checkbox"
-                          className="rounded border-slate-300 text-slate-900 focus:ring-slate-500 cursor-pointer"
+                          className="rounded border-[#E4E6E9] dark:border-[#2C3038] text-[#355CFF] focus:ring-[#355CFF]/30 cursor-pointer"
                           checked={selectedChannelIds.includes(ch.id)}
                           onChange={(e) => {
                             e.stopPropagation();
@@ -506,9 +506,9 @@ export default function ChannelsView({
                         />
                       </td>
                       {isVisible('name') && (
-                        <td className="ui-td min-w-[120px] font-medium text-slate-900 dark:text-slate-100">
+                        <td className="ui-td min-w-[120px] font-medium text-[#202124] dark:text-[#F1F2F4]">
                           <span
-                            className="block max-w-[200px] truncate text-xs font-medium text-slate-900 dark:text-white"
+                            className="block max-w-[200px] truncate text-xs font-medium text-[#202124] dark:text-[#F1F2F4]"
                             title={ch.name}
                           >
                             {ch.name}
@@ -517,18 +517,18 @@ export default function ChannelsView({
                       )}
                       {isVisible('type') && (
                         <td className="ui-td hidden sm:table-cell">
-                          <span className="px-2 py-0.5 rounded text-xs font-mono text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80">
+                          <span className="px-2 py-0.5 rounded text-xs font-mono text-[#656B75] dark:text-[#A1A7B0] bg-[#F0F1F2] dark:bg-[#22252B] border border-[#E4E6E9]/60 dark:border-[#2C3038]/60">
                             {ch.type}
                           </span>
                         </td>
                       )}
                       {isVisible('base_url') && (
-                        <td className="ui-td hidden lg:table-cell max-w-xs font-mono text-xs text-slate-500 dark:text-slate-400">
+                        <td className="ui-td hidden lg:table-cell max-w-xs font-mono text-xs text-[#656B75] dark:text-[#A1A7B0]">
                           <div className="flex items-center space-x-1.5">
                             <span className="truncate max-w-[220px]">{ch.base_url}</span>
                             <button
                               onClick={() => copyToClipboard(ch.base_url)}
-                              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition p-0.5 cursor-pointer"
+                              className="text-[#656B75] hover:text-[#355CFF] dark:text-[#A1A7B0] dark:hover:text-[#91A7FF] transition p-0.5 cursor-pointer"
                               title={isZh ? "复制 Base URL" : "Copy Base URL"}
                             >
                               <Copy className="w-3 h-3" />
@@ -540,7 +540,7 @@ export default function ChannelsView({
                         <td className="ui-td hidden xl:table-cell">
                           <div className="flex flex-wrap gap-1 max-w-xs">
                             {!ch.protocols || ch.protocols.length === 0 ? (
-                              <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                              <span className="text-xs text-[#656B75] dark:text-[#A1A7B0] font-mono">
                                 {isZh ? '全功能' : 'All'}
                               </span>
                             ) : (
@@ -557,14 +557,14 @@ export default function ChannelsView({
                                 else if (p === 'embeddings' || p === 'embedding') label = isZh ? '向量' : 'Embeddings';
                                 else if (p === 'rerank' || p === 'reranker') label = isZh ? '重排' : 'Rerank';
                                 return (
-                                  <span key={p} className="px-1.5 py-0.5 rounded text-xs font-mono text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/60">
+                                  <span key={p} className="px-1.5 py-0.5 rounded text-xs font-mono text-[#656B75] dark:text-[#A1A7B0] bg-[#F0F1F2] dark:bg-[#22252B] border border-[#E4E6E9]/60 dark:border-[#2C3038]/60">
                                     {label}
                                   </span>
                                 );
                               })
                             )}
                             {ch.protocols && ch.protocols.length > 3 && (
-                              <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                              <span className="text-xs font-mono text-[#656B75] dark:text-[#A1A7B0]">
                                 +{ch.protocols.length - 3}
                               </span>
                             )}
@@ -575,12 +575,12 @@ export default function ChannelsView({
                         <td className="ui-td hidden md:table-cell">
                           <div className="flex flex-wrap gap-1 max-w-xs">
                             {!ch.models || ch.models.length === 0 ? (
-                              <span className="text-xs text-slate-500 dark:text-slate-400">-</span>
+                              <span className="text-xs text-[#656B75] dark:text-[#A1A7B0]">-</span>
                             ) : (
                               ch.models.slice(0, 2).map((m) => (
                                 <span
                                   key={m}
-                                  className="px-1.5 py-0.5 rounded text-xs font-mono text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/60"
+                                  className="px-1.5 py-0.5 rounded text-xs font-mono text-[#656B75] dark:text-[#A1A7B0] bg-[#F0F1F2] dark:bg-[#22252B] border border-[#E4E6E9]/60 dark:border-[#2C3038]/60"
                                 >
                                   {m}
                                 </span>
@@ -588,7 +588,7 @@ export default function ChannelsView({
                             )}
                             {ch.models && ch.models.length > 2 && (
                               <span
-                                className="px-1.5 py-0.5 rounded text-xs font-mono text-slate-500 dark:text-slate-400"
+                                className="px-1.5 py-0.5 rounded text-xs font-mono text-[#656B75] dark:text-[#A1A7B0]"
                                 title={ch.models.slice(2).join(', ')}
                               >
                                 +{ch.models.length - 2}
@@ -598,12 +598,12 @@ export default function ChannelsView({
                         </td>
                       )}
                       {isVisible('priority') && (
-                        <td className="ui-td hidden sm:table-cell font-mono text-xs tabular-nums text-slate-600 dark:text-slate-400">
+                        <td className="ui-td hidden sm:table-cell font-mono text-xs tabular-nums text-[#656B75] dark:text-[#A1A7B0]">
                           {ch.priority}
                         </td>
                       )}
                       {isVisible('weight') && (
-                        <td className="ui-td hidden sm:table-cell font-mono text-xs tabular-nums text-slate-600 dark:text-slate-400">
+                        <td className="ui-td hidden sm:table-cell font-mono text-xs tabular-nums text-[#656B75] dark:text-[#A1A7B0]">
                           {ch.weight}
                         </td>
                       )}
@@ -611,10 +611,10 @@ export default function ChannelsView({
                         <td className="ui-td">
                           <button
                             onClick={() => toggleSingleStatus(ch)}
-                            className="inline-flex items-center space-x-1.5 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
+                            className="inline-flex items-center space-x-1.5 text-xs text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4] transition cursor-pointer"
                             title={isZh ? '点击切换启用状态' : 'Toggle enabled state'}
                           >
-                            <span className={`w-1.5 h-1.5 rounded-full ${ch.status === 'active' ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`} />
+                            <span className={`w-1.5 h-1.5 rounded-full ${ch.status === 'active' ? 'bg-emerald-500' : 'bg-[#E4E6E9] dark:bg-[#2C3038]'}`} />
                             <span>{ch.status === 'active' ? (isZh ? '已启用' : 'Enabled') : (isZh ? '已停用' : 'Disabled')}</span>
                           </button>
                         </td>
@@ -644,7 +644,7 @@ export default function ChannelsView({
                               </span>
                             )
                           ) : (
-                            <span className="text-slate-500 dark:text-slate-400">—</span>
+                            <span className="text-[#656B75] dark:text-[#A1A7B0]">—</span>
                           )}
                         </td>
                       )}
@@ -658,9 +658,9 @@ export default function ChannelsView({
                             aria-label={isZh ? '连通性测试' : 'Ping test'}
                           >
                             {testingId === ch.id ? (
-                              <RefreshCw className="w-3 h-3 animate-spin text-slate-400" />
+                              <RefreshCw className="w-3 h-3 animate-spin text-[#656B75]" />
                             ) : (
-                              <Play className="w-3 h-3 text-slate-400" />
+                              <Play className="w-3 h-3 text-[#656B75]" />
                             )}
                             <span className="hidden sm:inline">Ping</span>
                           </button>
@@ -670,12 +670,12 @@ export default function ChannelsView({
                             title={isZh ? '编辑' : 'Edit'}
                             aria-label={isZh ? '编辑' : 'Edit'}
                           >
-                            <Edit3 className="w-3 h-3 text-slate-400 sm:hidden" />
+                            <Edit3 className="w-3 h-3 text-[#656B75] sm:hidden" />
                             <span className="hidden sm:inline">{isZh ? '编辑' : 'Edit'}</span>
                           </button>
                           <button
                             onClick={() => handleDeleteChannel(ch.id)}
-                            className="text-xs px-2 py-1 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition font-medium cursor-pointer"
+                            className="text-xs px-2 py-1 text-[#656B75] dark:text-[#A1A7B0] hover:text-rose-600 dark:hover:text-rose-400 transition font-medium cursor-pointer"
                             title={isZh ? '删除' : 'Delete'}
                             aria-label={isZh ? '删除' : 'Delete'}
                           >

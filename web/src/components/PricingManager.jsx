@@ -659,13 +659,13 @@ export default function PricingManager({
 
   return (
     <div className="space-y-6 animate-in fade-in">
-      {/* 1. Header (Directly on canvas) */}
+      {/* 1. Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+          <h1 className="ui-page-title">
             {isZh ? '模型定价' : 'Model Pricing'}
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          <p className="ui-page-subtitle">
             {isZh ? '配置与管理官方参考基准定价与业务分组折扣倍率' : 'Configure official baseline token pricing and tier discount multipliers'}
           </p>
         </div>
@@ -674,7 +674,7 @@ export default function PricingManager({
           {isAdmin && (
             <button
               onClick={handleOpenAdd}
-              className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
+              className="ui-btn-primary ui-btn-sm"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>{isZh ? '新建定价规则' : 'New Pricing Rule'}</span>
@@ -683,28 +683,28 @@ export default function PricingManager({
           <button
             onClick={fetchPrices}
             disabled={loading}
-            className="p-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-lg transition cursor-pointer shadow-sm"
+            className="ui-btn-secondary ui-btn-sm"
             title={isZh ? '刷新费率' : 'Refresh'}
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-indigo-600' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0] ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
       {/* 1.5 Sub Navigation: Model Baseline Pricing vs Group Discount Tiers */}
-      <div className="flex items-center space-x-2 border-b border-slate-200/80 dark:border-slate-800 pb-2">
+      <div className="flex items-center space-x-2 border-b border-[#E4E6E9] dark:border-[#2C3038] pb-2">
         <button
           type="button"
           onClick={() => setPricingSubTab('models')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+          className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
             pricingSubTab === 'models'
-              ? 'bg-slate-900 dark:bg-indigo-600 text-white shadow-sm'
-              : 'bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              ? 'bg-[#355CFF] text-white shadow-xs'
+              : 'bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
           }`}
         >
           <Layers className="w-4 h-4" />
           <span>{isZh ? '模型官方基准定价' : 'Model Base Rates'}</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-700/80 dark:bg-indigo-700/80 text-white font-mono">
+          <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${pricingSubTab === 'models' ? 'bg-white/20 text-white' : 'bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0]'}`}>
             {prices.length}
           </span>
         </button>
@@ -712,15 +712,15 @@ export default function PricingManager({
         <button
           type="button"
           onClick={() => setPricingSubTab('groups')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+          className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
             pricingSubTab === 'groups'
-              ? 'bg-slate-900 dark:bg-indigo-600 text-white shadow-sm'
-              : 'bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              ? 'bg-[#355CFF] text-white shadow-xs'
+              : 'bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
           }`}
         >
           <Percent className="w-4 h-4" />
           <span>{isZh ? '分组折扣定价' : 'Group Discount Tiers'}</span>
-          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-700/80 dark:bg-indigo-700/80 text-white font-mono">
+          <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${pricingSubTab === 'groups' ? 'bg-white/20 text-white' : 'bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0]'}`}>
             {Object.keys(localGroupMultipliers).length}
           </span>
         </button>
@@ -728,21 +728,21 @@ export default function PricingManager({
 
       {/* Batch Action Bar (Admin only) */}
       {isAdmin && selectedKeys.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 px-5 py-3 rounded-xl animate-in fade-in gap-3">
-          <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-900 dark:text-indigo-200">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#EEF2FF] dark:bg-[#242D48] border border-[#355CFF]/30 px-4 py-2.5 rounded-xl animate-in fade-in gap-3">
+          <div className="flex items-center space-x-2 text-xs font-semibold text-[#355CFF] dark:text-[#91A7FF]">
             <span>{isZh ? `已选中 ${selectedKeys.length} 个模型定价规则` : `${selectedKeys.length} pricing rule(s) selected`}</span>
           </div>
           <div className="flex items-center space-x-2">
             <button
               onClick={handleBatchDelete}
-              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-medium shadow-sm transition flex items-center space-x-1 cursor-pointer"
+              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-medium shadow-xs transition flex items-center space-x-1 cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>{isZh ? '批量删除' : 'Delete Selected'}</span>
             </button>
             <button
               onClick={() => setSelectedKeys([])}
-              className="px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition cursor-pointer"
+              className="ui-btn-secondary ui-btn-sm"
             >
               {isZh ? '取消选择' : 'Deselect'}
             </button>
@@ -754,9 +754,9 @@ export default function PricingManager({
       {pricingSubTab === 'models' && (
         <div className="space-y-4">
           {/* Architecture Guidance Banner */}
-          <div className="p-3.5 rounded-2xl border border-indigo-100 dark:border-indigo-900/60 bg-indigo-50/60 dark:bg-indigo-950/30 flex items-start sm:items-center justify-between gap-3 text-xs">
-            <div className="flex items-center space-x-2.5 text-indigo-950 dark:text-indigo-200 min-w-0">
-              <Info className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5 sm:mt-0" />
+          <div className="p-3.5 rounded-xl border border-[#355CFF]/20 bg-[#EEF2FF]/60 dark:bg-[#242D48]/40 flex items-start sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center space-x-2.5 text-[#202124] dark:text-[#F1F2F4] min-w-0">
+              <Info className="w-4 h-4 text-[#355CFF] dark:text-[#91A7FF] shrink-0 mt-0.5 sm:mt-0" />
               <span>
                 {isZh
                   ? '模型定价统一定义供应商官方基准单价（Prompt / Completion / 缓存与闲时规则）。业务分组（VIP 8折、企业 1.5倍等）在此基准上按折扣倍数自动换算生效，无需为每个分组重复配置相同模型。'
@@ -766,18 +766,18 @@ export default function PricingManager({
             <button
               type="button"
               onClick={() => setPricingSubTab('groups')}
-              className="shrink-0 text-indigo-600 dark:text-indigo-400 font-semibold hover:underline inline-flex items-center space-x-1 cursor-pointer"
+              className="shrink-0 text-[#355CFF] dark:text-[#91A7FF] font-semibold hover:underline inline-flex items-center space-x-1 cursor-pointer"
             >
               <span>{isZh ? '配置分组倍率' : 'Configure Multipliers'}</span>
               <ArrowRight className="w-3 h-3" />
             </button>
           </div>
 
-          <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl shadow-sm overflow-hidden">
+          <div className="ui-card overflow-hidden">
             {/* Group Filter Tabs & Tier Preview */}
-            <div className="flex flex-wrap items-center justify-between gap-2 px-6 pt-5 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-6 pt-5 pb-3 border-b border-[#E4E6E9] dark:border-[#2C3038]">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-slate-400 font-medium mr-1">{isZh ? '价格分组:' : 'Price Group:'}</span>
+                <span className="text-xs text-[#656B75] dark:text-[#A1A7B0] font-medium mr-1">{isZh ? '价格分组:' : 'Price Group:'}</span>
                 {[
                   { id: 'all', label: isZh ? '全部规则' : 'All Rules' },
                   ...availableGroups.map(g => ({
@@ -799,12 +799,12 @@ export default function PricingManager({
                       onClick={() => { setGroupFilter(tab.id); setSelectedKeys([]); }}
                       className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer flex items-center space-x-1.5 ${
                         isActive
-                          ? 'bg-slate-900 dark:bg-indigo-600 text-white shadow-sm'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200/80 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-200'
+                          ? 'bg-[#355CFF] text-white shadow-xs'
+                          : 'bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
                       }`}
                     >
                       <span>{tab.label}</span>
-                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-slate-800 dark:bg-indigo-700/80 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'}`}>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-[#E4E6E9] dark:bg-[#2C3038] text-[#656B75] dark:text-[#A1A7B0]'}`}>
                         {count}
                       </span>
                     </button>
@@ -814,11 +814,11 @@ export default function PricingManager({
 
               {/* Rate Preview Tier Selector */}
               <div className="flex items-center space-x-2">
-                <span className="text-xs text-slate-400 font-medium">{isZh ? '折算生效预览:' : 'Preview Tier:'}</span>
+                <span className="text-xs text-[#656B75] dark:text-[#A1A7B0] font-medium">{isZh ? '折算生效预览:' : 'Preview Tier:'}</span>
                 <select
                   value={tierPreviewGroup}
                   onChange={(e) => setTierPreviewGroup(e.target.value)}
-                  className="text-xs font-semibold py-1 px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="ui-field text-xs font-semibold py-1 px-2.5 rounded-lg cursor-pointer"
                 >
                   <option value="default">{isZh ? '官方基准定价 (1.0x)' : 'Official Baseline (1.0x)'}</option>
                   {Object.entries(localGroupMultipliers).filter(([g]) => g !== 'default').map(([g, mult]) => (
@@ -905,12 +905,12 @@ export default function PricingManager({
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 dark:text-slate-400 font-medium bg-slate-50/50 dark:bg-slate-900/50">
+                <tr className="border-b border-[#E4E6E9] dark:border-[#2C3038] text-[#656B75] dark:text-[#A1A7B0] font-medium bg-[#F0F1F2]/50 dark:bg-[#22252B]/50">
                   {isAdmin && (
-                    <th className="py-3 px-4 w-10 text-center">
+                    <th className="ui-th w-10 text-center">
                       <input
                         type="checkbox"
-                        className="rounded-sm border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        className="rounded border-[#E4E6E9] dark:border-[#2C3038] text-[#355CFF] focus:ring-[#355CFF]/30 cursor-pointer"
                         checked={filteredPrices.length > 0 && selectedKeys.length === filteredPrices.length}
                         onChange={(e) => {
                           if (e.target.checked) {
@@ -922,17 +922,17 @@ export default function PricingManager({
                       />
                     </th>
                   )}
-                  <th className="py-3 px-6">{isZh ? '模型标识' : 'Model'}</th>
-                  <th className="py-3 px-4">{isZh ? '适用用户组' : 'Group Tier'}</th>
-                  <th className="py-3 px-4">{isZh ? '基准输入 (1M)' : 'Prompt (1M)'}</th>
-                  <th className="py-3 px-4">{isZh ? '基准输出 (1M)' : 'Completion (1M)'}</th>
-                  <th className="py-3 px-4">{isZh ? '缓存命中 (1M)' : 'Cache Hit (1M)'}</th>
-                  <th className="py-3 px-4">{isZh ? '分时优惠时段' : 'Off-Peak Windows'}</th>
-                  <th className="py-3 px-4">{isZh ? '当前生效费率' : 'Live Rate'}</th>
-                  {isAdmin && <th className="py-3 px-6 text-right">{isZh ? '操作' : 'Actions'}</th>}
+                  <th className="ui-th">{isZh ? '模型标识' : 'Model'}</th>
+                  <th className="ui-th">{isZh ? '适用用户组' : 'Group Tier'}</th>
+                  <th className="ui-th">{isZh ? '基准输入 (1M)' : 'Prompt (1M)'}</th>
+                  <th className="ui-th">{isZh ? '基准输出 (1M)' : 'Completion (1M)'}</th>
+                  <th className="ui-th">{isZh ? '缓存命中 (1M)' : 'Cache Hit (1M)'}</th>
+                  <th className="ui-th">{isZh ? '分时优惠时段' : 'Off-Peak Windows'}</th>
+                  <th className="ui-th">{isZh ? '当前生效费率' : 'Live Rate'}</th>
+                  {isAdmin && <th className="ui-th text-right">{isZh ? '操作' : 'Actions'}</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 text-slate-700 dark:text-slate-300">
+              <tbody className="divide-y divide-[#E4E6E9]/60 dark:divide-[#2C3038]/60 text-[#202124] dark:text-[#F1F2F4]">
                 {filteredPrices.map((p) => {
                   const itemKey = `${p.group_name || 'default'}::${p.model}`;
                   const isOff = p.is_currently_off_peak;
@@ -962,12 +962,12 @@ export default function PricingManager({
                   const isRouteMounted = p.model === '*' || mountedRouteModels.has(p.model) || (platformModels || []).includes(p.model);
 
                   return (
-                    <tr key={itemKey} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                    <tr key={itemKey} className="ui-tr-hover">
                       {isAdmin && (
-                        <td className="py-4 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                        <td className="ui-td text-center" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
-                            className="rounded-sm border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            className="rounded border-[#E4E6E9] dark:border-[#2C3038] text-[#355CFF] focus:ring-[#355CFF]/30 cursor-pointer"
                             checked={selectedKeys.includes(itemKey)}
                             onChange={(e) => {
                               e.stopPropagation();
@@ -980,7 +980,7 @@ export default function PricingManager({
                           />
                         </td>
                       )}
-                      <td className="py-4 px-6 font-mono font-bold text-slate-900 dark:text-slate-100">
+                      <td className="ui-td font-mono font-bold text-[#202124] dark:text-[#F1F2F4]">
                         <div className="flex items-center space-x-2">
                           <span>{p.model}</span>
                           {p.model !== '*' && (
@@ -1011,25 +1011,25 @@ export default function PricingManager({
                         </div>
                       </td>
 
-                      <td className="py-4 px-4">
+                      <td className="ui-td">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold border ${grpBadge.className}`}>
                           {grpBadge.label}
                         </span>
                       </td>
 
-                      <td className="py-4 px-4 font-mono font-medium">
+                      <td className="ui-td font-mono font-medium">
                         {currencySym}{Number(p.prompt_price || 0).toFixed(2)}
                       </td>
 
-                      <td className="py-4 px-4 font-mono font-medium">
+                      <td className="ui-td font-mono font-medium">
                         {currencySym}{Number(p.completion_price || 0).toFixed(2)}
                       </td>
 
-                      <td className="py-4 px-4 font-mono text-emerald-700 dark:text-emerald-400">
+                      <td className="ui-td font-mono text-emerald-700 dark:text-emerald-400">
                         <div>
                           {currencySym}{Number(p.cache_read_price || 0).toFixed(2)}
                           {p.prompt_price > 0 && (
-                            <span className="text-xs text-slate-500 dark:text-slate-400 ml-1">
+                            <span className="text-xs text-[#656B75] dark:text-[#A1A7B0] ml-1">
                               ({Math.round(((p.prompt_price - p.cache_read_price) / p.prompt_price) * 100)}% {isZh ? '节省' : 'Saved'})
                             </span>
                           )}
@@ -1037,7 +1037,7 @@ export default function PricingManager({
                       </td>
 
                       {/* Multi-slot Off-peak policy column */}
-                      <td className="py-4 px-4 font-sans">
+                      <td className="ui-td font-sans">
                         {p.off_peak_enabled ? (
                           <div className="space-y-1.5">
                             <div className="flex flex-wrap gap-1.5">
@@ -1046,9 +1046,9 @@ export default function PricingManager({
                                 return (
                                   <span
                                     key={sIdx}
-                                    className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-xs font-semibold"
+                                    className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-[#EEF2FF] dark:bg-[#242D48] border border-[#355CFF]/20 text-[#355CFF] dark:text-[#91A7FF] text-xs font-semibold"
                                   >
-                                    <Moon className="w-3 h-3 text-indigo-500" />
+                                    <Moon className="w-3 h-3 text-[#355CFF] dark:text-[#91A7FF]" />
                                     <span>
                                       {slot.name ? `${slot.name}: ` : ''}
                                       {daysStr ? `${daysStr} ` : ''}
@@ -1060,18 +1060,18 @@ export default function PricingManager({
                             </div>
                             {p.weekend_all_day && (
                               <div className="ui-meta flex items-center space-x-1">
-                                <Calendar className="w-3 h-3 text-slate-400" />
+                                <Calendar className="w-3 h-3 text-[#656B75] dark:text-[#A1A7B0]" />
                                 <span>{isZh ? '周六日全天享受优惠' : 'Weekend all-day discount active'}</span>
                               </div>
                             )}
                           </div>
                         ) : (
-                          <span className="text-slate-400 text-xs">{isZh ? '全天统一定价' : 'Uniform 24/7 Pricing'}</span>
+                          <span className="text-[#656B75] dark:text-[#A1A7B0] text-xs">{isZh ? '全天统一定价' : 'Uniform 24/7 Pricing'}</span>
                         )}
                       </td>
 
                       {/* Live effective rate */}
-                      <td className="py-4 px-4 font-mono">
+                      <td className="ui-td font-mono">
                         {(() => {
                           const previewMult = tierPreviewGroup !== 'default' ? (localGroupMultipliers[tierPreviewGroup] ?? 1.0) : 1.0;
                           const showTierTag = tierPreviewGroup !== 'default' && previewMult !== 1.0;
@@ -1091,11 +1091,11 @@ export default function PricingManager({
                             </div>
                           ) : (
                             <div className="space-y-0.5">
-                              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium">
+                              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0] text-xs font-medium">
                                 <span>{isZh ? '基准单价' : 'Standard Rate'}</span>
-                                {showTierTag && <span className="text-[10px] ml-1 font-sans text-indigo-600 dark:text-indigo-400 font-bold">({tierPreviewGroup} {previewMult}x)</span>}
+                                {showTierTag && <span className="text-[10px] ml-1 font-sans text-[#355CFF] dark:text-[#91A7FF] font-bold">({tierPreviewGroup} {previewMult}x)</span>}
                               </span>
-                              <div className="text-xs text-slate-700 dark:text-slate-300 font-medium">
+                              <div className="text-xs text-[#202124] dark:text-[#F1F2F4] font-medium">
                                 {isZh ? '输入' : 'Prompt'} {currencySym}{calcPrompt.toFixed(2)} / {isZh ? '输出' : 'Output'} {currencySym}{calcComp.toFixed(2)}
                               </div>
                             </div>
@@ -1105,16 +1105,16 @@ export default function PricingManager({
 
                       {/* Actions */}
                       {isAdmin && (
-                        <td className="py-4 px-6 text-right space-x-2 font-sans">
+                        <td className="ui-td text-right space-x-2 font-sans">
                           <button
                             onClick={() => handleOpenEdit(p)}
-                            className="px-3 py-1 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-xs font-medium transition cursor-pointer"
+                            className="ui-btn-secondary ui-btn-sm"
                           >
                             {isZh ? '编辑' : 'Edit'}
                           </button>
                           <button
                             onClick={() => handleDelete(p.model, p.group_name || 'default')}
-                            className="px-3 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 text-xs font-medium transition cursor-pointer"
+                            className="text-xs px-2 py-1 text-[#656B75] dark:text-[#A1A7B0] hover:text-rose-600 dark:hover:text-rose-400 transition font-medium cursor-pointer"
                           >
                             {isZh ? '删除' : 'Delete'}
                           </button>
@@ -1135,14 +1135,14 @@ export default function PricingManager({
       {pricingSubTab === 'groups' && (
         <div className="space-y-6">
           {/* Architecture Banner */}
-          <div className="bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-transparent border border-indigo-200/80 dark:border-indigo-800/60 rounded-2xl p-5 shadow-xs">
+          <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl p-5 shadow-xs">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="space-y-1">
-                <div className="flex items-center space-x-2 text-indigo-950 dark:text-indigo-200 font-semibold text-sm">
-                  <Sliders className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                <div className="flex items-center space-x-2 text-[#202124] dark:text-[#F1F2F4] font-semibold text-sm">
+                  <Sliders className="w-4 h-4 text-[#355CFF] dark:text-[#91A7FF] shrink-0" />
                   <span>{isZh ? '业务分组折扣定价体系' : 'Group Discount & Tier Pricing'}</span>
                 </div>
-                <div className="text-xs text-slate-600 dark:text-slate-400 font-mono">
+                <div className="text-xs text-[#656B75] dark:text-[#A1A7B0] font-mono">
                   {isZh
                     ? '扣费公式: 实际调用单价 = 官方模型基准单价 × 密钥所属分组倍率 (× 闲时时段折扣)'
                     : 'Charge Formula: Base Model Rate * Group Multiplier (* Off-Peak Discount)'}
@@ -1154,7 +1154,7 @@ export default function PricingManager({
                   <button
                     type="button"
                     onClick={() => setShowAddGroupModal(true)}
-                    className="px-3.5 py-2 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-700 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer"
+                    className="ui-btn-secondary ui-btn-sm"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>{isZh ? '新建分组' : 'New Group Tier'}</span>
@@ -1163,7 +1163,7 @@ export default function PricingManager({
                     type="button"
                     disabled={savingGroups}
                     onClick={() => handleSaveGroupMultipliers()}
-                    className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition cursor-pointer disabled:opacity-50"
+                    className="ui-btn-primary ui-btn-sm disabled:opacity-50"
                   >
                     <span>{savingGroups ? (isZh ? '保存中...' : 'Saving...') : (isZh ? '保存全部倍率' : 'Save Multipliers')}</span>
                   </button>
@@ -1183,20 +1183,20 @@ export default function PricingManager({
               return (
                 <div
                   key={grp}
-                  className="bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4 hover:border-indigo-300 dark:hover:border-indigo-700 transition flex flex-col justify-between"
+                  className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl p-5 space-y-4 hover:border-[#355CFF]/40 dark:hover:border-[#91A7FF]/40 transition flex flex-col justify-between"
                 >
                   <div className="space-y-3">
                     <div className="flex items-start justify-between">
                       <div>
                         <div className="flex items-center space-x-2">
-                          <span className="font-bold text-slate-900 dark:text-slate-100 text-sm font-mono">
+                          <span className="font-bold text-[#202124] dark:text-[#F1F2F4] text-sm font-mono">
                             {grp.toUpperCase()}
                           </span>
                           <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${getGroupBadge(grp).className}`}>
                             {getGroupBadge(grp).label}
                           </span>
                         </div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                        <div className="text-[11px] text-[#656B75] dark:text-[#A1A7B0] mt-1">
                           {isDefault
                             ? (isZh ? '官方基准参考价 (100% 基线)' : 'Official Baseline (100%)')
                             : isVip
@@ -1211,7 +1211,7 @@ export default function PricingManager({
                         <button
                           type="button"
                           onClick={() => handleDeleteGroupTier(grp)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                          className="p-1.5 text-[#656B75] hover:text-rose-600 dark:text-[#A1A7B0] dark:hover:text-rose-400 rounded-lg hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] transition cursor-pointer"
                           title={isZh ? '删除该分组' : 'Delete Group'}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1220,14 +1220,14 @@ export default function PricingManager({
                     </div>
 
                     {/* Multiplier display & adjustments */}
-                    <div className="bg-slate-50 dark:bg-slate-900/60 rounded-xl p-3 border border-slate-100 dark:border-slate-800/80 space-y-2">
+                    <div className="bg-[#F0F1F2] dark:bg-[#22252B] rounded-lg p-3 border border-[#E4E6E9] dark:border-[#2C3038] space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                        <span className="text-xs text-[#656B75] dark:text-[#A1A7B0] font-medium">
                           {isZh ? '计费倍数 (Multiplier)' : 'Rate Multiplier'}
                         </span>
                         <div className="flex items-center space-x-1.5">
                           {isDefault ? (
-                            <span className="font-mono font-bold text-sm text-slate-700 dark:text-slate-300">
+                            <span className="font-mono font-bold text-sm text-[#202124] dark:text-[#F1F2F4]">
                               1.00x
                             </span>
                           ) : (
@@ -1240,19 +1240,19 @@ export default function PricingManager({
                                 disabled={!isAdmin}
                                 value={mult}
                                 onChange={(e) => handleUpdateSingleMultiplier(grp, e.target.value)}
-                                className="w-20 px-2 py-1 text-right font-mono font-bold text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                className="w-20 px-2 py-1 text-right font-mono font-bold text-sm ui-field"
                               />
-                              <span className="text-xs font-mono text-slate-400">x</span>
+                              <span className="text-xs font-mono text-[#656B75] dark:text-[#A1A7B0]">x</span>
                             </div>
                           )}
                         </div>
                       </div>
 
                       <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-slate-400">
+                        <span className="text-[#656B75] dark:text-[#A1A7B0]">
                           {isZh ? '折算比例:' : 'Ratio:'}
                         </span>
-                        <span className={`font-semibold ${mult < 1.0 ? 'text-emerald-600 dark:text-emerald-400' : mult > 1.0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-600 dark:text-slate-300'}`}>
+                        <span className={`font-semibold ${mult < 1.0 ? 'text-emerald-600 dark:text-emerald-400' : mult > 1.0 ? 'text-amber-600 dark:text-amber-400' : 'text-[#656B75] dark:text-[#A1A7B0]'}`}>
                           {mult === 1.0
                             ? (isZh ? '官方基准 (100%)' : 'Standard 100%')
                             : mult < 1.0
@@ -1262,7 +1262,7 @@ export default function PricingManager({
                       </div>
 
                       {!isDefault && isAdmin && (
-                        <div className="pt-2 flex flex-wrap gap-1 border-t border-slate-200/60 dark:border-slate-800/60">
+                        <div className="pt-2 flex flex-wrap gap-1 border-t border-[#E4E6E9]/60 dark:border-[#2C3038]/60">
                           {[0.5, 0.7, 0.8, 0.9, 1.0, 1.2, 1.5].map((preset) => (
                             <button
                               key={preset}
@@ -1270,8 +1270,8 @@ export default function PricingManager({
                               onClick={() => handleUpdateSingleMultiplier(grp, preset)}
                               className={`px-2 py-0.5 rounded text-[10px] font-mono font-medium transition cursor-pointer ${
                                 mult === preset
-                                  ? 'bg-indigo-600 text-white font-bold'
-                                  : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                  ? 'bg-[#355CFF] text-white font-bold'
+                                  : 'bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] text-[#656B75] dark:text-[#A1A7B0] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B]'
                               }`}
                             >
                               {preset}x
@@ -1289,20 +1289,20 @@ export default function PricingManager({
           {/* Add Group Modal */}
           {showAddGroupModal && (
             <div
-              className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in"
+              className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-xs animate-in fade-in"
               onClick={(e) => {
                 if (e.target === e.currentTarget) setShowAddGroupModal(false);
               }}
             >
-              <div className="bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in zoom-in-95">
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                  <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
+              <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl p-6 max-w-md w-full shadow-xl space-y-4 animate-in zoom-in-95">
+                <div className="flex items-center justify-between border-b border-[#E4E6E9] dark:border-[#2C3038] pb-3">
+                  <h3 className="font-semibold text-[#202124] dark:text-[#F1F2F4] text-sm">
                     {isZh ? '新建计费分组' : 'New Pricing Group Tier'}
                   </h3>
                   <button
                     type="button"
                     onClick={() => setShowAddGroupModal(false)}
-                    className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 transition"
+                    className="p-1 hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] rounded-lg text-[#656B75] hover:text-[#202124] dark:text-[#A1A7B0] dark:hover:text-[#F1F2F4] transition"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -1310,7 +1310,7 @@ export default function PricingManager({
 
                 <form onSubmit={handleCreateNewGroupTier} className="space-y-4 text-xs">
                   <div>
-                    <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                    <label className="block text-[#202124] dark:text-[#F1F2F4] font-medium mb-1">
                       {isZh ? '分组英文标识 (Group ID)' : 'Group Identifier'} <span className="text-rose-500">*</span>
                     </label>
                     <input
@@ -1319,7 +1319,7 @@ export default function PricingManager({
                       placeholder={isZh ? '如 partner / test_tier / svip' : 'e.g. partner / svip'}
                       value={newGroupInputKey}
                       onChange={(e) => setNewGroupInputKey(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      className="w-full ui-field font-mono text-xs"
                     />
                     <div className="ui-meta mt-1">
                       {isZh ? '仅支持小写字母、数字、下划线及连字符' : 'Lowercase letters, digits, hyphen, underscore only'}
@@ -1327,7 +1327,7 @@ export default function PricingManager({
                   </div>
 
                   <div>
-                    <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                    <label className="block text-[#202124] dark:text-[#F1F2F4] font-medium mb-1">
                       {isZh ? '费率倍数 (Multiplier)' : 'Multiplier'} <span className="text-rose-500">*</span>
                     </label>
                     <div className="flex items-center space-x-2">
@@ -1339,9 +1339,9 @@ export default function PricingManager({
                         required
                         value={newGroupInputMultiplier}
                         onChange={(e) => setNewGroupInputMultiplier(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        className="w-full ui-field font-mono text-xs"
                       />
-                      <span className="font-mono text-slate-400">x</span>
+                      <span className="font-mono text-[#656B75] dark:text-[#A1A7B0]">x</span>
                     </div>
                     <div className="ui-meta mt-1">
                       {isZh ? '0.8 为 8折，1.5 为 1.5倍。该分组密钥将按此倍率乘以官方基准单价扣费。' : 'Base model prices will be multiplied by this factor.'}
@@ -1352,13 +1352,13 @@ export default function PricingManager({
                     <button
                       type="button"
                       onClick={() => setShowAddGroupModal(false)}
-                      className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 rounded-xl text-xs hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                      className="ui-btn-secondary ui-btn-sm"
                     >
                       {isZh ? '取消' : 'Cancel'}
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-sm transition"
+                      className="ui-btn-primary ui-btn-sm"
                     >
                       {isZh ? '确认添加' : 'Add Group'}
                     </button>
@@ -1373,15 +1373,15 @@ export default function PricingManager({
       {/* 3. Flexible Multi-Slot Edit / Add Modal */}
       {showModal && (
         <div
-          className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in"
+          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-xs animate-in fade-in"
           onClick={(e) => {
             if (e.target === e.currentTarget) setShowModal(false);
           }}
         >
-          <div className="bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 sm:p-8 max-w-xl w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
-            <div className="border-b border-slate-100 dark:border-slate-800 pb-3 flex items-center justify-between">
+          <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl p-6 sm:p-8 max-w-xl w-full shadow-xl space-y-5 animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+            <div className="border-b border-[#E4E6E9] dark:border-[#2C3038] pb-3 flex items-center justify-between">
               <div>
-                <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-base">
+                <h3 className="font-semibold text-[#202124] dark:text-[#F1F2F4] text-base">
                   {editingPrice 
                     ? (isZh ? `编辑 [${editingPrice.model}] 定价` : `Edit [${editingPrice.model}] Pricing`) 
                     : (isZh ? '新建模型定价与分时规则' : 'New Pricing & Off-Peak Rule')}
@@ -1389,7 +1389,7 @@ export default function PricingManager({
               </div>
               <button
                 onClick={() => setShowModal(false)}
-                className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition cursor-pointer"
+                className="p-1.5 hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] rounded-lg text-[#656B75] hover:text-[#202124] dark:text-[#A1A7B0] dark:hover:text-[#F1F2F4] transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1405,7 +1405,7 @@ export default function PricingManager({
             <form onSubmit={handleSave} className="space-y-4 text-xs">
               {/* Field 1: Model Identifier */}
               <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                <label className="block text-[#202124] dark:text-[#F1F2F4] font-medium mb-1">
                   {isZh ? '模型名称 (Model)' : 'Model ID'} <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -1416,20 +1416,16 @@ export default function PricingManager({
                   placeholder={isZh ? '如 deepseek-chat 或点击下方一键选择' : 'e.g. deepseek-chat or select below'}
                   value={formData.model}
                   onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500 disabled:opacity-60 text-xs"
+                  className="w-full ui-field font-mono text-xs disabled:opacity-60"
                 />
                 <datalist id="unpriced-models-datalist">
                   {unpricedModels.map(m => (
                     <option key={m} value={m} />
                   ))}
                 </datalist>
-                {/* The placeholder promised "click below to select", but no such row
-                    existed: handleSelectModelCandidate was written and never wired.
-                    It prefills a rate that suits the model's kind, which is the
-                    part an operator cannot guess. */}
                 {!editingPrice && candidateModels.length > 0 && (
                   <div className="mt-2.5 space-y-1.5">
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center justify-between">
+                    <div className="text-[11px] text-[#656B75] dark:text-[#A1A7B0] font-medium flex items-center justify-between">
                       <span>{isZh ? '快捷选择模型 (点击自动适配建议费率):' : 'Quick Select (auto-prefill rate):'}</span>
                       {candidateModels.some(c => c.isUnpriced) && (
                         <span className="text-amber-600 dark:text-amber-400 text-[10px] flex items-center gap-1">
@@ -1446,10 +1442,10 @@ export default function PricingManager({
                           onClick={() => handleSelectModelCandidate(m)}
                           className={`px-2 py-1 rounded-lg text-xs font-mono border transition cursor-pointer flex items-center space-x-1.5 ${
                             formData.model === m
-                              ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700 font-semibold shadow-xs'
+                              ? 'bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] border-[#355CFF]/30 font-semibold shadow-xs'
                               : isUnpriced
                               ? 'bg-amber-50/70 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/80 hover:border-amber-400'
-                              : 'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
+                              : 'bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0] border-[#E4E6E9] dark:border-[#2C3038] hover:border-[#355CFF]/40'
                           }`}
                           title={isUnpriced ? (isZh ? '当前组尚未配置该模型专属费率' : 'Unpriced in this group') : (isZh ? '点击自动填入并预设费率' : 'Click to select and prefill rate')}
                         >
@@ -1466,10 +1462,10 @@ export default function PricingManager({
 
               {/* Field: User Group Tier */}
               <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                <label className="block text-[#202124] dark:text-[#F1F2F4] font-medium mb-1">
                   {isZh ? '定价范围与分组 (Scope)' : 'Pricing Scope'} <span className="text-rose-500">*</span>
                 </label>
-                <div className="ui-meta mb-1.5 text-slate-500 dark:text-slate-400">
+                <div className="ui-meta mb-1.5 text-[#656B75] dark:text-[#A1A7B0]">
                   {isZh
                     ? '推荐保留为 [默认官方基准 (default)]。所有业务分组（如 VIP 8折、企业组 1.5倍）自动按倍率继承此单价；仅当此模型在某分组需特殊单独议价覆盖时才选择特定组。'
                     : 'Recommended: Default (default). All groups automatically inherit via their multiplier.'}
@@ -1490,8 +1486,8 @@ export default function PricingManager({
                           onClick={() => setFormData({ ...formData, group_name: g })}
                           className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
                             formData.group_name === g
-                              ? 'bg-slate-900 dark:bg-indigo-600 text-white border-slate-900 dark:border-indigo-600 font-semibold shadow-sm'
-                              : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                              ? 'bg-[#355CFF] text-white border-[#355CFF] font-semibold shadow-xs'
+                              : 'bg-white dark:bg-[#191B1F] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] border-[#E4E6E9] dark:border-[#2C3038] text-[#202124] dark:text-[#F1F2F4]'
                           }`}
                         >
                           {g === 'default' 
@@ -1509,20 +1505,20 @@ export default function PricingManager({
                       placeholder={isZh ? '或输入自定义用户组标识 (如 partner / test 等)' : 'Or input custom group identifier (e.g. partner / test)'}
                       value={formData.group_name}
                       onChange={(e) => setFormData({ ...formData, group_name: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '') })}
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 font-mono text-slate-900 dark:text-slate-100 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 text-xs"
+                      className="w-full ui-field font-mono text-xs"
                     />
                   </div>
                 )}
               </div>
 
               {/* Field 2: Base Rates */}
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-3">
-                <span className="font-bold text-slate-800 dark:text-slate-200 block text-xs">
+              <div className="p-4 rounded-xl bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038] space-y-3">
+                <span className="font-semibold text-[#202124] dark:text-[#F1F2F4] block text-xs">
                   {isZh ? '基准单价 (每 1,000,000 Tokens)' : 'Base Price (per 1,000,000 Tokens)'}
                 </span>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-slate-600 dark:text-slate-300 font-medium mb-1">
+                    <label className="block text-[#656B75] dark:text-[#A1A7B0] font-medium mb-1">
                       {isZh ? '输入单价 (¥)' : 'Prompt Price (¥)'}
                     </label>
                     <input
@@ -1539,12 +1535,12 @@ export default function PricingManager({
                           cache_read_price: (val * 0.1).toFixed(2)
                         });
                       }}
-                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500 text-xs"
+                      className="w-full ui-field font-mono text-xs"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-slate-600 dark:text-slate-300 font-medium mb-1">
+                    <label className="block text-[#656B75] dark:text-[#A1A7B0] font-medium mb-1">
                       {isZh ? '输出单价 (¥)' : 'Completion Price (¥)'}
                     </label>
                     <input
@@ -1554,7 +1550,7 @@ export default function PricingManager({
                       required
                       value={formData.completion_price}
                       onChange={(e) => setFormData({ ...formData, completion_price: e.target.value })}
-                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500 text-xs"
+                      className="w-full ui-field font-mono text-xs"
                     />
                   </div>
 
@@ -1568,18 +1564,18 @@ export default function PricingManager({
                       min="0"
                       value={formData.cache_read_price}
                       onChange={(e) => setFormData({ ...formData, cache_read_price: e.target.value })}
-                      className="w-full bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 rounded-xl px-2.5 py-1.5 font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500 text-xs"
+                      className="w-full ui-field font-mono text-xs border-emerald-300 dark:border-emerald-800"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Field 3: Time-of-Use Multi-Slot Flexible Configuration */}
-              <div className="p-4 rounded-2xl bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900 space-y-4">
+              <div className="p-4 rounded-xl bg-[#EEF2FF]/40 dark:bg-[#242D48]/30 border border-[#355CFF]/20 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
-                    <Moon className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                    <span className="font-bold text-slate-900 dark:text-slate-100">
+                    <Moon className="w-4 h-4 text-[#355CFF] dark:text-[#91A7FF]" />
+                    <span className="font-semibold text-[#202124] dark:text-[#F1F2F4]">
                       {isZh ? '开启分时优惠' : 'Enable Off-Peak Discount'}
                     </span>
                   </div>
@@ -1590,20 +1586,20 @@ export default function PricingManager({
                       onChange={(e) => setFormData({ ...formData, off_peak_enabled: e.target.checked })}
                       className="sr-only peer"
                     />
-                    <div className="w-9 h-5 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white dark:after:bg-slate-300 after:border-slate-300 dark:after:border-slate-500 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                    <div className="w-9 h-5 bg-[#E4E6E9] dark:bg-[#2C3038] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white dark:after:bg-[#F1F2F4] after:border-[#E4E6E9] dark:after:border-[#2C3038] after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#355CFF]"></div>
                   </label>
                 </div>
 
                 {formData.off_peak_enabled && (
                   <div className="space-y-3 pt-1 animate-in fade-in">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      <span className="text-xs font-semibold text-[#202124] dark:text-[#F1F2F4]">
                         {isZh ? '优惠时间段列表 (支持自由配置任意多个时段)' : 'Time Windows (Multiple custom windows supported)'}
                       </span>
                       <button
                         type="button"
                         onClick={handleAddSlot}
-                        className="inline-flex items-center space-x-1 px-3 py-1 rounded-lg bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white text-xs font-medium shadow-sm transition cursor-pointer"
+                        className="ui-btn-primary ui-btn-sm"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>{isZh ? '添加时间段' : 'Add Time Window'}</span>
@@ -1613,10 +1609,10 @@ export default function PricingManager({
                     {/* Slots List */}
                     <div className="space-y-2.5">
                       {formData.slots.map((slot, index) => (
-                        <div key={slot.id || index} className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5">
+                        <div key={slot.id || index} className="p-3 bg-white dark:bg-[#191B1F] rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] shadow-xs space-y-2.5">
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                             <div className="flex items-center space-x-2 flex-1">
-                              <span className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold flex items-center justify-center shrink-0">
+                              <span className="w-5 h-5 rounded-full bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] text-[10px] font-bold flex items-center justify-center shrink-0">
                                 {index + 1}
                               </span>
                               <input
@@ -1624,7 +1620,7 @@ export default function PricingManager({
                                 placeholder={isZh ? '时段名称 (选填)' : 'Slot name (optional)'}
                                 value={slot.name}
                                 onChange={(e) => handleUpdateSlot(slot.id, 'name', e.target.value)}
-                                className="w-28 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
+                                className="w-28 ui-field text-xs"
                               />
                             </div>
 
@@ -1634,15 +1630,15 @@ export default function PricingManager({
                                 placeholder="00:00"
                                 value={slot.start}
                                 onChange={(e) => handleUpdateSlot(slot.id, 'start', e.target.value)}
-                                className="w-18 px-2 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-mono text-center text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
+                                className="w-18 ui-field font-mono text-center text-xs"
                               />
-                              <span className="text-slate-400 text-xs">{isZh ? '至' : 'to'}</span>
+                              <span className="text-[#656B75] dark:text-[#A1A7B0] text-xs">{isZh ? '至' : 'to'}</span>
                               <input
                                 type="text"
                                 placeholder="08:30"
                                 value={slot.end}
                                 onChange={(e) => handleUpdateSlot(slot.id, 'end', e.target.value)}
-                                className="w-18 px-2 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-mono text-center text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
+                                className="w-18 ui-field font-mono text-center text-xs"
                               />
                             </div>
 
@@ -1650,7 +1646,7 @@ export default function PricingManager({
                               <select
                                 value={slot.discount}
                                 onChange={(e) => handleUpdateSlot(slot.id, 'discount', parseFloat(e.target.value))}
-                                className="px-2 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
+                                className="ui-field text-xs font-mono"
                               >
                                 <option value="0.1">{isZh ? '1 折 (10%)' : '90% Off (10%)'}</option>
                                 <option value="0.2">{isZh ? '2 折 (20%)' : '80% Off (20%)'}</option>
@@ -1668,7 +1664,7 @@ export default function PricingManager({
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveSlot(slot.id)}
-                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition cursor-pointer"
+                                  className="p-1.5 text-[#656B75] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition cursor-pointer"
                                   title={isZh ? '删除该时段' : 'Delete slot'}
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -1678,7 +1674,7 @@ export default function PricingManager({
                           </div>
 
                           {/* Zero-burden Weekday Selector */}
-                          <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 dark:border-slate-800 text-xs">
+                          <div className="flex items-center justify-between pt-1.5 border-t border-[#E4E6E9] dark:border-[#2C3038] text-xs">
                             <span className="ui-meta">{isZh ? '生效周期:' : 'Active on:'}</span>
                             <div className="flex items-center space-x-1">
                               {[
@@ -1698,8 +1694,8 @@ export default function PricingManager({
                                     onClick={() => toggleSlotDay(slot.id, val)}
                                     className={`w-6 h-6 rounded-md text-[11px] font-medium transition cursor-pointer flex items-center justify-center ${
                                       isActive
-                                        ? 'bg-slate-900 dark:bg-indigo-600 text-white font-semibold shadow-sm'
-                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                        ? 'bg-[#355CFF] text-white font-semibold shadow-xs'
+                                        : 'bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0] hover:bg-[#E4E6E9] dark:hover:bg-[#2C3038]'
                                     }`}
                                     title={isZh ? `周${label}` : `Day ${val}`}
                                   >
@@ -1707,7 +1703,7 @@ export default function PricingManager({
                                   </button>
                                 );
                               })}
-                              <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-medium ml-1.5">
+                              <span className="text-[11px] text-[#355CFF] dark:text-[#91A7FF] font-medium ml-1.5">
                                 {formatDaysLabel(slot.days, isZh) || (isZh ? '每天' : 'Everyday')}
                               </span>
                             </div>
@@ -1717,12 +1713,12 @@ export default function PricingManager({
                     </div>
 
                     <div className="pt-1">
-                      <label className="flex items-center space-x-2 text-slate-700 dark:text-slate-300 cursor-pointer">
+                      <label className="flex items-center space-x-2 text-[#202124] dark:text-[#F1F2F4] cursor-pointer">
                         <input
                           type="checkbox"
                           checked={formData.weekend_all_day}
                           onChange={(e) => setFormData({ ...formData, weekend_all_day: e.target.checked })}
-                          className="rounded-sm border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500"
+                          className="rounded border-[#E4E6E9] dark:border-[#2C3038] text-[#355CFF] focus:ring-[#355CFF]/30"
                         />
                         <span className="font-medium">{isZh ? '周六与周日全天享受优惠折扣' : 'All-day discount on Saturdays and Sundays'}</span>
                       </label>
@@ -1736,14 +1732,14 @@ export default function PricingManager({
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition font-medium cursor-pointer"
+                  className="ui-btn-secondary ui-btn-sm"
                 >
                   {isZh ? '取消' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-2 rounded-lg bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white font-medium transition shadow-sm flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
+                  className="ui-btn-primary ui-btn-sm disabled:opacity-50"
                 >
                   {saving ? (
                     <>

@@ -230,14 +230,14 @@ export default function SupplierReconciliationView({
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center space-x-3">
-            <h2 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
+            <h2 className="ui-page-title">
               {isZh ? '供应商整体对账' : 'Supplier FinOps Reconciliation'}
             </h2>
-            <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60">
+            <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] border border-[#355CFF]/20">
               {summary.active_suppliers_count || 0} {isZh ? '家活跃供应商' : 'active suppliers'}
             </span>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          <p className="ui-page-subtitle">
             {isZh
               ? '跨所有上游服务商（DeepSeek、OpenAI、硅基流动、火山引擎等）的算力消耗、Token吞吐与财务结算整体对账'
               : 'Global token consumption, upstream costs, and financial reconciliation across all channel providers'}
@@ -248,15 +248,15 @@ export default function SupplierReconciliationView({
           <button
             onClick={fetchReconciliation}
             disabled={loading}
-            className="ui-btn-secondary"
+            className="ui-btn-secondary ui-btn-sm"
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0] ${loading ? 'animate-spin' : ''}`} />
             <span>{isZh ? '刷新对账' : 'Refresh'}</span>
           </button>
           <button
             onClick={handleExportCSV}
             disabled={!report || suppliers.length === 0}
-            className="ui-btn-primary"
+            className="ui-btn-primary ui-btn-sm"
           >
             <Download className="w-3.5 h-3.5" />
             <span>{isZh ? '导出对账单' : 'Export Statement'}</span>
@@ -267,12 +267,12 @@ export default function SupplierReconciliationView({
       {/* 2. Top Metric Cards (6-Card Clean FinOps Grid) */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {/* Cost */}
-        <div className="p-3.5 bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-xl shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1">
+        <div className="ui-card p-3.5 shadow-xs">
+          <div className="flex items-center justify-between text-[#656B75] dark:text-[#A1A7B0] mb-1">
             <span className="text-xs font-medium">{isZh ? '供应商对账支出' : 'Supplier Cost'}</span>
             <DollarSign className="w-4 h-4 text-emerald-500" />
           </div>
-          <div className="text-lg font-bold font-mono tracking-tight text-slate-900 dark:text-white truncate">
+          <div className="text-lg font-bold font-mono tracking-tight text-[#202124] dark:text-[#F1F2F4] truncate">
             ¥{(summary.total_cost || 0).toFixed(4)}
           </div>
           <div className="ui-meta mt-0.5 truncate">
@@ -281,12 +281,12 @@ export default function SupplierReconciliationView({
         </div>
 
         {/* Requests */}
-        <div className="p-3.5 bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-xl shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1">
+        <div className="ui-card p-3.5 shadow-xs">
+          <div className="flex items-center justify-between text-[#656B75] dark:text-[#A1A7B0] mb-1">
             <span className="text-xs font-medium">{isZh ? '已对账调用量' : 'Invocations'}</span>
-            <Activity className="w-4 h-4 text-indigo-500" />
+            <Activity className="w-4 h-4 text-[#355CFF] dark:text-[#91A7FF]" />
           </div>
-          <div className="text-lg font-bold font-mono tracking-tight text-slate-900 dark:text-white truncate">
+          <div className="text-lg font-bold font-mono tracking-tight text-[#202124] dark:text-[#F1F2F4] truncate">
             {(summary.total_requests || 0).toLocaleString()}
           </div>
           <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5 truncate font-medium">
@@ -295,12 +295,12 @@ export default function SupplierReconciliationView({
         </div>
 
         {/* Uncached Input */}
-        <div className="p-3.5 bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-xl shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1">
+        <div className="ui-card p-3.5 shadow-xs">
+          <div className="flex items-center justify-between text-[#656B75] dark:text-[#A1A7B0] mb-1">
             <span className="text-xs font-medium">{isZh ? '未缓存输入 Token' : 'Uncached Input'}</span>
             <Layers className="w-4 h-4 text-sky-500" />
           </div>
-          <div className="text-lg font-bold font-mono tracking-tight text-slate-900 dark:text-white truncate">
+          <div className="text-lg font-bold font-mono tracking-tight text-[#202124] dark:text-[#F1F2F4] truncate">
             {summaryUncachedPrompt.toLocaleString()}
           </div>
           <div className="ui-meta mt-0.5 truncate">
@@ -309,12 +309,12 @@ export default function SupplierReconciliationView({
         </div>
 
         {/* Completion */}
-        <div className="p-3.5 bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-xl shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1">
+        <div className="ui-card p-3.5 shadow-xs">
+          <div className="flex items-center justify-between text-[#656B75] dark:text-[#A1A7B0] mb-1">
             <span className="text-xs font-medium">{isZh ? '输出补全 Token' : 'Completion'}</span>
             <Cpu className="w-4 h-4 text-purple-500" />
           </div>
-          <div className="text-lg font-bold font-mono tracking-tight text-slate-900 dark:text-white truncate">
+          <div className="text-lg font-bold font-mono tracking-tight text-[#202124] dark:text-[#F1F2F4] truncate">
             {(summary.completion_tokens || 0).toLocaleString()}
           </div>
           <div className="ui-meta mt-0.5 truncate">
@@ -323,8 +323,8 @@ export default function SupplierReconciliationView({
         </div>
 
         {/* Cached */}
-        <div className="p-3.5 bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-xl shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1">
+        <div className="ui-card p-3.5 shadow-xs">
+          <div className="flex items-center justify-between text-[#656B75] dark:text-[#A1A7B0] mb-1">
             <span className="text-xs font-medium">{isZh ? '前缀缓存 Token' : 'Cached Tokens'}</span>
             <Sparkles className="w-4 h-4 text-amber-500" />
           </div>
@@ -337,12 +337,12 @@ export default function SupplierReconciliationView({
         </div>
 
         {/* TPS */}
-        <div className="p-3.5 bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-xl shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1">
+        <div className="ui-card p-3.5 shadow-xs">
+          <div className="flex items-center justify-between text-[#656B75] dark:text-[#A1A7B0] mb-1">
             <span className="text-xs font-medium">{isZh ? '生成速率 (TPS)' : 'Decoding Speed'}</span>
-            <Clock className="w-4 h-4 text-indigo-500" />
+            <Clock className="w-4 h-4 text-[#355CFF] dark:text-[#91A7FF]" />
           </div>
-          <div className="text-lg font-bold font-mono tracking-tight text-indigo-600 dark:text-indigo-400 truncate">
+          <div className="text-lg font-bold font-mono tracking-tight text-[#355CFF] dark:text-[#91A7FF] truncate">
             {summary.avg_tps ? `${summary.avg_tps} tok/s` : '-'}
           </div>
           <div className="ui-meta mt-0.5 truncate">
@@ -356,11 +356,11 @@ export default function SupplierReconciliationView({
         {/* Row 1: Time presets and Custom range picker */}
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-slate-500 dark:text-slate-400 font-medium flex items-center space-x-1">
-              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-[#656B75] dark:text-[#A1A7B0] font-medium flex items-center space-x-1">
+              <Calendar className="w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0]" />
               <span>{isZh ? '对账周期:' : 'Period:'}</span>
             </span>
-            <div className="inline-flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200/80 dark:border-slate-800">
+            <div className="inline-flex bg-[#F0F1F2] dark:bg-[#22252B] p-0.5 rounded-lg border border-[#E4E6E9] dark:border-[#2C3038]">
               {[
                 { id: 'all', label: isZh ? '全量历史' : 'All Time' },
                 { id: 'today', label: isZh ? '今日' : 'Today' },
@@ -374,8 +374,8 @@ export default function SupplierReconciliationView({
                   onClick={() => setTimePreset(p.id)}
                   className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
                     timePreset === p.id
-                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs font-semibold'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-xs font-semibold'
+                      : 'text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
                   }`}
                 >
                   {p.label}
@@ -391,19 +391,19 @@ export default function SupplierReconciliationView({
                   value={customStart}
                   onChange={(e) => setCustomStart(e.target.value)}
                   placeholder="YYYY-MM-DD 00:00:00"
-                  className="bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-800 dark:text-slate-100 w-44 font-mono shadow-xs"
+                  className="ui-field px-2.5 py-1 text-xs w-44 font-mono shadow-xs"
                 />
-                <span className="text-slate-500 dark:text-slate-400">至</span>
+                <span className="text-[#656B75] dark:text-[#A1A7B0]">至</span>
                 <input
                   type="text"
                   value={customEnd}
                   onChange={(e) => setCustomEnd(e.target.value)}
                   placeholder="YYYY-MM-DD 23:59:59"
-                  className="bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-800 dark:text-slate-100 w-44 font-mono shadow-xs"
+                  className="ui-field px-2.5 py-1 text-xs w-44 font-mono shadow-xs"
                 />
                 <button
                   onClick={fetchReconciliation}
-                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium cursor-pointer"
+                  className="ui-btn-primary ui-btn-sm"
                 >
                   {isZh ? '查询' : 'Query'}
                 </button>
@@ -419,7 +419,7 @@ export default function SupplierReconciliationView({
         </div>
 
         {/* Row 2: Combined Filter Selectors & Search Input */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2.5 text-xs pt-1 border-t border-slate-100 dark:border-slate-800/60">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2.5 text-xs pt-1 border-t border-[#E4E6E9] dark:border-[#2C3038]">
           {/* 1. Supplier / Channel Selector */}
           <div>
             <label className="ui-label-sm">
@@ -496,7 +496,7 @@ export default function SupplierReconciliationView({
               {isZh ? '关键字搜索' : 'Search Query'}
             </label>
             <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+              <Search className="w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0] absolute left-2.5 top-2.5" />
               <input
                 type="text"
                 value={searchQuery}
@@ -510,15 +510,15 @@ export default function SupplierReconciliationView({
 
         {/* Row 3: Active Filter Chips Bar (Shown when any filter is active) */}
         {hasActiveFilters && (
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/60 animate-in fade-in">
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#E4E6E9] dark:border-[#2C3038] animate-in fade-in">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="ui-meta font-medium flex items-center space-x-1 mr-1">
-                <Filter className="w-3 h-3 text-indigo-500" />
+                <Filter className="w-3 h-3 text-[#355CFF] dark:text-[#91A7FF]" />
                 <span>{isZh ? '已生效筛选条件:' : 'Active Filters:'}</span>
               </span>
 
               {timePreset !== 'all' && (
-                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800 text-xs">
+                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] border border-[#355CFF]/20 text-xs">
                   <span>{isZh ? '周期:' : 'Period:'} {timePreset}</span>
                   <button onClick={() => setTimePreset('all')} className="hover:text-rose-500 cursor-pointer">
                     <X className="w-2.5 h-2.5" />
@@ -527,7 +527,7 @@ export default function SupplierReconciliationView({
               )}
 
               {channelFilter !== 'all' && (
-                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800 text-xs">
+                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] border border-[#355CFF]/20 text-xs">
                   <span>{isZh ? '渠道:' : 'Channel:'} {channelFilter}</span>
                   <button onClick={() => setChannelFilter('all')} className="hover:text-rose-500 cursor-pointer">
                     <X className="w-2.5 h-2.5" />
@@ -545,7 +545,7 @@ export default function SupplierReconciliationView({
               )}
 
               {channelStatusFilter !== 'all' && (
-                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs">
+                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0] border border-[#E4E6E9] dark:border-[#2C3038] text-xs">
                   <span>{isZh ? '状态:' : 'Status:'} {channelStatusFilter}</span>
                   <button onClick={() => setChannelStatusFilter('all')} className="hover:text-rose-500 cursor-pointer">
                     <X className="w-2.5 h-2.5" />
@@ -567,7 +567,7 @@ export default function SupplierReconciliationView({
               )}
 
               {searchQuery.trim() !== '' && (
-                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs">
+                <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0] border border-[#E4E6E9] dark:border-[#2C3038] text-xs">
                   <span>"{searchQuery}"</span>
                   <button onClick={() => setSearchQuery('')} className="hover:text-rose-500 cursor-pointer">
                     <X className="w-2.5 h-2.5" />
@@ -578,7 +578,7 @@ export default function SupplierReconciliationView({
 
             <button
               onClick={handleResetFilters}
-              className="text-xs text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 font-medium inline-flex items-center space-x-1 cursor-pointer transition"
+              className="text-xs text-[#656B75] dark:text-[#A1A7B0] hover:text-rose-600 dark:hover:text-rose-400 font-medium inline-flex items-center space-x-1 cursor-pointer transition"
             >
               <RotateCcw className="w-3 h-3" />
               <span>{isZh ? '重置所有筛选' : 'Reset All'}</span>
@@ -591,8 +591,8 @@ export default function SupplierReconciliationView({
       <div className="ui-card overflow-hidden">
         {suppliers.length === 0 ? (
           <div className="p-12 text-center flex flex-col items-center justify-center space-y-2">
-            <Server className="w-10 h-10 text-slate-300 dark:text-slate-600" />
-            <h4 className="font-medium text-xs text-slate-700 dark:text-slate-300">
+            <Server className="w-10 h-10 text-[#656B75]/40 dark:text-[#A1A7B0]/40" />
+            <h4 className="font-medium text-xs text-[#202124] dark:text-[#F1F2F4]">
               {isZh ? '所选时间范围内暂无对账流水记录' : 'No reconciliation records for selected period'}
             </h4>
             <p className="ui-meta">
@@ -603,19 +603,19 @@ export default function SupplierReconciliationView({
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs min-w-[900px]">
               <thead className="sticky top-0 z-20 shadow-2xs">
-                <tr className="text-slate-500 dark:text-slate-400 uppercase text-[11px] font-medium tracking-wide">
-                  <th className="py-3 px-4 font-semibold min-w-[160px] sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800">{isZh ? '供应商' : 'Supplier'}</th>
-                  <th className="py-3 px-2.5 font-semibold text-right w-20 min-w-[75px] sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800">{isZh ? '调用量' : 'Calls'}</th>
-                  <th className="py-3 px-2.5 font-semibold text-right w-20 min-w-[70px] sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800" title={isZh ? '未缓存输入 Prompt Token' : 'Uncached prompt tokens'}>{isZh ? '输入' : 'Input'}</th>
-                  <th className="py-3 px-2.5 font-semibold text-right w-20 min-w-[70px] sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800" title={isZh ? '模型输出 Completion Token' : 'Completion tokens'}>{isZh ? '输出' : 'Output'}</th>
-                  <th className="py-3 px-2.5 font-semibold text-right w-18 min-w-[65px] sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800" title={isZh ? '前缀缓存命中 Token' : 'Cached prefix tokens'}>{isZh ? '缓存' : 'Cached'}</th>
-                  <th className="py-3 px-2.5 font-semibold text-right w-20 min-w-[70px] sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800" title={isZh ? '生成速率 (Tokens/秒)' : 'Tokens per second'}>{isZh ? 'TPS' : 'TPS'}</th>
-                  <th className="py-3 px-2.5 font-semibold text-right w-20 min-w-[75px] sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800">{isZh ? '支出' : 'Cost'}</th>
-                  <th className="py-3 px-2.5 font-semibold text-right w-24 min-w-[85px] sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800">{isZh ? '耗时 / TTFT' : 'Latency / TTFT'}</th>
-                  <th className="py-3 px-2.5 text-center font-semibold w-24 min-w-[85px] sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800">{isZh ? '操作' : 'Actions'}</th>
+                <tr className="text-[#656B75] dark:text-[#A1A7B0] uppercase text-[11px] font-medium tracking-wide">
+                  <th className="ui-th min-w-[160px] sticky top-0 z-20 bg-[#F0F1F2]/90 dark:bg-[#191B1F]/90 border-b border-[#E4E6E9] dark:border-[#2C3038]">{isZh ? '供应商' : 'Supplier'}</th>
+                  <th className="ui-th text-right w-20 min-w-[75px] sticky top-0 z-20 bg-[#F0F1F2]/90 dark:bg-[#191B1F]/90 border-b border-[#E4E6E9] dark:border-[#2C3038]">{isZh ? '调用量' : 'Calls'}</th>
+                  <th className="ui-th text-right w-20 min-w-[70px] sticky top-0 z-20 bg-[#F0F1F2]/90 dark:bg-[#191B1F]/90 border-b border-[#E4E6E9] dark:border-[#2C3038]" title={isZh ? '未缓存输入 Prompt Token' : 'Uncached prompt tokens'}>{isZh ? '输入' : 'Input'}</th>
+                  <th className="ui-th text-right w-20 min-w-[70px] sticky top-0 z-20 bg-[#F0F1F2]/90 dark:bg-[#191B1F]/90 border-b border-[#E4E6E9] dark:border-[#2C3038]" title={isZh ? '模型输出 Completion Token' : 'Completion tokens'}>{isZh ? '输出' : 'Output'}</th>
+                  <th className="ui-th text-right w-18 min-w-[65px] sticky top-0 z-20 bg-[#F0F1F2]/90 dark:bg-[#191B1F]/90 border-b border-[#E4E6E9] dark:border-[#2C3038]" title={isZh ? '前缀缓存命中 Token' : 'Cached prefix tokens'}>{isZh ? '缓存' : 'Cached'}</th>
+                  <th className="ui-th text-right w-20 min-w-[70px] sticky top-0 z-20 bg-[#F0F1F2]/90 dark:bg-[#191B1F]/90 border-b border-[#E4E6E9] dark:border-[#2C3038]" title={isZh ? '生成速率 (Tokens/秒)' : 'Tokens per second'}>{isZh ? 'TPS' : 'TPS'}</th>
+                  <th className="ui-th text-right w-20 min-w-[75px] sticky top-0 z-20 bg-[#F0F1F2]/90 dark:bg-[#191B1F]/90 border-b border-[#E4E6E9] dark:border-[#2C3038]">{isZh ? '支出' : 'Cost'}</th>
+                  <th className="ui-th text-right w-24 min-w-[85px] sticky top-0 z-20 bg-[#F0F1F2]/90 dark:bg-[#191B1F]/90 border-b border-[#E4E6E9] dark:border-[#2C3038]">{isZh ? '耗时 / TTFT' : 'Latency / TTFT'}</th>
+                  <th className="ui-th text-center w-24 min-w-[85px] sticky top-0 z-20 bg-[#F0F1F2]/90 dark:bg-[#191B1F]/90 border-b border-[#E4E6E9] dark:border-[#2C3038]">{isZh ? '操作' : 'Actions'}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+              <tbody className="divide-y divide-[#E4E6E9]/60 dark:divide-[#2C3038]/60">
                 {suppliers.map((sup) => {
                   const isExpanded = !!expandedSuppliers[sup.channel_name];
                   const hasUsage = (sup.total_requests || 0) > 0;
@@ -625,17 +625,17 @@ export default function SupplierReconciliationView({
 
                   return (
                     <React.Fragment key={sup.channel_name || sup.channel_id}>
-                      <tr className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition">
+                      <tr className="ui-tr-hover">
                         {/* Supplier Name & Engine */}
-                        <td className="py-3.5 px-5">
+                        <td className="ui-td">
                           <div className="flex items-center space-x-2.5">
-                            <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-center shrink-0 shadow-2xs">
-                              <Server className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                            <div className="w-8 h-8 rounded-lg bg-[#F0F1F2] dark:bg-[#22252B] border border-[#E4E6E9] dark:border-[#2C3038] flex items-center justify-center shrink-0 shadow-2xs">
+                              <Server className="w-4 h-4 text-[#355CFF] dark:text-[#91A7FF]" />
                             </div>
                             <div className="min-w-0">
-                              <div className="flex items-center space-x-2 font-medium text-slate-900 dark:text-slate-100">
+                              <div className="flex items-center space-x-2 font-medium text-[#202124] dark:text-[#F1F2F4]">
                                 <span className="font-semibold text-sm">{sup.channel_name || (isZh ? '未命名渠道' : 'Unnamed Channel')}</span>
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-mono font-medium border border-slate-200/50 dark:border-slate-700/50">
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0] font-mono font-medium border border-[#E4E6E9]/60 dark:border-[#2C3038]/60">
                                   {sup.channel_type || 'openai'}
                                 </span>
                                 {sup.channel_status === 'active' && (
@@ -645,8 +645,8 @@ export default function SupplierReconciliationView({
                                   </span>
                                 )}
                                 {sup.channel_status === 'disabled' && (
-                                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center space-x-1 whitespace-nowrap">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block"></span>
+                                  <span className="text-xs text-[#656B75] dark:text-[#A1A7B0] font-medium flex items-center space-x-1 whitespace-nowrap">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-[#656B75] inline-block"></span>
                                     <span>{isZh ? '停用' : 'Disabled'}</span>
                                   </span>
                                 )}
@@ -665,8 +665,8 @@ export default function SupplierReconciliationView({
                         </td>
 
                         {/* Calls / Success */}
-                        <td className="py-3.5 px-4 text-right font-mono tabular-nums whitespace-nowrap">
-                          <div className="font-semibold text-slate-800 dark:text-slate-200">
+                        <td className="ui-td text-right font-mono tabular-nums whitespace-nowrap">
+                          <div className="font-semibold text-[#202124] dark:text-[#F1F2F4]">
                             {(sup.total_requests || 0).toLocaleString()}
                           </div>
                           {hasUsage ? (
@@ -685,74 +685,74 @@ export default function SupplierReconciliationView({
                               )}
                             </div>
                           ) : (
-                            <span className="inline-block text-xs px-1.5 py-0.2 rounded font-medium mt-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                            <span className="inline-block text-xs px-1.5 py-0.2 rounded font-medium mt-0.5 bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0]">
                               {isZh ? '期内无调用' : 'No Traffic'}
                             </span>
                           )}
                         </td>
 
                         {/* Uncached Prompt Tokens */}
-                        <td className="py-3 px-2.5 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300 font-medium whitespace-nowrap">
+                        <td className="ui-td text-right font-mono tabular-nums text-[#202124] dark:text-[#F1F2F4] font-medium whitespace-nowrap">
                           {uncachedPrompt.toLocaleString()}
                         </td>
 
                         {/* Completion Tokens */}
-                        <td className="py-3 px-2.5 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300 font-medium whitespace-nowrap">
+                        <td className="ui-td text-right font-mono tabular-nums text-[#202124] dark:text-[#F1F2F4] font-medium whitespace-nowrap">
                           {(sup.completion_tokens || 0).toLocaleString()}
                         </td>
 
                         {/* Cached Tokens */}
-                        <td className="py-3 px-2.5 text-right font-mono tabular-nums whitespace-nowrap">
+                        <td className="ui-td text-right font-mono tabular-nums whitespace-nowrap">
                           {(sup.cached_tokens || 0) > 0 ? (
                             <span className="text-amber-600 dark:text-amber-400 font-medium">
                               {(sup.cached_tokens || 0).toLocaleString()}
                             </span>
                           ) : (
-                            <span className="text-slate-500 dark:text-slate-400">-</span>
+                            <span className="text-[#656B75] dark:text-[#A1A7B0]">-</span>
                           )}
                         </td>
 
                         {/* Speed (TPS) */}
-                        <td className="py-3 px-2.5 text-right font-mono tabular-nums whitespace-nowrap">
+                        <td className="ui-td text-right font-mono tabular-nums whitespace-nowrap">
                           {hasUsage && sup.avg_tps > 0 ? (
                             <div className="flex items-center justify-end space-x-1 font-semibold">
-                              <span className="text-indigo-600 dark:text-indigo-400">{sup.avg_tps}</span>
-                              <span className="text-xs text-slate-500 dark:text-slate-400 font-normal">tok/s</span>
+                              <span className="text-[#355CFF] dark:text-[#91A7FF]">{sup.avg_tps}</span>
+                              <span className="text-xs text-[#656B75] dark:text-[#A1A7B0] font-normal">tok/s</span>
                             </div>
                           ) : (
-                            <span className="text-slate-500 dark:text-slate-400">-</span>
+                            <span className="text-[#656B75] dark:text-[#A1A7B0]">-</span>
                           )}
                         </td>
 
                         {/* Total Cost */}
-                        <td className="py-3 px-2.5 text-right font-mono tabular-nums whitespace-nowrap">
-                          <div className="font-bold text-sm text-slate-900 dark:text-white">
+                        <td className="ui-td text-right font-mono tabular-nums whitespace-nowrap">
+                          <div className="font-bold text-sm text-[#202124] dark:text-[#F1F2F4]">
                             ¥{(sup.total_cost || 0).toFixed(4)}
                           </div>
                         </td>
 
                         {/* Latency / TTFT */}
-                        <td className="py-3 px-2.5 text-right font-mono tabular-nums text-xs text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                          <div className="font-medium text-slate-700 dark:text-slate-300">{sup.avg_duration_ms || 0} ms</div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">TTFT: {sup.avg_ttft_ms || 0} ms</div>
+                        <td className="ui-td text-right font-mono tabular-nums text-xs text-[#656B75] dark:text-[#A1A7B0] whitespace-nowrap">
+                          <div className="font-medium text-[#202124] dark:text-[#F1F2F4]">{sup.avg_duration_ms || 0} ms</div>
+                          <div className="text-xs text-[#656B75] dark:text-[#A1A7B0]">TTFT: {sup.avg_ttft_ms || 0} ms</div>
                         </td>
 
                         {/* Actions */}
-                        <td className="py-3 px-2.5 text-center space-x-1.5 whitespace-nowrap">
+                        <td className="ui-td text-center space-x-1.5 whitespace-nowrap">
                           {sup.models && sup.models.length > 0 && (
                             <button
                               onClick={() => toggleExpand(sup.channel_name)}
-                              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium transition cursor-pointer inline-flex items-center space-x-1 shadow-2xs"
+                              className="ui-btn-secondary ui-btn-sm"
                               title={isZh ? '查看该供应商各模型消耗细项' : 'View model breakdown'}
                             >
                               <span>{sup.models.length} {isZh ? '个模型' : 'models'}</span>
-                              {isExpanded ? <ChevronUp className="w-3 h-3 text-slate-400" /> : <ChevronDown className="w-3 h-3 text-slate-400" />}
+                              {isExpanded ? <ChevronUp className="w-3 h-3 text-[#656B75] dark:text-[#A1A7B0]" /> : <ChevronDown className="w-3 h-3 text-[#656B75] dark:text-[#A1A7B0]" />}
                             </button>
                           )}
                           {onNavigateToLogs && (
                             <button
                               onClick={() => onNavigateToLogs(sup.channel_name)}
-                              className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-xs font-medium transition cursor-pointer inline-flex items-center space-x-1 shadow-2xs"
+                              className="ui-btn-secondary ui-btn-sm"
                               title={isZh ? '在审计日志中查看该供应商全部流水与厂商单号 (chat_id)' : 'Audit logs & chat_id'}
                             >
                               <span>{isZh ? '核对流水' : 'Logs'}</span>
@@ -764,69 +764,69 @@ export default function SupplierReconciliationView({
 
                       {/* Expandable Model Breakdown Details */}
                       {isExpanded && sup.models && sup.models.length > 0 && (
-                        <tr className="bg-slate-50/60 dark:bg-slate-900/40 border-b border-slate-100 dark:border-slate-800">
+                        <tr className="bg-[#F0F1F2]/40 dark:bg-[#22252B]/40 border-b border-[#E4E6E9] dark:border-[#2C3038]">
                           <td colSpan="9" className="py-3.5 px-6">
-                            <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2 flex items-center space-x-2">
-                              <Layers className="w-3.5 h-3.5 text-indigo-500" />
+                            <div className="text-xs font-semibold text-[#202124] dark:text-[#F1F2F4] mb-2 flex items-center space-x-2">
+                              <Layers className="w-3.5 h-3.5 text-[#355CFF] dark:text-[#91A7FF]" />
                               <span>{isZh ? `[${sup.channel_name}] 模型级对账结算明细` : `[${sup.channel_name}] Model Breakdown`}</span>
                             </div>
 
-                            <div className="border border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-[#0F1420] text-xs shadow-2xs">
+                            <div className="border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl overflow-hidden bg-white dark:bg-[#191B1F] text-xs shadow-2xs">
                               <table className="w-full text-left min-w-[850px]">
-                                <thead className="bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-[11px] border-b border-slate-200/80 dark:border-slate-800 uppercase font-semibold">
+                                <thead className="bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0] text-[11px] border-b border-[#E4E6E9] dark:border-[#2C3038] uppercase font-semibold">
                                   <tr>
-                                    <th className="py-2.5 px-2.5 min-w-[140px] bg-slate-100 dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800">{isZh ? '模型' : 'Model'}</th>
-                                    <th className="py-2.5 px-2 text-right w-20 min-w-[75px] bg-slate-100 dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800">{isZh ? '调用量' : 'Calls'}</th>
-                                    <th className="py-2.5 px-2 text-right w-20 min-w-[70px] bg-slate-100 dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800" title={isZh ? '未缓存输入 Prompt Token' : 'Uncached prompt tokens'}>{isZh ? '输入' : 'Input'}</th>
-                                    <th className="py-2.5 px-2 text-right w-20 min-w-[70px] bg-slate-100 dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800" title={isZh ? '模型输出 Completion Token' : 'Completion tokens'}>{isZh ? '输出' : 'Output'}</th>
-                                    <th className="py-2.5 px-2 text-right w-18 min-w-[65px] bg-slate-100 dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800" title={isZh ? '前缀缓存命中 Token' : 'Cached prefix tokens'}>{isZh ? '缓存' : 'Cached'}</th>
-                                    <th className="py-2.5 px-2 text-right w-20 min-w-[70px] bg-slate-100 dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800" title={isZh ? '生成速率 (Tokens/秒)' : 'Tokens per second'}>{isZh ? 'TPS' : 'TPS'}</th>
-                                    <th className="py-2.5 px-2 text-right w-20 min-w-[75px] bg-slate-100 dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800">{isZh ? '支出' : 'Cost'}</th>
-                                    <th className="py-2.5 px-2 text-right w-24 min-w-[85px] bg-slate-100 dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800">{isZh ? '耗时 / TTFT' : 'Latency / TTFT'}</th>
+                                    <th className="ui-th min-w-[140px]">{isZh ? '模型' : 'Model'}</th>
+                                    <th className="ui-th text-right w-20 min-w-[75px]">{isZh ? '调用量' : 'Calls'}</th>
+                                    <th className="ui-th text-right w-20 min-w-[70px]" title={isZh ? '未缓存输入 Prompt Token' : 'Uncached prompt tokens'}>{isZh ? '输入' : 'Input'}</th>
+                                    <th className="ui-th text-right w-20 min-w-[70px]" title={isZh ? '模型输出 Completion Token' : 'Completion tokens'}>{isZh ? '输出' : 'Output'}</th>
+                                    <th className="ui-th text-right w-18 min-w-[65px]" title={isZh ? '前缀缓存命中 Token' : 'Cached prefix tokens'}>{isZh ? '缓存' : 'Cached'}</th>
+                                    <th className="ui-th text-right w-20 min-w-[70px]" title={isZh ? '生成速率 (Tokens/秒)' : 'Tokens per second'}>{isZh ? 'TPS' : 'TPS'}</th>
+                                    <th className="ui-th text-right w-20 min-w-[75px]">{isZh ? '支出' : 'Cost'}</th>
+                                    <th className="ui-th text-right w-24 min-w-[85px]">{isZh ? '耗时 / TTFT' : 'Latency / TTFT'}</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono text-xs">
+                                <tbody className="divide-y divide-[#E4E6E9]/60 dark:divide-[#2C3038]/60 font-mono text-xs">
                                   {sup.models.map((m) => {
                                     const mUncached = m.uncached_prompt_tokens !== undefined
                                       ? m.uncached_prompt_tokens
                                       : Math.max(0, (m.prompt_tokens || 0) - (m.cached_tokens || 0));
                                     return (
-                                      <tr key={m.model} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition">
-                                        <td className="py-2 px-4 font-sans font-medium text-slate-800 dark:text-slate-200">
+                                      <tr key={m.model} className="ui-tr-hover">
+                                        <td className="ui-td font-sans font-medium text-[#202124] dark:text-[#F1F2F4]">
                                           {m.model}
                                         </td>
-                                        <td className="py-2 px-2 text-right tabular-nums whitespace-nowrap">
-                                          <span className="font-semibold text-slate-800 dark:text-slate-200">{m.total_requests}</span>
-                                          <span className="text-xs text-slate-500 dark:text-slate-400 ml-1.5">({m.success_requests}/{m.failed_requests})</span>
+                                        <td className="ui-td text-right tabular-nums whitespace-nowrap">
+                                          <span className="font-semibold text-[#202124] dark:text-[#F1F2F4]">{m.total_requests}</span>
+                                          <span className="text-xs text-[#656B75] dark:text-[#A1A7B0] ml-1.5">({m.success_requests}/{m.failed_requests})</span>
                                         </td>
-                                        <td className="py-2 px-2 text-right text-slate-700 dark:text-slate-300 tabular-nums whitespace-nowrap">
+                                        <td className="ui-td text-right text-[#202124] dark:text-[#F1F2F4] tabular-nums whitespace-nowrap">
                                           {mUncached.toLocaleString()}
                                         </td>
-                                        <td className="py-2 px-2 text-right text-slate-700 dark:text-slate-300 tabular-nums whitespace-nowrap">
+                                        <td className="ui-td text-right text-[#202124] dark:text-[#F1F2F4] tabular-nums whitespace-nowrap">
                                           {m.completion_tokens.toLocaleString()}
                                         </td>
-                                        <td className="py-2 px-2 text-right tabular-nums whitespace-nowrap">
+                                        <td className="ui-td text-right tabular-nums whitespace-nowrap">
                                           {m.cached_tokens > 0 ? (
                                             <span className="text-amber-600 dark:text-amber-400 font-medium">
                                               {m.cached_tokens.toLocaleString()}
                                             </span>
                                           ) : (
-                                            <span className="text-slate-500 dark:text-slate-400">-</span>
+                                            <span className="text-[#656B75] dark:text-[#A1A7B0]">-</span>
                                           )}
                                         </td>
-                                        <td className="py-2 px-2 text-right tabular-nums whitespace-nowrap">
+                                        <td className="ui-td text-right tabular-nums whitespace-nowrap">
                                           {m.avg_tps > 0 ? (
-                                            <span className="text-indigo-600 dark:text-indigo-400 font-medium">
-                                              {m.avg_tps} <span className="text-xs text-slate-500 dark:text-slate-400 font-normal">tok/s</span>
+                                            <span className="text-[#355CFF] dark:text-[#91A7FF] font-medium">
+                                              {m.avg_tps} <span className="text-xs text-[#656B75] dark:text-[#A1A7B0] font-normal">tok/s</span>
                                             </span>
                                           ) : (
-                                            <span className="text-slate-500 dark:text-slate-400">-</span>
+                                            <span className="text-[#656B75] dark:text-[#A1A7B0]">-</span>
                                           )}
                                         </td>
-                                        <td className="py-2 px-2 text-right font-bold text-slate-900 dark:text-white tabular-nums whitespace-nowrap">
+                                        <td className="ui-td text-right font-bold text-[#202124] dark:text-[#F1F2F4] tabular-nums whitespace-nowrap">
                                           ¥{m.total_cost.toFixed(4)}
                                         </td>
-                                        <td className="py-2 px-2 text-right text-slate-500 dark:text-slate-400 text-xs tabular-nums whitespace-nowrap">
+                                        <td className="ui-td text-right text-[#656B75] dark:text-[#A1A7B0] text-xs tabular-nums whitespace-nowrap">
                                           {m.avg_duration_ms}ms / TTFT {m.avg_ttft_ms}ms
                                         </td>
                                       </tr>

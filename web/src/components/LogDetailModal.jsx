@@ -210,36 +210,36 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="fixed inset-y-0 right-0 w-full max-w-xl bg-white dark:bg-[#0F1420] border-l border-slate-200/70 dark:border-slate-800/80 shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-200">
+      <div className="fixed inset-y-0 right-0 w-full max-w-xl bg-white dark:bg-[#191B1F] border-l border-[#E4E6E9] dark:border-[#2C3038] shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-200">
         {/* Header */}
-        <div className="p-6 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+        <div className="p-6 border-b border-[#E4E6E9] dark:border-[#2C3038] flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className={`w-9 h-9 rounded-lg flex items-center justify-center border ${
               isSuccess
-                ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200/80 dark:border-emerald-800/60 text-emerald-600 dark:text-emerald-400'
-                : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200/80 dark:border-rose-800/60 text-rose-600 dark:text-rose-400'
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                : 'bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400'
             }`}>
               <Activity className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-semibold text-base text-slate-900 dark:text-white tracking-tight flex items-center space-x-2">
+              <h3 className="font-semibold text-base text-[#202124] dark:text-[#F1F2F4] tracking-tight flex items-center space-x-2">
                 <span>{isZh ? '请求审计详情' : 'Audit Log Inspector'}</span>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-mono font-medium ${
                   isSuccess
-                    ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                    : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
+                    : 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30'
                 }`}>
                   HTTP {log.status_code || 200}
                 </span>
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-mono tabular-nums">
+              <p className="text-xs text-[#656B75] dark:text-[#A1A7B0] mt-0.5 font-mono tabular-nums">
                 {isZh ? '记录 #' : 'Log #'}{log.id} · {log.created_at ? new Date(log.created_at).toLocaleString() : (isZh ? '刚刚' : 'Just now')}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
+            className="p-1.5 hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] rounded-lg text-[#656B75] hover:text-[#202124] dark:hover:text-[#F1F2F4] transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -249,43 +249,43 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
         <div className="p-6 space-y-5 overflow-y-auto flex-1 text-sm">
           {/* Top key metric cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-800/70">
+            <div className="p-3.5 rounded-xl bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038]">
               <span className="ui-meta block font-medium">{isZh ? '请求模型' : 'Model'}</span>
-              <span className="text-xs font-mono font-semibold text-slate-900 dark:text-white truncate block mt-1">
+              <span className="text-xs font-mono font-semibold text-[#202124] dark:text-[#F1F2F4] truncate block mt-1">
                 {log.model || '-'}
               </span>
             </div>
-            <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-800/70">
+            <div className="p-3.5 rounded-xl bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038]">
               <span className="ui-meta block font-medium">{isZh ? '路由渠道' : 'Channel'}</span>
-              <span className="text-xs font-medium text-slate-900 dark:text-white truncate block mt-1 font-mono">
+              <span className="text-xs font-medium text-[#202124] dark:text-[#F1F2F4] truncate block mt-1 font-mono">
                 {log.channel || (isZh ? '直通/多源' : 'Direct / Multi')}
               </span>
             </div>
-            <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-800/70">
+            <div className="p-3.5 rounded-xl bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038]">
               <span className="ui-meta block font-medium">{isZh ? '首字延迟 (TTFT)' : 'TTFT Latency'}</span>
               <span className="text-xs font-mono tabular-nums font-semibold text-amber-600 dark:text-amber-400 block mt-1">
                 {log.ttft_ms ? `${log.ttft_ms} ms` : '-'}
               </span>
             </div>
-            <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-800/70">
+            <div className="p-3.5 rounded-xl bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038]">
               <span className="ui-meta block font-medium">{isZh ? '总执行耗时' : 'Total Duration'}</span>
-              <span className="text-xs font-mono tabular-nums font-semibold text-slate-900 dark:text-white block mt-1">
+              <span className="text-xs font-mono tabular-nums font-semibold text-[#202124] dark:text-[#F1F2F4] block mt-1">
                 {log.duration_ms} ms
               </span>
             </div>
           </div>
 
           {/* Quick Troubleshooting Actions Toolbar */}
-          <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-slate-100/70 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800">
-            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 px-1">
+          <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-[#F0F1F2] dark:bg-[#22252B] border border-[#E4E6E9] dark:border-[#2C3038]">
+            <span className="text-[11px] font-semibold text-[#656B75] dark:text-[#A1A7B0] px-1">
               {isZh ? '快捷排障:' : 'Diagnostics:'}
             </span>
             <button
               onClick={handleCopyCurl}
-              className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium border border-slate-200/80 dark:border-slate-700 transition flex items-center space-x-1.5 shadow-2xs cursor-pointer"
+              className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#191B1F] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] text-[#202124] dark:text-[#F1F2F4] text-xs font-medium border border-[#E4E6E9] dark:border-[#2C3038] transition flex items-center space-x-1.5 shadow-2xs cursor-pointer"
               title={isZh ? '复制终端可复现的 cURL 请求指令' : 'Copy reproducible cURL command'}
             >
-              {copiedCurl ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Terminal className="w-3.5 h-3.5 text-indigo-500" />}
+              {copiedCurl ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Terminal className="w-3.5 h-3.5 text-[#355CFF]" />}
               <span>{copiedCurl ? (isZh ? '已复制 cURL 指令' : 'cURL Copied') : (isZh ? '复制 cURL 重现指令' : 'Copy cURL')}</span>
             </button>
 
@@ -295,7 +295,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                   onClose();
                   onNavigate('playground');
                 }}
-                className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium border border-slate-200/80 dark:border-slate-700 transition flex items-center space-x-1.5 shadow-2xs cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#191B1F] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] text-[#202124] dark:text-[#F1F2F4] text-xs font-medium border border-[#E4E6E9] dark:border-[#2C3038] transition flex items-center space-x-1.5 shadow-2xs cursor-pointer"
                 title={isZh ? '在 Playground 演练测试此模型' : 'Test this model in Playground'}
               >
                 <Play className="w-3.5 h-3.5 text-emerald-500" />
@@ -309,7 +309,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                   onFilterBySession(log.trace_id);
                   onClose();
                 }}
-                className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium border border-slate-200/80 dark:border-slate-700 transition flex items-center space-x-1.5 shadow-2xs cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#191B1F] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] text-[#202124] dark:text-[#F1F2F4] text-xs font-medium border border-[#E4E6E9] dark:border-[#2C3038] transition flex items-center space-x-1.5 shadow-2xs cursor-pointer"
                 title={isZh ? '在调用日志中锁定该 Trace ID' : 'Filter by this Trace ID'}
               >
                 <Activity className="w-3.5 h-3.5 text-amber-500" />

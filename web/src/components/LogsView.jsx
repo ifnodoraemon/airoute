@@ -324,17 +324,17 @@ export default function LogsView({
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
           <div className="flex items-center space-x-3">
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
+            <h1 className="ui-page-title">
               {isZh ? '对话审计与请求日志' : 'Audit Logs & Traces'}
             </h1>
             {logViewMode === 'inference' && autoRefreshInterval > 0 && (
-              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-xs font-mono font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60">
+              <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-xs font-mono font-medium bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>{autoRefreshInterval}s {isZh ? '轮询中' : 'polling'}</span>
               </span>
             )}
           </div>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="ui-page-subtitle mt-1">
             {isZh
               ? '全链路 Trace 追溯、Token 消耗计量与企业安全审计留存'
               : 'End-to-end trace auditing, token metering, and enterprise compliance logs'}
@@ -343,27 +343,27 @@ export default function LogsView({
 
         {/* Tab switcher: Inference Audit vs System Runtime Console */}
         {isAdmin && (
-          <div className="flex items-center space-x-1 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200/80 dark:border-slate-700/80 shrink-0">
+          <div className="flex items-center space-x-1 p-1 bg-[#F0F1F2] dark:bg-[#22252B] rounded-xl border border-[#E4E6E9] dark:border-[#2C3038] shrink-0">
             <button
               onClick={() => setLogViewMode('inference')}
-              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors duration-150 cursor-pointer ${
                 logViewMode === 'inference'
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                  ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-2xs'
+                  : 'text-[#656B75] hover:text-[#202124] dark:text-[#A1A7B0] dark:hover:text-[#F1F2F4]'
               }`}
             >
-              <History className="w-3.5 h-3.5 text-indigo-500" />
+              <History className="w-3.5 h-3.5 text-[#355CFF]" />
               <span>{isZh ? '业务调用审计流水' : 'Inference Logs'}</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono bg-[#E4E6E9] dark:bg-[#2C3038] text-[#202124] dark:text-[#F1F2F4]">
                 {logTotal || displayedLogs.length}
               </span>
             </button>
             <button
               onClick={() => setLogViewMode('system')}
-              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors duration-150 cursor-pointer ${
                 logViewMode === 'system'
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                  ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-2xs'
+                  : 'text-[#656B75] hover:text-[#202124] dark:text-[#A1A7B0] dark:hover:text-[#F1F2F4]'
               }`}
             >
               <Terminal className="w-3.5 h-3.5 text-emerald-500" />
@@ -392,8 +392,8 @@ export default function LogsView({
             <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
           {/* Active Chat/Session/Trace Filter Tag */}
           {sessionFilter && (
-            <div className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800 text-xs text-indigo-700 dark:text-indigo-300 animate-in fade-in">
-              <span className="text-xs text-slate-500 dark:text-slate-400">{isZh ? '已锁定链路:' : 'Locked Trace:'}</span>
+            <div className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-[#EEF2FF] dark:bg-[#242D48] border border-[#355CFF]/30 dark:border-[#91A7FF]/30 text-xs text-[#355CFF] dark:text-[#91A7FF] animate-in fade-in">
+              <span className="text-xs text-[#656B75] dark:text-[#A1A7B0]">{isZh ? '已锁定链路:' : 'Locked Trace:'}</span>
               <span className="font-mono font-semibold max-w-[140px] truncate">{sessionFilter}</span>
               <button
                 onClick={() => {
@@ -410,7 +410,7 @@ export default function LogsView({
 
           {/* Keyword Search Input */}
           <div className="relative flex-1 min-w-[180px] sm:w-64">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+            <Search className="w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0] absolute left-3 top-2.5" />
             <input
               type="text"
               value={logFilter}
@@ -427,7 +427,7 @@ export default function LogsView({
             className="ui-btn ui-btn-secondary ui-btn-sm shrink-0"
             title={isZh ? '立即刷新日志' : 'Refresh logs now'}
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${logLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0] ${logLoading ? 'animate-spin' : ''}`} />
             <span>{isZh ? '刷新' : 'Refresh'}</span>
           </button>
 
@@ -437,19 +437,19 @@ export default function LogsView({
             aria-expanded={showMoreFilters}
             className={`ui-btn ui-btn-secondary ui-btn-sm shrink-0 ${
               showMoreFilters || activeFilterCount > 0
-                ? 'border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300'
+                ? 'border-[#355CFF]/40 dark:border-[#91A7FF]/40 text-[#355CFF] dark:text-[#91A7FF] bg-[#EEF2FF]/60 dark:bg-[#242D48]/60'
                 : ''
             }`}
             title={isZh ? '时间跨度、模型、渠道、状态、缓存与耗时筛选' : 'Time range, model, channel, status, cache and latency filters'}
           >
-            <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
+            <SlidersHorizontal className="w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0]" />
             <span>{isZh ? '更多筛选' : 'More filters'}</span>
             {activeFilterCount > 0 && (
-              <span className="rounded-full bg-indigo-100 dark:bg-indigo-950/70 px-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+              <span className="rounded-full bg-[#355CFF]/15 text-[#355CFF] dark:text-[#91A7FF] px-1.5 text-xs font-semibold">
                 {activeFilterCount}
               </span>
             )}
-            <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${showMoreFilters ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0] transition-transform ${showMoreFilters ? 'rotate-180' : ''}`} />
           </button>
 
           {/* Overflow menu: auto-refresh rate, CSV export, and the destructive clear */}
@@ -458,7 +458,7 @@ export default function LogsView({
               onClick={() => setMenuOpen((v) => !v)}
               aria-haspopup="true"
               aria-expanded={menuOpen}
-              className="ui-icon-btn border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F1420] shadow-sm"
+              className="ui-icon-btn border border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] shadow-2xs"
               title={isZh ? '更多操作' : 'More actions'}
             >
               <MoreHorizontal className="w-4 h-4" />
@@ -469,7 +469,7 @@ export default function LogsView({
                 <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
                 <div className="ui-menu min-w-[230px]">
                   <div className="px-2.5 py-1.5">
-                    <label htmlFor="logs-auto-refresh" className="block mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                    <label htmlFor="logs-auto-refresh" className="block mb-1 text-xs font-medium text-[#656B75] dark:text-[#A1A7B0]">
                       {isZh ? '自动刷新频率' : 'Auto-refresh'}
                     </label>
                     <select
@@ -486,7 +486,7 @@ export default function LogsView({
                     </select>
                   </div>
 
-                  <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+                  <div className="my-1 border-t border-[#E4E6E9] dark:border-[#2C3038]" />
 
                   <button
                     onClick={() => {
@@ -496,11 +496,11 @@ export default function LogsView({
                     className="ui-menu-item"
                     title={isZh ? '导出当前筛选结果为 CSV 审计报表' : 'Export current filtered results as CSV'}
                   >
-                    <FileSpreadsheet className="w-3.5 h-3.5 text-slate-400" />
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0]" />
                     <span>{isZh ? '导出 CSV 报表' : 'Export CSV'}</span>
                   </button>
 
-                  <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+                  <div className="my-1 border-t border-[#E4E6E9] dark:border-[#2C3038]" />
 
                   {/* Destructive action, visually separated from the rest. Only
                       super-admins may clear the audit trail. */}
@@ -510,7 +510,7 @@ export default function LogsView({
                         setMenuOpen(false);
                         handleClearLogs();
                       }}
-                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
                       title={isZh ? '清空全部审计调用日志（需确认）' : 'Clear all audit logs (ask for confirmation)'}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -526,15 +526,15 @@ export default function LogsView({
 
       {/* Collapsible filter panel: time range plus the five combined selects */}
       {showMoreFilters && (
-        <div className="p-4 bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-xs space-y-3 animate-in fade-in">
+        <div className="p-4 bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl shadow-2xs space-y-3 animate-in fade-in">
           {/* Row 1: Time Range and Matching Count */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
               <span className="ui-meta font-medium flex items-center space-x-1">
-                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                <Clock className="w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0]" />
                 <span>{isZh ? '时间跨度:' : 'Time Range:'}</span>
               </span>
-              <div className="inline-flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200/80 dark:border-slate-800">
+              <div className="inline-flex bg-[#F0F1F2] dark:bg-[#22252B] p-0.5 rounded-lg border border-[#E4E6E9] dark:border-[#2C3038]">
                 {[
                   { id: 'all', label: isZh ? '全部' : 'All' },
                   { id: '1h', label: isZh ? '近 1 小时' : '1h' },
@@ -550,10 +550,10 @@ export default function LogsView({
                         fetchLogs({ timeRange: item.id });
                       }
                     }}
-                    className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                       timeRange === item.id
-                        ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs font-semibold'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                        ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-2xs font-semibold'
+                        : 'text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
                     }`}
                   >
                     {item.label}
@@ -568,7 +568,7 @@ export default function LogsView({
                     type="datetime-local"
                     value={customStartTime}
                     onChange={(e) => setCustomStartTime(e.target.value)}
-                    className="bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-700 dark:text-slate-200 shadow-xs"
+                    className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-lg px-2 py-1 text-xs text-[#202124] dark:text-[#F1F2F4] shadow-2xs"
                     title={isZh ? '开始时间' : 'Start time'}
                   />
                   <span className="ui-meta">{isZh ? '至' : 'to'}</span>
@@ -576,7 +576,7 @@ export default function LogsView({
                     type="datetime-local"
                     value={customEndTime}
                     onChange={(e) => setCustomEndTime(e.target.value)}
-                    className="bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-700 dark:text-slate-200 shadow-xs"
+                    className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-lg px-2 py-1 text-xs text-[#202124] dark:text-[#F1F2F4] shadow-2xs"
                     title={isZh ? '结束时间' : 'End time'}
                   />
                   <button
@@ -597,7 +597,7 @@ export default function LogsView({
           </div>
 
           {/* Row 2: Combined Multi-Condition Dropdown Selectors */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800/60">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2.5 pt-3 border-t border-[#E4E6E9] dark:border-[#2C3038]">
             {/* 1. Model Selector */}
             <div>
               <label className="block mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -785,8 +785,8 @@ export default function LogsView({
 
       {/* Batch Action Bar (admin-only destructive actions) */}
       {isAdmin && selectedLogIds.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800/60 px-5 py-3 rounded-xl animate-in fade-in gap-3">
-          <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-900 dark:text-indigo-200">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#EEF2FF] dark:bg-[#242D48] border border-[#355CFF]/30 dark:border-[#91A7FF]/30 px-5 py-3 rounded-xl animate-in fade-in gap-3">
+          <div className="flex items-center space-x-2 text-xs font-semibold text-[#355CFF] dark:text-[#91A7FF]">
             <span>{isZh ? `已选中 ${selectedLogIds.length} 条调用日志` : `Selected ${selectedLogIds.length} log entries`}</span>
           </div>
           <div className="flex items-center space-x-2">
@@ -812,12 +812,12 @@ export default function LogsView({
         <div className="overflow-auto max-h-[calc(100vh-320px)]">
           <table className="w-full text-left border-collapse min-w-[1080px]">
             <thead className="sticky top-0 z-20 shadow-2xs">
-              <tr className="text-slate-500 dark:text-slate-400 text-xs uppercase font-medium tracking-wide">
-                <th className="py-3 px-3 w-10 text-center sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800">
+              <tr className="text-[#656B75] dark:text-[#A1A7B0] text-[11px] uppercase font-semibold tracking-wider">
+                <th className="py-3 px-3 w-10 text-center sticky top-0 z-20 bg-[#F7F7F5] dark:bg-[#191B1F] border-b border-[#E4E6E9] dark:border-[#2C3038]">
                   {isAdmin && (
                     <input
                       type="checkbox"
-                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      className="rounded border-[#E4E6E9] text-[#355CFF] focus:ring-[#355CFF] cursor-pointer"
                       checked={displayedLogs.length > 0 && selectedLogIds.length === displayedLogs.length}
                       onChange={(e) => {
                         if (e.target.checked) {
@@ -829,19 +829,19 @@ export default function LogsView({
                     />
                   )}
                 </th>
-                <th className="py-3 px-3 font-semibold sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800">{isZh ? '时间' : 'Time'}</th>
-                <th className="py-3 px-3 font-semibold sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800">{isZh ? '链路 / Trace' : 'Trace / Session'}</th>
-                <th className="py-3 px-3 font-semibold sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800">{isZh ? '模型 / 渠道' : 'Model / Provider'}</th>
-                <th className="py-3 px-2 font-semibold text-right w-20 min-w-[65px] sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800" title={isZh ? '未缓存输入 Prompt Token' : 'Uncached prompt tokens'}>{isZh ? '输入' : 'Input'}</th>
-                <th className="py-3 px-2 font-semibold text-right w-20 min-w-[65px] sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800" title={isZh ? '模型输出 Completion Token' : 'Completion tokens'}>{isZh ? '输出' : 'Output'}</th>
-                <th className="py-3 px-2 font-semibold text-right w-18 min-w-[60px] sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800" title={isZh ? '前缀缓存命中 Token' : 'Cached prefix tokens'}>{isZh ? '缓存' : 'Cached'}</th>
-                <th className="py-3 px-2 font-semibold text-right w-20 min-w-[65px] sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800" title={isZh ? '生成速率 (Tokens/秒)' : 'Tokens per second'}>{isZh ? 'TPS' : 'TPS'}</th>
-                <th className="py-3 px-2 font-semibold text-right w-20 min-w-[65px] sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800">{isZh ? '费用' : 'Cost'}</th>
-                <th className="py-3 px-2 font-semibold text-right w-24 min-w-[80px] sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800">{isZh ? '耗时 / TTFT' : 'Duration / TTFT'}</th>
-                <th className="py-3 px-2.5 text-right font-semibold w-24 min-w-[85px] sticky top-0 z-20 bg-slate-50 dark:bg-[#0F1420] border-b border-slate-200 dark:border-slate-800">{isZh ? '状态 / 操作' : 'Status / Action'}</th>
+                <th className="py-3 px-3 sticky top-0 z-20 bg-[#F7F7F5] dark:bg-[#191B1F] border-b border-[#E4E6E9] dark:border-[#2C3038]">{isZh ? '时间' : 'Time'}</th>
+                <th className="py-3 px-3 sticky top-0 z-20 bg-[#F7F7F5] dark:bg-[#191B1F] border-b border-[#E4E6E9] dark:border-[#2C3038]">{isZh ? '链路 / Trace' : 'Trace / Session'}</th>
+                <th className="py-3 px-3 sticky top-0 z-20 bg-[#F7F7F5] dark:bg-[#191B1F] border-b border-[#E4E6E9] dark:border-[#2C3038]">{isZh ? '模型 / 渠道' : 'Model / Provider'}</th>
+                <th className="py-3 px-2 text-right w-20 min-w-[65px] sticky top-0 z-20 bg-[#F7F7F5] dark:bg-[#191B1F] border-b border-[#E4E6E9] dark:border-[#2C3038]" title={isZh ? '未缓存输入 Prompt Token' : 'Uncached prompt tokens'}>{isZh ? '输入' : 'Input'}</th>
+                <th className="py-3 px-2 text-right w-20 min-w-[65px] sticky top-0 z-20 bg-[#F7F7F5] dark:bg-[#191B1F] border-b border-[#E4E6E9] dark:border-[#2C3038]" title={isZh ? '模型输出 Completion Token' : 'Completion tokens'}>{isZh ? '输出' : 'Output'}</th>
+                <th className="py-3 px-2 text-right w-18 min-w-[60px] sticky top-0 z-20 bg-[#F7F7F5] dark:bg-[#191B1F] border-b border-[#E4E6E9] dark:border-[#2C3038]" title={isZh ? '前缀缓存命中 Token' : 'Cached prefix tokens'}>{isZh ? '缓存' : 'Cached'}</th>
+                <th className="py-3 px-2 text-right w-20 min-w-[65px] sticky top-0 z-20 bg-[#F7F7F5] dark:bg-[#191B1F] border-b border-[#E4E6E9] dark:border-[#2C3038]" title={isZh ? '生成速率 (Tokens/秒)' : 'Tokens per second'}>{isZh ? 'TPS' : 'TPS'}</th>
+                <th className="py-3 px-2 text-right w-20 min-w-[65px] sticky top-0 z-20 bg-[#F7F7F5] dark:bg-[#191B1F] border-b border-[#E4E6E9] dark:border-[#2C3038]">{isZh ? '费用' : 'Cost'}</th>
+                <th className="py-3 px-2 text-right w-24 min-w-[80px] sticky top-0 z-20 bg-[#F7F7F5] dark:bg-[#191B1F] border-b border-[#E4E6E9] dark:border-[#2C3038]">{isZh ? '耗时 / TTFT' : 'Duration / TTFT'}</th>
+                <th className="py-3 px-2.5 text-right w-24 min-w-[85px] sticky top-0 z-20 bg-[#F7F7F5] dark:bg-[#191B1F] border-b border-[#E4E6E9] dark:border-[#2C3038]">{isZh ? '状态 / 操作' : 'Status / Action'}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70 text-xs">
+            <tbody className="divide-y divide-[#E4E6E9]/60 dark:divide-[#2C3038]/60 text-[13px]">
               {displayedLogs.map((log) => {
                 const isError = (log.status_code && log.status_code >= 400) || !!log.error_message;
                 const uncachedPrompt = getUncachedPrompt(log);
@@ -851,14 +851,14 @@ export default function LogsView({
                   <tr
                     key={log.id}
                     onClick={() => setActiveLogDetail(log)}
-                    className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition cursor-pointer group"
+                    className="hover:bg-[#F0F1F2]/70 dark:hover:bg-[#22252B]/60 transition-colors duration-150 cursor-pointer group"
                   >
                     {/* 1. Checkbox (selection drives admin batch deletion) */}
-                    <td className="py-3 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                    <td className="py-3 px-3 text-center border-b border-[#E4E6E9]/60 dark:border-[#2C3038]/60" onClick={(e) => e.stopPropagation()}>
                       {isAdmin && (
                         <input
                           type="checkbox"
-                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                          className="rounded border-[#E4E6E9] text-[#355CFF] focus:ring-[#355CFF] cursor-pointer"
                           checked={selectedLogIds.includes(log.id)}
                           onChange={(e) => {
                             e.stopPropagation();
@@ -873,18 +873,18 @@ export default function LogsView({
                     </td>
 
                     {/* 2. Request Time */}
-                    <td className="py-3 px-3.5 text-slate-500 dark:text-slate-400 font-mono tabular-nums whitespace-nowrap" title={log.created_at}>
+                    <td className="py-3 px-3.5 text-[#656B75] dark:text-[#A1A7B0] font-mono tabular-nums whitespace-nowrap border-b border-[#E4E6E9]/60 dark:border-[#2C3038]/60 text-xs" title={log.created_at}>
                       {log.created_at ? formatLogTime(log.created_at) : (isZh ? '刚刚' : 'Just now')}
                     </td>
 
                     {/* 3. Trace / Session */}
-                    <td className="py-3 px-3.5 font-mono tabular-nums text-xs">
+                    <td className="py-3 px-3.5 font-mono tabular-nums text-xs border-b border-[#E4E6E9]/60 dark:border-[#2C3038]/60">
                       <div className="flex items-center space-x-1.5">
                         <span
-                          className="text-slate-700 dark:text-slate-300 truncate max-w-[120px] font-medium"
+                          className="text-[#202124] dark:text-[#F1F2F4] truncate max-w-[120px] font-medium"
                           title={log.trace_id}
                         >
-                          {log.trace_id ? log.trace_id : <span className="text-slate-400 font-sans">-</span>}
+                          {log.trace_id ? log.trace_id : <span className="text-[#656B75] font-sans">-</span>}
                         </span>
                         {log.trace_id && (
                           <>
@@ -893,7 +893,7 @@ export default function LogsView({
                                 e.stopPropagation();
                                 copyWithFeedback(log.trace_id, 'Trace ID');
                               }}
-                              className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md text-slate-400 hover:text-slate-600 transition"
+                              className="p-1 hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] rounded-md text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4] transition-colors"
                               title={isZh ? "复制 Trace ID" : "Copy Trace ID"}
                             >
                               {copiedId === log.trace_id ? (
@@ -909,7 +909,7 @@ export default function LogsView({
                                 fetchLogs({ sessionFilter: log.trace_id });
                                 if (showToast) showToast(isZh ? `已筛选 Trace: ${log.trace_id}` : `Filtered Trace: ${log.trace_id}`, 'info');
                               }}
-                              className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
+                              className="p-1 hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] rounded-md text-[#656B75] dark:text-[#A1A7B0] hover:text-[#355CFF] dark:hover:text-[#91A7FF] transition-colors"
                               title={isZh ? "按 Trace ID 快速过滤" : "Quick filter by Trace ID"}
                             >
                               <Search className="w-3 h-3" />
@@ -920,7 +920,7 @@ export default function LogsView({
                       {log.session_id && (
                         <div className="flex items-center space-x-1 mt-0.5">
                           <span
-                            className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[110px]"
+                            className="text-xs text-[#656B75] dark:text-[#A1A7B0] truncate max-w-[110px]"
                             title={isZh ? `会话: ${log.session_id}` : `Session: ${log.session_id}`}
                           >
                             {isZh ? '会话:' : 'Session:'} {log.session_id}
@@ -930,7 +930,7 @@ export default function LogsView({
                               e.stopPropagation();
                               copyWithFeedback(log.session_id, isZh ? '会话 ID' : 'Session ID');
                             }}
-                            className="text-slate-400 hover:text-slate-600"
+                            className="text-[#656B75] hover:text-[#202124] dark:text-[#A1A7B0] dark:hover:text-[#F1F2F4]"
                             title={isZh ? "复制会话 ID" : "Copy Session ID"}
                           >
                             <Copy className="w-2.5 h-2.5" />
@@ -939,7 +939,7 @@ export default function LogsView({
                       )}
                       {log.chat_id && (
                         <span
-                          className="block text-xs text-slate-500 dark:text-slate-400 truncate max-w-[120px]"
+                          className="block text-xs text-[#656B75] dark:text-[#A1A7B0] truncate max-w-[120px]"
                           title={isZh ? `对话: ${log.chat_id}` : `Chat: ${log.chat_id}`}
                         >
                           {isZh ? '对话:' : 'Chat:'} {log.chat_id}
@@ -948,62 +948,62 @@ export default function LogsView({
                     </td>
 
                     {/* 4. Model / Provider */}
-                    <td className="py-3 px-3.5 text-xs">
+                    <td className="py-3 px-3.5 text-xs border-b border-[#E4E6E9]/60 dark:border-[#2C3038]/60">
                       <span
-                        className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-md max-w-[140px] inline-block truncate align-middle font-mono font-medium"
+                        className="px-2 py-0.5 bg-[#F0F1F2] dark:bg-[#22252B] text-[#202124] dark:text-[#F1F2F4] rounded-md max-w-[140px] inline-block truncate align-middle font-mono font-medium border border-[#E4E6E9] dark:border-[#2C3038]"
                         title={log.model}
                       >
                         {log.model || '-'}
                       </span>
                       {log.channel && (
-                        <div className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5 truncate max-w-[140px]">
+                        <div className="text-xs text-[#656B75] dark:text-[#A1A7B0] font-mono mt-0.5 truncate max-w-[140px]">
                           {isZh ? '渠道:' : 'Provider:'} {log.channel}
                         </div>
                       )}
                     </td>
 
                     {/* 5. Uncached Prompt */}
-                    <td className="py-3 px-2 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300 font-medium whitespace-nowrap">
+                    <td className="py-3 px-2 text-right font-mono tabular-nums text-[#202124] dark:text-[#F1F2F4] font-medium whitespace-nowrap border-b border-[#E4E6E9]/60 dark:border-[#2C3038]/60">
                       {uncachedPrompt.toLocaleString()}
                     </td>
 
                     {/* 6. Completion */}
-                    <td className="py-3 px-2 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300 font-medium whitespace-nowrap">
+                    <td className="py-3 px-2 text-right font-mono tabular-nums text-[#202124] dark:text-[#F1F2F4] font-medium whitespace-nowrap border-b border-[#E4E6E9]/60 dark:border-[#2C3038]/60">
                       {(log.completion_tokens || 0).toLocaleString()}
                     </td>
 
                     {/* 7. Cached */}
-                    <td className="py-3 px-2 text-right font-mono tabular-nums whitespace-nowrap">
+                    <td className="py-3 px-2 text-right font-mono tabular-nums whitespace-nowrap border-b border-[#E4E6E9]/60 dark:border-[#2C3038]/60">
                       {(log.cached_tokens || 0) > 0 ? (
                         <span className="text-amber-600 dark:text-amber-400 font-medium">
                           {(log.cached_tokens || 0).toLocaleString()}
                         </span>
                       ) : (
-                        <span className="text-slate-400">-</span>
+                        <span className="text-[#656B75] dark:text-[#A1A7B0]">-</span>
                       )}
                     </td>
 
                     {/* 8. TPS */}
-                    <td className="py-3 px-2 text-right font-mono tabular-nums whitespace-nowrap">
+                    <td className="py-3 px-2 text-right font-mono tabular-nums whitespace-nowrap border-b border-[#E4E6E9]/60 dark:border-[#2C3038]/60">
                       {tps !== '-' ? (
                         <div className="flex items-center justify-end space-x-0.5 font-semibold">
-                          <span className="text-indigo-600 dark:text-indigo-400">{tps}</span>
-                          <span className="text-xs text-slate-500 dark:text-slate-400 font-normal">tok/s</span>
+                          <span className="text-[#355CFF] dark:text-[#91A7FF]">{tps}</span>
+                          <span className="text-xs text-[#656B75] dark:text-[#A1A7B0] font-normal">tok/s</span>
                         </div>
                       ) : (
-                        <span className="text-slate-400">-</span>
+                        <span className="text-[#656B75] dark:text-[#A1A7B0]">-</span>
                       )}
                     </td>
 
                     {/* 9. Cost */}
-                    <td className="py-3 px-2 text-right font-mono tabular-nums whitespace-nowrap">
+                    <td className="py-3 px-2 text-right font-mono tabular-nums whitespace-nowrap border-b border-[#E4E6E9]/60 dark:border-[#2C3038]/60">
                       <div className="flex items-center justify-end space-x-1">
-                        <span className="font-semibold text-slate-900 dark:text-white">
+                        <span className="font-semibold text-[#202124] dark:text-[#F1F2F4]">
                           ¥{(log.cost || 0).toFixed(4)}
                         </span>
                         {log.is_off_peak && (
                           <span
-                            className="px-1.5 py-0.2 rounded text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                            className="px-1.5 py-0.2 rounded text-xs font-medium bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0]"
                             title={`Off-peak ${(log.off_peak_discount || 0.5) * 100}%`}
                           >
                             {isZh ? `闲` : `Off`}
@@ -1013,7 +1013,7 @@ export default function LogsView({
                     </td>
 
                     {/* 10. Duration / TTFT */}
-                    <td className="py-3 px-2 text-right font-mono tabular-nums whitespace-nowrap">
+                    <td className="py-3 px-2 text-right font-mono tabular-nums whitespace-nowrap border-b border-[#E4E6E9]/60 dark:border-[#2C3038]/60">
                       <div
                         className={`font-semibold ${
                           (log.duration_ms || 0) < 500
@@ -1025,20 +1025,20 @@ export default function LogsView({
                       >
                         {formatDuration(log.duration_ms ?? 0)}
                       </div>
-                      <div className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                      <div className="text-xs font-mono text-[#656B75] dark:text-[#A1A7B0]">
                         TTFT: {(log.ttft_ms || 0) > 0 ? formatDuration(log.ttft_ms) : '-'}
                       </div>
                     </td>
 
                     {/* 11. Status & Actions */}
-                    <td className="py-3 px-2.5 text-right space-x-1.5 whitespace-nowrap">
+                    <td className="py-3 px-2.5 text-right space-x-1.5 whitespace-nowrap border-b border-[#E4E6E9]/60 dark:border-[#2C3038]/60">
                       <span
                         className={`px-2 py-0.5 rounded-full text-xs font-mono font-medium ${
                           !isError
-                            ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                            ? 'bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
                             : (log.status_code || 200) < 500
-                            ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
-                            : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                            ? 'bg-amber-500/10 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                            : 'bg-rose-500/10 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-500/20'
                         }`}
                       >
                         {log.status_code || 200}
@@ -1051,7 +1051,7 @@ export default function LogsView({
                           {log.error_message}
                         </span>
                       )}
-                      <span className="text-xs text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition font-medium">
+                      <span className="text-xs text-[#656B75] dark:text-[#A1A7B0] group-hover:text-[#355CFF] dark:group-hover:text-[#91A7FF] transition-colors font-medium">
                         {isZh ? '详情 →' : 'Detail →'}
                       </span>
                       {isAdmin && (
@@ -1060,7 +1060,7 @@ export default function LogsView({
                             e.stopPropagation();
                             handleDeleteSingleLog(log.id);
                           }}
-                          className="p-1 text-slate-400 hover:text-rose-600 transition rounded-md hover:bg-rose-50 dark:hover:bg-rose-950/50 inline-flex items-center align-middle cursor-pointer"
+                          className="p-1 text-[#656B75] hover:text-rose-600 transition-colors rounded-md hover:bg-rose-500/10 inline-flex items-center align-middle cursor-pointer"
                           title={isZh ? '删除此记录' : 'Delete log'}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1119,8 +1119,8 @@ export default function LogsView({
         </div>
 
         {/* Server-side pagination */}
-        <div className="flex items-center justify-between p-4 border-t border-slate-100 dark:border-slate-800/80">
-          <span className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
+        <div className="flex items-center justify-between p-4 border-t border-[#E4E6E9] dark:border-[#2C3038]">
+          <span className="text-xs text-[#656B75] dark:text-[#A1A7B0] font-mono tabular-nums">
             {isZh
               ? `第 ${Math.floor(logOffset / logPageSize) + 1} 页 · 本页 ${displayedLogs.length} 条${logTotal > 0 ? ` · 筛选结果共 ${logTotal} 条` : ''}`
               : `Page ${Math.floor(logOffset / logPageSize) + 1} · ${displayedLogs.length} shown${logTotal > 0 ? ` · ${logTotal} matching` : ''}`}

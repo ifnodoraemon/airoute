@@ -270,19 +270,19 @@ export default function ModelRouteModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-xl w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
+      <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-6 max-w-xl w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 shrink-0">
+        <div className="flex items-center justify-between border-b border-[#E4E6E9] dark:border-[#2C3038] pb-3 shrink-0">
           <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold">
+            <div className="w-8 h-8 rounded-xl bg-[#EEF2FF] dark:bg-[#242D48] border border-[#355CFF]/30 dark:border-[#91A7FF]/30 flex items-center justify-center text-[#355CFF] dark:text-[#91A7FF] font-bold">
               <Cpu className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 tracking-tight">
+              <h3 className="font-semibold text-base text-[#202124] dark:text-[#F1F2F4] tracking-tight">
                 {isNew ? (isZh ? '新建模型路由' : 'Create Model Route') : (isZh ? '配置模型路由' : 'Configure Model Route')}
               </h3>
               {!isNew && (
-                <span className="font-mono text-xs text-indigo-600 dark:text-indigo-400 font-medium">
+                <span className="font-mono text-xs text-[#355CFF] dark:text-[#91A7FF] font-medium">
                   {modelName}
                 </span>
               )}
@@ -290,7 +290,7 @@ export default function ModelRouteModal({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
+            className="p-1.5 hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] rounded-xl text-[#656B75] hover:text-[#202124] dark:hover:text-[#F1F2F4] transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -692,18 +692,18 @@ export default function ModelRouteModal({
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end space-x-3 pt-3 border-t border-slate-100 dark:border-slate-800 shrink-0">
+          <div className="flex justify-end space-x-3 pt-3 border-t border-[#E4E6E9] dark:border-[#2C3038] shrink-0">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 font-medium transition cursor-pointer"
+              className="ui-btn-secondary"
             >
               {isZh ? '取消' : 'Cancel'}
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="px-4 py-1.5 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg font-medium shadow-sm transition flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer text-xs"
+              className="ui-btn-primary"
             >
               {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
               <span>{isNew ? (isZh ? '创建模型' : 'Create Route') : (isZh ? '保存' : 'Save')}</span>

@@ -54,14 +54,14 @@ export default function ChannelModal({
       <form
         onSubmit={onSubmit}
         aria-busy={submitting}
-        className="fixed inset-y-0 right-0 w-full max-w-xl bg-white dark:bg-[#0F1420] border-l border-slate-200/70 dark:border-slate-800/80 shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-200"
+        className="fixed inset-y-0 right-0 w-full max-w-xl bg-white dark:bg-[#191B1F] border-l border-[#E4E6E9] dark:border-[#2C3038] shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-200"
       >
-        <div className="p-6 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+        <div className="p-6 border-b border-[#E4E6E9] dark:border-[#2C3038] flex items-center justify-between">
           <div>
-            <h3 className="font-semibold text-base text-slate-900 dark:text-white tracking-tight">
+            <h3 className="font-semibold text-base text-[#202124] dark:text-[#F1F2F4] tracking-tight">
               {editingChannelId ? (isZh ? '编辑服务商' : 'Edit Upstream Provider') : (isZh ? '接入服务商' : 'Connect New Provider')}
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            <p className="text-xs text-[#656B75] dark:text-[#A1A7B0] mt-0.5">
               {isZh ? '配置上游模型服务商端点、鉴权密钥与协议映射' : 'Configure upstream endpoint, authentication credentials, and protocol mappings'}
             </p>
           </div>
@@ -93,10 +93,10 @@ export default function ChannelModal({
 
           {/* Field 0: 1-Click Provider Quick Presets */}
           {!editingChannelId && (
-            <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200/80 dark:border-slate-800/80 space-y-2">
+            <div className="p-3.5 bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 rounded-xl border border-[#E4E6E9] dark:border-[#2C3038] space-y-2">
               <div className="flex items-center justify-between">
-                <span className="font-medium text-slate-700 dark:text-slate-300 text-xs flex items-center space-x-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-slate-400" />
+                <span className="font-medium text-[#202124] dark:text-[#F1F2F4] text-xs flex items-center space-x-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-[#355CFF] dark:text-[#91A7FF]" />
                   <span>{isZh ? '快捷预设服务商 (点击一键自动填入):' : 'Quick Presets (1-click autofill):'}</span>
                 </span>
               </div>
@@ -117,10 +117,10 @@ export default function ChannelModal({
                     key={p.key}
                     type="button"
                     onClick={() => applyPreset(p.key)}
-                    className="px-2.5 py-1 rounded-md border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium transition flex items-center space-x-1 cursor-pointer shadow-sm"
+                    className="px-2.5 py-1 rounded-md border border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] text-[#202124] dark:text-[#F1F2F4] text-xs font-medium transition flex items-center space-x-1 cursor-pointer shadow-2xs"
                   >
                     <span>{p.label}</span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400 font-normal">({p.badge})</span>
+                    <span className="text-xs text-[#656B75] dark:text-[#A1A7B0] font-normal">({p.badge})</span>
                   </button>
                 ))}
               </div>
@@ -224,15 +224,15 @@ export default function ChannelModal({
           />
 
           {/* Collapsible Advanced Settings */}
-          <details className="group border border-slate-200/80 dark:border-slate-800 rounded-xl p-3.5 bg-slate-50/50 dark:bg-slate-900/40">
-            <summary className="font-medium text-slate-700 dark:text-slate-300 cursor-pointer flex items-center justify-between select-none">
+          <details className="group border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl p-3.5 bg-[#F0F1F2]/40 dark:bg-[#22252B]/40">
+            <summary className="font-medium text-[#202124] dark:text-[#F1F2F4] cursor-pointer flex items-center justify-between select-none">
               <span>{isZh ? '高级设置' : 'Advanced Settings'}</span>
-              <span className="text-slate-400 group-open:rotate-180 transition-transform text-xs">▼</span>
+              <span className="text-[#656B75] dark:text-[#A1A7B0] group-open:rotate-180 transition-transform text-xs">▼</span>
             </summary>
 
-            <div className="pt-3 space-y-3.5 border-t border-slate-200/60 dark:border-slate-800 mt-2.5">
+            <div className="pt-3 space-y-3.5 border-t border-[#E4E6E9] dark:border-[#2C3038] mt-2.5">
               <div>
-                <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">{isZh ? '服务引擎类型' : 'Engine Type'}</label>
+                <label className="block font-medium text-[#202124] dark:text-[#F1F2F4] mb-1">{isZh ? '服务引擎类型' : 'Engine Type'}</label>
                 <select
                   value={newChannel.type}
                   onChange={(e) => setNewChannel({ ...newChannel, type: e.target.value })}
@@ -298,7 +298,7 @@ export default function ChannelModal({
         </div>
 
         {/* Sticky Footer */}
-        <div className="p-4 bg-slate-50/70 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-3 mt-auto">
+        <div className="p-4 bg-[#F7F7F5]/90 dark:bg-[#111214]/90 border-t border-[#E4E6E9] dark:border-[#2C3038] flex items-center justify-between gap-3 mt-auto">
           <span className="ui-meta-sm truncate">
             {isDirty && !submitting ? (isZh ? '有未保存的修改' : 'Unsaved changes') : ''}
           </span>

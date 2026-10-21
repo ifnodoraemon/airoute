@@ -33,17 +33,17 @@ export default function DiscardChangesDialog({
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="discard-changes-title"
-        className="w-full max-w-sm rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0F1420] p-5 shadow-2xl animate-in zoom-in-95 duration-150"
+        className="w-full max-w-sm rounded-2xl border border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] p-5 shadow-2xl animate-in zoom-in-95 duration-150"
       >
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400">
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
             <AlertTriangle className="h-4 w-4" />
           </span>
           <div className="min-w-0">
-            <h4 id="discard-changes-title" className="text-sm font-semibold text-slate-900 dark:text-white">
+            <h4 id="discard-changes-title" className="text-sm font-semibold text-[#202124] dark:text-[#F1F2F4]">
               {title || (isZh ? '放弃未保存的修改？' : 'Discard unsaved changes?')}
             </h4>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            <p className="mt-1 text-xs text-[#656B75] dark:text-[#A1A7B0] leading-relaxed">
               {description ||
                 (isZh
                   ? '当前表单还有未保存的内容，关闭后这些修改将会丢失。'

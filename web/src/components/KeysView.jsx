@@ -224,19 +224,19 @@ export default function KeysView({
   const activeCount = keys.filter(k => k.status !== 'disabled').length;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Page Header (Directly on canvas) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-3">
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
+            <h1 className="ui-page-title">
               {isZh ? 'API 密钥管理' : 'API Keys'}
             </h1>
-            <span className="text-xs font-mono tabular-nums px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+            <span className="text-xs font-mono tabular-nums px-2.5 py-0.5 rounded-full bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0]">
               {keys.length} {isZh ? '个密钥' : 'keys'} · {activeCount} {isZh ? '生效中' : 'active'}
             </span>
           </div>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="ui-page-subtitle mt-1">
             {isZh ? '用于各业务客户端与系统调用接入鉴权、独立计费及模型级权限隔离' : 'Authentication, group pricing, rate limits, and model access scopes for client applications'}
           </p>
         </div>
@@ -257,7 +257,7 @@ export default function KeysView({
             className="ui-btn-secondary"
             title={isMasked ? (isZh ? '显示明文密钥' : 'Show plaintext key') : (isZh ? '脱敏隐藏密钥' : 'Mask key')}
           >
-            {isMasked ? <Eye className="w-3.5 h-3.5 text-slate-400" /> : <EyeOff className="w-3.5 h-3.5 text-slate-400" />}
+            {isMasked ? <Eye className="w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0]" /> : <EyeOff className="w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0]" />}
             <span>{isMasked ? (isZh ? '显示明文' : 'Show Key') : (isZh ? '脱敏遮蔽' : 'Mask Key')}</span>
           </button>
           <button
@@ -265,7 +265,7 @@ export default function KeysView({
             className="ui-btn-secondary"
             title={isZh ? '导出当前密钥列表为 CSV' : 'Export keys as CSV'}
           >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-slate-400" />
+            <FileSpreadsheet className="w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0]" />
             <span>{isZh ? '导出清单' : 'Export CSV'}</span>
           </button>
           <button
@@ -281,7 +281,7 @@ export default function KeysView({
       {/* Filter Bar (Directly on canvas) */}
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="relative flex-1 max-w-sm">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchQuery}
@@ -293,33 +293,33 @@ export default function KeysView({
 
         <div className="flex flex-wrap items-center gap-2">
           <span className="ui-meta font-medium">{isZh ? '状态:' : 'Status:'}</span>
-          <div className="inline-flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200/80 dark:border-slate-800">
+          <div className="inline-flex bg-[#F0F1F2] dark:bg-[#22252B] p-0.5 rounded-lg border border-[#E4E6E9] dark:border-[#2C3038]">
             <button
               onClick={() => setFilters({ status: 'all' })}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                 statusFilter === 'all'
-                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-semibold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-2xs font-semibold'
+                  : 'text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
               }`}
             >
               {isZh ? '全部' : 'All'} ({keys.length})
             </button>
             <button
               onClick={() => setFilters({ status: 'active' })}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                 statusFilter === 'active'
-                  ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm font-semibold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  ? 'bg-white dark:bg-[#191B1F] text-emerald-600 dark:text-emerald-400 shadow-2xs font-semibold'
+                  : 'text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
               }`}
             >
               {isZh ? '正常' : 'Active'} ({activeCount})
             </button>
             <button
               onClick={() => setFilters({ status: 'disabled' })}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                 statusFilter === 'disabled'
-                  ? 'bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400 shadow-sm font-semibold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  ? 'bg-white dark:bg-[#191B1F] text-rose-600 dark:text-rose-400 shadow-2xs font-semibold'
+                  : 'text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
               }`}
             >
               {isZh ? '已停用' : 'Disabled'} ({keys.length - activeCount})
@@ -350,20 +350,20 @@ export default function KeysView({
       ) : (
         <div className="space-y-4">
           {selectedKeyIds.length > 0 && (
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800/60 px-5 py-3 rounded-xl animate-in fade-in gap-3">
-              <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-900 dark:text-indigo-200">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#EEF2FF] dark:bg-[#242D48] border border-[#355CFF]/30 dark:border-[#91A7FF]/30 px-5 py-3 rounded-xl animate-in fade-in gap-3">
+              <div className="flex items-center space-x-2 text-xs font-semibold text-[#355CFF] dark:text-[#91A7FF]">
                 <span>{isZh ? `已选中 ${selectedKeyIds.length} 个密钥` : `Selected ${selectedKeyIds.length} keys`}</span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => handleBatchStatusKeys('active')}
-                  className="ui-btn ui-btn-sm bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
+                  className="ui-btn ui-btn-sm bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs"
                 >
                   {isZh ? '批量启用' : 'Batch Enable'}
                 </button>
                 <button
                   onClick={() => handleBatchStatusKeys('disabled')}
-                  className="ui-btn ui-btn-sm bg-amber-600 text-white hover:bg-amber-700 shadow-sm"
+                  className="ui-btn ui-btn-sm bg-amber-600 text-white hover:bg-amber-700 shadow-xs"
                 >
                   {isZh ? '批量停用' : 'Batch Disable'}
                 </button>
@@ -387,10 +387,10 @@ export default function KeysView({
           <div className="ui-card overflow-hidden">
             {filteredKeys.length === 0 ? (
               <div className="p-12 text-center flex flex-col items-center justify-center space-y-3">
-                <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 shadow-sm">
+                <div className="w-10 h-10 rounded-xl bg-[#F0F1F2] dark:bg-[#22252B] border border-[#E4E6E9] dark:border-[#2C3038] flex items-center justify-center text-[#656B75] dark:text-[#A1A7B0] shadow-2xs">
                   <Search className="w-5 h-5" />
                 </div>
-                <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
+                <h4 className="font-semibold text-sm text-[#202124] dark:text-[#F1F2F4]">
                   {isZh ? '没有匹配的密钥' : 'No matching keys'}
                 </h4>
                 <p className="ui-meta max-w-sm">
@@ -404,11 +404,11 @@ export default function KeysView({
               <div className="overflow-x-auto w-full">
                 <table className="w-full text-left border-collapse sm:min-w-[760px]">
                   <thead>
-                    <tr className="border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/60 dark:bg-slate-900/40">
+                    <tr className="border-b border-[#E4E6E9] dark:border-[#2C3038] bg-[#F7F7F5] dark:bg-[#191B1F]">
                       <th scope="col" className="ui-th w-10 text-center">
                         <input
                           type="checkbox"
-                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                          className="rounded border-[#E4E6E9] text-[#355CFF] focus:ring-[#355CFF] cursor-pointer"
                           checked={allVisibleSelected}
                           onChange={(e) => {
                             if (e.target.checked) {
@@ -431,13 +431,13 @@ export default function KeysView({
                       <th scope="col" className="ui-th text-right">{isZh ? '操作' : 'Actions'}</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
+                  <tbody className="divide-y divide-[#E4E6E9]/60 dark:divide-[#2C3038]/60 text-[13px]">
                     {sortedKeys.map((k) => (
-                      <tr key={k.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition">
+                      <tr key={k.id} className="hover:bg-[#F0F1F2]/70 dark:hover:bg-[#22252B]/60 transition-colors duration-150">
                         <td className="ui-td text-center">
                           <input
                             type="checkbox"
-                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            className="rounded border-[#E4E6E9] text-[#355CFF] focus:ring-[#355CFF] cursor-pointer"
                             checked={selectedKeyIds.includes(k.id)}
                             onChange={(e) => {
                               e.stopPropagation();
@@ -450,17 +450,17 @@ export default function KeysView({
                           />
                         </td>
                         {isVisible('name') && (
-                          <td className="ui-td font-medium text-slate-800 dark:text-slate-100">
+                          <td className="ui-td font-medium text-[#202124] dark:text-[#F1F2F4]">
                             {k.tenant_id}
                           </td>
                         )}
                         {isVisible('token') && (
-                          <td className={`ui-td font-mono text-indigo-700 dark:text-indigo-400 ${COLUMN_CLASS.token}`}>
+                          <td className={`ui-td font-mono text-[#355CFF] dark:text-[#91A7FF] ${COLUMN_CLASS.token}`}>
                             <div className="flex items-center space-x-1.5">
                               <span className="select-all">{maskKeyString(k.key)}</span>
                               <button
                                 onClick={() => copyToClipboard(k.key)}
-                                className="p-1 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-md text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 transition cursor-pointer"
+                                className="p-1 hover:bg-[#EEF2FF] dark:hover:bg-[#242D48] rounded-md text-[#656B75] dark:text-[#A1A7B0] hover:text-[#355CFF] dark:hover:text-[#91A7FF] transition-colors cursor-pointer"
                                 title={isZh ? "复制完整 API Key" : "Copy full API Key"}
                               >
                                 {copiedKey === k.key ? (
@@ -498,26 +498,26 @@ export default function KeysView({
                         )}
                         {isVisible('usage') && (
                           <td className={`ui-td font-mono tabular-nums ${COLUMN_CLASS.usage}`}>
-                            <span className="text-slate-900 dark:text-slate-100 font-semibold">
+                            <span className="text-[#202124] dark:text-[#F1F2F4] font-semibold">
                               ¥{Number(k.used_cost || 0).toFixed(4)}
                             </span>
                           </td>
                         )}
                         {isVisible('budget') && (
                           <td className={`ui-td font-mono tabular-nums ${COLUMN_CLASS.budget}`}>
-                            <span className={k.budget > 0 ? 'text-indigo-600 dark:text-indigo-400 font-medium' : 'text-slate-500 dark:text-slate-400'}>
+                            <span className={k.budget > 0 ? 'text-[#355CFF] dark:text-[#91A7FF] font-medium' : 'text-[#656B75] dark:text-[#A1A7B0]'}>
                               {k.budget > 0 ? `¥${Number(k.budget).toFixed(2)}` : (isZh ? '不限' : 'Unlimited')}
                             </span>
                           </td>
                         )}
                         {isVisible('models') && (
-                          <td className={`ui-td font-medium text-slate-600 dark:text-slate-300 ${COLUMN_CLASS.models}`}>
+                          <td className={`ui-td font-medium text-[#656B75] dark:text-[#A1A7B0] ${COLUMN_CLASS.models}`}>
                             {!k.allowed_models || k.allowed_models.length === 0 ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0] font-medium">
                                 {isZh ? '全部允许' : 'All Allowed'}
                               </span>
                             ) : (
-                              <span className="font-mono text-xs bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                              <span className="font-mono text-xs bg-[#F0F1F2] dark:bg-[#22252B] px-2 py-0.5 rounded border border-[#E4E6E9] dark:border-[#2C3038] text-[#202124] dark:text-[#F1F2F4]">
                                 {k.allowed_models.join(', ')}
                               </span>
                             )}
@@ -546,26 +546,26 @@ export default function KeysView({
                         <td className="ui-td text-right whitespace-nowrap space-x-1.5">
                           <button
                             onClick={() => onNavigateToDashboard && onNavigateToDashboard(k.key)}
-                            className="text-xs px-2.5 py-1 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60 font-medium transition inline-flex items-center space-x-1 cursor-pointer"
+                            className="text-xs px-2.5 py-1 rounded-lg bg-[#EEF2FF] dark:bg-[#242D48] hover:bg-[#355CFF]/15 text-[#355CFF] dark:text-[#91A7FF] border border-[#355CFF]/30 dark:border-[#91A7FF]/30 font-medium transition-colors inline-flex items-center space-x-1 cursor-pointer"
                             title={isZh ? '进入大盘查看该 Key 的实时 RPM / TPM 速率遥测' : 'View real-time RPM/TPM telemetry'}
                           >
-                            <Activity className="w-3 h-3 text-indigo-500" />
+                            <Activity className="w-3 h-3 text-[#355CFF] dark:text-[#91A7FF]" />
                             <span className="hidden lg:inline">{isZh ? '遥测' : 'Telemetry'}</span>
                           </button>
                           <button
                             onClick={() => copyCurlSnippet(k.key)}
-                            className="text-xs px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium transition inline-flex items-center space-x-1 cursor-pointer"
+                            className="text-xs px-2.5 py-1 rounded-lg bg-[#F0F1F2] dark:bg-[#22252B] hover:bg-[#E4E6E9] dark:hover:bg-[#2C3038] text-[#202124] dark:text-[#F1F2F4] font-medium transition-colors inline-flex items-center space-x-1 cursor-pointer"
                             title={isZh ? '复制 cURL 快速接入命令' : 'Copy cURL command'}
                           >
-                            <Terminal className="w-3 h-3 text-slate-400" />
+                            <Terminal className="w-3 h-3 text-[#656B75] dark:text-[#A1A7B0]" />
                             <span className="hidden sm:inline">cURL</span>
                           </button>
                           <button
                             onClick={() => handleToggleKeyStatus(k)}
-                            className={`text-xs px-2.5 py-1 rounded-lg border font-medium transition cursor-pointer ${
+                            className={`text-xs px-2.5 py-1 rounded-lg border font-medium transition-colors cursor-pointer ${
                               k.status === 'disabled'
-                                ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 border-emerald-200 dark:border-emerald-800/60'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 border-slate-200 dark:border-slate-700'
+                                ? 'bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/30'
+                                : 'bg-[#F0F1F2] dark:bg-[#22252B] text-[#202124] dark:text-[#F1F2F4] hover:bg-[#E4E6E9] dark:hover:bg-[#2C3038] border-[#E4E6E9] dark:border-[#2C3038]'
                             }`}
                             title={k.status === 'disabled' ? (isZh ? '恢复启用' : 'Enable') : (isZh ? '暂停使用' : 'Disable')}
                           >
@@ -573,15 +573,15 @@ export default function KeysView({
                           </button>
                           <button
                             onClick={() => setActiveQuickKey(k)}
-                            className="text-xs px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800/60 font-medium transition inline-flex items-center space-x-1 cursor-pointer"
+                            className="text-xs px-2.5 py-1 rounded-lg bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] hover:bg-[#355CFF]/15 border border-[#355CFF]/30 dark:border-[#91A7FF]/30 font-medium transition-colors inline-flex items-center space-x-1 cursor-pointer"
                             title={isZh ? '打开快速接入指引' : 'Open quick connect guide'}
                           >
-                            <Sparkles className="w-3 h-3 text-indigo-500" />
+                            <Sparkles className="w-3 h-3 text-[#355CFF] dark:text-[#91A7FF]" />
                             <span className="hidden md:inline">{isZh ? '快速接入' : 'Quick Connect'}</span>
                           </button>
                           <button
                             onClick={() => handleDeleteKey(k.id)}
-                            className="text-xs px-2 py-1 text-rose-600 dark:text-rose-400 hover:text-rose-800 dark:hover:text-rose-300 transition font-medium cursor-pointer"
+                            className="text-xs px-2 py-1 text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 transition-colors font-medium cursor-pointer"
                           >
                             {isZh ? '删除' : 'Delete'}
                           </button>

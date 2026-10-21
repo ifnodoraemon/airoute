@@ -9,22 +9,59 @@
 /* Tailwind v4 dark mode via the `.dark` class on <html> (v3 `darkMode: 'class'`). */
 @custom-variant dark (&:where(.dark, .dark *));
 
+@theme {
+  --color-page: var(--bg-page);
+  --color-surface: var(--bg-surface);
+  --color-subtle: var(--bg-subtle);
+  --color-border-subtle: var(--border-light);
+  --color-text-main: var(--text-primary);
+  --color-text-muted: var(--text-secondary);
+  --color-brand: var(--brand-primary);
+  --color-brand-active: var(--brand-active-text);
+  --color-brand-selected: var(--brand-selected-bg);
+}
+
+:root {
+  --bg-page: #F7F7F5;
+  --bg-surface: #FFFFFF;
+  --bg-subtle: #F0F1F2;
+  --border-light: #E4E6E9;
+  --text-primary: #202124;
+  --text-secondary: #656B75;
+  --brand-primary: #355CFF;
+  --brand-hover: #2B4CE0;
+  --brand-active-text: #355CFF;
+  --brand-selected-bg: #EEF2FF;
+}
+
+.dark {
+  --bg-page: #111214;
+  --bg-surface: #191B1F;
+  --bg-subtle: #22252B;
+  --border-light: #2C3038;
+  --text-primary: #F1F2F4;
+  --text-secondary: #A1A7B0;
+  --brand-primary: #355CFF;
+  --brand-hover: #4E70FF;
+  --brand-active-text: #91A7FF;
+  --brand-selected-bg: #242D48;
+}
+
 @layer base {
-  /* Tailwind v4 changed the default border/divide color to currentColor.
-     Restore the v3 behaviour (slate-200) so width-only `border` utilities keep
-     their original subtle look. */
   *,
   ::after,
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--color-slate-200);
+    border-color: var(--border-light);
   }
 
   body {
     margin: 0;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    transition: background-color 0.2s ease, color 0.2s ease;
+    background-color: var(--bg-page);
+    color: var(--text-primary);
+    transition: background-color 0.15s ease, color 0.15s ease;
   }
 
   code, kbd, samp, pre, .font-mono {
@@ -34,110 +71,126 @@
 
 /* ---------------------------------------------------------------------------
    Shared UI primitives.
-
-   The console grew module by module, so inputs, buttons and meta text drifted
-   into slightly different radii, heights and greys. These classes are the
-   single source of truth for those details: prefer them over ad-hoc utility
-   stacks when touching a form, toolbar or table.
+   Precision specifications:
+   - Form controls / buttons: rounded-lg (~8px), consistent heights
+   - Surfaces / cards: rounded-xl (~12px), 1px border, subtle shadow
+   - Text hierarchy: 24px title, 14px body, 13px table, 12px meta, 28-32px metric
    --------------------------------------------------------------------------- */
 @layer components {
-  /* ---- Form controls: one radius / height / focus treatment ---- */
+  /* ---- Form controls: unified radius / height / focus treatment ---- */
   .ui-field {
-    @apply w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0F1420]
-           px-3 py-2 text-xs leading-5 text-slate-800 dark:text-slate-100
-           placeholder-slate-400 dark:placeholder-slate-500 shadow-sm transition;
+    @apply w-full rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F]
+           px-3 py-2 text-[13px] leading-5 text-[#202124] dark:text-[#F1F2F4]
+           placeholder-[#656B75]/60 dark:placeholder-[#A1A7B0]/60 shadow-2xs transition-colors duration-150;
   }
   .ui-field:focus {
-    @apply outline-none border-indigo-500 ring-2 ring-indigo-500/15;
+    @apply outline-none border-[#355CFF] ring-2 ring-[#355CFF]/15;
   }
   .ui-field:disabled {
-    @apply opacity-60 cursor-not-allowed;
+    @apply opacity-50 cursor-not-allowed bg-[#F0F1F2]/50 dark:bg-[#22252B]/50;
   }
-  /* Compact variant: pair with .ui-field for dense grids (priority/weight/timeout). */
+  /* Compact variant for denser toolbars and inline grids */
   .ui-field-sm {
-    @apply px-2.5 py-1.5;
+    @apply px-2.5 py-1.5 text-xs;
   }
   .ui-label {
-    @apply block mb-1 text-xs font-medium text-slate-700 dark:text-slate-300;
+    @apply block mb-1.5 text-xs font-medium text-[#202124] dark:text-[#F1F2F4];
   }
   .ui-label-sm {
-    @apply block mb-1 text-[11px] font-medium text-slate-500 dark:text-slate-400;
+    @apply block mb-1 text-[11px] font-medium text-[#656B75] dark:text-[#A1A7B0];
   }
 
-  /* ---- Text hierarchy: supporting copy stays legible (>=12px, slate-500) ---- */
+  /* ---- Text hierarchy ---- */
+  .ui-page-title {
+    @apply text-2xl font-semibold tracking-tight text-[#202124] dark:text-[#F1F2F4];
+  }
+  .ui-page-subtitle {
+    @apply text-sm text-[#656B75] dark:text-[#A1A7B0] mt-1;
+  }
   .ui-meta {
-    @apply text-xs text-slate-500 dark:text-slate-400;
+    @apply text-xs text-[#656B75] dark:text-[#A1A7B0];
   }
   .ui-meta-sm {
-    @apply text-xs text-slate-500 dark:text-slate-400;
+    @apply text-[11px] text-[#656B75] dark:text-[#A1A7B0];
   }
   .ui-section-title {
-    @apply text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400;
+    @apply text-xs font-semibold uppercase tracking-wider text-[#656B75] dark:text-[#A1A7B0];
+  }
+  .ui-metric-number {
+    @apply text-3xl font-semibold font-mono tabular-nums tracking-tight text-[#202124] dark:text-[#F1F2F4];
   }
 
-  /* ---- Buttons: identical height, radius and disabled treatment ---- */
+  /* ---- Buttons ---- */
   .ui-btn {
     @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium
-           transition cursor-pointer select-none
+           transition-colors duration-150 cursor-pointer select-none active:scale-[0.99]
            disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none;
   }
   .ui-btn-primary {
     @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium
-           transition cursor-pointer select-none bg-slate-900 dark:bg-indigo-600 text-white
-           hover:bg-slate-800 dark:hover:bg-indigo-500 shadow-sm
+           transition-colors duration-150 cursor-pointer select-none bg-[#355CFF] text-white
+           hover:bg-[#2B4CE0] dark:hover:bg-[#4E70FF] shadow-xs active:scale-[0.99]
            disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none;
   }
   .ui-btn-secondary {
     @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium
-           transition cursor-pointer select-none border border-slate-200 dark:border-slate-800
-           bg-white dark:bg-[#0F1420] text-slate-700 dark:text-slate-300
-           hover:bg-slate-50 dark:hover:bg-slate-800/80 shadow-sm
+           transition-colors duration-150 cursor-pointer select-none border border-[#E4E6E9] dark:border-[#2C3038]
+           bg-white dark:bg-[#191B1F] text-[#202124] dark:text-[#F1F2F4]
+           hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] shadow-2xs active:scale-[0.99]
            disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none;
   }
   .ui-btn-ghost {
     @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium
-           transition cursor-pointer select-none text-slate-500 dark:text-slate-400
-           hover:text-slate-800 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800
+           transition-colors duration-150 cursor-pointer select-none text-[#656B75] dark:text-[#A1A7B0]
+           hover:text-[#202124] dark:hover:text-[#F1F2F4] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B]
            disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none;
   }
   .ui-btn-danger {
     @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium
-           transition cursor-pointer select-none bg-rose-600 text-white hover:bg-rose-500 shadow-sm
+           transition-colors duration-150 cursor-pointer select-none bg-rose-600 text-white hover:bg-rose-500 shadow-xs
            disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none;
   }
   .ui-btn-sm {
     @apply px-2.5 py-1.5;
   }
   .ui-icon-btn {
-    @apply inline-flex items-center justify-center rounded-lg p-1.5 text-slate-500 dark:text-slate-400
-           hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200
-           transition cursor-pointer;
+    @apply inline-flex items-center justify-center rounded-lg p-1.5 text-[#656B75] dark:text-[#A1A7B0]
+           hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] hover:text-[#202124] dark:hover:text-[#F1F2F4]
+           transition-colors duration-150 cursor-pointer;
   }
 
-  /* ---- Surfaces & tables ---- */
+  /* ---- Surfaces, Cards & Tables ---- */
   .ui-card {
-    @apply bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl shadow-sm;
+    @apply bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl shadow-2xs;
   }
   .ui-th {
-    @apply px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 whitespace-nowrap;
+    @apply px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-[#656B75] dark:text-[#A1A7B0] whitespace-nowrap border-b border-[#E4E6E9] dark:border-[#2C3038];
   }
   .ui-td {
-    @apply px-4 py-3 text-xs text-slate-700 dark:text-slate-300 align-middle;
+    @apply px-4 py-3.5 text-[13px] text-[#202124] dark:text-[#F1F2F4] border-b border-[#E4E6E9]/60 dark:border-[#2C3038]/60 align-middle;
+  }
+  .ui-tr-hover {
+    @apply hover:bg-[#F0F1F2]/70 dark:hover:bg-[#22252B]/60 transition-colors duration-150;
   }
   .ui-chip {
-    @apply inline-flex items-center gap-1 rounded-md border border-slate-200 dark:border-slate-800
-           bg-slate-50 dark:bg-slate-900/60 px-2 py-0.5 text-xs font-medium
-           text-slate-600 dark:text-slate-300;
+    @apply inline-flex items-center gap-1 rounded-md border border-[#E4E6E9] dark:border-[#2C3038]
+           bg-[#F0F1F2]/80 dark:bg-[#22252B]/80 px-2 py-0.5 text-xs font-medium
+           text-[#202124] dark:text-[#F1F2F4];
+  }
+  .ui-chip-active {
+    @apply inline-flex items-center gap-1 rounded-md border border-[#355CFF]/30 dark:border-[#91A7FF]/30
+           bg-[#EEF2FF] dark:bg-[#242D48] px-2 py-0.5 text-xs font-medium
+           text-[#355CFF] dark:text-[#91A7FF];
   }
 
-  /* ---- Dropdown panel (column pickers, overflow menus) ---- */
+  /* ---- Dropdown menus & Overflows ---- */
   .ui-menu {
-    @apply absolute right-0 mt-2 z-30 min-w-[180px] rounded-xl border border-slate-200 dark:border-slate-800
-           bg-white dark:bg-[#0F1420] p-1.5 shadow-xl;
+    @apply absolute right-0 mt-2 z-30 min-w-[180px] rounded-xl border border-[#E4E6E9] dark:border-[#2C3038]
+           bg-white dark:bg-[#191B1F] p-1.5 shadow-xl;
   }
   .ui-menu-item {
-    @apply flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300
-           hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer;
+    @apply flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-[#202124] dark:text-[#F1F2F4]
+           hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] transition-colors duration-150 cursor-pointer;
   }
 }
 
@@ -150,16 +203,16 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #E4E6E9;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #C8CBD0;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #2C3038;
 }
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #3E434E;
 }

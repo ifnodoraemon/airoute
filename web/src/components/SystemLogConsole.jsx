@@ -208,17 +208,17 @@ export default function SystemLogConsole({
   };
 
   return (
-    <div className="flex flex-col h-[750px] max-h-[85vh] bg-[#0c1017] text-slate-200 rounded-2xl border border-slate-800 shadow-2xl overflow-hidden font-mono text-xs">
+    <div className="flex flex-col h-[750px] max-h-[85vh] bg-[#111214] text-slate-200 rounded-2xl border border-[#2C3038] shadow-2xl overflow-hidden font-mono text-xs">
       {/* Top Toolbar */}
-      <div className="bg-[#111622] px-4 py-3 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
+      <div className="bg-[#191B1F] px-4 py-3 border-b border-[#2C3038] flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div className="flex items-center space-x-3">
           <div className="flex items-center space-x-2">
-            <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+            <div className="p-1.5 rounded-lg bg-[#355CFF]/15 text-[#91A7FF] border border-[#355CFF]/30">
               <Terminal className="w-4 h-4" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="font-semibold text-slate-100 font-sans text-sm">
+                <span className="font-semibold text-[#F1F2F4] font-sans text-sm">
                   {isZh ? '网关系统运行日志 (Live Tail)' : 'Gateway System Runtime Console'}
                 </span>
                 <span
@@ -234,7 +234,7 @@ export default function SystemLogConsole({
                   <span>{connected ? (isZh ? '实时已连接' : 'LIVE SSE') : (isZh ? '缓冲离线' : 'CONNECTING')}</span>
                 </span>
               </div>
-              <span className="text-[11px] text-slate-400 font-sans block mt-0.5">
+              <span className="text-[11px] text-[#A1A7B0] font-sans block mt-0.5">
                 {isZh
                   ? '支持内核事件、探活状态、断路器跳闸与集群同步秒级排障'
                   : 'Live engine telemetry, health prober, circuit breakers & cluster sync'}
@@ -299,18 +299,18 @@ export default function SystemLogConsole({
       </div>
 
       {/* Filter Chips Toolbar */}
-      <div className="bg-[#10141f] px-4 py-2.5 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-2.5 shrink-0">
+      <div className="bg-[#191B1F]/90 px-4 py-2.5 border-b border-[#2C3038] flex flex-wrap items-center justify-between gap-2.5 shrink-0">
         <div className="flex flex-wrap items-center gap-1.5">
           {/* Level Pills */}
-          <div className="flex items-center bg-slate-900/80 p-0.5 rounded-lg border border-slate-800 text-[11px]">
+          <div className="flex items-center bg-[#111214] p-0.5 rounded-lg border border-[#2C3038] text-[11px]">
             {['ALL', 'ERROR', 'WARN', 'INFO', 'DEBUG'].map((lvl) => (
               <button
                 key={lvl}
                 onClick={() => setSelectedLevel(lvl)}
                 className={`px-2 py-0.5 rounded-md font-sans transition cursor-pointer ${
                   selectedLevel === lvl
-                    ? 'bg-indigo-600 text-white font-semibold shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-[#355CFF] text-white font-semibold shadow-xs'
+                    : 'text-[#A1A7B0] hover:text-[#F1F2F4]'
                 }`}
               >
                 {lvl}
@@ -333,8 +333,8 @@ export default function SystemLogConsole({
                 onClick={() => setSelectedCategory(cat.id)}
                 className={`px-2 py-0.5 rounded-md text-[11px] font-sans border transition cursor-pointer ${
                   selectedCategory === cat.id
-                    ? 'bg-slate-800 text-indigo-300 border-indigo-500/50 font-medium'
-                    : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-300'
+                    ? 'bg-[#242D48] text-[#91A7FF] border-[#355CFF]/60 font-medium'
+                    : 'bg-[#111214] text-[#A1A7B0] border-[#2C3038] hover:border-[#355CFF]/30 hover:text-[#F1F2F4]'
                 }`}
               >
                 {cat.label}

@@ -31,6 +31,7 @@ const EXPORT_MAX_ROWS = 5000;
 
 export function useLogsData({ filters, showToast, isZh }) {
   const [logs, setLogs] = useState([]);
+  const [recentLogs, setRecentLogs] = useState([]);
   const [logTotal, setLogTotal] = useState(0);
   const [logOffset, setLogOffset] = useState(0);
   const [logLoading, setLogLoading] = useState(false);
@@ -194,10 +195,26 @@ export function useLogsData({ filters, showToast, isZh }) {
     requestRef.current += 1;
     setLogFacets({ models: [], channels: [] });
     setLogs([]);
+    setRecentLogs([]);
     setLogTotal(0);
     logOffsetRef.current = 0;
     setLogOffset(0);
     setSelectedLogIds([]);
+  }, []);
+
+  // Dedicated un-filtered loader for the overview dashboard's recent stream,
+  // ensuring the dashboard is never constrained by logs-view filter criteria.
+  const fetchRecentLogs = useCallback(async (overrideToken) => {
+    const opts = overrideToken ? { token: overrideToken } : {};
+    const generation = generationRef.current;
+    try {
+      const res = await apiFetch('/api/v1/admin/logs?limit=20&offset=0', opts);
+      const data = await res.json();
+      if (generation !== generationRef.current) return;
+      if (res.ok && data.code === 0 && Array.isArray(data.data)) {
+        setRecentLogs(data.data);
+      }
+    } catch {}
   }, []);
 
   // Batch log operations. Each one clears the affected selection and refetches, so
@@ -264,6 +281,8 @@ export function useLogsData({ filters, showToast, isZh }) {
     handleClearLogs,
     handleDeleteSingleLog,
     logs,
+    recentLogs,
+    fetchRecentLogs,
     logTotal,
     logOffset,
     logLoading,

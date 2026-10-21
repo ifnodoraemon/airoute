@@ -22,8 +22,8 @@ export function SortableTh({ column, sort, onSort, className = '' }) {
       <button
         type="button"
         onClick={() => onSort(column.key)}
-        className={`inline-flex items-center gap-1 transition cursor-pointer hover:text-slate-800 dark:hover:text-slate-100 ${
-          active ? 'text-slate-800 dark:text-slate-100' : ''
+        className={`inline-flex items-center gap-1 transition-colors cursor-pointer hover:text-[#202124] dark:hover:text-[#F1F2F4] ${
+          active ? 'text-[#355CFF] dark:text-[#91A7FF] font-semibold' : ''
         }`}
       >
         <span>{column.label}</span>
@@ -71,7 +71,7 @@ export function ColumnToggle({ controls, lang = 'zh' }) {
           <button
             type="button"
             onClick={resetColumns}
-            className="inline-flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+            className="inline-flex items-center gap-1 text-xs text-[#355CFF] dark:text-[#91A7FF] hover:underline cursor-pointer"
           >
             <RotateCcw className="h-3 w-3" />
             <span>{isZh ? '重置' : 'Reset'}</span>
@@ -84,7 +84,7 @@ export function ColumnToggle({ controls, lang = 'zh' }) {
                 type="checkbox"
                 checked={isVisible(col.key)}
                 onChange={() => toggleColumn(col.key)}
-                className="h-3.5 w-3.5 accent-indigo-600 cursor-pointer"
+                className="h-3.5 w-3.5 accent-[#355CFF] cursor-pointer"
               />
               <span>{col.label}</span>
             </label>

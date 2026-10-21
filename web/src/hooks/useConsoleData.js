@@ -133,7 +133,7 @@ export function useConsoleData({ adminUser }) {
         setPricingGroups(Array.from(grpSet));
       }
       if (routesRes.code === 0) setModelRoutes(routesRes.data || []);
-      if (mRes.code === 0 && mRes.data?.length) {
+      if (mRes.code === 0 && Array.isArray(mRes.data)) {
         const allM = mRes.data;
         const routes = routesRes.data || [];
         setModels(allM);

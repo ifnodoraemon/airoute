@@ -37,6 +37,18 @@ export default function OnboardingModal({
   const [testingPing, setTestingPing] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
+  useEffect(() => {
+    if (keys.length > 0 && (!selectedKey || selectedKey === 'sk-airoute-demo-key' || !keys.some(k => k.key === selectedKey))) {
+      setSelectedKey(keys[0].key);
+    }
+  }, [keys, selectedKey]);
+
+  useEffect(() => {
+    if (models.length > 0 && (!selectedModel || selectedModel === 'deepseek-v3' || !models.includes(selectedModel))) {
+      setSelectedModel(models[0]);
+    }
+  }, [models, selectedModel]);
+
   // Only the wizard's configuration is a draft: the step indicator and the
   // snippet tab are navigation/view state, so they never trip the guard.
   const isDirty = useFormDirty(isOpen, { selectedKey, selectedProtocol, selectedModel });
@@ -203,73 +215,85 @@ print(message.content[0].text)
         if (e.target === e.currentTarget) requestClose();
       }}
     >
-      <div className="bg-white dark:bg-[#111726] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl max-w-2xl w-full p-6 sm:p-7 shadow-2xl relative space-y-6">
+      <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl max-w-2xl w-full p-6 sm:p-7 shadow-2xl relative space-y-6">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-lg bg-slate-900 dark:bg-indigo-600 text-white flex items-center justify-center shadow-sm">
+            <div className="w-9 h-9 rounded-lg bg-[#355CFF] text-white flex items-center justify-center shadow-sm">
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              <h2 className="text-base font-semibold text-[#202124] dark:text-[#F1F2F4]">
                 {isZh ? '开发者极速上手接入向导' : 'Developer Onboarding Wizard'}
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-xs text-[#656B75] dark:text-[#A1A7B0] mt-0.5">
                 {isZh ? '3 步完成密钥配置、多协议代码生成与网关实时连通性探测' : '3 steps: API Key selection, multi-protocol SDK snippet generation & live handshake probe'}
               </p>
             </div>
           </div>
           <button
             onClick={requestClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+            className="p-1.5 rounded-lg text-[#656B75] hover:text-[#202124] dark:hover:text-[#F1F2F4] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Step Indicator */}
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 text-xs font-semibold">
+        <div className="flex items-center justify-between border-b border-[#E4E6E9] dark:border-[#2C3038] pb-3 text-xs font-semibold">
           <button
             onClick={() => setStep(1)}
-            className={`flex items-center space-x-2 pb-1 transition ${
+            className={`flex items-center space-x-2 pb-1 transition cursor-pointer ${
               step === 1
-                ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 font-bold'
-                : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                ? 'text-[#355CFF] dark:text-[#91A7FF] border-b-2 border-[#355CFF] dark:border-[#91A7FF] font-bold'
+                : 'text-[#656B75] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
             }`}
           >
-            <span className="w-5 h-5 rounded-full bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-xs">
+            <span className={`w-5 h-5 rounded-full border flex items-center justify-center text-xs ${
+              step === 1
+                ? 'bg-[#EEF2FF] dark:bg-[#242D48] border-[#355CFF]/40 text-[#355CFF] dark:text-[#91A7FF]'
+                : 'bg-[#F0F1F2] dark:bg-[#22252B] border-[#E4E6E9] dark:border-[#2C3038] text-[#656B75]'
+            }`}>
               1
             </span>
             <span>{isZh ? '选择或获取密钥' : 'Select API Key'}</span>
           </button>
 
-          <ArrowRight className="w-3.5 h-3.5 text-slate-300" />
+          <ArrowRight className="w-3.5 h-3.5 text-[#656B75]/40" />
 
           <button
             onClick={() => setStep(2)}
-            className={`flex items-center space-x-2 pb-1 transition ${
+            className={`flex items-center space-x-2 pb-1 transition cursor-pointer ${
               step === 2
-                ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 font-bold'
-                : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                ? 'text-[#355CFF] dark:text-[#91A7FF] border-b-2 border-[#355CFF] dark:border-[#91A7FF] font-bold'
+                : 'text-[#656B75] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
             }`}
           >
-            <span className="w-5 h-5 rounded-full bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-xs">
+            <span className={`w-5 h-5 rounded-full border flex items-center justify-center text-xs ${
+              step === 2
+                ? 'bg-[#EEF2FF] dark:bg-[#242D48] border-[#355CFF]/40 text-[#355CFF] dark:text-[#91A7FF]'
+                : 'bg-[#F0F1F2] dark:bg-[#22252B] border-[#E4E6E9] dark:border-[#2C3038] text-[#656B75]'
+            }`}>
               2
             </span>
             <span>{isZh ? '选择模型与协议' : 'Choose Protocol & Model'}</span>
           </button>
 
-          <ArrowRight className="w-3.5 h-3.5 text-slate-300" />
+          <ArrowRight className="w-3.5 h-3.5 text-[#656B75]/40" />
 
           <button
             onClick={() => setStep(3)}
-            className={`flex items-center space-x-2 pb-1 transition ${
+            className={`flex items-center space-x-2 pb-1 transition cursor-pointer ${
               step === 3
-                ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 font-bold'
-                : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                ? 'text-[#355CFF] dark:text-[#91A7FF] border-b-2 border-[#355CFF] dark:border-[#91A7FF] font-bold'
+                : 'text-[#656B75] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
             }`}
           >
-            <span className="w-5 h-5 rounded-full bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-xs">
+            <span className={`w-5 h-5 rounded-full border flex items-center justify-center text-xs ${
+              step === 3
+                ? 'bg-[#EEF2FF] dark:bg-[#242D48] border-[#355CFF]/40 text-[#355CFF] dark:text-[#91A7FF]'
+                : 'bg-[#F0F1F2] dark:bg-[#22252B] border-[#E4E6E9] dark:border-[#2C3038] text-[#656B75]'
+            }`}>
               3
             </span>
             <span>{isZh ? '代码接入与握手' : 'SDK & Handshake Probe'}</span>

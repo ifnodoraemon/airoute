@@ -242,19 +242,19 @@ export default function ModelRoutesManager({
   const getModalityBadge = (modality) => {
     switch (modality) {
       case 'images':
-        return { label: isZh ? '生图' : 'Image', color: 'text-amber-700 bg-amber-50 border-amber-200' };
+        return { label: isZh ? '生图' : 'Image', color: 'text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200 dark:border-amber-800' };
       case 'audio_speech':
-        return { label: isZh ? '语音TTS' : 'TTS', color: 'text-rose-700 bg-rose-50 border-rose-200' };
+        return { label: isZh ? '语音TTS' : 'TTS', color: 'text-rose-700 bg-rose-50 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200 dark:border-rose-800' };
       case 'audio_transcription':
-        return { label: isZh ? '语音STT' : 'STT', color: 'text-orange-700 bg-orange-50 border-orange-200' };
+        return { label: isZh ? '语音STT' : 'STT', color: 'text-orange-700 bg-orange-50 dark:bg-orange-950/40 dark:text-orange-300 border-orange-200 dark:border-orange-800' };
       case 'videos':
-        return { label: isZh ? '视频' : 'Video', color: 'text-purple-700 bg-purple-50 border-purple-200' };
+        return { label: isZh ? '视频' : 'Video', color: 'text-purple-700 bg-purple-50 dark:bg-purple-950/40 dark:text-purple-300 border-purple-200 dark:border-purple-800' };
       case 'embeddings':
-        return { label: isZh ? '嵌入' : 'Embedding', color: 'text-cyan-700 bg-cyan-50 border-cyan-200' };
+        return { label: isZh ? '嵌入' : 'Embedding', color: 'text-cyan-700 bg-cyan-50 dark:bg-cyan-950/40 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800' };
       case 'rerank':
-        return { label: isZh ? '重排' : 'Rerank', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
+        return { label: isZh ? '重排' : 'Rerank', color: 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' };
       default:
-        return { label: isZh ? '对话/文本' : 'Chat', color: 'text-indigo-700 bg-indigo-50 border-indigo-200' };
+        return { label: isZh ? '对话/文本' : 'Chat', color: 'text-[#355CFF] bg-[#EEF2FF] dark:bg-[#242D48] dark:text-[#91A7FF] border-[#355CFF]/20 dark:border-[#91A7FF]/20' };
     }
   };
 
@@ -265,21 +265,21 @@ export default function ModelRoutesManager({
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
+            <h1 className="ui-page-title">
               {isZh ? '模型路由与分发' : 'Model Routes & Dispatch'}
             </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            <p className="ui-page-subtitle">
               {isZh ? '仅超级管理员可查看与配置集群路由拓扑' : 'Cluster routing topology is restricted to administrators'}
             </p>
           </div>
         </div>
-        <div className="rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/60 dark:bg-amber-950/30 p-5 flex items-start space-x-3">
+        <div className="rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/60 dark:bg-amber-950/30 p-5 flex items-start space-x-3">
           <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
           <div className="text-sm text-amber-800 dark:text-amber-200">
             <p className="font-semibold">
               {isZh ? '权限不足：无法加载模型路由配置' : 'Insufficient permissions to load model routes'}
             </p>
-            <p className="mt-1 text-amber-700 dark:text-amber-300">
+            <p className="mt-1 text-amber-700 dark:text-amber-300 text-xs">
               {isZh
                 ? '该页面依赖管理员接口 (/admin/models/routes 与 /admin/channels)。你仍可在「模型定价」查看自己的费率，或在「Playground」直接调用模型。'
                 : 'This page relies on admin-only endpoints. You can still review your own rates under Pricing, or call models from the Playground.'}
@@ -291,14 +291,14 @@ export default function ModelRoutesManager({
   }
 
   return (
-    <div className="space-y-8">
-      {/* 1. Header (Directly on canvas) */}
+    <div className="space-y-6">
+      {/* 1. Header (Skeleton aligned) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
+          <h1 className="ui-page-title">
             {isZh ? '模型路由与分发' : 'Model Routes & Dispatch'}
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="ui-page-subtitle">
             {isZh ? '配置各模型的路由绑定、故障降级与定价；渠道模型库独立保留' : 'Configure provider weights, fallback chains, and pricing rates for AI models'}
           </p>
         </div>
@@ -307,14 +307,14 @@ export default function ModelRoutesManager({
           <button
             onClick={fetchModelRoutes}
             disabled={loading}
-            className="px-3.5 py-2 bg-white dark:bg-[#0F1420] hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-medium border border-slate-200/80 dark:border-slate-800 transition flex items-center space-x-1.5 cursor-pointer shadow-sm disabled:opacity-50"
+            className="ui-btn-secondary ui-btn-sm"
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0] ${loading ? 'animate-spin' : ''}`} />
             <span>{isZh ? '刷新' : 'Refresh'}</span>
           </button>
           <button
             onClick={handleOpenCreate}
-            className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium shadow-sm flex items-center space-x-1.5 transition cursor-pointer"
+            className="ui-btn-primary ui-btn-sm"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>{isZh ? '新建模型路由' : 'New Model Route'}</span>
@@ -322,17 +322,17 @@ export default function ModelRoutesManager({
         </div>
       </div>
 
-      {/* Search & Modality Bar (Directly on canvas) */}
+      {/* Search & Modality Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
-        <div className="inline-flex bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200/80 dark:border-slate-800 overflow-x-auto max-w-full">
+        <div className="inline-flex bg-[#F0F1F2] dark:bg-[#22252B] p-0.5 rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] overflow-x-auto max-w-full">
           {modalityTabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setFilters({ modality: tab.id })}
               className={`px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap transition cursor-pointer ${
                 selectedModality === tab.id
-                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-semibold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-xs font-semibold'
+                  : 'text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
               }`}
             >
               {tab.label}
@@ -341,34 +341,34 @@ export default function ModelRoutesManager({
         </div>
 
         <div className="relative w-full md:w-64 shrink-0">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+          <Search className="w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0] absolute left-3 top-2.5" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setFilters({ q: e.target.value })}
             placeholder={isZh ? '搜索模型或服务商...' : 'Search model or provider...'}
-            className="w-full bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-indigo-500 shadow-sm transition"
+            className="ui-field pl-9 pr-3 py-1.5 text-xs w-full"
           />
         </div>
       </div>
 
       {/* Batch Action Bar */}
       {selectedModels.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800/60 px-5 py-3 rounded-xl animate-in fade-in gap-3">
-          <div className="flex items-center space-x-2 text-xs font-semibold text-indigo-900 dark:text-indigo-200">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#EEF2FF] dark:bg-[#242D48] border border-[#355CFF]/30 px-4 py-2.5 rounded-xl animate-in fade-in gap-3">
+          <div className="flex items-center space-x-2 text-xs font-medium text-[#355CFF] dark:text-[#91A7FF]">
             <span>{isZh ? `已选中 ${selectedModels.length} 个模型路由` : `Selected ${selectedModels.length} routes`}</span>
           </div>
           <div className="flex items-center space-x-2">
             <button
               onClick={handleBatchDeleteRoutes}
-              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium rounded-lg shadow-sm transition flex items-center space-x-1 cursor-pointer"
+              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium rounded-lg shadow-xs transition flex items-center space-x-1 cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>{isZh ? '批量删除' : 'Batch Delete'}</span>
             </button>
             <button
               onClick={() => setSelectedModels([])}
-              className="px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-medium rounded-lg hover:bg-slate-50 transition cursor-pointer"
+              className="ui-btn-secondary ui-btn-sm"
             >
               {isZh ? '取消选择' : 'Deselect All'}
             </button>
@@ -376,16 +376,16 @@ export default function ModelRoutesManager({
         </div>
       )}
 
-      {/* Configuration summary: describes what is configured, not whether it works */}
+      {/* Configuration summary */}
       {modelRoutes.length > 0 && (
         <div className={`p-4 rounded-xl border text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
           spofRoutes.length > 0
             ? 'bg-amber-50/60 dark:bg-amber-950/20 border-amber-200/80 dark:border-amber-900/40 text-amber-900 dark:text-amber-200'
-            : 'bg-slate-50/60 dark:bg-slate-900/40 border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-300'
+            : 'bg-white dark:bg-[#191B1F] border-[#E4E6E9] dark:border-[#2C3038] text-[#202124] dark:text-[#F1F2F4]'
         }`}>
           <div className="flex items-start space-x-2.5">
             <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-              spofRoutes.length > 0 ? 'bg-amber-100/80 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+              spofRoutes.length > 0 ? 'bg-amber-100/80 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' : 'bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0]'
             }`}>
               <Shield className="w-4 h-4" />
             </div>
@@ -395,26 +395,26 @@ export default function ModelRoutesManager({
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                   spofRoutes.length > 0
                     ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                    : 'bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0]'
                 }`}>
                   {spofRoutes.length > 0
                     ? (isZh ? `配置层：${spofRoutes.length} 个模型仅单一服务商` : `Config: ${spofRoutes.length} single-provider`)
                     : (isZh ? '配置层：均已配置备用服务商' : 'Config: all have backups')}
                 </span>
               </div>
-              <p className="text-xs opacity-80 mt-0.5">
+              <p className="text-xs text-[#656B75] dark:text-[#A1A7B0] mt-0.5">
                 {isZh
                   ? `${modelRoutes.length} 条模型路由 · ${providerBindings} 条上游绑定（${boundChannelCount} 个渠道）· 覆盖 ${modalityCount} 类模态 · ${fallbackRouteCount} 条降级路由`
                   : `${modelRoutes.length} routes · ${providerBindings} upstream bindings across ${boundChannelCount} channels · ${modalityCount} modalities · ${fallbackRouteCount} fallback routes`}
               </p>
               {spofRoutes.length > 0 && (
-                <p className="text-xs opacity-80 mt-0.5">
+                <p className="text-xs text-amber-800 dark:text-amber-300 mt-0.5">
                   {isZh
                     ? `其中 ${spofRoutes.slice(0, 3).map(r => r.model).join(', ')} 仅绑定了单一上游，没有可切换的备用渠道。`
                     : `${spofRoutes.slice(0, 3).map(r => r.model).join(', ')} bind a single upstream, so there is no backup channel to switch to.`}
                 </p>
               )}
-              <p className="text-xs opacity-80 mt-0.5">
+              <p className="text-xs text-[#656B75] dark:text-[#A1A7B0] mt-0.5">
                 {probedModelCount > 0
                   ? (isZh
                       ? `已在本页手动探测 ${probedModelCount} 个模型的下游连通性（结果为本次会话内实测），其余模型未验证。`
@@ -428,7 +428,7 @@ export default function ModelRoutesManager({
           {spofRoutes.length > 0 && (
             <button
               onClick={() => handleOpenEdit(spofRoutes[0])}
-              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium text-xs shrink-0 cursor-pointer shadow-sm transition"
+              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium text-xs shrink-0 cursor-pointer shadow-xs transition"
             >
               {isZh ? `为 [${spofRoutes[0].model}] 配置备用服务商` : `Add backup for [${spofRoutes[0].model}]`}
             </button>
@@ -437,14 +437,14 @@ export default function ModelRoutesManager({
       )}
 
       {/* 2. Model Routes Table (Clean Master-Detail Layout) */}
-      <div className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl overflow-hidden shadow-sm">
+      <div className="ui-card overflow-hidden">
         {filteredRoutes.length === 0 ? (
           <div className="p-12 text-center flex flex-col items-center justify-center space-y-3">
-            <Cpu className="w-10 h-10 text-slate-300 dark:text-slate-600" />
+            <Cpu className="w-10 h-10 text-[#656B75]/40 dark:text-[#A1A7B0]/40" />
             {modelRoutes.length === 0 ? (
               <>
-                <h4 className="font-medium text-sm text-slate-700 dark:text-slate-300">{isZh ? '尚未配置模型路由' : 'No model routes configured yet'}</h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm">
+                <h4 className="font-medium text-sm text-[#202124] dark:text-[#F1F2F4]">{isZh ? '尚未配置模型路由' : 'No model routes configured yet'}</h4>
+                <p className="text-xs text-[#656B75] dark:text-[#A1A7B0] max-w-sm">
                   {isZh
                     ? '新建模型路由后，即可为模型绑定上游服务商、分流权重与降级链路。'
                     : 'Create a route to bind upstream providers, dispatch weights, and fallback chains to a model.'}
@@ -456,9 +456,9 @@ export default function ModelRoutesManager({
               </>
             ) : (
               <>
-                <Search className="w-10 h-10 text-slate-300 dark:text-slate-600" />
-                <h4 className="font-medium text-sm text-slate-700 dark:text-slate-300">{isZh ? '当前筛选没有匹配的路由' : 'No routes match the current filters'}</h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md">
+                <Search className="w-10 h-10 text-[#656B75]/40 dark:text-[#A1A7B0]/40" />
+                <h4 className="font-medium text-sm text-[#202124] dark:text-[#F1F2F4]">{isZh ? '当前筛选没有匹配的路由' : 'No routes match the current filters'}</h4>
+                <p className="text-xs text-[#656B75] dark:text-[#A1A7B0] max-w-md">
                   {isZh
                     ? `已配置的 ${modelRoutes.length} 条模型路由中，没有同时匹配关键词「${searchQuery || '全部'}」与模态「${selectedModalityLabel}」的项。`
                     : `None of the ${modelRoutes.length} configured routes match "${searchQuery || 'all'}" under "${selectedModalityLabel}".`}
@@ -474,11 +474,11 @@ export default function ModelRoutesManager({
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800/80 text-slate-500 dark:text-slate-400 bg-slate-50/60 dark:bg-slate-900/40 uppercase">
-                  <th className="py-4 px-6 w-10 text-center">
+                <tr className="border-b border-[#E4E6E9] dark:border-[#2C3038] text-[#656B75] dark:text-[#A1A7B0] bg-[#F0F1F2]/50 dark:bg-[#22252B]/50 uppercase">
+                  <th className="ui-th w-10 text-center">
                     <input
                       type="checkbox"
-                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      className="rounded border-[#E4E6E9] dark:border-[#2C3038] text-[#355CFF] focus:ring-[#355CFF]/30 cursor-pointer"
                       checked={filteredRoutes.length > 0 && selectedModels.length === filteredRoutes.length}
                       onChange={(e) => {
                         if (e.target.checked) {
@@ -489,14 +489,14 @@ export default function ModelRoutesManager({
                       }}
                     />
                   </th>
-                  <th className="py-4 px-6 font-semibold">{isZh ? '模型标识' : 'Model ID'}</th>
-                  <th className="py-4 px-6 font-semibold">{isZh ? '上游服务商 (权重)' : 'Upstream Channels (Weight)'}</th>
-                  <th className="py-4 px-6 font-semibold">{isZh ? '容灾降级' : 'Failover Target'}</th>
-                  <th className="py-4 px-6 font-semibold">{isZh ? '费率 (输入/输出)' : 'Rates (Prompt/Comp)'}</th>
-                  <th className="py-4 px-6 text-right font-semibold">{isZh ? '操作' : 'Actions'}</th>
+                  <th className="ui-th">{isZh ? '模型标识' : 'Model ID'}</th>
+                  <th className="ui-th">{isZh ? '上游服务商 (权重)' : 'Upstream Channels (Weight)'}</th>
+                  <th className="ui-th">{isZh ? '容灾降级' : 'Failover Target'}</th>
+                  <th className="ui-th">{isZh ? '费率 (输入/输出)' : 'Rates (Prompt/Comp)'}</th>
+                  <th className="ui-th text-right">{isZh ? '操作' : 'Actions'}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70">
+              <tbody className="divide-y divide-[#E4E6E9]/60 dark:divide-[#2C3038]/60">
                 {filteredRoutes.map((route) => {
                   const badge = getModalityBadge(route.modality);
                   const isExpanded = expandedModel === route.model;
@@ -505,11 +505,11 @@ export default function ModelRoutesManager({
 
                   return (
                     <React.Fragment key={route.model}>
-                      <tr className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition group">
-                        <td className="py-4 px-6 text-center" onClick={(e) => e.stopPropagation()}>
+                      <tr className="ui-tr-hover group">
+                        <td className="ui-td text-center" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
-                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            className="rounded border-[#E4E6E9] dark:border-[#2C3038] text-[#355CFF] focus:ring-[#355CFF]/30 cursor-pointer"
                             checked={selectedModels.includes(route.model)}
                             onChange={(e) => {
                               e.stopPropagation();
@@ -522,14 +522,14 @@ export default function ModelRoutesManager({
                           />
                         </td>
                         {/* Model name */}
-                        <td className="py-4 px-6 font-medium text-slate-900 dark:text-slate-100">
+                        <td className="ui-td font-medium text-[#202124] dark:text-[#F1F2F4]">
                           <div className="flex items-center space-x-1.5">
-                            <span className="font-mono text-xs text-slate-900 dark:text-white font-semibold">
+                            <span className="font-mono text-xs text-[#202124] dark:text-[#F1F2F4] font-semibold">
                               {route.model}
                             </span>
                             <button
                               onClick={() => copyToClipboard(route.model)}
-                              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer p-0.5 rounded"
+                              className="text-[#656B75] hover:text-[#355CFF] dark:text-[#A1A7B0] dark:hover:text-[#91A7FF] transition cursor-pointer p-0.5 rounded"
                               title={isZh ? "复制模型标识" : "Copy model ID"}
                             >
                               {copiedModel === route.model ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
@@ -541,7 +541,7 @@ export default function ModelRoutesManager({
                         </td>
 
                         {/* Providers & Weights */}
-                        <td className="py-4 px-6">
+                        <td className="ui-td">
                           <div className="flex flex-wrap items-center gap-1.5">
                             {(route.providers || []).map((p) => {
                               const ch = allChannels.find(c => c.id === p.channel_id);
@@ -564,13 +564,13 @@ export default function ModelRoutesManager({
                                   className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-md border text-xs font-medium ${
                                     warnMsg
                                       ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200'
-                                      : 'bg-slate-100 dark:bg-slate-800 border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                                      : 'bg-[#F0F1F2] dark:bg-[#22252B] border-[#E4E6E9]/60 dark:border-[#2C3038]/60 text-[#202124] dark:text-[#F1F2F4]'
                                   }`}
                                   title={warnMsg ? warnMsg : p.mapped_model ? `${isZh ? '上游模型: ' : 'Upstream: '}${p.mapped_model}` : ''}
                                 >
                                   {warnMsg && <ShieldAlert className="w-3 h-3 text-amber-500 shrink-0" />}
                                   <span>{p.channel_name}</span>
-                                  <strong className={`${warnMsg ? 'text-amber-700 dark:text-amber-300' : 'text-indigo-600 dark:text-indigo-400'} font-mono tabular-nums font-semibold`}>
+                                  <strong className={`${warnMsg ? 'text-amber-700 dark:text-amber-300' : 'text-[#355CFF] dark:text-[#91A7FF]'} font-mono tabular-nums font-semibold`}>
                                     {p.weight_percent ? `${p.weight_percent}%` : `${isZh ? '权重' : 'w:'}${p.weight}`}
                                   </strong>
                                 </span>
@@ -583,19 +583,19 @@ export default function ModelRoutesManager({
                         </td>
 
                         {/* Fallback */}
-                        <td className="py-4 px-6 font-mono text-xs">
+                        <td className="ui-td font-mono text-xs">
                           {route.fallback_model ? (
                             <span className="inline-flex items-center space-x-1 text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 px-2 py-0.5 rounded-md text-xs font-medium">
                               <Shield className="w-3 h-3 text-sky-600 dark:text-sky-400" />
                               <span>{isZh ? '降级: ' : 'Fallback: '}{route.fallback_model}</span>
                             </span>
                           ) : (
-                            <span className="text-xs text-slate-500 dark:text-slate-400 font-sans">{isZh ? '直通返回' : 'Direct Return'}</span>
+                            <span className="text-xs text-[#656B75] dark:text-[#A1A7B0] font-sans">{isZh ? '直通返回' : 'Direct Return'}</span>
                           )}
                         </td>
 
                         {/* Pricing */}
-                        <td className="py-4 px-6 text-xs">
+                        <td className="ui-td text-xs">
                           {price ? (
                             <button
                               type="button"
@@ -603,18 +603,18 @@ export default function ModelRoutesManager({
                                 e.stopPropagation();
                                 if (setCurrentTab) setCurrentTab('pricing');
                               }}
-                              className="flex items-center space-x-1.5 text-xs hover:text-indigo-600 dark:hover:text-indigo-400 transition cursor-pointer group text-left"
+                              className="flex items-center space-x-1.5 text-xs hover:text-[#355CFF] dark:hover:text-[#91A7FF] transition cursor-pointer group text-left"
                               title={isZh ? '已配置专属定价，点击前往【定价管理】查看与编辑' : 'Click to view pricing'}
                             >
-                              <span className="text-slate-700 dark:text-slate-300 font-mono tabular-nums font-semibold group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+                              <span className="text-[#202124] dark:text-[#F1F2F4] font-mono tabular-nums font-semibold group-hover:text-[#355CFF] dark:group-hover:text-[#91A7FF]">
                                 ¥{price.prompt_price.toFixed(1)}/¥{price.completion_price.toFixed(1)}
                               </span>
                               {price.off_peak_enabled !== false && (
-                                <span className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded font-medium text-xs">
+                                <span className="bg-[#F0F1F2] dark:bg-[#22252B] border border-[#E4E6E9] dark:border-[#2C3038] text-[#656B75] dark:text-[#A1A7B0] px-1.5 py-0.5 rounded font-medium text-xs">
                                   {isZh ? '闲时优惠' : 'Off-peak'}
                                 </span>
                               )}
-                              <ArrowRight className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 text-indigo-500 transition-opacity" />
+                              <ArrowRight className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 text-[#355CFF] dark:text-[#91A7FF] transition-opacity" />
                             </button>
                           ) : (
                             <button
@@ -634,23 +634,23 @@ export default function ModelRoutesManager({
                         </td>
 
                         {/* Actions */}
-                        <td className="py-4 px-6 text-right space-x-1.5">
+                        <td className="ui-td text-right space-x-1.5">
                           <button
                             onClick={() => handleOpenEdit(route)}
-                            className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-xs font-medium transition cursor-pointer"
+                            className="ui-btn-secondary ui-btn-sm"
                           >
                             {isZh ? '配置分发' : 'Configure'}
                           </button>
                           <button
                             onClick={() => setExpandedModel(isExpanded ? null : route.model)}
-                            className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer inline-flex items-center align-middle"
+                            className="p-1 rounded-lg hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] text-[#656B75] hover:text-[#202124] dark:text-[#A1A7B0] dark:hover:text-[#F1F2F4] transition cursor-pointer inline-flex items-center align-middle"
                             title={isExpanded ? (isZh ? '收起详情' : 'Collapse') : (isZh ? '展开服务商明细' : 'Expand Details')}
                           >
                             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                           </button>
                           <button
                             onClick={() => handleDeleteRoute(route.model)}
-                            className="p-1 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/50 text-slate-400 hover:text-rose-600 transition cursor-pointer inline-flex items-center align-middle"
+                            className="p-1 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/50 text-[#656B75] hover:text-rose-600 dark:text-[#A1A7B0] dark:hover:text-rose-400 transition cursor-pointer inline-flex items-center align-middle"
                             title={isZh ? '删除路由' : 'Delete Route'}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -660,10 +660,10 @@ export default function ModelRoutesManager({
 
                       {/* Expandable Provider Topology Detail Row */}
                       {isExpanded && (
-                        <tr className="bg-slate-50/50 dark:bg-slate-900/30 border-b border-slate-100 dark:border-slate-800/80">
+                        <tr className="bg-[#F0F1F2]/40 dark:bg-[#22252B]/40 border-b border-[#E4E6E9] dark:border-[#2C3038]">
                           <td colSpan="6" className="py-4 px-8 space-y-3">
                             <div className="flex items-center justify-between text-xs">
-                              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                              <span className="font-semibold text-[#202124] dark:text-[#F1F2F4]">
                                 {isZh
                                   ? `上游服务商明细与实时连通性探测 (${route.providers?.length || 0})`
                                   : `Upstream Providers & Health Probing (${route.providers?.length || 0})`}
@@ -671,48 +671,48 @@ export default function ModelRoutesManager({
                               <button
                                 onClick={() => handleProbeRoute(route.model)}
                                 disabled={probingModel === route.model}
-                                className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs font-medium text-slate-700 dark:text-slate-200 flex items-center space-x-1 transition cursor-pointer shadow-sm"
+                                className="ui-btn-secondary ui-btn-sm"
                               >
                                 <Zap className={`w-3 h-3 text-amber-500 ${probingModel === route.model ? 'animate-pulse' : ''}`} />
                                 <span>{probingModel === route.model ? (isZh ? '探测中...' : 'Probing...') : (isZh ? '测试所有下游延迟' : 'Test Downstream Latency')}</span>
                               </button>
                             </div>
 
-                            <div className="border border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-[#0F1420] text-xs shadow-sm">
+                            <div className="border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl overflow-hidden bg-white dark:bg-[#191B1F] text-xs">
                               <table className="w-full text-left">
-                                <thead className="bg-slate-50/70 dark:bg-slate-900/70 text-slate-500 dark:text-slate-400 text-xs border-b border-slate-100 dark:border-slate-800">
+                                <thead className="bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 text-[#656B75] dark:text-[#A1A7B0] text-xs border-b border-[#E4E6E9] dark:border-[#2C3038]">
                                   <tr>
-                                    <th className="py-2.5 px-4 font-semibold">{isZh ? '服务商名称' : 'Provider Name'}</th>
-                                    <th className="py-2.5 px-4 font-semibold">{isZh ? '服务引擎' : 'Engine'}</th>
-                                    <th className="py-2.5 px-4 font-semibold">{isZh ? '分流权重' : 'Weight'}</th>
-                                    <th className="py-2.5 px-4 font-semibold">{isZh ? '远端模型映射' : 'Remote Model'}</th>
-                                    <th className="py-2.5 px-4 font-semibold text-right">{isZh ? '健康状态 / 探测延迟' : 'Health / Latency'}</th>
+                                    <th className="ui-th">{isZh ? '服务商名称' : 'Provider Name'}</th>
+                                    <th className="ui-th">{isZh ? '服务引擎' : 'Engine'}</th>
+                                    <th className="ui-th">{isZh ? '分流权重' : 'Weight'}</th>
+                                    <th className="ui-th">{isZh ? '远端模型映射' : 'Remote Model'}</th>
+                                    <th className="ui-th text-right">{isZh ? '健康状态 / 探测延迟' : 'Health / Latency'}</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono text-xs">
+                                <tbody className="divide-y divide-[#E4E6E9]/60 dark:divide-[#2C3038]/60 font-mono text-xs">
                                   {(route.providers || []).map((p) => {
                                     const probe = probes.find(pr => pr.channel_id === p.channel_id);
                                     return (
-                                      <tr key={p.channel_id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                                        <td className="py-2.5 px-4 font-sans font-medium text-slate-800 dark:text-slate-200">
+                                      <tr key={p.channel_id} className="ui-tr-hover">
+                                        <td className="ui-td font-sans font-medium text-[#202124] dark:text-[#F1F2F4]">
                                           {p.channel_name}
                                         </td>
-                                        <td className="py-2.5 px-4 text-slate-500 dark:text-slate-400">
+                                        <td className="ui-td text-[#656B75] dark:text-[#A1A7B0]">
                                           {p.channel_type}
                                         </td>
-                                        <td className="py-2.5 px-4 text-indigo-600 dark:text-indigo-400 font-semibold tabular-nums">
+                                        <td className="ui-td text-[#355CFF] dark:text-[#91A7FF] font-semibold tabular-nums">
                                           {p.weight_percent ? `${p.weight_percent}%` : `${isZh ? '权重: ' : 'Weight: '}${p.weight}`}
                                         </td>
-                                        <td className="py-2.5 px-4 text-slate-600 dark:text-slate-300">
+                                        <td className="ui-td text-[#656B75] dark:text-[#A1A7B0]">
                                           {p.mapped_model || route.model}
                                         </td>
-                                        <td className="py-2.5 px-4 text-right font-sans">
+                                        <td className="ui-td text-right font-sans">
                                           {probe ? (
                                             <span className={`font-mono tabular-nums font-semibold ${probe.status === 'healthy' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                               {probe.latency_ms} ms ({probe.status})
                                             </span>
                                           ) : (
-                                            <span className="text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-xs font-medium">
+                                            <span className="text-[#656B75] dark:text-[#A1A7B0] bg-[#F0F1F2] dark:bg-[#22252B] px-1.5 py-0.5 rounded border border-[#E4E6E9] dark:border-[#2C3038] text-xs font-medium">
                                               {isZh ? '未探测' : 'Not probed'}
                                             </span>
                                           )}

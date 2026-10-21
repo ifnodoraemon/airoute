@@ -653,12 +653,12 @@ export default function DashboardView({
 
   const attentionTones = {
     danger: {
-      card: 'border-rose-200/70 dark:border-rose-900/60 border-l-rose-500 bg-rose-50/60 dark:bg-rose-950/20',
+      card: 'border-rose-200/80 dark:border-rose-900/60 border-l-rose-500 bg-rose-50/50 dark:bg-rose-950/20',
       icon: 'text-rose-500 dark:text-rose-400',
       title: 'text-rose-900 dark:text-rose-100'
     },
     warn: {
-      card: 'border-amber-200/70 dark:border-amber-900/60 border-l-amber-500 bg-amber-50/60 dark:bg-amber-950/20',
+      card: 'border-amber-200/80 dark:border-amber-900/60 border-l-amber-500 bg-amber-50/50 dark:bg-amber-950/20',
       icon: 'text-amber-500 dark:text-amber-400',
       title: 'text-amber-900 dark:text-amber-100'
     }
@@ -669,10 +669,10 @@ export default function DashboardView({
       {/* 1. Page Header (Directly on canvas, no box-in-box card) */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
+          <h2 className="ui-page-title">
             {isZh ? '运营总览' : 'Dashboard'}
           </h2>
-          <p className="ui-meta mt-1">
+          <p className="ui-page-subtitle mt-1">
             {isZh 
               ? '全双工并发吞吐、首字分位 SLA、多模态调用结构与 Prompt Cache 资金节约' 
               : 'Real-time telemetry, TTFT latency percentiles, multimodal workloads, and FinOps savings'}
@@ -686,7 +686,7 @@ export default function DashboardView({
               className="ui-btn-secondary"
               title={isZh ? '打开全链路动态路由与容灾演练' : 'Open visual routing & failover topology'}
             >
-              <Layers className="w-3.5 h-3.5 text-slate-400" />
+              <Layers className="w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0]" />
               <span>{isZh ? '运行时容灾拓扑' : 'Live Routing Topology'}</span>
             </button>
           )}
@@ -698,7 +698,7 @@ export default function DashboardView({
             className="ui-btn-secondary"
             title={isZh ? '复制一份包含 KPI、SLA 与建议的 Markdown 运营报告' : 'Copy a Markdown operations report with KPIs, SLA and recommendations'}
           >
-            <FileText className="w-3.5 h-3.5 text-slate-400" />
+            <FileText className="w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0]" />
             <span>
               {copiedReport
                 ? (isZh ? '已复制报告' : 'Report copied')
@@ -713,7 +713,7 @@ export default function DashboardView({
               className="ui-btn-secondary"
               title={isZh ? '重新拉取统计、渠道与日志数据' : 'Re-fetch stats, channels and logs'}
             >
-              <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${refreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0] ${refreshing ? 'animate-spin' : ''}`} />
               <span>{refreshing ? (isZh ? '刷新中…' : 'Refreshing…') : (isZh ? '刷新' : 'Refresh')}</span>
             </button>
             {lastRefreshed && (
@@ -814,15 +814,15 @@ export default function DashboardView({
       </section>
 
       {/* 2.5 REAL-TIME TELEMETRY COCKPIT & KEY DRILLDOWN */}
-      <section className="ui-card p-5 bg-gradient-to-br from-indigo-500/5 via-transparent to-purple-500/5 border-indigo-100 dark:border-indigo-900/40">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800/80">
+      <section className="ui-card p-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#E4E6E9] dark:border-[#2C3038]">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+            <div className="p-2 rounded-xl bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF]">
               <Gauge className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-semibold text-slate-900 dark:text-white">
+                <h3 className="text-base font-semibold text-[#202124] dark:text-[#F1F2F4]">
                   {selectedKey
                     ? (isZh ? `密钥实时速率遥测 · ${activeKeyObj?.tenant_id || activeKeyObj?.name || selectedKey.slice(0, 16)}` : `Key Telemetry · ${activeKeyObj?.tenant_id || activeKeyObj?.name || selectedKey.slice(0, 16)}`)
                     : (adminUser?.role === 'admin'
@@ -831,7 +831,7 @@ export default function DashboardView({
                       )
                   }
                 </h3>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-medium bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-medium bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                   LIVE 60s
                 </span>
@@ -847,7 +847,7 @@ export default function DashboardView({
 
           {/* Drill-down selector */}
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
+            <span className="text-xs font-medium text-[#656B75] dark:text-[#A1A7B0] whitespace-nowrap">
               {isZh ? '下钻分析:' : 'Drill-down:'}
             </span>
             <div className="relative min-w-[220px]">
@@ -884,26 +884,26 @@ export default function DashboardView({
         {/* 3 Telemetry Speedometers */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
           {/* Card 1: Requests per sec & RPM */}
-          <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800 flex flex-col justify-between">
+          <div className="p-4 rounded-xl bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038] flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+              <div className="flex items-center justify-between text-xs text-[#656B75] dark:text-[#A1A7B0]">
                 <span className="font-medium">{isZh ? '实时请求速率 (RPS / RPM)' : 'Real-time RPS / RPM'}</span>
-                <span className="font-mono text-indigo-600 dark:text-indigo-400">
+                <span className="font-mono text-[#355CFF] dark:text-[#91A7FF] font-semibold">
                   {currentRPM} RPM
                 </span>
               </div>
               <div className="mt-2 flex items-baseline gap-2">
-                <span className="text-3xl font-bold font-mono text-slate-900 dark:text-white tracking-tight">
+                <span className="text-3xl font-bold font-mono text-[#202124] dark:text-[#F1F2F4] tracking-tight">
                   {(currentRPM / 60).toFixed(1)}
                 </span>
-                <span className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                <span className="text-sm font-medium text-[#656B75] dark:text-[#A1A7B0]">
                   req/s
                 </span>
               </div>
             </div>
             
-            <div className="mt-3 pt-2.5 border-t border-slate-200/50 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between">
-              <span>{isZh ? '周期峰值' : 'Peak RPM'}: <strong className="font-mono text-slate-700 dark:text-slate-200">{peakRPM}</strong> RPM</span>
+            <div className="mt-3 pt-2.5 border-t border-[#E4E6E9] dark:border-[#2C3038] text-xs text-[#656B75] dark:text-[#A1A7B0] flex items-center justify-between">
+              <span>{isZh ? '周期峰值' : 'Peak RPM'}: <strong className="font-mono text-[#202124] dark:text-[#F1F2F4]">{peakRPM}</strong> RPM</span>
               {activeKeyObj?.rpm ? (
                 <span className="font-mono text-xs">
                   {isZh ? '限流水位' : 'Limit'}: {Math.min(100, Math.round((currentRPM / activeKeyObj.rpm) * 100))}%
@@ -913,14 +913,14 @@ export default function DashboardView({
 
             {/* Quota Progress Bar if key has RPM limit */}
             {activeKeyObj?.rpm > 0 && (
-              <div className="mt-2 w-full bg-slate-200 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+              <div className="mt-2 w-full bg-[#E4E6E9] dark:bg-[#2C3038] rounded-full h-1.5 overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all duration-300 ${
                     currentRPM >= activeKeyObj.rpm
                       ? 'bg-rose-500'
                       : currentRPM >= activeKeyObj.rpm * 0.8
                       ? 'bg-amber-500'
-                      : 'bg-indigo-500'
+                      : 'bg-[#355CFF]'
                   }`}
                   style={{ width: `${Math.min(100, (currentRPM / activeKeyObj.rpm) * 100)}%` }}
                 />
@@ -929,26 +929,26 @@ export default function DashboardView({
           </div>
 
           {/* Card 2: Tokens per min (TPM) */}
-          <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800 flex flex-col justify-between">
+          <div className="p-4 rounded-xl bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038] flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+              <div className="flex items-center justify-between text-xs text-[#656B75] dark:text-[#A1A7B0]">
                 <span className="font-medium">{isZh ? '实时 Token 吞吐 (TPM)' : 'Real-time TPM'}</span>
-                <span className="font-mono text-purple-600 dark:text-purple-400">
+                <span className="font-mono text-[#355CFF] dark:text-[#91A7FF] font-semibold">
                   {currentTPM >= 1000 ? `${(currentTPM / 1000).toFixed(1)}k` : currentTPM} /min
                 </span>
               </div>
               <div className="mt-2 flex items-baseline gap-2">
-                <span className="text-3xl font-bold font-mono text-slate-900 dark:text-white tracking-tight">
+                <span className="text-3xl font-bold font-mono text-[#202124] dark:text-[#F1F2F4] tracking-tight">
                   {currentTPM.toLocaleString()}
                 </span>
-                <span className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                <span className="text-sm font-medium text-[#656B75] dark:text-[#A1A7B0]">
                   Tokens/min
                 </span>
               </div>
             </div>
 
-            <div className="mt-3 pt-2.5 border-t border-slate-200/50 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between">
-              <span>{isZh ? '周期峰值' : 'Peak TPM'}: <strong className="font-mono text-slate-700 dark:text-slate-200">{peakTPM.toLocaleString()}</strong> TPM</span>
+            <div className="mt-3 pt-2.5 border-t border-[#E4E6E9] dark:border-[#2C3038] text-xs text-[#656B75] dark:text-[#A1A7B0] flex items-center justify-between">
+              <span>{isZh ? '周期峰值' : 'Peak TPM'}: <strong className="font-mono text-[#202124] dark:text-[#F1F2F4]">{peakTPM.toLocaleString()}</strong> TPM</span>
               <span className="font-mono text-xs">
                 ~{Math.round(currentTPM / 60)} tok/s
               </span>
@@ -956,14 +956,14 @@ export default function DashboardView({
 
             {/* Quota Progress Bar if key has TPM limit */}
             {activeKeyObj?.tpm > 0 && (
-              <div className="mt-2 w-full bg-slate-200 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+              <div className="mt-2 w-full bg-[#E4E6E9] dark:bg-[#2C3038] rounded-full h-1.5 overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all duration-300 ${
                     currentTPM >= activeKeyObj.tpm
                       ? 'bg-rose-500'
                       : currentTPM >= activeKeyObj.tpm * 0.8
                       ? 'bg-amber-500'
-                      : 'bg-purple-500'
+                      : 'bg-[#355CFF]'
                   }`}
                   style={{ width: `${Math.min(100, (currentTPM / activeKeyObj.tpm) * 100)}%` }}
                 />
@@ -972,38 +972,38 @@ export default function DashboardView({
           </div>
 
           {/* Card 3: Key Status / Overall Concurrency Summary */}
-          <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800 flex flex-col justify-between">
+          <div className="p-4 rounded-xl bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038] flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+              <div className="flex items-center justify-between text-xs text-[#656B75] dark:text-[#A1A7B0]">
                 <span className="font-medium">
                   {selectedKey ? (isZh ? '密钥运行状态与分组' : 'Key Status & Group') : (isZh ? '网关并发健康度' : 'Gateway Concurrency')}
                 </span>
-                <Sliders className="w-3.5 h-3.5 text-slate-400" />
+                <Sliders className="w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0]" />
               </div>
               {selectedKey ? (
                 <div className="mt-2 space-y-1.5">
                   <div className="flex items-center gap-2">
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
                       activeKeyObj?.status === 'disabled'
-                        ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
-                        : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                        ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                        : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
                     }`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${activeKeyObj?.status === 'disabled' ? 'bg-rose-500' : 'bg-emerald-500'}`} />
                       {activeKeyObj?.status === 'disabled' ? (isZh ? '已停用' : 'Disabled') : (isZh ? '运行中' : 'Active')}
                     </span>
-                    <span className="font-mono text-xs px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                    <span className="font-mono text-xs px-2 py-0.5 rounded bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF]">
                       {activeKeyObj?.group_name || 'default'} 组
                     </span>
                   </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                  <div className="text-xs text-[#656B75] dark:text-[#A1A7B0] font-mono">
                     {isZh ? '消耗额度' : 'Spent'}: ¥{Number(activeKeyObj?.used_cost || 0).toFixed(4)}
                     {Number(activeKeyObj?.budget) > 0 ? ` / ¥${Number(activeKeyObj.budget).toFixed(2)}` : ` (${isZh ? '不限预算' : 'No cap'})`}
                   </div>
                 </div>
               ) : (
                 <div className="mt-2">
-                  <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white">
-                    {channels.filter(c => c.status === 'active').length} <span className="text-sm font-normal text-slate-500 dark:text-slate-400">/ {channels.length} {isZh ? '渠道在线' : 'channels active'}</span>
+                  <div className="text-2xl font-bold font-mono text-[#202124] dark:text-[#F1F2F4]">
+                    {channels.filter(c => c.status === 'active').length} <span className="text-sm font-normal text-[#656B75] dark:text-[#A1A7B0]">/ {channels.length} {isZh ? '渠道在线' : 'channels active'}</span>
                   </div>
                   <div className="ui-meta mt-1">
                     {attention.tripped === 0
@@ -1014,7 +1014,7 @@ export default function DashboardView({
               )}
             </div>
 
-            <div className="mt-3 pt-2.5 border-t border-slate-200/50 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between">
+            <div className="mt-3 pt-2.5 border-t border-[#E4E6E9] dark:border-[#2C3038] text-xs text-[#656B75] dark:text-[#A1A7B0] flex items-center justify-between">
               <span>{isZh ? '调用成功率' : 'Success Rate'}: <strong className="font-mono text-emerald-600 dark:text-emerald-400">{slaAvailability}{slaAvailability === '—' ? '' : '%'}</strong></span>
               <span className="font-mono">TTFT ~{Math.round(stats.avg_ttft_ms || 0)}ms</span>
             </div>
@@ -1028,9 +1028,9 @@ export default function DashboardView({
         <div className="ui-card p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="ui-section-title">{isZh ? '累计调用量' : 'Total Requests'}</span>
-            <Zap className="w-4 h-4 text-slate-400" />
+            <Zap className="w-4 h-4 text-[#656B75] dark:text-[#A1A7B0]" />
           </div>
-          <div className="mt-2 text-2xl font-semibold font-mono tabular-nums tracking-tight text-slate-900 dark:text-white">
+          <div className="mt-2 ui-metric-number font-mono tabular-nums">
             {(stats.total_requests || 0).toLocaleString()}
           </div>
           <div className="ui-meta mt-2 flex items-center justify-between font-mono">
@@ -1038,7 +1038,7 @@ export default function DashboardView({
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
               <span>SLA {slaAvailability}{slaAvailability === '—' ? '' : '%'}</span>
             </div>
-            <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{(currentRPM / 60).toFixed(1)} req/s</span>
+            <span className="text-[#355CFF] dark:text-[#91A7FF] font-semibold">{(currentRPM / 60).toFixed(1)} req/s</span>
           </div>
         </div>
 
@@ -1046,14 +1046,14 @@ export default function DashboardView({
         <div className="ui-card p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="ui-section-title">{isZh ? 'Token 总吞吐' : 'Total Tokens'}</span>
-            <Activity className="w-4 h-4 text-slate-400" />
+            <Activity className="w-4 h-4 text-[#656B75] dark:text-[#A1A7B0]" />
           </div>
-          <div className="mt-2 text-2xl font-semibold font-mono tabular-nums tracking-tight text-slate-900 dark:text-white">
+          <div className="mt-2 ui-metric-number font-mono tabular-nums">
             {(stats.total_tokens || 0).toLocaleString()}
           </div>
           <div className="ui-meta mt-2 flex items-center justify-between font-mono">
             <span>Prompt {tokenMetrics.promptPctStr} · Comp {tokenMetrics.compPctStr}</span>
-            <span className="text-purple-600 dark:text-purple-400 font-semibold">{currentTPM >= 1000 ? `${(currentTPM / 1000).toFixed(1)}k` : currentTPM} TPM</span>
+            <span className="text-[#355CFF] dark:text-[#91A7FF] font-semibold">{currentTPM >= 1000 ? `${(currentTPM / 1000).toFixed(1)}k` : currentTPM} TPM</span>
           </div>
         </div>
 
@@ -1061,10 +1061,10 @@ export default function DashboardView({
         <div className="ui-card p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="ui-section-title">{isZh ? '平均首字延迟' : 'Avg TTFT'}</span>
-            <Clock className="w-4 h-4 text-slate-400" />
+            <Clock className="w-4 h-4 text-[#656B75] dark:text-[#A1A7B0]" />
           </div>
-          <div className="mt-2 text-2xl font-semibold font-mono tabular-nums tracking-tight text-slate-900 dark:text-white">
-            {Math.round(stats.avg_ttft_ms || 0)} <span className="text-sm font-normal text-slate-500 dark:text-slate-400">ms</span>
+          <div className="mt-2 ui-metric-number font-mono tabular-nums">
+            {Math.round(stats.avg_ttft_ms || 0)} <span className="text-sm font-normal text-[#656B75] dark:text-[#A1A7B0]">ms</span>
           </div>
           <div className="ui-meta mt-2 font-mono">
             {percentiles.sampled > 0
@@ -1077,9 +1077,9 @@ export default function DashboardView({
         <div className="ui-card p-5 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="ui-section-title">{isZh ? '累计消耗与节约' : 'Total Cost & Saved'}</span>
-            <DollarSign className="w-4 h-4 text-slate-400" />
+            <DollarSign className="w-4 h-4 text-[#656B75] dark:text-[#A1A7B0]" />
           </div>
-          <div className="mt-2 text-2xl font-semibold font-mono tabular-nums tracking-tight text-slate-900 dark:text-white">
+          <div className="mt-2 ui-metric-number font-mono tabular-nums">
             ¥{(stats.total_cost || 0).toFixed(4)}
           </div>
           <div className="ui-meta mt-2 font-mono">
@@ -1092,7 +1092,7 @@ export default function DashboardView({
       <div className="ui-card p-6 space-y-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
-            <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-100 tracking-tight">
+            <h4 className="font-semibold text-sm text-[#202124] dark:text-[#F1F2F4] tracking-tight">
               {isZh ? '多维时序走势与分位监测' : 'Time-Series Telemetry & SLA Waveform'}
             </h4>
             <p className="ui-meta mt-0.5">
@@ -1102,62 +1102,62 @@ export default function DashboardView({
 
           <div className="flex flex-wrap items-center gap-2">
             {/* Metric Selector Tabs */}
-            <div className="flex items-center bg-slate-100 dark:bg-slate-800/60 p-0.5 rounded-lg text-xs font-medium">
+            <div className="flex items-center bg-[#F0F1F2] dark:bg-[#22252B] p-0.5 rounded-lg text-xs font-medium">
               <button
                 onClick={() => setChartMetric('requests')}
-                className={`px-3 py-1 rounded-md transition ${chartMetric === 'requests' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                className={`px-3 py-1 rounded-md transition-colors ${chartMetric === 'requests' ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-2xs font-semibold' : 'text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'}`}
               >
                 {isZh ? '请求量 (QPS)' : 'Requests'}
               </button>
               <button
                 onClick={() => setChartMetric('tokens')}
-                className={`px-3 py-1 rounded-md transition ${chartMetric === 'tokens' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                className={`px-3 py-1 rounded-md transition-colors ${chartMetric === 'tokens' ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-2xs font-semibold' : 'text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'}`}
               >
                 {isZh ? 'Token 吞吐' : 'Tokens'}
               </button>
               <button
                 onClick={() => setChartMetric('rpm')}
-                className={`px-3 py-1 rounded-md transition ${chartMetric === 'rpm' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                className={`px-3 py-1 rounded-md transition-colors ${chartMetric === 'rpm' ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-2xs font-semibold' : 'text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'}`}
               >
                 {isZh ? '实时 RPM' : 'RPM'}
               </button>
               <button
                 onClick={() => setChartMetric('tpm')}
-                className={`px-3 py-1 rounded-md transition ${chartMetric === 'tpm' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                className={`px-3 py-1 rounded-md transition-colors ${chartMetric === 'tpm' ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-2xs font-semibold' : 'text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'}`}
               >
                 {isZh ? '实时 TPM' : 'TPM'}
               </button>
               <button
                 onClick={() => setChartMetric('latency')}
-                className={`px-3 py-1 rounded-md transition ${chartMetric === 'latency' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                className={`px-3 py-1 rounded-md transition-colors ${chartMetric === 'latency' ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-2xs font-semibold' : 'text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'}`}
               >
                 {isZh ? '首字延迟 TTFT' : 'TTFT Latency'}
               </button>
               <button
                 onClick={() => setChartMetric('errors')}
-                className={`px-3 py-1 rounded-md transition ${chartMetric === 'errors' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+                className={`px-3 py-1 rounded-md transition-colors ${chartMetric === 'errors' ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-2xs font-semibold' : 'text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'}`}
               >
                 {isZh ? '异常错误' : 'Errors'}
               </button>
             </div>
 
             {/* Timeframe Selector */}
-            <div className="flex items-center bg-slate-100 dark:bg-slate-800/60 p-0.5 rounded-lg text-xs font-medium">
+            <div className="flex items-center bg-[#F0F1F2] dark:bg-[#22252B] p-0.5 rounded-lg text-xs font-medium">
               <button
                 onClick={() => setTimeframe('1h')}
-                className={`px-2.5 py-1 rounded-md transition ${timeframe === '1h' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm font-semibold' : 'text-slate-500'}`}
+                className={`px-2.5 py-1 rounded-md transition-colors ${timeframe === '1h' ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-2xs font-semibold' : 'text-[#656B75] dark:text-[#A1A7B0]'}`}
               >
                 1h
               </button>
               <button
                 onClick={() => setTimeframe('24h')}
-                className={`px-2.5 py-1 rounded-md transition ${timeframe === '24h' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm font-semibold' : 'text-slate-500'}`}
+                className={`px-2.5 py-1 rounded-md transition-colors ${timeframe === '24h' ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-2xs font-semibold' : 'text-[#656B75] dark:text-[#A1A7B0]'}`}
               >
                 24h
               </button>
               <button
                 onClick={() => setTimeframe('7d')}
-                className={`px-2.5 py-1 rounded-md transition ${timeframe === '7d' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm font-semibold' : 'text-slate-500'}`}
+                className={`px-2.5 py-1 rounded-md transition-colors ${timeframe === '7d' ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-2xs font-semibold' : 'text-[#656B75] dark:text-[#A1A7B0]'}`}
               >
                 7d
               </button>
@@ -1169,10 +1169,10 @@ export default function DashboardView({
         <div className="relative h-60 w-full flex flex-col justify-between overflow-hidden pt-2">
           {/* Subtle Grid Lines */}
           <div className="absolute inset-0 pointer-events-none flex flex-col justify-between pb-8">
-            <div className="w-full border-b border-slate-900/[0.04] dark:border-white/[0.04]"></div>
-            <div className="w-full border-b border-slate-900/[0.04] dark:border-white/[0.04]"></div>
-            <div className="w-full border-b border-slate-900/[0.04] dark:border-white/[0.04]"></div>
-            <div className="w-full border-b border-slate-900/[0.04] dark:border-white/[0.04]"></div>
+            <div className="w-full border-b border-[#E4E6E9]/60 dark:border-[#2C3038]/60"></div>
+            <div className="w-full border-b border-[#E4E6E9]/60 dark:border-[#2C3038]/60"></div>
+            <div className="w-full border-b border-[#E4E6E9]/60 dark:border-[#2C3038]/60"></div>
+            <div className="w-full border-b border-[#E4E6E9]/60 dark:border-[#2C3038]/60"></div>
           </div>
 
           {/* Continuous SVG Trend Area Wave Overlay */}
@@ -1180,8 +1180,8 @@ export default function DashboardView({
             <svg viewBox="0 0 1000 140" preserveAspectRatio="none" className="w-full h-full overflow-visible">
               <defs>
                 <linearGradient id="telemetryGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#6366f1" stopOpacity="0.18" />
-                  <stop offset="100%" stopColor="#6366f1" stopOpacity="0.0" />
+                  <stop offset="0%" stopColor="#355CFF" stopOpacity="0.16" />
+                  <stop offset="100%" stopColor="#355CFF" stopOpacity="0.0" />
                 </linearGradient>
               </defs>
               {chartSvgData.areaD && (
@@ -1191,7 +1191,7 @@ export default function DashboardView({
                 <polyline
                   points={chartSvgData.pointsStr}
                   fill="none"
-                  stroke="#6366f1"
+                  stroke="#355CFF"
                   strokeWidth="2.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -1207,8 +1207,8 @@ export default function DashboardView({
                     cx={pt.x}
                     cy={pt.y}
                     r={isHovered ? "4.5" : "2"}
-                    fill={isHovered ? "#ffffff" : "#6366f1"}
-                    stroke="#6366f1"
+                    fill={isHovered ? "#ffffff" : "#355CFF"}
+                    stroke="#355CFF"
                     strokeWidth="2"
                     className="transition-all duration-150"
                   />
@@ -1219,15 +1219,15 @@ export default function DashboardView({
 
           {/* Hover Tooltip Overlay */}
           {hoveredBucket && (
-            <div className="absolute top-2 right-2 bg-slate-900/90 dark:bg-slate-800/95 text-white text-xs px-3 py-1.5 rounded-lg border border-slate-700 shadow-md pointer-events-none z-10 flex items-center gap-3">
-              <span className="font-mono text-slate-300">{hoveredBucket.label}</span>
-              <span className="font-semibold text-indigo-300 font-mono">
+            <div className="absolute top-2 right-2 bg-[#191B1F] text-[#F1F2F4] text-xs px-3 py-1.5 rounded-lg border border-[#2C3038] shadow-lg pointer-events-none z-10 flex items-center gap-3">
+              <span className="font-mono text-[#A1A7B0]">{hoveredBucket.label}</span>
+              <span className="font-semibold text-[#91A7FF] font-mono">
                 {isZh ? '请求' : 'Reqs'}: {hoveredBucket.requests} ({((hoveredBucket.rpm ?? 0) / 60).toFixed(1)} req/s · {hoveredBucket.rpm ?? 0} RPM)
               </span>
-              <span className="font-semibold text-sky-300 font-mono">
+              <span className="font-semibold text-sky-400 font-mono">
                 Tokens: {hoveredBucket.tokens.toLocaleString()} ({hoveredBucket.tpm ?? 0} TPM)
               </span>
-              <span className="font-semibold text-amber-300 font-mono">
+              <span className="font-semibold text-amber-400 font-mono">
                 TTFT: {hoveredBucket.avgTtft > 0 ? `${hoveredBucket.avgTtft}ms` : (isZh ? '无样本' : 'n/a')}
               </span>
               {hoveredBucket.errors > 0 && (
@@ -1264,7 +1264,7 @@ export default function DashboardView({
                 >
                   <div
                     style={{ height: `${heightPct}%` }}
-                    className="w-full max-w-[18px] rounded-t-sm transition-all duration-300 bg-slate-200 dark:bg-slate-700/80 group-hover:bg-indigo-500"
+                    className="w-full max-w-[18px] rounded-t-sm transition-all duration-150 bg-[#E4E6E9] dark:bg-[#2C3038] group-hover:bg-[#355CFF]"
                   />
                 </div>
               );
@@ -1272,7 +1272,7 @@ export default function DashboardView({
           </div>
 
           {/* X-Axis Timeline Labels */}
-          <div className="flex justify-between ui-meta font-mono pt-3 border-t border-slate-100 dark:border-slate-800/80 z-1">
+          <div className="flex justify-between ui-meta font-mono pt-3 border-t border-[#E4E6E9] dark:border-[#2C3038] z-1">
             <span>{timeBuckets[0]?.label}</span>
             <span>{timeBuckets[Math.floor(timeBuckets.length / 2)]?.label}</span>
             <span>{isZh ? '当前 (实时)' : 'Live Now'}</span>
@@ -1281,34 +1281,34 @@ export default function DashboardView({
 
         {/* Latency Percentiles & SLA Quick Stat Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-1">
-          <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/70">
+          <div className="p-4 rounded-xl bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038]">
             <span className="ui-meta font-medium block">{isZh ? 'P50 中位时延' : 'P50 Median TTFT'}</span>
             <div className="flex items-baseline gap-1.5 mt-1">
-              <span className="text-lg font-semibold text-slate-900 dark:text-slate-100 font-mono tabular-nums">
+              <span className="text-lg font-semibold text-[#202124] dark:text-[#F1F2F4] font-mono tabular-nums">
                 {fmtPct(percentiles.p50)}
               </span>
               <span className="ui-meta font-normal">(&lt; 200ms)</span>
             </div>
           </div>
-          <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/70">
+          <div className="p-4 rounded-xl bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038]">
             <span className="ui-meta font-medium block">{isZh ? 'P90 企业基准' : 'P90 Baseline'}</span>
             <div className="flex items-baseline gap-1.5 mt-1">
-              <span className="text-lg font-semibold text-slate-900 dark:text-slate-100 font-mono tabular-nums">
+              <span className="text-lg font-semibold text-[#202124] dark:text-[#F1F2F4] font-mono tabular-nums">
                 {fmtPct(percentiles.p90)}
               </span>
               <span className="ui-meta font-normal">(&lt; 500ms)</span>
             </div>
           </div>
-          <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/70">
+          <div className="p-4 rounded-xl bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038]">
             <span className="ui-meta font-medium block">{isZh ? 'P99 极端长尾' : 'P99 Tail TTFT'}</span>
             <div className="flex items-baseline gap-1.5 mt-1">
-              <span className="text-lg font-semibold text-slate-900 dark:text-slate-100 font-mono tabular-nums">
+              <span className="text-lg font-semibold text-[#202124] dark:text-[#F1F2F4] font-mono tabular-nums">
                 {fmtPct(percentiles.p99)}
               </span>
               <span className="ui-meta font-normal">(&lt; 1000ms)</span>
             </div>
           </div>
-          <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/70">
+          <div className="p-4 rounded-xl bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038]">
             <span className="ui-meta font-medium block">{isZh ? '服务可用率 (SLA)' : 'SLA Availability'}</span>
             <div className="flex items-baseline gap-1.5 mt-1">
               <span className="text-lg font-semibold text-emerald-600 dark:text-emerald-400 font-mono tabular-nums">
@@ -1325,7 +1325,7 @@ export default function DashboardView({
         {/* Panel 1: Multimodal Modality Distribution */}
         <div className="ui-card p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
+            <h4 className="font-semibold text-sm text-[#202124] dark:text-[#F1F2F4]">
               {isZh ? '全模态负载分布' : 'Multimodal Workload Distribution'}
             </h4>
             <span className="ui-meta font-mono">
@@ -1337,17 +1337,17 @@ export default function DashboardView({
             {modalityStats.map(mod => (
               <div key={mod.key} className="space-y-1">
                 <div className="flex justify-between text-xs">
-                  <span className="font-medium text-slate-700 dark:text-slate-300">
+                  <span className="font-medium text-[#202124] dark:text-[#F1F2F4]">
                     {mod.label}
                   </span>
-                  <span className="font-mono tabular-nums text-slate-500 dark:text-slate-400">
+                  <span className="font-mono tabular-nums text-[#656B75] dark:text-[#A1A7B0]">
                     {mod.count} {isZh ? '次' : 'reqs'} ({mod.pct}%)
                   </span>
                 </div>
-                <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                <div className="w-full bg-[#F0F1F2] dark:bg-[#22252B] h-1.5 rounded-full overflow-hidden">
                   <div
                     style={{ width: `${Math.max(4, mod.pct)}%` }}
-                    className="h-full rounded-full transition-all duration-500 bg-slate-900 dark:bg-indigo-500"
+                    className="h-full rounded-full transition-all duration-300 bg-[#355CFF]"
                   />
                 </div>
               </div>
@@ -1358,7 +1358,7 @@ export default function DashboardView({
         {/* Panel 2: Provider Latency & SLA Benchmark */}
         <div className="ui-card p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
+            <h4 className="font-semibold text-sm text-[#202124] dark:text-[#F1F2F4]">
               {isZh ? '服务商实时时延与可用性跑分' : 'Provider Latency & SLA Benchmark'}
             </h4>
             <span className="ui-meta font-mono">
@@ -1380,12 +1380,12 @@ export default function DashboardView({
                   <div key={p.id} className="space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center space-x-2">
-                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                        <span className="font-medium text-[#202124] dark:text-[#F1F2F4]">
                           {p.name}
                         </span>
                       </div>
                       <div className="flex items-center space-x-3 font-mono tabular-nums">
-                        <span className="font-medium text-slate-900 dark:text-slate-100">
+                        <span className="font-medium text-[#202124] dark:text-[#F1F2F4]">
                           {p.avgTtft} ms
                         </span>
                         <span className="text-emerald-600 dark:text-emerald-400 font-medium">
@@ -1393,10 +1393,10 @@ export default function DashboardView({
                         </span>
                       </div>
                     </div>
-                    <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                    <div className="w-full bg-[#F0F1F2] dark:bg-[#22252B] h-1.5 rounded-full overflow-hidden">
                       <div
                         style={{ width: `${barWidth}%` }}
-                        className="h-full rounded-full transition-all duration-500 bg-slate-900 dark:bg-indigo-500"
+                        className="h-full rounded-full transition-all duration-300 bg-[#355CFF]"
                       />
                     </div>
                   </div>
@@ -1405,11 +1405,11 @@ export default function DashboardView({
             </div>
           )}
 
-          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-xs">
+          <div className="pt-2 border-t border-[#E4E6E9] dark:border-[#2C3038] flex justify-between items-center text-xs">
             <span className="ui-meta">{isZh ? '按周期核算各服务商调用与支出' : 'Reconcile upstream costs'}</span>
             <button
               onClick={() => setCurrentTab('reconciliation')}
-              className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium inline-flex items-center gap-1 cursor-pointer"
+              className="text-[#355CFF] dark:text-[#91A7FF] hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
             >
               <span>{isZh ? '进入供应商整体对账 →' : 'Supplier Reconciliation →'}</span>
             </button>
@@ -1419,7 +1419,7 @@ export default function DashboardView({
         {/* Panel 3: Enterprise SLA Target & Error Budget Gauge */}
         <div className="ui-card p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
+            <h4 className="font-semibold text-sm text-[#202124] dark:text-[#F1F2F4]">
               {isZh ? '企业级 99.9% SLA 承诺与错误预算' : 'Enterprise 99.9% SLA & Error Budget'}
             </h4>
             <span className="ui-meta font-mono">
@@ -1428,16 +1428,16 @@ export default function DashboardView({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-            <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/70">
+            <div className="p-3.5 rounded-xl bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038]">
               <span className="ui-meta font-medium block">
                 {isZh ? 'SLA 目标承诺' : 'Committed Target'}
               </span>
-              <div className="text-lg font-semibold text-slate-900 dark:text-slate-100 font-mono tabular-nums mt-0.5">
+              <div className="text-lg font-semibold text-[#202124] dark:text-[#F1F2F4] font-mono tabular-nums mt-0.5">
                 99.90%
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/70">
+            <div className="p-3.5 rounded-xl bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038]">
               <span className="ui-meta font-medium block">
                 {isZh ? '当前实际可用率' : 'Actual Availability'}
               </span>
@@ -1446,29 +1446,29 @@ export default function DashboardView({
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-slate-50/70 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/70">
+            <div className="p-3.5 rounded-xl bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038]">
               <span className="ui-meta font-medium block">
                 {isZh ? '容灾运行状态' : 'Live failover state'}
               </span>
-              <div className="text-lg font-semibold text-slate-900 dark:text-slate-100 font-mono tabular-nums mt-0.5">
-                <button type="button" className="ui-btn-ghost ui-btn-sm text-indigo-600" onClick={onOpenTopology}>{isZh ? '查看实时拓扑' : 'View live topology'}</button>
+              <div className="text-lg font-semibold text-[#202124] dark:text-[#F1F2F4] font-mono tabular-nums mt-0.5">
+                <button type="button" className="ui-btn-ghost ui-btn-sm text-[#355CFF] dark:text-[#91A7FF]" onClick={onOpenTopology}>{isZh ? '查看实时拓扑' : 'View live topology'}</button>
               </div>
             </div>
           </div>
 
-          <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800/70">
+          <div className="space-y-1.5 pt-2 border-t border-[#E4E6E9] dark:border-[#2C3038]">
             <div className="flex justify-between text-xs">
-              <span className="text-slate-500 dark:text-slate-400">
+              <span className="text-[#656B75] dark:text-[#A1A7B0]">
                 {isZh ? '剩余错误预算' : 'Error Budget Remaining'}
               </span>
-              <span className="font-mono tabular-nums font-semibold text-slate-900 dark:text-white">
+              <span className="font-mono tabular-nums font-semibold text-[#202124] dark:text-[#F1F2F4]">
                 {errorBudget.remainingBudgetPct}%
               </span>
             </div>
-            <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+            <div className="w-full bg-[#F0F1F2] dark:bg-[#22252B] h-2 rounded-full overflow-hidden">
               <div
                 style={{ width: `${errorBudget.remainingBudgetPct}%` }}
-                className="h-full rounded-full transition-all duration-500 bg-slate-900 dark:bg-indigo-500"
+                className="h-full rounded-full transition-all duration-300 bg-[#355CFF]"
               />
             </div>
           </div>
@@ -1477,7 +1477,7 @@ export default function DashboardView({
         {/* Panel 4: Top Models Breakdown */}
         <div className="ui-card p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
+            <h4 className="font-semibold text-sm text-[#202124] dark:text-[#F1F2F4]">
               {isZh ? '热门大模型 Token 占比' : 'Top Models by Token Usage'}
             </h4>
             <span className="ui-meta font-mono">Top 5</span>
@@ -1492,16 +1492,16 @@ export default function DashboardView({
               {topModels.map(m => (
                 <div key={m.name} className="space-y-1">
                   <div className="flex justify-between text-xs font-mono tabular-nums">
-                    <span className="font-medium text-slate-800 dark:text-slate-200 truncate max-w-[200px]">
+                    <span className="font-medium text-[#202124] dark:text-[#F1F2F4] truncate max-w-[200px]">
                       {m.name}
                     </span>
-                    <span className="text-slate-500 dark:text-slate-400">
+                    <span className="text-[#656B75] dark:text-[#A1A7B0]">
                       {m.tokens} tokens ({m.percent}%)
                     </span>
                   </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                  <div className="w-full bg-[#F0F1F2] dark:bg-[#22252B] h-1.5 rounded-full overflow-hidden">
                     <div
-                      className="bg-slate-900 dark:bg-indigo-500 h-full rounded-full transition-all duration-500"
+                      className="bg-[#355CFF] h-full rounded-full transition-all duration-300"
                       style={{ width: `${Math.max(6, m.percent)}%` }}
                     />
                   </div>
@@ -1514,9 +1514,9 @@ export default function DashboardView({
 
       {/* 6. UPSTREAM PROVIDERS HEALTH & CIRCUIT BREAKER MATRIX */}
       <div className="ui-card overflow-hidden">
-        <div className="p-6 border-b border-slate-100 dark:border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="p-6 border-b border-[#E4E6E9] dark:border-[#2C3038] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
-            <h3 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
+            <h3 className="font-semibold text-sm text-[#202124] dark:text-[#F1F2F4]">
               {isZh ? '上游渠道健康度与测速' : 'Upstream Provider Health & Latency'}
             </h3>
             <p className="ui-meta mt-0.5">
@@ -1529,7 +1529,7 @@ export default function DashboardView({
               disabled={batchTesting || channels.length === 0}
               className="ui-btn-secondary ui-btn-sm"
             >
-              <Activity className={`w-3.5 h-3.5 text-slate-400 ${batchTesting ? 'animate-spin text-indigo-500' : ''}`} />
+              <Activity className={`w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0] ${batchTesting ? 'animate-spin text-[#355CFF]' : ''}`} />
               <span>{batchTesting ? (isZh ? '体检中...' : 'Probing...') : (isZh ? '全渠道体检' : 'Probe All')}</span>
             </button>
             <button
@@ -1543,7 +1543,7 @@ export default function DashboardView({
 
         {channels.length === 0 ? (
           <div className="p-10 text-center flex flex-col items-center justify-center space-y-3">
-            <h4 className="font-medium text-sm text-slate-700 dark:text-slate-300">{isZh ? '暂无服务商' : 'No Providers Connected'}</h4>
+            <h4 className="font-medium text-sm text-[#202124] dark:text-[#F1F2F4]">{isZh ? '暂无服务商' : 'No Providers Connected'}</h4>
             {adminUser?.role === 'admin' && setShowChannelModal && (
               <button
                 onClick={() => setShowChannelModal(true)}
@@ -1558,36 +1558,36 @@ export default function DashboardView({
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800/80 text-slate-500 dark:text-slate-400 text-xs font-medium">
-                  <th className="py-3 px-6">{isZh ? '服务商名称' : 'Provider Name'}</th>
-                  <th className="py-3 px-6">{isZh ? '协议类型' : 'Protocol'}</th>
-                  <th className="py-3 px-6">{isZh ? '接入 Base URL' : 'Base URL'}</th>
-                  <th className="py-3 px-6">{isZh ? '支持模型数' : 'Models'}</th>
-                  <th className="py-3 px-6">{isZh ? '熔断状态' : 'Breaker State'}</th>
-                  <th className="py-3 px-6">{isZh ? '最近延迟' : 'Latency'}</th>
-                  <th className="py-3 px-6 text-right">{isZh ? '操作' : 'Action'}</th>
+                <tr>
+                  <th className="ui-th">{isZh ? '服务商名称' : 'Provider Name'}</th>
+                  <th className="ui-th">{isZh ? '协议类型' : 'Protocol'}</th>
+                  <th className="ui-th">{isZh ? '接入 Base URL' : 'Base URL'}</th>
+                  <th className="ui-th text-right">{isZh ? '支持模型数' : 'Models'}</th>
+                  <th className="ui-th">{isZh ? '熔断状态' : 'Breaker State'}</th>
+                  <th className="ui-th text-right">{isZh ? '最近延迟' : 'Latency'}</th>
+                  <th className="ui-th text-right">{isZh ? '操作' : 'Action'}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70 text-xs">
+              <tbody className="divide-y divide-[#E4E6E9]/60 dark:divide-[#2C3038]/60">
                 {channels.map((ch) => {
                   const latInfo = channelLatencies[ch.id];
                   const breaker = ch.breaker_status || 'CLOSED';
                   return (
-                    <tr key={ch.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition">
-                      <td className="py-4 px-6 font-medium text-slate-900 dark:text-slate-100">
+                    <tr key={ch.id} className="ui-tr-hover">
+                      <td className="ui-td font-medium text-[#202124] dark:text-[#F1F2F4]">
                         {ch.name}
                       </td>
-                      <td className="py-4 px-6 font-mono text-xs text-slate-500">
+                      <td className="ui-td font-mono text-xs text-[#656B75] dark:text-[#A1A7B0]">
                         {ch.type}
                       </td>
-                      <td className="py-4 px-6 font-mono text-xs text-slate-500 dark:text-slate-400 max-w-xs truncate">
+                      <td className="ui-td font-mono text-xs text-[#656B75] dark:text-[#A1A7B0] max-w-xs truncate">
                         {ch.base_url}
                       </td>
-                      <td className="py-4 px-6 font-mono tabular-nums text-slate-500">
+                      <td className="ui-td font-mono tabular-nums text-right text-[#656B75] dark:text-[#A1A7B0]">
                         {ch.models?.length || 0}
                       </td>
-                      <td className="py-4 px-6">
-                        <span className="inline-flex items-center space-x-1.5 text-xs text-slate-600 dark:text-slate-300">
+                      <td className="ui-td">
+                        <span className="inline-flex items-center space-x-1.5 text-xs text-[#202124] dark:text-[#F1F2F4]">
                           <span
                             className={`w-1.5 h-1.5 rounded-full ${
                               breaker === 'CLOSED'
@@ -1602,7 +1602,7 @@ export default function DashboardView({
                           </span>
                         </span>
                       </td>
-                      <td className="py-4 px-6 font-mono tabular-nums text-xs">
+                      <td className="ui-td font-mono tabular-nums text-right">
                         {latInfo ? (
                           latInfo.success ? (
                             <span className="text-emerald-600 dark:text-emerald-400 font-medium">{latInfo.latencyMs} ms</span>
@@ -1610,16 +1610,16 @@ export default function DashboardView({
                             <span className="text-rose-500">{isZh ? '异常' : 'Error'}</span>
                           )
                         ) : (
-                          <span className="text-slate-500 dark:text-slate-400">-</span>
+                          <span className="text-[#656B75] dark:text-[#A1A7B0]">-</span>
                         )}
                       </td>
-                      <td className="py-4 px-6 text-right">
+                      <td className="ui-td text-right">
                         <button
                           onClick={() => handleTestChannel && handleTestChannel(ch)}
                           disabled={testingId === ch.id}
                           className="ui-btn-secondary ui-btn-sm"
                         >
-                          {testingId === ch.id ? <RefreshCw className="w-3 h-3 animate-spin text-slate-400" /> : <Play className="w-3 h-3 text-slate-400" />}
+                          {testingId === ch.id ? <RefreshCw className="w-3 h-3 animate-spin text-[#656B75] dark:text-[#A1A7B0]" /> : <Play className="w-3 h-3 text-[#656B75] dark:text-[#A1A7B0]" />}
                           <span>Ping</span>
                         </button>
                       </td>
@@ -1634,13 +1634,13 @@ export default function DashboardView({
 
       {/* 7. RECENT TRAFFIC AUDIT STREAM */}
       <div className="ui-card overflow-hidden">
-        <div className="p-6 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+        <div className="p-6 border-b border-[#E4E6E9] dark:border-[#2C3038] flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
+              <h3 className="font-semibold text-sm text-[#202124] dark:text-[#F1F2F4]">
                 {isZh ? '最近调用流水' : 'Recent Inbound Audit Stream'}
               </h3>
-              <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">
+              <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0]">
                 TOP 10
               </span>
             </div>
@@ -1652,7 +1652,7 @@ export default function DashboardView({
           </div>
           <button
             onClick={() => setCurrentTab('logs')}
-            className="text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
+            className="text-xs font-medium text-[#355CFF] dark:text-[#91A7FF] hover:underline transition-colors cursor-pointer"
           >
             {isZh ? '查看全部调用日志 →' : 'All Audit Logs →'}
           </button>
@@ -1663,7 +1663,7 @@ export default function DashboardView({
           if (recentLogsLoading && recentLogs.length === 0) {
             return (
               <div className="p-8 text-center ui-meta flex items-center justify-center gap-2">
-                <RefreshCw className="w-4 h-4 animate-spin text-slate-400" />
+                <RefreshCw className="w-4 h-4 animate-spin text-[#656B75] dark:text-[#A1A7B0]" />
                 <span>{isZh ? '正在加载最新流水...' : 'Loading recent stream...'}</span>
               </div>
             );
@@ -1679,50 +1679,50 @@ export default function DashboardView({
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-800/80 text-slate-500 dark:text-slate-400 text-xs font-medium">
-                    <th className="py-3 px-6">{isZh ? '时间' : 'Timestamp'}</th>
-                    <th className="py-3 px-6">{isZh ? '调用方' : 'Client'}</th>
-                    <th className="py-3 px-6">{isZh ? '模型' : 'Model'}</th>
-                    <th className="py-3 px-6">{isZh ? '渠道' : 'Channel'}</th>
-                    <th className="py-3 px-6">{isZh ? '状态' : 'Status'}</th>
-                    <th className="py-3 px-6">{isZh ? '首字 / 耗时' : 'TTFT / Latency'}</th>
-                    <th className="py-3 px-6">{isZh ? 'Token 消耗' : 'Tokens'}</th>
+                  <tr>
+                    <th className="ui-th">{isZh ? '时间' : 'Timestamp'}</th>
+                    <th className="ui-th">{isZh ? '调用方' : 'Client'}</th>
+                    <th className="ui-th">{isZh ? '模型' : 'Model'}</th>
+                    <th className="ui-th">{isZh ? '渠道' : 'Channel'}</th>
+                    <th className="ui-th">{isZh ? '状态' : 'Status'}</th>
+                    <th className="ui-th text-right">{isZh ? '首字 / 耗时' : 'TTFT / Latency'}</th>
+                    <th className="ui-th text-right">{isZh ? 'Token 消耗' : 'Tokens'}</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/70 text-xs">
+                <tbody className="divide-y divide-[#E4E6E9]/60 dark:divide-[#2C3038]/60">
                   {displayLogs.map((log) => (
                     <tr
                       key={log.id}
                       onClick={() => setActiveLogDetail && setActiveLogDetail(log)}
-                      className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 cursor-pointer transition"
+                      className="ui-tr-hover cursor-pointer"
                     >
-                      <td className="py-3.5 px-6 font-mono text-slate-500 dark:text-slate-400 text-xs">
+                      <td className="ui-td font-mono text-[#656B75] dark:text-[#A1A7B0] text-xs">
                         {new Date(log.created_at).toLocaleTimeString()}
                       </td>
-                      <td className="py-3.5 px-6 font-medium text-slate-800 dark:text-slate-200">
+                      <td className="ui-td font-medium text-[#202124] dark:text-[#F1F2F4]">
                         {log.tenant_id || (log.api_key ? (log.api_key.length > 12 ? `${log.api_key.slice(0, 8)}...` : log.api_key) : 'anonymous')}
                       </td>
-                      <td className="py-3.5 px-6 font-mono font-medium text-slate-900 dark:text-white">
+                      <td className="ui-td font-mono font-medium text-[#202124] dark:text-[#F1F2F4]">
                         {log.model}
                       </td>
-                      <td className="py-3.5 px-6 text-slate-500 font-mono text-xs">
+                      <td className="ui-td text-[#656B75] dark:text-[#A1A7B0] font-mono text-xs">
                         {log.channel || log.channel_name || (isZh ? '默认通道' : 'Default')}
                       </td>
-                      <td className="py-3.5 px-6">
+                      <td className="ui-td">
                         <span
                           className={`inline-flex items-center px-2 py-0.5 rounded font-mono text-[11px] font-medium ${
                             log.status_code >= 200 && log.status_code < 300
-                              ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60'
-                              : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/60'
+                              ? 'bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                              : 'bg-rose-500/10 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-500/20'
                           }`}
                         >
                           {log.status_code}
                         </span>
                       </td>
-                      <td className="py-3.5 px-6 font-mono tabular-nums text-slate-600 dark:text-slate-300">
+                      <td className="ui-td font-mono tabular-nums text-right text-[#202124] dark:text-[#F1F2F4]">
                         {log.ttft_ms > 0 ? `${log.ttft_ms}ms` : '—'} / {log.duration_ms ? `${log.duration_ms}ms` : '—'}
                       </td>
-                      <td className="py-3.5 px-6 font-mono tabular-nums text-slate-600 dark:text-slate-300">
+                      <td className="ui-td font-mono tabular-nums text-right text-[#202124] dark:text-[#F1F2F4]">
                         {(log.total_tokens || 0).toLocaleString()}
                       </td>
                     </tr>

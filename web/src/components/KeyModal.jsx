@@ -44,11 +44,11 @@ export default function KeyModal({
       <form
         onSubmit={onSubmit}
         aria-busy={submitting}
-        className="bg-white dark:bg-[#0F1420] border border-slate-200/70 dark:border-slate-800/80 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-150"
+        className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-150"
       >
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
+        <div className="flex items-center justify-between border-b border-[#E4E6E9] dark:border-[#2C3038] pb-3">
           <div>
-            <h3 className="font-semibold text-base text-slate-900 dark:text-white tracking-tight">
+            <h3 className="font-semibold text-base text-[#202124] dark:text-[#F1F2F4] tracking-tight">
               {isZh ? '新建 API 密钥' : 'Create API Key'}
             </h3>
           </div>
@@ -89,8 +89,8 @@ export default function KeyModal({
                       onClick={() => setNewKey({ ...newKey, group_name: g })}
                       className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
                         (newKey.group_name || 'default') === g
-                          ? 'bg-slate-900 dark:bg-indigo-600 text-white border-slate-900 dark:border-indigo-600 font-semibold shadow-sm'
-                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
+                          ? 'bg-[#355CFF] text-white border-[#355CFF] font-semibold shadow-xs'
+                          : 'bg-white dark:bg-[#191B1F] border-[#E4E6E9] dark:border-[#2C3038] text-[#202124] dark:text-[#F1F2F4] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B]'
                       }`}
                     >
                       {(() => {
@@ -163,11 +163,11 @@ export default function KeyModal({
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="font-semibold text-slate-700 dark:text-slate-300">{isZh ? 'API 密钥' : 'API Key'}</label>
+              <label className="font-semibold text-[#202124] dark:text-[#F1F2F4]">{isZh ? 'API 密钥' : 'API Key'}</label>
               <button
                 type="button"
                 onClick={() => setNewKey(prev => ({ ...prev, key: '' }))}
-                className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 cursor-pointer"
+                className="text-xs text-[#355CFF] dark:text-[#91A7FF] hover:underline flex items-center space-x-1 cursor-pointer"
               >
                 <span>{isZh ? '由服务端安全生成' : 'Generate server-side'}</span>
               </button>
@@ -182,7 +182,7 @@ export default function KeyModal({
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="font-semibold text-slate-700 dark:text-slate-300">
+              <label className="font-semibold text-[#202124] dark:text-[#F1F2F4]">
                 {isZh ? '额度限制 (CNY, 0 为不限)' : 'Quota Limit (CNY, 0 for unlimited)'}
               </label>
               <div className="flex items-center space-x-1.5 text-xs">
@@ -196,7 +196,7 @@ export default function KeyModal({
                     key={p.label}
                     type="button"
                     onClick={() => setNewKey(prev => ({ ...prev, budget: p.val }))}
-                    className="text-indigo-600 dark:text-indigo-400 hover:underline px-1 cursor-pointer"
+                    className="text-[#355CFF] dark:text-[#91A7FF] hover:underline px-1 cursor-pointer"
                   >
                     {p.label}
                   </button>
@@ -215,7 +215,7 @@ export default function KeyModal({
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="font-semibold text-slate-700 dark:text-slate-300">
+              <label className="font-semibold text-[#202124] dark:text-[#F1F2F4]">
                 {isZh ? '速率限制 (RPM, 0 为不限)' : 'Rate Limit (RPM, 0 for unlimited)'}
               </label>
               <div className="flex items-center space-x-1.5 text-xs">
@@ -229,7 +229,7 @@ export default function KeyModal({
                     key={p.label}
                     type="button"
                     onClick={() => setNewKey(prev => ({ ...prev, rpm: p.val }))}
-                    className="text-indigo-600 dark:text-indigo-400 hover:underline px-1 cursor-pointer"
+                    className="text-[#355CFF] dark:text-[#91A7FF] hover:underline px-1 cursor-pointer"
                   >
                     {p.label}
                   </button>
@@ -245,7 +245,7 @@ export default function KeyModal({
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3 pt-4 border-t border-slate-100 dark:border-slate-800/80">
+        <div className="flex items-center justify-between gap-3 pt-4 border-t border-[#E4E6E9] dark:border-[#2C3038]">
           <span className="ui-meta-sm truncate">
             {isDirty && !submitting ? (isZh ? '有未保存的修改' : 'Unsaved changes') : ''}
           </span>
