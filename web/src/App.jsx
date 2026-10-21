@@ -1409,6 +1409,7 @@ export default function App() {
                 setShowChannelModal={setShowChannelModal}
                 setActiveLogDetail={setActiveLogDetail}
                 adminUser={adminUser}
+                adminFetch={apiFetch}
                 onOpenTopology={() => setShowTopologyModal(true)}
                 lang={lang}
                 t={t}

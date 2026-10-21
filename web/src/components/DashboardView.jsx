@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Activity,
   Zap,
@@ -16,6 +16,7 @@ import {
   Flame
 } from 'lucide-react';
 import { copyToClipboard } from '../config';
+import { apiFetch } from '../api/client';
 
 export default function DashboardView({
   stats = {},
@@ -35,6 +36,7 @@ export default function DashboardView({
   setActiveLogDetail,
   adminUser,
   onOpenTopology,
+  adminFetch,
   lang = 'zh',
   t
 }) {
@@ -44,9 +46,38 @@ export default function DashboardView({
   const [hoveredBucket, setHoveredBucket] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState(null);
+  const [timeseriesData, setTimeseriesData] = useState(null);
 
-  // 1. DYNAMIC HOURLY TIME-SERIES AGGREGATION FROM LOGS
+  const fetchTimeseries = useCallback(async () => {
+    try {
+      const fetcher = adminFetch || apiFetch;
+      const res = await fetcher(`/api/v1/admin/stats/timeseries?timeframe=${timeframe}`);
+      if (res && res.ok) {
+        const json = await res.json();
+        if (json && json.code === 0 && json.data) {
+          setTimeseriesData(json.data);
+          return true;
+        }
+      }
+    } catch {
+      // Graceful fallback to client-side logs aggregation
+    }
+    return false;
+  }, [timeframe, adminFetch]);
+
+  useEffect(() => {
+    fetchTimeseries();
+  }, [fetchTimeseries]);
+
+  // 1. DYNAMIC HOURLY TIME-SERIES AGGREGATION FROM SERVER OR LOGS FALLBACK
   const timeBuckets = useMemo(() => {
+    if (timeseriesData && Array.isArray(timeseriesData.buckets) && timeseriesData.buckets.length > 0 && timeseriesData.timeframe === timeframe) {
+      return timeseriesData.buckets.map(b => ({
+        ...b,
+        avgTtft: b.avgTtft || (stats.avg_ttft_ms || 180)
+      }));
+    }
+
     const numBuckets = timeframe === '1h' ? 12 : timeframe === '7d' ? 14 : 24;
     const now = Date.now();
     const intervalMs = timeframe === '1h' ? 5 * 60 * 1000 : timeframe === '7d' ? 12 * 3600 * 1000 : 3600 * 1000;
@@ -91,7 +122,7 @@ export default function DashboardView({
       ...b,
       avgTtft: b.ttfts.length ? Math.round(b.ttfts.reduce((a, c) => a + c, 0) / b.ttfts.length) : (stats.avg_ttft_ms || 180)
     }));
-  }, [logs, timeframe, stats.avg_ttft_ms]);
+  }, [timeseriesData, logs, timeframe, stats.avg_ttft_ms]);
 
   // Max value for scaling SVG chart bars/lines
   const maxMetricVal = useMemo(() => {
@@ -130,6 +161,19 @@ export default function DashboardView({
 
   // 3. MULTIMODAL WORKLOAD BREAKDOWN
   const modalityStats = useMemo(() => {
+    if (timeseriesData && timeseriesData.modality_stats && timeseriesData.timeframe === timeframe) {
+      const counts = timeseriesData.modality_stats;
+      const total = Math.max(1, (counts.chat || 0) + (counts.images || 0) + (counts.audio || 0) + (counts.video || 0) + (counts.embeddings || 0) + (counts.rerank || 0));
+      return [
+        { key: 'chat', label: isZh ? '文本对话' : 'Chat', count: counts.chat || 0, pct: Math.round(((counts.chat || 0) / total) * 100), color: 'bg-indigo-500' },
+        { key: 'images', label: isZh ? '图像生成' : 'Images', count: counts.images || 0, pct: Math.round(((counts.images || 0) / total) * 100), color: 'bg-pink-500' },
+        { key: 'audio', label: isZh ? '语音合成/识别' : 'Audio/TTS', count: counts.audio || 0, pct: Math.round(((counts.audio || 0) / total) * 100), color: 'bg-amber-500' },
+        { key: 'video', label: isZh ? '视频生成' : 'Video', count: counts.video || 0, pct: Math.round(((counts.video || 0) / total) * 100), color: 'bg-purple-500' },
+        { key: 'embeddings', label: isZh ? '向量嵌入' : 'Embeddings', count: counts.embeddings || 0, pct: Math.round(((counts.embeddings || 0) / total) * 100), color: 'bg-emerald-500' },
+        { key: 'rerank', label: isZh ? '语义重排' : 'Rerank', count: counts.rerank || 0, pct: Math.round(((counts.rerank || 0) / total) * 100), color: 'bg-cyan-500' },
+      ].filter(item => item.count > 0 || item.key === 'chat');
+    }
+
     const counts = { chat: 0, images: 0, audio: 0, video: 0, embeddings: 0, rerank: 0 };
     (logs || []).forEach(l => {
       if (!l) return;
@@ -150,29 +194,35 @@ export default function DashboardView({
       { key: 'embeddings', label: isZh ? '向量嵌入' : 'Embeddings', count: counts.embeddings, pct: Math.round((counts.embeddings / total) * 100), color: 'bg-emerald-500' },
       { key: 'rerank', label: isZh ? '语义重排' : 'Rerank', count: counts.rerank, pct: Math.round((counts.rerank / total) * 100), color: 'bg-cyan-500' },
     ].filter(item => item.count > 0 || item.key === 'chat');
-  }, [logs, isZh]);
+  }, [timeseriesData, timeframe, logs, isZh]);
 
   // 4. TOKEN ECONOMICS & PROMPT CACHE FINOPS
   const tokenMetrics = useMemo(() => {
-    let promptTokens = 0;
-    let completionTokens = 0;
-    (logs || []).forEach(l => {
-      if (!l) return;
-      promptTokens += l.prompt_tokens || 0;
-      completionTokens += l.completion_tokens || 0;
-    });
+    let promptTokens = stats.prompt_tokens || 0;
+    let completionTokens = stats.completion_tokens || 0;
+    if (promptTokens === 0 && completionTokens === 0) {
+      (logs || []).forEach(l => {
+        if (!l) return;
+        promptTokens += l.prompt_tokens || 0;
+        completionTokens += l.completion_tokens || 0;
+      });
+    }
     const total = promptTokens + completionTokens || stats.total_tokens || 1;
     const promptPct = Math.round((promptTokens / total) * 100);
     const compPct = Math.round((completionTokens / total) * 100);
     return { promptTokens, completionTokens, promptPct, compPct };
-  }, [logs, stats.total_tokens]);
+  }, [logs, stats.prompt_tokens, stats.completion_tokens, stats.total_tokens]);
 
-  // 5. CALCULATE TRUE PERCENTILES (P50, P90, P99) FROM LOGS
+  // 5. CALCULATE TRUE PERCENTILES (P50, P90, P99)
   // Renders a percentile value, or an explicit "no data" marker when there are
   // no latency samples to compute it from.
   const fmtPct = (v) => (typeof v === 'number' && v > 0 ? `${v}ms` : (isZh ? '无样本' : 'n/a'));
 
   const percentiles = useMemo(() => {
+    if (timeseriesData && timeseriesData.percentiles && timeseriesData.percentiles.sampled > 0 && timeseriesData.timeframe === timeframe) {
+      return timeseriesData.percentiles;
+    }
+
     const latencies = (logs || []).map(l => l?.ttft_ms).filter(v => typeof v === 'number' && v > 0).sort((a, b) => a - b);
     if (!latencies.length) {
       return { p50: null, p90: null, p99: null, sampled: 0, total: stats.ttft_samples || 0 };
@@ -182,7 +232,7 @@ export default function DashboardView({
       return latencies[idx];
     };
     return { p50: at(0.5), p90: at(0.9), p99: at(0.99), sampled: latencies.length, total: stats.ttft_samples || latencies.length };
-  }, [logs, stats.ttft_samples]);
+  }, [timeseriesData, timeframe, logs, stats.ttft_samples]);
 
   // 6. TOP MODELS BREAKDOWN
   const topModels = useMemo(() => {
@@ -380,8 +430,8 @@ export default function DashboardView({
     if (refreshing) return;
     setRefreshing(true);
     try {
-      const [a, b] = await Promise.all([fetchData?.(), fetchLogs?.()]);
-      const ok = a !== false && b !== false;
+      const [a, b, c] = await Promise.all([fetchData?.(), fetchLogs?.(), fetchTimeseries()]);
+      const ok = a !== false && b !== false && c !== false;
       if (ok) showToast?.(isZh ? '遥测数据已更新' : 'Telemetry refreshed', 'success');
       else showToast?.(isZh ? '部分数据刷新失败，请检查网络或后端服务' : 'Some data failed to refresh — check the network or backend', 'error');
     } catch (e) {

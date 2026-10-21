@@ -48,6 +48,39 @@ func (h *AdminHandler) GetStatsOverview(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": stats})
 }
 
+// GetStatsTimeSeries returns bucketed time series metrics and true latency percentiles across the cluster.
+func (h *AdminHandler) GetStatsTimeSeries(c *gin.Context) {
+	timeframe := c.DefaultQuery("timeframe", "24h")
+	if timeframe != "1h" && timeframe != "24h" && timeframe != "7d" {
+		timeframe = "24h"
+	}
+
+	var keyNames []string
+	claims, ok := GetClaimsFromContext(c)
+	if ok && claims.Role != "admin" {
+		user, err := h.repo.GetUserByUsername(claims.Username)
+		if err != nil || user == nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "账户不存在或暂时无法验证，请重新登录"})
+			return
+		}
+		keys, err := h.repo.ListAPIKeysByUser(user.ID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		for _, k := range keys {
+			keyNames = append(keyNames, k.Key)
+		}
+	}
+
+	data, err := h.repo.GetStatsTimeSeries(timeframe, keyNames)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": data})
+}
+
 // MiddlewareComponentStatus represents the live status of an internal middleware/infrastructure component.
 type MiddlewareComponentStatus struct {
 	ID          string  `json:"id"`

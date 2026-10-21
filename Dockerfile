@@ -19,6 +19,8 @@ FROM golang:1.26-alpine AS go-builder
 # published under (see .github/workflows/docker.yml). The default keeps a plain
 # `docker build .` working without build arguments.
 ARG VERSION=1.1.0-dev
+ARG GOPROXY=https://goproxy.cn,https://proxy.golang.org,direct
+ENV GOPROXY=${GOPROXY}
 
 WORKDIR /app
 

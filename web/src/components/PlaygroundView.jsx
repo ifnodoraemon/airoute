@@ -40,21 +40,6 @@ export default function PlaygroundView({
   const isZh = lang === 'zh';
   const [playModality, setPlayModality] = useState(initialModality || 'chat');
 
-  // Real off-peak state for the currently selected chat model.
-  //
-  // The footer used to print a hardcoded "闲时费率 5 折激活中" banner regardless
-  // of the model's actual configuration, which is a claim the UI cannot support
-  // without the pricing row. We now read it from the pricing data and show
-  // nothing when the model has no off-peak discount configured.
-  const activeChatModel = playModel || (models.length > 0 ? models[0] : '');
-  const activePrice = prices.find(p => p.model === activeChatModel && (p.group_name || 'default') === 'default')
-    || prices.find(p => p.model === activeChatModel);
-  const offPeak = (() => {
-    if (!activePrice || activePrice.off_peak_enabled === false) return null;
-    const discount = typeof activePrice.off_peak_discount === 'number' ? activePrice.off_peak_discount : null;
-    if (discount === null || discount >= 1) return null;
-    return { discount, label: `${Math.round(discount * 10)}` };
-  })();
   const [playMode, setPlayMode] = useState('single'); // 'single' | 'arena'
   const [playApiKey, setPlayApiKey] = useState('');
   const [isCustomKey, setIsCustomKey] = useState(false);
@@ -122,6 +107,26 @@ export default function PlaygroundView({
   // Single Model state
   const [playModel, setPlayModel] = useState(initialModel || (chatModels[0] || ''));
   const [arenaModelB, setArenaModelB] = useState(chatModels[1] || chatModels[0] || '');
+
+  // Real off-peak state for the currently selected chat model.
+  //
+  // The footer used to print a hardcoded "闲时费率 5 折激活中" banner regardless
+  // of the model's actual configuration, which is a claim the UI cannot support
+  // without the pricing row. We now read it from the pricing data and show
+  // nothing when the model has no off-peak discount configured.
+  //
+  // This must stay below the playModel declaration: reading a `const` state
+  // binding before its initialization throws a TDZ ReferenceError that kills
+  // the whole playground on mount.
+  const activeChatModel = playModel || (models.length > 0 ? models[0] : '');
+  const activePrice = prices.find(p => p.model === activeChatModel && (p.group_name || 'default') === 'default')
+    || prices.find(p => p.model === activeChatModel);
+  const offPeak = (() => {
+    if (!activePrice || activePrice.off_peak_enabled === false) return null;
+    const discount = typeof activePrice.off_peak_discount === 'number' ? activePrice.off_peak_discount : null;
+    if (discount === null || discount >= 1) return null;
+    return { discount, label: `${Math.round(discount * 10)}` };
+  })();
   const [playStream, setPlayStream] = useState(true);
   const [temperature, setTemperature] = useState(0.7);
   const [maxTokens, setMaxTokens] = useState(2048);
