@@ -8,7 +8,6 @@ import {
   ExternalLink,
   AlertCircle,
   Cpu,
-  Layers,
   Sparkles,
   BookOpen,
   History,
@@ -108,7 +107,6 @@ export default function App() {
     adminToken,
     adminUser,
     authTab,
-    credentialToken,
     restoringSession,
     getSessionGeneration,
     finishSessionRestore,
@@ -116,7 +114,6 @@ export default function App() {
     setAuthTab,
     signIn,
     restoreSession,
-    refreshUser,
     patchUser,
     endSession,
     signOutLocal,
@@ -307,30 +304,6 @@ export default function App() {
     showToast(isZh ? '已安全退出账号' : 'Successfully logged out', 'info');
   };
 
-  const inFlightProfileRef = useRef(false);
-  const fetchUserProfile = useCallback(async () => {
-    if (inFlightProfileRef.current) return;
-    inFlightProfileRef.current = true;
-    // The marker is not a credential; the hook strips it.
-    const tok = credentialToken;
-    const generation = getSessionGeneration();
-    try {
-      const res = await fetch('/api/v1/user/me', {
-        headers: tok ? { Authorization: `Bearer ${tok}` } : {},
-        credentials: 'same-origin'
-      });
-      const data = await res.json();
-      if (generation !== getSessionGeneration()) return;
-      if (res.ok && data.code === 0 && data.data) {
-        refreshUser(data.data, { token: tok });
-      } else if (res.status === 401) {
-        endSession({ notify: true });
-      }
-    } catch (e) {
-    } finally {
-      inFlightProfileRef.current = false;
-    }
-  }, [credentialToken, getSessionGeneration, refreshUser, endSession]);
 
   const {
     activeQuickKey, setActiveQuickKey,
@@ -454,7 +427,12 @@ export default function App() {
     status: 'all',
     cache: 'all',
     latency: 'all',
+    // Page cursor is URL state as well: refreshing or sharing a link should land
+    // on the same page of the audit trail.
+    page: '1',
   });
+  const logPageNumber = Math.max(1, parseInt(logFilters.page, 10) || 1);
+  const logPageSize = LOG_PAGE_SIZE;
   const logFilter = logFilters.q;
   const setLogFilter = (value) => setLogFilters({ q: value });
   const timeRange = logFilters.range;
@@ -549,20 +527,59 @@ export default function App() {
 
   // One owner for filter-driven loads on the logs tab. Debouncing also prevents
   // a click and several effects from issuing competing copies of the same query.
+  //
+  // The page cursor is URL state (`logs.page`). A filter change resets to page 1,
+  // paging itself is handled by handleLogPageChange (which fetches directly), and
+  // returning to the tab keeps the page the link points at — so the effect stays
+  // silent when only the cursor moved.
+  const logFilterSignatureRef = useRef('');
+  const logsTabActiveRef = useRef(false);
   useEffect(() => {
-    if (restoringSession || !adminToken || viewMode !== 'console' || currentTab !== 'logs') return undefined;
+    if (currentTab !== 'logs' || viewMode !== 'console') {
+      logsTabActiveRef.current = false;
+      return undefined;
+    }
+    if (restoringSession || !adminToken) return undefined;
+
+    const signature = JSON.stringify([
+      logFilters.q, logFilters.range, logFilters.start, logFilters.end,
+      logFilters.session, logFilters.correlation_type, logFilters.key_id,
+      logFilters.model, logFilters.channel, logFilters.status, logFilters.cache, logFilters.latency,
+    ]);
+    const enteringTab = !logsTabActiveRef.current;
+    logsTabActiveRef.current = true;
+    const firstRun = logFilterSignatureRef.current === '';
+    const signatureChanged = firstRun || logFilterSignatureRef.current !== signature;
+    logFilterSignatureRef.current = signature;
+    if (!enteringTab && !signatureChanged) return undefined;
+
+    let targetPage;
+    if (firstRun) {
+      // Deep link / restored URL: honour the page it names.
+      targetPage = logPageNumber;
+    } else if (signatureChanged) {
+      // A different result set makes the old offset meaningless.
+      targetPage = 1;
+    } else {
+      // Returning to the tab: keep the page currently in the URL.
+      targetPage = logPageNumber;
+    }
+    const targetOffset = (targetPage - 1) * logPageSize;
     const timer = setTimeout(() => {
-      resetOffset();
-      fetchLogs({ offset: 0 });
+      if (signatureChanged && logPageNumber !== 1) setLogFilters({ page: '1' });
+      goToOffset(targetOffset);
+      fetchLogs({ offset: targetOffset });
     }, 350);
     return () => clearTimeout(timer);
-  }, [logFilters, currentTab, viewMode, fetchLogs, resetOffset, restoringSession, adminToken]);
+  }, [logFilters, currentTab, viewMode, fetchLogs, goToOffset, restoringSession, adminToken, logPageNumber, logPageSize, setLogFilters]);
 
   // Server-side pagination for audit logs (offset-based, page size above).
   const handleLogPageChange = (newOffset) => {
     if (newOffset < 0) return;
+    const nextPage = Math.floor(newOffset / logPageSize) + 1;
     goToOffset(newOffset);
     fetchLogs({ offset: newOffset });
+    if (String(nextPage) !== logFilters.page) setLogFilters({ page: String(nextPage) });
   };
 
   // Batch Log Operations

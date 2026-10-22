@@ -109,6 +109,23 @@ describe('App integration', () => {
     await waitForConsoleLoad();
   });
 
+  it('restores the audit page named in the URL', async () => {
+    signIn();
+    // Filters/page live in the query string while the route lives in the hash.
+    window.history.replaceState(null, '', '/?logs.page=3#/logs');
+    stubGateway({
+      '/api/v1/auth/me': () => jsonResponse({ code: 0, data: { user: { username: 'root', role: 'admin' } } }),
+    });
+
+    render(<App />);
+
+    // Page 3 of a 50-row page is offset 100; a refresh or shared link must land
+    // there instead of silently jumping back to the first page.
+    await waitFor(() => {
+      expect(requestedUrls().some((u) => u.includes('/api/v1/admin/logs') && u.includes('offset=100'))).toBe(true);
+    }, { timeout: 8000 });
+  });
+
   it('restores the dashboard deep link from a cookie without any legacy token or profile hint', async () => {
     window.history.replaceState(null, '', '/#/dashboard');
     stubGateway({
