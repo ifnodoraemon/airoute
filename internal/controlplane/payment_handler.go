@@ -1,9 +1,12 @@
 package controlplane
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -38,8 +41,25 @@ func (h *AdminHandler) CreateStripeRechargeSession(c *gin.Context) {
 	if currency == "" {
 		currency = "CNY"
 	}
+	// Wallet balances are denominated in CNY. Normalize once to the minor
+	// unit used by checkout, so the charged amount and credited amount agree.
+	if currency != "CNY" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "钱包充值仅支持人民币 CNY"})
+		return
+	}
+	cents := math.Round(req.Amount * 100)
+	if math.IsNaN(cents) || math.IsInf(cents, 0) || cents < 1 || cents > 99_999_999 || math.Abs(req.Amount*100-cents) > 0.000001 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "充值金额须为 0.01 至 999999.99 元，最多保留两位小数"})
+		return
+	}
+	req.Amount = cents / 100
 
-	orderNo := fmt.Sprintf("REC%s%d", time.Now().Format("20060102150405"), time.Now().UnixMicro()%1000)
+	orderToken, err := GenerateAPIKey()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成订单号失败"})
+		return
+	}
+	orderNo := "REC" + strings.TrimPrefix(orderToken, "sk-")
 
 	order := &storage.RechargeOrderRecord{
 		OrderNo:  orderNo,
@@ -52,6 +72,10 @@ func (h *AdminHandler) CreateStripeRechargeSession(c *gin.Context) {
 
 	baseURL := ResolvePublicBaseURL(c)
 	stripeKey := os.Getenv("STRIPE_API_KEY")
+	if strings.TrimSpace(os.Getenv("STRIPE_WEBHOOK_SECRET")) == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "error": "支付到账通知尚未配置，请使用兑换券或联系管理员"})
+		return
+	}
 	successURL := os.Getenv("STRIPE_SUCCESS_URL")
 	if successURL == "" {
 		successURL = fmt.Sprintf("%s/app/?tab=wallet&recharge=success&order_no=%s", baseURL, orderNo)
@@ -69,16 +93,19 @@ func (h *AdminHandler) CreateStripeRechargeSession(c *gin.Context) {
 
 		data := url.Values{}
 		data.Set("success_url", successURL)
-		data.Set("cancel_url", fmt.Sprintf("%s/app/?tab=wallet&recharge=cancel", baseURL))
+		data.Set("cancel_url", fmt.Sprintf("%s/app/?tab=wallet&recharge=cancel&order_no=%s", baseURL, orderNo))
 		data.Set("payment_method_types[0]", "card")
 		data.Set("mode", "payment")
+		data.Set("adaptive_pricing[enabled]", "false")
 		data.Set("client_reference_id", orderNo)
 		data.Set("line_items[0][price_data][currency]", strings.ToLower(currency))
-		data.Set("line_items[0][price_data][unit_amount]", strconv.FormatInt(int64(req.Amount*100), 10))
+		data.Set("line_items[0][price_data][unit_amount]", strconv.FormatInt(int64(cents), 10))
 		data.Set("line_items[0][price_data][product_data][name]", fmt.Sprintf("Airoute 钱包充值 (¥%.2f)", req.Amount))
 		data.Set("line_items[0][quantity]", "1")
 
-		httpReq, err := http.NewRequest("POST", stripeEndpoint, strings.NewReader(data.Encode()))
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
+		defer cancel()
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", stripeEndpoint, strings.NewReader(data.Encode()))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "构造支付请求失败，请稍后重试"})
 			return
@@ -127,7 +154,7 @@ func (h *AdminHandler) CreateStripeRechargeSession(c *gin.Context) {
 			ID  string `json:"id"`
 			URL string `json:"url"`
 		}
-		if err := json.Unmarshal(body, &stripeRes); err != nil || stripeRes.URL == "" {
+		if err := json.Unmarshal(body, &stripeRes); err != nil || stripeRes.URL == "" || stripeRes.ID == "" {
 			c.JSON(http.StatusBadGateway, gin.H{
 				"code":  502,
 				"error": "支付服务响应数据解析失败。线上充值暂不可用，请使用兑换券充值或稍后重试。",
@@ -158,6 +185,24 @@ func (h *AdminHandler) CreateStripeRechargeSession(c *gin.Context) {
 		"code":  503,
 		"error": "系统尚未配置线上收款通道。当前不支持在线支付，请使用额度兑换券进行充值或联系管理员。",
 	})
+}
+
+// GetUserRechargeOrder polls the authenticated customer's own checkout only.
+func (h *AdminHandler) GetUserRechargeOrder(c *gin.Context) {
+	claims, ok := RequireAuthClaims(c)
+	if !ok {
+		return
+	}
+	order, err := h.repo.GetRechargeOrder(c.Param("order_no"))
+	if err != nil && err != sql.ErrNoRows {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询订单失败"})
+		return
+	}
+	if order == nil || order.Username != claims.Username {
+		c.JSON(http.StatusNotFound, gin.H{"error": "订单不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": order})
 }
 
 // SandboxRecharge allows instant wallet recharge for direct/fast checkout (Admin/Dev/Test only).

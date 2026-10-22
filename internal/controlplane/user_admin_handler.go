@@ -2,6 +2,7 @@ package controlplane
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 
@@ -53,13 +54,13 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 
 // CreateUserRequest defines payload to create a new user account.
 type CreateUserRequest struct {
-	Username  string  `json:"username" binding:"required"`
-	Email     string  `json:"email"`
-	Password  string  `json:"password" binding:"required"`
-	Role      string  `json:"role"`
-	Status    string  `json:"status"`
-	Balance   float64 `json:"balance"`
-	GroupName string  `json:"group_name"`
+	Username  string   `json:"username" binding:"required"`
+	Email     string   `json:"email"`
+	Password  string   `json:"password" binding:"required"`
+	Role      string   `json:"role"`
+	Status    string   `json:"status"`
+	Balance   *float64 `json:"balance"`
+	GroupName string   `json:"group_name"`
 }
 
 // CreateUser adds a new user with quota, group, and automatically creates an initial API key.
@@ -94,10 +95,15 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 	if req.GroupName == "" {
 		req.GroupName = "default"
 	}
-	if req.Role == "admin" && req.Balance <= 0 {
-		req.Balance = 9999999.0
-	} else if req.Balance <= 0 {
-		req.Balance = 10.0 // Default initial quota
+	initialBalance := config.GetGlobalConfig().GetInitialUserBalance()
+	if req.Balance != nil {
+		initialBalance = *req.Balance
+	} else if req.Role == "admin" {
+		initialBalance = 9999999.0
+	}
+	if math.IsNaN(initialBalance) || math.IsInf(initialBalance, 0) || initialBalance < 0 || initialBalance > 1_000_000_000 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "初始余额必须在 0 至 1000000000 元之间"})
+		return
 	}
 
 	existing, _ := h.repo.GetUserByUsername(req.Username)
@@ -118,21 +124,16 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 		PasswordHash: string(hash),
 		Role:         req.Role,
 		Status:       req.Status,
-		Balance:      req.Balance,
+		Balance:      initialBalance,
 		GroupName:    req.GroupName,
 	}
-	if err := h.repo.CreateUser(user); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "创建用户失败: " + err.Error()})
-		return
-	}
-
 	// Auto-generate initial API key for the new user
 	newKey, err := GenerateAPIKey()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "安全随机源不可用，无法生成密钥"})
 		return
 	}
-	_ = h.repo.CreateAPIKey(&storage.APIKeyRecord{
+	if err := h.repo.CreateUserWithAPIKey(user, &storage.APIKeyRecord{
 		Key:           newKey,
 		TenantID:      user.Username,
 		UserID:        user.ID,
@@ -142,7 +143,10 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 		TPM:           100000,
 		Budget:        100.0,
 		Status:        "active",
-	})
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "创建账号及初始密钥失败，请重试"})
+		return
+	}
 	h.syncDataPlane()
 
 	c.JSON(http.StatusOK, gin.H{

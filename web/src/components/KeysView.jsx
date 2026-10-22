@@ -18,6 +18,8 @@ import { getGatewayOrigin, toCSV } from '../config';
 import useTableControls from '../hooks/useTableControls';
 import useUrlFilters from '../hooks/useUrlFilters';
 import { SortableTh, ColumnToggle } from './TableControls';
+import { availableKeyModels } from '../lib/keyModels';
+import { inferClientModality } from '../lib/modelModality';
 
 // Low-priority columns are dropped at narrow widths so that name, status and
 // actions stay reachable on a phone-width viewport without horizontal hunting.
@@ -32,6 +34,7 @@ const COLUMN_CLASS = {
 
 export default function KeysView({
   keys = [],
+  models = [],
   handleOpenCreateKey,
   selectedKeyIds = [],
   setSelectedKeyIds,
@@ -208,13 +211,19 @@ export default function KeysView({
   };
 
   // Copy cURL sample snippet
-  const copyCurlSnippet = async (keyStr) => {
+  const copyCurlSnippet = async (key) => {
+    const model = availableKeyModels(key, models).find(name => inferClientModality(name) === 'chat');
+    if (!model) {
+      showToast?.(isZh ? '该密钥暂无可用聊天模型，请检查授权范围和模型配置' : 'No available chat model for this key. Check model access and configuration.', 'warning');
+      return;
+    }
+    const keyStr = key.key;
     const origin = getGatewayOrigin();
     const curl = `curl ${origin}/v1/chat/completions \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer ${keyStr}" \\
   -d '{
-    "model": "deepseek-v4-flash",
+    "model": "${model}",
     "messages": [{"role": "user", "content": "Hello Airoute!"}]
   }'`;
     await copyToClipboard(curl);
@@ -331,7 +340,7 @@ export default function KeysView({
 
       {/* Keys Content */}
       {keys.length === 0 ? (
-        <div className="bg-white dark:bg-[#0F1420] border border-dashed border-slate-300 dark:border-slate-800 rounded-2xl p-12 text-center flex flex-col items-center justify-center space-y-3">
+        <div className="bg-white dark:bg-[#191B1F] border border-dashed border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-12 text-center flex flex-col items-center justify-center space-y-3">
           <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 shadow-sm">
             <Key className="w-5 h-5" />
           </div>
@@ -545,15 +554,15 @@ export default function KeysView({
                         )}
                         <td className="ui-td text-right whitespace-nowrap space-x-1.5">
                           <button
-                            onClick={() => onNavigateToDashboard && onNavigateToDashboard(k.key)}
+                            onClick={() => onNavigateToDashboard && onNavigateToDashboard(k.key, k.id)}
                             className="text-xs px-2.5 py-1 rounded-lg bg-[#EEF2FF] dark:bg-[#242D48] hover:bg-[#355CFF]/15 text-[#355CFF] dark:text-[#91A7FF] border border-[#355CFF]/30 dark:border-[#91A7FF]/30 font-medium transition-colors inline-flex items-center space-x-1 cursor-pointer"
-                            title={isZh ? '进入大盘查看该 Key 的实时 RPM / TPM 速率遥测' : 'View real-time RPM/TPM telemetry'}
+                            title={isAdmin ? (isZh ? '查看该密钥的 RPM / TPM 指标' : 'View RPM/TPM metrics') : (isZh ? '查看该密钥的调用记录与扣费' : 'View this key’s usage and charges')}
                           >
                             <Activity className="w-3 h-3 text-[#355CFF] dark:text-[#91A7FF]" />
-                            <span className="hidden lg:inline">{isZh ? '遥测' : 'Telemetry'}</span>
+                            <span className="hidden lg:inline">{isAdmin ? (isZh ? '遥测' : 'Telemetry') : (isZh ? '用量' : 'Usage')}</span>
                           </button>
                           <button
-                            onClick={() => copyCurlSnippet(k.key)}
+                            onClick={() => copyCurlSnippet(k)}
                             className="text-xs px-2.5 py-1 rounded-lg bg-[#F0F1F2] dark:bg-[#22252B] hover:bg-[#E4E6E9] dark:hover:bg-[#2C3038] text-[#202124] dark:text-[#F1F2F4] font-medium transition-colors inline-flex items-center space-x-1 cursor-pointer"
                             title={isZh ? '复制 cURL 快速接入命令' : 'Copy cURL command'}
                           >

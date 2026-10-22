@@ -84,6 +84,14 @@ func (r *Repository) GetUserByEmail(email string) (*UserRecord, error) {
 
 // CreateUser inserts a new user record.
 func (r *Repository) CreateUser(u *UserRecord) error {
+	return insertUser(r.db, u)
+}
+
+type recordInserter interface {
+	InsertGetID(query string, args ...any) (int64, error)
+}
+
+func insertUser(db recordInserter, u *UserRecord) error {
 	if u.Role == "" {
 		u.Role = "user"
 	}
@@ -93,13 +101,35 @@ func (r *Repository) CreateUser(u *UserRecord) error {
 	if u.GroupName == "" {
 		u.GroupName = "default"
 	}
-	id, err := r.db.InsertGetID(`INSERT INTO users (username, email, password_hash, role, status, balance, balance_units, group_name, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+	id, err := db.InsertGetID(`INSERT INTO users (username, email, password_hash, role, status, balance, balance_units, group_name, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 		u.Username, u.Email, u.PasswordHash, u.Role, u.Status, u.Balance, ToUnits(u.Balance), u.GroupName)
 	if err != nil {
 		return err
 	}
 	u.ID = id
 	return nil
+}
+
+// CreateUserWithAPIKey keeps onboarding atomic: a failed key insert must not
+// leave behind an account that the customer cannot register again.
+func (r *Repository) CreateUserWithAPIKey(user *UserRecord, key *APIKeyRecord) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := insertUser(tx, user); err != nil {
+		return err
+	}
+	key.UserID = user.ID
+	key.TenantID = user.Username
+	if key.GroupName == "" {
+		key.GroupName = user.GroupName
+	}
+	if err := insertAPIKey(tx, key); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // UpdateUserPassword updates the password hash for a user.

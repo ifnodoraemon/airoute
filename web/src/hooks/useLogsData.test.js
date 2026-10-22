@@ -45,6 +45,20 @@ describe('useLogsData', () => {
     expect(lastQuery().get('offset')).toBe('0');
   });
 
+  it('uses the same typed trace and key filters for loading and exporting', async () => {
+    const { result } = renderHook(() => useLogsData({ filters: filters({ session: 'trace-123', correlation_type:'trace_id', key_id:'42' }) }));
+    await act(async () => { await result.current.fetchLogs(); });
+    expect(lastQuery().get('trace_id')).toBe('trace-123');
+    expect(lastQuery().get('session_id')).toBeNull();
+    expect(lastQuery().get('key_id')).toBe('42');
+    await act(async () => { await result.current.fetchAllLogsForExport(); });
+    expect(lastQuery().get('trace_id')).toBe('trace-123');
+    expect(lastQuery().get('key_id')).toBe('42');
+    await act(async () => { await result.current.fetchLogs({offset:100}); await result.current.fetchLogs({sessionFilter:'chat-456',correlationType:'chat_id'}); });
+    expect(lastQuery().get('chat_id')).toBe('chat-456');
+    expect(lastQuery().get('offset')).toBe('0');
+  });
+
   it('stores the rows and the honest total', async () => {
     globalThis.fetch.mockResolvedValue(logResponse([{ id: 1 }], 400));
     const { result } = renderHook(() => useLogsData({ filters: filters() }));
@@ -200,6 +214,34 @@ describe('useLogsData', () => {
     });
 
     expect(ok).toBe(false);
+  });
+
+  it('surfaces a load failure so the console does not render an empty trail', async () => {
+    globalThis.fetch.mockResolvedValue({ ok: false, status: 503, json: async () => ({ error: 'database offline' }) });
+    const { result } = renderHook(() => useLogsData({ filters: filters(), isZh: true }));
+
+    await act(async () => {
+      await result.current.fetchLogs();
+    });
+
+    expect(result.current.logError).toContain('database offline');
+    expect(result.current.logs).toEqual([]);
+  });
+
+  it('clears the failure once a later load succeeds', async () => {
+    globalThis.fetch.mockResolvedValue({ ok: false, status: 503, json: async () => ({ error: 'database offline' }) });
+    const { result } = renderHook(() => useLogsData({ filters: filters(), isZh: true }));
+    await act(async () => {
+      await result.current.fetchLogs();
+    });
+
+    globalThis.fetch.mockResolvedValue(logResponse([{ id: 1 }], 1));
+    await act(async () => {
+      await result.current.fetchLogs();
+    });
+
+    expect(result.current.logError).toBe('');
+    expect(result.current.logs).toEqual([{ id: 1 }]);
   });
 
   it('moves the page cursor and the rendered offset together', async () => {

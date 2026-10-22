@@ -135,6 +135,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 			userGroup.POST("/wallet/recharge/sandbox", adminHandler.SandboxRecharge)
 			userGroup.GET("/wallet/recharge/sandbox", adminHandler.SandboxRecharge)
 			userGroup.GET("/wallet/orders", adminHandler.ListUserRechargeOrders)
+			userGroup.GET("/wallet/orders/:order_no", adminHandler.GetUserRechargeOrder)
 			userGroup.GET("/keys", adminHandler.ListUserKeys)
 			userGroup.POST("/keys", adminHandler.CreateUserKey)
 			userGroup.DELETE("/keys/:id", adminHandler.DeleteUserKey)

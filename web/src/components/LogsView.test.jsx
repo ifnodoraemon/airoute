@@ -53,6 +53,24 @@ describe('LogsView', () => {
     expect(screen.getByText(/本页 0 条/)).toBeInTheDocument();
   });
 
+  it('shows the load failure with a retry instead of claiming there are no logs', () => {
+    const { fetchLogs } = setup({ logError: 'database offline' });
+
+    expect(screen.getByText(/审计日志加载失败/)).toBeInTheDocument();
+    expect(screen.getByText(/database offline/)).toBeInTheDocument();
+    expect(screen.queryByText(/暂无审计调用日志/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /重试/ }));
+    expect(fetchLogs).toHaveBeenCalled();
+  });
+
+  it('shows a loading row on the first load instead of the empty state', () => {
+    setup({ logLoading: true });
+
+    expect(screen.getByText(/正在加载审计日志/)).toBeInTheDocument();
+    expect(screen.queryByText(/暂无审计调用日志/)).not.toBeInTheDocument();
+  });
+
   it('counts the rows on the page', () => {
     setup({ filteredLogs: [log({ id: 1 }), log({ id: 2 })], logsLength: 2 });
 

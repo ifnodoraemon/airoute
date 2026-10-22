@@ -13,7 +13,7 @@ function jsonResponse(body, status = 200) {
 function setup({ user = { username: 'alice', role: 'user', balance: 100 }, ...props } = {}) {
   const adminFetch = vi.fn(async (url) => jsonResponse({
     code: 0,
-    data: url.endsWith('/wallet') ? { ...user, group_name: 'default', orders: [] } : {},
+    data: url.endsWith('/wallet') ? { ...user, group_name: 'default', stripe_enabled: true, orders: [] } : {},
   }));
   const handlers = {
     adminFetch,
@@ -30,6 +30,7 @@ function setup({ user = { username: 'alice', role: 'user', balance: 100 }, ...pr
 describe('WalletManagementView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.replaceState(null, '', '/');
   });
 
   it('renders the balance it was given, to two decimals', () => {
@@ -43,6 +44,7 @@ describe('WalletManagementView', () => {
     it('sends the selected preset amount', async () => {
       const { adminFetch } = setup();
 
+      await waitFor(() => expect(screen.getByRole('button', { name: /立即支付|Pay Now/ })).toBeEnabled());
       fireEvent.click(screen.getByRole('button', { name: /立即支付|Pay Now/ }));
 
       await waitFor(() => expect(adminFetch).toHaveBeenCalled());
@@ -54,6 +56,7 @@ describe('WalletManagementView', () => {
       const { adminFetch } = setup();
 
       fireEvent.change(screen.getByPlaceholderText(/输入金额|Enter amount/), { target: { value: '123.45' } });
+      await waitFor(() => expect(screen.getByRole('button', { name: /立即支付|Pay Now/ })).toBeEnabled());
       fireEvent.click(screen.getByRole('button', { name: /立即支付|Pay Now/ }));
 
       await waitFor(() => expect(adminFetch).toHaveBeenCalled());
@@ -70,6 +73,7 @@ describe('WalletManagementView', () => {
       const field = screen.getByPlaceholderText(/输入金额|Enter amount/);
       fireEvent.change(field, { target: { value: '99' } });
       fireEvent.change(field, { target: { value: '' } });
+      await waitFor(() => expect(screen.getByRole('button', { name: /立即支付|Pay Now/ })).toBeEnabled());
       fireEvent.click(screen.getByRole('button', { name: /立即支付|Pay Now/ }));
 
       await waitFor(() => expect(adminFetch).toHaveBeenCalled());
@@ -81,6 +85,7 @@ describe('WalletManagementView', () => {
       const { adminFetch, showToast } = setup();
 
       fireEvent.change(screen.getByPlaceholderText(/输入金额|Enter amount/), { target: { value: '-10' } });
+      await waitFor(() => expect(screen.getByRole('button', { name: /立即支付|Pay Now/ })).toBeEnabled());
       fireEvent.click(screen.getByRole('button', { name: /立即支付|Pay Now/ }));
 
       await waitFor(() => expect(showToast).toHaveBeenCalledWith(expect.any(String), 'warning'));

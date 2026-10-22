@@ -836,7 +836,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
         onPointerDown={handleBtnPointerDown}
         onClick={handleBtnClick}
         style={style}
-        className={`fixed z-40 flex items-center space-x-2 px-3.5 py-2.5 rounded-full bg-linear-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 text-white shadow-xl shadow-indigo-500/25 hover:shadow-indigo-500/40 border border-white/20 select-none touch-none ${
+        className={`fixed z-40 flex items-center space-x-2 px-3.5 py-2.5 rounded-full bg-[#355CFF] hover:bg-[#2849E6] text-white shadow-xl shadow-[#355CFF]/25 hover:shadow-[#355CFF]/35 border border-white/20 select-none touch-none ${
           isBtnDragging ? 'cursor-grabbing scale-105 opacity-90 shadow-2xl' : 'cursor-grab hover:scale-[1.02] transition-transform transition-shadow duration-200'
         }`}
         title={isZh ? 'Airoute AI 智能副驾驶 (按住可拖动位置，点击打开，快捷键 Cmd+J)' : 'Airoute AI Copilot (Drag to move, click to open, Cmd+J)'}
@@ -861,60 +861,60 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
       style={!isExpanded && modalPos ? { left: `${modalPos.x}px`, top: `${modalPos.y}px`, bottom: 'auto', right: 'auto' } : undefined}
       className={`fixed z-50 transition-all duration-300 ease-out flex flex-col ${
         isExpanded
-          ? 'inset-4 sm:inset-10 bg-white dark:bg-[#0F1420] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800'
-          : `${modalPos ? '' : 'bottom-6 right-6'} w-full max-w-[420px] h-[640px] max-h-[88vh] bg-white dark:bg-[#0F1420] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800`
+          ? 'inset-4 sm:inset-10 bg-white dark:bg-[#191B1F] rounded-2xl shadow-2xl border border-[#E4E6E9] dark:border-[#2C3038]'
+          : `${modalPos ? '' : 'bottom-6 right-6'} w-full max-w-[420px] h-[640px] max-h-[88vh] bg-white dark:bg-[#191B1F] rounded-2xl shadow-2xl border border-[#E4E6E9] dark:border-[#2C3038]`
       } overflow-hidden animate-in zoom-in-95`}
     >
       {/* 头部控制栏 (可按住拖动) */}
       <div
         onPointerDown={handleModalHeaderPointerDown}
-        className={`px-4 py-3 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between bg-white dark:bg-[#0F1420] ${
+        className={`px-4 py-3 border-b border-[#E4E6E9] dark:border-[#2C3038] flex items-center justify-between bg-white dark:bg-[#191B1F] ${
           isExpanded ? '' : 'cursor-grab active:cursor-grabbing select-none'
         }`}
         title={isExpanded ? '' : (isZh ? '按住此处可拖动窗口位置' : 'Drag header to move window')}
       >
         <div className="flex items-center space-x-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-sm shrink-0">
+          <div className="w-8 h-8 rounded-xl bg-[#355CFF] flex items-center justify-center text-white shadow-sm shrink-0">
             <Sparkles className="w-4 h-4 text-amber-300" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center space-x-2">
-              <h3 className="font-semibold text-sm text-slate-900 dark:text-slate-100 truncate">
+              <h3 className="font-semibold text-sm text-[#202124] dark:text-[#F1F2F4] truncate">
                 {isZh ? 'Airoute 智能副驾驶' : 'Airoute AI Copilot'}
               </h3>
-              <span className="px-1.5 py-0.2 rounded-full text-xs font-mono font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60 shrink-0">
+              <span className="px-1.5 py-0.2 rounded-full text-xs font-mono font-semibold bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] border border-[#355CFF]/20 dark:border-[#91A7FF]/30 shrink-0">
                 Harness
               </span>
             </div>
 
             {/* 模型与工具契约展示 */}
-            <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+            <div className="flex items-center gap-2 mt-0.5 text-xs text-[#656B75] dark:text-[#A1A7B0]">
               <div className="flex items-center gap-1">
-                <Cpu className="w-3 h-3 text-indigo-500 shrink-0" />
+                <Cpu className="w-3 h-3 text-[#355CFF] dark:text-[#91A7FF] shrink-0" />
                 {candidateModels.length > 0 ? (
                   <select
                     value={selectedModel}
                     onChange={(e) => setSelectedModel(e.target.value)}
-                    className="bg-transparent text-slate-600 dark:text-slate-300 font-mono text-xs border-none focus:outline-none cursor-pointer truncate max-w-[130px]"
+                    className="bg-transparent text-[#202124] dark:text-[#F1F2F4] font-mono text-xs border-none focus:outline-none cursor-pointer truncate max-w-[130px]"
                     title={isZh ? '切换副驾驶驱动模型' : 'Switch Copilot Model'}
                   >
                     {candidateModels.map(m => (
-                      <option key={m} value={m} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                      <option key={m} value={m} className="bg-white dark:bg-[#191B1F] text-[#202124] dark:text-[#F1F2F4]">
                         {m}
                       </option>
                     ))}
                   </select>
                 ) : (
-                  <span className="font-mono text-xs text-slate-500 dark:text-slate-400">auto-telemetry</span>
+                  <span className="font-mono text-xs text-[#656B75] dark:text-[#A1A7B0]">auto-telemetry</span>
                 )}
               </div>
 
-              <span className="text-slate-300 dark:text-slate-700">•</span>
+              <span className="text-[#E4E6E9] dark:text-[#2C3038]">•</span>
 
               <button
                 type="button"
                 onClick={() => setShowToolsModal(!showToolsModal)}
-                className="inline-flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                className="inline-flex items-center gap-1 text-xs text-[#355CFF] dark:text-[#91A7FF] hover:underline cursor-pointer"
                 title={isZh ? '查看装载的标准工具契约' : 'View Registered Harness Tools'}
               >
                 <Wrench className="w-2.5 h-2.5" />
@@ -927,21 +927,21 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
         <div className="flex items-center space-x-1 shrink-0">
           <button
             onClick={handleClearHistory}
-            className="p-1.5 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            className="p-1.5 text-[#656B75] hover:text-rose-500 dark:hover:text-rose-400 rounded-lg hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] transition"
             title={isZh ? '清空会话' : 'Clear Chat'}
           >
             <Trash2 className="w-4 h-4" />
           </button>
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            className="p-1.5 text-[#656B75] hover:text-[#202124] dark:hover:text-[#F1F2F4] rounded-lg hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] transition"
             title={isExpanded ? 'Restore' : 'Expand'}
           >
             {isExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+            className="p-1.5 text-[#656B75] hover:text-[#202124] dark:hover:text-[#F1F2F4] rounded-lg hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] transition cursor-pointer"
             title="Close (ESC)"
           >
             <X className="w-4 h-4" />
@@ -951,26 +951,26 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
 
       {/* 标准工具契约抽屉 (Tools Schema Modal) */}
       {showToolsModal && (
-        <div className="px-4 py-2.5 bg-indigo-50/90 dark:bg-slate-900/95 border-b border-indigo-100 dark:border-indigo-950 text-xs text-slate-700 dark:text-slate-300 animate-in slide-in-from-top-2">
+        <div className="px-4 py-2.5 bg-[#F7F7F5] dark:bg-[#22252B] border-b border-[#E4E6E9] dark:border-[#2C3038] text-xs text-[#202124] dark:text-[#F1F2F4] animate-in slide-in-from-top-2">
           <div className="flex items-center justify-between mb-1.5">
-            <div className="flex items-center gap-1.5 font-semibold text-indigo-950 dark:text-indigo-300 text-xs">
-              <Layers className="w-3.5 h-3.5 text-indigo-500" />
+            <div className="flex items-center gap-1.5 font-semibold text-[#202124] dark:text-[#F1F2F4] text-xs">
+              <Layers className="w-3.5 h-3.5 text-[#355CFF] dark:text-[#91A7FF]" />
               <span>{isZh ? 'Harness 契约工具库 (OpenAI Tools v1)' : 'Harness Tool Registry'}</span>
             </div>
             <button
               onClick={() => setShowToolsModal(false)}
-              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              className="text-[#656B75] hover:text-[#202124] dark:hover:text-[#F1F2F4]"
             >
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
           <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 text-xs">
             {COPILOT_HARNESS_TOOLS.map((t, idx) => (
-              <div key={idx} className="p-1.5 rounded-lg bg-white/80 dark:bg-slate-800/80 border border-indigo-100 dark:border-slate-700">
-                <div className="font-mono font-semibold text-indigo-600 dark:text-indigo-400 text-xs">
+              <div key={idx} className="p-1.5 rounded-lg bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038]">
+                <div className="font-mono font-semibold text-[#355CFF] dark:text-[#91A7FF] text-xs">
                   {t.function.name}
                 </div>
-                <div className="text-xs text-slate-600 dark:text-slate-400 line-clamp-1">
+                <div className="text-xs text-[#656B75] dark:text-[#A1A7B0] line-clamp-1">
                   {t.function.description}
                 </div>
               </div>
@@ -980,7 +980,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
       )}
 
       {/* 消息对话容器 */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs bg-[#F7F7F5] dark:bg-[#111214]">
         {messages.map((m) => {
           const isUser = m.role === 'user';
           const isReasoningOpen = !!expandedReasoningIds[m.id];
@@ -995,8 +995,8 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
               <div
                 className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 shadow-2xs ${
                   isUser
-                    ? 'bg-slate-900 dark:bg-slate-700 text-white'
-                    : 'bg-indigo-600 text-white'
+                    ? 'bg-[#202124] dark:bg-[#2C3038] text-white'
+                    : 'bg-[#355CFF] text-white'
                 }`}
               >
                 {isUser ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
@@ -1005,14 +1005,14 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
               <div
                 className={`max-w-[88%] rounded-2xl p-4 leading-relaxed relative group ${
                   isUser
-                    ? 'bg-indigo-600 text-white rounded-tr-xs shadow-xs'
-                    : 'bg-slate-50 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 text-slate-800 dark:text-slate-200 rounded-tl-xs shadow-xs'
+                    ? 'bg-[#355CFF] text-white rounded-tr-xs shadow-xs'
+                    : 'bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] text-[#202124] dark:text-[#F1F2F4] rounded-tl-xs shadow-xs'
                 }`}
               >
                 {!isUser && (
                   <button
                     onClick={() => handleCopy(m.content, m.id)}
-                    className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 p-1.5 rounded-lg bg-white dark:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 shadow-2xs transition border border-slate-200/60 dark:border-slate-700 cursor-pointer"
+                    className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 p-1.5 rounded-lg bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] hover:text-[#202124] dark:hover:text-[#F1F2F4] shadow-2xs transition border border-[#E4E6E9] dark:border-[#2C3038] cursor-pointer"
                     title={isZh ? '复制内容' : 'Copy'}
                   >
                     {copiedId === m.id ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
@@ -1021,7 +1021,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
 
                 {/* 离线降级提示：本地模板不是实时遥测 */}
                 {!isUser && m.isFallback && (
-                  <div className="mb-3 rounded-xl border border-amber-300/80 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:text-amber-200">
+                  <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:text-amber-200">
                     {isZh
                       ? '⚠️ 离线本地模板（非实时）：模型不可用，以下内容由静态诊断生成，未读取实时集群指标，请勿据此直接做运维决策。'
                       : '⚠️ Offline template (not live): the model was unavailable, so this reply comes from a static diagnostic and does not reflect live cluster metrics.'}
@@ -1030,11 +1030,11 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
 
                 {/* 深度思考过程 (Thinking Process) 折叠卡片 */}
                 {!isUser && m.reasoning && (
-                  <div className="mb-3 rounded-xl border border-amber-200/80 dark:border-amber-800/60 bg-amber-50/70 dark:bg-amber-950/30 overflow-hidden">
+                  <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 overflow-hidden">
                     <button
                       type="button"
                       onClick={() => toggleReasoning(m.id)}
-                      className="w-full flex items-center justify-between px-3 py-1.5 text-xs font-semibold text-amber-900 dark:text-amber-300 hover:bg-amber-100/50 dark:hover:bg-amber-900/40 transition cursor-pointer"
+                      className="w-full flex items-center justify-between px-3 py-1.5 text-xs font-semibold text-amber-900 dark:text-amber-200 hover:bg-amber-500/20 transition cursor-pointer"
                     >
                       <div className="flex items-center space-x-1.5">
                         <Sparkles className="w-3 h-3 text-amber-500 animate-pulse" />
@@ -1043,7 +1043,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                       {isReasoningOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                     </button>
                     {isReasoningOpen && (
-                      <div className="px-3 py-2 border-t border-amber-200/60 dark:border-amber-800/40 text-xs font-mono leading-relaxed text-amber-950/80 dark:text-amber-200/80 whitespace-pre-wrap max-h-48 overflow-y-auto">
+                      <div className="px-3 py-2 border-t border-amber-500/20 text-xs font-mono leading-relaxed text-amber-900/90 dark:text-amber-200/90 whitespace-pre-wrap max-h-48 overflow-y-auto">
                         {m.reasoning}
                       </div>
                     )}
@@ -1052,18 +1052,18 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
 
                 {/* 标准 Agent Harness 执行轨迹 (Tool Execution Steps) */}
                 {!isUser && traceSteps.length > 0 && (
-                  <div className="mb-3 rounded-xl border border-indigo-200/80 dark:border-indigo-900/60 bg-indigo-50/50 dark:bg-indigo-950/20 overflow-hidden">
+                  <div className="mb-3 rounded-xl border border-[#E4E6E9] dark:border-[#2C3038] bg-[#F7F7F5] dark:bg-[#22252B] overflow-hidden">
                     <button
                       type="button"
                       onClick={() => toggleTrace(m.id)}
-                      className="w-full flex items-center justify-between px-3 py-1.5 text-xs font-semibold text-indigo-950 dark:text-indigo-300 hover:bg-indigo-100/40 dark:hover:bg-indigo-900/40 transition cursor-pointer"
+                      className="w-full flex items-center justify-between px-3 py-1.5 text-xs font-semibold text-[#202124] dark:text-[#F1F2F4] hover:bg-[#F0F1F2] dark:hover:bg-[#2c3038] transition cursor-pointer"
                     >
                       <div className="flex items-center space-x-1.5">
-                        <Terminal className="w-3 h-3 text-indigo-500" />
+                        <Terminal className="w-3 h-3 text-[#355CFF] dark:text-[#91A7FF]" />
                         <span>{isZh ? `Harness 执行轨迹 (${traceSteps.length} 步工具调用)` : `Harness Trace (${traceSteps.length} tools)`}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-mono text-indigo-500/80">
+                        <span className="text-xs font-mono text-[#355CFF] dark:text-[#91A7FF]">
                           {traceSteps.reduce((acc, s) => acc + (s.duration_ms || 0), 0)}ms
                         </span>
                         {isTraceOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
@@ -1071,14 +1071,14 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                     </button>
 
                     {isTraceOpen && (
-                      <div className="px-3 py-2 border-t border-indigo-200/60 dark:border-indigo-900/40 space-y-2 max-h-60 overflow-y-auto">
+                      <div className="px-3 py-2 border-t border-[#E4E6E9] dark:border-[#2C3038] space-y-2 max-h-60 overflow-y-auto">
                         {traceSteps.map((step, sIdx) => {
                           const stepKey = `${m.id}_step_${sIdx}`;
                           const isObsOpen = !!expandedStepObsIds[stepKey];
                           const isSuccess = step.status === 'success';
 
                           return (
-                            <div key={sIdx} className="rounded-lg bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 p-2 text-xs">
+                            <div key={sIdx} className="rounded-lg bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] p-2 text-xs">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center space-x-1.5 font-mono font-medium">
                                   {isSuccess ? (
@@ -1086,9 +1086,9 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                                   ) : (
                                     <AlertTriangle className="w-3 h-3 text-rose-500" />
                                   )}
-                                  <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{step.tool}</span>
+                                  <span className="text-[#355CFF] dark:text-[#91A7FF] font-semibold">{step.tool}</span>
                                 </div>
-                                <div className="flex items-center gap-1 font-mono text-slate-500 dark:text-slate-400 text-xs">
+                                <div className="flex items-center gap-1 font-mono text-[#656B75] dark:text-[#A1A7B0] text-xs">
                                   <Clock className="w-2.5 h-2.5" />
                                   <span>{step.duration_ms || 0}ms</span>
                                 </div>
@@ -1096,17 +1096,17 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
 
                               {/* 参数概览 */}
                               {step.args && Object.keys(step.args).length > 0 && (
-                                <div className="mt-1 text-slate-500 dark:text-slate-400 font-mono text-xs truncate">
+                                <div className="mt-1 text-[#656B75] dark:text-[#A1A7B0] font-mono text-xs truncate">
                                   args: {JSON.stringify(step.args)}
                                 </div>
                               )}
 
                               {/* 观察结果 (Observation) 折叠 */}
-                              <div className="mt-1.5 pt-1 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                              <div className="mt-1.5 pt-1 border-t border-[#E4E6E9] dark:border-[#2C3038] flex items-center justify-between">
                                 <button
                                   type="button"
                                   onClick={() => toggleStepObs(stepKey)}
-                                  className="text-xs text-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-300 flex items-center gap-0.5 cursor-pointer"
+                                  className="text-xs text-[#355CFF] dark:text-[#91A7FF] hover:underline flex items-center gap-0.5 cursor-pointer"
                                 >
                                   <span>{isObsOpen ? (isZh ? '收起观测数据' : 'Hide Observation') : (isZh ? '查看观测数据 (Observation)' : 'View Observation')}</span>
                                   {isObsOpen ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
@@ -1114,7 +1114,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                               </div>
 
                               {isObsOpen && (
-                                <pre className="mt-1 p-2 rounded bg-slate-950 text-slate-200 font-mono text-xs overflow-x-auto max-h-36">
+                                <pre className="mt-1 p-2 rounded bg-[#111214] text-[#F1F2F4] border border-[#2C3038] font-mono text-xs overflow-x-auto max-h-36">
                                   {JSON.stringify(step.result || step.error, null, 2)}
                                 </pre>
                               )}
@@ -1135,7 +1135,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
 
                 {/* 交互式操作引导按钮 */}
                 {m.actions && m.actions.length > 0 && (
-                  <div className="mt-3.5 pt-2.5 border-t border-slate-200/60 dark:border-slate-800/80 flex flex-wrap gap-2">
+                  <div className="mt-3.5 pt-2.5 border-t border-[#E4E6E9] dark:border-[#2C3038] flex flex-wrap gap-2">
                     {m.actions.map((act, i) => (
                       <button
                         key={i}
@@ -1146,7 +1146,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                             if (!isExpanded) onClose();
                           }
                         }}
-                        className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 font-semibold text-xs flex items-center space-x-1.5 transition border border-indigo-200/60 dark:border-indigo-800 cursor-pointer shadow-2xs"
+                        className="px-3 py-1.5 rounded-xl bg-[#EEF2FF] hover:bg-[#E0E7FF] dark:bg-[#242D48] dark:hover:bg-[#2e3a5e] text-[#355CFF] dark:text-[#91A7FF] font-semibold text-xs flex items-center space-x-1.5 transition border border-[#355CFF]/20 dark:border-[#91A7FF]/30 cursor-pointer shadow-2xs"
                       >
                         <span>{act.label}</span>
                         <ArrowRight className="w-3 h-3" />
@@ -1160,8 +1160,8 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
         })}
 
         {isLoading && (
-          <div className="flex items-center space-x-2 text-xs text-slate-500 dark:text-slate-400 py-2 px-1">
-            <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-500" />
+          <div className="flex items-center space-x-2 text-xs text-[#656B75] dark:text-[#A1A7B0] py-2 px-1">
+            <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#355CFF] dark:text-[#91A7FF]" />
             <span>{isZh ? 'Harness 正在调度工具与推理生成中...' : 'Harness is executing tools and reasoning...'}</span>
           </div>
         )}
@@ -1169,7 +1169,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
       </div>
 
       {/* 标准 Harness Benchmark 基准任务快捷栏 */}
-      <div className="px-3 py-2 bg-slate-50/70 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-2 overflow-x-auto text-xs no-scrollbar">
+      <div className="px-3 py-2 bg-[#F7F7F5] dark:bg-[#191B1F] border-t border-[#E4E6E9] dark:border-[#2C3038] flex items-center gap-2 overflow-x-auto text-xs no-scrollbar">
         {HARNESS_BENCHMARKS.map((bm) => (
           <button
             key={bm.id}
@@ -1181,12 +1181,12 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
             aria-pressed={activeBenchmark === bm.id}
             className={`px-2.5 py-1.5 rounded-xl border whitespace-nowrap transition cursor-pointer font-medium shadow-2xs disabled:opacity-50 flex items-center gap-1.5 ${
               activeBenchmark === bm.id
-                ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700'
-                : 'bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 border-slate-200/80 dark:border-slate-700'
+                ? 'bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] border-[#355CFF] dark:border-[#91A7FF]'
+                : 'bg-white dark:bg-[#22252B] hover:bg-[#F0F1F2] dark:hover:bg-[#2c3038] text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4] border-[#E4E6E9] dark:border-[#2C3038]'
             }`}
             title={bm.description}
           >
-            <span className="px-1 py-0.2 rounded text-xs font-mono bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60 font-semibold">
+            <span className="px-1 py-0.2 rounded text-xs font-mono bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] border border-[#355CFF]/20 dark:border-[#91A7FF]/30 font-semibold">
               {bm.code}
             </span>
             <span>{isZh ? bm.label : bm.enLabel}</span>
@@ -1200,7 +1200,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
           e.preventDefault();
           handleSend();
         }}
-        className="p-3 border-t border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F1420] flex items-center space-x-2"
+        className="p-3 border-t border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] flex items-center space-x-2"
       >
         <input
           ref={inputRef}
@@ -1208,7 +1208,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={isZh ? '向 Harness 发出运维巡检、排错或架构指令...' : 'Issue an SRE audit or ops instruction to Harness...'}
-          className="flex-1 bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs"
+          className="flex-1 bg-[#F7F7F5] dark:bg-[#22252B] border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl px-3.5 py-2 text-xs text-[#202124] dark:text-[#F1F2F4] placeholder-[#656B75] dark:placeholder-[#A1A7B0] focus:outline-none focus:ring-1 focus:ring-[#355CFF] shadow-2xs"
         />
 
         {isLoading ? (
@@ -1224,7 +1224,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
           <button
             type="submit"
             disabled={!input.trim()}
-            className="p-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white transition cursor-pointer shadow-md shadow-indigo-600/20"
+            className="p-2 rounded-xl bg-[#355CFF] hover:bg-[#2849E6] disabled:opacity-40 text-white transition cursor-pointer shadow-md shadow-[#355CFF]/20"
             title={isZh ? '发送' : 'Send'}
           >
             <Send className="w-4 h-4" />

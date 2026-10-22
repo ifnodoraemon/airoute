@@ -753,7 +753,7 @@ curl -X POST "${messagesUrl}" \\
             <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
               {isZh ? 'Model Context Protocol (MCP) 广场' : 'Model Context Protocol (MCP) Hub'}
             </h1>
-            <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60">
+            <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] border border-[#355CFF]/20 dark:border-[#91A7FF]/30">
               JSON-RPC 2.0
             </span>
           </div>
@@ -767,19 +767,19 @@ curl -X POST "${messagesUrl}" \\
             onClick={() => handleOpenProbe(null)}
             className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-2xs"
           >
-            <Radio className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+            <Radio className="w-3.5 h-3.5 text-[#355CFF] dark:text-[#91A7FF]" />
             {isZh ? '协议探针' : 'Protocol Probe'}
           </button>
           <button
             onClick={() => { setSelectedServerForConfig(null); setConfigModalOpen(true); }}
             className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-2xs"
           >
-            <FileCode className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+            <FileCode className="w-3.5 h-3.5 text-[#355CFF] dark:text-[#91A7FF]" />
             {isZh ? '客户端配置' : 'Client Config'}
           </button>
           <button
             onClick={() => setAddServerModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors shadow-xs"
+            className="ui-btn ui-btn-primary ui-btn-sm"
           >
             <Plus className="w-3.5 h-3.5" />
             {isZh ? '接入新服务' : 'Add Server'}
@@ -796,10 +796,10 @@ curl -X POST "${messagesUrl}" \\
       </div>
 
       {/* 核心指标与规格看板 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F1420] shadow-xs">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 p-6 rounded-2xl border border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] shadow-xs">
         {/* 指标 1：协议总闸 */}
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60 flex items-center justify-center shrink-0 shadow-2xs">
+          <div className="w-12 h-12 rounded-2xl bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] border border-[#355CFF]/20 dark:border-[#91A7FF]/30 flex items-center justify-center shrink-0 shadow-2xs">
             <Cpu className="w-6 h-6" />
           </div>
           <div className="min-w-0 flex-1">
@@ -808,14 +808,14 @@ curl -X POST "${messagesUrl}" \\
               <button
                 onClick={handleToggleGlobalMcp}
                 disabled={togglingGlobal}
-                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${mcpSettings.mcp_enabled ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${mcpSettings.mcp_enabled ? 'bg-[#355CFF]' : 'bg-[#E4E6E9] dark:bg-[#2C3038]'}`}
                 title={mcpSettings.mcp_enabled ? (isZh ? '点击关闭 MCP' : 'Click to disable MCP') : (isZh ? '点击开启 MCP' : 'Click to enable MCP')}
               >
                 <span
                   className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${mcpSettings.mcp_enabled ? 'translate-x-4' : 'translate-x-0'}`}
                 />
               </button>
-              <span className={`text-xs font-semibold ${mcpSettings.mcp_enabled ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>
+              <span className={`text-xs font-semibold ${mcpSettings.mcp_enabled ? 'text-[#355CFF] dark:text-[#91A7FF]' : 'text-[#656B75] dark:text-[#A1A7B0]'}`}>
                 {mcpSettings.mcp_enabled ? (isZh ? '已激活运行' : 'Active') : (isZh ? '已全局停用' : 'Disabled')}
               </span>
             </div>
@@ -837,7 +837,7 @@ curl -X POST "${messagesUrl}" \\
 
         {/* 指标 3：挂载工具 */}
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 border border-purple-200/60 dark:border-purple-800/60 flex items-center justify-center shrink-0 shadow-2xs">
+          <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-[#355CFF] dark:text-[#91A7FF] border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center shrink-0 shadow-2xs">
             <Layers className="w-6 h-6" />
           </div>
           <div>
@@ -850,7 +850,7 @@ curl -X POST "${messagesUrl}" \\
 
         {/* 指标 4：统一 SSE 端点 */}
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center shrink-0 shadow-2xs">
+          <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-[#355CFF] dark:text-[#91A7FF] border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center shrink-0 shadow-2xs">
             <Globe className="w-6 h-6" />
           </div>
           <div className="min-w-0 flex-1">
@@ -861,7 +861,7 @@ curl -X POST "${messagesUrl}" \\
               </code>
               <button
                 onClick={() => handleCopyText(sseUrl, 'sse-endpoint')}
-                className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                className="p-1 text-slate-400 hover:text-[#355CFF] dark:hover:text-[#91A7FF] transition-colors"
                 title={isZh ? '复制完整端点 URL' : 'Copy Full Endpoint URL'}
               >
                 {copiedKey === 'sse-endpoint' ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
@@ -872,7 +872,7 @@ curl -X POST "${messagesUrl}" \\
       </div>
 
       {/* 搜索与分类导航 */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-white dark:bg-[#0F1420] p-2.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-white dark:bg-[#191B1F] p-2.5 rounded-2xl border border-slate-200/80 dark:border-[#2C3038] shadow-2xs">
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none px-1">
           {categories.map(cat => {
             const Icon = cat.icon;
@@ -881,7 +881,7 @@ curl -X POST "${messagesUrl}" \\
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-xl whitespace-nowrap transition-all ${active ? 'bg-indigo-600 text-white shadow-xs font-semibold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'}`}
+                className={`flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-xl whitespace-nowrap transition-all ${active ? 'bg-[#355CFF] text-white shadow-xs font-semibold' : 'text-[#656B75] dark:text-[#A1A7B0] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B]'}`}
               >
                 <Icon className="w-3.5 h-3.5" />
                 <span>{cat.name}</span>
@@ -891,22 +891,22 @@ curl -X POST "${messagesUrl}" \\
         </div>
 
         <div className="relative min-w-[240px] px-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-2.5" />
+          <Search className="w-4 h-4 text-[#656B75] dark:text-[#A1A7B0] absolute left-3.5 top-2.5" />
           <input
             type="text"
             placeholder={isZh ? '搜索 MCP 服务或能力...' : 'Search MCP servers or tools...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3.5 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs"
+            className="w-full pl-9 pr-3.5 py-2 text-xs rounded-xl border border-[#E4E6E9] dark:border-[#2C3038] bg-[#F7F7F5] dark:bg-[#22252B] text-[#202124] dark:text-[#F1F2F4] placeholder-[#656B75] dark:placeholder-[#A1A7B0] focus:outline-none focus:ring-1 focus:ring-[#355CFF] shadow-2xs"
           />
         </div>
       </div>
 
       {/* MCP 服务卡片列表 */}
       {filteredServers.length === 0 ? (
-        <div className="p-16 text-center bg-white dark:bg-[#0F1420] rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 shadow-2xs">
+        <div className="p-16 text-center bg-white dark:bg-[#191B1F] rounded-2xl border border-dashed border-[#E4E6E9] dark:border-[#2C3038] shadow-2xs">
           <Cpu className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+          <p className="text-sm font-semibold text-[#202124] dark:text-[#F1F2F4]">
             {isZh ? '未找到匹配的 MCP 服务' : 'No matching MCP servers found'}
           </p>
           <p className="ui-meta mt-1.5">
@@ -922,13 +922,13 @@ curl -X POST "${messagesUrl}" \\
             return (
               <div
                 key={server.id}
-                className={`flex flex-col justify-between p-6 rounded-2xl border transition-all duration-200 ${server.enabled ? 'border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F1420] shadow-xs hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700' : 'border-slate-200/50 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/30 opacity-70'}`}
+                className={`flex flex-col justify-between p-6 rounded-2xl border transition-all duration-200 ${server.enabled ? 'border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] shadow-xs hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700' : 'border-[#E4E6E9]/50 dark:border-[#2C3038]/50 bg-slate-50/50 dark:bg-slate-900/30 opacity-70'}`}
               >
                 <div>
                   {/* 卡片头部 */}
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="flex items-center gap-3">
-                      <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-2xs ${server.id === 'airoute-gateway' ? 'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-800/50' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700'}`}>
+                      <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-2xs ${server.id === 'airoute-gateway' ? 'bg-blue-50 dark:bg-blue-950/70 text-[#355CFF] dark:text-[#91A7FF] border border-blue-200/50 dark:border-blue-800/50' : 'bg-[#F0F1F2] dark:bg-[#22252B] text-[#202124] dark:text-[#F1F2F4] border border-[#E4E6E9] dark:border-[#2C3038]'}`}>
                         {server.category === 'ops' ? <Server className="w-5 h-5" /> :
                          server.category === 'dev' ? <Code2 className="w-5 h-5" /> :
                          server.category === 'search' ? <Globe className="w-5 h-5" /> :
@@ -938,10 +938,10 @@ curl -X POST "${messagesUrl}" \\
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                          <h3 className="text-sm font-semibold text-[#202124] dark:text-[#F1F2F4] truncate">
                             {server.name}
                           </h3>
-                          <span className={`px-2 py-0.5 text-xs font-mono font-semibold rounded-md ${server.transport === 'sse' ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-300' : 'bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-300'}`}>
+                          <span className={`px-2 py-0.5 text-xs font-mono font-semibold rounded-md ${server.transport === 'sse' ? 'bg-blue-50 dark:bg-blue-950/60 text-[#355CFF] dark:text-[#91A7FF]' : 'bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0]'}`}>
                             {server.transport.toUpperCase()}
                           </span>
                         </div>
@@ -954,7 +954,7 @@ curl -X POST "${messagesUrl}" \\
                     <button
                       onClick={() => handleToggleServer(server.id, server.enabled)}
                       disabled={isToggling}
-                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${server.enabled ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${server.enabled ? 'bg-[#355CFF]' : 'bg-slate-300 dark:bg-slate-600'}`}
                       title={server.enabled ? (isZh ? '点击停用' : 'Click to disable') : (isZh ? '点击启用' : 'Click to enable')}
                     >
                       <span
@@ -964,7 +964,7 @@ curl -X POST "${messagesUrl}" \\
                   </div>
 
                   {/* 描述文案 */}
-                  <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed line-clamp-2 mb-3.5 min-h-[38px]">
+                  <p className="text-xs text-[#656B75] dark:text-[#A1A7B0] leading-relaxed line-clamp-2 mb-3.5 min-h-[38px]">
                     {server.description}
                   </p>
 
@@ -975,7 +975,7 @@ curl -X POST "${messagesUrl}" \\
                       {server.tools.slice(0, 3).map(t => (
                         <span
                           key={t}
-                          className="px-2 py-0.5 font-mono text-xs bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 rounded-lg border border-slate-200/80 dark:border-slate-800"
+                          className="px-2 py-0.5 font-mono text-xs bg-[#F0F1F2] dark:bg-[#22252B] text-[#202124] dark:text-[#F1F2F4] rounded-lg border border-[#E4E6E9] dark:border-[#2C3038]"
                         >
                           {t}
                         </span>
@@ -988,18 +988,18 @@ curl -X POST "${messagesUrl}" \\
                 </div>
 
                 {/* 卡片底部操作栏 */}
-                <div className="pt-3.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2">
+                <div className="pt-3.5 border-t border-[#E4E6E9] dark:border-[#2C3038] flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleOpenProbe(server)}
-                      className="px-2.5 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-xl transition-colors inline-flex items-center gap-1.5"
+                      className="px-2.5 py-1.5 text-xs font-medium text-[#355CFF] dark:text-[#91A7FF] hover:bg-blue-50 dark:hover:bg-blue-950/60 rounded-xl transition-colors inline-flex items-center gap-1.5"
                     >
                       <Radio className="w-3.5 h-3.5" />
                       {isZh ? '调试探针' : 'Probe'}
                     </button>
                     <button
                       onClick={() => { setSelectedServerForConfig(server); setConfigModalOpen(true); }}
-                      className="px-2.5 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors inline-flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 shadow-2xs"
+                      className="px-2.5 py-1.5 text-xs font-medium text-[#656B75] dark:text-[#A1A7B0] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] rounded-xl transition-colors inline-flex items-center gap-1.5 border border-[#E4E6E9] dark:border-[#2C3038] shadow-2xs"
                     >
                       <Terminal className="w-3.5 h-3.5" />
                       {isZh ? '配置' : 'Config'}
@@ -1030,10 +1030,10 @@ curl -X POST "${messagesUrl}" \\
             if (e.target === e.currentTarget) setConfigModalOpen(false);
           }}
         >
-          <div className="bg-white dark:bg-[#0F1420] rounded-xl shadow-2xl border border-gray-200 dark:border-slate-800 max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
+          <div className="bg-white dark:bg-[#191B1F] rounded-xl shadow-2xl border border-[#E4E6E9] dark:border-[#2C3038] max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E4E6E9] dark:border-[#2C3038]">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded-lg">
+                <div className="p-2 bg-blue-50 dark:bg-blue-950/50 text-[#355CFF] dark:text-[#91A7FF] rounded-lg">
                   <FileCode className="w-5 h-5" />
                 </div>
                 <div>
@@ -1056,14 +1056,14 @@ curl -X POST "${messagesUrl}" \\
             </div>
 
             {/* 注入鉴权 Token 凭证栏 */}
-            <div className="p-3 bg-gray-50 dark:bg-gray-900/60 rounded-xl border border-gray-200 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="p-3 bg-[#F0F1F2] dark:bg-[#22252B] rounded-xl border border-[#E4E6E9] dark:border-[#2C3038] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <div className="flex items-center gap-2">
-                <Lock className="w-4 h-4 text-indigo-500" />
+                <Lock className="w-4 h-4 text-[#355CFF] dark:text-[#91A7FF]" />
                 <div>
-                  <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">
+                  <span className="text-xs font-semibold text-[#202124] dark:text-[#F1F2F4]">
                     {isZh ? '鉴权凭证注入 (Authorization Token / API Key)' : 'Auth Credential Injection (Token / API Key)'}
                   </span>
-                  <span className="hidden sm:inline text-xs text-slate-500 dark:text-slate-400 ml-2">
+                  <span className="hidden sm:inline text-xs text-[#656B75] dark:text-[#A1A7B0] ml-2">
                     {isZh ? '(自动写入客户端配置文件与请求头)' : '(Injected into client configs & headers)'}
                   </span>
                 </div>
@@ -1074,7 +1074,7 @@ curl -X POST "${messagesUrl}" \\
                     onChange={(e) => {
                       if (e.target.value) setConfigToken(e.target.value);
                     }}
-                    className="px-2 py-1 text-xs rounded-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200"
+                    className="px-2 py-1 text-xs rounded-sm border border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] text-[#202124] dark:text-[#F1F2F4]"
                     defaultValue=""
                   >
                     <option value="" disabled>{isZh ? '选择已发行 Key...' : 'Select issued key...'}</option>
@@ -1090,13 +1090,13 @@ curl -X POST "${messagesUrl}" \\
                   value={configToken}
                   onChange={(e) => setConfigToken(e.target.value)}
                   placeholder="YOUR_AIROUTE_KEY"
-                  className="px-2.5 py-1 text-xs font-mono rounded-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white min-w-[200px]"
+                  className="px-2.5 py-1 text-xs font-mono rounded-sm border border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] text-[#202124] dark:text-[#F1F2F4] min-w-[200px]"
                 />
               </div>
             </div>
 
             {/* 客户端选择 Tabs */}
-            <div className="flex items-center gap-2 border-b border-gray-200 dark:border-gray-800 pb-2 overflow-x-auto">
+            <div className="flex items-center gap-2 border-b border-[#E4E6E9] dark:border-[#2C3038] pb-2 overflow-x-auto">
               {[
                 { id: 'cursor', label: 'Cursor (.cursor/mcp.json)' },
                 { id: 'claude', label: 'Claude Desktop' },
@@ -1107,7 +1107,7 @@ curl -X POST "${messagesUrl}" \\
                 <button
                   key={c.id}
                   onClick={() => setActiveConfigClient(c.id)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap transition-colors ${activeConfigClient === c.id ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap transition-colors ${activeConfigClient === c.id ? 'bg-[#355CFF] text-white shadow-2xs' : 'text-[#656B75] dark:text-[#A1A7B0] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B]'}`}
                 >
                   {c.label}
                 </button>
@@ -1117,7 +1117,7 @@ curl -X POST "${messagesUrl}" \\
             {/* 配置代码预览与一键复制 */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                <span className="text-xs font-medium text-[#202124] dark:text-[#F1F2F4]">
                   {activeConfigClient === 'cursor' && (isZh ? '配置文件位置: 项目根目录 .cursor/mcp.json' : 'Config path: project root .cursor/mcp.json')}
                   {activeConfigClient === 'claude' && (isZh ? '配置文件位置: ~/Library/Application Support/Claude/claude_desktop_config.json' : 'Config path: ~/Library/Application Support/Claude/claude_desktop_config.json')}
                   {activeConfigClient === 'cline' && (isZh ? '配置文件位置: Cline Settings -> MCP Servers' : 'Config path: Cline Settings -> MCP Servers')}
@@ -1132,14 +1132,14 @@ curl -X POST "${messagesUrl}" \\
                                  activeConfigClient === 'python' ? getPythonSnippet() : getCurlSnippet();
                     handleCopyText(code, 'client-config');
                   }}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-[#F0F1F2] dark:bg-[#22252B] text-[#202124] dark:text-[#F1F2F4] rounded-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                 >
                   {copiedKey === 'client-config' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                   <span>{copiedKey === 'client-config' ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制配置' : 'Copy Config')}</span>
                 </button>
               </div>
 
-              <div className="bg-gray-900 text-gray-100 p-4 rounded-xl font-mono text-xs overflow-x-auto border border-gray-800">
+              <div className="bg-[#111214] text-gray-100 p-4 rounded-xl font-mono text-xs overflow-x-auto border border-[#2C3038]">
                 <pre className="whitespace-pre-wrap leading-relaxed">
                   {activeConfigClient === 'cursor' && getCursorConfig()}
                   {activeConfigClient === 'claude' && getClaudeConfig()}
@@ -1161,7 +1161,7 @@ curl -X POST "${messagesUrl}" \\
             <div className="flex justify-end pt-2">
               <button
                 onClick={() => setConfigModalOpen(false)}
-                className="px-4 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700"
+                className="px-4 py-2 text-xs font-medium text-[#656B75] dark:text-[#A1A7B0] bg-[#F0F1F2] dark:bg-[#22252B] rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700"
               >
                 {isZh ? '关闭' : 'Close'}
               </button>
@@ -1178,10 +1178,10 @@ curl -X POST "${messagesUrl}" \\
             if (e.target === e.currentTarget) setAddServerModalOpen(false);
           }}
         >
-          <div className="bg-white dark:bg-[#0F1420] rounded-xl shadow-2xl border border-gray-200 dark:border-slate-800 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
+          <div className="bg-white dark:bg-[#191B1F] rounded-xl shadow-2xl border border-[#E4E6E9] dark:border-[#2C3038] max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E4E6E9] dark:border-[#2C3038]">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-linear-to-br from-indigo-500 to-purple-600 text-white rounded-lg">
+                <div className="p-2 bg-[#355CFF] text-white rounded-lg shadow-2xs">
                   <Plus className="w-5 h-5" />
                 </div>
                 <div>
@@ -1314,7 +1314,7 @@ curl -X POST "${messagesUrl}" \\
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-sm"
+                  className="px-4 py-2 text-xs font-medium text-white bg-[#355CFF] rounded-lg hover:bg-blue-600 shadow-sm"
                 >
                   {isZh ? '确认接入' : 'Confirm Registration'}
                 </button>
@@ -1332,18 +1332,18 @@ curl -X POST "${messagesUrl}" \\
             if (e.target === e.currentTarget) setProbeModalOpen(false);
           }}
         >
-          <div className="bg-white dark:bg-[#0F1420] rounded-xl shadow-2xl border border-gray-200 dark:border-slate-800 max-w-5xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
+          <div className="bg-white dark:bg-[#191B1F] rounded-xl shadow-2xl border border-[#E4E6E9] dark:border-[#2C3038] max-w-5xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E4E6E9] dark:border-[#2C3038]">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-linear-to-br from-indigo-500 to-purple-600 text-white rounded-lg">
+                <div className="p-2 bg-[#355CFF] text-white rounded-lg shadow-2xs">
                   <Radio className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                  <h3 className="text-base font-bold text-[#202124] dark:text-[#F1F2F4] flex items-center gap-2">
                     {isZh ? '在线协议探针控制台' : 'Online Protocol Probe Console'}
-                    <span className="text-xs font-mono font-normal text-indigo-500">JSON-RPC 2.0</span>
+                    <span className="text-xs font-mono font-normal text-[#355CFF] dark:text-[#91A7FF]">JSON-RPC 2.0</span>
                   </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="text-xs text-[#656B75] dark:text-[#A1A7B0]">
                     {isZh ? `向网关端点 ${messagesUrl} 发送标准协议报文并实时验证安全拦截与工具输出` : `Send standard JSON-RPC 2.0 messages to ${messagesUrl} to verify security interception & output`}
                   </p>
                 </div>
@@ -1357,40 +1357,40 @@ curl -X POST "${messagesUrl}" \\
             </div>
 
             {/* 协议教程与通信原理解析 */}
-            <div className="p-3 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 rounded-xl text-xs text-indigo-900 dark:text-indigo-200">
-              <div className="flex items-center gap-2 font-semibold mb-1 text-indigo-700 dark:text-indigo-300">
+            <div className="p-3 bg-blue-50/60 dark:bg-[#242D48]/50 border border-blue-200/50 dark:border-blue-900/40 rounded-xl text-xs text-blue-950 dark:text-[#91A7FF]">
+              <div className="flex items-center gap-2 font-semibold mb-1 text-[#355CFF] dark:text-[#91A7FF]">
                 <BookOpen className="w-4 h-4" />
                 <span>{isZh ? 'MCP 双向通信原理解析与接入教程' : 'MCP Bi-directional Architecture & Tutorial'}</span>
               </div>
-              <p className="text-xs leading-relaxed text-indigo-700/80 dark:text-indigo-300/80">
+              <p className="text-xs leading-relaxed text-[#656B75] dark:text-[#A1A7B0]">
                 {isZh ? (
-                  <><b>标准交互流:</b> 客户端首先发起 <code className="font-mono bg-indigo-100 dark:bg-indigo-900/60 px-1 py-0.5 rounded-sm">GET /mcp/sse</code> 建立长连接握手；随后将左侧的 <b>JSON-RPC 2.0 请求报文</b> 通过 <code className="font-mono bg-indigo-100 dark:bg-indigo-900/60 px-1 py-0.5 rounded-sm">POST /mcp/messages</code> 投递至网关。网关安全审计并调度工具后，将右侧的 <b>响应结果</b> 实时返回给客户端。</>
+                  <><b>标准交互流:</b> 客户端首先发起 <code className="font-mono bg-blue-100 dark:bg-blue-950/80 px-1 py-0.5 rounded-sm">GET /mcp/sse</code> 建立长连接握手；随后将左侧的 <b>JSON-RPC 2.0 请求报文</b> 通过 <code className="font-mono bg-blue-100 dark:bg-blue-950/80 px-1 py-0.5 rounded-sm">POST /mcp/messages</code> 投递至网关。网关安全审计并调度工具后，将右侧的 <b>响应结果</b> 实时返回给客户端。</>
                 ) : (
-                  <><b>Standard Flow:</b> Clients initiate <code className="font-mono bg-indigo-100 dark:bg-indigo-900/60 px-1 py-0.5 rounded-sm">GET /mcp/sse</code> handshake, then send <b>JSON-RPC 2.0 request</b> via <code className="font-mono bg-indigo-100 dark:bg-indigo-900/60 px-1 py-0.5 rounded-sm">POST /mcp/messages</code>. Gateway audits security and dispatches tools, returning <b>responses</b> in real-time.</>
+                  <><b>Standard Flow:</b> Clients initiate <code className="font-mono bg-blue-100 dark:bg-blue-950/80 px-1 py-0.5 rounded-sm">GET /mcp/sse</code> handshake, then send <b>JSON-RPC 2.0 request</b> via <code className="font-mono bg-blue-100 dark:bg-blue-950/80 px-1 py-0.5 rounded-sm">POST /mcp/messages</code>. Gateway audits security and dispatches tools, returning <b>responses</b> in real-time.</>
                 )}
               </p>
             </div>
 
             {/* 鉴权 Token 凭证与目标服务配置栏 */}
-            <div className="p-3 bg-gray-50 dark:bg-gray-900/60 rounded-xl border border-gray-200 dark:border-gray-800 space-y-2.5">
+            <div className="p-3 bg-[#F0F1F2] dark:bg-[#22252B] rounded-xl border border-[#E4E6E9] dark:border-[#2C3038] space-y-2.5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-indigo-500" />
-                  <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">
+                  <Lock className="w-4 h-4 text-[#355CFF] dark:text-[#91A7FF]" />
+                  <span className="text-xs font-semibold text-[#202124] dark:text-[#F1F2F4]">
                     {isZh ? '鉴权凭证 (Authorization Token / 虚拟 API Key)' : 'Authentication Token / Virtual API Key'}
                   </span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                  <span className="text-xs text-[#656B75] dark:text-[#A1A7B0]">
                     {isZh ? '(支持 Bearer Token 与 X-API-Key 多租户隔离)' : '(Supports Bearer Token & multi-tenant isolation)'}
                   </span>
                 </div>
                 {keys && keys.length > 0 && (
                   <div className="flex items-center gap-1.5 text-xs">
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{isZh ? '快捷填充:' : 'Quick Fill:'}</span>
+                    <span className="text-xs text-[#656B75] dark:text-[#A1A7B0]">{isZh ? '快捷填充:' : 'Quick Fill:'}</span>
                     <select
                       onChange={(e) => {
                         if (e.target.value) setProbeToken(e.target.value);
                       }}
-                      className="px-2 py-1 text-xs rounded-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200"
+                      className="px-2 py-1 text-xs rounded-sm border border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] text-[#202124] dark:text-[#F1F2F4]"
                       defaultValue=""
                     >
                       <option value="" disabled>{isZh ? '选择网关已发行 Key...' : 'Select issued key...'}</option>
@@ -1408,7 +1408,7 @@ curl -X POST "${messagesUrl}" \\
                 value={probeToken}
                 onChange={(e) => setProbeToken(e.target.value)}
                 placeholder={isZh ? '输入虚拟 API Key 或管理员 Token (如 sk-airoute-...)' : 'Enter API Key or Admin Token (e.g., sk-airoute-...)'}
-                className="w-full px-3 py-1.5 font-mono text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="w-full px-3 py-1.5 font-mono text-xs rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] text-[#202124] dark:text-[#F1F2F4] placeholder-[#656B75] dark:placeholder-[#A1A7B0] focus:outline-none focus:ring-1 focus:ring-[#355CFF]"
               />
             </div>
 
@@ -1518,7 +1518,7 @@ curl -X POST "${messagesUrl}" \\
                       <button
                         type="button"
                         onClick={() => handleSelectTool('airoute_data_redact')}
-                        className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+                        className="text-xs text-[#355CFF] dark:text-[#91A7FF] hover:underline"
                       >
                         {isZh ? '敏感脱敏' : 'Redaction'}
                       </button>
@@ -1550,7 +1550,7 @@ curl -X POST "${messagesUrl}" \\
                       <button
                         type="button"
                         onClick={() => handleSelectTool('sequentialthinking')}
-                        className="text-xs text-purple-600 dark:text-purple-400 hover:underline"
+                        className="text-xs text-sky-600 dark:text-sky-400 hover:underline"
                       >
                         {isZh ? '深度推理' : 'Thinking'}
                       </button>
@@ -1560,13 +1560,13 @@ curl -X POST "${messagesUrl}" \\
                     rows="3"
                     value={probeToolArgs}
                     onChange={(e) => setProbeToolArgs(e.target.value)}
-                    className="w-full px-3 py-2 font-mono text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-900 text-gray-100"
+                    className="w-full px-3 py-2 font-mono text-xs rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] bg-[#111214] text-gray-100"
                   />
                 </div>
               )}
 
               <div className="flex items-center justify-between pt-1">
-                <span className="text-xs text-slate-500 dark:text-slate-400">
+                <span className="text-xs text-[#656B75] dark:text-[#A1A7B0]">
                   {probeLatency !== null && (
                     <span className="text-emerald-500 font-mono">
                       ✓ {isZh ? `往返耗时: ${probeLatency} ms` : `Roundtrip: ${probeLatency} ms`}
@@ -1576,7 +1576,7 @@ curl -X POST "${messagesUrl}" \\
                 <button
                   onClick={handleRunProbe}
                   disabled={probeRunning}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-sm"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#355CFF] rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors shadow-sm"
                 >
                   <Send className={`w-3.5 h-3.5 ${probeRunning ? 'animate-pulse' : ''}`} />
                   <span>{probeRunning ? (isZh ? '探针执行中...' : 'Probing...') : (isZh ? '发送 JSON-RPC 2.0 报文' : 'Send JSON-RPC 2.0 Request')}</span>
@@ -1587,31 +1587,31 @@ curl -X POST "${messagesUrl}" \\
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-2">
                 {/* 1. 发送请求报文 */}
                 <div className="flex flex-col space-y-1.5">
-                  <div className="flex items-center justify-between text-xs font-semibold text-gray-700 dark:text-gray-300">
+                  <div className="flex items-center justify-between text-xs font-semibold text-[#202124] dark:text-[#F1F2F4]">
                     <div className="flex items-center gap-1.5">
-                      <span className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400">
+                      <span className="flex items-center gap-1 text-[#355CFF] dark:text-[#91A7FF]">
                         <Send className="w-3.5 h-3.5" />
                         {isZh ? '发送请求报文' : 'Request Payload'}
                       </span>
-                      <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 ml-1 text-xs">
+                      <div className="flex items-center bg-[#F0F1F2] dark:bg-[#22252B] rounded-lg p-0.5 ml-1 text-xs">
                         <button
                           type="button"
                           onClick={() => setRequestViewTab('wire')}
-                          className={`px-1.5 py-0.5 rounded-sm ${requestViewTab === 'wire' ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-300 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}`}
+                          className={`px-1.5 py-0.5 rounded-sm ${requestViewTab === 'wire' ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-xs font-medium' : 'text-[#656B75] hover:text-[#202124] dark:hover:text-[#F1F2F4]'}`}
                         >
                           {isZh ? 'HTTP报文' : 'Wire'}
                         </button>
                         <button
                           type="button"
                           onClick={() => setRequestViewTab('json')}
-                          className={`px-1.5 py-0.5 rounded-sm ${requestViewTab === 'json' ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-300 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}`}
+                          className={`px-1.5 py-0.5 rounded-sm ${requestViewTab === 'json' ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-xs font-medium' : 'text-[#656B75] hover:text-[#202124] dark:hover:text-[#F1F2F4]'}`}
                         >
                           JSON-RPC
                         </button>
                         <button
                           type="button"
                           onClick={() => setRequestViewTab('curl')}
-                          className={`px-1.5 py-0.5 rounded-sm ${requestViewTab === 'curl' ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-300 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}`}
+                          className={`px-1.5 py-0.5 rounded-sm ${requestViewTab === 'curl' ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-xs font-medium' : 'text-[#656B75] hover:text-[#202124] dark:hover:text-[#F1F2F4]'}`}
                         >
                           cURL
                         </button>
@@ -1625,20 +1625,20 @@ curl -X POST "${messagesUrl}" \\
                                     getCurlRequestText();
                         handleCopyText(txt, 'probe-req');
                       }}
-                      className="inline-flex items-center gap-1 text-xs font-normal text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                      className="inline-flex items-center gap-1 text-xs font-normal text-[#656B75] hover:text-[#355CFF] dark:hover:text-[#91A7FF] transition-colors"
                     >
                       {copiedKey === 'probe-req' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                       {isZh ? '复制请求' : 'Copy Request'}
                     </button>
                   </div>
-                  <div className="bg-gray-900 text-gray-100 p-3.5 rounded-xl font-mono text-xs overflow-x-auto min-h-[170px] max-h-64 border border-gray-800 inset-shadow-sm">
+                  <div className="bg-[#111214] text-gray-100 p-3.5 rounded-xl font-mono text-xs overflow-x-auto min-h-[170px] max-h-64 border border-[#2C3038] inset-shadow-sm">
                     <pre className="whitespace-pre-wrap leading-relaxed">
                       {requestViewTab === 'wire' && getWireRequestText()}
                       {requestViewTab === 'json' && JSON.stringify(lastSentPayload || getCurrentRpcPayload(), null, 2)}
                       {requestViewTab === 'curl' && getCurlRequestText()}
                     </pre>
                   </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between">
+                  <div className="text-xs text-[#656B75] dark:text-[#A1A7B0] flex items-center justify-between">
                     <span>{isZh ? `传输端点: POST ${messagesUrl}` : `Endpoint: POST ${messagesUrl}`}</span>
                     <span>{isZh ? (probeToken ? '鉴权: Bearer Token (已配置)' : '鉴权: 未配置 Token') : (probeToken ? 'Auth: Bearer Token' : 'Auth: None')}</span>
                   </div>
@@ -1646,7 +1646,7 @@ curl -X POST "${messagesUrl}" \\
 
                 {/* 2. 网关接收响应 */}
                 <div className="flex flex-col space-y-1.5">
-                  <div className="flex items-center justify-between text-xs font-semibold text-gray-700 dark:text-gray-300">
+                  <div className="flex items-center justify-between text-xs font-semibold text-[#202124] dark:text-[#F1F2F4]">
                     <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       {isZh ? '接收响应 (Response Payload: HTTP 200 OK)' : 'Response Payload (HTTP 200 OK)'}
@@ -1655,19 +1655,19 @@ curl -X POST "${messagesUrl}" \\
                       <button
                         type="button"
                         onClick={() => handleCopyText(JSON.stringify(probeResult, null, 2), 'probe-res')}
-                        className="inline-flex items-center gap-1 text-xs font-normal text-gray-500 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                        className="inline-flex items-center gap-1 text-xs font-normal text-[#656B75] hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
                       >
                         {copiedKey === 'probe-res' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                         {isZh ? '复制响应' : 'Copy Response'}
                       </button>
                     )}
                   </div>
-                  <div className="bg-gray-900 text-gray-100 p-3.5 rounded-xl font-mono text-xs overflow-x-auto min-h-[170px] max-h-64 border border-gray-800 inset-shadow-sm flex flex-col justify-start">
+                  <div className="bg-[#111214] text-gray-100 p-3.5 rounded-xl font-mono text-xs overflow-x-auto min-h-[170px] max-h-64 border border-[#2C3038] inset-shadow-sm flex flex-col justify-start">
                     {probeResult ? (
                       <pre className="whitespace-pre-wrap leading-relaxed">{JSON.stringify(probeResult, null, 2)}</pre>
                     ) : (
                       <div className="h-full flex flex-col items-center justify-center text-gray-500 text-center py-8">
-                        <Terminal className="w-8 h-8 mb-2 opacity-40 text-indigo-400" />
+                        <Terminal className="w-8 h-8 mb-2 opacity-40 text-[#355CFF]" />
                         <p className="text-xs font-medium text-gray-400">{isZh ? '等待发送探针' : 'Awaiting Probe Execution'}</p>
                         <p className="text-xs text-gray-400 mt-1">{isZh ? '点击上方“发送 JSON-RPC 2.0 报文”发起实时调用测试' : 'Click "Send JSON-RPC 2.0 Request" above to test live execution'}</p>
                       </div>

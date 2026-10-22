@@ -360,6 +360,7 @@ func (h *Handler) handleNativeAnthropicStream(c *gin.Context, stream <-chan *mod
 	var ttftDuration time.Duration
 	var firstContentSeen bool
 	chatID, channel, statusCode := "", first.Channel, http.StatusOK
+	var streamErr error
 	defer func() {
 		// Anthropic input_tokens excludes prompt-cache reads/writes; the audit
 		// record must report the full prompt and surface cache hits separately.
@@ -376,6 +377,7 @@ func (h *Handler) handleNativeAnthropicStream(c *gin.Context, stream <-chan *mod
 			TTFT:             ttftDuration,
 			StatusCode:       statusCode,
 			UsageSource:      "upstream",
+			ErrorMessage:     sanitizeErrorMessage(streamErr),
 			LiveTracked:      true, // stream deltas already fed the live token meter
 		})
 	}()
@@ -387,6 +389,7 @@ func (h *Handler) handleNativeAnthropicStream(c *gin.Context, stream <-chan *mod
 			channel = event.Channel
 		}
 		if event.Err != nil {
+			streamErr = event.Err
 			statusCode = http.StatusBadGateway
 			body, _ := json.Marshal(gin.H{"type": "error", "error": gin.H{"type": "stream_error", "message": sanitizeErrorMessage(event.Err)}})
 			fmt.Fprintf(c.Writer, "event: error\ndata: %s\n\n", body)

@@ -12,6 +12,7 @@ import {
   FilterX,
   X,
   RotateCcw,
+  AlertTriangle,
   SlidersHorizontal,
   MoreHorizontal,
   ChevronDown,
@@ -66,6 +67,7 @@ export default function LogsView({
   setLogFilters,
   fetchLogs,
   logLoading,
+  logError = '',
   handleClearLogs,
   timeRange,
   setTimeRange,
@@ -110,6 +112,7 @@ export default function LogsView({
   };
   const setFilters = setLogFilters || (() => {});
   const resetUrlFilters = () => setFilters({
+    key_id: '',
     model: 'all',
     channel: 'all',
     status: 'all',
@@ -194,6 +197,7 @@ export default function LogsView({
     latencyFilter !== 'all' ||
     Boolean(logFilter) ||
     Boolean(sessionFilter) ||
+    Boolean(filters.key_id) ||
     timeRange !== 'all';
 
   // Count of filters that live in the collapsible panel (shown on its toggle, so
@@ -208,7 +212,7 @@ export default function LogsView({
   ].filter(Boolean).length;
 
   // Every active condition, including the keyword and the parent-owned trace lock.
-  const totalActiveFilterCount = activeFilterCount + (logFilter ? 1 : 0) + (sessionFilter ? 1 : 0);
+  const totalActiveFilterCount = activeFilterCount + (logFilter ? 1 : 0) + (sessionFilter ? 1 : 0) + (filters.key_id ? 1 : 0);
 
   const timeRangeLabels = {
     '1h': isZh ? '近 1 小时' : 'Last 1h',
@@ -217,13 +221,13 @@ export default function LogsView({
     custom: isZh ? '自定义区间' : 'Custom range',
   };
 
+  // Only reset the filter state; the logs-tab effect owns the fetch. Calling
+  // fetchLogs here as well issued the same query twice for one click.
   const handleResetFilters = () => {
     resetUrlFilters();
     setLogFilter('');
-    const needsServerRefetch = Boolean(sessionFilter) || timeRange !== 'all';
     if (sessionFilter) setSessionFilter('');
     if (timeRange !== 'all') setTimeRange('all');
-    if (needsServerRefetch) fetchLogs({ timeRange: 'all', sessionFilter: '' });
   };
 
   // Export the WHOLE filtered result set to CSV.
@@ -391,15 +395,18 @@ export default function LogsView({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
           {/* Active Chat/Session/Trace Filter Tag */}
+          {filters.key_id && (
+            <div className="ui-meta flex items-center gap-2">
+              <span>{isZh ? '密钥' : 'Key'} #{filters.key_id}</span>
+              <button className="ui-icon-btn" title={isZh ? '清除密钥筛选' : 'Clear key filter'} onClick={() => setFilters({ key_id: '' })}>✕</button>
+            </div>
+          )}
           {sessionFilter && (
             <div className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-[#EEF2FF] dark:bg-[#242D48] border border-[#355CFF]/30 dark:border-[#91A7FF]/30 text-xs text-[#355CFF] dark:text-[#91A7FF] animate-in fade-in">
               <span className="text-xs text-[#656B75] dark:text-[#A1A7B0]">{isZh ? '已锁定链路:' : 'Locked Trace:'}</span>
               <span className="font-mono font-semibold max-w-[140px] truncate">{sessionFilter}</span>
               <button
-                onClick={() => {
-                  setSessionFilter('');
-                  fetchLogs({ sessionFilter: '' });
-                }}
+                onClick={() => setSessionFilter('')}
                 className="hover:text-rose-500 ml-1 font-semibold transition cursor-pointer"
                 title={isZh ? '清除筛选' : 'Clear filter'}
               >
@@ -544,12 +551,7 @@ export default function LogsView({
                 ].map((item) => (
                   <button
                     key={item.id}
-                    onClick={() => {
-                      setTimeRange(item.id);
-                      if (item.id !== 'custom') {
-                        fetchLogs({ timeRange: item.id });
-                      }
-                    }}
+                    onClick={() => setTimeRange(item.id)}
                     className={`px-3 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                       timeRange === item.id
                         ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-2xs font-semibold'
@@ -742,10 +744,7 @@ export default function LogsView({
               <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs">
                 <span>{isZh ? '时间:' : 'Time:'} {timeRangeLabels[timeRange] || timeRange}</span>
                 <button
-                  onClick={() => {
-                    setTimeRange('all');
-                    fetchLogs({ timeRange: 'all' });
-                  }}
+                  onClick={() => setTimeRange('all')}
                   className="hover:text-rose-500 cursor-pointer"
                   title={isZh ? '清除时间筛选' : 'Clear time filter'}
                 >
@@ -766,7 +765,7 @@ export default function LogsView({
             {Boolean(sessionFilter) && (
               <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-mono">
                 <span>{isZh ? 'Trace/会话:' : 'Trace:'} {sessionFilter}</span>
-                <button onClick={() => { setSessionFilter(''); fetchLogs({ sessionFilter: '' }); }} className="hover:text-rose-500 cursor-pointer" title={isZh ? '清除链路筛选' : 'Clear trace filter'}>
+                <button onClick={() => setSessionFilter('')} className="hover:text-rose-500 cursor-pointer" title={isZh ? '清除链路筛选' : 'Clear trace filter'}>
                   <X className="w-3 h-3" />
                 </button>
               </span>
@@ -905,8 +904,7 @@ export default function LogsView({
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setSessionFilter(log.trace_id);
-                                fetchLogs({ sessionFilter: log.trace_id });
+                                setSessionFilter(log.trace_id, 'trace_id');
                                 if (showToast) showToast(isZh ? `已筛选 Trace: ${log.trace_id}` : `Filtered Trace: ${log.trace_id}`, 'info');
                               }}
                               className="p-1 hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] rounded-md text-[#656B75] dark:text-[#A1A7B0] hover:text-[#355CFF] dark:hover:text-[#91A7FF] transition-colors"
@@ -1074,7 +1072,29 @@ export default function LogsView({
                 <tr>
                   <td colSpan="11" className="py-12 text-center font-sans">
                     <div className="flex flex-col items-center justify-center space-y-2">
-                      {hasActiveFilters ? (
+                      {logLoading ? (
+                        <>
+                          <RefreshCw className="w-8 h-8 text-slate-300 dark:text-slate-600 stroke-1 animate-spin" />
+                          <span className="ui-meta font-medium">
+                            {isZh ? '正在加载审计日志…' : 'Loading audit logs…'}
+                          </span>
+                        </>
+                      ) : logError ? (
+                        <>
+                          <AlertTriangle className="w-8 h-8 text-rose-500 stroke-1" />
+                          <span className="ui-meta font-medium">
+                            {isZh ? '审计日志加载失败' : 'Failed to load audit logs'}
+                          </span>
+                          <span className="ui-meta max-w-md break-words">{logError}</span>
+                          <button
+                            onClick={() => fetchLogs()}
+                            className="ui-btn ui-btn-secondary ui-btn-sm"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>{isZh ? '重试' : 'Retry'}</span>
+                          </button>
+                        </>
+                      ) : hasActiveFilters ? (
                         <>
                           <FilterX className="w-8 h-8 text-slate-300 dark:text-slate-600 stroke-1" />
                           <span className="ui-meta font-medium">

@@ -25,7 +25,7 @@ func (h *AdminHandler) GetStatsOverview(c *gin.Context) {
 			c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "账户不存在或暂时无法验证，请重新登录"})
 			return
 		}
-		keys, err := h.repo.ListAPIKeysByUser(user.ID)
+		keys, err := h.repo.ListHistoricalAPIKeysByUser(user.ID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -88,7 +88,7 @@ func (h *AdminHandler) GetStatsTimeSeries(c *gin.Context) {
 			c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "账户不存在或暂时无法验证，请重新登录"})
 			return
 		}
-		keys, err := h.repo.ListAPIKeysByUser(user.ID)
+		keys, err := h.repo.ListHistoricalAPIKeysByUser(user.ID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -228,17 +228,19 @@ func (h *AdminHandler) GetSystemMiddlewares(c *gin.Context) {
 	})
 
 	// 6. Notification & SMTP Service
-	smtpMode := "系统内置通知通道 (零配置直接送达)"
-	if os.Getenv("SMTP_HOST") != "" {
+	smtpMode := "未配置 SMTP，邮件验证码不可用"
+	smtpStatus := "disabled"
+	if strings.TrimSpace(os.Getenv("SMTP_HOST")) != "" {
 		smtpMode = fmt.Sprintf("SMTP 邮件中继服务 (%s)", os.Getenv("SMTP_HOST"))
+		smtpStatus = "configured"
 	}
 	list = append(list, MiddlewareComponentStatus{
 		ID:          "notification",
 		Name:        "用户通知与安全验证系统",
 		Category:    "通知与认证",
-		Status:      "operational",
+		Status:      smtpStatus,
 		Mode:        smtpMode,
-		Description: "新用户注册安全验证码发放、密码找回通知、余额告警触达与消息通知保障。",
+		Description: "用于发送邮箱验证码；配置状态不代表邮件已送达，请通过发送验证码验证实际投递。",
 	})
 
 	c.JSON(http.StatusOK, gin.H{

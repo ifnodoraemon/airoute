@@ -3,7 +3,7 @@ import { X, RefreshCw, AlertTriangle } from 'lucide-react';
 
 // TraceSnapshotModal shows the redacted request/response snapshot archived for a
 // trace id, which is usually the fastest way to diagnose a failed call.
-export default function TraceSnapshotModal({ isOpen, traceId, onClose, lang = 'zh', adminFetch }) {
+export default function TraceSnapshotModal({ isOpen, traceId, initialQueryField = 'trace_id', onClose, lang = 'zh', adminFetch }) {
   const isZh = lang === 'zh';
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -38,11 +38,11 @@ export default function TraceSnapshotModal({ isOpen, traceId, onClose, lang = 'z
   useEffect(() => {
     if (isOpen) {
       setQueryValue(traceId || '');
-      setQueryField('trace_id');
-      load('trace_id', traceId);
+      setQueryField(initialQueryField);
+      load(initialQueryField, traceId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, traceId]);
+  }, [isOpen, traceId, initialQueryField]);
 
   if (!isOpen) return null;
 
@@ -57,7 +57,7 @@ export default function TraceSnapshotModal({ isOpen, traceId, onClose, lang = 'z
             <div className="ui-meta font-mono">{traceId}</div>
           </div>
           <div className="flex items-center space-x-1">
-            <button onClick={load} className="ui-icon-btn" title={isZh ? '刷新' : 'Refresh'}>
+            <button onClick={() => load()} className="ui-icon-btn" title={isZh ? '刷新' : 'Refresh'}>
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
             <button onClick={onClose} className="ui-icon-btn">

@@ -27,7 +27,7 @@ export default function CurlExportModal({ curlCmd, onClose, onCopy, lang = 'zh',
         {/* Header */}
         <div className="p-6 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+            <div className="w-10 h-10 rounded-xl bg-[#EEF2FF] dark:bg-[#242D48] border border-[#355CFF]/20 dark:border-[#91A7FF]/30 flex items-center justify-center text-[#355CFF] dark:text-[#91A7FF]">
               <Terminal className="w-5 h-5" />
             </div>
             <div>
@@ -54,7 +54,7 @@ export default function CurlExportModal({ curlCmd, onClose, onCopy, lang = 'zh',
           <div className="flex items-center space-x-2">
             <button
               onClick={handleCopy}
-              className="ui-btn bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm"
+              className="ui-btn ui-btn-primary font-semibold shadow-sm"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copied ? (isZh ? '已复制！' : 'Copied!') : (isZh ? '复制命令' : 'Copy Command')}</span>

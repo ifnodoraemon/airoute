@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -115,6 +116,8 @@ func (h *AdminHandler) StripeWebhook(c *gin.Context) {
 				ID                string `json:"id"`
 				ClientReferenceID string `json:"client_reference_id"`
 				PaymentStatus     string `json:"payment_status"`
+				AmountTotal       int64  `json:"amount_total"`
+				Currency          string `json:"currency"`
 			} `json:"object"`
 		} `json:"data"`
 	}
@@ -124,20 +127,35 @@ func (h *AdminHandler) StripeWebhook(c *gin.Context) {
 		return
 	}
 
-	if event.Type == "checkout.session.completed" {
-		// Only complete order when payment_status is 'paid' (avoid unpaid asynchronous payment methods)
-		if event.Data.Object.PaymentStatus != "" && event.Data.Object.PaymentStatus != "paid" {
+	switch event.Type {
+	case "checkout.session.completed", "checkout.session.async_payment_succeeded", "checkout.session.expired", "checkout.session.async_payment_failed":
+		obj := event.Data.Object
+		if (event.Type == "checkout.session.completed" || event.Type == "checkout.session.async_payment_succeeded") && obj.PaymentStatus != "paid" {
 			c.JSON(http.StatusOK, gin.H{"received": true, "status": event.Data.Object.PaymentStatus})
 			return
 		}
-		orderNo := event.Data.Object.ClientReferenceID
-		if orderNo != "" {
-			_, err := h.repo.CompleteRechargeOrder(orderNo)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "订单处理失败: " + err.Error()})
-				return
-			}
-			// Reflect the credited balance in data-plane memory right away.
+		order, err := h.repo.GetRechargeOrder(obj.ClientReferenceID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "订单暂不可用，请重试"})
+			return
+		}
+		if order.Channel != "stripe" || obj.ID == "" || order.StripeSessionID != obj.ID || !strings.EqualFold(order.Currency, obj.Currency) || int64(math.Round(order.Amount*100)) != obj.AmountTotal {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "支付事件与订单的会话、金额或币种不一致"})
+			return
+		}
+		switch event.Type {
+		case "checkout.session.expired":
+			err = h.repo.CloseRechargeOrder(order.OrderNo, "expired")
+		case "checkout.session.async_payment_failed":
+			err = h.repo.CloseRechargeOrder(order.OrderNo, "failed")
+		default:
+			_, err = h.repo.CompleteRechargeOrder(order.OrderNo)
+		}
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "订单处理失败: " + err.Error()})
+			return
+		}
+		if obj.PaymentStatus == "paid" {
 			h.syncDataPlane()
 		}
 	}

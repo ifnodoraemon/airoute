@@ -759,8 +759,8 @@ export default function PricingManager({
               <Info className="w-4 h-4 text-[#355CFF] dark:text-[#91A7FF] shrink-0 mt-0.5 sm:mt-0" />
               <span>
                 {isZh
-                  ? '模型定价统一定义供应商官方基准单价（Prompt / Completion / 缓存与闲时规则）。业务分组（VIP 8折、企业 1.5倍等）在此基准上按折扣倍数自动换算生效，无需为每个分组重复配置相同模型。'
-                  : 'Model rates define official baseline prices. Group tiers automatically inherit these rates multiplied by their discount factor.'}
+                  ? '这里配置客户调用费率。默认定价可叠加分组倍率；命中分组专属定价时直接使用该定价，不重复应用分组倍率。闲时优惠在此基础上计算。'
+                  : 'These are customer rates. Group multipliers apply to inherited default rates; group-specific prices override them without a second group discount. Off-peak discounts apply afterward.'}
               </span>
             </div>
             <button
@@ -820,7 +820,7 @@ export default function PricingManager({
                   onChange={(e) => setTierPreviewGroup(e.target.value)}
                   className="ui-field text-xs font-semibold py-1 px-2.5 rounded-lg cursor-pointer"
                 >
-                  <option value="default">{isZh ? '官方基准定价 (1.0x)' : 'Official Baseline (1.0x)'}</option>
+                  <option value="default">{isZh ? '默认客户定价 (1.0x)' : 'Default Customer Rate (1.0x)'}</option>
                   {Object.entries(localGroupMultipliers).filter(([g]) => g !== 'default').map(([g, mult]) => (
                     <option key={g} value={g}>
                       {g === 'vip' ? (isZh ? `VIP组 (${mult}x · ${Math.round(mult * 10)}折)` : `VIP (${mult}x)`)
@@ -1073,7 +1073,14 @@ export default function PricingManager({
                       {/* Live effective rate */}
                       <td className="ui-td font-mono">
                         {(() => {
-                          const previewMult = tierPreviewGroup !== 'default' ? (localGroupMultipliers[tierPreviewGroup] ?? 1.0) : 1.0;
+                          const priceGroup = p.group_name || 'default';
+                          const previewMult = tierPreviewGroup !== 'default' && priceGroup !== tierPreviewGroup ? (localGroupMultipliers[tierPreviewGroup] ?? 1.0) : 1.0;
+                          if (priceGroup !== 'default' && priceGroup !== tierPreviewGroup) {
+                            return <span className="ui-meta">{isZh ? '请选择对应用户组预览' : 'Select the matching group to preview'}</span>;
+                          }
+                          if (priceGroup === 'default' && tierPreviewGroup !== 'default' && prices.some(rate => rate.model === p.model && rate.group_name === tierPreviewGroup)) {
+                            return <span className="ui-meta">{isZh ? '使用该用户组专属定价' : 'Uses the group-specific price'}</span>;
+                          }
                           const showTierTag = tierPreviewGroup !== 'default' && previewMult !== 1.0;
                           const calcPrompt = Math.round(effPrompt * previewMult * 1e6) / 1e6;
                           const calcComp = Math.round(effComp * previewMult * 1e6) / 1e6;

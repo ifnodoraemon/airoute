@@ -82,6 +82,7 @@ function ViewLoader() {
 }
 import { translations, I18nContext } from './i18n';
 import { setPublicGatewayUrl } from './config';
+import { inferClientModality } from './lib/modelModality';
 import useUrlFilters from './hooks/useUrlFilters';
 import { useUiPreferences } from './hooks/useUiPreferences';
 import { useToast } from './hooks/useToast';
@@ -373,7 +374,12 @@ export default function App() {
       targetHash = `#/${currentTab}`;
     }
 
-    if (targetHash && window.location.hash !== targetHash) {
+    if (viewMode === 'status' || viewMode === 'landing' || viewMode === 'auth') {
+      const cleanUrl = window.location.pathname + targetHash;
+      if (window.location.hash !== targetHash || window.location.search) {
+        window.history.replaceState(null, '', cleanUrl);
+      }
+    } else if (targetHash && window.location.hash !== targetHash) {
       window.history.replaceState(null, '', targetHash);
     }
   }, [viewMode, currentTab, authTab, setCurrentTab, setAuthTab, restoringSession]);
@@ -441,6 +447,8 @@ export default function App() {
     start: '',
     end: '',
     session: '',
+    correlation_type: 'session_id',
+    key_id: '',
     model: 'all',
     channel: 'all',
     status: 'all',
@@ -456,7 +464,7 @@ export default function App() {
   const customEndTime = logFilters.end;
   const setCustomEndTime = (value) => setLogFilters({ end: value });
   const sessionFilter = logFilters.session;
-  const setSessionFilter = (value) => setLogFilters({ session: value });
+  const setSessionFilter = (value, type = 'session_id') => setLogFilters({ session: value, correlation_type: type });
   // The audit-log data and its loaders live in one hook. The filters stay here:
   // they are URL-bound and rendered by the log toolbar. The hook keeps its own
   // mirror of them, so the ref that used to live at this point is gone.
@@ -467,6 +475,7 @@ export default function App() {
     logTotal,
     logOffset,
     logLoading,
+    logError,
     logFacets,
     fetchLogs,
     fetchAllLogsForExport,
@@ -733,6 +742,7 @@ export default function App() {
       {activeQuickKey && (
         <QuickStartModal
           apiKey={activeQuickKey}
+          models={models}
           onClose={() => setActiveQuickKey(null)}
           onCopy={(txt) => {
             copyToClipboard(txt);
@@ -752,14 +762,15 @@ export default function App() {
             copyToClipboard(txt);
           }}
           onFilterBySession={(sid) => {
-            setSessionFilter(sid);
-            resetOffset();
-            fetchLogs({ sessionFilter: sid, offset: 0 });
-            setTraceSnapshotId(sid);
-            showToast(isZh ? `已按会话 ID: ${sid} 筛选` : `Filtered by session ID: ${sid}`, 'info');
+            // Only update the filter state: the logs-tab effect owns the fetch
+            // and resets the page cursor. Fetching here as well issued the same
+            // query twice on every click.
+            setSessionFilter(sid, 'trace_id');
+            setCurrentTab('logs');
+            showToast(isZh ? `已按 Trace ID: ${sid} 筛选` : `Filtered by Trace ID: ${sid}`, 'info');
           }}
-          onOpenTrace={(chatId) => setTraceSnapshotId(chatId)}
-          onDeleteLog={handleDeleteSingleLog}
+          onOpenTrace={adminUser?.role === 'admin' ? ((value, field = 'trace_id') => setTraceSnapshotId({ value, field })) : undefined}
+          onDeleteLog={adminUser?.role === 'admin' ? handleDeleteSingleLog : undefined}
           onNavigate={(targetTab) => {
             setCurrentTab(targetTab);
             setViewMode('console');
@@ -1458,6 +1469,8 @@ export default function App() {
             {currentTab === 'keys' && (
               <KeysView
                 keys={keys}
+                models={models}
+                showToast={showToast}
                 handleOpenCreateKey={handleOpenCreateKey}
                 selectedKeyIds={selectedKeyIds}
                 setSelectedKeyIds={setSelectedKeyIds}
@@ -1473,9 +1486,10 @@ export default function App() {
                 pricingGroups={pricingGroups}
                 groupMultipliers={groupMultipliers}
                 onNavigateToPricing={() => setCurrentTab('pricing')}
-                onNavigateToDashboard={(keyStr) => {
+                onNavigateToDashboard={(keyStr, keyId) => {
                   if (adminUser?.role !== 'admin') {
-                    setLogFilters((prev) => ({ ...prev, q: keyStr }));
+                    setLogFilters({ q: '', key_id: String(keyId), session: '', correlation_type: 'session_id', range: 'all', start: '', end: '', model: 'all', channel: 'all', status: 'all', cache: 'all', latency: 'all' });
+                    resetOffset();
                     setCurrentTab('logs');
                   } else {
                     setDashboardSelectedKey(keyStr);
@@ -1499,6 +1513,7 @@ export default function App() {
                 setLogFilters={setLogFilters}
                 fetchLogs={fetchLogs}
                 logLoading={logLoading}
+                logError={logError}
                 handleClearLogs={handleClearLogs}
                 timeRange={timeRange}
                 setTimeRange={setTimeRange}
@@ -1681,6 +1696,7 @@ export default function App() {
             setPlayModel(m);
             setCurrentTab('playground');
           }}
+          onCreateKey={() => { setShowOnboardingModal(false); setCurrentTab('keys'); handleOpenCreateKey(); }}
           showToast={showToast}
           lang={lang}
           t={t}
@@ -1704,7 +1720,8 @@ export default function App() {
         {traceSnapshotId && (
           <TraceSnapshotModal
             isOpen={!!traceSnapshotId}
-            traceId={traceSnapshotId}
+            traceId={traceSnapshotId?.value || traceSnapshotId}
+            initialQueryField={traceSnapshotId?.field || 'trace_id'}
             onClose={() => setTraceSnapshotId('')}
             lang={lang}
             adminFetch={apiFetch}
@@ -1731,6 +1748,10 @@ export default function App() {
           setViewMode={setViewMode}
           models={models}
           channels={channels}
+          onSelectModel={(model) => {
+            setPlayModel(model);
+            setPlayModality(modelRoutes.find(route => route.model === model)?.modality || inferClientModality(model));
+          }}
           keys={keys}
           adminUser={adminUser}
           onOpenNewKey={handleOpenCreateKey}

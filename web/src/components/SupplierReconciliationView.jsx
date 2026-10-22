@@ -122,7 +122,7 @@ export default function SupplierReconciliationView({
       isZh ? '输出Token' : 'Completion Tokens',
       isZh ? '缓存Token' : 'Cached Tokens',
       isZh ? '生成速率(TPS)' : 'Tokens Per Second (TPS)',
-      isZh ? '对账支出(元)' : 'Total Cost (CNY)',
+      isZh ? '客户计费金额(元)' : 'Customer Charges (CNY)',
       isZh ? '平均时延(ms)' : 'Avg Duration (ms)',
       isZh ? '首字时延(ms)' : 'Avg TTFT (ms)'
     ];
@@ -239,8 +239,8 @@ export default function SupplierReconciliationView({
           </div>
           <p className="ui-page-subtitle">
             {isZh
-              ? '跨所有上游服务商（DeepSeek、OpenAI、硅基流动、火山引擎等）的算力消耗、Token吞吐与财务结算整体对账'
-              : 'Global token consumption, upstream costs, and financial reconciliation across all channel providers'}
+              ? '按上游渠道核对调用量、Token 用量和客户计费金额。上游应付金额请以供应商账单为准。'
+              : 'Usage and customer charges grouped by channel. Use supplier invoices for upstream payable amounts.'}
           </p>
         </div>
 
@@ -269,14 +269,14 @@ export default function SupplierReconciliationView({
         {/* Cost */}
         <div className="ui-card p-3.5 shadow-xs">
           <div className="flex items-center justify-between text-[#656B75] dark:text-[#A1A7B0] mb-1">
-            <span className="text-xs font-medium">{isZh ? '供应商对账支出' : 'Supplier Cost'}</span>
+            <span className="text-xs font-medium">{isZh ? '按渠道汇总客户计费' : 'Customer Charges by Channel'}</span>
             <DollarSign className="w-4 h-4 text-emerald-500" />
           </div>
           <div className="text-lg font-bold font-mono tracking-tight text-[#202124] dark:text-[#F1F2F4] truncate">
             ¥{(summary.total_cost || 0).toFixed(4)}
           </div>
           <div className="ui-meta mt-0.5 truncate">
-            {isZh ? '累计应付上游账单' : 'Incurred upstream'}
+            {isZh ? '按客户费率计算；不代表上游采购成本' : 'Customer rates; upstream purchase cost unavailable'}
           </div>
         </div>
 
@@ -610,7 +610,7 @@ export default function SupplierReconciliationView({
                   <th className="ui-th text-right w-20 min-w-[70px] sticky top-0 z-20 bg-[#F0F1F2]/90 dark:bg-[#191B1F]/90 border-b border-[#E4E6E9] dark:border-[#2C3038]" title={isZh ? '模型输出 Completion Token' : 'Completion tokens'}>{isZh ? '输出' : 'Output'}</th>
                   <th className="ui-th text-right w-18 min-w-[65px] sticky top-0 z-20 bg-[#F0F1F2]/90 dark:bg-[#191B1F]/90 border-b border-[#E4E6E9] dark:border-[#2C3038]" title={isZh ? '前缀缓存命中 Token' : 'Cached prefix tokens'}>{isZh ? '缓存' : 'Cached'}</th>
                   <th className="ui-th text-right w-20 min-w-[70px] sticky top-0 z-20 bg-[#F0F1F2]/90 dark:bg-[#191B1F]/90 border-b border-[#E4E6E9] dark:border-[#2C3038]" title={isZh ? '生成速率 (Tokens/秒)' : 'Tokens per second'}>{isZh ? 'TPS' : 'TPS'}</th>
-                  <th className="ui-th text-right w-20 min-w-[75px] sticky top-0 z-20 bg-[#F0F1F2]/90 dark:bg-[#191B1F]/90 border-b border-[#E4E6E9] dark:border-[#2C3038]">{isZh ? '支出' : 'Cost'}</th>
+                  <th className="ui-th text-right w-20 min-w-[75px] sticky top-0 z-20 bg-[#F0F1F2]/90 dark:bg-[#191B1F]/90 border-b border-[#E4E6E9] dark:border-[#2C3038]">{isZh ? '客户计费' : 'Charges'}</th>
                   <th className="ui-th text-right w-24 min-w-[85px] sticky top-0 z-20 bg-[#F0F1F2]/90 dark:bg-[#191B1F]/90 border-b border-[#E4E6E9] dark:border-[#2C3038]">{isZh ? '耗时 / TTFT' : 'Latency / TTFT'}</th>
                   <th className="ui-th text-center w-24 min-w-[85px] sticky top-0 z-20 bg-[#F0F1F2]/90 dark:bg-[#191B1F]/90 border-b border-[#E4E6E9] dark:border-[#2C3038]">{isZh ? '操作' : 'Actions'}</th>
                 </tr>
@@ -781,7 +781,7 @@ export default function SupplierReconciliationView({
                                     <th className="ui-th text-right w-20 min-w-[70px]" title={isZh ? '模型输出 Completion Token' : 'Completion tokens'}>{isZh ? '输出' : 'Output'}</th>
                                     <th className="ui-th text-right w-18 min-w-[65px]" title={isZh ? '前缀缓存命中 Token' : 'Cached prefix tokens'}>{isZh ? '缓存' : 'Cached'}</th>
                                     <th className="ui-th text-right w-20 min-w-[70px]" title={isZh ? '生成速率 (Tokens/秒)' : 'Tokens per second'}>{isZh ? 'TPS' : 'TPS'}</th>
-                                    <th className="ui-th text-right w-20 min-w-[75px]">{isZh ? '支出' : 'Cost'}</th>
+                                    <th className="ui-th text-right w-20 min-w-[75px]">{isZh ? '客户计费' : 'Charges'}</th>
                                     <th className="ui-th text-right w-24 min-w-[85px]">{isZh ? '耗时 / TTFT' : 'Latency / TTFT'}</th>
                                   </tr>
                                 </thead>

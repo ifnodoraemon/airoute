@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   MessageSquare,
   Image as ImageIcon,
@@ -25,6 +25,7 @@ import {
 import { getGatewayOrigin, copyToClipboard as crossOriginCopy } from '../config';
 import MarkdownRenderer from './MarkdownRenderer';
 import { inferClientModality } from '../lib/modelModality';
+import { availableKeyModels } from '../lib/keyModels';
 
 export default function PlaygroundView({
   keys = [],
@@ -45,19 +46,20 @@ export default function PlaygroundView({
   const [playApiKey, setPlayApiKey] = useState('');
   const [isCustomKey, setIsCustomKey] = useState(false);
   const [customKeyInput, setCustomKeyInput] = useState('');
+  const activeKeys = useMemo(() => keys.filter(key => !key.status || key.status === 'active'), [keys]);
 
   // Auto-select initial key
   useEffect(() => {
-    if (!playApiKey && keys.length > 0 && !isCustomKey) {
-      setPlayApiKey(keys[0].key);
+    if (!isCustomKey && playApiKey !== '__none__' && !activeKeys.some(key => key.key === playApiKey)) {
+      setPlayApiKey(activeKeys[0]?.key || '');
     }
-  }, [keys, playApiKey, isCustomKey]);
+  }, [activeKeys, playApiKey, isCustomKey]);
 
   const getEffectiveApiKey = () => {
     if (isCustomKey) return customKeyInput.trim();
     if (playApiKey === '__none__') return '';
-    if (playApiKey) return playApiKey;
-    if (keys.length > 0) return keys[0].key;
+    if (activeKeys.some(key => key.key === playApiKey)) return playApiKey;
+    if (activeKeys.length > 0) return activeKeys[0].key;
     return '';
   };
 
@@ -77,10 +79,7 @@ export default function PlaygroundView({
 
     if (selectedKeyObj && selectedKeyObj.allowed_models && selectedKeyObj.allowed_models.length > 0) {
       if (!selectedKeyObj.allowed_models.includes('*')) {
-        const allowedSet = new Set(selectedKeyObj.allowed_models);
-        const filtered = list.filter(m => allowedSet.has(m));
-        const extra = selectedKeyObj.allowed_models.filter(m => inferClientModality(m) === modality && !filtered.includes(m));
-        return [...filtered, ...extra];
+        return availableKeyModels(selectedKeyObj, list);
       }
     }
     return list;
@@ -194,6 +193,12 @@ export default function PlaygroundView({
   const [rerankQuery, setRerankQuery] = useState('');
   const [rerankDocs, setRerankDocs] = useState('');
   const [rerankResult, setRerankResult] = useState(null);
+
+  useEffect(() => {
+    const setters = { chat: setPlayModel, images: setImgModel, audio_speech: setTtsModel, audio_transcription: setSttModel, videos: setVideoModel, embeddings: setEmbedModel, rerank: setRerankModel };
+    if (initialModel) (setters[initialModality] || setPlayModel)(initialModel);
+    setPlayModality(initialModality || 'chat');
+  }, [initialModel, initialModality]);
 
   // Sync initial model across chat and multimodal categories
   useEffect(() => {
@@ -880,16 +885,16 @@ Execute the following mission with precision, maintainability, and zero speculat
   return (
     <div className="space-y-4 animate-in fade-in duration-200">
       {/* 1. Modality Selector Bar */}
-      <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-1.5 shadow-sm flex flex-wrap items-center justify-between gap-2">
+      <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-1.5 shadow-sm flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
           {[
-            { id: 'chat', label: isZh ? 'Chat 对话' : 'Chat', icon: MessageSquare, activeColor: 'bg-indigo-600 text-white' },
-            { id: 'images', label: isZh ? 'Images 绘图' : 'Images', icon: ImageIcon, activeColor: 'bg-pink-600 text-white' },
-            { id: 'audio_speech', label: isZh ? 'TTS 语音合成' : 'TTS Speech', icon: Volume2, activeColor: 'bg-cyan-600 text-white' },
-            { id: 'audio_transcription', label: isZh ? 'STT 语音转写' : 'STT Audio', icon: Mic, activeColor: 'bg-teal-600 text-white' },
-            { id: 'videos', label: isZh ? 'Video 视频生成' : 'Videos', icon: Video, activeColor: 'bg-purple-600 text-white' },
-            { id: 'embeddings', label: isZh ? 'Embedding 向量' : 'Embeddings', icon: Cpu, activeColor: 'bg-emerald-600 text-white' },
-            { id: 'rerank', label: isZh ? 'Rerank 重排' : 'Rerank', icon: Sliders, activeColor: 'bg-amber-600 text-white' },
+            { id: 'chat', label: isZh ? 'Chat 对话' : 'Chat', icon: MessageSquare, activeColor: 'bg-[#355CFF] text-white' },
+            { id: 'images', label: isZh ? 'Images 绘图' : 'Images', icon: ImageIcon, activeColor: 'bg-[#355CFF] text-white' },
+            { id: 'audio_speech', label: isZh ? 'TTS 语音合成' : 'TTS Speech', icon: Volume2, activeColor: 'bg-[#355CFF] text-white' },
+            { id: 'audio_transcription', label: isZh ? 'STT 语音转写' : 'STT Audio', icon: Mic, activeColor: 'bg-[#355CFF] text-white' },
+            { id: 'videos', label: isZh ? 'Video 视频生成' : 'Videos', icon: Video, activeColor: 'bg-[#355CFF] text-white' },
+            { id: 'embeddings', label: isZh ? 'Embedding 向量' : 'Embeddings', icon: Cpu, activeColor: 'bg-[#355CFF] text-white' },
+            { id: 'rerank', label: isZh ? 'Rerank 重排' : 'Rerank', icon: Sliders, activeColor: 'bg-[#355CFF] text-white' },
           ].map(tab => {
             const Icon = tab.icon;
             return (
@@ -901,8 +906,8 @@ Execute the following mission with precision, maintainability, and zero speculat
                 }}
                 className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
                   playModality === tab.id
-                    ? `${tab.activeColor} shadow-sm`
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100'
+                    ? `${tab.activeColor} shadow-sm font-semibold`
+                    : 'text-[#656B75] dark:text-[#A1A7B0] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -914,13 +919,13 @@ Execute the following mission with precision, maintainability, and zero speculat
 
         {/* Arena Mode Switch (Only for Chat) */}
         {playModality === 'chat' && (
-          <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-lg">
+          <div className="flex items-center space-x-1 bg-[#F0F1F2] dark:bg-[#22252B] p-1 rounded-lg">
             <button
               onClick={() => setPlayMode('single')}
               className={`px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
                 playMode === 'single'
-                  ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
+                  ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-sm font-semibold'
+                  : 'text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
               }`}
             >
               {isZh ? '单模型' : 'Single Model'}
@@ -929,8 +934,8 @@ Execute the following mission with precision, maintainability, and zero speculat
               onClick={() => setPlayMode('arena')}
               className={`px-2.5 py-1 rounded-md text-xs font-medium flex items-center space-x-1 transition cursor-pointer ${
                 playMode === 'arena'
-                  ? 'bg-slate-900 dark:bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
+                  ? 'bg-[#355CFF] text-white shadow-sm font-semibold'
+                  : 'text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
               }`}
             >
               <Split className="w-3 h-3" />
@@ -943,10 +948,10 @@ Execute the following mission with precision, maintainability, and zero speculat
       {/* 2. Main Playground Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Parameter Controls */}
-        <div className="bg-white dark:bg-[#111726] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-6 space-y-4 shadow-sm h-fit">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-            <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm flex items-center space-x-2">
-              <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+        <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-6 space-y-4 shadow-sm h-fit">
+          <div className="flex items-center justify-between border-b border-[#E4E6E9] dark:border-[#2C3038] pb-3">
+            <h3 className="font-bold text-[#202124] dark:text-[#F1F2F4] text-sm flex items-center space-x-2">
+              <Sparkles className="w-4 h-4 text-[#355CFF] dark:text-[#91A7FF]" />
               <span>{isZh ? '参数配置' : 'Hyperparameters'}</span>
             </h3>
           </div>
@@ -982,7 +987,7 @@ Execute the following mission with precision, maintainability, and zero speculat
                 onChange={(e) => setPlayApiKey(e.target.value)}
                 className="ui-field font-mono"
               >
-                {keys.map((k) => (
+                {activeKeys.map((k) => (
                   <option key={k.key || k.id} value={k.key}>
                     {k.tenant_id ? `${k.tenant_id} - ` : ''}{k.key.slice(0, 10)}...{k.key.slice(-4)}
                   </option>
@@ -1061,11 +1066,11 @@ Execute the following mission with precision, maintainability, and zero speculat
               </div>
 
               {/* Hyperparameters: Temperature & MaxTokens */}
-              <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <div className="space-y-3 pt-2 border-t border-[#E4E6E9] dark:border-[#2C3038]">
                 <div>
-                  <div className="flex justify-between text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  <div className="flex justify-between text-xs font-semibold text-[#656B75] dark:text-[#A1A7B0] mb-1">
                     <span>{isZh ? '温度 (Temperature)' : 'Temperature'}</span>
-                    <span className="font-mono text-indigo-600 dark:text-indigo-400">{temperature}</span>
+                    <span className="font-mono text-[#355CFF] dark:text-[#91A7FF]">{temperature}</span>
                   </div>
                   <input
                     type="range"
@@ -1074,12 +1079,12 @@ Execute the following mission with precision, maintainability, and zero speculat
                     step="0.1"
                     value={temperature}
                     onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                    className="w-full accent-indigo-600 cursor-pointer"
+                    className="w-full accent-[#355CFF] cursor-pointer"
                   />
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
+                  <div className="flex items-center justify-between text-xs font-semibold text-[#656B75] dark:text-[#A1A7B0] mb-1.5">
                     <span>{isZh ? '最大生成 Token (Max Tokens)' : 'Max Tokens'}</span>
                     <div className="flex items-center space-x-1.5">
                       <input
@@ -1093,7 +1098,7 @@ Execute the following mission with precision, maintainability, and zero speculat
                           const val = e.target.value;
                           setMaxTokens(val === '' ? '' : Math.max(1, parseInt(val) || ''));
                         }}
-                        className="ui-field ui-field-sm w-20 text-right font-mono font-bold text-indigo-600 dark:text-indigo-400"
+                        className="ui-field ui-field-sm w-20 text-right font-mono font-bold text-[#355CFF] dark:text-[#91A7FF]"
                         title={isZh ? '输入任意正整数，留空表示不限制（自动按模型上限）' : 'Enter arbitrary number or leave empty for auto'}
                       />
                       <span className="ui-meta font-mono">
@@ -1122,8 +1127,8 @@ Execute the following mission with precision, maintainability, and zero speculat
                           onClick={() => setMaxTokens(p.val)}
                           className={`px-2 py-0.5 text-[10px] font-mono rounded-md border transition cursor-pointer ${
                             isActive
-                              ? 'bg-indigo-600 text-white border-indigo-600 font-bold shadow-xs'
-                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'
+                              ? 'bg-[#355CFF] text-white border-[#355CFF] font-bold shadow-xs'
+                              : 'bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0] border-[#E4E6E9] dark:border-[#2C3038] hover:bg-[#E4E6E9] dark:hover:bg-[#2C3038]'
                           }`}
                         >
                           {p.label}
@@ -1140,7 +1145,7 @@ Execute the following mission with precision, maintainability, and zero speculat
                     step="256"
                     value={maxTokens ? Math.min(131072, Math.max(256, Number(maxTokens))) : 2048}
                     onChange={(e) => setMaxTokens(parseInt(e.target.value))}
-                    className="w-full accent-indigo-600 cursor-pointer"
+                    className="w-full accent-[#355CFF] cursor-pointer"
                   />
                   <div className="flex justify-between ui-meta font-mono mt-0.5">
                     <span>256</span>
@@ -1156,9 +1161,9 @@ Execute the following mission with precision, maintainability, and zero speculat
                     id="streamCheck"
                     checked={playStream}
                     onChange={(e) => setPlayStream(e.target.checked)}
-                    className="rounded-sm border-slate-300 text-indigo-600 focus:ring-0 cursor-pointer"
+                    className="rounded-sm border-[#E4E6E9] dark:border-[#2C3038] text-[#355CFF] focus:ring-0 cursor-pointer"
                   />
-                  <label htmlFor="streamCheck" className="text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
+                  <label htmlFor="streamCheck" className="text-xs font-semibold text-[#202124] dark:text-[#F1F2F4] cursor-pointer">
                     {isZh ? '开启 SSE 流式输出 (Streaming)' : 'Enable SSE Streaming'}
                   </label>
                 </div>
@@ -1556,9 +1561,9 @@ Execute the following mission with precision, maintainability, and zero speculat
                 /* Side-by-Side Arena Split View */
                 <div className="flex-1 grid grid-cols-2 gap-3 min-h-0">
                   {/* Left Contender: Model A */}
-                  <div className="flex flex-col rounded-xl border border-indigo-200 dark:border-indigo-800/80 bg-slate-50/60 dark:bg-slate-900/40 p-3 overflow-y-auto space-y-3">
-                    <div className="flex items-center justify-between pb-2 border-b border-indigo-100 dark:border-indigo-900 text-xs">
-                      <span className="font-bold text-indigo-600 dark:text-indigo-400 font-mono">
+                  <div className="flex flex-col rounded-xl border border-[#355CFF]/30 dark:border-[#355CFF]/40 bg-[#EEF2FF]/30 dark:bg-[#242D48]/20 p-3 overflow-y-auto space-y-3">
+                    <div className="flex items-center justify-between pb-2 border-b border-[#355CFF]/20 dark:border-[#355CFF]/30 text-xs">
+                      <span className="font-bold text-[#355CFF] dark:text-[#91A7FF] font-mono">
                         Model A: {playModel}
                       </span>
                       <div className="ui-meta font-mono space-x-2">
@@ -1567,11 +1572,11 @@ Execute the following mission with precision, maintainability, and zero speculat
                       </div>
                     </div>
                     {playReasoningOutput && (
-                      <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 text-[11px] text-amber-900 dark:text-amber-200 font-mono whitespace-pre-wrap">
+                      <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-900 dark:text-amber-200 font-mono whitespace-pre-wrap">
                         {playReasoningOutput}
                       </div>
                     )}
-                    <div className="text-xs text-slate-800 dark:text-slate-100 leading-relaxed">
+                    <div className="text-xs text-[#202124] dark:text-[#F1F2F4] leading-relaxed">
                       {playOutput ? (
                         <MarkdownRenderer content={playOutput} />
                       ) : (
@@ -1583,9 +1588,9 @@ Execute the following mission with precision, maintainability, and zero speculat
                   </div>
 
                   {/* Right Contender: Model B */}
-                  <div className="flex flex-col rounded-xl border border-purple-200 dark:border-purple-800/80 bg-purple-50/30 dark:bg-purple-950/20 p-3 overflow-y-auto space-y-3">
-                    <div className="flex items-center justify-between pb-2 border-b border-purple-100 dark:border-purple-900 text-xs">
-                      <span className="font-bold text-purple-600 dark:text-purple-400 font-mono">
+                  <div className="flex flex-col rounded-xl border border-[#E4E6E9] dark:border-[#2C3038] bg-[#F0F1F2]/60 dark:bg-[#22252B]/40 p-3 overflow-y-auto space-y-3">
+                    <div className="flex items-center justify-between pb-2 border-b border-[#E4E6E9] dark:border-[#2C3038] text-xs">
+                      <span className="font-bold text-[#202124] dark:text-[#F1F2F4] font-mono">
                         Model B: {arenaModelB}
                       </span>
                       <div className="ui-meta font-mono space-x-2">

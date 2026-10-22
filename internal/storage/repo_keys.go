@@ -53,9 +53,9 @@ func (rec *APIKeyRecord) resolveMoney() {
 	}
 }
 
-// ListAPIKeys returns all API keys.
+// ListAPIKeys returns all non-deleted API keys for management.
 func (r *Repository) ListAPIKeys() ([]*APIKeyRecord, error) {
-	rows, err := r.db.Query(`SELECT id, key, tenant_id, COALESCE(allowed_models, ''), rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys ORDER BY id ASC`)
+	rows, err := r.db.Query(`SELECT id, key, tenant_id, COALESCE(allowed_models, ''), rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE status <> 'deleted' ORDER BY id ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func (r *Repository) ListAPIKeys() ([]*APIKeyRecord, error) {
 
 // ListAPIKeysByUser returns API keys belonging to a specific user.
 func (r *Repository) ListAPIKeysByUser(userID int64) ([]*APIKeyRecord, error) {
-	rows, err := r.db.Query(`SELECT id, key, tenant_id, COALESCE(allowed_models, ''), rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE user_id = ? ORDER BY id ASC`, userID)
+	rows, err := r.db.Query(`SELECT id, key, tenant_id, COALESCE(allowed_models, ''), rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE user_id = ? AND status <> 'deleted' ORDER BY id ASC`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -109,18 +109,27 @@ func (r *Repository) ListAPIKeysByUser(userID int64) ([]*APIKeyRecord, error) {
 	return list, nil
 }
 
+// ListHistoricalAPIKeysByUser is for audit scoping only. Deleted keys are kept
+// here so revoking credentials does not erase a customer's historical charges.
+func (r *Repository) ListHistoricalAPIKeysByUser(userID int64) ([]*APIKeyRecord, error) {
+	rows, err := r.db.Query(`SELECT id, key FROM api_keys WHERE user_id = ?`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	keys := make([]*APIKeyRecord, 0)
+	for rows.Next() {
+		var key APIKeyRecord
+		if err := rows.Scan(&key.ID, &key.Key); err != nil {
+			return nil, err
+		}
+		keys = append(keys, &key)
+	}
+	return keys, rows.Err()
+}
+
 // CreateAPIKey inserts a new API key.
 func (r *Repository) CreateAPIKey(rec *APIKeyRecord) error {
-	allowedBytes, _ := json.Marshal(rec.AllowedModels)
-	if rec.Status == "" {
-		rec.Status = "active"
-	}
-	if rec.RPM < 0 {
-		rec.RPM = 0
-	}
-	if rec.GroupName == "" {
-		rec.GroupName = "default"
-	}
 	if rec.UserID <= 0 {
 		if rec.TenantID != "" {
 			if u, _ := r.GetUserByUsername(rec.TenantID); u != nil && u.ID > 0 {
@@ -133,8 +142,21 @@ func (r *Repository) CreateAPIKey(rec *APIKeyRecord) error {
 			}
 		}
 	}
+	return insertAPIKey(r.db, rec)
+}
 
-	id, err := r.db.InsertGetID(`INSERT INTO api_keys (key, tenant_id, allowed_models, rpm, tpm, budget, budget_units, used_tokens, used_cost, used_cost_units, group_name, user_id, status, format_validation, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+func insertAPIKey(db recordInserter, rec *APIKeyRecord) error {
+	allowedBytes, _ := json.Marshal(rec.AllowedModels)
+	if rec.Status == "" {
+		rec.Status = "active"
+	}
+	if rec.RPM < 0 {
+		rec.RPM = 0
+	}
+	if rec.GroupName == "" {
+		rec.GroupName = "default"
+	}
+	id, err := db.InsertGetID(`INSERT INTO api_keys (key, tenant_id, allowed_models, rpm, tpm, budget, budget_units, used_tokens, used_cost, used_cost_units, group_name, user_id, status, format_validation, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 		rec.Key, rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, ToUnits(rec.Budget), rec.UsedTokens, rec.UsedCost, ToUnits(rec.UsedCost), rec.GroupName, rec.UserID, rec.Status, rec.FormatValidation)
 	if err != nil {
 		return err
@@ -143,15 +165,15 @@ func (r *Repository) CreateAPIKey(rec *APIKeyRecord) error {
 	return nil
 }
 
-// DeleteAPIKey deletes an API key by ID.
+// DeleteAPIKey revokes a key permanently while retaining its billing ownership.
 func (r *Repository) DeleteAPIKey(id int64) error {
-	_, err := r.db.Exec(`DELETE FROM api_keys WHERE id=?`, id)
+	_, err := r.db.Exec(`UPDATE api_keys SET status = 'deleted', updated_at = CURRENT_TIMESTAMP WHERE id=?`, id)
 	return err
 }
 
 // GetAPIKey returns a single API key by ID.
 func (r *Repository) GetAPIKey(id int64) (*APIKeyRecord, error) {
-	row := r.db.QueryRow(`SELECT id, key, tenant_id, COALESCE(allowed_models, ''), rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE id = ?`, id)
+	row := r.db.QueryRow(`SELECT id, key, tenant_id, COALESCE(allowed_models, ''), rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE id = ? AND status <> 'deleted'`, id)
 	var rec APIKeyRecord
 	var allowedJSON string
 	if err := row.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.BudgetUnits, &rec.UsedCostUnits, &rec.GroupName, &rec.UserID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
@@ -166,10 +188,15 @@ func (r *Repository) GetAPIKey(id int64) (*APIKeyRecord, error) {
 
 // GetAPIKeyByKey returns a single API key by key string.
 func (r *Repository) GetAPIKeyByKey(key string) (*APIKeyRecord, error) {
-	return r.GetAPIKeyByKeyContext(context.Background(), key)
+	rec, err := r.GetAPIKeyByKeyContext(context.Background(), key)
+	if err == nil && rec.Status == "deleted" {
+		return nil, sql.ErrNoRows
+	}
+	return rec, err
 }
 
-// GetAPIKeyByKeyContext is GetAPIKeyByKey bound to a caller context/deadline.
+// GetAPIKeyByKeyContext reads the authoritative credential state, including
+// deleted keys so authentication can reject them even before a runtime reload.
 // The data-plane auth middleware uses this on every request: without a deadline
 // a lock-contended SQLite (or a stalled Postgres) query pins the request forever.
 func (r *Repository) GetAPIKeyByKeyContext(ctx context.Context, key string) (*APIKeyRecord, error) {
@@ -198,7 +225,7 @@ func (r *Repository) UpdateAPIKey(rec *APIKeyRecord) error {
 	if rec.GroupName == "" {
 		rec.GroupName = "default"
 	}
-	_, err := r.db.Exec(`UPDATE api_keys SET tenant_id = ?, allowed_models = ?, rpm = ?, tpm = ?, budget = ?, budget_units = ?, group_name = ?, user_id = ?, status = ?, format_validation = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+	_, err := r.db.Exec(`UPDATE api_keys SET tenant_id = ?, allowed_models = ?, rpm = ?, tpm = ?, budget = ?, budget_units = ?, group_name = ?, user_id = ?, status = ?, format_validation = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status <> 'deleted'`,
 		rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, ToUnits(rec.Budget), rec.GroupName, rec.UserID, rec.Status, rec.FormatValidation, rec.ID)
 	return err
 }
@@ -214,7 +241,7 @@ func (r *Repository) BatchDeleteAPIKeys(ids []int64) (int64, error) {
 		placeholders[i] = "?"
 		args[i] = id
 	}
-	q := fmt.Sprintf(`DELETE FROM api_keys WHERE id IN (%s)`, strings.Join(placeholders, ","))
+	q := fmt.Sprintf(`UPDATE api_keys SET status = 'deleted', updated_at = CURRENT_TIMESTAMP WHERE status <> 'deleted' AND id IN (%s)`, strings.Join(placeholders, ","))
 	res, err := r.db.Exec(q, args...)
 	if err != nil {
 		return 0, err
@@ -234,7 +261,7 @@ func (r *Repository) BatchUpdateAPIKeyStatus(ids []int64, status string) (int64,
 		placeholders[i] = "?"
 		args[i+1] = id
 	}
-	q := fmt.Sprintf(`UPDATE api_keys SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id IN (%s)`, strings.Join(placeholders, ","))
+	q := fmt.Sprintf(`UPDATE api_keys SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE status <> 'deleted' AND id IN (%s)`, strings.Join(placeholders, ","))
 	res, err := r.db.Exec(q, args...)
 	if err != nil {
 		return 0, err
@@ -250,6 +277,18 @@ func (r *Repository) CountActiveKeys() int {
 	var count int
 	_ = r.db.QueryRow(`SELECT COUNT(*) FROM api_keys WHERE status='active'`).Scan(&count)
 	return count
+}
+
+// HasRegisteredAPIKeys includes deleted credentials: revoking the last key must
+// never reopen the gateway's unauthenticated development mode. Read failures are
+// returned so configuration reloads keep the previous authentication policy.
+func (r *Repository) HasRegisteredAPIKeys() (bool, error) {
+	if r == nil || r.db == nil {
+		return false, fmt.Errorf("API key storage is unavailable")
+	}
+	var hasKeys bool
+	err := r.db.QueryRow(`SELECT EXISTS (SELECT 1 FROM api_keys)`).Scan(&hasKeys)
+	return hasKeys, err
 }
 
 // CountAPIKeys returns the total number of API keys ever registered, including

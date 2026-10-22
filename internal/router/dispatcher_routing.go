@@ -28,6 +28,9 @@ func (d *Dispatcher) ListChannelsForModel(modelName, proto string) []*model.Chan
 	matched := make([]*model.ChannelConfig, 0, 4)
 	for i := range d.channels {
 		ch := &d.channels[i]
+		if ch.Status != "" && ch.Status != "active" {
+			continue
+		}
 		if proto != "" && !ch.SupportsProtocol(proto) {
 			continue
 		}
@@ -51,6 +54,9 @@ func (d *Dispatcher) GetChannelsForModelAndProtocolWithContext(ctx context.Conte
 	var matched []*model.ChannelConfig
 	for i := range d.channels {
 		ch := &d.channels[i]
+		if ch.Status != "" && ch.Status != "active" {
+			continue
+		}
 		if proto != "" && !ch.SupportsProtocol(proto) {
 			continue
 		}
@@ -129,6 +135,9 @@ func (d *Dispatcher) GetAllSupportedModels() []string {
 
 	modelSet := make(map[string]struct{})
 	for _, ch := range d.channels {
+		if ch.Status != "" && ch.Status != "active" {
+			continue
+		}
 		for _, m := range ch.Models {
 			if ch.SupportsModel(m) {
 				modelSet[m] = struct{}{}

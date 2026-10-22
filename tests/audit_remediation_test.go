@@ -62,10 +62,12 @@ func TestAudit_StripeWebhookSignatureVerification(t *testing.T) {
 
 	orderNo := "ORD_TEST_999"
 	order := &storage.RechargeOrderRecord{
-		OrderNo:  orderNo,
-		Username: "alice",
-		Amount:   100.0,
-		Status:   "pending",
+		OrderNo:         orderNo,
+		Username:        "alice",
+		Amount:          100.0,
+		Status:          "pending",
+		Channel:         "stripe",
+		StripeSessionID: "cs_test_123",
 	}
 	require.NoError(t, repo.CreateRechargeOrder(order))
 
@@ -75,7 +77,9 @@ func TestAudit_StripeWebhookSignatureVerification(t *testing.T) {
 			"object": {
 				"id": "cs_test_123",
 				"client_reference_id": "%s",
-				"payment_status": "paid"
+				"payment_status": "paid",
+				"amount_total": 10000,
+				"currency": "cny"
 			}
 		}
 	}`, orderNo))

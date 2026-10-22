@@ -28,10 +28,19 @@ func (e *UpstreamError) Error() string {
 	if len(body) > 2048 {
 		body = body[:2048]
 	}
+	// Upstream bodies often end with a newline; trailing whitespace rendered as a
+	// blank line in the audit table and made one-line messages look truncated.
+	body = strings.TrimSpace(body)
+	channel := ""
 	if e.Channel != "" {
-		return fmt.Sprintf("upstream %s returned status %d: %s", e.Channel, e.Status, body)
+		channel = " " + e.Channel
 	}
-	return fmt.Sprintf("upstream returned status %d: %s", e.Status, body)
+	// An empty body used to render a dangling "status 404: " — noise that read
+	// like a truncated message. Say only what is known.
+	if body == "" {
+		return fmt.Sprintf("upstream%s returned status %d", channel, e.Status)
+	}
+	return fmt.Sprintf("upstream%s returned status %d: %s", channel, e.Status, body)
 }
 
 // StatusCode returns the upstream HTTP status code.

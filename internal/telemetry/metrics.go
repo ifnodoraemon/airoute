@@ -18,6 +18,14 @@ type Metrics struct {
 	TotalPromptTokens     atomic.Uint64
 	TotalCompletionTokens atomic.Uint64
 
+	// Usage-log ingestion pipeline. Audit rows are billing evidence, so a drop
+	// has to be visible on /metrics rather than only in a slog line nobody
+	// watches.
+	UsageLogRecordsFlushed atomic.Uint64 // rows persisted successfully
+	UsageLogRecordsDropped atomic.Uint64 // rows lost to a full buffer or repeated write failures
+	UsageLogFlushFailures  atomic.Uint64 // failed batch writes (each is retried)
+	UsageLogQueueDepth     atomic.Int64  // rows currently waiting in the local buffer
+
 	// Latency & TTFT tracking
 	mu             sync.RWMutex
 	ttftSumMs      float64

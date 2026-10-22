@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import {
   X,
   Copy,
@@ -16,35 +16,13 @@ import {
 } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
 
-export default function LogDetailModal({ log, prices: initialPrices = [], onClose, onCopy, onFilterBySession, onDeleteLog, onNavigate, onOpenTrace, lang = 'zh', t }) {
+export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession, onDeleteLog, onNavigate, onOpenTrace, lang = 'zh', t }) {
   useModalA11y(!!log, onClose);
 
   const isZh = lang === 'zh';
   const [copied, setCopied] = useState(false);
   const [copiedCurl, setCopiedCurl] = useState(false);
-  const [localPrices, setLocalPrices] = useState(initialPrices);
-
-  useEffect(() => {
-    if (initialPrices && initialPrices.length > 0) {
-      setLocalPrices(initialPrices);
-    } else {
-      fetch('/api/v1/admin/pricing', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('airoute_token') || ''}` }
-      })
-        .then(r => r.json())
-        .then(res => {
-          if (res && res.code === 0 && Array.isArray(res.data)) {
-            setLocalPrices(res.data);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [initialPrices]);
-
-  const matchedPrice = useMemo(() => {
-    if (!localPrices || !log?.model) return null;
-    return localPrices.find(p => p.model === log.model);
-  }, [localPrices, log?.model]);
+  const matchedPrice = log?.pricing_snapshot;
 
   const handleCopyRaw = () => {
     if (!log) return;
@@ -72,7 +50,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
     if (!log) return;
     const origin = window.location.origin;
     const model = log.model || 'gpt-4o';
-    const key = log.api_key || 'YOUR_API_KEY';
+    const key = 'YOUR_API_KEY';
     const curl = `curl -X POST "${origin}/v1/chat/completions" \\
   -H "Authorization: Bearer ${key}" \\
   -H "Content-Type: application/json" \\
@@ -283,10 +261,10 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
             <button
               onClick={handleCopyCurl}
               className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#191B1F] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] text-[#202124] dark:text-[#F1F2F4] text-xs font-medium border border-[#E4E6E9] dark:border-[#2C3038] transition flex items-center space-x-1.5 shadow-2xs cursor-pointer"
-              title={isZh ? '复制终端可复现的 cURL 请求指令' : 'Copy reproducible cURL command'}
+              title={isZh ? '复制聊天接口示例，请填写有效密钥；不包含原始请求内容' : 'Copy a chat API example; replace YOUR_API_KEY. Original request body is not included.'}
             >
               {copiedCurl ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Terminal className="w-3.5 h-3.5 text-[#355CFF]" />}
-              <span>{copiedCurl ? (isZh ? '已复制 cURL 指令' : 'cURL Copied') : (isZh ? '复制 cURL 重现指令' : 'Copy cURL')}</span>
+              <span>{copiedCurl ? (isZh ? '已复制 cURL 指令' : 'cURL Copied') : (isZh ? '复制聊天 cURL 示例' : 'Copy chat example')}</span>
             </button>
 
             {onNavigate && (
@@ -299,7 +277,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                 title={isZh ? '在 Playground 演练测试此模型' : 'Test this model in Playground'}
               >
                 <Play className="w-3.5 h-3.5 text-emerald-500" />
-                <span>{isZh ? 'Playground 演练' : 'Playground Replay'}</span>
+                <span>{isZh ? 'Playground 演练' : 'Open Playground'}</span>
               </button>
             )}
 
@@ -323,16 +301,16 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
             <div className="p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 space-y-2">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-semibold text-slate-800 dark:text-slate-200 flex items-center space-x-1.5">
-                  <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                  <Clock className="w-3.5 h-3.5 text-[#355CFF] dark:text-[#91A7FF]" />
                   <span>{isZh ? '时延瀑布与解码速率' : 'Latency Waterfall & TPS'}</span>
                 </span>
                 {waterfall.tps && (
                   <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold ${
                     Number(waterfall.tps) >= 50
-                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
                       : Number(waterfall.tps) >= 15
-                      ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
-                      : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                      ? 'bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] border border-[#355CFF]/20 dark:border-[#91A7FF]/30'
+                      : 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30'
                   }`}>
                     {Number(waterfall.tps) >= 50 ? '⚡ ' : Number(waterfall.tps) >= 15 ? '🟢 ' : '🐢 '}
                     {waterfall.tps} tok/s {isZh ? '解码速率' : 'TPS'}
@@ -341,7 +319,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
               </div>
 
               {/* Progress bar */}
-              <div className="w-full h-2.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex">
+              <div className="w-full h-2.5 rounded-full bg-[#E4E6E9] dark:bg-[#2C3038] overflow-hidden flex">
                 {waterfall.ttftPct > 0 && (
                   <div
                     style={{ width: `${waterfall.ttftPct}%` }}
@@ -352,25 +330,25 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                 {waterfall.genPct > 0 && (
                   <div
                     style={{ width: `${waterfall.genPct}%` }}
-                    className="h-full bg-indigo-500 transition-all duration-300"
+                    className="h-full bg-[#355CFF] transition-all duration-300"
                     title={`Generation: ${waterfall.gen}ms (${waterfall.genPct}%)`}
                   />
                 )}
               </div>
 
               {/* Legend & Summary */}
-              <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+              <div className="flex items-center justify-between text-[11px] text-[#656B75] dark:text-[#A1A7B0]">
                 <div className="flex items-center space-x-3">
                   <span className="flex items-center space-x-1">
                     <span className="w-2 h-2 rounded-xs bg-amber-500" />
                     <span>{isZh ? '首字延迟(TTFT): ' : 'TTFT: '}</span>
-                    <strong className="text-slate-700 dark:text-slate-300 font-mono">{waterfall.ttft}ms</strong>
+                    <strong className="text-[#202124] dark:text-[#F1F2F4] font-mono">{waterfall.ttft}ms</strong>
                     <span>({waterfall.ttftPct}%)</span>
                   </span>
                   <span className="flex items-center space-x-1">
-                    <span className="w-2 h-2 rounded-xs bg-indigo-500" />
+                    <span className="w-2 h-2 rounded-xs bg-[#355CFF]" />
                     <span>{isZh ? '流式解码: ' : 'Generation: '}</span>
-                    <strong className="text-slate-700 dark:text-slate-300 font-mono">{waterfall.gen}ms</strong>
+                    <strong className="text-[#202124] dark:text-[#F1F2F4] font-mono">{waterfall.gen}ms</strong>
                     <span>({waterfall.genPct}%)</span>
                   </span>
                 </div>
@@ -406,7 +384,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                           onFilterBySession(log.trace_id);
                           onClose();
                         }}
-                        className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-[11px] font-medium transition cursor-pointer"
+                        className="px-2 py-0.5 rounded-md bg-[#EEF2FF] dark:bg-[#242D48] hover:bg-[#E0E7FF] dark:hover:bg-[#2e3a5e] text-[#355CFF] dark:text-[#91A7FF] text-[11px] font-medium transition cursor-pointer"
                       >
                         {isZh ? '追踪全链路' : 'Trace Flow'}
                       </button>
@@ -428,7 +406,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                       setCopied(true);
                       setTimeout(() => setCopied(false), 2000);
                     }}
-                    className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer"
+                    className="p-1 hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer"
                     title={isZh ? '复制对话 ID' : 'Copy Chat ID'}
                   >
                     <Copy className="w-3 h-3" />
@@ -436,10 +414,10 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                   {onOpenTrace && (
                     <button
                       onClick={() => {
-                        onOpenTrace(log.chat_id);
+                        onOpenTrace(log.chat_id, 'chat_id');
                         onClose();
                       }}
-                      className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-[11px] font-medium transition cursor-pointer"
+                      className="px-2 py-0.5 rounded-md bg-[#EEF2FF] dark:bg-[#242D48] hover:bg-[#E0E7FF] dark:hover:bg-[#2e3a5e] text-[#355CFF] dark:text-[#91A7FF] text-[11px] font-medium transition cursor-pointer"
                     >
                       {isZh ? '查看快照' : 'Snapshot'}
                     </button>
@@ -460,7 +438,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                       setCopied(true);
                       setTimeout(() => setCopied(false), 2000);
                     }}
-                    className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer"
+                    className="p-1 hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer"
                     title={isZh ? '复制会话 ID' : 'Copy Session ID'}
                   >
                     <Copy className="w-3 h-3" />
@@ -471,7 +449,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                         onFilterBySession(log.session_id);
                         onClose();
                       }}
-                      className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-[11px] font-medium transition cursor-pointer"
+                      className="px-2 py-0.5 rounded-md bg-[#EEF2FF] dark:bg-[#242D48] hover:bg-[#E0E7FF] dark:hover:bg-[#2e3a5e] text-[#355CFF] dark:text-[#91A7FF] text-[11px] font-medium transition cursor-pointer"
                     >
                       {isZh ? '筛选此会话' : 'Filter Session'}
                     </button>
@@ -526,7 +504,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                 {log.cost > 0 ? (() => {
                   const pTokens = log.prompt_tokens || 0;
                   const cTokens = log.completion_tokens || 0;
-                  const cachedTokens = log.cached_tokens || 0;
+                  const cachedTokens = Math.min(pTokens, log.cached_tokens || 0);
                   const uncachedPrompt = Math.max(0, pTokens - cachedTokens);
 
                   if (matchedPrice) {
@@ -544,16 +522,16 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                     }
                     parts.push(`${isZh ? '输出' : 'Completion'} ${cTokens.toLocaleString()} × ¥${cPrice}/1M`);
                     if (fixedPrice > 0) {
-                      parts.push(`${isZh ? '固定' : 'Fixed'} ¥${fixedPrice}`);
+                      parts.push(`${isZh ? '固定' : 'Fixed'} ¥${fixedPrice} × ${matchedPrice.billable_units || 1}`);
                     }
 
                     const formulaBase = parts.join(' + ');
 
                     return (
                       <div className="flex flex-wrap items-center justify-end gap-1">
-                        <span>{log.is_off_peak ? `(${formulaBase})` : formulaBase}</span>
+                        <span>({formulaBase}) × {matchedPrice.group_multiplier ?? 1}</span>
                         {log.is_off_peak && (
-                          <span className="text-indigo-600 dark:text-indigo-400 font-medium">
+                          <span className="text-[#355CFF] dark:text-[#91A7FF] font-medium">
                             {' '}× {isZh ? `闲时 ${Math.round((log.off_peak_discount || 0.5) * 10)}折` : `Off-peak ${Math.round((1 - (log.off_peak_discount || 0.5)) * 100)}% off`}
                           </span>
                         )}
@@ -563,20 +541,12 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                   }
 
                   return (
-                    <div className="flex flex-wrap items-center justify-end gap-1">
-                      <span>
-                        {isZh ? '输入' : 'Prompt'} {pTokens.toLocaleString()} Tokens (输入单价) + {isZh ? '输出' : 'Completion'} {cTokens.toLocaleString()} Tokens (输出单价)
-                      </span>
-                      {log.is_off_peak && (
-                        <span className="text-indigo-600 dark:text-indigo-400 font-medium">
-                          {' '}× {isZh ? `闲时 ${Math.round((log.off_peak_discount || 0.5) * 10)}折` : 'Off-peak'}
-                        </span>
-                      )}
-                      <span className="font-semibold text-slate-900 dark:text-white"> = ¥{(log.cost || 0).toFixed(4)}</span>
-                    </div>
+                    <span className="font-sans text-slate-500">
+                      {isZh ? '该记录没有历史费率快照，以已入账金额为准。' : 'No historical rate snapshot is available. The recorded charge is authoritative.'}
+                    </span>
                   );
                 })() : (
-                  <span className="text-slate-500 font-sans">{isZh ? '零费率模型或管理员豁免计费' : 'Zero-cost tier or admin billing exemption'}</span>
+                  <span className="text-slate-500 font-sans">{isZh ? '本次请求未产生扣费' : 'No charge recorded for this request'}</span>
                 )}
               </div>
             </div>
@@ -642,7 +612,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
                       onClose();
                       onNavigate(rca.actionTab);
                     }}
-                    className="px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white font-medium flex items-center space-x-1.5 transition cursor-pointer text-xs shadow-sm"
+                    className="ui-btn ui-btn-primary ui-btn-sm"
                   >
                     <span>{rca.actionLabel}</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -658,7 +628,7 @@ export default function LogDetailModal({ log, prices: initialPrices = [], onClos
               <span className="text-xs font-medium text-slate-600 dark:text-slate-400">{isZh ? '原始日志 JSON' : 'Raw Log JSON'}</span>
               <button
                 onClick={handleCopyRaw}
-                className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center space-x-1 font-medium cursor-pointer"
+                className="text-xs text-[#355CFF] dark:text-[#91A7FF] hover:underline flex items-center space-x-1 font-medium cursor-pointer"
               >
                 {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                 <span>{copied ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制 JSON' : 'Copy JSON')}</span>

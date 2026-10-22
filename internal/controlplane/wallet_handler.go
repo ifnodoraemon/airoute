@@ -3,6 +3,7 @@ package controlplane
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -208,19 +209,24 @@ func (h *AdminHandler) GetUserWallet(c *gin.Context) {
 		return
 	}
 
-	orders, _ := h.repo.ListRechargeOrders(user.Username)
+	orders, err := h.repo.ListRechargeOrders(user.Username)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询充值记录失败"})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
 		"data": gin.H{
-			"username":   user.Username,
-			"email":      user.Email,
-			"role":       user.Role,
-			"status":     user.Status,
-			"balance":    user.Balance,
-			"is_admin":   strings.EqualFold(user.Role, "admin"),
-			"group_name": user.GroupName,
-			"orders":     orders,
+			"username":       user.Username,
+			"email":          user.Email,
+			"role":           user.Role,
+			"status":         user.Status,
+			"balance":        user.Balance,
+			"is_admin":       strings.EqualFold(user.Role, "admin"),
+			"group_name":     user.GroupName,
+			"orders":         orders,
+			"stripe_enabled": strings.TrimSpace(os.Getenv("STRIPE_API_KEY")) != "" && strings.TrimSpace(os.Getenv("STRIPE_WEBHOOK_SECRET")) != "",
 		},
 	})
 }

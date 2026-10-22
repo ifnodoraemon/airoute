@@ -34,11 +34,13 @@ describe('Role journey audit: desired outcomes', () => {
       return response({ code: 0, data: data[path] ?? [], total: 0 });
     });
     render(<App />);
-    fireEvent.click(await screen.findByTitle('进入大盘查看该 Key 的实时 RPM / TPM 速率遥测', {}, { timeout: 8000 }));
+    fireEvent.click(await screen.findByTitle('查看该密钥的调用记录与扣费', {}, { timeout: 8000 }));
     // Wait until the role guard's effect has settled.
     await waitFor(() => expect(window.location.hash).not.toBe('#/keys'), { timeout: 8000 });
     await new Promise(resolve => setTimeout(resolve, 50));
-    expect(window.location.hash).not.toBe('#/wallet');
+    expect(window.location.hash).toBe('#/logs');
+    await waitFor(() => expect(fetch.mock.calls.some(([url]) => { const u = new URL(String(url), 'http://localhost'); return u.pathname.endsWith('/admin/logs') && u.searchParams.get('key_id') === '77' && !u.searchParams.has('q'); })).toBe(true));
+    expect(window.location.search).not.toContain(key.key);
   });
 
   it('onboarding should use loaded credentials after initially mounting without data', () => {

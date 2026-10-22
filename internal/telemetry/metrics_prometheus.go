@@ -79,6 +79,23 @@ func (m *Metrics) ToPrometheusFormat() string {
 	sb.WriteString("# TYPE airoute_completion_tokens_total counter\n")
 	sb.WriteString(fmt.Sprintf("airoute_completion_tokens_total %d\n", m.TotalCompletionTokens.Load()))
 
+	// Usage-log ingestion pipeline: a drop means an audit/billing row was lost.
+	sb.WriteString("# HELP airoute_usage_log_records_flushed_total Usage log rows persisted successfully\n")
+	sb.WriteString("# TYPE airoute_usage_log_records_flushed_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_usage_log_records_flushed_total %d\n", m.UsageLogRecordsFlushed.Load()))
+
+	sb.WriteString("# HELP airoute_usage_log_records_dropped_total Usage log rows dropped before persistence\n")
+	sb.WriteString("# TYPE airoute_usage_log_records_dropped_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_usage_log_records_dropped_total %d\n", m.UsageLogRecordsDropped.Load()))
+
+	sb.WriteString("# HELP airoute_usage_log_flush_failures_total Failed usage log batch writes\n")
+	sb.WriteString("# TYPE airoute_usage_log_flush_failures_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_usage_log_flush_failures_total %d\n", m.UsageLogFlushFailures.Load()))
+
+	sb.WriteString("# HELP airoute_usage_log_queue_depth Usage log rows waiting in the local buffer\n")
+	sb.WriteString("# TYPE airoute_usage_log_queue_depth gauge\n")
+	sb.WriteString(fmt.Sprintf("airoute_usage_log_queue_depth %d\n", m.UsageLogQueueDepth.Load()))
+
 	sb.WriteString("# HELP airoute_ttft_avg_ms Average Time To First Token in milliseconds\n")
 	sb.WriteString("# TYPE airoute_ttft_avg_ms gauge\n")
 	sb.WriteString(fmt.Sprintf("airoute_ttft_avg_ms %.2f\n", avgTTFT))

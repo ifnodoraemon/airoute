@@ -37,11 +37,8 @@ func (f *fakeSnapshotSource) ToModelAPIKeys() ([]model.APIKeyConfig, error) {
 	return f.keys, nil
 }
 
-func (f *fakeSnapshotSource) ListAPIKeys() ([]*storage.APIKeyRecord, error) {
-	if f.allKeysErr != nil {
-		return nil, f.allKeysErr
-	}
-	return f.allKeys, nil
+func (f *fakeSnapshotSource) HasRegisteredAPIKeys() (bool, error) {
+	return len(f.allKeys) > 0, f.allKeysErr
 }
 
 func (f *fakeSnapshotSource) GetModelFallbacks() (map[string]string, error) {

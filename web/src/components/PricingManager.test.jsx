@@ -31,6 +31,19 @@ function modelsResponse() {
   return { ok: true, status: 200, json: async () => ({ code: 0, data: ['gpt-x'] }) };
 }
 
+it('does not apply the VIP multiplier twice to a group-specific price', async () => {
+  renderPricing([
+    {model:'gpt-x',group_name:'default',prompt_price:20,completion_price:40,currency:'CNY'},
+    {model:'gpt-x',group_name:'vip',prompt_price:10,completion_price:20,currency:'CNY'},
+  ], {group_multipliers:{default:1,vip:0.8}});
+  await screen.findAllByText('gpt-x');
+  const preview=screen.getAllByRole('combobox').find(select=>Array.from(select.options).some(option=>option.value==='vip'));
+  fireEvent.change(preview,{target:{value:'vip'}});
+  expect(screen.getByText(/输入 ¥10\.00 \/ 输出 ¥20\.00/)).toBeInTheDocument();
+  expect(screen.queryByText(/输入 ¥8\.00 \/ 输出 ¥16\.00/)).not.toBeInTheDocument();
+  expect(screen.getByText('使用该用户组专属定价')).toBeInTheDocument();
+});
+
 function renderPricing(rows, extra = {}) {
   const showToast = vi.fn();
   const adminFetch = vi.fn(async (url) => {

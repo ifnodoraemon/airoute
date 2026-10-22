@@ -51,32 +51,22 @@ func RecordUsage(c *gin.Context, params AuditRecordParams) float64 {
 // cached token count so streaming handlers can emit them as a trailer.
 func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, int) {
 	var cost, savedCost float64
+	var pricingSnapshot *storage.UsagePricingSnapshot
 	var isOffPeak bool
 	var offPeakDiscount float64 = 1.0
 	keyGroup := getKeyGroup(c)
 	success := params.StatusCode >= 200 && params.StatusCode < 400
 
 	if success && !params.SkipBilling && billing.GlobalEngine != nil {
-		cost, savedCost, _, isOffPeak, offPeakDiscount = billing.GlobalEngine.CalculateCostDetailedWithGroup(
+		cost, savedCost, _, isOffPeak, offPeakDiscount, pricingSnapshot = billing.GlobalEngine.CalculateCostForUnits(
 			params.Model,
 			keyGroup,
 			params.PromptTokens,
 			params.CompletionTokens,
 			params.CachedTokens,
+			params.BillableUnits,
 			time.Now(),
 		)
-		if params.BillableUnits > 1 {
-			price := billing.GlobalEngine.GetPriceWithGroup(params.Model, keyGroup)
-			if price != nil {
-				// Apply the same off-peak factor as the first unit so a single
-				// request is never billed with two different rates.
-				unit := price.FixedPrice
-				if isOffPeak {
-					unit *= offPeakDiscount
-				}
-				cost += float64(params.BillableUnits-1) * unit
-			}
-		}
 	}
 
 	totTokens := params.TotalTokens
@@ -124,6 +114,7 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 			CachedTokens:     params.CachedTokens,
 			TotalTokens:      totTokens,
 			Cost:             cost,
+			PricingSnapshot:  pricingSnapshot,
 			IsOffPeak:        isOffPeak,
 			OffPeakDiscount:  offPeakDiscount,
 			DurationMs:       ceilMillis(params.Duration),
@@ -273,20 +264,10 @@ func channelFromError(err error) string {
 	return ""
 }
 
-// recordFailedRequest audits an unsuccessful API dispatch with zero tokens and the designated status code.
-func recordFailedRequest(c *gin.Context, sessionID, modelName string, dur time.Duration, statusCode int) {
-	RecordUsage(c, AuditRecordParams{
-		SessionID:        sessionID,
-		Model:            modelName,
-		PromptTokens:     0,
-		CompletionTokens: 0,
-		TotalTokens:      0,
-		Duration:         dur,
-		StatusCode:       statusCode,
-	})
-}
-
-// recordFailedRequestWithError also records why the request failed and which upstream channel was involved.
+// recordFailedRequestWithError audits an unsuccessful API dispatch: why it
+// failed and which upstream channel was involved. Callers must always pass the
+// dispatch error — recording only a status code left operators staring at a 502
+// row with an empty message.
 func recordFailedRequestWithError(c *gin.Context, sessionID, modelName string, dur time.Duration, statusCode int, err error) {
 	msg := ""
 	channel := ""

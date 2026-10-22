@@ -113,10 +113,40 @@ func (c *Client) AckLogs(ctx context.Context, stream, group string, ids ...strin
 	return c.rdb.XAck(ctx, stream, group, ids...).Err()
 }
 
-// TrimStream caps stream size to prevent unbounded memory growth.
-func (c *Client) TrimStream(ctx context.Context, stream string, maxLen int64) error {
-	if !c.IsActive() || maxLen <= 0 {
+// TrimStreamBefore drops entries older than minID. Unlike a length cap it can
+// never evict a message that has not been acknowledged yet, because callers pass
+// the last acknowledged id. A MAXLEN cap raced with the pending-entries list and
+// could silently delete billing records that had not been persisted.
+func (c *Client) TrimStreamBefore(ctx context.Context, stream, minID string) error {
+	if !c.IsActive() || minID == "" {
 		return nil
 	}
-	return c.rdb.XTrimMaxLenApprox(ctx, stream, maxLen, 0).Err()
+	return c.rdb.XTrimMinID(ctx, stream, minID).Err()
+}
+
+// MinPendingID returns the smallest id still pending in the consumer group, or ""
+// when the group has no pending entries. In a multi-node cluster each consumer
+// has its own PEL, so trimming by one consumer's acknowledged id is only safe
+// when the whole group has nothing outstanding.
+func (c *Client) MinPendingID(ctx context.Context, stream, group string) (string, error) {
+	if !c.IsActive() {
+		return "", fmt.Errorf("redis client not active")
+	}
+	pending, err := c.rdb.XPendingExt(ctx, &redis.XPendingExtArgs{
+		Stream: stream,
+		Group:  group,
+		Start:  "-",
+		End:    "+",
+		Count:  1,
+	}).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return "", nil
+		}
+		return "", err
+	}
+	if len(pending) == 0 {
+		return "", nil
+	}
+	return pending[0].ID, nil
 }

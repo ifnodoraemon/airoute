@@ -319,7 +319,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
       </div>
 
       {/* 核心指标与规格看板 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F1420] shadow-xs">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#191B1F] shadow-xs">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/60 flex items-center justify-center shrink-0 shadow-2xs">
             <Workflow className="w-6 h-6" />
@@ -333,7 +333,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
         </div>
 
         <div className="flex items-center gap-4 border-t md:border-t-0 md:border-l border-slate-100 dark:border-slate-800/80 pt-4 md:pt-0 md:pl-6">
-          <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60 flex items-center justify-center shrink-0 shadow-2xs">
+          <div className="w-12 h-12 rounded-2xl bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] border border-[#355CFF]/20 dark:border-[#91A7FF]/30 flex items-center justify-center shrink-0 shadow-2xs">
             <ShieldCheck className="w-6 h-6" />
           </div>
           <div>
@@ -363,7 +363,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
       </div>
 
       {/* 搜索与分类导航 */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-white dark:bg-[#0F1420] p-2.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-white dark:bg-[#191B1F] p-2.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none px-1">
           {categories.map(cat => {
             const Icon = cat.icon;
@@ -401,14 +401,14 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
       {loading && skills.length === 0 ? (
         // Without this the list rendered "No matching Agent Skills found" while the
         // first request was still in flight, which reads as a broken catalogue.
-        <div className="p-16 text-center bg-white dark:bg-[#0F1420] rounded-2xl border border-slate-200 dark:border-slate-800">
-          <RefreshCw className="w-8 h-8 text-indigo-500 mx-auto mb-3 animate-spin" />
+        <div className="p-16 text-center bg-white dark:bg-[#191B1F] rounded-2xl border border-slate-200 dark:border-slate-800">
+          <RefreshCw className="w-8 h-8 text-[#355CFF] dark:text-[#91A7FF] mx-auto mb-3 animate-spin" />
           <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
             {isZh ? '正在加载 Agent 技能…' : 'Loading Agent Skills…'}
           </p>
         </div>
       ) : filteredSkills.length === 0 ? (
-        <div className="p-16 text-center bg-white dark:bg-[#0F1420] rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+        <div className="p-16 text-center bg-white dark:bg-[#191B1F] rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
           <Sparkles className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
           <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
             {isZh ? '未找到匹配的 Agent 技能' : 'No matching Agent Skills found'}
@@ -428,7 +428,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
                 key={skill.id}
                 className={`flex flex-col justify-between p-6 rounded-2xl border transition-all duration-200 ${
                   skill.enabled
-                    ? 'border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0F1420] shadow-xs hover:shadow-md'
+                    ? 'border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#191B1F] shadow-xs hover:shadow-md'
                     : 'border-slate-200/50 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/30 opacity-75'
                 }`}
               >
@@ -514,7 +514,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
                     </button>
                     <button
                       onClick={() => { setSelectedSkillForGuide(skill); setClientGuideModalOpen(true); }}
-                      className="ui-btn ui-btn-sm border border-indigo-200/70 dark:border-indigo-800/70 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 shadow-2xs"
+                      className="ui-btn ui-btn-sm border border-[#355CFF]/30 dark:border-[#91A7FF]/30 bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] hover:bg-[#E0E7FF] dark:hover:bg-[#2e3a5e] shadow-2xs"
                     >
                       <Terminal className="w-3.5 h-3.5" />
                       <span>{isZh ? '接入' : 'Connect'}</span>
@@ -552,7 +552,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
             if (e.target === e.currentTarget) setClientGuideModalOpen(false);
           }}
         >
-          <div className="bg-white dark:bg-[#0F1420] rounded-xl shadow-2xl border border-gray-200 dark:border-slate-800 max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-[#191B1F] rounded-xl shadow-2xl border border-gray-200 dark:border-slate-800 max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-linear-to-br from-amber-500 to-orange-600 text-white rounded-lg">
@@ -792,7 +792,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
             if (e.target === e.currentTarget) setManifestSkill(null);
           }}
         >
-          <div className="bg-white dark:bg-[#0F1420] rounded-xl shadow-2xl border border-gray-200 dark:border-slate-800 max-w-3xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-[#191B1F] rounded-xl shadow-2xl border border-gray-200 dark:border-slate-800 max-w-3xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             {/* 模态框头部 */}
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
@@ -823,7 +823,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
                 </a>
                 <button
                   onClick={() => { setSelectedSkillForGuide(manifestSkill); setClientGuideModalOpen(true); }}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-[#355CFF] dark:text-[#91A7FF] bg-[#EEF2FF] dark:bg-[#242D48] border border-[#355CFF]/30 dark:border-[#91A7FF]/30 rounded-lg hover:bg-[#E0E7FF] dark:hover:bg-[#2e3a5e] transition-colors"
                 >
                   <Terminal className="w-3.5 h-3.5" />
                   <span>{isZh ? '接入客户端' : 'Connect Client'}</span>
@@ -903,7 +903,7 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
             {manifestTab === 'bundle_tree' && (
               <div className="space-y-4">
                 {/* 存储后端与加速说明 */}
-                <div className="p-3 bg-linear-to-r from-gray-50 to-slate-100 dark:from-gray-900 dark:to-[#0F1420] rounded-xl border border-gray-200 dark:border-gray-800 flex items-start justify-between gap-3 text-xs">
+                <div className="p-3 bg-linear-to-r from-gray-50 to-slate-100 dark:from-gray-900 dark:to-[#191B1F] rounded-xl border border-gray-200 dark:border-gray-800 flex items-start justify-between gap-3 text-xs">
                   <div className="space-y-1">
                     <div className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
                       {storageStatus?.driver === 's3' ? (
@@ -1057,7 +1057,7 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
             if (e.target === e.currentTarget) setTestModalSkill(null);
           }}
         >
-          <div className="bg-white dark:bg-[#0F1420] rounded-xl shadow-2xl border border-gray-200 dark:border-slate-800 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-[#191B1F] rounded-xl shadow-2xl border border-gray-200 dark:border-slate-800 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-linear-to-br from-amber-500 to-orange-600 text-white rounded-lg">
@@ -1142,7 +1142,7 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
             if (e.target === e.currentTarget) setCreateModalOpen(false);
           }}
         >
-          <div className="bg-white dark:bg-[#0F1420] rounded-xl shadow-2xl border border-gray-200 dark:border-slate-800 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-[#191B1F] rounded-xl shadow-2xl border border-gray-200 dark:border-slate-800 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-linear-to-br from-amber-500 to-orange-600 text-white rounded-lg">

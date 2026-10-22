@@ -110,7 +110,7 @@ func (h *Handler) HandlePublicStatus(c *gin.Context) {
 		}
 
 		st := "operational"
-		if healthyCount == 0 && len(channels) > 0 {
+		if len(channels) == 0 || healthyCount == 0 {
 			st = "degraded"
 			allHealthy = false
 		}
@@ -148,7 +148,7 @@ func (h *Handler) HandlePublicStatus(c *gin.Context) {
 			"require_email_verification": requireVerify,
 			"oauth_github_enabled":       os.Getenv("GITHUB_CLIENT_ID") != "",
 			"oauth_google_enabled":       os.Getenv("GOOGLE_CLIENT_ID") != "",
-			"stripe_enabled":             os.Getenv("STRIPE_API_KEY") != "",
+			"stripe_enabled":             strings.TrimSpace(os.Getenv("STRIPE_API_KEY")) != "" && strings.TrimSpace(os.Getenv("STRIPE_WEBHOOK_SECRET")) != "",
 			"sandbox_recharge_enabled":   os.Getenv("ENABLE_SANDBOX_RECHARGE") == "true",
 		},
 	})

@@ -315,14 +315,25 @@ func (e *BillingEngine) IsOffPeak(p *storage.ModelPriceRecord, t time.Time) (boo
 
 // CalculateCostDetailedWithGroup computes total request cost, total saved amount, cache savings, and off-peak discount metrics for a specified pricing group.
 func (e *BillingEngine) CalculateCostDetailedWithGroup(modelName, groupName string, promptTokens, completionTokens, cachedTokens int, t time.Time) (cost float64, totalSaved float64, cacheSaved float64, isOffPeak bool, discount float64) {
+	cost, totalSaved, cacheSaved, isOffPeak, discount, _ = e.CalculateCostForUnits(modelName, groupName, promptTokens, completionTokens, cachedTokens, 1, t)
+	return
+}
+
+// CalculateCostForUnits applies a single resolved price and discounts to every
+// fixed-price unit, while charging the request's token usage only once.
+func (e *BillingEngine) CalculateCostForUnits(modelName, groupName string, promptTokens, completionTokens, cachedTokens, units int, t time.Time) (cost float64, totalSaved float64, cacheSaved float64, isOffPeak bool, discount float64, snapshot *storage.UsagePricingSnapshot) {
 	if e == nil {
-		return 0, 0, 0, false, 1.0
+		return 0, 0, 0, false, 1.0, nil
 	}
 
 	p := e.GetPriceWithGroup(modelName, groupName)
 	if p == nil {
-		return 0, 0, 0, false, 1.0
+		return 0, 0, 0, false, 1.0, nil
 	}
+	if units < 1 {
+		units = 1
+	}
+	fixedCost := p.FixedPrice * float64(units)
 
 	if promptTokens < 0 {
 		promptTokens = 0
@@ -366,11 +377,11 @@ func (e *BillingEngine) CalculateCostDetailedWithGroup(modelName, groupName stri
 	}
 
 	groupedTokenCost := baseTokenCost * multiplier
-	groupedFixedCost := p.FixedPrice * multiplier
+	groupedFixedCost := fixedCost * multiplier
 
 	groupSaved := 0.0
 	if multiplier < 1.0 {
-		groupSaved = (baseTokenCost + p.FixedPrice) * (1.0 - multiplier)
+		groupSaved = (baseTokenCost + fixedCost) * (1.0 - multiplier)
 	}
 
 	// Time-of-Use Off-Peak Discount Evaluation
@@ -391,7 +402,12 @@ func (e *BillingEngine) CalculateCostDetailedWithGroup(modelName, groupName stri
 	totalSaved = roundPrecision(totalSaved)
 	cacheSaved = roundPrecision(cacheSaved)
 
-	return cost, totalSaved, cacheSaved, isOffPeak, discount
+	snapshot = &storage.UsagePricingSnapshot{
+		Model: p.Model, GroupName: groupName, PriceGroup: p.GroupName, Currency: p.Currency,
+		PromptPrice: p.PromptPrice, CompletionPrice: p.CompletionPrice, CacheReadPrice: p.CacheReadPrice,
+		FixedPrice: p.FixedPrice, GroupMultiplier: multiplier, OffPeakDiscount: discount, BillableUnits: units,
+	}
+	return cost, totalSaved, cacheSaved, isOffPeak, discount, snapshot
 }
 
 // roundPrecision rounds monetary amounts to 8 decimal places (fraction of micro-cents)

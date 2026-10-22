@@ -3,6 +3,8 @@ package router
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 )
 
 // DispatchError is the terminal failure of a dispatch attempt: either routing
@@ -73,4 +75,16 @@ func newExhaustedError(ctx context.Context, modelName string, attempted []string
 		Trail: formatAttemptedTrail(ctx, attempted),
 		Err:   err,
 	}
+}
+
+// skippedOnlyError explains an exhausted dispatch in which every candidate was
+// bypassed by the circuit breaker, so no upstream was actually called and the
+// loop ended with a nil last error. Wrapping that nil error rendered as
+// "%!w(<nil>)" in the audit log, which told the operator nothing; naming the
+// real condition does.
+func skippedOnlyError(modelName string, skipped []string) error {
+	if len(skipped) == 0 {
+		return fmt.Errorf("every candidate channel for model %s is unavailable; no upstream was called", modelName)
+	}
+	return fmt.Errorf("every candidate channel for model %s is temporarily disabled by the circuit breaker, so no upstream was called (skipped: %s)", modelName, strings.Join(skipped, ", "))
 }

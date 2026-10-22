@@ -446,7 +446,7 @@ function BlockquoteBlock({ tokens = [], rawText = '' }) {
 // 6. Table Component with Clean Borders and Styling
 function TableBlock({ header = [], rows = [], align = [] }) {
   return (
-    <div className="my-3 overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0F1420] shadow-2xs">
+    <div className="my-3 overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#191B1F] shadow-2xs">
       <table className="w-full text-left border-collapse text-xs">
         <thead className="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-semibold border-b border-slate-200 dark:border-slate-800">
           <tr>

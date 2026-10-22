@@ -43,3 +43,29 @@ func TestMetrics_PercentilesAndModelBreakdown(t *testing.T) {
 		t.Fatalf("expected Prometheus text to contain model metric for claude failure, got:\n%s", promText)
 	}
 }
+
+// Usage-log rows are billing evidence. They used to be dropped with only a slog
+// line, so a silent loss was invisible to monitoring.
+func TestMetrics_UsageLogPipelineIsExposed(t *testing.T) {
+	m := &Metrics{
+		latencyBuckets: make(map[float64]uint64),
+		ttftBuckets:    make(map[float64]uint64),
+		modelRequests:  make(map[string]map[string]uint64),
+	}
+	m.UsageLogRecordsFlushed.Add(120)
+	m.UsageLogRecordsDropped.Add(3)
+	m.UsageLogFlushFailures.Add(1)
+	m.UsageLogQueueDepth.Store(7)
+
+	promText := m.ToPrometheusFormat()
+	for _, want := range []string{
+		"airoute_usage_log_records_flushed_total 120",
+		"airoute_usage_log_records_dropped_total 3",
+		"airoute_usage_log_flush_failures_total 1",
+		"airoute_usage_log_queue_depth 7",
+	} {
+		if !strings.Contains(promText, want) {
+			t.Fatalf("expected %q in Prometheus text, got:\n%s", want, promText)
+		}
+	}
+}

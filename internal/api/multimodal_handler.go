@@ -12,6 +12,7 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/billing"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/provider"
 	"github.com/ifnodoraemon/airoute/internal/router"
 )
 
@@ -38,7 +39,9 @@ func (h *MultimodalHandler) dispatchAndForward(c *gin.Context, upReq *router.Ups
 	start := time.Now()
 	resp, err := h.dispatcher.DispatchHTTP(c.Request.Context(), upReq)
 	if err != nil {
-		recordFailedRequest(c, sessionID, upReq.Model, time.Since(start), http.StatusBadGateway)
+		// Keep the routing failure in the audit row: recording only the 502 left
+		// operators staring at an error with no message at all.
+		recordFailedRequestWithError(c, sessionID, upReq.Model, time.Since(start), http.StatusBadGateway, err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": sanitizeErrorMessage(err)})
 		return
 	}
@@ -56,7 +59,11 @@ func (h *MultimodalHandler) dispatchAndForward(c *gin.Context, upReq *router.Ups
 			SkipBilling:   upReq.Method == http.MethodGet,
 		})
 	} else {
-		recordFailedRequest(c, sessionID, upReq.Model, dur, resp.StatusCode)
+		// Name the status and the channel that returned it. A bare status code
+		// audit row gave operators no way to tell an upstream outage from a
+		// missing route.
+		recordFailedRequestWithError(c, sessionID, upReq.Model, dur, resp.StatusCode,
+			provider.NewUpstreamError(resp.Channel, resp.StatusCode, nil))
 	}
 
 	for k, vals := range resp.Headers {

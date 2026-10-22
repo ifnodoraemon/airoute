@@ -32,14 +32,14 @@ export default function CapabilitiesSelector({ protocols = [], onToggle, onSetPr
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
-          <Layers className="w-3.5 h-3.5 text-indigo-500" />
+          <Layers className="w-3.5 h-3.5 text-[#355CFF] dark:text-[#91A7FF]" />
           <span>{isZh ? `协议能力 (${protocols.length}/${CAPABILITIES.length})` : `Protocol Capabilities (${protocols.length}/${CAPABILITIES.length})`}</span>
         </label>
         <div className="flex items-center space-x-2 text-xs">
           <button
             type="button"
             onClick={handleSelectAll}
-            className="text-indigo-600 dark:text-indigo-400 hover:underline"
+            className="text-[#355CFF] dark:text-[#91A7FF] hover:underline"
           >
             {isZh ? '全选' : 'Select All'}
           </button>
@@ -47,7 +47,7 @@ export default function CapabilitiesSelector({ protocols = [], onToggle, onSetPr
           <button
             type="button"
             onClick={handleSelectChatOnly}
-            className="text-indigo-600 dark:text-indigo-400 hover:underline"
+            className="text-[#355CFF] dark:text-[#91A7FF] hover:underline"
           >
             {isZh ? '仅对话' : 'Chat Only'}
           </button>
@@ -73,16 +73,16 @@ export default function CapabilitiesSelector({ protocols = [], onToggle, onSetPr
               onClick={() => onToggle(cap.id)}
               className={`p-2.5 rounded-lg border text-left transition flex flex-col justify-between ${
                 isChecked
-                  ? 'bg-indigo-50/70 dark:bg-indigo-950/50 border-indigo-300 dark:border-indigo-700 text-indigo-950 dark:text-indigo-200 shadow-sm'
-                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500 hover:border-slate-300 dark:hover:border-slate-700 opacity-60 hover:opacity-90'
+                  ? 'bg-[#EEF2FF] dark:bg-[#242D48] border-[#355CFF]/30 dark:border-[#91A7FF]/40 text-[#202124] dark:text-[#F1F2F4] shadow-sm'
+                  : 'bg-white dark:bg-[#191B1F] border-[#E4E6E9] dark:border-[#2C3038] text-[#656B75] dark:text-[#A1A7B0] hover:border-[#355CFF]/40 opacity-70 hover:opacity-100'
               }`}
             >
               <div className="flex items-center justify-between w-full">
                 <Icon className={`w-4 h-4 ${isChecked ? cap.color : 'text-slate-400'}`} />
                 <span className={`w-3.5 h-3.5 rounded-md border flex items-center justify-center text-[10px] ${
                   isChecked
-                    ? 'bg-indigo-600 border-indigo-600 text-white'
-                    : 'border-slate-300 dark:border-slate-700'
+                    ? 'bg-[#355CFF] border-[#355CFF] text-white'
+                    : 'border-[#E4E6E9] dark:border-[#2C3038]'
                 }`}>
                   {isChecked ? '✓' : ''}
                 </span>

@@ -130,34 +130,34 @@ export default function AccountManageModal({
         if (e.target === e.currentTarget) requestClose();
       }}
     >
-      <div className="relative bg-white dark:bg-[#0F1420] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-150">
+      <div className="relative bg-white dark:bg-[#191B1F] rounded-2xl border border-[#E4E6E9] dark:border-[#2C3038] shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-150">
         {/* Modal Header */}
-        <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+        <div className="px-6 py-5 border-b border-[#E4E6E9] dark:border-[#2C3038] flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-base uppercase">
+            <div className="w-10 h-10 rounded-2xl bg-[#EEF2FF] dark:bg-[#242D48] border border-[#355CFF]/20 dark:border-[#91A7FF]/30 flex items-center justify-center text-[#355CFF] dark:text-[#91A7FF] font-bold text-base uppercase">
               {adminUser?.username?.charAt(0) || 'U'}
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 tracking-tight">{isZh ? '个人账号中心' : 'Account Center'}</h3>
+              <h3 className="text-base font-bold text-[#202124] dark:text-[#F1F2F4] tracking-tight">{isZh ? '个人账号中心' : 'Account Center'}</h3>
               <p className="ui-meta">{isZh ? '管理个人资料与 API 接入凭证' : 'Manage profile & API credentials'}</p>
             </div>
           </div>
           <button
             onClick={requestClose}
-            className="p-2 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+            className="p-2 rounded-lg text-[#656B75] hover:text-[#202124] dark:hover:text-[#F1F2F4] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] transition cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center px-6 pt-4 border-b border-slate-100 dark:border-slate-800/80 space-x-6">
+        <div className="flex items-center px-6 pt-4 border-b border-[#E4E6E9] dark:border-[#2C3038] space-x-6">
           <button
             onClick={() => { setActiveTab('profile'); setErrorMsg(''); }}
             className={`pb-3 text-xs font-semibold transition border-b-2 cursor-pointer flex items-center space-x-1.5 ${
               activeTab === 'profile'
-                ? 'border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400'
-                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                ? 'border-[#355CFF] text-[#355CFF] dark:text-[#91A7FF]'
+                : 'border-transparent text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
             }`}
           >
             <User className="w-3.5 h-3.5" />
@@ -167,8 +167,8 @@ export default function AccountManageModal({
             onClick={() => { setActiveTab('password'); setErrorMsg(''); }}
             className={`pb-3 text-xs font-semibold transition border-b-2 cursor-pointer flex items-center space-x-1.5 ${
               activeTab === 'password'
-                ? 'border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400'
-                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                ? 'border-[#355CFF] text-[#355CFF] dark:text-[#91A7FF]'
+                : 'border-transparent text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
             }`}
           >
             <Lock className="w-3.5 h-3.5" />
@@ -239,22 +239,22 @@ export default function AccountManageModal({
                   </div>
                 </div>
                 {isAdmin && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/30 text-indigo-300 font-medium">
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-[#355CFF]/20 text-[#91A7FF] font-medium">
                     {isZh ? '管理员豁免计费' : 'Admin Exemption'}
                   </span>
                 )}
               </div>
 
               {/* Gateway API Base URL Card */}
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-2">
+              <div className="p-4 rounded-2xl bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038] space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center space-x-1.5">
-                    <Server className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                  <span className="text-xs font-bold text-[#202124] dark:text-[#F1F2F4] flex items-center space-x-1.5">
+                    <Server className="w-3.5 h-3.5 text-[#355CFF] dark:text-[#91A7FF]" />
                     <span>{isZh ? '网关 API Base URL' : 'Gateway API Base URL'}</span>
                   </span>
                   <button
                     onClick={handleCopyBaseUrl}
-                    className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-semibold flex items-center space-x-1 transition cursor-pointer"
+                    className="text-xs text-[#355CFF] dark:text-[#91A7FF] hover:underline font-semibold flex items-center space-x-1 transition cursor-pointer"
                   >
                     {copiedBaseUrl ? (
                       <>

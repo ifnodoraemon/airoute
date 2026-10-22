@@ -192,10 +192,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 
 	var lastErr error
 	var attempted []string // channels actually called and failed for this model
+	var skipped []string   // channels bypassed by the circuit breaker, never called
 	for i, ch := range channels {
 		// High-Availability Circuit Breaker: fail fast if upstream is down
 		if !d.circuitBreaker.CanExecute(ch.Name) {
 			telemetry.Logger.Warn("circuit breaker is OPEN, bypassing dead upstream", "channel", ch.Name)
+			skipped = append(skipped, ch.Name)
 			continue
 		}
 
@@ -260,6 +262,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 			continue
 		}
 		attempted = append(attempted, d.recordChannelFailure(ch.Name, err, i+1))
+	}
+
+	// A loop that only ever skipped channels (all circuit-broken) leaves lastErr
+	// nil. Wrapping it below printed "%!w(<nil>)" into the audit log; replace it
+	// with the condition the operator actually needs to see.
+	if lastErr == nil {
+		lastErr = skippedOnlyError(req.Model, skipped)
 	}
 
 	if fb := d.GetModelFallback(req.Model); fb != "" && !strings.EqualFold(fb, req.Model) {

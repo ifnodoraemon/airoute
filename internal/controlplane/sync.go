@@ -22,7 +22,7 @@ import (
 type SnapshotSource interface {
 	ToModelChannels() ([]model.ChannelConfig, error)
 	ToModelAPIKeys() ([]model.APIKeyConfig, error)
-	ListAPIKeys() ([]*storage.APIKeyRecord, error)
+	HasRegisteredAPIKeys() (bool, error)
 	GetModelFallbacks() (map[string]string, error)
 }
 
@@ -43,7 +43,7 @@ type ConfigSnapshot struct {
 	Channels []model.ChannelConfig
 	APIKeys  []model.APIKeyConfig
 	// HasKeys records whether any key has ever been registered, including
-	// disabled ones. The auth middleware uses it to decide whether to enforce
+	// disabled and deleted ones. The auth middleware uses it to decide whether to enforce
 	// authentication at all, so it must never be derived from a failed read.
 	HasKeys   bool
 	Fallbacks map[string]string
@@ -132,7 +132,7 @@ func (s *Synchronizer) Version() uint64 {
 //
 // Two of those reads used to be optional, and both mattered:
 //
-//   - ListAPIKeys errors were discarded, so a transient failure reported "no key
+//   - Registered-key lookup errors were discarded, so a transient failure reported "no key
 //     has ever been registered". That is the flag the auth middleware uses to
 //     decide whether to enforce authentication at all, so the failure could open
 //     the gateway to unauthenticated traffic.
@@ -196,7 +196,7 @@ func (s *Synchronizer) loadSnapshot() (*ConfigSnapshot, error) {
 		return nil, fmt.Errorf("load api keys from db error: %w", err)
 	}
 
-	allKeys, err := s.source.ListAPIKeys()
+	hasKeys, err := s.source.HasRegisteredAPIKeys()
 	if err != nil {
 		return nil, fmt.Errorf("count registered api keys error: %w", err)
 	}
@@ -209,7 +209,7 @@ func (s *Synchronizer) loadSnapshot() (*ConfigSnapshot, error) {
 	return &ConfigSnapshot{
 		Channels:  channels,
 		APIKeys:   keys,
-		HasKeys:   len(allKeys) > 0,
+		HasKeys:   hasKeys,
 		Fallbacks: fallbacks,
 	}, nil
 }

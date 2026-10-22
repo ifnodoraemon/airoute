@@ -13,7 +13,7 @@ export default function Toast({ toast, onClose }) {
         {isSuccess && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
         {isError && <AlertCircle className="w-5 h-5 text-rose-500" />}
         {isWarning && <AlertCircle className="w-5 h-5 text-amber-500" />}
-        {!isSuccess && !isError && !isWarning && <Info className="w-5 h-5 text-indigo-500" />}
+        {!isSuccess && !isError && !isWarning && <Info className="w-5 h-5 text-[#355CFF]" />}
       </div>
       <div className="flex-1 text-xs font-medium leading-relaxed">
         {toast.message}

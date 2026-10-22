@@ -161,6 +161,27 @@ func (r *Repository) CreateRechargeOrder(rec *RechargeOrderRecord) error {
 	return nil
 }
 
+// GetRechargeOrder returns a checkout record, including its verified payment status.
+func (r *Repository) GetRechargeOrder(orderNo string) (*RechargeOrderRecord, error) {
+	var rec RechargeOrderRecord
+	err := r.db.QueryRow(`SELECT id, order_no, username, amount, currency, channel, stripe_session_id, status, created_at, updated_at FROM recharge_orders WHERE order_no = ?`, orderNo).
+		Scan(&rec.ID, &rec.OrderNo, &rec.Username, &rec.Amount, &rec.Currency, &rec.Channel, &rec.StripeSessionID, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &rec, nil
+}
+
+// CloseRechargeOrder records a terminal checkout event without overwriting a
+// confirmed payment, including when Stripe delivers events out of order.
+func (r *Repository) CloseRechargeOrder(orderNo, status string) error {
+	if status != "expired" && status != "failed" {
+		return fmt.Errorf("invalid terminal recharge status: %s", status)
+	}
+	_, err := r.db.Exec(`UPDATE recharge_orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE order_no = ? AND status = 'pending'`, status, orderNo)
+	return err
+}
+
 // CompleteRechargeOrder marks an order as paid and credits the user's wallet balance.
 func (r *Repository) CompleteRechargeOrder(orderNo string) (*RechargeOrderRecord, error) {
 	tx, err := r.db.Begin()
@@ -172,7 +193,7 @@ func (r *Repository) CompleteRechargeOrder(orderNo string) (*RechargeOrderRecord
 	}()
 
 	var rec RechargeOrderRecord
-	row := tx.QueryRow(`SELECT id, order_no, username, amount, currency, channel, stripe_session_id, status, created_at, updated_at FROM recharge_orders WHERE order_no = ?`, orderNo)
+	row := tx.QueryRow(r.db.Rebind(`SELECT id, order_no, username, amount, currency, channel, stripe_session_id, status, created_at, updated_at FROM recharge_orders WHERE order_no = ?`), orderNo)
 	if err := row.Scan(&rec.ID, &rec.OrderNo, &rec.Username, &rec.Amount, &rec.Currency, &rec.Channel, &rec.StripeSessionID, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
 		return nil, fmt.Errorf("订单不存在: %w", err)
 	}
@@ -183,7 +204,7 @@ func (r *Repository) CompleteRechargeOrder(orderNo string) (*RechargeOrderRecord
 
 	// Atomic state transition: only the transaction that flips pending -> paid
 	// credits the wallet, so concurrent webhook retries cannot double-credit.
-	res, err := tx.Exec(`UPDATE recharge_orders SET status = 'paid', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status <> 'paid'`, rec.ID)
+	res, err := tx.Exec(r.db.Rebind(`UPDATE recharge_orders SET status = 'paid', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status <> 'paid'`), rec.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +213,7 @@ func (r *Repository) CompleteRechargeOrder(orderNo string) (*RechargeOrderRecord
 		return &rec, nil
 	}
 
-	credit, err := tx.Exec(`UPDATE users SET balance = balance + ?, balance_units = COALESCE(balance_units, 0) + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, rec.Amount, ToUnits(rec.Amount), rec.Username)
+	credit, err := tx.Exec(r.db.Rebind(`UPDATE users SET balance = balance + ?, balance_units = COALESCE(balance_units, 0) + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`), rec.Amount, ToUnits(rec.Amount), rec.Username)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +234,7 @@ func (r *Repository) ListRechargeOrders(username string) ([]*RechargeOrderRecord
 	var rows *sql.Rows
 	var err error
 	if username != "" {
-		rows, err = r.db.Query(`SELECT id, order_no, username, amount, currency, channel, stripe_session_id, status, created_at, updated_at FROM recharge_orders WHERE username = ? ORDER BY id DESC LIMIT 50`, username)
+		rows, err = r.db.Query(r.db.Rebind(`SELECT id, order_no, username, amount, currency, channel, stripe_session_id, status, created_at, updated_at FROM recharge_orders WHERE username = ? ORDER BY id DESC LIMIT 50`), username)
 	} else {
 		rows, err = r.db.Query(`SELECT id, order_no, username, amount, currency, channel, stripe_session_id, status, created_at, updated_at FROM recharge_orders ORDER BY id DESC LIMIT 100`)
 	}

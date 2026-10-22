@@ -23,6 +23,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
     role: adminUser?.role || 'user',
     status: adminUser?.status || 'active',
     group_name: adminUser?.group_name || 'default',
+    stripe_enabled: false,
     orders: []
   });
   const [loading, setLoading] = useState(false);
@@ -33,8 +34,12 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
   // Recharge State
   const [rechargeAmount, setRechargeAmount] = useState(50);
   const [customAmount, setCustomAmount] = useState('');
-  const [rechargeMethod, setRechargeMethod] = useState('stripe'); // 'stripe' (primary) or 'sandbox' (admin only)
   const [recharging, setRecharging] = useState(false);
+  const [checkoutReturn] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return { state: params.get('recharge'), order: params.get('order_no') || '' };
+  });
+  const [checkoutMessage, setCheckoutMessage] = useState('');
 
   // Redeem State
   const [redeemCode, setRedeemCode] = useState('');
@@ -103,6 +108,68 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
   }, [fetchWallet, fetchRedemptions, isAdmin]);
 
   useEffect(() => {
+    const refresh = () => { if (document.visibilityState !== 'hidden') fetchWallet(); };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [fetchWallet]);
+
+  useEffect(() => {
+    if (!checkoutReturn.state) return;
+    if (checkoutReturn.state === 'cancel') {
+      setCheckoutMessage(isZh ? '已返回钱包，尚未确认付款。订单状态以支付平台通知为准。' : 'Returned to wallet without payment confirmation. Order status follows the payment provider.');
+      return;
+    }
+    if (checkoutReturn.state !== 'success' || !checkoutReturn.order || !adminFetch) return;
+    let cancelled = false;
+    let timer;
+    let attempts = 0;
+    const controller = new AbortController();
+    setCheckoutMessage(isZh ? '正在确认支付结果，到账后会自动更新余额…' : 'Confirming payment. Your balance will update when credited…');
+    const poll = async () => {
+      attempts += 1;
+      try {
+        const res = await adminFetch(`/api/v1/user/wallet/orders/${encodeURIComponent(checkoutReturn.order)}`, { signal: controller.signal });
+        const data = await res.json();
+        if (cancelled) return;
+        if (res.ok && data.code === 0 && data.data) {
+          const status = data.data.status;
+          if (status === 'paid') {
+            setCheckoutMessage(isZh ? '充值已到账，余额已更新。' : 'Payment credited. Your balance is updated.');
+            await fetchWallet();
+          } else if (['expired', 'failed', 'cancelled'].includes(status)) {
+            setCheckoutMessage(isZh ? '本次支付未完成，请查看订单状态后重新发起充值。' : 'Payment was not completed. Check the order status before starting another checkout.');
+            await fetchWallet();
+          }
+          if (['paid', 'expired', 'failed', 'cancelled'].includes(status)) {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('recharge');
+            url.searchParams.delete('order_no');
+            window.history.replaceState(window.history.state, '', url);
+            return;
+          }
+        } else if (res.status === 404 || res.status === 401 || res.status === 403) {
+          setCheckoutMessage(isZh ? '无法查询该订单，请确认当前登录账号或联系管理员。' : 'Unable to access this order. Check your account or contact support.');
+          return;
+        }
+      } catch {
+        // Temporary network errors are retried within the same bounded window.
+      }
+      if (cancelled) return;
+      if (attempts >= 60) {
+        setCheckoutMessage(isZh ? '支付结果仍在确认中。请稍后刷新或凭订单号联系管理员，避免重复支付。' : 'Payment is still being confirmed. Refresh later or contact support with the order number before paying again.');
+        return;
+      }
+      timer = setTimeout(poll, 2000);
+    };
+    poll();
+    return () => { cancelled = true; clearTimeout(timer); controller.abort(); };
+  }, [checkoutReturn, adminFetch, fetchWallet, isZh]);
+
+  useEffect(() => {
     if (adminUser) {
       setWalletData(prev => ({
         ...prev,
@@ -144,9 +211,10 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
   };
 
   const handleRecharge = async () => {
+    if (!walletData.stripe_enabled) return;
     const finalAmount = customAmount ? parseFloat(customAmount) : rechargeAmount;
-    if (isNaN(finalAmount) || finalAmount <= 0) {
-      showToast(isZh ? '请输入有效的充值金额' : 'Please enter a valid amount', 'warning');
+    if (!Number.isFinite(finalAmount) || finalAmount < 0.01 || finalAmount > 999999.99 || Math.abs(finalAmount * 100 - Math.round(finalAmount * 100)) > 0.000001) {
+      showToast(isZh ? '请输入 0.01 至 999999.99 元的金额，最多两位小数' : 'Enter an amount from 0.01 to 999999.99 with at most two decimal places', 'warning');
       return;
     }
 
@@ -235,10 +303,10 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
         </span>
       );
     }
-    if (s === 'cancelled' || s === 'canceled') {
+    if (s === 'cancelled' || s === 'canceled' || s === 'expired') {
       return (
         <span className="px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0] border border-[#E4E6E9] dark:border-[#2C3038]">
-          {isZh ? '已取消' : 'Cancelled'}
+          {s === 'expired' ? (isZh ? '已过期' : 'Expired') : (isZh ? '已取消' : 'Cancelled')}
         </span>
       );
     }
@@ -258,6 +326,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
 
   return (
     <div className="space-y-6">
+      {checkoutMessage && <div role="status" className="ui-panel p-4 text-sm">{checkoutMessage}{checkoutReturn.order && <div className="ui-meta mt-1 font-mono">{checkoutReturn.order}</div>}</div>}
       {/* Page Title & Subtitle */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -475,10 +544,10 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                   </div>
                   <div>
                     <div className="font-semibold text-xs text-[#202124] dark:text-[#F1F2F4] flex items-center space-x-2">
-                      <span>{isZh ? 'Stripe 国际信用卡 / 企业网银' : 'Stripe Cards & Global Pay'}</span>
+                      <span>{isZh ? 'Stripe 信用卡支付' : 'Stripe Cards & Global Pay'}</span>
                       <span className="text-xs px-2 py-0.5 bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] rounded-md font-medium whitespace-nowrap">{isZh ? '官方渠道' : 'Official'}</span>
                     </div>
-                    <div className="ui-meta mt-1">{isZh ? '支持 Visa, MasterCard, 微信/支付宝跨境结算；未配置或通道异常时请使用上方兑换券' : 'Supports Visa, MasterCard, Alipay/WeChat. If unconfigured, please use gift card above'}</div>
+                    <div className="ui-meta mt-1">{walletData.stripe_enabled ? (isZh ? '通过 Stripe 使用银行卡支付' : 'Pay by card through Stripe') : (isZh ? '在线支付尚未开通，请使用兑换券或联系管理员' : 'Online payment is unavailable. Use a gift card or contact support.')}</div>
                   </div>
                 </div>
               </div>
@@ -489,7 +558,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
               <button
                 type="button"
                 onClick={handleRecharge}
-                disabled={recharging}
+                disabled={recharging || !walletData.stripe_enabled}
                 className="ui-btn-primary"
               >
                 {recharging ? (

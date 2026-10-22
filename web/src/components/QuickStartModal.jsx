@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { X, Copy, Check, Terminal, Code, Cpu, Sparkles, BookOpen } from 'lucide-react';
 import { getGatewayOrigin } from '../config';
 import useModalA11y from '../hooks/useModalA11y';
+import { availableKeyModels } from '../lib/keyModels';
+import { inferClientModality } from '../lib/modelModality';
 
-export default function QuickStartModal({ apiKey, onClose, onCopy, lang = 'zh', t }) {
+export default function QuickStartModal({ apiKey, models = [], onClose, onCopy, lang = 'zh', t }) {
   useModalA11y(!!apiKey, onClose);
 
   const isZh = lang === 'zh';
@@ -13,6 +15,8 @@ export default function QuickStartModal({ apiKey, onClose, onCopy, lang = 'zh', 
   const origin = getGatewayOrigin();
   const baseUrl = origin ? `${origin}/v1` : '/v1';
   const keyStr = apiKey?.key || 'sk-airoute-xxxx';
+  const chatModels = availableKeyModels(apiKey, models).filter(name => inferClientModality(name) === 'chat');
+  const model = chatModels[0] || 'YOUR_AVAILABLE_CHAT_MODEL';
 
   const pythonCode = `from openai import OpenAI
 
@@ -23,7 +27,7 @@ client = OpenAI(
 
 # 1. 聊天补全 (OpenAI / DeepSeek / Claude / Gemini 统一协议)
 response = client.chat.completions.create(
-    model="deepseek-chat",
+    model="${model}",
     messages=[
         {"role": "system", "content": "You are a helpful coding assistant."},
         {"role": "user", "content": "用 Go 实现快速排序"}
@@ -37,7 +41,7 @@ for chunk in response:
 
 # 2. 官方新代智能体 Responses API (/v1/responses)
 # resp = client.responses.create(
-#     model="gpt-6",
+#     model="${model}",
 #     input="分析微服务与单体架构的选型考量",
 #     instructions="You are an enterprise system architect."
 # )
@@ -49,7 +53,7 @@ curl -X POST "${baseUrl}/chat/completions" \\
   -H "Authorization: Bearer ${keyStr}" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "deepseek-chat",
+    "model": "${model}",
     "messages": [{"role": "user", "content": "你好，请做个自我介绍"}],
     "stream": true
   }'
@@ -59,7 +63,7 @@ curl -X POST "${baseUrl}/responses" \\
   -H "Authorization: Bearer ${keyStr}" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "deepseek-chat",
+    "model": "${model}",
     "input": "请用一句话介绍微服务网关的核心价值",
     "instructions": "You are an infrastructure expert.",
     "stream": true
@@ -79,7 +83,7 @@ const openai = new OpenAI({
 
 async function main() {
   const stream = await openai.chat.completions.create({
-    model: "deepseek-chat",
+    model: "${model}",
     messages: [{ role: "user", content: "解释量子计算的基本原理" }],
     stream: true,
   });
@@ -102,10 +106,7 @@ Override OpenAI Base URL: ${baseUrl}
 API Key: ${keyStr}
 
 # 步骤 3：在模型列表中添加当前网关已启用的模型：
-# - deepseek-chat
-# - deepseek-reasoner
-# - claude-3-5-sonnet
-# - gpt-4o
+${chatModels.map(name => '# - ' + name).join('\n') || '# 暂无可用模型'}
 
 # 步骤 4：(推荐) 在项目根目录创建 .cursorrules 注入网关规则：
 # """
@@ -150,7 +151,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 llm = ChatOpenAI(
     base_url="${baseUrl}",
     api_key="${keyStr}",
-    model="deepseek-chat",
+    model="${model}",
     temperature=0.3,
     streaming=True
 )
@@ -174,7 +175,7 @@ for chunk in llm.stream(messages):
 #    ${keyStr}
 # 
 # 3. 自定义模型列表:
-#    在客户端模型设置中填入当前网关已启用的模型名称 (例如 deepseek-chat, gpt-4o, claude-3-5-sonnet)
+#    在客户端模型设置中填入当前网关已启用的模型名称 (例如 ${model})
 # 
 # 4. 特色体验:
 #    网关原生支持 DeepSeek-R1 思维链流式展开与全双工协议转换。
@@ -209,6 +210,7 @@ for chunk in llm.stream(messages):
       }}
     >
       <div className="bg-white dark:bg-[#111726] border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        {!chatModels.length && <p role="status" className="p-4 text-sm text-amber-700 dark:text-amber-300">{isZh ? '该密钥暂无可用聊天模型，请先配置模型及访问权限，再替换示例中的模型占位符。' : 'No chat model is available for this key. Configure model access before replacing the model placeholder.'}</p>}
         {/* Modal Header */}
         <div className="p-6 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
           <div className="flex items-center space-x-3">

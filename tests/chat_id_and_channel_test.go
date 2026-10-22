@@ -346,7 +346,8 @@ func TestFailedRequestAuditTrail(t *testing.T) {
 	require.Len(t, logs, 1)
 	assert.Equal(t, http.StatusBadGateway, logs[0].StatusCode)
 	assert.Equal(t, 0, logs[0].PromptTokens)
-	assert.Empty(t, logs[0].Channel)
+	// A failed request must retain the attempted upstream for diagnosis.
+	assert.Equal(t, "Dead Upstream", logs[0].Channel)
 }
 
 func TestUsageLogTimeFilterSQLite(t *testing.T) {

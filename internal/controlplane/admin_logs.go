@@ -15,8 +15,12 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 	limit, _ := strconv.Atoi(limitStr)
 	if limit <= 0 {
 		limit = 50
-	} else if limit > 1000 {
-		limit = 1000
+	} else if limit > storage.MaxUsageLogPageSize {
+		// Clamp before the repository sees it, so the `limit` echoed below is the
+		// size actually applied. The repository used to clamp silently, and the
+		// handler replayed the requested size, so a client paging by it skipped
+		// rows.
+		limit = storage.MaxUsageLogPageSize
 	}
 	offsetStr := c.DefaultQuery("offset", "0")
 	offset, _ := strconv.Atoi(offsetStr)
@@ -42,6 +46,14 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 		Cache:   c.Query("cache"),
 		Latency: c.Query("latency"),
 	}
+	if keyID := c.Query("key_id"); keyID != "" {
+		id, err := strconv.ParseInt(keyID, 10, 64)
+		if err != nil || id <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的密钥 ID"})
+			return
+		}
+		filter.APIKeyID = id
+	}
 
 	// Non-admin callers are scoped to their own API keys. Fail-closed: when the
 	// user lookup fails, ScopeByAPIKeys stays set with an empty key list, and the
@@ -49,7 +61,7 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 	if claims, ok := GetClaimsFromContext(c); ok && claims.Role != "admin" {
 		filter.ScopeByAPIKeys = true
 		if user, _ := h.repo.GetUserByUsername(claims.Username); user != nil {
-			userKeys, _ := h.repo.ListAPIKeysByUser(user.ID)
+			userKeys, _ := h.repo.ListHistoricalAPIKeysByUser(user.ID)
 			// Scope in SQL so LIMIT/OFFSET pagination applies after filtering.
 			filter.APIKeys = make([]string, 0, len(userKeys))
 			for _, k := range userKeys {

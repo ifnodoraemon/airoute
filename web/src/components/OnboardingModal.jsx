@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   X,
   Sparkles,
@@ -16,6 +16,8 @@ import { copyToClipboard as crossOriginCopy } from '../utils/clipboard';
 import useFormDirty from '../hooks/useFormDirty';
 import useUnsavedGuard from '../hooks/useUnsavedGuard';
 import DiscardChangesDialog from './DiscardChangesDialog';
+import { availableKeyModels } from '../lib/keyModels';
+import { inferClientModality } from '../lib/modelModality';
 
 export default function OnboardingModal({
   isOpen,
@@ -23,31 +25,34 @@ export default function OnboardingModal({
   keys = [],
   models = [],
   onNavigateToPlayground,
+  onCreateKey,
   showToast,
   lang = 'zh',
   t
 }) {
   const isZh = lang === 'zh';
   const [step, setStep] = useState(1);
-  const [selectedKey, setSelectedKey] = useState(() => (keys.length > 0 ? keys[0].key : 'sk-airoute-demo-key'));
+  const activeKeys = useMemo(() => keys.filter(key => !key.status || key.status === 'active'), [keys]);
+  const [selectedKey, setSelectedKey] = useState(() => activeKeys[0]?.key || '');
   const [selectedProtocol, setSelectedProtocol] = useState('openai');
-  const [selectedModel, setSelectedModel] = useState(() => (models.length > 0 ? models[0] : 'deepseek-v3'));
+  const [selectedModel, setSelectedModel] = useState('');
+  const allowedModels = useMemo(() => availableKeyModels(activeKeys.find(key => key.key === selectedKey), models).filter(name => inferClientModality(name) === 'chat'), [activeKeys, models, selectedKey]);
   const [snippetTab, setSnippetTab] = useState('python');
   const [copiedKey, setCopiedKey] = useState('');
   const [testingPing, setTestingPing] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
   useEffect(() => {
-    if (keys.length > 0 && (!selectedKey || selectedKey === 'sk-airoute-demo-key' || !keys.some(k => k.key === selectedKey))) {
-      setSelectedKey(keys[0].key);
+    if (!activeKeys.some(k => k.key === selectedKey)) {
+      setSelectedKey(activeKeys[0]?.key || '');
     }
-  }, [keys, selectedKey]);
+  }, [activeKeys, selectedKey]);
 
   useEffect(() => {
-    if (models.length > 0 && (!selectedModel || selectedModel === 'deepseek-v3' || !models.includes(selectedModel))) {
-      setSelectedModel(models[0]);
+    if (!allowedModels.includes(selectedModel)) {
+      setSelectedModel(allowedModels[0] || '');
     }
-  }, [models, selectedModel]);
+  }, [allowedModels, selectedModel]);
 
   // Only the wizard's configuration is a draft: the step indicator and the
   // snippet tab are navigation/view state, so they never trip the guard.
@@ -71,6 +76,20 @@ export default function OnboardingModal({
   if (!isOpen) return null;
 
   const origin = getGatewayOrigin();
+  const probeText = isZh ? 'Ping: 首次接入握手测试' : 'Ping: First handshake probe';
+  const probe = selectedProtocol === 'claude' ? {
+    path: '/v1/messages',
+    headers: { 'x-api-key': selectedKey, 'anthropic-version': '2023-06-01' },
+    body: { model: selectedModel, messages: [{ role: 'user', content: probeText }], max_tokens: 30 },
+  } : selectedProtocol === 'gemini' ? {
+    path: `/v1beta/models/${encodeURIComponent(selectedModel)}:generateContent`,
+    headers: { 'x-goog-api-key': selectedKey },
+    body: { contents: [{ role: 'user', parts: [{ text: probeText }] }], generationConfig: { maxOutputTokens: 30 } },
+  } : {
+    path: '/v1/chat/completions',
+    headers: { Authorization: `Bearer ${selectedKey}` },
+    body: { model: selectedModel, messages: [{ role: 'user', content: probeText }], max_tokens: 30, stream: false },
+  };
 
   // Completion closes for real: restore the opened configuration first so the
   // dirty draft can never re-open the discard prompt on the way out.
@@ -93,30 +112,29 @@ export default function OnboardingModal({
   };
 
   const handleTestProbe = async () => {
+    if (!selectedKey || !allowedModels.includes(selectedModel)) return;
     setTestingPing(true);
     setTestResult(null);
     const start = Date.now();
     try {
-      const res = await fetch('/v1/chat/completions', {
+      const res = await fetch(`${origin}${probe.path}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${selectedKey}`,
+          ...probe.headers,
         },
-        body: JSON.stringify({
-          model: selectedModel,
-          messages: [{ role: 'user', content: isZh ? 'Ping: 首次接入握手测试' : 'Ping: First handshake probe' }],
-          max_tokens: 30,
-          stream: false,
-        }),
+        body: JSON.stringify(probe.body),
       });
       const data = await res.json().catch(() => ({}));
       const duration = Date.now() - start;
-      if (res.ok && data.choices && data.choices[0]) {
+      const reply = selectedProtocol === 'claude' ? data.content?.map(part => part.text || '').join('')
+        : selectedProtocol === 'gemini' ? data.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('')
+        : data.choices?.[0]?.message?.content;
+      if (res.ok && reply !== undefined) {
         setTestResult({
           success: true,
           latency: duration,
-          text: data.choices[0].message?.content || (isZh ? '通信正常！' : 'Communication healthy!'),
+          text: reply || (isZh ? '通信正常！' : 'Communication healthy!'),
           model: data.model || selectedModel,
         });
         if (showToast) showToast(isZh ? '握手成功！网关通信正常' : 'Handshake successful! Gateway is online', 'success');
@@ -179,17 +197,10 @@ async function main() {
 main();
 `;
 
-  const curlCode = `curl -X POST "${origin}/v1/chat/completions" \\
-  -H "Authorization: Bearer ${selectedKey}" \\
+  const curlCode = `curl -X POST "${origin}${probe.path}" \\
   -H "Content-Type: application/json" \\
-  -d '{
-    "model": "${selectedModel}",
-    "messages": [
-      {"role": "user", "content": "Hello Airoute!"}
-    ],
-    "stream": true
-  }'
-`;
+${Object.entries(probe.headers).map(([name, value]) => `  -H "${name}: ${value}" \\`).join('\n')}
+  -d '${JSON.stringify(probe.body, null, 2)}'`;
 
   const claudeCode = `import anthropic
 
@@ -263,6 +274,7 @@ print(message.content[0].text)
 
           <button
             onClick={() => setStep(2)}
+            disabled={!selectedKey}
             className={`flex items-center space-x-2 pb-1 transition cursor-pointer ${
               step === 2
                 ? 'text-[#355CFF] dark:text-[#91A7FF] border-b-2 border-[#355CFF] dark:border-[#91A7FF] font-bold'
@@ -283,6 +295,7 @@ print(message.content[0].text)
 
           <button
             onClick={() => setStep(3)}
+            disabled={!selectedKey || !selectedModel}
             className={`flex items-center space-x-2 pb-1 transition cursor-pointer ${
               step === 3
                 ? 'text-[#355CFF] dark:text-[#91A7FF] border-b-2 border-[#355CFF] dark:border-[#91A7FF] font-bold'
@@ -305,18 +318,18 @@ print(message.content[0].text)
           <div className="space-y-4 animate-in fade-in duration-150">
             <div className="bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800/80">
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center space-x-1.5">
-                <Key className="w-3.5 h-3.5 text-indigo-500" />
+                <Key className="w-3.5 h-3.5 text-[#355CFF] dark:text-[#91A7FF]" />
                 <span>{isZh ? '选择用于接入调用的 API 密钥 (API Key)' : 'Select API Key for client requests'}</span>
               </label>
 
-              {keys.length > 0 ? (
+              {activeKeys.length > 0 ? (
                 <div className="space-y-2">
                   <select
                     value={selectedKey}
                     onChange={(e) => setSelectedKey(e.target.value)}
                     className="ui-field font-mono"
                   >
-                    {keys.map((k) => (
+                    {activeKeys.map((k) => (
                       <option key={k.id || k.key} value={k.key}>
                         {k.tenant_id ? `[${k.tenant_id}] ` : ''}
                         {k.key.slice(0, 10)}...{k.key.slice(-4)} (RPM: {k.rpm || 60})
@@ -324,14 +337,15 @@ print(message.content[0].text)
                     ))}
                   </select>
                   <p className="ui-meta">
-                    {isZh ? '该密钥已自动关联默认扣费组与全模态访问权限。' : 'This key is automatically mapped to the default billing group and full multimodal scope.'}
+                    {isZh ? '后续模型列表会按该密钥的授权范围筛选。' : 'Models are filtered by this key’s access permissions.'}
                   </p>
                 </div>
               ) : (
                 <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-lg text-xs text-amber-800 dark:text-amber-300">
                   {isZh 
-                    ? '当前暂无已签发的 API 密钥。可使用演示临时密钥进行测试，或前往【API 密钥】菜单创建企业级密钥。' 
-                    : 'No API keys issued yet. You may use the demo key for testing, or navigate to [API Keys] to create one.'}
+                    ? '当前没有有效密钥，请先创建或启用 API 密钥。'
+                    : 'No active API key. Create or enable a key before testing.'}
+                  {onCreateKey && <button type="button" className="ui-btn ui-btn-sm mt-2" onClick={() => completeWizard(onCreateKey)}>{isZh ? '创建 API 密钥' : 'Create API Key'}</button>}
                 </div>
               )}
 
@@ -342,7 +356,8 @@ print(message.content[0].text)
                 <button
                   type="button"
                   onClick={() => copyToClipboard(selectedKey, 'key')}
-                  className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-md font-medium transition flex items-center space-x-1 shrink-0"
+                  disabled={!selectedKey}
+                  className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-[#EEF2FF] dark:hover:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] rounded-md font-medium transition flex items-center space-x-1 shrink-0"
                 >
                   {copiedKey === 'key' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                   <span>{copiedKey === 'key' ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制密钥' : 'Copy Key')}</span>
@@ -354,6 +369,7 @@ print(message.content[0].text)
               <button
                 type="button"
                 onClick={() => setStep(2)}
+                disabled={!selectedKey}
                 className="ui-btn-primary"
               >
                 <span>{isZh ? '下一步：选择模型与协议' : 'Next: Protocol & Model'}</span>
@@ -379,11 +395,11 @@ print(message.content[0].text)
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => setSelectedProtocol(p.id)}
+                    onClick={() => { setSelectedProtocol(p.id); setSnippetTab(p.id === 'claude' ? 'claude' : p.id === 'gemini' ? 'curl' : 'python'); }}
                     className={`p-3 rounded-lg border text-left transition cursor-pointer ${
                       selectedProtocol === p.id
-                        ? 'bg-indigo-50/80 dark:bg-indigo-950/60 border-indigo-400 text-indigo-900 dark:text-indigo-200 ring-2 ring-indigo-500/20'
-                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                        ? 'bg-[#EEF2FF] dark:bg-[#242D48] border-[#355CFF] text-[#202124] dark:text-[#F1F2F4] ring-1 ring-[#355CFF]'
+                        : 'bg-white dark:bg-[#191B1F] border-[#E4E6E9] dark:border-[#2C3038] text-[#656B75] dark:text-[#A1A7B0] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B]'
                     }`}
                   >
                     <div className="font-semibold text-xs">{p.label}</div>
@@ -397,13 +413,13 @@ print(message.content[0].text)
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
                 {isZh ? '测试请求模型 (挂载模型)' : 'Target Model'}
               </label>
-              {models.length > 0 ? (
+              {allowedModels.length > 0 ? (
                 <select
                   value={selectedModel}
                   onChange={(e) => setSelectedModel(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-[#F7F7F5] dark:bg-[#22252B] border border-[#E4E6E9] dark:border-[#2C3038] rounded-lg px-3 py-2 text-xs font-mono text-[#202124] dark:text-[#F1F2F4] focus:outline-none focus:border-[#355CFF]"
                 >
-                  {models.map((m) => (
+                  {allowedModels.map((m) => (
                     <option key={m} value={m}>
                       {m}
                     </option>
@@ -414,7 +430,8 @@ print(message.content[0].text)
                   type="text"
                   value={selectedModel}
                   onChange={(e) => setSelectedModel(e.target.value)}
-                  placeholder="deepseek-v3 / gpt-4o / claude-3-5-sonnet"
+                  disabled
+                  placeholder={isZh ? '该密钥暂无可用聊天模型' : 'No available chat model for this key'}
                   className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-800 dark:text-slate-100"
                 />
               )}
@@ -434,6 +451,7 @@ print(message.content[0].text)
               <button
                 type="button"
                 onClick={() => setStep(3)}
+                disabled={!selectedModel}
                 className="ui-btn-primary"
               >
                 <span>{isZh ? '下一步：代码验证与握手' : 'Next: Code & Handshake'}</span>
@@ -461,7 +479,7 @@ print(message.content[0].text)
                     onClick={() => setSnippetTab(tab.id)}
                     className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
                       snippetTab === tab.id
-                        ? 'bg-slate-900 dark:bg-indigo-600 text-white shadow-sm'
+                        ? 'bg-[#355CFF] text-white shadow-sm'
                         : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                     }`}
                   >
@@ -499,11 +517,11 @@ print(message.content[0].text)
             </pre>
 
             {/* Live Handshake Test */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800/80 rounded-xl space-y-2">
+            <div className="p-4 bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl space-y-2">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="font-semibold text-xs text-slate-900 dark:text-slate-100 flex items-center space-x-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                  <span className="font-semibold text-xs text-[#202124] dark:text-[#F1F2F4] flex items-center space-x-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-[#355CFF] dark:text-[#91A7FF]" />
                     <span>{isZh ? '在线握手探测 (Live Handshake Probe)' : 'Live Handshake Probe'}</span>
                   </span>
                   <p className="ui-meta mt-0.5">
@@ -514,8 +532,8 @@ print(message.content[0].text)
                 <button
                   type="button"
                   onClick={handleTestProbe}
-                  disabled={testingPing}
-                  className="px-3.5 py-1.5 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition flex items-center space-x-1.5 shrink-0 shadow-sm cursor-pointer"
+                  disabled={testingPing || !selectedKey || !selectedModel}
+                  className="px-3.5 py-1.5 bg-[#355CFF] hover:bg-[#2849E6] text-white rounded-lg text-xs font-medium transition flex items-center space-x-1.5 shrink-0 shadow-sm cursor-pointer"
                 >
                   {testingPing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
                   <span>{testingPing ? (isZh ? '探测中...' : 'Probing...') : (isZh ? '立即测试握手' : 'Test Handshake')}</span>

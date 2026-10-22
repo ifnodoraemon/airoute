@@ -195,7 +195,7 @@ export default function SystemLogConsole({
       case 'prober':
         return { label: isZh ? '渠道探活' : 'Prober', color: 'text-amber-400 bg-amber-950/60 border-amber-800/50' };
       case 'sync':
-        return { label: isZh ? '集群同步' : 'Sync', color: 'text-purple-400 bg-purple-950/60 border-purple-800/50' };
+        return { label: isZh ? '集群同步' : 'Sync', color: 'text-[#91A7FF] bg-[#242D48] border-[#355CFF]/30' };
       case 'router':
         return { label: isZh ? '路由调度' : 'Router', color: 'text-cyan-400 bg-cyan-950/60 border-cyan-800/50' };
       case 'auth':
@@ -351,7 +351,7 @@ export default function SystemLogConsole({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={isZh ? '搜索日志内容、Trace ID、渠道...' : 'Search logs, trace_id, channel...'}
-            className="w-full bg-slate-900/90 text-slate-200 placeholder-slate-500 text-xs pl-8 pr-7 py-1 rounded-lg border border-slate-800 focus:border-indigo-500 focus:outline-none"
+            className="w-full bg-slate-900/90 text-slate-200 placeholder-slate-500 text-xs pl-8 pr-7 py-1 rounded-lg border border-slate-800 focus:border-[#355CFF] focus:outline-none"
           />
           {searchQuery && (
             <button
@@ -373,7 +373,7 @@ export default function SystemLogConsole({
         >
           {loading && logs.length === 0 ? (
             <div className="h-full flex items-center justify-center text-slate-500 space-x-2">
-              <RefreshCw className="w-4 h-4 animate-spin text-indigo-400" />
+              <RefreshCw className="w-4 h-4 animate-spin text-[#355CFF] dark:text-[#91A7FF]" />
               <span>{isZh ? '正在拉取网关系统日志...' : 'Connecting to gateway system logs...'}</span>
             </div>
           ) : filteredLogs.length === 0 ? (
@@ -395,7 +395,7 @@ export default function SystemLogConsole({
                   key={log.id}
                   onClick={() => setSelectedLog(isSelected ? null : log)}
                   className={`pt-1 pb-1 px-2 rounded hover:bg-slate-800/60 transition cursor-pointer flex items-start gap-2.5 ${
-                    isSelected ? 'bg-indigo-950/50 border border-indigo-800/60' : ''
+                    isSelected ? 'bg-[#242D48] border border-[#355CFF]/40' : ''
                   }`}
                 >
                   {/* Timestamp */}
@@ -457,7 +457,7 @@ export default function SystemLogConsole({
           <div className="w-80 md:w-96 border-l border-slate-800 bg-[#0e131d] p-4 overflow-y-auto space-y-4 shrink-0 animate-in slide-in-from-right duration-150">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2">
               <span className="font-semibold text-slate-200 font-sans text-xs flex items-center gap-1.5">
-                <Info className="w-3.5 h-3.5 text-indigo-400" />
+                <Info className="w-3.5 h-3.5 text-[#355CFF] dark:text-[#91A7FF]" />
                 <span>{isZh ? '排障日志详情分析' : 'Troubleshooting Log Detail'}</span>
               </span>
               <button
@@ -484,7 +484,7 @@ export default function SystemLogConsole({
               </div>
               <div className="flex items-center justify-between py-1 border-b border-slate-800/60">
                 <span className="text-slate-500">{isZh ? '节点' : 'Node'}:</span>
-                <span className="text-indigo-300 font-mono text-[11px]">{selectedLog.node_id || 'airoute-gateway'}</span>
+                <span className="text-[#91A7FF] font-mono text-[11px]">{selectedLog.node_id || 'airoute-gateway'}</span>
               </div>
               {selectedLog.trace_id && (
                 <div className="flex items-center justify-between py-1 border-b border-slate-800/60">
@@ -553,7 +553,7 @@ export default function SystemLogConsole({
         </div>
         <div className="flex items-center space-x-2">
           {searchQuery && (
-            <span className="text-indigo-400">
+            <span className="text-[#91A7FF]">
               {isZh ? `过滤词: "${searchQuery}"` : `Filtered by "${searchQuery}"`}
             </span>
           )}

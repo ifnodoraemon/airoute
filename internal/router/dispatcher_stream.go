@@ -42,10 +42,12 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 
 	var lastErr error
 	var attempted []string // channels actually called and failed for this model
+	var skipped []string   // channels bypassed by the circuit breaker, never called
 	for i, ch := range channels {
 		// High-Availability Circuit Breaker: fail fast if upstream is down
 		if !d.circuitBreaker.CanExecute(ch.Name) {
 			telemetry.Logger.Warn("circuit breaker is OPEN, bypassing dead upstream stream", "channel", ch.Name)
+			skipped = append(skipped, ch.Name)
 			continue
 		}
 
@@ -157,6 +159,12 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		outChan := make(chan *model.StreamEvent, 64)
 		go pipeStreamEvents(ctx, outChan, preamble, streamChan, trail, attemptCancel)
 		return outChan, nil
+	}
+
+	// Only skipped channels (all circuit-broken) leave lastErr nil; name that
+	// condition instead of letting %w render "%!w(<nil>)" in the audit log.
+	if lastErr == nil {
+		lastErr = skippedOnlyError(req.Model, skipped)
 	}
 
 	if fb := d.GetModelFallback(req.Model); fb != "" && !strings.EqualFold(fb, req.Model) {

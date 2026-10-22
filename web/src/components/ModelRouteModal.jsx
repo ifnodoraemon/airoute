@@ -381,7 +381,7 @@ export default function ModelRouteModal({
                   const isCustomMode = !!customModeMap[p.channel_id];
 
                   return (
-                    <div key={p.channel_id} className="p-3 bg-white dark:bg-[#0F1420] hover:bg-slate-50/50 dark:hover:bg-slate-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div key={p.channel_id} className="p-3 bg-white dark:bg-[#191B1F] hover:bg-slate-50/50 dark:hover:bg-slate-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="min-w-0 flex-1 space-y-1.5">
                         <div className="flex items-center space-x-2">
                           <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">{p.channel_name}</span>

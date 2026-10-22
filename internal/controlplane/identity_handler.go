@@ -1,6 +1,7 @@
 package controlplane
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -84,11 +85,6 @@ func (h *AdminHandler) Register(c *gin.Context) {
 		GroupName:    "default",
 	}
 
-	if err := h.repo.CreateUser(user); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "创建用户失败: " + err.Error()})
-		return
-	}
-
 	// Automatically generate an initial API key for the new user
 	newKey, err := GenerateAPIKey()
 	if err != nil {
@@ -96,7 +92,7 @@ func (h *AdminHandler) Register(c *gin.Context) {
 		return
 	}
 
-	_ = h.repo.CreateAPIKey(&storage.APIKeyRecord{
+	if err := h.repo.CreateUserWithAPIKey(user, &storage.APIKeyRecord{
 		Key:           newKey,
 		TenantID:      username,
 		UserID:        user.ID,
@@ -106,7 +102,10 @@ func (h *AdminHandler) Register(c *gin.Context) {
 		TPM:           100000,
 		Budget:        100.0,
 		Status:        "active",
-	})
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "创建账号及初始密钥失败，请重试"})
+		return
+	}
 	h.syncDataPlane()
 
 	// Generate login token
@@ -115,7 +114,7 @@ func (h *AdminHandler) Register(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    0,
-		"message": "注册成功！已为您赠送 ¥5.00 新手体验额度并自动生成 API 密钥",
+		"message": fmt.Sprintf("注册成功！初始额度为 ¥%.2f，已自动生成 API 密钥", user.Balance),
 		"data": gin.H{
 			"token": token,
 			"user": gin.H{

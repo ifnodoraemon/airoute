@@ -29,12 +29,17 @@ const EXPORT_PAGE_SIZE = 200;
 // result set.
 const EXPORT_MAX_ROWS = 5000;
 
+const correlationField = (value) => ['trace_id', 'chat_id', 'session_id'].includes(value) ? value : 'session_id';
+
 export function useLogsData({ filters, showToast, isZh }) {
   const [logs, setLogs] = useState([]);
   const [recentLogs, setRecentLogs] = useState([]);
   const [logTotal, setLogTotal] = useState(0);
   const [logOffset, setLogOffset] = useState(0);
   const [logLoading, setLogLoading] = useState(false);
+  // Last load failure, so the console can tell "no logs match" apart from
+  // "the request failed" — they used to share the same empty state.
+  const [logError, setLogError] = useState('');
   const [logFacets, setLogFacets] = useState({ models: [], channels: [] });
   const [selectedLogIds, setSelectedLogIds] = useState([]);
 
@@ -71,7 +76,7 @@ export function useLogsData({ filters, showToast, isZh }) {
       //    the old offset is meaningless for the new result set;
       //  - otherwise keep the currently viewed page (polling refresh).
       const filterReset =
-        override.timeRange !== undefined || override.sessionFilter !== undefined;
+        override.timeRange !== undefined || override.sessionFilter !== undefined || override.keyId !== undefined || override.q !== undefined;
       const off =
         override.offset !== undefined ? override.offset : (filterReset ? 0 : logOffsetRef.current);
       p.set('offset', String(off));
@@ -82,8 +87,11 @@ export function useLogsData({ filters, showToast, isZh }) {
       const sf = override.sessionFilter !== undefined ? override.sessionFilter : filters.session;
 
       if (sf && sf.trim()) {
-        p.set('session_id', sf.trim());
+        p.set(correlationField(override.correlationType ?? current.correlation_type), sf.trim());
       }
+
+      const keyId = override.keyId !== undefined ? override.keyId : current.key_id;
+      if (keyId) p.set('key_id', String(keyId));
 
       // Keyword and facet filters are applied SERVER-SIDE. Filtering only the
       // loaded page made search/filter/export silently miss every match on the
@@ -122,18 +130,23 @@ export function useLogsData({ filters, showToast, isZh }) {
         setLogFacets(data.facets || { models: [], channels: [] });
         // Total rows for the current filter, used for honest pagination.
         setLogTotal(typeof data.total === 'number' ? data.total : (data.data || []).length);
+        setLogError('');
         return true;
       }
+      setLogError(data?.error || (isZh ? '加载审计日志失败' : 'Failed to load audit logs'));
       return false;
     } catch (e) {
       console.error('Fetch logs failed:', e);
+      if (generation === generationRef.current && request === requestRef.current) {
+        setLogError((isZh ? '加载审计日志失败: ' : 'Failed to load audit logs: ') + e.message);
+      }
       return false;
     } finally {
       if (generation === generationRef.current && request === requestRef.current) setLogLoading(false);
     }
     // The four date/range values are dependencies on purpose: see the note at the
     // top of this file.
-  }, [filters.range, filters.session, filters.start, filters.end]);
+  }, [filters.range, filters.session, filters.start, filters.end, isZh]);
 
   // Fetch EVERY row matching the active log filters (used by the CSV export).
   const fetchAllLogsForExport = useCallback(async (maxRows = EXPORT_MAX_ROWS) => {
@@ -151,7 +164,8 @@ export function useLogsData({ filters, showToast, isZh }) {
       if (facets.status && facets.status !== 'all') p.set('status', facets.status);
       if (facets.cache && facets.cache !== 'all') p.set('cache', facets.cache);
       if (facets.latency && facets.latency !== 'all') p.set('latency', facets.latency);
-      if (facets.session && facets.session.trim()) p.set('session_id', facets.session.trim());
+      if (facets.session && facets.session.trim()) p.set(correlationField(facets.correlation_type), facets.session.trim());
+      if (facets.key_id) p.set('key_id', String(facets.key_id));
       const tr = facets.range;
       const now = new Date();
       if (tr === '1h') p.set('start_time', new Date(now.getTime() - 3600000).toISOString());
@@ -197,6 +211,7 @@ export function useLogsData({ filters, showToast, isZh }) {
     setLogs([]);
     setRecentLogs([]);
     setLogTotal(0);
+    setLogError('');
     logOffsetRef.current = 0;
     setLogOffset(0);
     setSelectedLogIds([]);
@@ -286,6 +301,7 @@ export function useLogsData({ filters, showToast, isZh }) {
     logTotal,
     logOffset,
     logLoading,
+    logError,
     logFacets,
     fetchLogs,
     fetchAllLogsForExport,

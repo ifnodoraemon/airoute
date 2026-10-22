@@ -52,6 +52,7 @@ func TestPaymentException_StripeErrorDoesNotFallbackToSandbox(t *testing.T) {
 	defer mockStripe.Close()
 
 	t.Setenv("STRIPE_API_KEY", "sk_test_synthetic_key")
+	t.Setenv("STRIPE_WEBHOOK_SECRET", "whsec_synthetic_test")
 	t.Setenv("STRIPE_API_BASE", mockStripe.URL)
 
 	body, _ := json.Marshal(map[string]interface{}{
@@ -113,6 +114,7 @@ func TestPaymentException_DBWriteFailureDoesNotLeakCheckoutURL(t *testing.T) {
 	defer mockStripe.Close()
 
 	t.Setenv("STRIPE_API_KEY", "sk_test_synthetic_key")
+	t.Setenv("STRIPE_WEBHOOK_SECRET", "whsec_synthetic_test")
 	t.Setenv("STRIPE_API_BASE", mockStripe.URL)
 
 	// Simulate database write failure by dropping the recharge_orders table

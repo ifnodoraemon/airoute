@@ -40,6 +40,12 @@ type Repository struct {
 	statsCache   *StatsOverview
 	statsCacheAt time.Time
 	statsMu      sync.RWMutex
+
+	// facetMu guards facetCache, a short-lived per-scope cache of the audit
+	// filter dropdowns. They used to cost two full-history DISTINCT scans on
+	// every console request, including the 10-second polls.
+	facetMu    sync.Mutex
+	facetCache map[string]usageLogFacetCacheEntry
 }
 
 var globalRepo *Repository

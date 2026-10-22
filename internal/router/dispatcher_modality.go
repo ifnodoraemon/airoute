@@ -53,10 +53,12 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 
 	var lastErr error
 	var attempted []string // channels actually called and failed
+	var skipped []string   // channels bypassed by the circuit breaker, never called
 	for i, ch := range channels {
 		// Circuit Breaker: fail fast if upstream is down
 		if !d.circuitBreaker.CanExecute(ch.Name) {
 			telemetry.Logger.Warn("circuit breaker is OPEN, bypassing dead upstream", "channel", ch.Name)
+			skipped = append(skipped, ch.Name)
 			continue
 		}
 
@@ -155,6 +157,9 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 	}
 
 	telemetry.GlobalMetrics.RecordRequest(false, 0, 0, 0)
+	if lastErr == nil {
+		lastErr = skippedOnlyError(req.Model, skipped)
+	}
 	return nil, newExhaustedError(ctx, req.Model, attempted, fmt.Errorf("all %d providers failed for model '%s'. Last error: %w", len(channels), req.Model, lastErr))
 }
 
@@ -167,9 +172,11 @@ func (d *Dispatcher) DispatchEmbedding(ctx context.Context, req *model.Embedding
 
 	var lastErr error
 	var attempted []string // channels actually called and failed
+	var skipped []string   // channels bypassed by the circuit breaker, never called
 	for i, ch := range channels {
 		if !d.circuitBreaker.CanExecute(ch.Name) {
 			telemetry.Logger.Warn("circuit breaker is OPEN, bypassing dead upstream", "channel", ch.Name)
+			skipped = append(skipped, ch.Name)
 			continue
 		}
 
@@ -223,6 +230,9 @@ func (d *Dispatcher) DispatchEmbedding(ctx context.Context, req *model.Embedding
 	}
 
 	telemetry.GlobalMetrics.RecordRequest(false, 0, 0, 0)
+	if lastErr == nil {
+		lastErr = skippedOnlyError(req.Model, skipped)
+	}
 	return nil, newExhaustedError(ctx, req.Model, attempted, fmt.Errorf("all %d providers failed for embedding model '%s'. Last error: %w", len(channels), req.Model, lastErr))
 }
 
@@ -235,9 +245,11 @@ func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankReques
 
 	var lastErr error
 	var attempted []string // channels actually called and failed
+	var skipped []string   // channels bypassed by the circuit breaker, never called
 	for i, ch := range channels {
 		if !d.circuitBreaker.CanExecute(ch.Name) {
 			telemetry.Logger.Warn("circuit breaker is OPEN, bypassing dead upstream", "channel", ch.Name)
+			skipped = append(skipped, ch.Name)
 			continue
 		}
 
@@ -288,5 +300,8 @@ func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankReques
 	}
 
 	telemetry.GlobalMetrics.RecordRequest(false, 0, 0, 0)
+	if lastErr == nil {
+		lastErr = skippedOnlyError(req.Model, skipped)
+	}
 	return nil, newExhaustedError(ctx, req.Model, attempted, fmt.Errorf("all %d providers failed for rerank model '%s'. Last error: %w", len(channels), req.Model, lastErr))
 }
