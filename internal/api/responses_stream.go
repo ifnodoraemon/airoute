@@ -36,6 +36,10 @@ func (h *Handler) handleResponsesStreaming(
 	sessionID string,
 	start time.Time,
 ) {
+	// Track the in-flight stream for the dashboard's live telemetry gauges.
+	telemetry.GlobalLiveMetrics.BeginStream()
+	defer telemetry.GlobalLiveMetrics.EndStream()
+
 	if chatReq.StreamOptions == nil {
 		chatReq.StreamOptions = &model.StreamOptions{IncludeUsage: true}
 	} else {
@@ -119,6 +123,7 @@ func (h *Handler) handleResponsesStreaming(
 			TTFT:             ttftDuration,
 			StatusCode:       statusCode,
 			ErrorMessage:     sanitizeErrorMessage(streamError),
+			LiveTracked:      true, // stream deltas already fed the live token meter
 		})
 	}
 
@@ -168,6 +173,8 @@ func (h *Handler) handleResponsesStreaming(
 				deltaText := choice.Delta.Content
 				if deltaText != "" {
 					fullContent.WriteString(deltaText)
+					// 实时吞吐：流式 delta 到达即计入内存 token 计数。
+					telemetry.GlobalLiveMetrics.AddChars(len(deltaText))
 					writeSSEJSON(w, flusher, "response.output_text.delta", gin.H{
 						"type":  "response.output_text.delta",
 						"delta": deltaText,

@@ -16,6 +16,11 @@ import (
 
 // handleAnthropicStream handles SSE streaming responses for Claude SDK clients.
 func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, req *AnthropicInboundRequest, canonicalReq *model.ChatCompletionRequest, sessionID string, start time.Time) {
+	// Track the in-flight stream for the dashboard's live telemetry gauges. This
+	// covers both the adapted and the native Anthropic stream paths below.
+	telemetry.GlobalLiveMetrics.BeginStream()
+	defer telemetry.GlobalLiveMetrics.EndStream()
+
 	// Ensure usage is requested from OpenAI-compatible upstreams regardless of
 	// how the canonical request was built.
 	if canonicalReq.StreamOptions == nil {
@@ -114,6 +119,7 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 			TTFT:             ttftDuration,
 			StatusCode:       statusCode,
 			UsageSource:      usageSource,
+			LiveTracked:      true, // stream deltas already fed the live token meter
 			ErrorMessage:     sanitizeErrorMessage(streamError),
 		})
 	}
@@ -262,6 +268,8 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 							firstTokenRecorded = true
 						}
 						accumulatedCompChars += len(chunkDelta.Content)
+						// 实时吞吐：流式 delta 到达即计入内存 token 计数。
+						telemetry.GlobalLiveMetrics.AddChars(len(chunkDelta.Content))
 
 						blockDelta := gin.H{
 							"type":  "content_block_delta",
@@ -368,6 +376,7 @@ func (h *Handler) handleNativeAnthropicStream(c *gin.Context, stream <-chan *mod
 			TTFT:             ttftDuration,
 			StatusCode:       statusCode,
 			UsageSource:      "upstream",
+			LiveTracked:      true, // stream deltas already fed the live token meter
 		})
 	}()
 	write := func(event *model.StreamEvent) bool {
@@ -402,6 +411,13 @@ func (h *Handler) handleNativeAnthropicStream(c *gin.Context, stream <-chan *mod
 						inputTokens = intFromJSONNumber(usage["input_tokens"])
 						cachedReadTokens = intFromJSONNumber(usage["cache_read_input_tokens"])
 						cacheCreationTokens = intFromJSONNumber(usage["cache_creation_input_tokens"])
+					}
+				}
+			} else if event.NativeAnthropicType == "content_block_delta" {
+				// 实时吞吐：从原生 delta 中取出文本增量计入内存 token 计数。
+				if delta, ok := payload["delta"].(map[string]any); ok {
+					if text, ok := delta["text"].(string); ok && text != "" {
+						telemetry.GlobalLiveMetrics.AddChars(len(text))
 					}
 				}
 			} else if event.NativeAnthropicType == "message_delta" {

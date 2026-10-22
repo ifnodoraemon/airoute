@@ -15,6 +15,10 @@ import (
 
 // handleGeminiStream handles streaming SSE responses for Google Gemini SDK clients.
 func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, canonicalReq *model.ChatCompletionRequest, modelName, sessionID string, start time.Time) {
+	// Track the in-flight stream for the dashboard's live telemetry gauges.
+	telemetry.GlobalLiveMetrics.BeginStream()
+	defer telemetry.GlobalLiveMetrics.EndStream()
+
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, canonicalReq)
 	if err != nil {
 		statusCode, _, _, _ := resolveUpstreamFailureStatus(err)
@@ -66,6 +70,7 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 			TTFT:             ttftDuration,
 			StatusCode:       statusCode,
 			UsageSource:      usageSource,
+			LiveTracked:      true, // stream deltas already fed the live token meter
 			ErrorMessage:     sanitizeErrorMessage(streamError),
 		})
 	}
@@ -152,6 +157,8 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 							firstTokenRecorded = true
 						}
 						accumulatedChars += len(chunkChoice.Delta.Content)
+						// 实时吞吐：流式 delta 到达即计入内存 token 计数。
+						telemetry.GlobalLiveMetrics.AddChars(len(chunkChoice.Delta.Content))
 						geminiParts = append(geminiParts, gin.H{"text": chunkChoice.Delta.Content})
 					}
 

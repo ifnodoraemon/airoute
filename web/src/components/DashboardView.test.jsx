@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, within, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, within, fireEvent, waitFor, act } from '@testing-library/react';
 import DashboardView from './DashboardView';
 
 // DashboardView is props-driven and computes every number it shows: the SLA
@@ -190,5 +190,205 @@ describe('DashboardView', () => {
     setup({ lang: 'en' });
 
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
+  });
+});
+
+// The live endpoint is additive: with it the cockpit reports in-flight work; without
+// it nothing may change. Both directions are pinned below, because a silent fallback
+// is otherwise easy to turn into a silent regression (or a toast on every poll).
+
+const livePayload = (overrides = {}) => ({
+  active_requests: 0,
+  active_streams: 0,
+  tokens_per_sec_1s: 0,
+  tokens_per_sec_10s: 0,
+  tokens_per_sec_60s: 0,
+  tokens_last_60s: 0,
+  last_token_at: null,
+  idle_seconds: 0,
+  nodes: 2,
+  server_time: '2026-10-22T02:12:03Z',
+  ...overrides
+});
+
+// Stubs the live endpoint (with an optional failure status); every other admin
+// request succeeds with an empty payload so the rest of the dashboard keeps its
+// ordinary empty-state behaviour.
+function liveFetch(liveData, { status = 200 } = {}) {
+  return vi.fn(async (url) => {
+    const path = String(url).split('?')[0];
+    if (path === '/api/v1/admin/stats/live') {
+      if (status !== 200) {
+        return { ok: false, status, json: async () => ({ code: status }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ code: 0, data: liveData }) };
+    }
+    return { ok: true, status: 200, json: async () => ({ code: 0, data: [] }) };
+  });
+}
+
+const liveCallCount = (adminFetch) => adminFetch.mock.calls
+  .filter(([url]) => String(url).split('?')[0] === '/api/v1/admin/stats/live').length;
+
+describe('DashboardView live telemetry', () => {
+  it('polls the live endpoint and renders the generating badge', async () => {
+    const adminFetch = liveFetch(livePayload({
+      active_requests: 3,
+      active_streams: 2,
+      tokens_per_sec_10s: 41.3,
+      tokens_last_60s: 900
+    }));
+    setup({ adminFetch });
+
+    await waitFor(() => expect(adminFetch).toHaveBeenCalledWith('/api/v1/admin/stats/live'));
+
+    // Two streams in flight: the badge names them, and the TPM card switches from
+    // the 60s mean to the 10s rate plus the in-flight count.
+    expect(await screen.findByText('生成中 2')).toBeInTheDocument();
+    expect(screen.getByText('当前 41 tok/s · 2 个生成中')).toBeInTheDocument();
+    // Concurrency is reported next to the channel count, not instead of it.
+    expect(screen.getByText('当前并发 3')).toBeInTheDocument();
+    // The static badge must be gone once live data speaks.
+    expect(screen.queryByText('LIVE 60s')).not.toBeInTheDocument();
+  });
+
+  it('reports idle instead of a live window when nothing is moving', async () => {
+    const adminFetch = liveFetch(livePayload({ idle_seconds: 42 }));
+    setup({ adminFetch });
+
+    expect(await screen.findByText('空闲')).toBeInTheDocument();
+    expect(screen.getByText('空闲 · 最近请求 42s 前')).toBeInTheDocument();
+    expect(screen.queryByText('LIVE 60s')).not.toBeInTheDocument();
+  });
+
+  it('collapses a long idle period into "over an hour"', async () => {
+    const adminFetch = liveFetch(livePayload({ idle_seconds: 7200 }));
+    setup({ adminFetch });
+
+    expect(await screen.findByText('空闲 · 最近请求超过 1 小时')).toBeInTheDocument();
+  });
+
+  it('keeps the 60s mean when there is recent traffic but no stream in flight', async () => {
+    const adminFetch = liveFetch(livePayload({ tokens_last_60s: 2112, tokens_per_sec_10s: 3 }));
+    setup({ adminFetch, stats: { current_tpm: 12000 } });
+
+    expect(await screen.findByText('LIVE 60s')).toBeInTheDocument();
+    // 12000 TPM / 60 = 200 tok/s, the pre-existing 60s mean.
+    expect(screen.getByText('~200 tok/s')).toBeInTheDocument();
+    expect(screen.queryByText(/个生成中/)).not.toBeInTheDocument();
+  });
+
+  it('uses the same live labels in English', async () => {
+    const adminFetch = liveFetch(livePayload({ active_streams: 2, active_requests: 1, tokens_per_sec_10s: 41.3 }));
+    setup({ adminFetch, lang: 'en' });
+
+    expect(await screen.findByText('Generating 2')).toBeInTheDocument();
+    expect(screen.getByText('Current 41 tok/s · 2 streaming')).toBeInTheDocument();
+    expect(screen.getByText('Concurrency 1')).toBeInTheDocument();
+  });
+
+  it('degrades silently when the live endpoint is missing', async () => {
+    // An older gateway answers 404. The dashboard must keep its previous 60s-window
+    // behaviour: no error toast, no idle claim, no crash.
+    const adminFetch = liveFetch(null, { status: 404 });
+    const showToast = vi.fn();
+    setup({ adminFetch, showToast });
+
+    await waitFor(() => expect(adminFetch).toHaveBeenCalledWith('/api/v1/admin/stats/live'));
+
+    expect(screen.getByText('运营总览')).toBeInTheDocument();
+    expect(screen.getByText('LIVE 60s')).toBeInTheDocument();
+    expect(screen.queryByText('空闲')).not.toBeInTheDocument();
+    expect(screen.queryByText(/当前并发/)).not.toBeInTheDocument();
+    expect(showToast).not.toHaveBeenCalled();
+  });
+
+  it('degrades silently when the live request throws', async () => {
+    const adminFetch = vi.fn(async (url) => {
+      if (String(url).endsWith('/stats/live')) throw new Error('network down');
+      return { ok: true, status: 200, json: async () => ({ code: 0, data: [] }) };
+    });
+    setup({ adminFetch });
+
+    await waitFor(() => expect(adminFetch).toHaveBeenCalledWith('/api/v1/admin/stats/live'));
+    expect(screen.getByText('LIVE 60s')).toBeInTheDocument();
+    expect(screen.queryByText(/空闲/)).not.toBeInTheDocument();
+  });
+
+  // Timers are faked here: the cadence itself is the contract, so real 2s/15s
+  // waits would be both slow and flaky.
+  describe('polling cadence', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      delete document.hidden;
+    });
+
+    it('polls every 2s while mounted', async () => {
+      const adminFetch = liveFetch(livePayload());
+      setup({ adminFetch });
+
+      await act(async () => {});
+      expect(liveCallCount(adminFetch)).toBe(1);
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+      expect(liveCallCount(adminFetch)).toBe(2);
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+      expect(liveCallCount(adminFetch)).toBe(3);
+    });
+
+    it('pauses while the tab is hidden and catches up on return', async () => {
+      const adminFetch = liveFetch(livePayload());
+      setup({ adminFetch });
+
+      await act(async () => {});
+      expect(liveCallCount(adminFetch)).toBe(1);
+
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+      await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+      const hiddenAt = liveCallCount(adminFetch);
+      await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
+      expect(liveCallCount(adminFetch)).toBe(hiddenAt);
+
+      // Coming back visible fetches immediately rather than waiting for the tick.
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+      await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+      expect(liveCallCount(adminFetch)).toBe(hiddenAt + 1);
+    });
+
+    it('stops polling after unmount', async () => {
+      const adminFetch = liveFetch(livePayload());
+      const { unmount } = setup({ adminFetch });
+
+      await act(async () => {});
+      const before = liveCallCount(adminFetch);
+      expect(before).toBe(1);
+
+      unmount();
+      await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
+      expect(liveCallCount(adminFetch)).toBe(before);
+    });
+
+    it('refreshes the time-series and the audit stream every 15s', async () => {
+      const adminFetch = liveFetch(livePayload());
+      setup({ adminFetch });
+
+      const countPath = (suffix) => adminFetch.mock.calls
+        .filter(([url]) => String(url).split('?')[0].endsWith(suffix)).length;
+
+      await act(async () => {});
+      const timeseriesBefore = countPath('/admin/stats/timeseries');
+      const logsBefore = countPath('/admin/logs');
+      expect(timeseriesBefore).toBeGreaterThan(0);
+      expect(logsBefore).toBeGreaterThan(0);
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
+      expect(countPath('/admin/stats/timeseries')).toBeGreaterThan(timeseriesBefore);
+      expect(countPath('/admin/logs')).toBeGreaterThan(logsBefore);
+    });
   });
 });

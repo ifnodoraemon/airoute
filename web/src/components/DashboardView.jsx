@@ -22,6 +22,13 @@ import {
 import { copyToClipboard } from '../config';
 import { apiFetch } from '../api/client';
 
+// The live endpoint is in-memory and cheap; 2s keeps the badge honest during a
+// stream without hammering the gateway.
+const LIVE_POLL_MS = 2000;
+// The chart and the audit stream are aggregates, so they move far slower than
+// the speedometers and are refreshed on their own, slower cadence.
+const DASHBOARD_REFRESH_MS = 15000;
+
 export default function DashboardView({
   stats = {},
   channels = [],
@@ -79,6 +86,7 @@ export default function DashboardView({
 
   const [recentLogs, setRecentLogs] = useState([]);
   const [recentLogsLoading, setRecentLogsLoading] = useState(false);
+  const [liveStats, setLiveStats] = useState(null);
 
   const fetchRecentLogs = useCallback(async (keyOverride) => {
     try {
@@ -160,11 +168,129 @@ export default function DashboardView({
     fetchRecentLogs();
   }, [fetchTimeseries, fetchRecentLogs]);
 
+  // Real-time gateway telemetry (in-flight requests and streams).
+  //
+  // The 60s window only sees completed requests, so during a long stream the
+  // speedometers read zero while the gateway is in fact busy. The live endpoint
+  // is purely in-memory and reports what is happening right now. It is optional:
+  // when it is missing (older gateway) or fails, the dashboard silently keeps
+  // its previous 60s-window behaviour — no toast, no error state, no blocking of
+  // the first paint.
+  useEffect(() => {
+    let mounted = true;
+    let timer = null;
+    let inFlight = false;
+    const fetcher = adminFetch || apiFetch;
+
+    const load = async () => {
+      // Never stack requests: on a slow gateway the 2s tick would otherwise pile
+      // up and resolve out of order.
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const res = await fetcher('/api/v1/admin/stats/live');
+        const json = res && res.ok ? await res.json() : null;
+        if (!mounted) return;
+        const data = json && json.code === 0 ? json.data : null;
+        setLiveStats(data && typeof data === 'object' && !Array.isArray(data) ? data : null);
+      } catch {
+        // Endpoint absent or gateway unreachable: degrade to the 60s window.
+        if (mounted) setLiveStats(null);
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const stop = () => {
+      if (timer !== null) {
+        clearInterval(timer);
+        timer = null;
+      }
+    };
+    const start = () => {
+      if (timer === null) timer = setInterval(load, LIVE_POLL_MS);
+    };
+    // A hidden tab has nobody watching it; polling there only burns requests.
+    // Coming back visible catches up immediately instead of waiting a tick.
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        stop();
+        return;
+      }
+      start();
+      load();
+    };
+
+    load();
+    if (!document.hidden) start();
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      mounted = false;
+      stop();
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [adminFetch]);
+
+  // The time-series chart and its "period peak" only loaded at mount, so they
+  // went stale as soon as the page stayed open. Refresh them periodically, in
+  // the background and without touching the shell's own polling.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.hidden) return;
+      fetchTimeseries();
+      fetchRecentLogs();
+    }, DASHBOARD_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [fetchTimeseries, fetchRecentLogs]);
+
   const effectiveStats = keyStats || stats;
   const currentRPM = effectiveStats.current_rpm ?? timeseriesData?.current_rpm ?? 0;
   const currentTPM = effectiveStats.current_tpm ?? timeseriesData?.current_tpm ?? 0;
   const peakRPM = timeseriesData?.peak_rpm ?? effectiveStats.peak_rpm ?? 0;
   const peakTPM = timeseriesData?.peak_tpm ?? effectiveStats.peak_tpm ?? 0;
+
+  // Live gateway state, or null when the endpoint is unavailable. `livePhase`
+  // collapses it into the four states the header badge and the TPM card speak:
+  // streaming (tokens arriving), busy (request in flight, nothing counted yet),
+  // live (traffic in the last 60s), idle (nothing).
+  const hasLiveStats = Boolean(liveStats);
+  const activeStreams = hasLiveStats ? Math.max(0, Math.round(Number(liveStats.active_streams) || 0)) : 0;
+  const activeRequests = hasLiveStats ? Math.max(0, Math.round(Number(liveStats.active_requests) || 0)) : 0;
+  const liveTokensLast60s = hasLiveStats ? Number(liveStats.tokens_last_60s) || 0 : 0;
+  const liveTokensPerSec10s = hasLiveStats ? Number(liveStats.tokens_per_sec_10s) || 0 : 0;
+  // -1 means "no token has ever been observed" and must stay distinct from a
+  // genuine 0, otherwise a fresh gateway claims a request finished a second ago.
+  const rawIdleSeconds = hasLiveStats ? Number(liveStats.idle_seconds) : Number.NaN;
+  const liveIdleSeconds = Number.isFinite(rawIdleSeconds) ? Math.round(rawIdleSeconds) : -1;
+  // A key drill-down is scoped to one key while these counters are platform-wide,
+  // so the live layer is muted there rather than reporting the wrong scope.
+  const livePhase = !hasLiveStats || selectedKey
+    ? null
+    : activeStreams > 0
+      ? 'streaming'
+      : activeRequests > 0
+        ? 'busy'
+        : liveTokensLast60s > 0
+          ? 'live'
+          : 'idle';
+
+  // One string for the TPM card's secondary line, so the JSX stays readable.
+  const liveDetail = (() => {
+    if (livePhase === 'streaming') {
+      const tps = Math.round(liveTokensPerSec10s);
+      return isZh ? `当前 ${tps} tok/s · ${activeStreams} 个生成中` : `Current ${tps} tok/s · ${activeStreams} streaming`;
+    }
+    if (livePhase === 'busy') {
+      return isZh ? `处理中 ${activeRequests} 个请求` : `${activeRequests} in flight`;
+    }
+    if (livePhase === 'idle') {
+      if (liveIdleSeconds < 0) return isZh ? '空闲 · 尚无请求' : 'Idle · no requests yet';
+      if (liveIdleSeconds > 3600) return isZh ? '空闲 · 最近请求超过 1 小时' : 'Idle · last request over 1h ago';
+      return isZh ? `空闲 · 最近请求 ${liveIdleSeconds}s 前` : `Idle · last request ${liveIdleSeconds}s ago`;
+    }
+    return null;
+  })();
 
   const activeKeyObj = useMemo(() => {
     return (keys || []).find(k => k.key === selectedKey);
@@ -674,8 +800,8 @@ export default function DashboardView({
           </h2>
           <p className="ui-page-subtitle mt-1">
             {isZh 
-              ? '全双工并发吞吐、首字分位 SLA、多模态调用结构与 Prompt Cache 资金节约' 
-              : 'Real-time telemetry, TTFT latency percentiles, multimodal workloads, and FinOps savings'}
+              ? '并发、首字延迟、模态分布与缓存节省' 
+              : 'Concurrency, TTFT, modality mix and cache savings'}
           </p>
         </div>
 
@@ -831,15 +957,37 @@ export default function DashboardView({
                       )
                   }
                 </h3>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-medium bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  LIVE 60s
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-medium border ${
+                    livePhase === 'idle'
+                      ? 'bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0] border-[#E4E6E9] dark:border-[#2C3038]'
+                      : livePhase === 'busy'
+                        ? 'bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] border-[#355CFF]/25'
+                        : 'bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      livePhase === 'idle'
+                        ? 'bg-[#9AA0A6] dark:bg-[#7C828B]'
+                        : livePhase === 'busy'
+                          ? 'bg-[#355CFF] animate-pulse'
+                          : 'bg-emerald-500 animate-pulse'
+                    }`}
+                  ></span>
+                  {livePhase === 'streaming'
+                    ? (isZh ? `生成中 ${activeStreams}` : `Generating ${activeStreams}`)
+                    : livePhase === 'busy'
+                      ? (isZh ? `处理中 ${activeRequests}` : `Working ${activeRequests}`)
+                      : livePhase === 'idle'
+                        ? (isZh ? '空闲' : 'Idle')
+                        : 'LIVE 60s'}
                 </span>
               </div>
               <p className="ui-meta mt-0.5">
                 {selectedKey
-                  ? (isZh ? '正在监测当前指定 API 密钥的近60秒真实速率与限流配额水位' : 'Monitoring real-time traffic and quota utilization for selected API key')
-                  : (isZh ? '全平台实时滑动窗口 (近60秒) 吞吐速率与历史峰值遥测' : 'Platform-wide 60s sliding window throughput rate and peak telemetry')
+                  ? (isZh ? '该密钥近 60 秒速率与限流水位' : 'Last 60s key rate and quota')
+                  : (isZh ? '近 60 秒滑动窗口 · 含周期峰值' : '60s sliding window with peak')
                 }
               </p>
             </div>
@@ -947,10 +1095,10 @@ export default function DashboardView({
               </div>
             </div>
 
-            <div className="mt-3 pt-2.5 border-t border-[#E4E6E9] dark:border-[#2C3038] text-xs text-[#656B75] dark:text-[#A1A7B0] flex items-center justify-between">
+            <div className="mt-3 pt-2.5 border-t border-[#E4E6E9] dark:border-[#2C3038] text-xs text-[#656B75] dark:text-[#A1A7B0] flex flex-wrap items-center justify-between gap-2">
               <span>{isZh ? '周期峰值' : 'Peak TPM'}: <strong className="font-mono text-[#202124] dark:text-[#F1F2F4]">{peakTPM.toLocaleString()}</strong> TPM</span>
-              <span className="font-mono text-xs">
-                ~{Math.round(currentTPM / 60)} tok/s
+              <span className="font-mono text-xs text-right">
+                {liveDetail ?? `~${Math.round(currentTPM / 60)} tok/s`}
               </span>
             </div>
 
@@ -1002,8 +1150,15 @@ export default function DashboardView({
                 </div>
               ) : (
                 <div className="mt-2">
-                  <div className="text-2xl font-bold font-mono text-[#202124] dark:text-[#F1F2F4]">
-                    {channels.filter(c => c.status === 'active').length} <span className="text-sm font-normal text-[#656B75] dark:text-[#A1A7B0]">/ {channels.length} {isZh ? '渠道在线' : 'channels active'}</span>
+                  <div className="flex items-baseline flex-wrap gap-x-2 gap-y-1">
+                    <div className="text-2xl font-bold font-mono text-[#202124] dark:text-[#F1F2F4]">
+                      {channels.filter(c => c.status === 'active').length} <span className="text-sm font-normal text-[#656B75] dark:text-[#A1A7B0]">/ {channels.length} {isZh ? '渠道在线' : 'channels active'}</span>
+                    </div>
+                    {livePhase && (
+                      <span className="ml-auto px-1.5 py-0.5 rounded border border-[#E4E6E9] dark:border-[#2C3038] font-mono text-[11px] text-[#656B75] dark:text-[#A1A7B0]">
+                        {isZh ? `当前并发 ${activeRequests}` : `Concurrency ${activeRequests}`}
+                      </span>
+                    )}
                   </div>
                   <div className="ui-meta mt-1">
                     {attention.tripped === 0
@@ -1096,7 +1251,7 @@ export default function DashboardView({
               {isZh ? '多维时序走势与分位监测' : 'Time-Series Telemetry & SLA Waveform'}
             </h4>
             <p className="ui-meta mt-0.5">
-              {isZh ? '近时段吞吐与首字时延波动曲线' : 'Live throughput and TTFT latency trends'}
+              {isZh ? '吞吐与首字时延趋势' : 'Throughput and TTFT trends'}
             </p>
           </div>
 
@@ -1406,7 +1561,7 @@ export default function DashboardView({
           )}
 
           <div className="pt-2 border-t border-[#E4E6E9] dark:border-[#2C3038] flex justify-between items-center text-xs">
-            <span className="ui-meta">{isZh ? '按周期核算各服务商调用与支出' : 'Reconcile upstream costs'}</span>
+            <span className="ui-meta">{isZh ? '各服务商调用与支出核算' : 'Provider usage and spend'}</span>
             <button
               onClick={() => setCurrentTab('reconciliation')}
               className="text-[#355CFF] dark:text-[#91A7FF] hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
@@ -1520,7 +1675,7 @@ export default function DashboardView({
               {isZh ? '上游渠道健康度与测速' : 'Upstream Provider Health & Latency'}
             </h3>
             <p className="ui-meta mt-0.5">
-              {isZh ? '实时探测通道连通性与断路器隔离状态' : 'Real-time probe latency and circuit breaker status'}
+              {isZh ? '通道探测与熔断状态' : 'Probe latency and breaker state'}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -1646,8 +1801,8 @@ export default function DashboardView({
             </div>
             <p className="ui-meta mt-0.5">
               {selectedKey
-                ? (isZh ? '当前所选密钥的最新调用流水记录（不受日志筛选器影响）' : 'Latest invocations for selected key (unaffected by audit log filters)')
-                : (isZh ? '系统最新请求审计流水（按时间倒序，不受日志筛选器影响）' : 'Latest system request stream in reverse chronological order')}
+                ? (isZh ? '所选密钥最近调用，不受筛选影响' : 'Latest calls for selected key, ignoring filters')
+                : (isZh ? '最近调用流水，按时间倒序' : 'Latest requests, newest first')}
             </p>
           </div>
           <button

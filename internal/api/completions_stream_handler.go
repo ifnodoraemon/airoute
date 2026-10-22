@@ -13,6 +13,10 @@ import (
 )
 
 func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context, req LegacyCompletionRequest, chatReq model.ChatCompletionRequest, sessionID string, start time.Time) {
+	// Track the in-flight stream for the dashboard's live telemetry gauges.
+	telemetry.GlobalLiveMetrics.BeginStream()
+	defer telemetry.GlobalLiveMetrics.EndStream()
+
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, &chatReq)
 	if err != nil {
 		respondUpstreamDispatchError(c, sessionID, req.Model, time.Since(start), err)
@@ -73,6 +77,8 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 						firstTokenRecorded = true
 					}
 					accumulatedChars += len(ch.Delta.Content)
+					// 实时吞吐：流式 delta 到达即计入内存 token 计数。
+					telemetry.GlobalLiveMetrics.AddChars(len(ch.Delta.Content))
 				}
 				choices = append(choices, gin.H{
 					"text":          ch.Delta.Content,
@@ -129,6 +135,7 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 		TTFT:             ttftDuration,
 		StatusCode:       statusCode,
 		UsageSource:      usageSource,
+		LiveTracked:      true, // stream deltas already fed the live token meter
 		ErrorMessage:     sanitizeErrorMessage(streamError),
 	})
 

@@ -15,6 +15,11 @@ import (
 
 // handleChatStream orchestrates SSE response streaming, token consumption metrics, and audit logging.
 func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *model.ChatCompletionRequest, sessionID string, start time.Time) {
+	// Track the in-flight stream for the dashboard's live telemetry gauges; the
+	// defer keeps the gauge balanced on every exit path (error, disconnect).
+	telemetry.GlobalLiveMetrics.BeginStream()
+	defer telemetry.GlobalLiveMetrics.EndStream()
+
 	if req.StreamOptions == nil {
 		req.StreamOptions = &model.StreamOptions{IncludeUsage: true}
 	} else {
@@ -87,6 +92,7 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 			TTFT:             ttftDuration,
 			StatusCode:       statusCode,
 			UsageSource:      usageSource,
+			LiveTracked:      true, // stream deltas already fed the live token meter
 			ErrorMessage: func() string {
 				if streamError != nil {
 					return streamError.Error()
@@ -162,11 +168,17 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 				}
 				if len(event.Chunk.Choices) > 0 {
 					delta := event.Chunk.Choices[0].Delta
+					deltaChars := 0
 					if delta.Content != "" {
-						accumulatedCompChars += len(delta.Content)
+						deltaChars += len(delta.Content)
 					}
 					if delta.ReasoningContent != "" {
-						accumulatedCompChars += len(delta.ReasoningContent)
+						deltaChars += len(delta.ReasoningContent)
+					}
+					if deltaChars > 0 {
+						accumulatedCompChars += deltaChars
+						// 实时吞吐：delta 到达即计入内存 token 计数，无需等待 usage 帧。
+						telemetry.GlobalLiveMetrics.AddChars(deltaChars)
 					}
 				}
 

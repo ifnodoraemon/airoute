@@ -34,6 +34,7 @@ type AuditRecordParams struct {
 	TTFT             time.Duration
 	StatusCode       int
 	UsageSource      string // "upstream" (default) or "estimated" when tokens are locally approximated
+	LiveTracked      bool   // true when streaming deltas already fed the live token meter
 	ErrorMessage     string // populated for failed requests so the audit log explains the failure
 	BillableUnits    int
 	SkipBilling      bool
@@ -96,6 +97,14 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 		params.PromptTokens,
 		params.CompletionTokens,
 	)
+
+	// The dashboard's live throughput meter is normally fed by the streaming
+	// delta hooks. Non-streaming requests have no deltas, so their tokens are
+	// added here once the request completes; streaming handlers set LiveTracked
+	// so their totals are not counted twice.
+	if !params.LiveTracked {
+		telemetry.GlobalLiveMetrics.AddTokens(totTokens)
+	}
 
 	if storage.GlobalAsyncLogger != nil {
 		tenantID := c.GetString("tenant_id")

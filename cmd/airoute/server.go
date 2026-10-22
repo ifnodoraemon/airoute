@@ -149,6 +149,13 @@ func runServer(args []string) {
 	// Initialize Enterprise Distributed Redis Layer FIRST (required by AsyncLogger for stream consumption)
 	redisClient := distributed.InitRedis(cfg.Server.RedisURL)
 
+	// Publish this node's in-flight telemetry snapshot every second so the
+	// dashboard's live throughput endpoint can aggregate across replicas.
+	// No-op without Redis; the endpoint then serves node-local values.
+	stopLiveStats := make(chan struct{})
+	defer close(stopLiveStats)
+	distributed.StartLiveStatsPublisher(redisClient, stopLiveStats)
+
 	// Initialize Async Usage Logger for zero-latency audit logs
 	// NOTE: Must be after Redis init so redisStreamWorker can start consuming the stream
 	asyncLogger := storage.InitAsyncLogger(repo, 10000, 100, 500*time.Millisecond)
