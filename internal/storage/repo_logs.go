@@ -321,3 +321,37 @@ func (r *Repository) ClearAllUsageLogs() error {
 	r.invalidateUsageLogFacetCache()
 	return nil
 }
+
+// PurgeUsageLogsBefore deletes audit rows created before cutoff in bounded
+// batches, so a large backlog cannot hold a long write lock on the data plane's
+// database. Returns the number of deleted rows.
+func (r *Repository) PurgeUsageLogsBefore(cutoff time.Time, batchSize int) (int64, error) {
+	if batchSize <= 0 {
+		batchSize = 5000
+	}
+	cutoffValue := cutoff.UTC().Format("2006-01-02 15:04:05")
+	var total int64
+	for {
+		res, err := r.db.Exec(
+			`DELETE FROM usage_logs WHERE id IN (SELECT id FROM usage_logs WHERE created_at < ? ORDER BY id LIMIT ?)`,
+			cutoffValue, batchSize,
+		)
+		if err != nil {
+			return total, err
+		}
+		deleted, err := res.RowsAffected()
+		if err != nil {
+			return total, err
+		}
+		total += deleted
+		if deleted < int64(batchSize) {
+			break
+		}
+	}
+	if total > 0 {
+		// Pruned rows may have been the last use of a model or channel; the filter
+		// dropdowns must not keep advertising them for a full cache TTL.
+		r.invalidateUsageLogFacetCache()
+	}
+	return total, nil
+}

@@ -324,3 +324,94 @@ func TestBatchUsageLogInsertSpansChunks(t *testing.T) {
 		t.Fatalf("token totals changed: got %d want %d", gotTokens, wantTokens)
 	}
 }
+
+// Retention must delete only rows older than the cutoff, and must do it in
+// bounded batches rather than one unbounded DELETE.
+func TestPurgeUsageLogsBeforeKeepsRecentRows(t *testing.T) {
+	db, err := OpenDB(filepath.Join(t.TempDir(), "retention.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := NewRepository(db)
+
+	old := time.Now().AddDate(-2, 0, 0).UTC()
+	for i := 0; i < 5; i++ {
+		if err := repo.RecordUsageLog(&UsageLogRecord{APIKey: "ret-key", Model: "ret-model", StatusCode: 200, CreatedAt: old.Add(time.Duration(i) * time.Minute)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 2; i++ {
+		if err := repo.RecordUsageLog(&UsageLogRecord{APIKey: "ret-key", Model: "ret-model", StatusCode: 200, CreatedAt: time.Now()}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// batchSize 2 forces several iterations over the five expired rows.
+	deleted, err := repo.PurgeUsageLogsBefore(time.Now().AddDate(-1, 0, 0), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted != 5 {
+		t.Fatalf("deleted=%d want=5", deleted)
+	}
+	_, remaining, err := repo.ListUsageLogsWithFilterAndCount(LogFilter{Limit: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if remaining != 2 {
+		t.Fatalf("recent rows were pruned: remaining=%d want=2", remaining)
+	}
+}
+
+func TestUsageLogRetentionConfig(t *testing.T) {
+	t.Setenv("GATEWAY_USAGE_LOG_RETENTION_DAYS", "30")
+	t.Setenv("GATEWAY_USAGE_LOG_PRUNE_INTERVAL_HOURS", "2")
+	retention, interval := ResolveUsageLogRetention()
+	if retention != 30*24*time.Hour || interval != 2*time.Hour {
+		t.Fatalf("config not honoured: retention=%v interval=%v", retention, interval)
+	}
+
+	// Zero keeps every row, which also disables the worker.
+	t.Setenv("GATEWAY_USAGE_LOG_RETENTION_DAYS", "0")
+	retention, _ = ResolveUsageLogRetention()
+	if retention != 0 {
+		t.Fatalf("retention=0 should disable pruning, got %v", retention)
+	}
+
+	// Garbage falls back to the one-year default instead of disabling retention.
+	t.Setenv("GATEWAY_USAGE_LOG_RETENTION_DAYS", "not-a-number")
+	retention, _ = ResolveUsageLogRetention()
+	if retention != 365*24*time.Hour {
+		t.Fatalf("invalid value should keep the default, got %v", retention)
+	}
+}
+
+// The worker must go through the repository purge path: expired rows disappear,
+// recent ones stay.
+func TestUsageLogRetentionWorkerPrunesExpiredRows(t *testing.T) {
+	db, err := OpenDB(filepath.Join(t.TempDir(), "retention-worker.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := NewRepository(db)
+
+	if err := repo.RecordUsageLog(&UsageLogRecord{APIKey: "w-key", Model: "w-old", StatusCode: 200, CreatedAt: time.Now().AddDate(-2, 0, 0)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.RecordUsageLog(&UsageLogRecord{APIKey: "w-key", Model: "w-new", StatusCode: 200}); err != nil {
+		t.Fatal(err)
+	}
+
+	worker := &UsageLogRetention{repo: repo, retention: 365 * 24 * time.Hour, interval: time.Hour, stop: make(chan struct{})}
+	worker.pruneOnce()
+
+	page, remaining, err := repo.ListUsageLogsWithFilterAndCount(LogFilter{Limit: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if remaining != 1 || len(page) != 1 || page[0].Model != "w-new" {
+		t.Fatalf("unexpected survivors: remaining=%d page=%+v", remaining, page)
+	}
+}

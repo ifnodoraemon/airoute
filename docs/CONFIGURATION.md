@@ -92,6 +92,8 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `GATEWAY_TRACE_SAMPLE` | `100` | Percentage of **successful** requests captured when mode is `all` |
 | `GATEWAY_TRACE_TTL_HOURS` | `72` | Retention window for archived snapshots |
 | `GATEWAY_TRACE_MAX_SNIPPET` | `4096` | Maximum bytes retained per request/response snippet |
+| `GATEWAY_USAGE_LOG_RETENTION_DAYS` | `365` | Retention window for audit (`usage_logs`) rows; `0` keeps every row |
+| `GATEWAY_USAGE_LOG_PRUNE_INTERVAL_HOURS` | `6` | How often expired audit rows are pruned |
 | `GATEWAY_METRICS_TOKEN` | unset | When set, `/metrics` requires `Authorization: Bearer <token>` |
 | `GATEWAY_PUBLIC_STATUS` | `true` | Set `false` to hide the model catalog on the public status page |
 | `GATEWAY_BLOCK_PRIVATE_PROBE` | `false` | Reject probing RFC1918 private upstream addresses |

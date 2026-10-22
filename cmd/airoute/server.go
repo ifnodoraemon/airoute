@@ -168,6 +168,11 @@ func runServer(args []string) {
 	traceCapture := storage.InitTraceCapture(repo)
 	defer traceCapture.Stop()
 
+	// Prune audit rows beyond the retention window (GATEWAY_USAGE_LOG_RETENTION_DAYS,
+	// 0 disables). Without this usage_logs only ever grew.
+	usageLogRetention := storage.InitUsageLogRetention(repo)
+	defer usageLogRetention.Stop()
+
 	// Initialize Control Plane Synchronizer & load state into Data Plane memory
 	synchronizer := controlplane.NewSynchronizer(repo, dispatcher)
 	if err := synchronizer.ReloadFromDB(); err != nil {
