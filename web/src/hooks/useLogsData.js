@@ -149,15 +149,39 @@ export function useLogsData({ filters, showToast, isZh }) {
   }, [filters.range, filters.session, filters.start, filters.end, isZh]);
 
   // Fetch EVERY row matching the active log filters (used by the CSV export).
-  const fetchAllLogsForExport = useCallback(async (maxRows = EXPORT_MAX_ROWS) => {
+  // Returns { rows, truncated }: `truncated` is true when the result set is
+  // larger than the export cap, so the UI can say so instead of silently
+  // shipping a shortened report. `onProgress` receives the running row count.
+  const fetchAllLogsForExport = useCallback(async (maxRows = EXPORT_MAX_ROWS, onProgress) => {
     const generation = generationRef.current;
     const collected = [];
     let offset = 0;
+    let truncated = false;
+    // Freeze the relative window once: re-evaluating "last 7 days" on every page
+    // shifted the boundary mid-export, which duplicated or skipped rows.
+    const frozenAt = new Date();
+    const facets = filtersRef.current || {};
+    const range = facets.range;
+    let startTime = '';
+    let endTime = '';
+    if (range === '1h') {
+      startTime = new Date(frozenAt.getTime() - 3600000).toISOString();
+      endTime = frozenAt.toISOString();
+    } else if (range === 'today') {
+      startTime = new Date(frozenAt.getFullYear(), frozenAt.getMonth(), frozenAt.getDate()).toISOString();
+      endTime = frozenAt.toISOString();
+    } else if (range === '7d') {
+      startTime = new Date(frozenAt.getTime() - 7 * 86400000).toISOString();
+      endTime = frozenAt.toISOString();
+    } else if (range === 'custom') {
+      if (facets.start) startTime = new Date(facets.start).toISOString();
+      if (facets.end) endTime = new Date(facets.end).toISOString();
+    }
+
     for (;;) {
       const p = new URLSearchParams();
       p.set('limit', String(EXPORT_PAGE_SIZE));
       p.set('offset', String(offset));
-      const facets = filtersRef.current || {};
       if (facets.q && facets.q.trim()) p.set('q', facets.q.trim());
       if (facets.model && facets.model !== 'all') p.set('model', facets.model);
       if (facets.channel && facets.channel !== 'all') p.set('channel', facets.channel);
@@ -166,15 +190,8 @@ export function useLogsData({ filters, showToast, isZh }) {
       if (facets.latency && facets.latency !== 'all') p.set('latency', facets.latency);
       if (facets.session && facets.session.trim()) p.set(correlationField(facets.correlation_type), facets.session.trim());
       if (facets.key_id) p.set('key_id', String(facets.key_id));
-      const tr = facets.range;
-      const now = new Date();
-      if (tr === '1h') p.set('start_time', new Date(now.getTime() - 3600000).toISOString());
-      else if (tr === 'today') p.set('start_time', new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString());
-      else if (tr === '7d') p.set('start_time', new Date(now.getTime() - 7 * 86400000).toISOString());
-      else if (tr === 'custom') {
-        if (facets.start) p.set('start_time', new Date(facets.start).toISOString());
-        if (facets.end) p.set('end_time', new Date(facets.end).toISOString());
-      }
+      if (startTime) p.set('start_time', startTime);
+      if (endTime) p.set('end_time', endTime);
 
       const res = await apiFetch(`/api/v1/admin/logs?${p.toString()}`);
       const data = await res.json();
@@ -184,10 +201,16 @@ export function useLogsData({ filters, showToast, isZh }) {
       if (!res.ok || data.code !== 0) break;
       const batch = data.data || [];
       collected.push(...batch);
-      if (batch.length < EXPORT_PAGE_SIZE || collected.length >= maxRows) break;
+      if (onProgress) onProgress({ collected: Math.min(collected.length, maxRows), maxRows });
+      if (batch.length < EXPORT_PAGE_SIZE) break;
+      if (collected.length >= maxRows) {
+        // More rows exist than the cap allows; the caller must surface this.
+        truncated = true;
+        break;
+      }
       offset += EXPORT_PAGE_SIZE;
     }
-    return collected;
+    return { rows: collected.slice(0, maxRows), truncated };
   }, []);
 
   // Move to a page. The ref and the state must move together: the ref is what a

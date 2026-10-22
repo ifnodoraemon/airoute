@@ -306,12 +306,13 @@ describe('useLogsData', () => {
     });
     const { result } = renderHook(() => useLogsData({ filters: filters() }));
 
-    let rows;
+    let outcome;
     await act(async () => {
-      rows = await result.current.fetchAllLogsForExport();
+      outcome = await result.current.fetchAllLogsForExport();
     });
 
-    expect(rows).toHaveLength(405);
+    expect(outcome.rows).toHaveLength(405);
+    expect(outcome.truncated).toBe(false);
     expect(globalThis.fetch).toHaveBeenCalledTimes(3);
   });
 
@@ -321,12 +322,15 @@ describe('useLogsData', () => {
     }));
     const { result } = renderHook(() => useLogsData({ filters: filters() }));
 
-    let rows;
+    let outcome;
     await act(async () => {
-      rows = await result.current.fetchAllLogsForExport(300);
+      outcome = await result.current.fetchAllLogsForExport(300);
     });
 
-    expect(rows).toHaveLength(400);
+    // The cap is a hard limit: the report must not grow to 400 rows, and the
+    // caller has to be able to tell the report was shortened.
+    expect(outcome.rows).toHaveLength(300);
+    expect(outcome.truncated).toBe(true);
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
   });
 
@@ -341,6 +345,33 @@ describe('useLogsData', () => {
     const q = lastQuery();
     expect(q.get('q')).toBe('boom');
     expect(q.get('start_time')).toBeTruthy();
+  });
+
+  it('reports export progress and freezes the relative time window', async () => {
+    const pages = [Array.from({ length: 200 }, (_, i) => ({ id: i })), [{ id: 200 }]];
+    let call = 0;
+    globalThis.fetch.mockImplementation(async () => {
+      const body = pages[Math.min(call, pages.length - 1)];
+      call += 1;
+      return { ok: true, status: 200, json: async () => ({ code: 0, data: body }) };
+    });
+    const progress = [];
+    const { result } = renderHook(() => useLogsData({ filters: filters({ range: 'today' }) }));
+
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.fetchAllLogsForExport(5000, ({ collected }) => progress.push(collected));
+    });
+
+    expect(outcome.rows).toHaveLength(201);
+    expect(outcome.truncated).toBe(false);
+    expect(progress).toEqual([200, 201]);
+
+    // Both boundaries are pinned once, so pages cannot drift while the export
+    // is walking a relative range like "today".
+    const q = lastQuery();
+    expect(q.get('start_time')).toBeTruthy();
+    expect(q.get('end_time')).toBeTruthy();
   });
 });
 
@@ -429,13 +460,13 @@ describe('useLogsData in-flight invalidation', () => {
       return { ok: true, status: 200, json: async () => ({ code: 0, data: Array.from({ length: 200 }, (_, i) => ({ id: i })) }) };
     });
 
-    let rows;
+    let outcome;
     await act(async () => {
-      rows = await result.current.fetchAllLogsForExport();
+      outcome = await result.current.fetchAllLogsForExport();
     });
 
     // Only the first page was collected before the generation changed.
-    expect(rows).toHaveLength(200);
+    expect(outcome.rows).toHaveLength(200);
   });
 
   it('still applies rows when no reset happened', async () => {

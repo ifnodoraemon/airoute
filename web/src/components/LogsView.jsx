@@ -98,6 +98,9 @@ export default function LogsView({
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [logViewMode, setLogViewMode] = useState('inference'); // 'inference' | 'system'
+  // Non-null while a CSV export is walking pages; carries the running row count
+  // so the menu entry can show progress instead of freezing silently.
+  const [exportProgress, setExportProgress] = useState(null);
 
   // The combined facet filters are owned by App.jsx: it is the component that
   // builds the server-side query (and persists them in the URL under `logs.*`).
@@ -237,12 +240,18 @@ export default function LogsView({
   // ask App.jsx to page through the server-side filter and hand back every match.
   const handleExportCSV = async () => {
     let exportRows = displayedLogs;
+    let truncated = false;
     if (onExportAll) {
+      setExportProgress({ collected: 0, maxRows: 0 });
       try {
-        exportRows = await onExportAll();
+        const result = await onExportAll(undefined, ({ collected, maxRows }) => setExportProgress({ collected, maxRows }));
+        exportRows = result?.rows || [];
+        truncated = Boolean(result?.truncated);
       } catch (e) {
         if (showToast) showToast((isZh ? '导出失败: ' : 'Export failed: ') + e.message, 'warning');
         return;
+      } finally {
+        setExportProgress(null);
       }
     }
     if (!exportRows || exportRows.length === 0) {
@@ -319,7 +328,18 @@ export default function LogsView({
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    if (showToast) showToast(isZh ? `成功导出 ${exportRows.length} 条审计日志（全部匹配记录）` : `Exported ${exportRows.length} matching audit logs`, 'success');
+    if (showToast) {
+      if (truncated) {
+        showToast(
+          isZh
+            ? `筛选结果超过导出上限，已导出前 ${exportRows.length} 条；请缩小时间范围后分段导出`
+            : `Result set exceeds the export cap; exported the first ${exportRows.length} rows. Narrow the time range to export the rest.`,
+          'warning'
+        );
+      } else {
+        showToast(isZh ? `成功导出 ${exportRows.length} 条审计日志（全部匹配记录）` : `Exported ${exportRows.length} matching audit logs`, 'success');
+      }
+    }
   };
 
   return (
@@ -500,11 +520,20 @@ export default function LogsView({
                       setMenuOpen(false);
                       handleExportCSV();
                     }}
-                    className="ui-menu-item"
+                    disabled={Boolean(exportProgress)}
+                    className="ui-menu-item disabled:opacity-60 disabled:cursor-not-allowed"
                     title={isZh ? '导出当前筛选结果为 CSV 审计报表' : 'Export current filtered results as CSV'}
                   >
                     <FileSpreadsheet className="w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0]" />
-                    <span>{isZh ? '导出 CSV 报表' : 'Export CSV'}</span>
+                    <span>
+                      {exportProgress
+                        ? isZh
+                          ? `导出中 ${exportProgress.collected}${exportProgress.maxRows ? ` / ${exportProgress.maxRows}` : ''}…`
+                          : `Exporting ${exportProgress.collected}${exportProgress.maxRows ? ` / ${exportProgress.maxRows}` : ''}…`
+                        : isZh
+                        ? '导出 CSV 报表'
+                        : 'Export CSV'}
+                    </span>
                   </button>
 
                   <div className="my-1 border-t border-[#E4E6E9] dark:border-[#2C3038]" />
@@ -1056,6 +1085,10 @@ export default function LogsView({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
+                            // The detail modal already asks before deleting; the
+                            // row shortcut deleted immediately, so one click
+                            // could destroy an audit row.
+                            if (!window.confirm(isZh ? '确认删除这条调用日志？' : 'Delete this request log?')) return;
                             handleDeleteSingleLog(log.id);
                           }}
                           className="p-1 text-[#656B75] hover:text-rose-600 transition-colors rounded-md hover:bg-rose-500/10 inline-flex items-center align-middle cursor-pointer"

@@ -245,3 +245,42 @@ func TestUsageLogFacetsCacheIsScopedAndInvalidated(t *testing.T) {
 		t.Fatalf("cleared trail still served cached facets: %+v", cleared)
 	}
 }
+
+// Every console page filters by scope (tenant/key/model) plus a time range.
+// Single-column indexes cannot serve that shape, so migration v18 adds
+// composite ones; this pins both their existence and the scoped query they serve.
+func TestUsageLogQueryIndexesExist(t *testing.T) {
+	db, err := OpenDB(filepath.Join(t.TempDir(), "log-indexes.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	for _, name := range []string{"idx_usage_tenant_created", "idx_usage_key_created", "idx_usage_model_created"} {
+		var found string
+		if err := db.DB.QueryRow(`SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?`, name).Scan(&found); err != nil {
+			t.Fatalf("index %s missing after migration: %v", name, err)
+		}
+	}
+
+	repo := NewRepository(db)
+	base := time.Date(2026, 10, 21, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < 4; i++ {
+		record := &UsageLogRecord{APIKey: "scope-key", TenantID: "tenant-a", Model: "scope-model", Channel: "scope-channel", StatusCode: 200, CreatedAt: base.Add(time.Duration(i) * time.Hour)}
+		if err := repo.RecordUsageLog(record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page, total, err := repo.ListUsageLogsWithFilterAndCount(LogFilter{
+		Limit:     50,
+		TenantID:  "tenant-a",
+		StartTime: base.Add(1 * time.Hour).Format(time.RFC3339),
+		EndTime:   base.Add(2 * time.Hour).Format(time.RFC3339),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 2 || len(page) != 2 {
+		t.Fatalf("tenant+time scope broken: total=%d page=%d", total, len(page))
+	}
+}

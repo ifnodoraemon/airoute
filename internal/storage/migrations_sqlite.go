@@ -480,6 +480,7 @@ func (db *DB) migrate() error {
 		},
 		{Version: 16, Name: "independent_model_routes", Up: createModelRoutesTable},
 		{Version: 17, Name: "usage_pricing_snapshot", Up: addUsagePricingSnapshot},
+		{Version: 18, Name: "usage_log_query_indexes", Up: addUsageLogQueryIndexes},
 	}
 	return db.runMigrations(migrations)
 }
