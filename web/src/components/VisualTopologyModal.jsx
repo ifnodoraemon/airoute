@@ -22,7 +22,7 @@ export default function VisualTopologyModal({ isOpen, onClose, adminFetch, onVie
         <header className="flex items-start justify-between gap-4">
           <div>
             <h2 id="routing-topology-title" className="text-lg font-semibold flex items-center gap-2"><Network className="w-5 h-5 text-indigo-500" />{isZh ? '运行时容灾拓扑' : 'Live routing topology'}</h2>
-            <p className="ui-meta mt-1">{isZh ? '按真实生效配置展示模型映射、优先级和跨模型兜底；调用结果来自审计日志。' : 'Active model mappings, priority tiers and model fallbacks, with recorded request outcomes.'}</p>
+            <p className="ui-meta mt-1">{isZh ? '映射、优先级与兜底，调用结果取自审计日志' : 'Mappings, priority tiers and fallbacks from audit logs'}</p>
           </div>
           <button type="button" className="ui-btn-ghost p-2" aria-label={isZh ? '关闭容灾拓扑' : 'Close topology'} onClick={onClose}><X className="w-5 h-5" /></button>
         </header>

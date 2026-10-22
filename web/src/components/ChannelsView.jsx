@@ -277,8 +277,8 @@ export default function ChannelsView({
           </div>
           <p className="ui-page-subtitle mt-1">
             {isZh
-              ? '管理 GPUStack、商业厂商大模型上游凭证与负载权重'
-              : 'Manage provider credentials, health checks, and circuit-breaker weights'}
+              ? '接入上游凭证与负载权重'
+              : 'Provider credentials, health and weights'}
           </p>
         </div>
 

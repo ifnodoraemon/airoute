@@ -336,8 +336,8 @@ export default function LogsView({
           </div>
           <p className="ui-page-subtitle mt-1">
             {isZh
-              ? '全链路 Trace 追溯、Token 消耗计量与企业安全审计留存'
-              : 'End-to-end trace auditing, token metering, and enterprise compliance logs'}
+              ? 'Trace、Token 计量与审计留存'
+              : 'Trace, token metering and audit logs'}
           </p>
         </div>
 

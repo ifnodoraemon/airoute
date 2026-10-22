@@ -237,7 +237,7 @@ export default function KeysView({
             </span>
           </div>
           <p className="ui-page-subtitle mt-1">
-            {isZh ? '用于各业务客户端与系统调用接入鉴权、独立计费及模型级权限隔离' : 'Authentication, group pricing, rate limits, and model access scopes for client applications'}
+            {isZh ? '客户端鉴权、分组计费与模型权限' : 'Auth, group pricing and model scopes'}
           </p>
         </div>
 

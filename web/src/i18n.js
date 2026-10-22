@@ -68,7 +68,7 @@ export const translations = {
     dashCircuitMatrixSub: '按探测结果切换闭合/跳闸/半开',
     dashErrorClustering: '近 24 小时错误聚类与 AI 根因分析 (RCA)',
     dashErrorClusteringSub: '异常状态码聚合与排障建议',
-    dashNoErrors: '最近 24 小时内未检测到任何异常请求，集群运行稳健！',
+    dashNoErrors: '近 24 小时无异常请求',
     dashOccurrences: '次发生',
     dashRcaTitle: '智能排障建议 (Remediation)',
     dashStatusHealthy: '正常',
@@ -83,9 +83,9 @@ export const translations = {
 
     // Status Page
     statusAllOperational: '所有核心模型与上游渠道运转正常',
-    statusDegraded: '部分模型服务响应延迟偏高或触发降级',
-    statusOutage: '检测到部分上游提供商发生熔断或不可用',
-    statusSubtitle: '实时可用性、响应耗时与最近 30 天服务 SLA 运行看板',
+    statusDegraded: '部分模型延迟偏高或降级',
+    statusOutage: '部分上游熔断或不可用',
+    statusSubtitle: '实时可用性与近 30 天 SLA',
     statusRefresh: '刷新状态',
     statusRealtime: '实时数据更新',
     statusOperationalBadge: '运行正常',
@@ -108,7 +108,7 @@ export const translations = {
 
     // Playground 2.0
     playTitle: '多模态调试演练 (Playground 2.0)',
-    playSubtitle: '单模型深入评测与双模型竞技场 (Arena)，全模态流式验证、TTFT 测速与参数调优',
+    playSubtitle: '单模型评测与双模型竞技场',
     playSingleMode: '单模型模式',
     playArenaMode: '双模型竞技场 (Arena 对比)',
     playProtocol: '接入协议',
@@ -134,7 +134,7 @@ export const translations = {
     playSending: '生成中...',
     playThinking: '思考过程 (Reasoning)',
     playThinkingDone: '深度思考完成',
-    playSelectModelPrompt: '请在上方选择有效的模型以开启调试演练',
+    playSelectModelPrompt: '先在上方选择模型',
     playTabChat: '文本对话',
     playTabImages: '图像生成',
     playTabTTS: '语音合成 (TTS)',
@@ -145,13 +145,13 @@ export const translations = {
 
     // Onboarding Wizard
     onboardTitle: '开发者 3 步极速接入向导',
-    onboardSubtitle: '开箱即用：30 秒内完成 API 密钥配置、SDK 代码生成与实时握手验证',
+    onboardSubtitle: '30 秒完成密钥配置与握手验证',
     onboardStep1: '步骤 1: 获取或选择 API 密钥',
     onboardStep2: '步骤 2: 选择交互协议与目标模型',
     onboardStep3: '步骤 3: 复制 SDK 代码与即时探测',
-    onboardStep1Desc: '每个客户端请求必须携带一个 API 密钥进行鉴权与速率治理。',
+    onboardStep1Desc: '请求需携带 API Key 以鉴权限流',
     onboardStep2Desc: 'Airoute 原生兼容 OpenAI、Anthropic Claude 与 Gemini 协议，并支持全双工互转。',
-    onboardStep3Desc: '选择你最熟悉的编程语言复制代码，或直接在浏览器内触发实时连通性探测。',
+    onboardStep3Desc: '复制 SDK 代码，或直接浏览器探测',
     onboardSelectKey: '选择现有 API 密钥',
     onboardUseDemoKey: '无可用密钥，使用默认演示凭证',
     onboardNext: '下一步',
@@ -164,11 +164,11 @@ export const translations = {
 
     // Visual Topology Modal
     topoTitle: '全链路智能路由与容灾拓扑',
-    topoSubtitle: '零内存拷贝分发管道，多级容灾降级队列与自适应三态熔断矩阵',
+    topoSubtitle: '路由分发、容灾降级与熔断矩阵',
     topoChaosTitle: '交互式混沌故障注入演练',
     topoSimulateFail: '模拟主渠道 503 宕机',
     topoRestore: '恢复正常网络分发',
-    topoChaosActiveTip: '已注入混沌故障：触发自动无感熔断降级',
+    topoChaosActiveTip: '已注入故障，自动熔断降级',
     topoChaosNormalTip: '所有渠道处于正常低延迟状态',
     topoNodeInbound: '客户端请求 Inbound',
     topoNodeNormalize: '协议规范化 & 前缀重写',
@@ -179,7 +179,7 @@ export const translations = {
 
     // Docs View
     docsTitle: 'Airoute 开发者文档与架构规范',
-    docsSubtitle: '高可用 AI 网关、全模态流式协议互转与企业级治理实践',
+    docsSubtitle: '网关、协议互转与治理实践',
     docsNavArchitecture: '架构与流式转发',
     docsNavSdk: 'SDK 极速上手',
     docsNavMultimodal: '多模态端点',
@@ -189,7 +189,7 @@ export const translations = {
 
     // Model Routes Manager
     modelTopologyTitle: '模型路由',
-    modelTopologySubtitle: '配置模型多渠道平滑分发权重与无感故障转移',
+    modelTopologySubtitle: '配置分发权重与故障转移',
     modelTabAll: '全模态',
     modelTabChat: '文本对话',
     modelTabEmbed: '向量嵌入',
@@ -210,7 +210,7 @@ export const translations = {
 
     // Channels Manager
     channelTitle: '渠道管理',
-    channelSubtitle: '接入与管理上游 AI 提供商，自动识别协议与多模态端点',
+    channelSubtitle: '接入上游提供商并识别协议',
     channelAddBtn: '接入新渠道',
     channelTableTitle: '渠道名称',
     channelTableBaseURL: '服务地址 (Base URL)',
@@ -222,10 +222,10 @@ export const translations = {
 
     // Keys Manager
     keysTitle: 'API 密钥',
-    keysSubtitle: '管理调用凭证，配置速率限制 (RPM) 与可用模型范围',
+    keysSubtitle: '管理调用凭证、RPM 与模型范围',
     keysCreateBtn: '创建 API 密钥',
     keysEmptyTitle: '尚未签发任何 API 密钥',
-    keysEmptyDesc: '为不同应用或终端创建独立调用密钥，精确控制调用配额与速率权限。',
+    keysEmptyDesc: '为每个应用创建独立密钥，控制配额',
     keysTableKey: 'API 密钥 (Token)',
     keysTableTenant: '所属应用 / 租户',
     keysTableRPM: '速率限制 (RPM)',
@@ -243,7 +243,7 @@ export const translations = {
 
     // Plaza (Skill & MCP Hub)
     plazaTitle: '扩展广场',
-    plazaSubtitle: '发现与按需启用 Agent 技能，支持 MCP 2024-11-05 协议与渐进式按需加载',
+    plazaSubtitle: '按需启用 Agent 技能 (MCP)',
     plazaSearch: '搜索技能名称、标识或暴露工具...',
     plazaAll: '全部',
     plazaOps: '运维治理',
@@ -261,7 +261,7 @@ export const translations = {
 
     // Logs
     logsTitle: '调用日志',
-    logsSubtitle: '查询会话请求明细、耗时、首字时延及 Token 消耗',
+    logsSubtitle: '查询请求明细、耗时与 Token',
     logsFilterPlaceholder: '按 Trace ID、模型、渠道或租户过滤...',
     logsTimeRange1h: '最近 1 小时',
     logsTimeRangeToday: '今天',
@@ -351,7 +351,7 @@ export const translations = {
     dashCircuitMatrixSub: 'Breaker states follow probe results',
     dashErrorClustering: '24h Error Clustering & AI RCA Insights',
     dashErrorClusteringSub: 'Error code grouping and remediation tips',
-    dashNoErrors: 'No abnormal requests detected in the last 24 hours. Cluster is operating smoothly!',
+    dashNoErrors: 'No errors in the last 24h',
     dashOccurrences: 'occurrences',
     dashRcaTitle: 'Remediation Recommendation',
     dashStatusHealthy: 'Healthy',
@@ -366,9 +366,9 @@ export const translations = {
 
     // Status Page
     statusAllOperational: 'All Models & Upstream Providers Operational',
-    statusDegraded: 'Degraded Performance on Selected Models',
-    statusOutage: 'Major Outage or Circuit Breakers Tripped',
-    statusSubtitle: 'Live SLA availability, latency, and 30-day uptime track',
+    statusDegraded: 'Degraded on some models',
+    statusOutage: 'Some upstreams tripped or down',
+    statusSubtitle: 'Live availability and 30-day SLA',
     statusRefresh: 'Refresh Status',
     statusRealtime: 'Realtime telemetry',
     statusOperationalBadge: 'Operational',
@@ -391,7 +391,7 @@ export const translations = {
 
     // Playground 2.0
     playTitle: 'Multimodal Playground 2.0',
-    playSubtitle: 'In-depth single model testing & Side-by-Side Arena comparison, streaming verification, TTFT speedometer & parameter tuning',
+    playSubtitle: 'Single-model test and Arena compare',
     playSingleMode: 'Single Model',
     playArenaMode: 'Model Arena (Side-by-Side)',
     playProtocol: 'Protocol',
@@ -417,7 +417,7 @@ export const translations = {
     playSending: 'Generating...',
     playThinking: 'Reasoning Process',
     playThinkingDone: 'Reasoning Completed',
-    playSelectModelPrompt: 'Please select an active model above to begin testing',
+    playSelectModelPrompt: 'Pick a model above to start',
     playTabChat: 'Chat',
     playTabImages: 'Images',
     playTabTTS: 'Audio (TTS)',
@@ -428,13 +428,13 @@ export const translations = {
 
     // Onboarding Wizard
     onboardTitle: '3-Step Developer Onboarding Wizard',
-    onboardSubtitle: 'Get started in under 30 seconds: configure API keys, generate SDK snippets, and verify live connectivity',
+    onboardSubtitle: 'Keys, SDK snippets and a live probe in 30s',
     onboardStep1: 'Step 1: Select or Generate API Key',
     onboardStep2: 'Step 2: Choose Protocol & Target Model',
     onboardStep3: 'Step 3: Copy SDK Snippets & Live Probe',
-    onboardStep1Desc: 'Every client request requires a valid API key for authentication and rate limit enforcement.',
+    onboardStep1Desc: 'Requests need an API key for auth and limits',
     onboardStep2Desc: 'Airoute natively supports OpenAI, Anthropic Claude, and Gemini protocols with full bidirectional cross-translation.',
-    onboardStep3Desc: 'Copy the snippet in your preferred language or trigger a live in-browser connectivity probe.',
+    onboardStep3Desc: 'Copy the SDK snippet or probe from the browser',
     onboardSelectKey: 'Select Existing API Key',
     onboardUseDemoKey: 'No keys found, using temporary demo credentials',
     onboardNext: 'Next',
@@ -447,11 +447,11 @@ export const translations = {
 
     // Visual Topology Modal
     topoTitle: 'Visual Routing & Failover Flow Topology',
-    topoSubtitle: 'Zero-memory-copy pipeline, multi-tier fallback queue, and adaptive tri-state circuit breaker matrix',
+    topoSubtitle: 'Routing, failover and breaker matrix',
     topoChaosTitle: 'Interactive Chaos Outage Simulation',
     topoSimulateFail: 'Simulate Primary 503 Outage',
     topoRestore: 'Restore Normal Traffic',
-    topoChaosActiveTip: 'Chaos Injected: Automatic Zero-Downtime Failover Active',
+    topoChaosActiveTip: 'Chaos injected: automatic failover',
     topoChaosNormalTip: 'All channels healthy with optimal low-latency routing',
     topoNodeInbound: 'Client Inbound',
     topoNodeNormalize: 'Rewrite & Normalization',
@@ -462,7 +462,7 @@ export const translations = {
 
     // Docs View
     docsTitle: 'Airoute Developer Documentation',
-    docsSubtitle: 'High-availability AI gateway, multimodal protocol inter-op, and enterprise governance',
+    docsSubtitle: 'Gateway, protocol interop and governance',
     docsNavArchitecture: 'Architecture & Streaming',
     docsNavSdk: 'SDK Quickstart',
     docsNavMultimodal: 'Multimodal Endpoints',
@@ -472,7 +472,7 @@ export const translations = {
 
     // Model Routes Manager
     modelTopologyTitle: 'Model Routing',
-    modelTopologySubtitle: 'Configure weighted load balancing and zero-touch failover',
+    modelTopologySubtitle: 'Weighted routing and failover',
     modelTabAll: 'All Modalities',
     modelTabChat: 'Chat / Text',
     modelTabEmbed: 'Embeddings',
@@ -493,7 +493,7 @@ export const translations = {
 
     // Channels Manager
     channelTitle: 'Channels',
-    channelSubtitle: 'Connect and manage upstream model providers and protocol endpoints',
+    channelSubtitle: 'Connect upstream providers and protocols',
     channelAddBtn: 'Add Channel',
     channelTableTitle: 'Channel Name',
     channelTableBaseURL: 'Base URL',
@@ -505,10 +505,10 @@ export const translations = {
 
     // Keys Manager
     keysTitle: 'API Keys',
-    keysSubtitle: 'Manage API credentials, RPM rate limits, and allowed model scopes',
+    keysSubtitle: 'Credentials, RPM limits and model scopes',
     keysCreateBtn: 'Create Key',
     keysEmptyTitle: 'No API Keys Issued Yet',
-    keysEmptyDesc: 'Create dedicated keys for teams and applications to manage quotas.',
+    keysEmptyDesc: 'Create per-app keys with their own quotas',
     keysTableKey: 'API Key',
     keysTableTenant: 'App / Team',
     keysTableRPM: 'Rate Limit (RPM)',
@@ -526,7 +526,7 @@ export const translations = {
 
     // Plaza (Skill & MCP Hub)
     plazaTitle: 'Plaza',
-    plazaSubtitle: 'Discover and toggle Agent Skills on demand with MCP 2024-11-05 and Progressive Loading',
+    plazaSubtitle: 'Enable Agent Skills on demand (MCP)',
     plazaSearch: 'Search skill name, id, or tool name...',
     plazaAll: 'All',
     plazaOps: 'Ops',
@@ -544,7 +544,7 @@ export const translations = {
 
     // Logs
     logsTitle: 'Logs',
-    logsSubtitle: 'Trace request latency, TTFT, token counts, and session history',
+    logsSubtitle: 'Requests, latency and token usage',
     logsFilterPlaceholder: 'Filter by Trace ID, model, channel, or tenant...',
     logsTimeRange1h: 'Last 1 Hour',
     logsTimeRangeToday: 'Today',

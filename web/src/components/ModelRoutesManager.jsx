@@ -299,7 +299,7 @@ export default function ModelRoutesManager({
             {isZh ? '模型路由与分发' : 'Model Routes & Dispatch'}
           </h1>
           <p className="ui-page-subtitle">
-            {isZh ? '配置各模型的路由绑定、故障降级与定价；渠道模型库独立保留' : 'Configure provider weights, fallback chains, and pricing rates for AI models'}
+            {isZh ? '配置路由绑定、降级与定价' : 'Routing weights, fallbacks and pricing'}
           </p>
         </div>
 

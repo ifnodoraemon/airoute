@@ -200,7 +200,7 @@ export default function ServiceStatus({
             <div className="flex flex-wrap items-center gap-2 mb-1">
               <h2 className="text-base font-semibold tracking-tight">
                 {anyTripped
-                  ? (t ? t.statusDegraded : (isZh ? '部分模型服务响应延迟偏高或触发熔断降级' : 'Partial service degradation or circuit breaker tripped'))
+                  ? (t ? t.statusDegraded : (isZh ? '部分模型延迟偏高或熔断' : 'Partial degradation or breaker tripped'))
                   : (rawModels.length === 0 ? (isZh ? '暂无已配置模型' : 'No configured models') : (isZh ? '当前未发现熔断渠道' : 'No tripped channels reported'))}
               </h2>
               <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-white/40 dark:bg-black/20 border border-current/20 backdrop-blur-sm">
@@ -209,7 +209,7 @@ export default function ServiceStatus({
               </span>
             </div>
             <p className="text-xs opacity-80 mt-0.5">
-              {isZh ? '基于当前配置与熔断状态；历史可用率需接入独立监控数据' : 'Based on current routes and circuit breakers; historical uptime requires monitoring data'}
+              {isZh ? '按当前配置与熔断状态推算' : 'Based on current routes and breakers'}
               <span className="ml-2 font-mono tabular-nums text-xs opacity-75">
                 ({isZh ? '更新于 ' : 'Updated at '}{lastUpdated.toLocaleTimeString()})
               </span>

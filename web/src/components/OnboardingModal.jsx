@@ -227,7 +227,7 @@ print(message.content[0].text)
                 {isZh ? '开发者极速上手接入向导' : 'Developer Onboarding Wizard'}
               </h2>
               <p className="text-xs text-[#656B75] dark:text-[#A1A7B0] mt-0.5">
-                {isZh ? '3 步完成密钥配置、多协议代码生成与网关实时连通性探测' : '3 steps: API Key selection, multi-protocol SDK snippet generation & live handshake probe'}
+                {isZh ? '3 步完成密钥、代码与连通探测' : '3 steps: key, SDK snippet, live probe'}
               </p>
             </div>
           </div>
