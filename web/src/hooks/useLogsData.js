@@ -182,6 +182,9 @@ export function useLogsData({ filters, showToast, isZh }) {
       const p = new URLSearchParams();
       p.set('limit', String(EXPORT_PAGE_SIZE));
       p.set('offset', String(offset));
+      // The export walks pages of rows; totals and facets are not part of the CSV.
+      p.set('count', '0');
+      p.set('facets', '0');
       if (facets.q && facets.q.trim()) p.set('q', facets.q.trim());
       if (facets.model && facets.model !== 'all') p.set('model', facets.model);
       if (facets.channel && facets.channel !== 'all') p.set('channel', facets.channel);
@@ -246,7 +249,9 @@ export function useLogsData({ filters, showToast, isZh }) {
     const opts = overrideToken ? { token: overrideToken } : {};
     const generation = generationRef.current;
     try {
-      const res = await apiFetch('/api/v1/admin/logs?limit=20&offset=0', opts);
+      // The dashboard stream needs rows only: skipping the filtered COUNT and the
+      // facet DISTINCT keeps the 8s poll to a single query.
+      const res = await apiFetch('/api/v1/admin/logs?limit=20&offset=0&count=0&facets=0', opts);
       const data = await res.json();
       if (generation !== generationRef.current) return;
       if (res.ok && data.code === 0 && Array.isArray(data.data)) {

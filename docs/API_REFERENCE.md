@@ -325,6 +325,7 @@ All Admin APIs are under `/api/v1/admin`:
 | `POST` | `/api/v1/admin/keys` | Create client API key |
 | `DELETE`| `/api/v1/admin/keys/:id` | Revoke client API key |
 | `GET` | `/api/v1/admin/logs?limit=50` | Query real-time audit logs with TTFT, tokens, latency, status code |
+| `GET` | `/api/v1/admin/logs?limit=50&count=0&facets=0` | Rows only: skips the filtered COUNT and facet DISTINCT (dashboard poll / CSV export) |
 | `GET` | `/api/v1/admin/stats/overview` | Query aggregated gateway statistics (QPS, TTFT, Tokens) |
 | `GET` | `/api/v1/admin/models` | List all active models across providers |
 

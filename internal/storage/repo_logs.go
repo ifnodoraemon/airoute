@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const usageLogErrorSQL = `(COALESCE(status_code, 0) < 200 OR status_code >= 400 OR COALESCE(error_message, '') <> '')`
@@ -29,6 +30,26 @@ func escapeLikePattern(s string) string {
 // width). Comparing against that exact format is what lets SQLite use
 // idx_usage_created.
 const sqliteTimestampLayout = "2006-01-02 15:04:05"
+
+// ftsPhrase renders user text as an FTS5 phrase, doubling embedded quotes so the
+// match grammar cannot interpret it as operators.
+func ftsPhrase(keyword string) string {
+	return `"` + strings.ReplaceAll(keyword, `"`, `""`) + `"`
+}
+
+// sqliteUsageLogFTSAvailable reports whether migration v20 created the FTS5 index.
+func (r *Repository) sqliteUsageLogFTSAvailable() bool {
+	r.ftsOnce.Do(func() {
+		if r.db.Dialect() != "sqlite" {
+			return
+		}
+		var count int
+		if err := r.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'usage_logs_fts'`).Scan(&count); err == nil {
+			r.ftsAvailable = count > 0
+		}
+	})
+	return r.ftsAvailable
+}
 
 // normalizeSQLiteTimestamp converts an API time filter (RFC3339 from the console,
 // or a plain date) into the stored representation.
@@ -142,6 +163,10 @@ type LogFilter struct {
 	Latency string
 	// Keyword is a free-text match across trace/chat/session/model/channel/error.
 	Keyword string
+	// SkipCount omits the total-row COUNT. Dashboard polls and CSV export only
+	// need the rows, and COUNT over the filtered set is the expensive part of a
+	// page request.
+	SkipCount bool
 }
 
 // ListUsageLogs returns recent usage logs for audit and monitoring.
@@ -220,8 +245,17 @@ func (r *Repository) buildUsageLogWhere(f LogFilter) (string, []interface{}) {
 		// Free-text search must run in SQL: filtering only the loaded page
 		// silently misses every match living on another page.
 		like := "%" + escapeLikePattern(f.Keyword) + "%"
-		where += ` AND (trace_id LIKE ? ESCAPE '\' OR COALESCE(chat_id,'') LIKE ? ESCAPE '\' OR COALESCE(session_id,'') LIKE ? ESCAPE '\' OR COALESCE(model,'') LIKE ? ESCAPE '\' OR COALESCE(channel,'') LIKE ? ESCAPE '\' OR COALESCE(error_message,'') LIKE ? ESCAPE '\')`
-		args = append(args, like, like, like, like, like, like)
+		likeClause := ` AND (trace_id LIKE ? ESCAPE '\' OR COALESCE(chat_id,'') LIKE ? ESCAPE '\' OR COALESCE(session_id,'') LIKE ? ESCAPE '\' OR COALESCE(model,'') LIKE ? ESCAPE '\' OR COALESCE(channel,'') LIKE ? ESCAPE '\' OR COALESCE(error_message,'') LIKE ? ESCAPE '\')`
+		// The trigram tokenizer cannot answer queries shorter than three
+		// characters, so those keep the LIKE scan; everything else goes through
+		// the FTS5 index instead of scanning six columns.
+		if r.db.Dialect() == "sqlite" && utf8.RuneCountInString(f.Keyword) >= 3 && r.sqliteUsageLogFTSAvailable() {
+			where += ` AND id IN (SELECT rowid FROM usage_logs_fts WHERE usage_logs_fts MATCH ?)`
+			args = append(args, ftsPhrase(f.Keyword))
+		} else {
+			where += likeClause
+			args = append(args, like, like, like, like, like, like)
+		}
 	}
 	return where, args
 }
@@ -250,9 +284,12 @@ func (r *Repository) ListUsageLogsWithFilterAndCount(f LogFilter) ([]*UsageLogRe
 
 	where, whereArgs := r.buildUsageLogWhere(f)
 
-	var total int64
-	if err := r.db.QueryRow(`SELECT COUNT(*) FROM usage_logs WHERE 1=1`+where, whereArgs...).Scan(&total); err != nil {
-		return nil, 0, err
+	// -1 means "not counted"; callers that asked to skip it must not use the value.
+	total := int64(-1)
+	if !f.SkipCount {
+		if err := r.db.QueryRow(`SELECT COUNT(*) FROM usage_logs WHERE 1=1`+where, whereArgs...).Scan(&total); err != nil {
+			return nil, 0, err
+		}
 	}
 
 	query := `SELECT id, trace_id, COALESCE(chat_id, ''), COALESCE(session_id, ''), COALESCE(api_key, ''), COALESCE(tenant_id, ''), COALESCE(model, ''), COALESCE(channel, ''), prompt_tokens, completion_tokens, COALESCE(cached_tokens, 0), total_tokens, COALESCE(cost, 0.0), COALESCE(is_off_peak, 0), COALESCE(off_peak_discount, 1.0), duration_ms, ttft_ms, status_code, COALESCE(usage_source, 'upstream'), COALESCE(error_message, ''), COALESCE(pricing_snapshot, ''), created_at FROM usage_logs WHERE 1=1` + where + ` ORDER BY id DESC LIMIT ? OFFSET ?`

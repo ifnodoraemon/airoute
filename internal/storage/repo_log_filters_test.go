@@ -415,3 +415,90 @@ func TestUsageLogRetentionWorkerPrunesExpiredRows(t *testing.T) {
 		t.Fatalf("unexpected survivors: remaining=%d page=%+v", remaining, page)
 	}
 }
+
+// SQLite keyword search goes through the FTS5 trigram index for queries of three
+// or more characters, and keeps the LIKE scan only for shorter ones that the
+// tokenizer cannot answer.
+func TestUsageLogKeywordUsesSQLiteTrigramIndex(t *testing.T) {
+	db, err := OpenDB(filepath.Join(t.TempDir(), "fts-search.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	var ftsTables int
+	if err := db.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'usage_logs_fts'`).Scan(&ftsTables); err != nil || ftsTables != 1 {
+		t.Fatalf("migration v20 did not create usage_logs_fts: count=%d err=%v", ftsTables, err)
+	}
+
+	repo := NewRepository(db)
+	seed := []struct {
+		model, channel, errMsg string
+	}{
+		{"deepseek-v4.1-flash", "罗总", ""},
+		{"claude-5", "backup", "upstream returned 503"},
+		{"pct-100%", "pct", ""},
+	}
+	for _, record := range seed {
+		if err := repo.RecordUsageLog(&UsageLogRecord{APIKey: "fts-key", Model: record.model, Channel: record.channel, ErrorMessage: record.errMsg, StatusCode: 200}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cases := []struct {
+		keyword string
+		want    int64
+		why     string
+	}{
+		{"seek-v4", 1, "substring in the middle of a column"},
+		{"DEEPSEEK", 1, "ASCII case-insensitive like SQLite LIKE"},
+		{"upstream returned", 1, "phrase with a space"},
+		{"100%", 1, "wildcard characters match literally"},
+		{"罗总", 1, "two-character query falls back to the LIKE scan"},
+		{"no-such-token", 0, "no false positives"},
+	}
+	for _, tc := range cases {
+		_, total, err := repo.ListUsageLogsWithFilterAndCount(LogFilter{Keyword: tc.keyword})
+		if err != nil {
+			t.Fatalf("keyword %q: %v", tc.keyword, err)
+		}
+		if total != tc.want {
+			t.Fatalf("keyword %q matched %d rows, want %d (%s)", tc.keyword, total, tc.want, tc.why)
+		}
+	}
+
+	// Deleting rows must also remove them from the index, or search advertises
+	// rows the console can no longer show.
+	if _, err := repo.PurgeUsageLogsBefore(time.Now().Add(time.Hour), 2); err != nil {
+		t.Fatal(err)
+	}
+	if _, total, err := repo.ListUsageLogsWithFilterAndCount(LogFilter{Keyword: "seek-v4"}); err != nil || total != 0 {
+		t.Fatalf("purged rows still matched through FTS: total=%d err=%v", total, err)
+	}
+}
+
+// Callers that skip the total get rows only, with -1 marking "not counted" so a
+// page-length fallback cannot be mistaken for a real total.
+func TestUsageLogsSkipCountOmitsTotal(t *testing.T) {
+	db, err := OpenDB(filepath.Join(t.TempDir(), "skip-count.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := NewRepository(db)
+	for i := 0; i < 3; i++ {
+		if err := repo.RecordUsageLog(&UsageLogRecord{APIKey: "skip-key", Model: "skip-model", StatusCode: 200}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page, total, err := repo.ListUsageLogsWithFilterAndCount(LogFilter{Limit: 50, SkipCount: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != -1 {
+		t.Fatalf("total=%d want -1 when the count is skipped", total)
+	}
+	if len(page) != 3 {
+		t.Fatalf("rows lost: got %d want 3", len(page))
+	}
+}

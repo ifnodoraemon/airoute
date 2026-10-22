@@ -90,6 +90,12 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 		}
 	}
 
+	// Aggregates are optional: the dashboard's 8s poll and the CSV export only
+	// need rows, and the filtered COUNT plus the DISTINCT facets are the expensive
+	// half of a page request.
+	skipFacets := c.Query("facets") == "0"
+	filter.SkipCount = c.Query("count") == "0"
+
 	logs, total, err := h.repo.ListUsageLogsWithFilterAndCount(filter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -98,17 +104,24 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 	if logs == nil {
 		logs = make([]*storage.UsageLogRecord, 0)
 	}
-	facets, err := h.repo.ListUsageLogFacets(filter)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
 	if !shouldRevealKey(c) {
 		maskUsageLogKeys(logs)
 	}
 	// `total` is the size of the whole filtered result set, so the console can
 	// paginate honestly instead of assuming the current page is everything.
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": logs, "total": total, "limit": limit, "offset": offset, "facets": facets})
+	payload := gin.H{"code": 0, "data": logs, "limit": limit, "offset": offset}
+	if !filter.SkipCount {
+		payload["total"] = total
+	}
+	if !skipFacets {
+		facets, err := h.repo.ListUsageLogFacets(filter)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		payload["facets"] = facets
+	}
+	c.JSON(http.StatusOK, payload)
 }
 
 // DeleteLog deletes a single log by ID (admin only).

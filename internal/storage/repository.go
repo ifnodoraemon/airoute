@@ -46,6 +46,12 @@ type Repository struct {
 	// every console request, including the 10-second polls.
 	facetMu    sync.Mutex
 	facetCache map[string]usageLogFacetCacheEntry
+
+	// ftsOnce/ftsAvailable remember whether migration v20 created the SQLite FTS5
+	// index, so the keyword query can pick MATCH or the LIKE fallback without
+	// probing sqlite_master on every request.
+	ftsOnce      sync.Once
+	ftsAvailable bool
 }
 
 var globalRepo *Repository

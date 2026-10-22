@@ -60,3 +60,45 @@ func TestListLogsEchoesTheEffectivePageSize(t *testing.T) {
 		t.Fatalf("total %d, want %d", body.Total, storage.MaxUsageLogPageSize+10)
 	}
 }
+
+// The dashboard poll and the CSV export only need rows: with count=0/facets=0 the
+// response must not pay for (or promise) aggregates it never computed.
+func TestListLogsCanSkipAggregates(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := storage.OpenDB(filepath.Join(t.TempDir(), "skip-aggregates.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	repo := storage.NewRepository(db)
+	if err := repo.BatchRecordUsageLogs([]*storage.UsageLogRecord{
+		{APIKey: "agg-key", Model: "agg-model", Channel: "agg-channel", StatusCode: 200},
+		{APIKey: "agg-key", Model: "agg-model", Channel: "agg-channel", StatusCode: 200},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &AdminHandler{repo: repo}
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/logs?count=0&facets=0", nil)
+	h.ListLogs(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status %d: %s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if _, present := body["total"]; present {
+		t.Fatalf("total should be omitted when count=0: %s", w.Body.String())
+	}
+	if _, present := body["facets"]; present {
+		t.Fatalf("facets should be omitted when facets=0: %s", w.Body.String())
+	}
+	rows, _ := body["data"].([]any)
+	if len(rows) != 2 {
+		t.Fatalf("rows lost when skipping aggregates: got %d want 2", len(rows))
+	}
+}

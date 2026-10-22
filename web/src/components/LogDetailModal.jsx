@@ -9,9 +9,7 @@ import {
   Sparkles,
   ArrowRight,
   Terminal,
-  Zap,
   Play,
-  Layers,
   Clock
 } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
@@ -72,6 +70,12 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
   // inside it is invisible to the JSX.
   const errorMessage = (log && log.error_message ? String(log.error_message) : '').trim();
   const hasUpstreamDetail = errorMessage.length > 0;
+  // A channel value such as "罗总→gpustack-cluster" is a failover chain, not a
+  // single name; render it as an ordered sequence so the path is legible.
+  const channelChain = (log && log.channel ? String(log.channel) : '')
+    .split('→')
+    .map((name) => name.trim())
+    .filter(Boolean);
   const isErrorLog = !!log && ((log.status_code || 200) >= 400 || hasUpstreamDetail);
 
   // Heuristic remediation hint.
@@ -235,9 +239,25 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
             </div>
             <div className="p-3.5 rounded-xl bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038]">
               <span className="ui-meta block font-medium">{isZh ? '路由渠道' : 'Channel'}</span>
-              <span className="text-xs font-medium text-[#202124] dark:text-[#F1F2F4] truncate block mt-1 font-mono">
-                {log.channel || (isZh ? '直通/多源' : 'Direct / Multi')}
-              </span>
+              {channelChain.length > 1 ? (
+                <span
+                  className="flex flex-wrap items-center gap-1 mt-1 font-mono text-[11px] text-[#202124] dark:text-[#F1F2F4]"
+                  title={isZh ? '降级链：从左到右依次尝试' : 'Failover chain: tried left to right'}
+                >
+                  {channelChain.map((name, index) => (
+                    <span key={`${name}-${index}`} className="inline-flex items-center gap-1">
+                      {index > 0 && <ArrowRight className="w-3 h-3 text-[#656B75] dark:text-[#A1A7B0]" />}
+                      <span className="px-1.5 py-0.5 rounded-md bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038]">
+                        {name}
+                      </span>
+                    </span>
+                  ))}
+                </span>
+              ) : (
+                <span className="text-xs font-medium text-[#202124] dark:text-[#F1F2F4] truncate block mt-1 font-mono">
+                  {log.channel || (isZh ? '直通/多源' : 'Direct / Multi')}
+                </span>
+              )}
             </div>
             <div className="p-3.5 rounded-xl bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038]">
               <span className="ui-meta block font-medium">{isZh ? '首字延迟 (TTFT)' : 'TTFT Latency'}</span>
@@ -559,11 +579,21 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
           {/* Error notice if failed */}
           {log.error_message && (
             <div className="p-4 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-900/50 text-rose-800 dark:text-rose-300 text-xs">
-              <div className="font-semibold mb-1 flex items-center space-x-1.5">
-                <AlertCircle className="w-3.5 h-3.5" />
-                <span>{isZh ? '上游异常原始回包' : 'Raw Upstream Error Message'}</span>
+              <div className="font-semibold mb-1 flex items-center justify-between gap-2">
+                <span className="flex items-center space-x-1.5">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>{isZh ? '上游异常原始回包' : 'Raw Upstream Error Message'}</span>
+                </span>
+                <button
+                  onClick={() => onCopy(errorMessage)}
+                  className="text-[11px] font-medium hover:underline flex items-center space-x-1 cursor-pointer"
+                  title={isZh ? '复制完整错误文本' : 'Copy the full error text'}
+                >
+                  <Copy className="w-3 h-3" />
+                  <span>{isZh ? '复制错误' : 'Copy error'}</span>
+                </button>
               </div>
-              <div className="font-mono mt-1 text-[11px]">{log.error_message}</div>
+              <div className="font-mono mt-1 text-[11px] whitespace-pre-wrap break-all">{log.error_message}</div>
             </div>
           )}
 

@@ -482,6 +482,7 @@ func (db *DB) migrate() error {
 		{Version: 17, Name: "usage_pricing_snapshot", Up: addUsagePricingSnapshot},
 		{Version: 18, Name: "usage_log_query_indexes", Up: addUsageLogQueryIndexes},
 		{Version: 19, Name: "usage_log_search_indexes", Up: addUsageLogSearchIndexes},
+		{Version: 20, Name: "usage_log_sqlite_fts", Up: addUsageLogFTSIndex},
 	}
 	return db.runMigrations(migrations)
 }
