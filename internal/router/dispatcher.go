@@ -177,7 +177,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 			nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
 			if fbErr != nil {
 				telemetry.Logger.Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
-				return nil, fmt.Errorf("no upstream provider available for requested model '%s': %w", req.Model, fbErr)
+				return nil, newNoRouteError(ctx, req.Model, fmt.Errorf("no upstream provider available for requested model '%s': %w", req.Model, fbErr))
 			}
 			telemetry.Logger.Warn("no upstream provider for model, triggering cross-model fallback",
 				"requested_model", req.Model,
@@ -187,7 +187,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 			reqCopy.Model = fb
 			return d.Dispatch(nextCtx, &reqCopy)
 		}
-		return nil, fmt.Errorf("no upstream provider available for requested model '%s'", req.Model)
+		return nil, newNoRouteError(ctx, req.Model, fmt.Errorf("no upstream provider available for requested model '%s'", req.Model))
 	}
 
 	var lastErr error
@@ -266,7 +266,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
 		if fbErr != nil {
 			telemetry.Logger.Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
-			return nil, fmt.Errorf("all %d candidate channels failed for model %s (last error: %v); cannot fallback to %s: %w", len(channels), req.Model, lastErr, fb, fbErr)
+			return nil, newExhaustedError(ctx, req.Model, attempted, fmt.Errorf("all %d candidate channels failed for model %s (last error: %v); cannot fallback to %s: %w", len(channels), req.Model, lastErr, fb, fbErr))
 		}
 		telemetry.Logger.Warn("all candidate channels failed, triggering cross-model fallback",
 			"requested_model", req.Model,
@@ -279,7 +279,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 	}
 
 	telemetry.GlobalMetrics.RecordRequest(false, 0, 0, 0)
-	return nil, fmt.Errorf("all %d candidate channels failed for model %s. Last error: %w", len(channels), req.Model, lastErr)
+	return nil, newExhaustedError(ctx, req.Model, attempted, fmt.Errorf("all %d candidate channels failed for model %s. Last error: %w", len(channels), req.Model, lastErr))
 }
 
 func (d *Dispatcher) candidateChannelsForRequest(ctx context.Context, req *model.ChatCompletionRequest, proto string) []*model.ChannelConfig {

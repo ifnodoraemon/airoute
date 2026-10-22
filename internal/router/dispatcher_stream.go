@@ -27,7 +27,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
 			if fbErr != nil {
 				telemetry.Logger.Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
-				return nil, fmt.Errorf("no upstream provider available for requested model '%s': %w", req.Model, fbErr)
+				return nil, newNoRouteError(ctx, req.Model, fmt.Errorf("no upstream provider available for requested model '%s': %w", req.Model, fbErr))
 			}
 			telemetry.Logger.Warn("no upstream provider for stream model, triggering cross-model fallback",
 				"requested_model", req.Model,
@@ -37,7 +37,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			reqCopy.Model = fb
 			return d.DispatchStream(nextCtx, &reqCopy)
 		}
-		return nil, fmt.Errorf("no upstream provider available for requested model '%s'", req.Model)
+		return nil, newNoRouteError(ctx, req.Model, fmt.Errorf("no upstream provider available for requested model '%s'", req.Model))
 	}
 
 	var lastErr error
@@ -163,7 +163,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
 		if fbErr != nil {
 			telemetry.Logger.Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
-			return nil, fmt.Errorf("all channels failed for stream request on model %s (last error: %v); cannot fallback to %s: %w", req.Model, lastErr, fb, fbErr)
+			return nil, newExhaustedError(ctx, req.Model, attempted, fmt.Errorf("all channels failed for stream request on model %s (last error: %v); cannot fallback to %s: %w", req.Model, lastErr, fb, fbErr))
 		}
 		telemetry.Logger.Warn("all stream channels failed, triggering cross-model fallback",
 			"requested_model", req.Model,
@@ -175,7 +175,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		return d.DispatchStream(withChannelTrail(nextCtx, attempted), &reqCopy)
 	}
 
-	return nil, fmt.Errorf("all channels failed for stream request on model %s. Last error: %w", req.Model, lastErr)
+	return nil, newExhaustedError(ctx, req.Model, attempted, fmt.Errorf("all channels failed for stream request on model %s. Last error: %w", req.Model, lastErr))
 }
 
 // pipeStreamEvents pipes events from upstream stream channel to client channel with cancellation guard.

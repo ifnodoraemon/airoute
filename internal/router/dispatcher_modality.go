@@ -48,7 +48,7 @@ type UpstreamResponse struct {
 func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*UpstreamResponse, error) {
 	channels := d.ResolveCandidateChannels(ctx, req.Model, req.Protocol)
 	if len(channels) == 0 {
-		return nil, fmt.Errorf("no upstream provider available for model '%s' and protocol '%s'", req.Model, req.Protocol)
+		return nil, newNoRouteError(ctx, req.Model, fmt.Errorf("no upstream provider available for model '%s' and protocol '%s'", req.Model, req.Protocol))
 	}
 
 	var lastErr error
@@ -155,14 +155,14 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 	}
 
 	telemetry.GlobalMetrics.RecordRequest(false, 0, 0, 0)
-	return nil, fmt.Errorf("all %d providers failed for model '%s'. Last error: %w", len(channels), req.Model, lastErr)
+	return nil, newExhaustedError(ctx, req.Model, attempted, fmt.Errorf("all %d providers failed for model '%s'. Last error: %w", len(channels), req.Model, lastErr))
 }
 
 // DispatchEmbedding routes an embedding request across matching candidate channels with Circuit Breaking and Safe Fallback.
 func (d *Dispatcher) DispatchEmbedding(ctx context.Context, req *model.EmbeddingRequest) (*model.EmbeddingResponse, error) {
 	channels := d.ResolveCandidateChannels(ctx, req.Model, "embeddings")
 	if len(channels) == 0 {
-		return nil, fmt.Errorf("no upstream provider available for embedding model '%s'", req.Model)
+		return nil, newNoRouteError(ctx, req.Model, fmt.Errorf("no upstream provider available for embedding model '%s'", req.Model))
 	}
 
 	var lastErr error
@@ -223,14 +223,14 @@ func (d *Dispatcher) DispatchEmbedding(ctx context.Context, req *model.Embedding
 	}
 
 	telemetry.GlobalMetrics.RecordRequest(false, 0, 0, 0)
-	return nil, fmt.Errorf("all %d providers failed for embedding model '%s'. Last error: %w", len(channels), req.Model, lastErr)
+	return nil, newExhaustedError(ctx, req.Model, attempted, fmt.Errorf("all %d providers failed for embedding model '%s'. Last error: %w", len(channels), req.Model, lastErr))
 }
 
 // DispatchRerank routes a cross-encoder rerank request across candidate channels with Circuit Breaking and Safe Fallback.
 func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankRequest) (*model.RerankResponse, error) {
 	channels := d.ResolveCandidateChannels(ctx, req.Model, "rerank")
 	if len(channels) == 0 {
-		return nil, fmt.Errorf("no upstream provider available for rerank model '%s'", req.Model)
+		return nil, newNoRouteError(ctx, req.Model, fmt.Errorf("no upstream provider available for rerank model '%s'", req.Model))
 	}
 
 	var lastErr error
@@ -288,5 +288,5 @@ func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankReques
 	}
 
 	telemetry.GlobalMetrics.RecordRequest(false, 0, 0, 0)
-	return nil, fmt.Errorf("all %d providers failed for rerank model '%s'. Last error: %w", len(channels), req.Model, lastErr)
+	return nil, newExhaustedError(ctx, req.Model, attempted, fmt.Errorf("all %d providers failed for rerank model '%s'. Last error: %w", len(channels), req.Model, lastErr))
 }

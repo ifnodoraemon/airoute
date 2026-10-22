@@ -62,19 +62,41 @@ func withChannelTrail(ctx context.Context, attempted []string) context.Context {
 	return context.WithValue(ctx, channelTrailKey{}, merged)
 }
 
+// maxChannelTrailLen caps the rendered trail: the usage_logs.channel column is
+// VARCHAR(128) on Postgres.
+const maxChannelTrailLen = 128
+
 // formatChannelTrail renders the full routing chain for the audit log:
 // channels attempted in prior models (from ctx) + channels attempted for the
 // current model + the channel that finally succeeded, joined with "→".
-// The result is capped to maxChannelTrailLen runes (the usage_logs.channel
-// column is VARCHAR(128) on Postgres); when capped, the most recent hops are
-// preserved and the chain is prefixed with "…".
 func formatChannelTrail(ctx context.Context, attempted []string, final string) string {
-	const maxChannelTrailLen = 128
 	prior := getChannelTrail(ctx)
 	all := make([]string, 0, len(prior)+len(attempted)+1)
 	all = append(all, prior...)
 	all = append(all, attempted...)
 	all = append(all, final)
+	return joinChannelTrail(all)
+}
+
+// formatAttemptedTrail renders the routing chain that was actually called and
+// failed, with no serving channel appended. This is the failure-path counterpart
+// of formatChannelTrail, used by DispatchError: it keeps the audit trail honest
+// when there is no success hop, and returns "" when no channel was ever reached.
+func formatAttemptedTrail(ctx context.Context, attempted []string) string {
+	prior := getChannelTrail(ctx)
+	if len(prior) == 0 && len(attempted) == 0 {
+		return ""
+	}
+	all := make([]string, 0, len(prior)+len(attempted))
+	all = append(all, prior...)
+	all = append(all, attempted...)
+	return joinChannelTrail(all)
+}
+
+// joinChannelTrail joins a routing chain with "→", capped to maxChannelTrailLen
+// runes; when capped, the most recent hops are preserved and the chain is
+// prefixed with "…".
+func joinChannelTrail(all []string) string {
 	joined := strings.Join(all, "→")
 	if len([]rune(joined)) <= maxChannelTrailLen {
 		return joined
