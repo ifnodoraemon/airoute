@@ -67,7 +67,7 @@ func (db *DB) runMigrations(migrations []Migration) error {
 			continue
 		}
 
-		telemetry.Logger.Info("applying database migration", "version", m.Version, "name", m.Name, "dialect", db.Dialect())
+		telemetry.ScopedLogger("system").Info("applying database migration", "version", m.Version, "name", m.Name, "dialect", db.Dialect())
 		// Up and the version record are two separate statements rather than one
 		// transaction; see applyMigration below. A crash between them replays the
 		// migration on the next start, which is safe because every migration is

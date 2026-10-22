@@ -129,7 +129,7 @@ func joinChannelTrail(all []string) string {
 func (d *Dispatcher) recordChannelFailure(chName string, err error, attempt int) string {
 	d.circuitBreaker.RecordFailure(chName)
 	telemetry.GlobalMetrics.RecordFallback()
-	telemetry.Logger.Warn("channel execution failed, triggering fallback",
+	telemetry.ScopedLogger("router").Warn("channel execution failed, triggering fallback",
 		"channel", chName,
 		"error", err.Error(),
 		"fallback_index", attempt,
@@ -142,7 +142,7 @@ func (d *Dispatcher) recordChannelSuccess(ctx context.Context, attempted []strin
 	d.circuitBreaker.RecordSuccess(chName)
 	trail := formatChannelTrail(ctx, attempted, chName)
 	telemetry.GlobalMetrics.RecordRequest(true, dur, promptTokens, compTokens)
-	telemetry.Logger.Info("channel execution succeeded",
+	telemetry.ScopedLogger("router").Info("channel execution succeeded",
 		"channel", chName,
 		"duration_ms", dur.Milliseconds(),
 		"total_tokens", promptTokens+compTokens,

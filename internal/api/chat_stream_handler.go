@@ -128,7 +128,7 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 
 			if event.Err != nil {
 				streamError = event.Err
-				telemetry.Logger.Error("stream error received mid-flight", "error", event.Err.Error())
+				telemetry.ScopedLogger("router").Error("stream error received mid-flight", "error", event.Err.Error())
 				errJSON, _ := json.Marshal(gin.H{
 					"error": gin.H{
 						"message": sanitizeErrorMessage(event.Err),

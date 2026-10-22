@@ -176,10 +176,10 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		if fb := d.GetModelFallback(req.Model); fb != "" && !strings.EqualFold(fb, req.Model) {
 			nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
 			if fbErr != nil {
-				telemetry.Logger.Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
+				telemetry.ScopedLogger("router").Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
 				return nil, newNoRouteError(ctx, req.Model, fmt.Errorf("no upstream provider available for requested model '%s': %w", req.Model, fbErr))
 			}
-			telemetry.Logger.Warn("no upstream provider for model, triggering cross-model fallback",
+			telemetry.ScopedLogger("router").Warn("no upstream provider for model, triggering cross-model fallback",
 				"requested_model", req.Model,
 				"fallback_model", fb,
 			)
@@ -196,7 +196,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 	for i, ch := range channels {
 		// High-Availability Circuit Breaker: fail fast if upstream is down
 		if !d.circuitBreaker.CanExecute(ch.Name) {
-			telemetry.Logger.Warn("circuit breaker is OPEN, bypassing dead upstream", "channel", ch.Name)
+			telemetry.ScopedLogger("router").Warn("circuit breaker is OPEN, bypassing dead upstream", "channel", ch.Name)
 			skipped = append(skipped, ch.Name)
 			continue
 		}
@@ -205,14 +205,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 
 		if !exists {
 			lastErr = fmt.Errorf("unsupported provider type '%s' on channel %s", ch.Type, ch.Name)
-			telemetry.Logger.Warn("provider type not found", "channel", ch.Name, "type", ch.Type)
+			telemetry.ScopedLogger("router").Warn("provider type not found", "channel", ch.Name, "type", ch.Type)
 			// CanExecute may have taken a half-open canary slot; hand it back or
 			// the channel stays locked out until the 2x-cooldown reset.
 			d.circuitBreaker.AbortCanary(ch.Name)
 			continue
 		}
 
-		telemetry.Logger.Info("attempting chat completion",
+		telemetry.ScopedLogger("router").Info("attempting chat completion",
 			"channel", ch.Name,
 			"model", req.Model,
 			"attempt", i+1,
@@ -244,7 +244,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		// the same request would fail on every channel, so do not trip the breaker and do not fan out.
 		// Note: 404 from a single channel means this node does not host the model; we fall through to next channels.
 		if isFatalClientPayloadError(err) {
-			telemetry.Logger.Warn("upstream rejected request with a deterministic client error, aborting fallback",
+			telemetry.ScopedLogger("router").Warn("upstream rejected request with a deterministic client error, aborting fallback",
 				"channel", ch.Name,
 				"error", err.Error(),
 			)
@@ -254,7 +254,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		if !provider.IsChannelFailure(err) {
 			// Unknown but non-fatal classification: try the next channel without
 			// charging the breaker.
-			telemetry.Logger.Warn("channel returned a non-health error, trying next channel without tripping breaker",
+			telemetry.ScopedLogger("router").Warn("channel returned a non-health error, trying next channel without tripping breaker",
 				"channel", ch.Name,
 				"error", err.Error(),
 			)
@@ -274,10 +274,10 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 	if fb := d.GetModelFallback(req.Model); fb != "" && !strings.EqualFold(fb, req.Model) {
 		nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
 		if fbErr != nil {
-			telemetry.Logger.Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
+			telemetry.ScopedLogger("router").Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
 			return nil, newExhaustedError(ctx, req.Model, attempted, fmt.Errorf("all %d candidate channels failed for model %s (last error: %v); cannot fallback to %s: %w", len(channels), req.Model, lastErr, fb, fbErr))
 		}
-		telemetry.Logger.Warn("all candidate channels failed, triggering cross-model fallback",
+		telemetry.ScopedLogger("router").Warn("all candidate channels failed, triggering cross-model fallback",
 			"requested_model", req.Model,
 			"fallback_model", fb,
 			"last_error", lastErr,

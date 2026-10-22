@@ -52,7 +52,7 @@ func StartLiveStatsPublisher(client *Client, stop <-chan struct{}) {
 			err = rdb.Set(ctx, key, payload, liveSnapshotTTL).Err()
 			// Log a failure once rather than every second while Redis is down.
 			if err != nil && err.Error() != lastErr {
-				telemetry.Logger.Warn("failed to publish live telemetry snapshot to redis", "error", err.Error())
+				telemetry.ScopedLogger("sync").Warn("failed to publish live telemetry snapshot to redis", "error", err.Error())
 				lastErr = err.Error()
 			}
 			if err == nil {

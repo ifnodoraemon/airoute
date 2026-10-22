@@ -107,7 +107,7 @@ func (al *AsyncLogger) Record(rec *UsageLogRecord) {
 			if err == nil {
 				return
 			}
-			telemetry.Logger.Warn("failed to push log to Redis Stream, falling back to local memory buffer", "error", err.Error())
+			telemetry.ScopedLogger("system").Warn("failed to push log to Redis Stream, falling back to local memory buffer", "error", err.Error())
 		}
 	}
 
@@ -116,7 +116,7 @@ func (al *AsyncLogger) Record(rec *UsageLogRecord) {
 		return
 	}
 	if al.stopped.Load() {
-		telemetry.Logger.Warn("async logger already stopped; dropping log record", "trace_id", rec.TraceID)
+		telemetry.ScopedLogger("system").Warn("async logger already stopped; dropping log record", "trace_id", rec.TraceID)
 		telemetry.GlobalMetrics.UsageLogRecordsDropped.Add(1)
 		return
 	}
@@ -126,10 +126,10 @@ func (al *AsyncLogger) Record(rec *UsageLogRecord) {
 	case al.ch <- rec:
 		telemetry.GlobalMetrics.UsageLogQueueDepth.Store(int64(len(al.ch)))
 	case <-al.stopCh:
-		telemetry.Logger.Error("usage log submitted after logger stopped", "trace_id", rec.TraceID)
+		telemetry.ScopedLogger("system").Error("usage log submitted after logger stopped", "trace_id", rec.TraceID)
 		telemetry.GlobalMetrics.UsageLogRecordsDropped.Add(1)
 	case <-timer.C:
-		telemetry.Logger.Error("async logger buffer full and flush stalled; dropping log record to prevent gateway freeze",
+		telemetry.ScopedLogger("system").Error("async logger buffer full and flush stalled; dropping log record to prevent gateway freeze",
 			"trace_id", rec.TraceID,
 			"model", rec.Model,
 			"buffer_capacity", cap(al.ch),
@@ -172,13 +172,13 @@ func (al *AsyncLogger) worker() {
 		if err != nil {
 			failures++
 			telemetry.GlobalMetrics.UsageLogFlushFailures.Add(1)
-			telemetry.Logger.Error("failed to persist usage logs",
+			telemetry.ScopedLogger("system").Error("failed to persist usage logs",
 				"error", err.Error(), "count", len(batch), "attempt", failures)
 			if failures >= maxFailures {
 				// Give up on this batch rather than letting memory grow without
 				// bound; the records are surfaced loudly so they can be
 				// reconciled from the Redis stream or upstream provider bills.
-				telemetry.Logger.Error("dropping unpersistable usage log batch after repeated failures",
+				telemetry.ScopedLogger("system").Error("dropping unpersistable usage log batch after repeated failures",
 					"count", len(batch), "attempts", failures)
 				telemetry.GlobalMetrics.UsageLogRecordsDropped.Add(uint64(len(batch)))
 				batch = batch[:0]
@@ -216,7 +216,7 @@ func (al *AsyncLogger) worker() {
 						time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
 					}
 					if len(batch) > 0 {
-						telemetry.Logger.Error("usage logs remain unpersisted at shutdown", "count", len(batch))
+						telemetry.ScopedLogger("system").Error("usage logs remain unpersisted at shutdown", "count", len(batch))
 						telemetry.GlobalMetrics.UsageLogRecordsDropped.Add(uint64(len(batch)))
 					}
 					return
@@ -240,7 +240,7 @@ func (al *AsyncLogger) redisStreamWorker(client *distributed.Client) {
 	ctx := context.Background()
 
 	_ = client.EnsureConsumerGroup(ctx, RedisLogStreamKey, RedisLogGroup)
-	telemetry.Logger.Info("started Redis Streams distributed log ingestion consumer",
+	telemetry.ScopedLogger("system").Info("started Redis Streams distributed log ingestion consumer",
 		"stream", RedisLogStreamKey,
 		"group", RedisLogGroup,
 		"consumer", consumerID,
@@ -282,7 +282,7 @@ func (al *AsyncLogger) redisStreamWorker(client *distributed.Client) {
 			}
 			if writeErr != nil {
 				telemetry.GlobalMetrics.UsageLogFlushFailures.Add(1)
-				telemetry.Logger.Error("failed to batch write logs from Redis stream after retries, keeping in PEL for recovery",
+				telemetry.ScopedLogger("system").Error("failed to batch write logs from Redis stream after retries, keeping in PEL for recovery",
 					"error", writeErr.Error(),
 					"count", len(streamBatch),
 				)
@@ -309,7 +309,7 @@ func (al *AsyncLogger) redisStreamWorker(client *distributed.Client) {
 	for attempt := 1; ; attempt++ {
 		pendingMsgs, err := client.ReadPendingPEL(ctx, RedisLogStreamKey, RedisLogGroup, consumerID, int64(al.batchSize))
 		if err != nil {
-			telemetry.Logger.Warn("failed to read unacknowledged PEL messages on startup", "error", err.Error())
+			telemetry.ScopedLogger("system").Warn("failed to read unacknowledged PEL messages on startup", "error", err.Error())
 			break
 		}
 		if len(pendingMsgs) == 0 {
@@ -319,17 +319,17 @@ func (al *AsyncLogger) redisStreamWorker(client *distributed.Client) {
 			// XACK did not take effect, so the next read returns the same head.
 			// Rewriting it would duplicate billing rows; the AutoClaim ticker
 			// retries the leftovers, so stop here instead of spinning.
-			telemetry.Logger.Warn("startup PEL recovery stopped making progress; remaining messages stay pending for AutoClaim",
+			telemetry.ScopedLogger("system").Warn("startup PEL recovery stopped making progress; remaining messages stay pending for AutoClaim",
 				"next_id", pendingMsgs[0].ID)
 			break
 		}
-		telemetry.Logger.Info("re-processing unacknowledged PEL messages on startup", "count", len(pendingMsgs))
+		telemetry.ScopedLogger("system").Info("re-processing unacknowledged PEL messages on startup", "count", len(pendingMsgs))
 		if processStreamMessages(pendingMsgs) {
 			lastRecovered = pendingMsgs[0].ID
 			continue
 		}
 		if attempt >= maxPELRecoveryAttempts {
-			telemetry.Logger.Error("abandoning startup PEL recovery after repeated database failures; messages stay pending for AutoClaim",
+			telemetry.ScopedLogger("system").Error("abandoning startup PEL recovery after repeated database failures; messages stay pending for AutoClaim",
 				"attempts", attempt,
 				"pending", len(pendingMsgs),
 			)
@@ -359,7 +359,7 @@ func (al *AsyncLogger) redisStreamWorker(client *distributed.Client) {
 			if err == nil {
 				claimStart = nextStart
 				if len(claimedMsgs) > 0 {
-					telemetry.Logger.Info("reclaimed orphaned PEL messages from dead consumers", "count", len(claimedMsgs))
+					telemetry.ScopedLogger("system").Info("reclaimed orphaned PEL messages from dead consumers", "count", len(claimedMsgs))
 					processStreamMessages(claimedMsgs)
 				}
 			}
@@ -384,10 +384,10 @@ func (al *AsyncLogger) redisStreamWorker(client *distributed.Client) {
 				// pending check makes that safe across every node, not just this
 				// consumer.
 				if pendingID, err := client.MinPendingID(ctx, RedisLogStreamKey, RedisLogGroup); err != nil {
-					telemetry.Logger.Warn("failed to inspect pending log stream entries; skipping trim", "error", err.Error())
+					telemetry.ScopedLogger("system").Warn("failed to inspect pending log stream entries; skipping trim", "error", err.Error())
 				} else if pendingID == "" {
 					if err := client.TrimStreamBefore(ctx, RedisLogStreamKey, ackedUpTo); err != nil {
-						telemetry.Logger.Warn("failed to trim acknowledged log stream entries", "error", err.Error())
+						telemetry.ScopedLogger("system").Warn("failed to trim acknowledged log stream entries", "error", err.Error())
 					}
 				}
 			}

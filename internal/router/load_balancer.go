@@ -79,7 +79,7 @@ func (s *SessionAffinitySelector) Select(ctx context.Context, group []*model.Cha
 		}
 	}
 
-	telemetry.Logger.Debug("routed via LLM session affinity",
+	telemetry.ScopedLogger("router").Debug("routed via LLM session affinity",
 		"session_id", sessionID,
 		"model", modelName,
 		"channel", chosen.Name,

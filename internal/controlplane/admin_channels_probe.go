@@ -23,7 +23,7 @@ func (h *AdminHandler) ProbeChannel(c *gin.Context) {
 		return
 	}
 
-	telemetry.Logger.Info("handling downstream channel probe request",
+	telemetry.ScopedLogger("prober").Info("handling downstream channel probe request",
 		"base_url", req.BaseURL,
 		"has_api_key", req.APIKey != "",
 		"type", req.Type,
@@ -32,7 +32,7 @@ func (h *AdminHandler) ProbeChannel(c *gin.Context) {
 
 	result, err := h.prober.Probe(c.Request.Context(), &req)
 	if err != nil {
-		telemetry.Logger.Warn("downstream channel probe returned error",
+		telemetry.ScopedLogger("prober").Warn("downstream channel probe returned error",
 			"base_url", req.BaseURL,
 			"error", err.Error(),
 		)
@@ -40,7 +40,7 @@ func (h *AdminHandler) ProbeChannel(c *gin.Context) {
 		return
 	}
 
-	telemetry.Logger.Info("downstream channel probe completed",
+	telemetry.ScopedLogger("prober").Info("downstream channel probe completed",
 		"base_url", req.BaseURL,
 		"detected_type", result.Type,
 		"suggested_name", result.SuggestedName,

@@ -55,7 +55,7 @@ func (b *BreakerStatus) toClosed(now time.Time) {
 	b.ConsecutiveSuccesses = 0
 	b.CanaryInFlight = 0
 	b.LastStateChange = now
-	telemetry.Logger.Info("circuit breaker recovered to closed state", "provider", b.name)
+	telemetry.ScopedLogger("breaker").Info("circuit breaker recovered to closed state", "provider", b.name)
 }
 
 func (b *BreakerStatus) toOpen(now time.Time, cooldown time.Duration) {
@@ -64,7 +64,7 @@ func (b *BreakerStatus) toOpen(now time.Time, cooldown time.Duration) {
 	b.ConsecutiveSuccesses = 0
 	b.CanaryInFlight = 0
 	b.LastStateChange = now
-	telemetry.Logger.Warn("circuit breaker TRIPPED to OPEN state, bypassing provider",
+	telemetry.ScopedLogger("breaker").Warn("circuit breaker TRIPPED to OPEN state, bypassing provider",
 		"provider", b.name,
 		"consecutive_failures", b.ConsecutiveFailures,
 		"cooldown_sec", cooldown.Seconds(),
@@ -77,7 +77,7 @@ func (b *BreakerStatus) toHalfOpen(now time.Time) {
 	b.ConsecutiveSuccesses = 0
 	b.CanaryInFlight = 0
 	b.LastStateChange = now
-	telemetry.Logger.Info("circuit breaker entered half-open state, allowing canary probe", "provider", b.name)
+	telemetry.ScopedLogger("breaker").Info("circuit breaker entered half-open state, allowing canary probe", "provider", b.name)
 }
 
 // closedState handles requests when circuit is healthy.

@@ -284,3 +284,43 @@ func TestUsageLogQueryIndexesExist(t *testing.T) {
 		t.Fatalf("tenant+time scope broken: total=%d page=%d", total, len(page))
 	}
 }
+
+// A flush can carry more rows than one multi-row INSERT chunk; the chunking must
+// not drop rows, and rows without an explicit CreatedAt must still be stamped.
+func TestBatchUsageLogInsertSpansChunks(t *testing.T) {
+	db, err := OpenDB(filepath.Join(t.TempDir(), "chunked-insert.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := NewRepository(db)
+
+	const total = 60 // > the 25-row insert chunk
+	logs := make([]*UsageLogRecord, 0, total)
+	wantTokens := int64(0)
+	for i := 0; i < total; i++ {
+		logs = append(logs, &UsageLogRecord{APIKey: "chunk-key", Model: "chunk-model", StatusCode: 200, TotalTokens: i})
+		wantTokens += int64(i)
+	}
+	if err := repo.BatchRecordUsageLogs(logs); err != nil {
+		t.Fatal(err)
+	}
+
+	page, count, err := repo.ListUsageLogsWithFilterAndCount(LogFilter{Limit: 200})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != total || len(page) != total {
+		t.Fatalf("chunked insert lost rows: count=%d page=%d want=%d", count, len(page), total)
+	}
+	var gotTokens int64
+	for _, l := range page {
+		gotTokens += int64(l.TotalTokens)
+		if l.CreatedAt.IsZero() {
+			t.Fatalf("row %d lost its created_at stamp", l.ID)
+		}
+	}
+	if gotTokens != wantTokens {
+		t.Fatalf("token totals changed: got %d want %d", gotTokens, wantTokens)
+	}
+}

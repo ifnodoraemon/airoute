@@ -72,7 +72,7 @@ func (c *Client) AllowRPM(ctx context.Context, apiKey string, rpm int) (bool, er
 	res, err := slidingWindowLua.Run(ctx, c.rdb, []string{key}, rpm, nowMs).Result()
 	if err != nil {
 		// On Redis failure, fail-open to ensure API availability
-		telemetry.Logger.Warn("redis rate limit query error, failing open to preserve traffic", "error", err.Error())
+		telemetry.ScopedLogger("sync").Warn("redis rate limit query error, failing open to preserve traffic", "error", err.Error())
 		return true, err
 	}
 

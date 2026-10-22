@@ -161,7 +161,7 @@ func (s *Synchronizer) ReloadFromDB() error {
 	// The snapshot is in effect from here on, so the version moves with it even if a
 	// dependent subsystem lags.
 	version := s.version.Add(1)
-	telemetry.Logger.Info("hot reloaded data plane memory state from database",
+	telemetry.ScopedLogger("sync").Info("hot reloaded data plane memory state from database",
 		"version", version,
 		"active_channels", len(snap.Channels),
 		"active_keys", len(snap.APIKeys),
@@ -234,10 +234,10 @@ func (s *Synchronizer) ReloadAndBroadcast(ctx context.Context, reason string) er
 	err := s.ReloadFromDB()
 	if client := distributed.GetClient(); client != nil && client.IsActive() {
 		if pubErr := client.PublishReload(ctx, reason); pubErr != nil {
-			telemetry.Logger.Warn("failed to broadcast reload event to redis cluster", "error", pubErr.Error())
+			telemetry.ScopedLogger("sync").Warn("failed to broadcast reload event to redis cluster", "error", pubErr.Error())
 			err = errors.Join(err, &HotReloadError{Stage: "集群广播", Err: pubErr})
 		} else {
-			telemetry.Logger.Info("broadcast cluster reload notification via Redis Pub/Sub", "reason", reason)
+			telemetry.ScopedLogger("sync").Info("broadcast cluster reload notification via Redis Pub/Sub", "reason", reason)
 		}
 	}
 	return err
@@ -262,13 +262,13 @@ func (s *Synchronizer) StartPeriodicSync(interval time.Duration, stopCh <-chan s
 					// the default interval) so a persistent DB outage does not
 					// flood the log while staying observable.
 					if consecutiveFailures == 1 || consecutiveFailures%30 == 0 {
-						telemetry.Logger.Error("periodic data plane sync from database failed",
+						telemetry.ScopedLogger("sync").Error("periodic data plane sync from database failed",
 							"error", err.Error(),
 							"consecutive_failures", consecutiveFailures,
 						)
 					}
 				} else if consecutiveFailures > 0 {
-					telemetry.Logger.Info("periodic data plane sync recovered",
+					telemetry.ScopedLogger("sync").Info("periodic data plane sync recovered",
 						"after_failures", consecutiveFailures)
 					consecutiveFailures = 0
 				}

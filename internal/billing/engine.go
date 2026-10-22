@@ -130,7 +130,7 @@ func (e *BillingEngine) ReloadPrices() error {
 	e.groupMultipliers = multipliers
 	e.mu.Unlock()
 
-	telemetry.Logger.Info("reloaded model pricing engine", "rules_count", len(list), "groups_count", len(multipliers))
+	telemetry.ScopedLogger("billing").Info("reloaded model pricing engine", "rules_count", len(list), "groups_count", len(multipliers))
 	return nil
 }
 

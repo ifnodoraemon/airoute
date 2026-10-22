@@ -141,7 +141,7 @@ func AccessLogMiddleware() gin.HandlerFunc {
 			path = path + "?" + sanitizeURLQuery(raw)
 		}
 
-		telemetry.Logger.Info("http_access",
+		telemetry.ScopedLogger("system").Info("http_access",
 			"trace_id", traceID,
 			"method", c.Request.Method,
 			"path", path,

@@ -230,7 +230,7 @@ func OpenDB(dataSourceName string) (*DB, error) {
 
 	if isPostgres {
 		dataSourceName = ApplyPostgresStatementTimeouts(dataSourceName)
-		telemetry.Logger.Info("initializing distributed PostgreSQL connection", "source", strings.Split(dataSourceName, "@")[len(strings.Split(dataSourceName, "@"))-1])
+		telemetry.ScopedLogger("system").Info("initializing distributed PostgreSQL connection", "source", strings.Split(dataSourceName, "@")[len(strings.Split(dataSourceName, "@"))-1])
 		db, err := sql.Open("postgres", dataSourceName)
 		if err != nil {
 			return nil, fmt.Errorf("open postgres db error: %w", err)
@@ -245,7 +245,7 @@ func OpenDB(dataSourceName string) (*DB, error) {
 		db.SetConnMaxIdleTime(5 * time.Minute)
 
 		if err := db.Ping(); err != nil {
-			telemetry.Logger.Warn("postgres ping failed, checking connection", "error", err.Error())
+			telemetry.ScopedLogger("system").Warn("postgres ping failed, checking connection", "error", err.Error())
 		}
 
 		wrapper := &DB{DB: db, dialect: "postgres"}
@@ -253,7 +253,7 @@ func OpenDB(dataSourceName string) (*DB, error) {
 			db.Close()
 			return nil, fmt.Errorf("migrate postgres db schema error: %w", err)
 		}
-		telemetry.Logger.Info("PostgreSQL distributed storage initialized successfully")
+		telemetry.ScopedLogger("system").Info("PostgreSQL distributed storage initialized successfully")
 		return wrapper, nil
 	}
 

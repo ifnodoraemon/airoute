@@ -188,6 +188,11 @@ type BroadcastHandler struct {
 	next   slog.Handler
 	buffer *LogRingBuffer
 	level  slog.Level
+	// attrs carries attributes attached via With/WithAttrs (a scoped logger's
+	// category, for example). slog handlers are expected to remember them; this
+	// wrapper used to forward them only to the stdout handler, so they never
+	// reached the ring buffer.
+	attrs []slog.Attr
 }
 
 // NewBroadcastHandler wraps stdout slog handler with memory ring buffer capture.
@@ -211,20 +216,31 @@ func (h *BroadcastHandler) Handle(ctx context.Context, r slog.Record) error {
 	}
 
 	if h.buffer != nil {
-		attrs := make(map[string]any)
-		var traceID string
+		attrs := make(map[string]any, len(h.attrs)+8)
+		for _, a := range h.attrs {
+			attrs[a.Key] = a.Value.Any()
+		}
 		r.Attrs(func(a slog.Attr) bool {
-			k := a.Key
-			v := a.Value.Any()
-			attrs[k] = v
-			if strings.EqualFold(k, "trace_id") || strings.EqualFold(k, "traceId") {
-				traceID = fmt.Sprintf("%v", v)
-			}
+			attrs[a.Key] = a.Value.Any()
 			return true
 		})
 
 		msg := r.Message
-		category := categorizeLog(msg, attrs)
+		// A call site that knows its subsystem attaches the category explicitly;
+		// the message heuristic below is only a fallback for unlabelled sites.
+		category := normalizeCategory(attrs["category"])
+		if category == "" {
+			category = categorizeLog(msg, attrs)
+		}
+		delete(attrs, "category")
+
+		traceID := ""
+		for _, key := range []string{"trace_id", "traceId"} {
+			if v, ok := attrs[key]; ok {
+				traceID = fmt.Sprintf("%v", v)
+				break
+			}
+		}
 
 		entry := &SystemLogEntry{
 			Timestamp: r.Time,
@@ -241,15 +257,44 @@ func (h *BroadcastHandler) Handle(ctx context.Context, r slog.Record) error {
 	return err
 }
 
+// knownLogCategories is the set the console renders. An explicit category outside
+// it is ignored so a typo cannot invent a filter nobody can select.
+var knownLogCategories = map[string]struct{}{
+	"breaker": {},
+	"prober":  {},
+	"router":  {},
+	"sync":    {},
+	"auth":    {},
+	"billing": {},
+	"system":  {},
+}
+
+// normalizeCategory validates an explicit category attribute.
+func normalizeCategory(raw any) string {
+	value, ok := raw.(string)
+	if !ok {
+		return ""
+	}
+	category := strings.ToLower(strings.TrimSpace(value))
+	if _, known := knownLogCategories[category]; !known {
+		return ""
+	}
+	return category
+}
+
 func (h *BroadcastHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	var next slog.Handler
 	if h.next != nil {
 		next = h.next.WithAttrs(attrs)
 	}
+	merged := make([]slog.Attr, 0, len(h.attrs)+len(attrs))
+	merged = append(merged, h.attrs...)
+	merged = append(merged, attrs...)
 	return &BroadcastHandler{
 		next:   next,
 		buffer: h.buffer,
 		level:  h.level,
+		attrs:  merged,
 	}
 }
 
@@ -262,9 +307,14 @@ func (h *BroadcastHandler) WithGroup(name string) slog.Handler {
 		next:   next,
 		buffer: h.buffer,
 		level:  h.level,
+		attrs:  h.attrs,
 	}
 }
 
+// categorizeLog is the fallback classifier for call sites that do not attach an
+// explicit category. Guessing a subsystem from message text is brittle (the same
+// smell as recovering a channel name from an error string), so subsystem loggers
+// should use ScopedLogger instead.
 func categorizeLog(msg string, attrs map[string]any) string {
 	msgLower := strings.ToLower(msg)
 	if strings.Contains(msgLower, "breaker") || strings.Contains(msgLower, "circuit") {

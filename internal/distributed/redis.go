@@ -43,14 +43,14 @@ func InitRedis(redisURL string) *Client {
 	defer clientMu.Unlock()
 
 	if redisURL == "" {
-		telemetry.Logger.Info("Redis not configured, running in local memory Zero-Dependency mode")
+		telemetry.ScopedLogger("sync").Info("Redis not configured, running in local memory Zero-Dependency mode")
 		globalClient = nil
 		return nil
 	}
 
 	opt, err := redis.ParseURL(redisURL)
 	if err != nil {
-		telemetry.Logger.Warn("failed to parse REDIS_URL, falling back to local memory", "error", err.Error(), "url", redisURL)
+		telemetry.ScopedLogger("sync").Warn("failed to parse REDIS_URL, falling back to local memory", "error", err.Error(), "url", redisURL)
 		globalClient = nil
 		return nil
 	}
@@ -67,13 +67,13 @@ func InitRedis(redisURL string) *Client {
 	defer cancel()
 
 	if err := rdb.Ping(ctx).Err(); err != nil {
-		telemetry.Logger.Warn("cannot reach Redis server, gracefully falling back to local in-memory operation", "error", err.Error())
+		telemetry.ScopedLogger("sync").Warn("cannot reach Redis server, gracefully falling back to local in-memory operation", "error", err.Error())
 		_ = rdb.Close()
 		globalClient = nil
 		return nil
 	}
 
-	telemetry.Logger.Info("connected to Redis server successfully (Enterprise Distributed Cluster Mode ACTIVATED)",
+	telemetry.ScopedLogger("sync").Info("connected to Redis server successfully (Enterprise Distributed Cluster Mode ACTIVATED)",
 		"addr", opt.Addr,
 		"db", opt.DB,
 	)
@@ -118,7 +118,7 @@ func (c *Client) PublishReload(ctx context.Context, reason string) error {
 	payload, _ := json.Marshal(evt)
 
 	err := c.rdb.Publish(ctx, ReloadChannel, string(payload)).Err()
-	telemetry.Logger.Info("published cluster reload broadcast", "reason", reason, "version", newVer)
+	telemetry.ScopedLogger("sync").Info("published cluster reload broadcast", "reason", reason, "version", newVer)
 	return err
 }
 
@@ -152,7 +152,7 @@ func (c *Client) SubscribeReload(onReload func(reason string), stopChan <-chan s
 			}
 
 			// Channel closed unexpectedly: resubscribe with capped backoff.
-			telemetry.Logger.Warn("redis cluster reload subscription lost, reconnecting",
+			telemetry.ScopedLogger("sync").Warn("redis cluster reload subscription lost, reconnecting",
 				"retry_in", backoff.String())
 			select {
 			case <-time.After(backoff):
@@ -177,7 +177,7 @@ func (c *Client) subscribeReloadOnce(stopChan <-chan struct{}, onReload func(rea
 	defer pubsub.Close()
 
 	ch := pubsub.Channel()
-	telemetry.Logger.Info("subscribed to Redis cluster invalidation channel", "channel", ReloadChannel)
+	telemetry.ScopedLogger("sync").Info("subscribed to Redis cluster invalidation channel", "channel", ReloadChannel)
 
 	// Self-healing periodic ticker to catch any dropped pub/sub events
 	reconcileTicker := time.NewTicker(15 * time.Second)
@@ -191,7 +191,7 @@ func (c *Client) subscribeReloadOnce(stopChan <-chan struct{}, onReload func(rea
 			}
 			var evt ClusterEvent
 			if err := json.Unmarshal([]byte(msg.Payload), &evt); err == nil {
-				telemetry.Logger.Info("received Redis cluster reload broadcast (<1ms latency)", "reason", evt.Reason)
+				telemetry.ScopedLogger("sync").Info("received Redis cluster reload broadcast (<1ms latency)", "reason", evt.Reason)
 				if v, err := c.rdb.Get(context.Background(), ConfigVersionKey).Int64(); err == nil && v > *localVersion {
 					*localVersion = v
 				}
@@ -200,7 +200,7 @@ func (c *Client) subscribeReloadOnce(stopChan <-chan struct{}, onReload func(rea
 		case <-reconcileTicker.C:
 			if v, err := c.rdb.Get(context.Background(), ConfigVersionKey).Int64(); err == nil {
 				if v > *localVersion {
-					telemetry.Logger.Info("reconciled cluster config version divergence, triggering self-healing reload", "localVersion", *localVersion, "remoteVersion", v)
+					telemetry.ScopedLogger("sync").Info("reconciled cluster config version divergence, triggering self-healing reload", "localVersion", *localVersion, "remoteVersion", v)
 					*localVersion = v
 					onReload("version_sync_reconciliation")
 				}

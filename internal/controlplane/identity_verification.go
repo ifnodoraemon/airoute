@@ -30,11 +30,11 @@ func sendVerificationEmail(targetEmail, code, purpose string) error {
 		// explicit local development rely on the code being returned in the
 		// response body instead.
 		if devCodeExposed() {
-			telemetry.Logger.Warn("email verification code generated without SMTP; returning it to the caller because dev mode is enabled",
+			telemetry.ScopedLogger("auth").Warn("email verification code generated without SMTP; returning it to the caller because dev mode is enabled",
 				"email", targetEmail, "purpose", purpose)
 			return nil
 		}
-		telemetry.Logger.Warn("email verification code generated but SMTP is not configured; verification cannot be delivered",
+		telemetry.ScopedLogger("auth").Warn("email verification code generated but SMTP is not configured; verification cannot be delivered",
 			"email", targetEmail, "purpose", purpose,
 			"remediation", "configure SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS")
 		return fmt.Errorf("SMTP is not configured, verification email cannot be delivered")
@@ -133,7 +133,7 @@ func (h *AdminHandler) SendVerificationCode(c *gin.Context) {
 
 	// Dispatch email via SMTP if configured
 	if err := sendVerificationEmail(email, code, purpose); err != nil {
-		telemetry.Logger.Error("failed to dispatch verification email via SMTP", "email", email, "error", err)
+		telemetry.ScopedLogger("auth").Error("failed to dispatch verification email via SMTP", "email", email, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "发送邮件失败: " + err.Error()})
 		return
 	}

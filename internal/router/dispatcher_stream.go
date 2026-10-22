@@ -26,10 +26,10 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		if fb := d.GetModelFallback(req.Model); fb != "" && !strings.EqualFold(fb, req.Model) {
 			nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
 			if fbErr != nil {
-				telemetry.Logger.Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
+				telemetry.ScopedLogger("router").Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
 				return nil, newNoRouteError(ctx, req.Model, fmt.Errorf("no upstream provider available for requested model '%s': %w", req.Model, fbErr))
 			}
-			telemetry.Logger.Warn("no upstream provider for stream model, triggering cross-model fallback",
+			telemetry.ScopedLogger("router").Warn("no upstream provider for stream model, triggering cross-model fallback",
 				"requested_model", req.Model,
 				"fallback_model", fb,
 			)
@@ -46,7 +46,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 	for i, ch := range channels {
 		// High-Availability Circuit Breaker: fail fast if upstream is down
 		if !d.circuitBreaker.CanExecute(ch.Name) {
-			telemetry.Logger.Warn("circuit breaker is OPEN, bypassing dead upstream stream", "channel", ch.Name)
+			telemetry.ScopedLogger("router").Warn("circuit breaker is OPEN, bypassing dead upstream stream", "channel", ch.Name)
 			skipped = append(skipped, ch.Name)
 			continue
 		}
@@ -59,7 +59,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			continue
 		}
 
-		telemetry.Logger.Info("attempting streaming connection",
+		telemetry.ScopedLogger("router").Info("attempting streaming connection",
 			"channel", ch.Name,
 			"model", req.Model,
 			"attempt", i+1,
@@ -88,7 +88,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			lastErr = err
 			attempted = append(attempted, ch.Name)
 			telemetry.GlobalMetrics.RecordFallback()
-			telemetry.Logger.Warn("stream connection failed, trying next channel",
+			telemetry.ScopedLogger("router").Warn("stream connection failed, trying next channel",
 				"channel", ch.Name,
 				"error", err.Error(),
 			)
@@ -150,7 +150,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			lastErr = firstErr
 			attempted = append(attempted, ch.Name)
 			telemetry.GlobalMetrics.RecordFallback()
-			telemetry.Logger.Warn("channel failed before first valid token, falling back", "channel", ch.Name, "error", firstErr.Error())
+			telemetry.ScopedLogger("router").Warn("channel failed before first valid token, falling back", "channel", ch.Name, "error", firstErr.Error())
 			continue
 		}
 
@@ -170,10 +170,10 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 	if fb := d.GetModelFallback(req.Model); fb != "" && !strings.EqualFold(fb, req.Model) {
 		nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
 		if fbErr != nil {
-			telemetry.Logger.Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
+			telemetry.ScopedLogger("router").Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
 			return nil, newExhaustedError(ctx, req.Model, attempted, fmt.Errorf("all channels failed for stream request on model %s (last error: %v); cannot fallback to %s: %w", req.Model, lastErr, fb, fbErr))
 		}
-		telemetry.Logger.Warn("all stream channels failed, triggering cross-model fallback",
+		telemetry.ScopedLogger("router").Warn("all stream channels failed, triggering cross-model fallback",
 			"requested_model", req.Model,
 			"fallback_model", fb,
 			"last_error", lastErr,

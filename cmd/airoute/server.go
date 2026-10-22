@@ -58,7 +58,7 @@ func runServer(args []string) {
 
 	// Initialize Logger
 	telemetry.InitLogger(cfg.Server.LogLevel)
-	telemetry.Logger.Info("starting airoute",
+	telemetry.ScopedLogger("system").Info("starting airoute",
 		"version", Version,
 		"config", *configPath,
 		"db", *dbPath,
@@ -73,33 +73,33 @@ func runServer(args []string) {
 	isRelease := os.Getenv("GIN_MODE") == "release" || cfg.Server.LogLevel == "warn" || cfg.Server.LogLevel == "error"
 	if issues := productionSecurityIssues(cfg); len(issues) > 0 {
 		for _, issue := range issues {
-			telemetry.Logger.Warn("SECURITY WARNING: "+issue, "remediation", "set GATEWAY_ADMIN_SECRET and GATEWAY_ADMIN_PASSWORD to strong random values")
+			telemetry.ScopedLogger("system").Warn("SECURITY WARNING: "+issue, "remediation", "set GATEWAY_ADMIN_SECRET and GATEWAY_ADMIN_PASSWORD to strong random values")
 		}
 		if isRelease {
-			telemetry.Logger.Error("refusing to start: insecure default credentials detected in release mode; set GATEWAY_ADMIN_SECRET and GATEWAY_ADMIN_PASSWORD")
+			telemetry.ScopedLogger("system").Error("refusing to start: insecure default credentials detected in release mode; set GATEWAY_ADMIN_SECRET and GATEWAY_ADMIN_PASSWORD")
 			os.Exit(1)
 		}
 	}
 	if isRelease && os.Getenv("STRIPE_WEBHOOK_SECRET") == "" {
-		telemetry.Logger.Warn("SECURITY WARNING: STRIPE_WEBHOOK_SECRET is unset in production release mode. Stripe payment webhooks will be rejected.")
+		telemetry.ScopedLogger("system").Warn("SECURITY WARNING: STRIPE_WEBHOOK_SECRET is unset in production release mode. Stripe payment webhooks will be rejected.")
 	}
 	// Without a shared secret the HMAC signing key is generated randomly per
 	// process: every restart invalidates all issued tokens, and in a multi-replica
 	// cluster a token minted by one node is rejected by every other node.
 	if os.Getenv("GATEWAY_ADMIN_SECRET") == "" {
-		telemetry.Logger.Warn("CONFIGURATION WARNING: GATEWAY_ADMIN_SECRET is unset; using a per-process random signing key. " +
+		telemetry.ScopedLogger("system").Warn("CONFIGURATION WARNING: GATEWAY_ADMIN_SECRET is unset; using a per-process random signing key. " +
 			"User sessions will not survive a restart and will not be valid across cluster replicas.")
 	}
 	if !strings.HasPrefix(dataSource, "postgres://") && !strings.HasPrefix(dataSource, "postgresql://") {
 		if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
-			telemetry.Logger.Warn("STORAGE WARNING: Running in Kubernetes with SQLite file storage. For multi-replica deployments (replicas > 1), configure PostgreSQL via DATABASE_URL to avoid database lock contention.")
+			telemetry.ScopedLogger("system").Warn("STORAGE WARNING: Running in Kubernetes with SQLite file storage. For multi-replica deployments (replicas > 1), configure PostgreSQL via DATABASE_URL to avoid database lock contention.")
 		}
 	}
 
 	// Initialize Storage Layer (SQLite or Distributed PostgreSQL)
 	db, err := storage.OpenDB(dataSource)
 	if err != nil {
-		telemetry.Logger.Error("failed to open database", "error", err.Error())
+		telemetry.ScopedLogger("system").Error("failed to open database", "error", err.Error())
 		os.Exit(1)
 	}
 	defer db.Close()
@@ -112,7 +112,7 @@ func runServer(args []string) {
 	// Seed DB from YAML config if DB is currently empty
 	existingChannels, _ := repo.ListChannels()
 	if len(existingChannels) == 0 && len(cfg.Channels) > 0 {
-		telemetry.Logger.Info("seeding database from initial config file", "channels", len(cfg.Channels))
+		telemetry.ScopedLogger("system").Info("seeding database from initial config file", "channels", len(cfg.Channels))
 		for _, ch := range cfg.Channels {
 			_ = repo.CreateChannel(&storage.ChannelRecord{
 				Name:           ch.Name,
@@ -171,7 +171,7 @@ func runServer(args []string) {
 	// Initialize Control Plane Synchronizer & load state into Data Plane memory
 	synchronizer := controlplane.NewSynchronizer(repo, dispatcher)
 	if err := synchronizer.ReloadFromDB(); err != nil {
-		telemetry.Logger.Warn("initial sync from db failed, using config file defaults", "error", err.Error())
+		telemetry.ScopedLogger("system").Warn("initial sync from db failed, using config file defaults", "error", err.Error())
 		dispatcher.UpdateChannels(cfg.Channels)
 	}
 
@@ -180,9 +180,9 @@ func runServer(args []string) {
 		stopRedis := make(chan struct{})
 		defer close(stopRedis)
 		redisClient.SubscribeReload(func(reason string) {
-			telemetry.Logger.Info("handling cluster-wide reload broadcast (<1ms latency)", "reason", reason)
+			telemetry.ScopedLogger("system").Info("handling cluster-wide reload broadcast (<1ms latency)", "reason", reason)
 			if err := synchronizer.ReloadFromDB(); err != nil {
-				telemetry.Logger.Error("failed to reload data plane after cluster broadcast", "error", err.Error())
+				telemetry.ScopedLogger("system").Error("failed to reload data plane after cluster broadcast", "error", err.Error())
 			}
 		}, stopRedis)
 	}
@@ -196,10 +196,10 @@ func runServer(args []string) {
 	storageCfg := cfg.GetStorageConfig()
 	artifactStorage, err := storage.NewArtifactStorage(storageCfg)
 	if err != nil {
-		telemetry.Logger.Warn("failed to initialize configured artifact storage, falling back to local storage", "error", err.Error())
+		telemetry.ScopedLogger("system").Warn("failed to initialize configured artifact storage, falling back to local storage", "error", err.Error())
 		artifactStorage, _ = storage.NewLocalStorage(storageCfg.LocalPath)
 	}
-	telemetry.Logger.Info("artifact storage initialized", "driver", artifactStorage.Driver())
+	telemetry.ScopedLogger("system").Info("artifact storage initialized", "driver", artifactStorage.Driver())
 
 	// Initialize Admin Handler
 	adminHandler := controlplane.NewAdminHandler(repo, synchronizer, dispatcher)
@@ -221,9 +221,9 @@ func runServer(args []string) {
 
 	// Run server in background goroutine
 	go func() {
-		telemetry.Logger.Info("gateway server listening", "addr", addr)
+		telemetry.ScopedLogger("system").Info("gateway server listening", "addr", addr)
 		if pub := cfg.GetPublicURL(); pub != "" {
-			telemetry.Logger.Info("gateway public endpoint configured", "url", pub)
+			telemetry.ScopedLogger("system").Info("gateway public endpoint configured", "url", pub)
 		}
 
 		fmt.Printf("\n%s🚀 Airoute 网关已成功就绪%s\n", colorBold+colorGreen, colorReset)
@@ -235,7 +235,7 @@ func runServer(args []string) {
 		fmt.Println()
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			telemetry.Logger.Error("server fatal error", "error", err.Error())
+			telemetry.ScopedLogger("system").Error("server fatal error", "error", err.Error())
 			os.Exit(1)
 		}
 	}()
@@ -245,14 +245,14 @@ func runServer(args []string) {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	telemetry.Logger.Info("shutting down airoute gracefully")
+	telemetry.ScopedLogger("system").Info("shutting down airoute gracefully")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		telemetry.Logger.Error("server forced to shutdown", "error", err.Error())
+		telemetry.ScopedLogger("system").Error("server forced to shutdown", "error", err.Error())
 	}
 
-	telemetry.Logger.Info("airoute exited smoothly")
+	telemetry.ScopedLogger("system").Info("airoute exited smoothly")
 }

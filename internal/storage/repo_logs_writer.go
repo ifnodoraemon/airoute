@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -166,21 +167,16 @@ func (r *Repository) BatchRecordUsageLogsContext(ctx context.Context, logs []*Us
 	keyTenantMap := make(map[string]string)
 	orphanTenantCostMap := make(map[string]float64)
 
-	insertWithTimeSQL := r.db.Rebind(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, cost_units, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, usage_source, error_message, pricing_snapshot, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-	insertSQL := r.db.Rebind(`INSERT INTO usage_logs (trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, cost_units, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, usage_source, error_message, pricing_snapshot) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	// Multi-row INSERT: a 100-row flush used to be 100 round trips inside the
+	// transaction. 22 columns per row keeps a chunk of 25 well under SQLite's
+	// bound-parameter limit while cutting the round trips 25x.
+	const (
+		insertColumns  = `trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, cost_units, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, usage_source, error_message, pricing_snapshot, created_at`
+		insertColumnsN = 22
+		insertChunk    = 25
+	)
 
-	stmtWithTime, err := tx.Prepare(insertWithTimeSQL)
-	if err != nil {
-		return err
-	}
-	defer stmtWithTime.Close()
-
-	stmt, err := tx.Prepare(insertSQL)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
+	var rowArgs []interface{}
 	for _, log := range logs {
 		if log == nil {
 			continue
@@ -203,14 +199,20 @@ func (r *Repository) BatchRecordUsageLogsContext(ctx context.Context, logs []*Us
 
 		keyVal := log.APIKey
 		usageSource := normalizeUsageSource(log.UsageSource)
-		if !log.CreatedAt.IsZero() {
-			_, err = stmtWithTime.Exec(log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, ToUnits(log.Cost), isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, usageSource, truncateError(log.ErrorMessage), encodePricingSnapshot(log.PricingSnapshot), log.CreatedAt.UTC().Format("2006-01-02 15:04:05"))
-		} else {
-			_, err = stmt.Exec(log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel, log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, ToUnits(log.Cost), isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, usageSource, truncateError(log.ErrorMessage), encodePricingSnapshot(log.PricingSnapshot))
+		// Every column is supplied: rows in one VALUES list must describe the
+		// same shape, so a zero CreatedAt takes the flush timestamp instead of
+		// the column default.
+		createdAt := log.CreatedAt
+		if createdAt.IsZero() {
+			createdAt = time.Now()
 		}
-		if err != nil {
-			return err
-		}
+		rowArgs = append(rowArgs,
+			log.TraceID, log.ChatID, log.SessionID, keyVal, log.TenantID, log.Model, log.Channel,
+			log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, ToUnits(log.Cost),
+			isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, usageSource,
+			truncateError(log.ErrorMessage), encodePricingSnapshot(log.PricingSnapshot),
+			createdAt.UTC().Format("2006-01-02 15:04:05"),
+		)
 
 		if keyVal != "" {
 			keyCostMap[keyVal] += log.Cost
@@ -220,6 +222,25 @@ func (r *Repository) BatchRecordUsageLogsContext(ctx context.Context, logs []*Us
 			}
 		} else if log.TenantID != "" && log.Cost > 0 {
 			orphanTenantCostMap[log.TenantID] += log.Cost
+		}
+	}
+
+	rowCount := len(rowArgs) / insertColumnsN
+	if rowCount > 0 {
+		rowPlaceholder := "(" + strings.Repeat("?, ", insertColumnsN-1) + "?)"
+		for start := 0; start < rowCount; start += insertChunk {
+			end := start + insertChunk
+			if end > rowCount {
+				end = rowCount
+			}
+			placeholders := make([]string, end-start)
+			for i := range placeholders {
+				placeholders[i] = rowPlaceholder
+			}
+			query := r.db.Rebind(`INSERT INTO usage_logs (` + insertColumns + `) VALUES ` + strings.Join(placeholders, ","))
+			if _, err := tx.Exec(query, rowArgs[start*insertColumnsN:end*insertColumnsN]...); err != nil {
+				return err
+			}
 		}
 	}
 
