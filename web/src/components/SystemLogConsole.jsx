@@ -7,17 +7,10 @@ import {
   Copy,
   Check,
   Search,
-  Filter,
   RefreshCw,
   AlertTriangle,
-  AlertCircle,
   Info,
   Flame,
-  Activity,
-  Server,
-  Layers,
-  Sliders,
-  ChevronRight,
   X
 } from 'lucide-react';
 import { apiFetch } from '../api/client';
@@ -34,7 +27,6 @@ export default function SystemLogConsole({
   const isZh = lang === 'zh';
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [streaming, setStreaming] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
   const [searchQuery, setSearchQuery] = useState(initialTraceId || '');
   const [selectedLevel, setSelectedLevel] = useState('ALL'); // ALL, ERROR, WARN, INFO, DEBUG
@@ -42,10 +34,15 @@ export default function SystemLogConsole({
   const [selectedLog, setSelectedLog] = useState(null);
   const [copiedId, setCopiedId] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
-  const consoleEndRef = useRef(null);
   const consoleContainerRef = useRef(null);
   const sseRef = useRef(null);
+  const retryRef = useRef(null);
+  const pollRef = useRef(null);
+  // Only auto-scroll while the operator is already at the bottom; scrolling on
+  // every record used to drag the view away mid-inspection.
+  const followBottomRef = useRef(true);
 
   // Fetch initial history
   const fetchRecentLogs = useCallback(async () => {
@@ -67,61 +64,106 @@ export default function SystemLogConsole({
     }
   }, [adminFetch]);
 
-  // Connect SSE for live streaming
+  // Connect SSE for live streaming, with bounded reconnect backoff and a polling
+  // fallback. The native EventSource retry does not cover a revoked token or a
+  // proxy that closed the stream, and the old code merely greyed out the dot.
   useEffect(() => {
     fetchRecentLogs();
 
-    if (!streaming) return;
-
-    // Use SSE native or fetch-based stream
     let active = true;
-    const connectSSE = () => {
-      try {
-        const token = localStorage.getItem('airoute_token') || '';
-        const streamUrl = token ? `/api/v1/admin/system/logs/stream?token=${encodeURIComponent(token)}` : '/api/v1/admin/system/logs/stream';
-        const source = new EventSource(streamUrl, { withCredentials: true });
-        sseRef.current = source;
 
-        source.onopen = () => {
-          if (active) setConnected(true);
-        };
-
-        source.addEventListener('log', (e) => {
-          if (!active) return;
-          try {
-            const entry = JSON.parse(e.data);
-            setLogs((prev) => {
-              if (prev.some((item) => item.id === entry.id)) return prev;
-              const next = [...prev, entry];
-              return next.length > 2000 ? next.slice(-2000) : next;
-            });
-          } catch {}
-        });
-
-        source.onerror = () => {
-          if (active) setConnected(false);
-        };
-      } catch {
-        // Fallback to polling if SSE unavailable
+    const stopPolling = () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
       }
     };
+    const startPolling = () => {
+      if (pollRef.current) return;
+      pollRef.current = setInterval(() => {
+        if (active) fetchRecentLogs();
+      }, 5000);
+    };
 
-    connectSSE();
+    let attempt = 0;
+    const connect = () => {
+      if (!active) return;
+      const token = localStorage.getItem('airoute_token') || '';
+      const streamUrl = token ? `/api/v1/admin/system/logs/stream?token=${encodeURIComponent(token)}` : '/api/v1/admin/system/logs/stream';
+      let source;
+      try {
+        source = new EventSource(streamUrl, { withCredentials: true });
+      } catch {
+        startPolling();
+        return;
+      }
+      sseRef.current = source;
+
+      source.onopen = () => {
+        if (!active) return;
+        attempt = 0;
+        setReconnectAttempt(0);
+        setConnected(true);
+        stopPolling();
+      };
+
+      source.addEventListener('log', (e) => {
+        if (!active) return;
+        try {
+          const entry = JSON.parse(e.data);
+          setLogs((prev) => {
+            if (prev.some((item) => item.id === entry.id)) return prev;
+            const next = [...prev, entry];
+            return next.length > 2000 ? next.slice(-2000) : next;
+          });
+        } catch {}
+      });
+
+      source.onerror = () => {
+        if (!active) return;
+        setConnected(false);
+        // Take over reconnection: close first so the browser's own retry does
+        // not race our scheduled attempt and open a second stream.
+        try {
+          source.close();
+        } catch {}
+        if (sseRef.current === source) sseRef.current = null;
+        attempt += 1;
+        setReconnectAttempt(attempt);
+        startPolling();
+        const delay = Math.min(30000, 2000 * 2 ** Math.min(attempt - 1, 4));
+        if (retryRef.current) clearTimeout(retryRef.current);
+        retryRef.current = setTimeout(connect, delay);
+      };
+    };
+
+    connect();
 
     return () => {
       active = false;
+      stopPolling();
+      if (retryRef.current) {
+        clearTimeout(retryRef.current);
+        retryRef.current = null;
+      }
       if (sseRef.current) {
         sseRef.current.close();
         sseRef.current = null;
       }
     };
-  }, [streaming, fetchRecentLogs]);
+  }, [fetchRecentLogs]);
 
-  // Auto-scroll to bottom unless paused
+  const handleConsoleScroll = () => {
+    const container = consoleContainerRef.current;
+    if (!container) return;
+    followBottomRef.current = container.scrollHeight - container.scrollTop - container.clientHeight < 48;
+  };
+
+  // Follow new lines only while the operator is already at the bottom.
   useEffect(() => {
-    if (!isPaused && consoleEndRef.current && typeof consoleEndRef.current.scrollIntoView === 'function') {
-      consoleEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
+    if (isPaused || !followBottomRef.current) return;
+    const container = consoleContainerRef.current;
+    if (container) container.scrollTop = container.scrollHeight;
   }, [logs, isPaused]);
 
   // Filter logs
@@ -152,6 +194,11 @@ export default function SystemLogConsole({
       return true;
     });
   }, [logs, selectedLevel, selectedCategory, searchQuery]);
+
+  // Rendering all 2000 buffered lines re-laid out the whole list on every record.
+  // Show the newest window; filters, copy and the counters still use the full set.
+  const VISIBLE_LOG_LIMIT = 300;
+  const visibleLogs = useMemo(() => filteredLogs.slice(-VISIBLE_LOG_LIMIT), [filteredLogs]);
 
   const handleClear = () => {
     setLogs([]);
@@ -231,7 +278,19 @@ export default function SystemLogConsole({
                   <span
                     className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}
                   ></span>
-                  <span>{connected ? (isZh ? '实时已连接' : 'LIVE SSE') : (isZh ? '缓冲离线' : 'CONNECTING')}</span>
+                  <span>
+                    {connected
+                      ? isZh
+                        ? '实时已连接'
+                        : 'LIVE SSE'
+                      : reconnectAttempt > 0
+                      ? isZh
+                        ? `重连中 #${reconnectAttempt}`
+                        : `RECONNECTING #${reconnectAttempt}`
+                      : isZh
+                      ? '连接中'
+                      : 'CONNECTING'}
+                  </span>
                 </span>
               </div>
               <span className="text-[11px] text-[#A1A7B0] font-sans block mt-0.5">
@@ -369,8 +428,16 @@ export default function SystemLogConsole({
         {/* Terminal Log Stream Table */}
         <div
           ref={consoleContainerRef}
+          onScroll={handleConsoleScroll}
           className="flex-1 overflow-y-auto p-4 space-y-1 divide-y divide-slate-800/30 font-mono text-[11px] leading-relaxed select-text"
         >
+          {filteredLogs.length > VISIBLE_LOG_LIMIT && (
+            <div className="sticky top-0 z-10 -mt-1 mb-1 bg-[#0e131d]/95 px-2 py-1 text-[10px] font-sans text-[#A1A7B0] border-b border-slate-800/60">
+              {isZh
+                ? `仅渲染最近 ${VISIBLE_LOG_LIMIT} 条（筛选命中 ${filteredLogs.length} 条）`
+                : `Rendering the latest ${VISIBLE_LOG_LIMIT} of ${filteredLogs.length} matches`}
+            </div>
+          )}
           {loading && logs.length === 0 ? (
             <div className="h-full flex items-center justify-center text-slate-500 space-x-2">
               <RefreshCw className="w-4 h-4 animate-spin text-[#355CFF] dark:text-[#91A7FF]" />
@@ -387,7 +454,7 @@ export default function SystemLogConsole({
               </span>
             </div>
           ) : (
-            filteredLogs.map((log) => {
+            visibleLogs.map((log) => {
               const catBadge = getCategoryBadge(log.category);
               const isSelected = selectedLog?.id === log.id;
               return (
@@ -449,7 +516,6 @@ export default function SystemLogConsole({
               );
             })
           )}
-          <div ref={consoleEndRef} />
         </div>
 
         {/* Selected Log Detail Inspector Drawer */}
@@ -548,10 +614,29 @@ export default function SystemLogConsole({
       <div className="bg-[#111622] px-4 py-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400 shrink-0">
         <div className="flex items-center space-x-3">
           <span>{isZh ? `已加载: ${filteredLogs.length} 条` : `Showing: ${filteredLogs.length} entries`}</span>
+          {filteredLogs.length > visibleLogs.length && (
+            <>
+              <span>·</span>
+              <span>{isZh ? `渲染: 最近 ${visibleLogs.length} 条` : `Rendered: latest ${visibleLogs.length}`}</span>
+            </>
+          )}
           <span>·</span>
           <span>{isZh ? `内存缓冲池: ${logs.length} / 2000` : `Ring Buffer: ${logs.length}/2000`}</span>
         </div>
         <div className="flex items-center space-x-2">
+          <span className={connected ? 'text-emerald-400' : 'text-amber-400'}>
+            {connected
+              ? isZh
+                ? '实时流正常'
+                : 'Live stream OK'
+              : reconnectAttempt > 0
+              ? isZh
+                ? `实时流断开，重连中 (#${reconnectAttempt})`
+                : `Stream lost, reconnecting (#${reconnectAttempt})`
+              : isZh
+              ? '正在连接实时流…'
+              : 'Connecting live stream…'}
+          </span>
           {searchQuery && (
             <span className="text-[#91A7FF]">
               {isZh ? `过滤词: "${searchQuery}"` : `Filtered by "${searchQuery}"`}
