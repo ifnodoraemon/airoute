@@ -86,11 +86,19 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
+	req.Role = strings.ToLower(strings.TrimSpace(req.Role))
+	req.Status = strings.ToLower(strings.TrimSpace(req.Status))
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	req.GroupName = strings.ToLower(strings.TrimSpace(req.GroupName))
 	if req.Role == "" {
 		req.Role = "user"
 	}
 	if req.Status == "" {
 		req.Status = "active"
+	}
+	if (req.Role != "user" && req.Role != "admin") || (req.Status != "active" && req.Status != "locked") {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "角色仅支持 admin/user，状态仅支持 active/locked"})
+		return
 	}
 	if req.GroupName == "" {
 		req.GroupName = "default"
@@ -110,6 +118,12 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 	if existing != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "该用户名已存在"})
 		return
+	}
+	if req.Email != "" {
+		if existing, _ := h.repo.GetUserByEmail(req.Email); existing != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "该邮箱已被绑定注册"})
+			return
+		}
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
@@ -191,9 +205,10 @@ func (h *AdminHandler) DeleteUser(c *gin.Context) {
 	}
 
 	if err := h.repo.DeleteUser(targetUsername); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "删除用户失败: " + err.Error()})
+		respondUserUpdateError(c, err, "删除用户失败")
 		return
 	}
+	h.syncDataPlane()
 
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "账号已成功删除"})
 }
@@ -224,7 +239,7 @@ func (h *AdminHandler) ResetUserPassword(c *gin.Context) {
 	}
 
 	targetUser, err := h.repo.GetUserByUsername(targetUsername)
-	if err != nil || targetUser == nil {
+	if err != nil || targetUser == nil || targetUser.Status == "deleted" {
 		c.JSON(http.StatusNotFound, gin.H{"code": 404, "error": "目标用户不存在"})
 		return
 	}
@@ -236,7 +251,7 @@ func (h *AdminHandler) ResetUserPassword(c *gin.Context) {
 	}
 
 	if err := h.repo.UpdateUserPassword(targetUsername, string(hash)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "重置密码失败: " + err.Error()})
+		respondUserUpdateError(c, err, "重置密码失败")
 		return
 	}
 

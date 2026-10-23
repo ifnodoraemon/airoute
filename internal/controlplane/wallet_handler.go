@@ -1,6 +1,8 @@
 package controlplane
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -8,7 +10,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/config"
+	"github.com/ifnodoraemon/airoute/internal/storage"
 )
+
+func respondUserUpdateError(c *gin.Context, err error, message string) {
+	status := http.StatusInternalServerError
+	if errors.Is(err, sql.ErrNoRows) {
+		status, message = http.StatusNotFound, "目标用户不存在或已删除"
+	} else if errors.Is(err, storage.ErrBalanceOutOfRange) {
+		status, message = http.StatusBadRequest, err.Error()
+	}
+	c.JSON(status, gin.H{"code": status, "error": message})
+}
 
 // UpdateUserStatusRequest defines lock/unlock payload.
 type UpdateUserStatusRequest struct {
@@ -17,7 +30,7 @@ type UpdateUserStatusRequest struct {
 
 // UpdateUserStatus locks or unlocks a user account.
 func (h *AdminHandler) UpdateUserStatus(c *gin.Context) {
-	_, ok := RequireAdminClaims(c, "权限不足，仅管理员可锁定或解锁用户")
+	claims, ok := RequireAdminClaims(c, "权限不足，仅管理员可锁定或解锁用户")
 	if !ok {
 		return
 	}
@@ -40,9 +53,13 @@ func (h *AdminHandler) UpdateUserStatus(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "状态仅支持 active 或 locked"})
 		return
 	}
+	if targetUsername == claims.Username && status == "locked" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "不能锁定当前正在登录的管理员账号"})
+		return
+	}
 
 	if err := h.repo.UpdateUserStatus(targetUsername, status); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "更新用户状态失败: " + err.Error()})
+		respondUserUpdateError(c, err, "更新用户状态失败")
 		return
 	}
 
@@ -75,15 +92,19 @@ func (h *AdminHandler) UpdateUserBalance(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "请提供调整额度参数 (balance 或 delta)"})
 		return
 	}
+	if (req.Balance == nil) == (req.Delta == nil) {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "请提供且仅提供 balance 或 delta 其中一个参数"})
+		return
+	}
 
 	if req.Balance != nil {
 		if err := h.repo.SetUserBalance(targetUsername, *req.Balance); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "更新额度失败: " + err.Error()})
+			respondUserUpdateError(c, err, "更新额度失败")
 			return
 		}
 	} else if req.Delta != nil {
 		if err := h.repo.UpdateUserBalance(targetUsername, *req.Delta); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "调整额度失败: " + err.Error()})
+			respondUserUpdateError(c, err, "调整额度失败")
 			return
 		}
 	} else {
@@ -125,8 +146,12 @@ func (h *AdminHandler) UpdateUserGroup(c *gin.Context) {
 	}
 
 	groupName := strings.ToLower(strings.TrimSpace(req.GroupName))
+	if groupName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "分组名称不能为空"})
+		return
+	}
 	if err := h.repo.UpdateUserGroup(targetUsername, groupName); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "更新分组失败: " + err.Error()})
+		respondUserUpdateError(c, err, "更新分组失败")
 		return
 	}
 
@@ -175,13 +200,13 @@ func (h *AdminHandler) UpdateUserRole(c *gin.Context) {
 	}
 
 	targetUser, err := h.repo.GetUserByUsername(targetUsername)
-	if err != nil || targetUser == nil {
+	if err != nil || targetUser == nil || targetUser.Status == "deleted" {
 		c.JSON(http.StatusNotFound, gin.H{"code": 404, "error": "目标用户不存在"})
 		return
 	}
 
 	if err := h.repo.UpdateUserRole(targetUsername, role); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "修改角色失败: " + err.Error()})
+		respondUserUpdateError(c, err, "修改角色失败")
 		return
 	}
 

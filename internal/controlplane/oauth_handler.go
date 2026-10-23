@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/config"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -195,19 +196,27 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 
 	// Security: a simulated/demo authorization may never log in to an existing
 	// administrator account, even if the caller forged an arbitrary code.
-	if !realExchange && user != nil && strings.EqualFold(user.Role, "admin") {
-		h.oauthError(c, http.StatusForbidden, "管理员账号不允许通过模拟演示登录，请使用标准密码登录")
+	if !realExchange && user != nil {
+		h.oauthError(c, http.StatusForbidden, "模拟登录不能接管已存在的账号，请使用标准密码或真实 OAuth 登录")
 		return
 	}
 
 	if user == nil {
+		if !config.GetGlobalConfig().IsRegistrationAllowed() {
+			h.oauthError(c, http.StatusForbidden, "自主注册已关闭，请联系管理员分配账号")
+			return
+		}
 		// New OAuth user: create with trial balance
 		randPassBytes := make([]byte, 16)
 		if _, err := rand.Read(randPassBytes); err != nil {
 			h.oauthError(c, http.StatusInternalServerError, "安全随机源不可用")
 			return
 		}
-		hash, _ := bcrypt.GenerateFromPassword(randPassBytes, bcrypt.DefaultCost)
+		hash, err := bcrypt.GenerateFromPassword(randPassBytes, bcrypt.DefaultCost)
+		if err != nil {
+			h.oauthError(c, http.StatusInternalServerError, "创建 OAuth 账户失败")
+			return
+		}
 
 		user = &storage.UserRecord{
 			Username:     username,
@@ -215,21 +224,16 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 			PasswordHash: string(hash),
 			Role:         "user",
 			Status:       "active",
-			Balance:      5.0,
+			Balance:      config.GetGlobalConfig().GetInitialUserBalance(),
 			GroupName:    "default",
 		}
-		if err := h.repo.CreateUser(user); err != nil {
-			h.oauthError(c, http.StatusInternalServerError, "创建 OAuth 账户失败: "+err.Error())
-			return
-		}
-
 		// Create default API key
 		newKey, err := GenerateAPIKey()
 		if err != nil {
 			h.oauthError(c, http.StatusInternalServerError, "安全随机源不可用，无法生成密钥")
 			return
 		}
-		_ = h.repo.CreateAPIKey(&storage.APIKeyRecord{
+		if err := h.repo.CreateUserWithAPIKey(user, &storage.APIKeyRecord{
 			Key:           newKey,
 			TenantID:      username,
 			UserID:        user.ID,
@@ -239,12 +243,15 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 			TPM:           100000,
 			Budget:        100.0,
 			Status:        "active",
-		})
+		}); err != nil {
+			h.oauthError(c, http.StatusInternalServerError, "创建 OAuth 账号及初始密钥失败，请重试")
+			return
+		}
 		h.syncDataPlane()
 	}
 
-	if strings.EqualFold(user.Status, "locked") {
-		h.oauthError(c, http.StatusForbidden, "该账户已被管理员锁定，无法登录")
+	if strings.EqualFold(user.Status, "locked") || strings.EqualFold(user.Status, "deleted") {
+		h.oauthError(c, http.StatusForbidden, "该账户已被锁定或删除，无法登录")
 		return
 	}
 

@@ -110,7 +110,7 @@ func TestAdminAuth_LoginAndProtectedRoutes(t *testing.T) {
 	createUserPayload, _ := json.Marshal(map[string]string{
 		"username": "operator1",
 		"password": "operator123456",
-		"role":     "operator",
+		"role":     "user",
 	})
 	reqCreateUser := httptest.NewRequest(http.MethodPost, "/api/v1/admin/users", bytes.NewReader(createUserPayload))
 	reqCreateUser.Header.Set("Content-Type", "application/json")

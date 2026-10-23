@@ -229,7 +229,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
     }
 
     try {
-      const res = await adminFetch(`/api/v1/admin/users/${user.username}/status`, {
+      const res = await adminFetch(`/api/v1/admin/users/${encodeURIComponent(user.username)}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
@@ -251,15 +251,15 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
     setQuotaModalError('');
     if (!quotaTargetUser) return;
     const val = parseFloat(quotaValue);
-    if (isNaN(val)) {
-      setQuotaModalError(isZh ? '请输入有效数字' : 'Please enter a valid number');
+    if (!Number.isFinite(val) || Math.abs(val) > 1000000000) {
+      setQuotaModalError(isZh ? '请输入 -1000000000 至 1000000000 之间的金额' : 'Enter an amount between -1000000000 and 1000000000');
       return;
     }
 
     setAdjustingQuota(true);
     try {
       const payload = quotaMode === 'exact' ? { balance: val } : { delta: val };
-      const res = await adminFetch(`/api/v1/admin/users/${quotaTargetUser.username}/balance`, {
+      const res = await adminFetch(`/api/v1/admin/users/${encodeURIComponent(quotaTargetUser.username)}/balance`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -284,7 +284,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
 
   const handleUpdateGroup = async (user, newGroup) => {
     try {
-      const res = await adminFetch(`/api/v1/admin/users/${user.username}/group`, {
+      const res = await adminFetch(`/api/v1/admin/users/${encodeURIComponent(user.username)}/group`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ group_name: newGroup })
@@ -317,7 +317,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
     }
 
     try {
-      const res = await adminFetch(`/api/v1/admin/users/${user.username}/role`, {
+      const res = await adminFetch(`/api/v1/admin/users/${encodeURIComponent(user.username)}/role`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: newRole })
@@ -349,7 +349,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
 
     setResetting(true);
     try {
-      const res = await adminFetch(`/api/v1/admin/users/${resetTargetUser.username}/password`, {
+      const res = await adminFetch(`/api/v1/admin/users/${encodeURIComponent(resetTargetUser.username)}/password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ new_password: resetPassword })
@@ -379,12 +379,12 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
       showToast(isZh ? '无法删除当前正在登录的账号' : 'Cannot delete currently logged in account', 'warning');
       return;
     }
-    if (!window.confirm(isZh ? `确定要删除用户 [${targetUsername}] 吗？` : `Are you sure you want to delete user [${targetUsername}]?`)) {
+    if (!window.confirm(isZh ? `确定删除用户 [${targetUsername}] 吗？登录和密钥将立即失效，账务记录会保留，该用户名不能重新注册。` : `Delete user [${targetUsername}]? Login and API keys will be revoked. Billing records and the username will be retained.`)) {
       return;
     }
 
     try {
-      const res = await adminFetch(`/api/v1/admin/users/${targetUsername}`, {
+      const res = await adminFetch(`/api/v1/admin/users/${encodeURIComponent(targetUsername)}`, {
         method: 'DELETE'
       });
       const data = await res.json();

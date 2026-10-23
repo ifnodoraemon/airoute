@@ -2,7 +2,9 @@ package storage
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 )
@@ -21,22 +23,47 @@ type RedemptionCodeRecord struct {
 
 // CreateRedemptionCode creates a new redemption card.
 func (r *Repository) CreateRedemptionCode(rec *RedemptionCodeRecord) error {
+	return r.CreateRedemptionCodes([]*RedemptionCodeRecord{rec})
+}
+
+// CreateRedemptionCodes commits the entire batch or none of it, so an operator
+// can safely retry a failed generation without leaving undistributed cards.
+func (r *Repository) CreateRedemptionCodes(records []*RedemptionCodeRecord) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, rec := range records {
+		if err := insertRedemptionCode(tx, rec); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func insertRedemptionCode(db recordInserter, rec *RedemptionCodeRecord) error {
+	if rec == nil || !ValidRechargeAmount(rec.Amount) {
+		return fmt.Errorf("兑换金额须为 0.01 至 999999.99 元，最多保留两位小数")
+	}
 	if rec.Status == "" {
 		rec.Status = "active"
 	}
-	id, err := r.db.InsertGetID(`INSERT INTO redemption_codes (code, name, amount, status, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+	id, err := db.InsertGetID(`INSERT INTO redemption_codes (code, name, amount, status) VALUES (?, ?, ?, ?)`,
 		rec.Code, rec.Name, rec.Amount, rec.Status)
 	if err != nil {
-		// Table doesn't have updated_at, handle gracefully
-		id, err = r.db.InsertGetID(`INSERT INTO redemption_codes (code, name, amount, status) VALUES (?, ?, ?, ?)`,
-			rec.Code, rec.Name, rec.Amount, rec.Status)
-		if err != nil {
-			return err
-		}
+		return err
 	}
 	rec.ID = id
 	return nil
 }
+
+func ValidRechargeAmount(amount float64) bool {
+	cents := math.Round(amount * 100)
+	return !math.IsNaN(cents) && !math.IsInf(cents, 0) && cents >= 1 && cents <= 99_999_999 && math.Abs(amount*100-cents) <= 0.000001
+}
+
+var ErrRedemptionUsed = errors.New("已兑换的记录须保留，不能删除")
 
 // ListRedemptionCodes returns all redemption codes.
 func (r *Repository) ListRedemptionCodes() ([]*RedemptionCodeRecord, error) {
@@ -90,7 +117,7 @@ func (r *Repository) RedeemCode(code, username string) (*RedemptionCodeRecord, e
 		return nil, err
 	}
 
-	if rec.Status != "active" {
+	if rec.Status != "active" || !ValidRechargeAmount(rec.Amount) {
 		return nil, fmt.Errorf("该兑换码已被使用或已失效")
 	}
 
@@ -106,12 +133,12 @@ func (r *Repository) RedeemCode(code, username string) (*RedemptionCodeRecord, e
 	}
 
 	// Credit user balance
-	credited, err := tx.Exec(r.db.Rebind(`UPDATE users SET balance = balance + ?, balance_units = COALESCE(balance_units, 0) + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ? OR email = ?`), rec.Amount, ToUnits(rec.Amount), username, username)
+	credited, err := tx.Exec(`UPDATE users SET balance = balance + ?, balance_units = COALESCE(balance_units, 0) + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ? AND status = 'active'`, rec.Amount, ToUnits(rec.Amount), username)
 	if err != nil {
 		return nil, fmt.Errorf("充值到账户余额失败: %w", err)
 	}
-	if affected, _ := credited.RowsAffected(); affected == 0 {
-		return nil, fmt.Errorf("充值失败: 用户不存在 (%s)", username)
+	if err := requireUserUpdated(credited, nil); err != nil {
+		return nil, fmt.Errorf("充值失败: 用户不存在或不可用 (%s): %w", username, err)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -124,10 +151,17 @@ func (r *Repository) RedeemCode(code, username string) (*RedemptionCodeRecord, e
 	return &rec, nil
 }
 
-// DeleteRedemptionCode removes a redemption code.
+// DeleteRedemptionCode removes unused codes while preserving redemption evidence.
 func (r *Repository) DeleteRedemptionCode(id int64) error {
-	_, err := r.db.Exec(`DELETE FROM redemption_codes WHERE id = ?`, id)
-	return err
+	err := requireUserUpdated(r.db.Exec(`DELETE FROM redemption_codes WHERE id = ? AND status = 'active'`, id))
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	var status string
+	if err := r.db.QueryRow(`SELECT status FROM redemption_codes WHERE id = ?`, id).Scan(&status); err != nil {
+		return err
+	}
+	return ErrRedemptionUsed
 }
 
 // RechargeOrderRecord represents a user wallet top-up order.

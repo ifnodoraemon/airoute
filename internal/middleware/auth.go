@@ -217,7 +217,7 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		if userStatus != "" {
 			// Account lock check
-			if strings.EqualFold(userStatus, "locked") {
+			if strings.EqualFold(userStatus, "locked") || strings.EqualFold(userStatus, "deleted") {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 					"error": gin.H{
 						"message": "User account is locked. Please contact administrator.",

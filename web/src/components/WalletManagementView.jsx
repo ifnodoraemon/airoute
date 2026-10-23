@@ -27,6 +27,8 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
     orders: []
   });
   const [loading, setLoading] = useState(false);
+  const [walletError, setWalletError] = useState('');
+  const [redemptionsError, setRedemptionsError] = useState('');
 
   // Tab: 'wallet' (User wallet & recharge) or 'redemptions' (Admin gift cards)
   const [activeTab, setActiveTab] = useState('wallet');
@@ -79,13 +81,17 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
         if (onBalanceUpdateRef.current && data.data.balance !== undefined) {
           onBalanceUpdateRef.current(data.data.balance);
         }
+        setWalletError('');
+        return true;
       }
-    } catch (err) {
-      console.error('fetch wallet err:', err);
+      throw new Error('Wallet unavailable');
+    } catch {
+      setWalletError(isZh ? '余额和充值记录刷新失败，当前显示可能不是最新数据。请重试。' : 'Could not refresh your wallet. Displayed balances may be outdated. Please retry.');
+      return false;
     } finally {
       setLoading(false);
     }
-  }, [adminFetch]);
+  }, [adminFetch, isZh]);
 
   const fetchRedemptions = useCallback(async () => {
     if (!adminFetch || !isAdmin) return;
@@ -93,12 +99,15 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
       const res = await adminFetch('/api/v1/admin/redemptions');
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        setRedemptions(data.data || []);
+        setRedemptions(Array.isArray(data.data) ? data.data : []);
+        setRedemptionsError('');
+      } else {
+        throw new Error('Gift cards unavailable');
       }
-    } catch (err) {
-      console.error('fetch redemptions err:', err);
+    } catch {
+      setRedemptionsError(isZh ? '兑换卡列表加载失败，请刷新重试。' : 'Could not load gift cards. Please refresh to retry.');
     }
-  }, [isAdmin, adminFetch]);
+  }, [isAdmin, adminFetch, isZh]);
 
   useEffect(() => {
     fetchWallet();
@@ -138,8 +147,11 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
         if (res.ok && data.code === 0 && data.data) {
           const status = data.data.status;
           if (status === 'paid') {
-            setCheckoutMessage(isZh ? '充值已到账，余额已更新。' : 'Payment credited. Your balance is updated.');
-            await fetchWallet();
+            const refreshed = await fetchWallet();
+            if (cancelled) return;
+            setCheckoutMessage(refreshed
+              ? (isZh ? '充值已到账，余额已更新。' : 'Payment credited. Your balance is updated.')
+              : (isZh ? '充值已到账，余额暂未刷新，请点击刷新余额。' : 'Payment credited. Refresh your balance to see the updated amount.'));
           } else if (['expired', 'failed', 'cancelled'].includes(status)) {
             setCheckoutMessage(isZh ? '本次支付未完成，请查看订单状态后重新发起充值。' : 'Payment was not completed. Check the order status before starting another checkout.');
             await fetchWallet();
@@ -241,8 +253,14 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
 
   const handleGenerateRedemptions = async (e) => {
     if (e) e.preventDefault();
-    if (genAmount <= 0) {
-      showToast(isZh ? '请输入有效的单卡金额' : 'Please enter a valid amount per card', 'warning');
+    const amount = Number(genAmount);
+    const count = Number(genCount);
+    if (!Number.isFinite(amount) || amount < 0.01 || amount > 999999.99 || Math.abs(amount * 100 - Math.round(amount * 100)) > 0.000001) {
+      showToast(isZh ? '单卡金额须为 0.01 至 999999.99 元，最多两位小数' : 'Enter an amount from 0.01 to 999999.99 with at most two decimal places', 'warning');
+      return;
+    }
+    if (!Number.isInteger(count) || count < 1 || count > 100) {
+      showToast(isZh ? '每批须生成 1 至 100 张兑换卡' : 'Generate between 1 and 100 cards per batch', 'warning');
       return;
     }
     setGenerating(true);
@@ -251,8 +269,8 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          count: parseInt(genCount, 10) || 1,
-          amount: parseFloat(genAmount),
+          count,
+          amount,
           name: genName.trim() || (isZh ? '额度兑换卡' : 'Gift Card')
         })
       });
@@ -327,6 +345,12 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
   return (
     <div className="space-y-6">
       {checkoutMessage && <div role="status" className="ui-panel p-4 text-sm">{checkoutMessage}{checkoutReturn.order && <div className="ui-meta mt-1 font-mono">{checkoutReturn.order}</div>}</div>}
+      {walletError && activeTab === 'wallet' && (
+        <div role="alert" className="ui-panel p-4 text-sm flex items-center justify-between gap-3">
+          <span>{walletError}</span>
+          <button onClick={fetchWallet} disabled={loading} className="ui-btn-secondary ui-btn-sm">{isZh ? '重试' : 'Retry'}</button>
+        </div>
+      )}
       {/* Page Title & Subtitle */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -615,7 +639,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                   </tbody>
                 </table>
               </div>
-            ) : (
+            ) : !walletError && (
               <div className="py-8 text-center ui-meta">
                 {isZh ? '暂无充值流水记录' : 'No recharge history records found'}
               </div>
@@ -652,6 +676,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
             </div>
 
             {/* Redemptions Table */}
+            {redemptionsError && <div role="alert" className="ui-panel p-4 text-sm">{redemptionsError}</div>}
             {redemptions.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs text-[#202124] dark:text-[#F1F2F4]">
@@ -699,8 +724,9 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                         <td className="ui-td text-right">
                           <button
                             onClick={() => handleDeleteRedemption(r.id)}
-                            className="p-1.5 hover:bg-rose-500/10 rounded-lg text-[#656B75] dark:text-[#A1A7B0] hover:text-rose-600 dark:hover:text-rose-400 transition cursor-pointer"
-                            title={isZh ? '删除兑换卡' : 'Delete card'}
+                            disabled={r.status !== 'active'}
+                            className="p-1.5 hover:bg-rose-500/10 rounded-lg text-[#656B75] dark:text-[#A1A7B0] hover:text-rose-600 dark:hover:text-rose-400 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                            title={r.status === 'active' ? (isZh ? '删除兑换卡' : 'Delete card') : (isZh ? '已兑换记录保留用于核账' : 'Redeemed records are retained for reconciliation')}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -710,7 +736,7 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
                   </tbody>
                 </table>
               </div>
-            ) : (
+            ) : !redemptionsError && (
               <div className="py-12 text-center ui-meta space-y-3">
                 <Gift className="w-8 h-8 text-[#656B75]/40 mx-auto" />
                 <p>{isZh ? '暂无兑换卡记录，点击右上角「批量生成兑换卡」即可立即创建卡密。' : 'No gift card records yet. Click "Generate Gift Cards" in the top right to create cards.'}</p>

@@ -2,7 +2,9 @@ package controlplane
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -43,17 +45,18 @@ func (h *AdminHandler) GenerateRedemptions(c *gin.Context) {
 	}
 
 	var req GenerateRedemptionsRequest
-	if err := c.ShouldBindJSON(&req); err != nil || req.Amount <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "请提供有效的充值金额"})
+	if err := c.ShouldBindJSON(&req); err != nil || !storage.ValidRechargeAmount(req.Amount) {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "单卡金额须为 0.01 至 999999.99 元，最多保留两位小数"})
 		return
 	}
 
 	count := req.Count
-	if count <= 0 {
+	if count == 0 {
 		count = 1
 	}
-	if count > 100 {
-		count = 100
+	if count < 1 || count > 100 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "每批须生成 1 至 100 张兑换卡"})
+		return
 	}
 
 	name := req.Name
@@ -62,6 +65,7 @@ func (h *AdminHandler) GenerateRedemptions(c *gin.Context) {
 	}
 
 	createdCodes := make([]string, 0, count)
+	records := make([]*storage.RedemptionCodeRecord, 0, count)
 	for i := 0; i < count; i++ {
 		codeBytes := make([]byte, 8)
 		if _, err := rand.Read(codeBytes); err != nil {
@@ -76,9 +80,12 @@ func (h *AdminHandler) GenerateRedemptions(c *gin.Context) {
 			Amount: req.Amount,
 			Status: "active",
 		}
-		if err := h.repo.CreateRedemptionCode(rec); err == nil {
-			createdCodes = append(createdCodes, code)
-		}
+		records = append(records, rec)
+		createdCodes = append(createdCodes, code)
+	}
+	if err := h.repo.CreateRedemptionCodes(records); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "兑换卡生成失败，本批次未创建任何卡密，请重试"})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -97,12 +104,20 @@ func (h *AdminHandler) DeleteRedemption(c *gin.Context) {
 
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
+	if err != nil || id <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "无效的兑换码ID"})
 		return
 	}
 
 	if err := h.repo.DeleteRedemptionCode(id); err != nil {
+		if errors.Is(err, storage.ErrRedemptionUsed) {
+			c.JSON(http.StatusConflict, gin.H{"code": 409, "error": err.Error()})
+			return
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"code": 404, "error": "兑换码不存在"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "删除兑换码失败: " + err.Error()})
 		return
 	}

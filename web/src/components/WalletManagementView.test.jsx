@@ -40,6 +40,60 @@ describe('WalletManagementView', () => {
     expect(screen.getByText(/¥\s*100\.00/)).toBeInTheDocument();
   });
 
+  it('shows a failed wallet fetch and lets the customer retry', async () => {
+    const adminFetch = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ error: 'unavailable' }, 503))
+      .mockResolvedValue(jsonResponse({ code: 0, data: { balance: 130, orders: [], stripe_enabled: true } }));
+    setup({ adminFetch });
+    expect(await screen.findByRole('alert')).toHaveTextContent('刷新失败');
+    expect(screen.queryByText('暂无充值流水记录')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    await screen.findByText(/¥\s*130\.00/);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('keeps a confirmed payment distinct from a failed balance refresh', async () => {
+    window.history.replaceState(null, '', '/?recharge=success&order_no=REC-refresh');
+    const adminFetch = vi.fn(async url => String(url).includes('/orders/')
+      ? jsonResponse({ code: 0, data: { status: 'paid' } })
+      : jsonResponse({ error: 'unavailable' }, 503));
+    setup({ adminFetch });
+    expect(await screen.findByRole('status')).toHaveTextContent('充值已到账，余额暂未刷新');
+    expect(screen.queryByText('充值已到账，余额已更新。')).not.toBeInTheDocument();
+  });
+
+  it('retains redeemed gift cards and prevents deleting their evidence', async () => {
+    const adminFetch = vi.fn(async url => jsonResponse({ code: 0, data: String(url).endsWith('/redemptions')
+      ? [{ id: 1, code: 'CARD-used', status: 'used', amount: 20, used_by: 'alice' }]
+      : { balance: 100, orders: [] } }));
+    setup({ user: { username: 'operator', role: 'admin' }, adminFetch });
+    fireEvent.click(screen.getByRole('button', { name: /兑换卡管理/ }));
+    await screen.findByText('CARD-used');
+    expect(screen.getByTitle('已兑换记录保留用于核账')).toBeDisabled();
+  });
+
+  it('does not describe a failed gift-card query as an empty list', async () => {
+    const adminFetch = vi.fn(async url => String(url).endsWith('/redemptions')
+      ? jsonResponse({ error: 'unavailable' }, 503)
+      : jsonResponse({ code: 0, data: { balance: 100, orders: [] } }));
+    setup({ user: { username: 'operator', role: 'admin' }, adminFetch });
+    fireEvent.click(screen.getByRole('button', { name: /兑换卡管理/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('兑换卡列表加载失败');
+    expect(screen.queryByText(/暂无兑换卡记录/)).not.toBeInTheDocument();
+  });
+
+  it('rejects fractional gift-card counts instead of silently rounding them', async () => {
+    const adminFetch = vi.fn(async url => jsonResponse({ code: 0, data: String(url).endsWith('/redemptions') ? [] : { balance: 100, orders: [] } }));
+    const showToast = vi.fn();
+    setup({ user: { username: 'operator', role: 'admin' }, adminFetch, showToast });
+    fireEvent.click(screen.getByRole('button', { name: /兑换卡管理/ }));
+    fireEvent.click(screen.getByRole('button', { name: '批量生成兑换卡' }));
+    fireEvent.change(screen.getByPlaceholderText('5'), { target: { value: '1.5' } });
+    fireEvent.submit(screen.getByRole('button', { name: '确认生成' }).closest('form'));
+    expect(showToast).toHaveBeenCalledWith('每批须生成 1 至 100 张兑换卡', 'warning');
+    expect(adminFetch.mock.calls.some(([url]) => String(url).endsWith('/generate'))).toBe(false);
+  });
+
   describe('recharge amount', () => {
     it('sends the selected preset amount', async () => {
       const { adminFetch } = setup();

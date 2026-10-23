@@ -89,7 +89,7 @@ func (h *AdminHandler) AdminAuthMiddleware() gin.HandlerFunc {
 
 		if h.repo != nil {
 			user, err := h.repo.GetUserByUsername(claims.Username)
-			if err != nil || user == nil {
+			if err != nil || user == nil || user.Status == "deleted" {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "账户不存在或暂时无法验证，请重新登录"})
 				return
 			}

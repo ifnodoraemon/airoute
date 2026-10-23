@@ -118,8 +118,8 @@ func TestDeletedKeyPreservesCustomerHistory(t *testing.T) {
 }
 
 func TestDeletingLastKeyKeepsAuthenticationEnforced(t *testing.T) {
-	for _, batch := range []bool{false, true} {
-		t.Run(fmt.Sprintf("batch=%v", batch), func(t *testing.T) {
+	for _, operation := range []string{"single", "batch", "account"} {
+		t.Run(operation, func(t *testing.T) {
 			_, repo := regressionHandler(t)
 			key := regressionUsage(t, repo)
 			previousConfig := config.GetGlobalConfig()
@@ -151,8 +151,10 @@ func TestDeletingLastKeyKeepsAuthenticationEnforced(t *testing.T) {
 			}
 			request(key.Key, http.StatusOK)
 			var err error
-			if batch {
+			if operation == "batch" {
 				_, err = repo.BatchDeleteAPIKeys([]int64{key.ID})
+			} else if operation == "account" {
+				err = repo.DeleteUser("regression-client")
 			} else {
 				err = repo.DeleteAPIKey(key.ID)
 			}

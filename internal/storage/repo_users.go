@@ -3,6 +3,8 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"math"
 	"strings"
 	"time"
 
@@ -38,15 +40,28 @@ func (u *UserRecord) resolveBalanceUnits() {
 	u.BalanceUnits = ToUnits(u.Balance)
 }
 
-// GetUserByUsername finds a user by username or email.
+// GetUserByUsername resolves a canonical account identity, never an email alias.
+// Deleted identities remain reserved so old tokens and payment orders cannot
+// become attached to a newly registered account with the same username.
 func (r *Repository) GetUserByUsername(username string) (*UserRecord, error) {
-	row := r.db.QueryRow(`SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE username = ? OR email = ?`, username, username)
+	row := r.db.QueryRow(`SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE username = ?`, username)
 	var u UserRecord
 	if err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.Balance, &u.BalanceUnits, &u.GroupName, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		return nil, err
 	}
 	u.resolveBalanceUnits()
 	return &u, nil
+}
+
+// GetUserByLogin allows email sign-in only at the login boundary. An exact
+// username takes precedence when legacy accounts have overlapping identifiers.
+func (r *Repository) GetUserByLogin(identifier string) (*UserRecord, error) {
+	identifier = strings.TrimSpace(identifier)
+	u, err := r.GetUserByUsername(identifier)
+	if errors.Is(err, sql.ErrNoRows) {
+		return r.GetUserByEmail(strings.ToLower(identifier))
+	}
+	return u, err
 }
 
 // GetUserByID finds a user by primary key ID.
@@ -134,26 +149,59 @@ func (r *Repository) CreateUserWithAPIKey(user *UserRecord, key *APIKeyRecord) e
 
 // UpdateUserPassword updates the password hash for a user.
 func (r *Repository) UpdateUserPassword(username, newHash string) error {
-	_, err := r.db.Exec(`UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, newHash, username)
-	return err
+	return requireUserUpdated(r.db.Exec(`UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ? AND status <> 'deleted'`, newHash, username))
 }
 
 // UpdateUserStatus updates user status ('active' or 'locked').
 func (r *Repository) UpdateUserStatus(username, status string) error {
-	_, err := r.db.Exec(`UPDATE users SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, status, username)
+	return requireUserUpdated(r.db.Exec(`UPDATE users SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ? AND status <> 'deleted'`, status, username))
+}
+
+const MaxUserBalance = 1_000_000_000.0
+
+var ErrBalanceOutOfRange = errors.New("账户余额或调整金额必须在 -1000000000 至 1000000000 元之间")
+
+func validUserBalance(amount float64) bool {
+	return !math.IsNaN(amount) && !math.IsInf(amount, 0) && math.Abs(amount) <= MaxUserBalance
+}
+
+func requireUserUpdated(result sql.Result, err error) error {
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err == nil && n == 0 {
+		return sql.ErrNoRows
+	}
 	return err
 }
 
 // UpdateUserBalance adjusts a user's wallet balance by a delta amount.
 func (r *Repository) UpdateUserBalance(username string, delta float64) error {
-	_, err := r.db.Exec(`UPDATE users SET balance = balance + ?, balance_units = COALESCE(balance_units, 0) + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, delta, ToUnits(delta), username)
+	if !validUserBalance(delta) {
+		return ErrBalanceOutOfRange
+	}
+	units := ToUnits(delta)
+	limit := ToUnits(MaxUserBalance)
+	err := requireUserUpdated(r.db.Exec(`UPDATE users SET balance = balance + ?, balance_units = COALESCE(balance_units, 0) + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ? AND status <> 'deleted' AND COALESCE(balance_units, 0) BETWEEN ? AND ?`, delta, units, username, -limit-units, limit-units))
+	if errors.Is(err, sql.ErrNoRows) {
+		user, lookupErr := r.GetUserByUsername(username)
+		if lookupErr != nil {
+			return lookupErr
+		}
+		if user.Status != "deleted" {
+			return ErrBalanceOutOfRange
+		}
+	}
 	return err
 }
 
 // SetUserBalance sets an exact wallet balance for a user.
 func (r *Repository) SetUserBalance(username string, balance float64) error {
-	_, err := r.db.Exec(`UPDATE users SET balance = ?, balance_units = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, balance, ToUnits(balance), username)
-	return err
+	if !validUserBalance(balance) {
+		return ErrBalanceOutOfRange
+	}
+	return requireUserUpdated(r.db.Exec(`UPDATE users SET balance = ?, balance_units = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ? AND status <> 'deleted'`, balance, ToUnits(balance), username))
 }
 
 // UpdateUserGroup updates a user's pricing group.
@@ -161,8 +209,7 @@ func (r *Repository) UpdateUserGroup(username, groupName string) error {
 	if groupName == "" {
 		groupName = "default"
 	}
-	_, err := r.db.Exec(`UPDATE users SET group_name = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, groupName, username)
-	return err
+	return requireUserUpdated(r.db.Exec(`UPDATE users SET group_name = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ? AND status <> 'deleted'`, groupName, username))
 }
 
 // UpdateUserRole updates a user's system role ('admin' or 'user').
@@ -170,8 +217,7 @@ func (r *Repository) UpdateUserRole(username, role string) error {
 	if role != "admin" && role != "user" {
 		role = "user"
 	}
-	_, err := r.db.Exec(`UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?`, role, username)
-	return err
+	return requireUserUpdated(r.db.Exec(`UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ? AND status <> 'deleted'`, role, username))
 }
 
 // DeductUserBalance deducts quota/cost from user wallet. Admins are exempt.
@@ -185,7 +231,7 @@ func (r *Repository) DeductUserBalance(userID int64, cost float64) error {
 
 // ListUsers returns all registered users without password hashes.
 func (r *Repository) ListUsers() ([]*UserRecord, error) {
-	rows, err := r.db.Query(`SELECT id, username, COALESCE(email, ''), COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users ORDER BY id ASC`)
+	rows, err := r.db.Query(`SELECT id, username, COALESCE(email, ''), COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE status <> 'deleted' ORDER BY id ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -206,14 +252,25 @@ func (r *Repository) ListUsers() ([]*UserRecord, error) {
 	return list, nil
 }
 
-// DeleteUser removes a user by username and cleans up associated API keys.
+// DeleteUser closes an account and revokes its credentials in one transaction.
+// Retain account and key identities for historical charges and delayed payments.
 func (r *Repository) DeleteUser(username string) error {
-	u, _ := r.GetUserByUsername(username)
-	if u != nil && u.ID > 0 {
-		_, _ = r.db.Exec(`DELETE FROM api_keys WHERE user_id = ?`, u.ID)
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
 	}
-	_, err := r.db.Exec(`DELETE FROM users WHERE username = ?`, username)
-	return err
+	defer tx.Rollback()
+	var userID int64
+	if err := tx.QueryRow(`SELECT id FROM users WHERE username = ? AND status <> 'deleted'`, username).Scan(&userID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE api_keys SET status = 'deleted', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? OR (COALESCE(user_id, 0) = 0 AND tenant_id = ?)`, userID, username); err != nil {
+		return err
+	}
+	if err := requireUserUpdated(tx.Exec(`UPDATE users SET status = 'deleted', password_hash = '', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status <> 'deleted'`, userID)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // EnsureDefaultAdmin initializes the default admin user if it does not already exist.

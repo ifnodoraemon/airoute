@@ -48,7 +48,7 @@ func (h *AdminHandler) CreateStripeRechargeSession(c *gin.Context) {
 		return
 	}
 	cents := math.Round(req.Amount * 100)
-	if math.IsNaN(cents) || math.IsInf(cents, 0) || cents < 1 || cents > 99_999_999 || math.Abs(req.Amount*100-cents) > 0.000001 {
+	if !storage.ValidRechargeAmount(req.Amount) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "充值金额须为 0.01 至 999999.99 元，最多保留两位小数"})
 		return
 	}

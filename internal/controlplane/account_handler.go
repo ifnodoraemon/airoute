@@ -32,8 +32,8 @@ func (h *AdminHandler) Login(c *gin.Context) {
 		return
 	}
 
-	user, err := h.repo.GetUserByUsername(req.Username)
-	if err != nil || user == nil {
+	user, err := h.repo.GetUserByLogin(req.Username)
+	if err != nil || user == nil || user.Status == "deleted" {
 		globalLoginGuard.failure(req.Username, clientIP)
 		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "用户名或密码错误"})
 		return
