@@ -172,6 +172,9 @@ func runServer(args []string) {
 	// not by the client-facing alias.
 	api.SetServedModelResolver(dispatcher.ResolveServedModel)
 
+	// Verify the timeout numbers agree with each other and with the edge proxy.
+	reportTimeoutChain(repo, dispatcher)
+
 	// Token-estimate calibration describes the upstream tokenizers, so it must
 	// survive restarts and be shared by both replicas.
 	if err := billing.LoadCalibration(repo, billing.GlobalCalibrator); err != nil {

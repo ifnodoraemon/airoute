@@ -324,6 +324,38 @@ GATEWAY_DRAIN_TIMEOUT_SEC=120
 
 ---
 
+## 四之七、超时链对齐（3000s → 300s）
+
+线上曾出现三个互相矛盾的超时值：
+
+| 环节 | 原值 | 问题 |
+|---|---|---|
+| 渠道 `timeout_seconds` | **3000s** | 比边界代理还大，永远不会生效 |
+| nginx `proxy_read_timeout` | 600s | 实际最先切断的一方 |
+| 首 token 等待 | 30s（代码默认） | 与渠道超时无关联，容易被忽略 |
+
+也就是说"配置上允许跑 50 分钟"，但请求在 10 分钟时就被 LB 切断，而 30 秒内没有首 token 就会被我们自己放弃——三个数字各说各话。
+
+处理：
+
+1. 渠道超时改为 **300s**（`罗总` 与 `gpustack-cluster` 同步），使链路变成
+   **30s（首 token） < 300s（渠道） < 600s（边界代理）**，每层都在下一层之内；
+2. 启动自检 `reportTimeoutChain`：对每个 active 渠道打印
+   `first_token / channel_timeout / edge_budget`，并在"渠道超时 > 边界预算"或
+   "首 token ≥ 渠道超时"时告警，防止以后再次配置出自相矛盾的数值；
+3. `GATEWAY_EDGE_TIMEOUT_SEC`（默认 600）声明边界代理预算，与 nginx 保持一致。
+
+线上启动日志：
+
+```
+INFO timeout chain channel=罗总 first_token=30s channel_timeout=5m0s edge_budget=10m0s
+```
+
+无告警即表示链路自洽。若要放宽整体时长，必须**同时**调整 nginx 的
+`proxy_read_timeout` 与 `GATEWAY_EDGE_TIMEOUT_SEC`，否则只是改了个不生效的数字。
+
+---
+
 ## 五、部署与遗留
 
 本次修复通过 `scripts/docker-rebuild.sh` 滚动发布（两副本依次重建 + 健康检查），并已验证：
