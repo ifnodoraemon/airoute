@@ -15,7 +15,7 @@ func TestUnpricedModelIsNotDiscounted(t *testing.T) {
 	engine := NewEngine(nil) // no repository: only the hardcoded default applies
 
 	shanghai := shanghaiLoc
-	night := time.Date(2026, 10, 24, 3, 0, 0, 0, shanghai)   // Saturday 03:00
+	night := time.Date(2026, 10, 24, 3, 0, 0, 0, shanghai)        // Saturday 03:00
 	weekendNoon := time.Date(2026, 10, 24, 12, 0, 0, 0, shanghai) // Saturday 12:00
 	weekdayNoon := time.Date(2026, 10, 23, 12, 0, 0, 0, shanghai) // Friday 12:00
 
