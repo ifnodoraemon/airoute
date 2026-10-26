@@ -483,6 +483,8 @@ func (db *DB) migrate() error {
 		{Version: 18, Name: "usage_log_query_indexes", Up: addUsageLogQueryIndexes},
 		{Version: 19, Name: "usage_log_search_indexes", Up: addUsageLogSearchIndexes},
 		{Version: 20, Name: "usage_log_sqlite_fts", Up: addUsageLogFTSIndex},
+		{Version: 21, Name: "usage_log_billing_id", Up: addUsageLogBillingID},
+		{Version: 22, Name: "usage_log_cost_units_backfill", Up: backfillUsageLogCostUnits},
 	}
 	return db.runMigrations(migrations)
 }

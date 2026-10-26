@@ -44,15 +44,17 @@ func (h *Handler) HandleEmbeddings(c *gin.Context) {
 		return
 	}
 
+	pTokens, usageSource := resolveEmbeddingTokens(&req, resp.Usage)
 	RecordUsage(c, AuditRecordParams{
 		SessionID:    sessionID,
 		Channel:      resp.Channel,
 		Model:        req.Model,
-		PromptTokens: resp.Usage.PromptTokens,
-		TotalTokens:  resp.Usage.TotalTokens,
+		PromptTokens: pTokens,
+		TotalTokens:  pTokens,
 		Duration:     time.Since(start),
 		TTFT:         time.Since(start),
 		StatusCode:   http.StatusOK,
+		UsageSource:  usageSource,
 	})
 
 	c.JSON(http.StatusOK, resp)

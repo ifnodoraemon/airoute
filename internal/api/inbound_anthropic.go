@@ -101,11 +101,8 @@ func (h *Handler) handleAnthropicUnary(c *gin.Context, reqCtx context.Context, r
 		var native map[string]any
 		if err := json.Unmarshal(resp.NativeAnthropicResponse, &native); err == nil {
 			native["model"] = req.Model
-			inputTokens, outputTokens := 0, 0
-			if resp.Usage != nil {
-				inputTokens, outputTokens = resp.Usage.PromptTokens, resp.Usage.CompletionTokens
-			}
-			RecordUsage(c, AuditRecordParams{SessionID: sessionID, ChatID: resp.ID, Channel: resp.Channel, Model: req.Model, PromptTokens: inputTokens, CompletionTokens: outputTokens, Duration: time.Since(start), StatusCode: http.StatusOK})
+			inputTokens, outputTokens, _, usageSource := resolveChatUsage(canonicalReq, resp)
+			RecordUsage(c, AuditRecordParams{SessionID: sessionID, ChatID: resp.ID, Channel: resp.Channel, Model: req.Model, PromptTokens: inputTokens, CompletionTokens: outputTokens, Duration: time.Since(start), StatusCode: http.StatusOK, UsageSource: usageSource})
 			c.JSON(http.StatusOK, native)
 			return
 		}
@@ -157,18 +154,12 @@ func (h *Handler) handleAnthropicUnary(c *gin.Context, reqCtx context.Context, r
 		})
 	}
 
-	inputTokens := 0
-	outputTokens := 0
-	cachedTokens := 0
-	if resp.Usage != nil {
-		cachedTokens = resp.Usage.GetCachedTokens()
-		// Anthropic's input_tokens excludes prompt-cache reads; our canonical
-		// PromptTokens includes them, so subtract before rendering the response.
-		inputTokens = resp.Usage.PromptTokens - cachedTokens
-		if inputTokens < 0 {
-			inputTokens = 0
-		}
-		outputTokens = resp.Usage.CompletionTokens
+	pTokens, outputTokens, cachedTokens, usageSource := resolveChatUsage(canonicalReq, resp)
+	// Anthropic's input_tokens excludes prompt-cache reads; our canonical
+	// PromptTokens includes them, so subtract before rendering the response.
+	inputTokens := pTokens - cachedTokens
+	if inputTokens < 0 {
+		inputTokens = 0
 	}
 
 	usagePayload := gin.H{
@@ -204,7 +195,7 @@ func (h *Handler) handleAnthropicUnary(c *gin.Context, reqCtx context.Context, r
 		CachedTokens:     cachedTokens,
 		Duration:         time.Since(start),
 		StatusCode:       http.StatusOK,
-		UsageSource:      "upstream",
+		UsageSource:      usageSource,
 	})
 
 	c.JSON(http.StatusOK, anthropicResp)

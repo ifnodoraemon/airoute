@@ -135,12 +135,7 @@ func (h *Handler) handleCompletionsUnary(c *gin.Context, reqCtx context.Context,
 	}
 
 	dur := time.Since(start)
-	pTokens, cTokens, cachedTokens := 0, 0, 0
-	if resp.Usage != nil {
-		pTokens = resp.Usage.PromptTokens
-		cTokens = resp.Usage.CompletionTokens
-		cachedTokens = resp.Usage.GetCachedTokens()
-	}
+	pTokens, cTokens, cachedTokens, usageSource := resolveChatUsage(&chatReq, resp)
 	RecordUsage(c, AuditRecordParams{
 		ChatID:           resp.ID,
 		Channel:          resp.Channel,
@@ -151,6 +146,7 @@ func (h *Handler) handleCompletionsUnary(c *gin.Context, reqCtx context.Context,
 		CachedTokens:     cachedTokens,
 		Duration:         dur,
 		StatusCode:       http.StatusOK,
+		UsageSource:      usageSource,
 	})
 
 	textResp := TextCompletionResponse{

@@ -29,7 +29,18 @@ func escapeLikePattern(s string) string {
 // sqliteTimestampLayout is how usage_logs.created_at is written (UTC, fixed
 // width). Comparing against that exact format is what lets SQLite use
 // idx_usage_created.
-const sqliteTimestampLayout = "2006-01-02 15:04:05"
+//
+// Microseconds are mandatory. The previous whole-second layout collapsed every
+// row of a flush onto the same instant: a burst of 502s all read 02:09:44 with
+// no way to order them, measure retry spacing, or correlate them with the
+// nanosecond-precision access log. It also made the audit page mix two
+// timestamp shapes ("...:44" and "...:44.905597") in one page.
+const sqliteTimestampLayout = "2006-01-02 15:04:05.000000"
+
+// legacySecondTimestampLayout is how rows written before the precision fix were
+// stored (SQLite only; PostgreSQL kept whatever precision it was given).
+// Time filters still accept it so old rows remain queryable.
+const legacySecondTimestampLayout = "2006-01-02 15:04:05"
 
 // ftsPhrase renders user text as an FTS5 phrase, doubling embedded quotes so the
 // match grammar cannot interpret it as operators.
@@ -60,6 +71,7 @@ func normalizeSQLiteTimestamp(raw string) (string, bool) {
 	}
 	for _, layout := range []string{
 		sqliteTimestampLayout,
+		legacySecondTimestampLayout,
 		"2006-01-02T15:04:05",
 		time.RFC3339Nano,
 		"2006-01-02",
@@ -137,6 +149,12 @@ type UsageLogRecord struct {
 	UsageSource      string                `json:"usage_source"` // "upstream" (reported) or "estimated" (local fallback)
 	ErrorMessage     string                `json:"error_message,omitempty"`
 	CreatedAt        time.Time             `json:"created_at"`
+	// BillingID is the server-generated idempotency key for this billable row.
+	// It is never taken from client input: trace_id is client-controllable
+	// (X-Request-ID / traceparent) and one reused value already spans dozens of
+	// genuine requests, so a unique index on it would break billing. A retried
+	// Redis stream delivery carries the same BillingID and is applied once.
+	BillingID string `json:"billing_id,omitempty"`
 }
 
 // LogFilter defines search/filtering criteria for usage audit logs.
@@ -366,7 +384,7 @@ func (r *Repository) PurgeUsageLogsBefore(cutoff time.Time, batchSize int) (int6
 	if batchSize <= 0 {
 		batchSize = 5000
 	}
-	cutoffValue := cutoff.UTC().Format("2006-01-02 15:04:05")
+	cutoffValue := cutoff.UTC().Format(sqliteTimestampLayout)
 	var total int64
 	for {
 		res, err := r.db.Exec(

@@ -110,12 +110,7 @@ func (h *Handler) handleChatUnary(c *gin.Context, reqCtx context.Context, req *m
 	if req.Model != "" {
 		resp.Model = req.Model
 	}
-	pTokens, cTokens, cachedTokens := 0, 0, 0
-	if resp.Usage != nil {
-		pTokens = resp.Usage.PromptTokens
-		cTokens = resp.Usage.CompletionTokens
-		cachedTokens = resp.Usage.GetCachedTokens()
-	}
+	pTokens, cTokens, cachedTokens, usageSource := resolveChatUsage(req, resp)
 	RecordUsage(c, AuditRecordParams{
 		ChatID:           upstreamChatID,
 		Channel:          resp.Channel,
@@ -126,6 +121,7 @@ func (h *Handler) handleChatUnary(c *gin.Context, reqCtx context.Context, req *m
 		CachedTokens:     cachedTokens,
 		Duration:         dur,
 		StatusCode:       http.StatusOK,
+		UsageSource:      usageSource,
 	})
 	c.JSON(http.StatusOK, resp)
 }

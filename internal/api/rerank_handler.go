@@ -49,14 +49,16 @@ func (h *Handler) HandleRerank(c *gin.Context) {
 		return
 	}
 
+	tokens, usageSource := resolveRerankTokens(&req, resp.Usage)
 	RecordUsage(c, AuditRecordParams{
 		SessionID:    sessionID,
 		Channel:      resp.Channel,
 		Model:        req.Model,
-		PromptTokens: resp.Usage.TotalTokens,
-		TotalTokens:  resp.Usage.TotalTokens,
+		PromptTokens: tokens,
+		TotalTokens:  tokens,
 		Duration:     time.Since(start),
 		StatusCode:   http.StatusOK,
+		UsageSource:  usageSource,
 	})
 
 	c.JSON(http.StatusOK, resp)

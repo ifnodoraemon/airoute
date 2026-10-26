@@ -47,6 +47,12 @@ func RecordUsage(c *gin.Context, params AuditRecordParams) float64 {
 	return cost
 }
 
+// statusClientClosed is the de-facto "client closed request" status recorded in
+// the audit trail when the downstream disconnects mid-stream. It is not part of
+// net/http's status constants because no server in the Go standard library
+// generates it.
+const statusClientClosed = 499
+
 // recordUsage is the full-fidelity variant, also returning the saved cost and
 // cached token count so streaming handlers can emit them as a trailer.
 func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, int) {
@@ -57,7 +63,16 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 	keyGroup := getKeyGroup(c)
 	success := params.StatusCode >= 200 && params.StatusCode < 400
 
-	if success && !params.SkipBilling && billing.GlobalEngine != nil {
+	// Billing is decoupled from the audit status: a streaming client that
+	// disconnects after the upstream already produced tokens still consumed
+	// (and still costs us) those tokens. Recording 499 without charging made
+	// "receive the answer, then drop the connection" a free-usage exploit, and
+	// the other three streaming implementations already charged in that case.
+	// The audit row keeps the truthful 499 status.
+	billable := success ||
+		(params.StatusCode == statusClientClosed && (params.PromptTokens > 0 || params.CompletionTokens > 0))
+
+	if billable && !params.SkipBilling && billing.GlobalEngine != nil {
 		cost, savedCost, _, isOffPeak, offPeakDiscount, pricingSnapshot = billing.GlobalEngine.CalculateCostForUnits(
 			params.Model,
 			keyGroup,
@@ -123,6 +138,14 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 			UsageSource:      params.UsageSource,
 			ErrorMessage:     params.ErrorMessage,
 		})
+	}
+
+	// Publish the failure reason for the access log. Every failed dispatch funnels
+	// through this recorder, so the same message that lands in usage_logs also
+	// lands on the stdout access line instead of forcing an operator to join the
+	// database just to learn what the gateway answered.
+	if c != nil && params.ErrorMessage != "" {
+		c.Set(middleware.ContextKeyErrorMessage, sanitizeErrorMessage(fmt.Errorf("%s", params.ErrorMessage)))
 	}
 
 	// Cost headers can only be emitted while the response head is still open.
@@ -305,6 +328,99 @@ func getAPIKeyConfig(c *gin.Context) *model.APIKeyConfig {
 // request could be billed differently depending on which endpoint served it.
 func estimateTokens(chars int) int {
 	return model.EstimateTokensFromChars(chars)
+}
+
+// Usage provenance markers recorded on the audit row.
+const (
+	usageSourceUpstream  = "upstream"
+	usageSourceEstimated = "estimated"
+)
+
+// estimateCompletionFromChoices approximates completion tokens from the text an
+// upstream actually returned. Covers visible content, reasoning content (billed
+// as output by providers that stream it) and tool calls.
+func estimateCompletionFromChoices(choices []model.ChatCompletionChoice) int {
+	chars := 0
+	for i := range choices {
+		chars += len(choices[i].Message.GetContentString())
+		chars += len(choices[i].Message.ReasoningContent)
+		for j := range choices[i].Message.ToolCalls {
+			if b, err := json.Marshal(choices[i].Message.ToolCalls[j]); err == nil {
+				chars += len(b)
+			}
+		}
+	}
+	return estimateTokens(chars)
+}
+
+// resolveChatUsage returns the token counts to bill for a unary chat-shaped
+// response.
+//
+// Some upstreams omit the usage block entirely. Billing such a request at zero
+// means the gateway pays the provider and charges the customer nothing (148 such
+// HTTP-200 rows were observed, ~¥2.2). The streaming handlers already fall back
+// to estimation; unary responses now use the same heuristic and mark the audit
+// row usage_source=estimated so the approximation stays visible.
+func resolveChatUsage(req *model.ChatCompletionRequest, resp *model.ChatCompletionResponse) (promptTokens, completionTokens, cachedTokens int, source string) {
+	source = usageSourceUpstream
+	if resp != nil && resp.Usage != nil {
+		promptTokens = resp.Usage.PromptTokens
+		completionTokens = resp.Usage.CompletionTokens
+		cachedTokens = resp.Usage.GetCachedTokens()
+	}
+	if promptTokens == 0 {
+		if estimated := estimateCanonicalPromptTokens(req); estimated > 0 {
+			promptTokens = estimated
+			source = usageSourceEstimated
+		}
+	}
+	if completionTokens == 0 && resp != nil {
+		if estimated := estimateCompletionFromChoices(resp.Choices); estimated > 0 {
+			completionTokens = estimated
+			source = usageSourceEstimated
+		}
+	}
+	return promptTokens, completionTokens, cachedTokens, source
+}
+
+// resolveEmbeddingTokens approximates prompt tokens for an embedding request when
+// the upstream returned no usage. String inputs are measured by length; token-id
+// arrays are already token counts.
+func resolveEmbeddingTokens(req *model.EmbeddingRequest, usage model.EmbeddingUsage) (int, string) {
+	if usage.PromptTokens > 0 {
+		return usage.PromptTokens, usageSourceUpstream
+	}
+	if req == nil {
+		return 0, usageSourceUpstream
+	}
+	if inputs := req.GetInputStrings(); len(inputs) > 0 {
+		chars := 0
+		for _, input := range inputs {
+			chars += len(input)
+		}
+		return estimateTokens(chars), usageSourceEstimated
+	}
+	// Token-id form: one array element is one token.
+	if ids, ok := req.Input.([]any); ok && len(ids) > 0 {
+		return len(ids), usageSourceEstimated
+	}
+	return 0, usageSourceUpstream
+}
+
+// resolveRerankTokens approximates prompt tokens for a rerank request (query plus
+// every candidate document) when the upstream returned no usage.
+func resolveRerankTokens(req *model.RerankRequest, usage model.RerankUsage) (int, string) {
+	if usage.TotalTokens > 0 {
+		return usage.TotalTokens, usageSourceUpstream
+	}
+	if req == nil {
+		return 0, usageSourceUpstream
+	}
+	chars := len(req.Query)
+	for _, doc := range req.GetDocumentTexts() {
+		chars += len(doc)
+	}
+	return estimateTokens(chars), usageSourceEstimated
 }
 
 // estimateCanonicalPromptTokens approximates prompt tokens from the canonical

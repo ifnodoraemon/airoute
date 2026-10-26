@@ -104,14 +104,7 @@ func (h *Handler) handleResponsesNonStreaming(
 	}
 
 	dur := time.Since(start)
-	pTokens := 0
-	cTokens := 0
-	cachedTokens := 0
-	if resp.Usage != nil {
-		pTokens = resp.Usage.PromptTokens
-		cTokens = resp.Usage.CompletionTokens
-		cachedTokens = resp.Usage.GetCachedTokens()
-	}
+	pTokens, cTokens, cachedTokens, usageSource := resolveChatUsage(chatReq, resp)
 
 	RecordUsage(c, AuditRecordParams{
 		ChatID:           resp.ID,
@@ -123,6 +116,7 @@ func (h *Handler) handleResponsesNonStreaming(
 		CachedTokens:     cachedTokens,
 		Duration:         dur,
 		StatusCode:       http.StatusOK,
+		UsageSource:      usageSource,
 	})
 
 	result := model.ConvertChatResponseToResponseResult(resp)

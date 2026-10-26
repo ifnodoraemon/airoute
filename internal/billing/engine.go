@@ -1,6 +1,8 @@
 package billing
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"math"
 	"sort"
@@ -26,6 +28,11 @@ type BillingEngine struct {
 	// depending on Go's randomized map iteration order.
 	wildcard []wildcardRule
 	deflt    *storage.ModelPriceRecord
+	// lastSignature identifies the rate set currently in effect. The periodic
+	// sync reloads prices every 10s per replica; without this the log carried an
+	// identical "reloaded model pricing engine" line every 10s (about 17k lines
+	// per day per replica), which drowned out real billing events.
+	lastSignature string
 }
 
 // wildcardRule is a pre-sorted wildcard pricing pattern.
@@ -48,7 +55,12 @@ func NewEngine(repo *storage.Repository) *BillingEngine {
 			CacheReadPrice:  0.2, // Default benchmark ¥0.20 / 1M cached prompt (90% discount)
 			FixedPrice:      0.0,
 			Currency:        "CNY",
-			OffPeakEnabled:  true,
+			// A model with no configured price must not also receive a time-of-use
+			// discount: the fallback rate is already an estimate, and halving it
+			// (00:00-08:30 plus all weekend for "custom" mode) silently gave away
+			// 50% of the revenue for every unpriced model that appeared. Discounts
+			// are opt-in per price rule.
+			OffPeakEnabled:  false,
 			OffPeakMode:     "custom",
 			OffPeakDiscount: 0.5,
 			WeekendAllDay:   true,
@@ -124,14 +136,36 @@ func (e *BillingEngine) ReloadPrices() error {
 		multipliers["default"] = 1.0
 	}
 
+	signature := rateSignature(list, multipliers)
+
 	e.mu.Lock()
 	e.prices = m
 	e.wildcard = wildcards
 	e.groupMultipliers = multipliers
+	changed := e.lastSignature != signature
+	e.lastSignature = signature
 	e.mu.Unlock()
 
-	telemetry.ScopedLogger("billing").Info("reloaded model pricing engine", "rules_count", len(list), "groups_count", len(multipliers))
+	logger := telemetry.ScopedLogger("billing")
+	if changed {
+		logger.Info("reloaded model pricing engine", "rules_count", len(list), "groups_count", len(multipliers))
+	} else {
+		// Periodic reload with identical rates: keep it observable at debug level
+		// instead of writing the same INFO line every 10 seconds.
+		logger.Debug("model pricing unchanged; reload was a no-op", "rules_count", len(list))
+	}
 	return nil
+}
+
+// rateSignature is a stable digest of the loaded rate card, used only to decide
+// whether a periodic reload actually changed anything. Ordering is canonical
+// because the rules are sorted before hashing and JSON sorts map keys.
+func rateSignature(list []*storage.ModelPriceRecord, multipliers map[string]float64) string {
+	hasher := sha256.New()
+	encoder := json.NewEncoder(hasher)
+	_ = encoder.Encode(list)
+	_ = encoder.Encode(multipliers)
+	return hex.EncodeToString(hasher.Sum(nil))
 }
 
 // GetGroupMultiplier returns the billing rate multiplier for a group (defaults to 1.0).

@@ -37,6 +37,10 @@ type AsyncLogger struct {
 	wg         sync.WaitGroup
 	batchSize  int
 	flushTimer time.Duration
+	// spill is the last-resort local append-only file. A record that no queue
+	// accepts is written here (and replayed on the next start) instead of being
+	// dropped, because a dropped record is an uncollected charge.
+	spill *usageSpill
 }
 
 // GlobalAsyncLogger is the application-wide async logger instance.
@@ -60,9 +64,15 @@ func InitAsyncLogger(repo *Repository, bufferSize, batchSize int, flushInterval 
 		stopCh:     make(chan struct{}),
 		batchSize:  batchSize,
 		flushTimer: flushInterval,
+		spill:      newUsageSpill(),
 	}
 
 	GlobalAsyncLogger = al
+
+	// Replay anything an earlier process had to spill before new traffic starts
+	// competing for the same database.
+	al.wg.Add(1)
+	go al.spillReplayer()
 
 	// Start local in-memory worker
 	al.wg.Add(1)
@@ -96,6 +106,13 @@ func (al *AsyncLogger) Record(rec *UsageLogRecord) {
 		}
 	}
 
+	// Assign the billing idempotency key here, once, before the record can be
+	// duplicated by any transport: the key then survives Redis redelivery, so a
+	// replayed message is written (and charged) at most once.
+	if rec.BillingID == "" {
+		rec.BillingID = NewBillingID()
+	}
+
 	// Try distributed message queue first if active
 	redisClient := distributed.GetClient()
 	if redisClient != nil && redisClient.IsActive() {
@@ -116,8 +133,7 @@ func (al *AsyncLogger) Record(rec *UsageLogRecord) {
 		return
 	}
 	if al.stopped.Load() {
-		telemetry.ScopedLogger("system").Warn("async logger already stopped; dropping log record", "trace_id", rec.TraceID)
-		telemetry.GlobalMetrics.UsageLogRecordsDropped.Add(1)
+		al.spillRecords([]*UsageLogRecord{rec}, "logger stopped")
 		return
 	}
 	timer := time.NewTimer(500 * time.Millisecond)
@@ -126,15 +142,50 @@ func (al *AsyncLogger) Record(rec *UsageLogRecord) {
 	case al.ch <- rec:
 		telemetry.GlobalMetrics.UsageLogQueueDepth.Store(int64(len(al.ch)))
 	case <-al.stopCh:
-		telemetry.ScopedLogger("system").Error("usage log submitted after logger stopped", "trace_id", rec.TraceID)
-		telemetry.GlobalMetrics.UsageLogRecordsDropped.Add(1)
+		al.spillRecords([]*UsageLogRecord{rec}, "logger stopped while queueing")
 	case <-timer.C:
-		telemetry.ScopedLogger("system").Error("async logger buffer full and flush stalled; dropping log record to prevent gateway freeze",
-			"trace_id", rec.TraceID,
-			"model", rec.Model,
-			"buffer_capacity", cap(al.ch),
+		al.spillRecords([]*UsageLogRecord{rec}, "in-memory buffer full and flush stalled")
+	}
+}
+
+// spillRecords writes records to the local append-only spill file when no queue
+// will take them, and reports a billing-loss alert only if even that fails.
+func (al *AsyncLogger) spillRecords(records []*UsageLogRecord, reason string) {
+	if len(records) == 0 {
+		return
+	}
+	written, err := al.spill.append(records)
+	if err != nil {
+		telemetry.GlobalMetrics.UsageLogRecordsDropped.Add(uint64(len(records)))
+		telemetry.ScopedLogger("system").Error("BILLING LOSS: usage records could not be spooled or persisted",
+			"reason", reason,
+			"count", len(records),
+			"error", err.Error(),
 		)
-		telemetry.GlobalMetrics.UsageLogRecordsDropped.Add(1)
+		return
+	}
+	telemetry.GlobalMetrics.UsageLogRecordsSpilled.Add(uint64(written))
+	telemetry.WarnLogger(telemetry.ScopedLogger("system"), "usage-spill-write", 30*time.Second,
+		"usage log pipeline degraded; billing records spooled to disk",
+		"reason", reason,
+		"count", written,
+	)
+}
+
+// spillReplayer persists records left in the spill file by an earlier process.
+func (al *AsyncLogger) spillReplayer() {
+	defer al.wg.Done()
+	if al.spill == nil || !al.spill.enabled() || al.repo == nil {
+		return
+	}
+	replayed, err := al.spill.replay(al.repo)
+	if err != nil {
+		telemetry.ScopedLogger("system").Error("failed to replay spilled usage records; files are kept for the next start",
+			"error", err.Error(), "replayed", replayed)
+		return
+	}
+	if replayed > 0 {
+		telemetry.ScopedLogger("system").Info("replayed spilled usage records", "count", replayed)
 	}
 }
 
@@ -175,12 +226,10 @@ func (al *AsyncLogger) worker() {
 			telemetry.ScopedLogger("system").Error("failed to persist usage logs",
 				"error", err.Error(), "count", len(batch), "attempt", failures)
 			if failures >= maxFailures {
-				// Give up on this batch rather than letting memory grow without
-				// bound; the records are surfaced loudly so they can be
-				// reconciled from the Redis stream or upstream provider bills.
-				telemetry.ScopedLogger("system").Error("dropping unpersistable usage log batch after repeated failures",
-					"count", len(batch), "attempts", failures)
-				telemetry.GlobalMetrics.UsageLogRecordsDropped.Add(uint64(len(batch)))
+				// Give up on the database for now, but not on the money: spool the
+				// batch to disk so it is replayed later. Dropping it here would
+				// silently discard up to a hundred charges.
+				al.spillRecords(batch, "repeated flush failures")
 				batch = batch[:0]
 				failures = 0
 				return true
@@ -216,8 +265,7 @@ func (al *AsyncLogger) worker() {
 						time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
 					}
 					if len(batch) > 0 {
-						telemetry.ScopedLogger("system").Error("usage logs remain unpersisted at shutdown", "count", len(batch))
-						telemetry.GlobalMetrics.UsageLogRecordsDropped.Add(uint64(len(batch)))
+						al.spillRecords(batch, "unpersisted at shutdown")
 					}
 					return
 				}

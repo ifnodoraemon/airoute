@@ -96,6 +96,30 @@ func (m *Metrics) ToPrometheusFormat() string {
 	sb.WriteString("# TYPE airoute_usage_log_queue_depth gauge\n")
 	sb.WriteString(fmt.Sprintf("airoute_usage_log_queue_depth %d\n", m.UsageLogQueueDepth.Load()))
 
+	sb.WriteString("# HELP airoute_billing_duplicates_skipped_total At-least-once deliveries rejected by the billing idempotency key\n")
+	sb.WriteString("# TYPE airoute_billing_duplicates_skipped_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_billing_duplicates_skipped_total %d\n", m.BillingDuplicatesSkipped.Load()))
+
+	sb.WriteString("# HELP airoute_billing_overdrafts_total Wallet charges that left a negative balance\n")
+	sb.WriteString("# TYPE airoute_billing_overdrafts_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_billing_overdrafts_total %d\n", m.BillingOverdrafts.Load()))
+
+	sb.WriteString("# HELP airoute_usage_log_records_spilled_total Billing records written to the local spill file\n")
+	sb.WriteString("# TYPE airoute_usage_log_records_spilled_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_usage_log_records_spilled_total %d\n", m.UsageLogRecordsSpilled.Load()))
+
+	sb.WriteString("# HELP airoute_usage_log_spill_replay_failures_total Unreadable spill records\n")
+	sb.WriteString("# TYPE airoute_usage_log_spill_replay_failures_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_usage_log_spill_replay_failures_total %d\n", m.UsageLogSpillReplayFailures.Load()))
+
+	sb.WriteString("# HELP airoute_billing_ledger_drift_units Absolute key-vs-audit cost drift in 1e-9 units\n")
+	sb.WriteString("# TYPE airoute_billing_ledger_drift_units gauge\n")
+	sb.WriteString(fmt.Sprintf("airoute_billing_ledger_drift_units %d\n", m.BillingLedgerDriftUnits.Load()))
+
+	sb.WriteString("# HELP airoute_billing_wallet_drift_units Absolute balance-mirror drift in 1e-9 units\n")
+	sb.WriteString("# TYPE airoute_billing_wallet_drift_units gauge\n")
+	sb.WriteString(fmt.Sprintf("airoute_billing_wallet_drift_units %d\n", m.BillingWalletDriftUnits.Load()))
+
 	sb.WriteString("# HELP airoute_ttft_avg_ms Average Time To First Token in milliseconds\n")
 	sb.WriteString("# TYPE airoute_ttft_avg_ms gauge\n")
 	sb.WriteString(fmt.Sprintf("airoute_ttft_avg_ms %.2f\n", avgTTFT))
