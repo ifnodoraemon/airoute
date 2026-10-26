@@ -233,10 +233,14 @@ func streamEventHasContent(event *model.StreamEvent) bool {
 	return false
 }
 
-// GetFirstTokenTimeout determines the safe fallback window timeout for a channel and model.
+// GetFirstTokenTimeout is how long a single attempt may stay silent before the
+// gateway gives up on it. It is derived from the channel timeout, not configured
+// separately.
 // Deep thinking / reasoning models (e.g. o1, o3, DeepSeek-R1) are given an extended window (up to 60s),
 // and the environment variable GATEWAY_FIRST_TOKEN_TIMEOUT can explicitly override the default 30s.
-// firstTokenTimeoutOverride reads GATEWAY_FIRST_TOKEN_TIMEOUT once per process.
+// firstTokenTimeoutOverride reads GATEWAY_FIRST_TOKEN_TIMEOUT once per process. It
+// only applies to channels that have no timeout configured; a configured channel
+// timeout is always the window that governs.
 // It used to be parsed on every streaming request (os.Getenv + strconv.Atoi).
 var firstTokenTimeoutOverride = sync.OnceValue(func() time.Duration {
 	env := os.Getenv("GATEWAY_FIRST_TOKEN_TIMEOUT")
@@ -251,6 +255,13 @@ var firstTokenTimeoutOverride = sync.OnceValue(func() time.Duration {
 })
 
 func (d *Dispatcher) GetFirstTokenTimeout(ch *model.ChannelConfig, modelName string) time.Duration {
+	// The channel timeout is the only budget an operator configures, and waiting for
+	// the first token cannot outlast it: there is nothing separate to set. A shorter
+	// window only exists to fail over to another channel sooner, which buys nothing
+	// while one channel serves the model.
+	if ch != nil && ch.TimeoutSeconds > 0 {
+		return time.Duration(ch.TimeoutSeconds) * time.Second
+	}
 	timeout := 30 * time.Second
 	lowerModel := strings.ToLower(modelName)
 	if strings.Contains(lowerModel, "r1") || strings.Contains(lowerModel, "o1") || strings.Contains(lowerModel, "o3") || strings.Contains(lowerModel, "reasoning") || strings.Contains(lowerModel, "thinking") {
@@ -258,12 +269,6 @@ func (d *Dispatcher) GetFirstTokenTimeout(ch *model.ChannelConfig, modelName str
 	}
 	if override := firstTokenTimeoutOverride(); override > 0 {
 		timeout = override
-	}
-	if ch != nil && ch.TimeoutSeconds > 0 {
-		chTimeout := time.Duration(ch.TimeoutSeconds) * time.Second
-		if timeout > chTimeout {
-			timeout = chTimeout
-		}
 	}
 	return timeout
 }

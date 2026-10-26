@@ -324,35 +324,34 @@ GATEWAY_DRAIN_TIMEOUT_SEC=120
 
 ---
 
-## 四之七、超时链对齐（3000s → 300s）
+## 四之七、超时只有一个旋钮：渠道超时
 
-线上曾出现三个互相矛盾的超时值：
+原状态是三个各自独立的超时值，运维必须手工保持它们协调：
 
 | 环节 | 原值 | 问题 |
 |---|---|---|
 | 渠道 `timeout_seconds` | **3000s** | 比边界代理还大，永远不会生效 |
 | nginx `proxy_read_timeout` | 600s | 实际最先切断的一方 |
-| 首 token 等待 | 30s（代码默认） | 与渠道超时无关联，容易被忽略 |
+| 首 token 等待 | 30s（代码默认） | 与渠道超时无关，容易与渠道超时理解冲突 |
 
-也就是说"配置上允许跑 50 分钟"，但请求在 10 分钟时就被 LB 切断，而 30 秒内没有首 token 就会被我们自己放弃——三个数字各说各话。
+对使用者来说，"渠道超时"应该就是"这个渠道一次请求最多等多久"。因此合并为**单一旋钮**：
 
-处理：
-
-1. 渠道超时改为 **300s**（`罗总` 与 `gpustack-cluster` 同步），使链路变成
-   **30s（首 token） < 300s（渠道） < 600s（边界代理）**，每层都在下一层之内；
-2. 启动自检 `reportTimeoutChain`：对每个 active 渠道打印
-   `first_token / channel_timeout / edge_budget`，并在"渠道超时 > 边界预算"或
-   "首 token ≥ 渠道超时"时告警，防止以后再次配置出自相矛盾的数值；
-3. `GATEWAY_EDGE_TIMEOUT_SEC`（默认 600）声明边界代理预算，与 nginx 保持一致。
-
-线上启动日志：
+1. **渠道超时 = 唯一配置项**（当前 300s）。首 token 等待**直接等于**渠道超时
+   （`GetFirstTokenTimeout` 不再返回更小的独立值）：设 300s 就等 300s，不会在 30s 被自己提前放弃。
+2. **边界代理抬高到 1h**（nginx `proxy_read_timeout/proxy_send_timeout 3600s`），
+   远高于渠道超时上限，保证"配了就算数"——不会再出现配置被 LB 提前截断的情况。
+3. **保存时校验上限**：`model.MaxChannelTimeoutSeconds = 1800`（30 分钟）。
+   超出范围的渠道超时在保存时直接报错，而不是静默存下一个不生效的数字。
+4. **启动自检**打印实际链路并校验不变量（边界 > 上限）：
 
 ```
-INFO timeout chain channel=罗总 first_token=30s channel_timeout=5m0s edge_budget=10m0s
+INFO timeout chain channel=罗总 first_token=5m0s channel_timeout=5m0s edge_timeout=1h0m0s
 ```
 
-无告警即表示链路自洽。若要放宽整体时长，必须**同时**调整 nginx 的
-`proxy_read_timeout` 与 `GATEWAY_EDGE_TIMEOUT_SEC`，否则只是改了个不生效的数字。
+即：运维只设一个数，其余全部由它派生或由系统保证。
+
+> 代价说明：渠道长期静默时不再有"早期失败"（此前 30s 就放弃并可切换渠道）。单渠道场景下早期失败没有收益，
+> 反而会误伤慢但正常的上游；一旦恢复多渠道路由，需要重新引入"每渠道独立的首 token 窗口"才能快速 failover。
 
 ---
 

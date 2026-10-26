@@ -3,7 +3,9 @@ package controlplane
 import (
 	"context"
 	"errors"
+	"fmt"
 
+	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
@@ -105,6 +107,11 @@ func (s *ChannelService) Create(ctx context.Context, rec *storage.ChannelRecord)
 func (s *ChannelService) Update(ctx context.Context, id int64, patch *storage.ChannelRecord) (*storage.ChannelRecord, error) {
 	updated, err := s.store.PatchChannel(id, func(current *storage.ChannelRecord) error {
 		mergeChannelUpdate(current, patch)
+		timeout, err := normalizeChannelTimeout(current.TimeoutSeconds)
+		if err != nil {
+			return err
+		}
+		current.TimeoutSeconds = timeout
 		return nil
 	})
 	if err != nil {
@@ -164,7 +171,37 @@ func validateNewChannel(rec *storage.ChannelRecord) error {
 	if rec == nil || rec.Name == "" || rec.BaseURL == "" || rec.Type == "" {
 		return &ValidationError{Message: "渠道名称、类型与 base_url 为必填项"}
 	}
+	timeout, err := normalizeChannelTimeout(rec.TimeoutSeconds)
+	if err != nil {
+		return err
+	}
+	rec.TimeoutSeconds = timeout
 	return nil
+}
+
+// normalizeChannelTimeout turns the single operator-facing knob into a validated
+// per-request upstream budget.
+//
+// The channel timeout is the only timeout an operator should have to think about.
+// It is also the window a channel may stay silent before the first token arrives -
+// there is no separate value to keep in sync - and the edge proxy's timeout is
+// configured far above the maximum accepted here, so a configured budget is always
+// the one that takes effect. Rejecting out-of-range
+// values is what makes that guarantee hold: silently accepting a 3000s budget
+// behind a 600s proxy produced a number that never decided anything.
+func normalizeChannelTimeout(seconds int) (int, error) {
+	if seconds == 0 {
+		return model.DefaultChannelTimeoutSeconds, nil
+	}
+	if seconds < model.MinChannelTimeoutSeconds {
+		return 0, &ValidationError{Message: fmt.Sprintf("渠道超时必须大于 %d 秒", model.MinChannelTimeoutSeconds)}
+	}
+	if seconds > model.MaxChannelTimeoutSeconds {
+		return 0, &ValidationError{Message: fmt.Sprintf(
+			"渠道超时不能超过 %d 秒（%d 分钟）；这是单次上游调用的总预算，边界代理的超时已设置得比它更高",
+			model.MaxChannelTimeoutSeconds, model.MaxChannelTimeoutSeconds/60)}
+	}
+	return seconds, nil
 }
 
 // normalizeChannelStatus enforces the two-state contract: anything that is not

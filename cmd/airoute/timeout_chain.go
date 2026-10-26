@@ -1,9 +1,6 @@
 package main
 
 import (
-	"os"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
@@ -12,37 +9,26 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
-// defaultEdgeTimeoutBudget mirrors nginx's proxy_read_timeout in the shipped
-// deployment. A channel timeout larger than this can never take effect: the edge
-// cuts the connection first, so the larger number is a lie in the configuration.
-const defaultEdgeTimeoutBudget = 600 * time.Second
-
-// edgeTimeoutBudget reads GATEWAY_EDGE_TIMEOUT_SEC (default 600s).
-func edgeTimeoutBudget() time.Duration {
-	raw := strings.TrimSpace(os.Getenv("GATEWAY_EDGE_TIMEOUT_SEC"))
-	if raw == "" {
-		return defaultEdgeTimeoutBudget
-	}
-	seconds, err := strconv.Atoi(raw)
-	if err != nil || seconds <= 0 {
-		return defaultEdgeTimeoutBudget
-	}
-	return time.Duration(seconds) * time.Second
-}
+// edgeProxyTimeout mirrors nginx's proxy_read_timeout in the shipped deployment. It
+// is deliberately far above model.MaxChannelTimeoutSeconds: the edge must never be
+// the component that ends a request, so the channel timeout - the only knob an
+// operator sets - is always the value that decides.
+const edgeProxyTimeout = time.Hour
 
 // reportTimeoutChain logs the effective timeout budget for each active channel and
 // warns when the configured numbers contradict each other.
 //
-// The three knobs form a chain: the first-token wait bounds how long a single
-// attempt may stay silent, the channel timeout bounds the whole upstream call, and
-// the edge proxy bounds everything. When they are set independently they drift
-// apart - the live cluster had a 3000s channel timeout behind a 600s nginx, so the
-// configuration promised a budget that the edge silently truncated.
+// There is one operator-facing knob: the channel timeout. The first-token window is
+// derived from it (they are the same number), and the edge proxy's timeout is set
+// far above the maximum accepted channel timeout so it never truncates a request.
+// This check exists to prove that invariant at startup instead of assuming it: the
+// live cluster once ran a 3000s channel timeout behind a 600s nginx, so the
+// configured budget never decided anything.
 func reportTimeoutChain(repo *storage.Repository, dispatcher *router.Dispatcher) {
 	if repo == nil || dispatcher == nil {
 		return
 	}
-	edge := edgeTimeoutBudget()
+	edge := edgeProxyTimeout
 	channels, err := repo.ListChannels()
 	if err != nil {
 		telemetry.ScopedLogger("router").Warn("timeout chain check skipped", "error", err.Error())
@@ -61,19 +47,13 @@ func reportTimeoutChain(repo *storage.Repository, dispatcher *router.Dispatcher)
 			"channel", record.Name,
 			"first_token", firstToken.String(),
 			"channel_timeout", channelTimeout.String(),
-			"edge_budget", edge.String())
+			"edge_timeout", edge.String())
 
 		if channelTimeout > edge {
-			telemetry.ScopedLogger("router").Warn("channel timeout exceeds the edge budget; the proxy will cut requests first",
+			telemetry.ScopedLogger("router").Warn("channel timeout exceeds the edge proxy timeout; the proxy will cut requests first",
 				"channel", record.Name,
 				"channel_timeout", channelTimeout.String(),
-				"edge_budget", edge.String())
-		}
-		if firstToken >= channelTimeout {
-			telemetry.ScopedLogger("router").Warn("first-token wait is not shorter than the channel timeout; it cannot take effect",
-				"channel", record.Name,
-				"first_token", firstToken.String(),
-				"channel_timeout", channelTimeout.String())
+				"edge_timeout", edge.String())
 		}
 	}
 }

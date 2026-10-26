@@ -168,6 +168,19 @@ func (c *ChannelConfig) SupportsModel(requestedModel string) bool {
 
 // GetUpstreamModel returns the mapped upstream model name if specified, otherwise the requested model.
 // Supports cascading models, unlimited slashes, wildcard prefixes (e.g. "yy/*": "*"), and channel prefix stripping.
+const (
+	// DefaultChannelTimeoutSeconds is the per-request upstream budget applied when
+	// an operator does not set one.
+	DefaultChannelTimeoutSeconds = 60
+	// MinChannelTimeoutSeconds rejects a budget so small that no request can finish.
+	MinChannelTimeoutSeconds = 1
+	// MaxChannelTimeoutSeconds is the largest budget an operator may configure. The
+	// edge proxy's own timeout is set well above it, so the channel timeout is the
+	// value that actually decides when a request stops - which is the point of
+	// having it at all.
+	MaxChannelTimeoutSeconds = 1800
+)
+
 func (c *ChannelConfig) GetUpstreamModel(requestedModel string) string {
 	if p, allowed, _ := c.routeProvider(requestedModel); allowed {
 		if p.MappedModel != "" {
