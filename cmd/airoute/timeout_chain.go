@@ -48,6 +48,14 @@ func reportTimeoutChain(repo *storage.Repository, dispatcher *router.Dispatcher)
 			"channel_timeout", channelTimeout.String(),
 			"edge_timeout", edge.String())
 
+		if channelTimeout > time.Hour {
+			// Not an error: the operator asked for it and the proxy allows it. It is
+			// worth saying out loud though, because a silent upstream will hold the
+			// request (and the client connection) for that whole window.
+			telemetry.ScopedLogger("router").Warn("channel budget is unusually large",
+				"channel", record.Name,
+				"channel_timeout", channelTimeout.String())
+		}
 		if channelTimeout > edge {
 			telemetry.ScopedLogger("router").Warn("channel timeout exceeds the edge proxy timeout; the proxy will cut requests first",
 				"channel", record.Name,

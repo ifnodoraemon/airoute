@@ -17,6 +17,10 @@ func TestNormalizeChannelTimeout(t *testing.T) {
 	}{
 		{0, model.DefaultChannelTimeoutSeconds, false},
 		{300, 300, false},
+		// An hour, or several hours, must simply work: the proxy budget is a day.
+		{3600, 3600, false},
+		{7200, 7200, false},
+		{model.MaxChannelTimeoutSeconds - 1, model.MaxChannelTimeoutSeconds - 1, false},
 		{model.MaxChannelTimeoutSeconds, model.MaxChannelTimeoutSeconds, false},
 		// Zero is the "not provided" sentinel on partial updates; a negative value
 		// is an outright invalid budget.

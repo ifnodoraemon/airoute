@@ -175,12 +175,15 @@ const (
 	// MinChannelTimeoutSeconds rejects a budget so small that no request can finish.
 	MinChannelTimeoutSeconds = 1
 	// EdgeProxyTimeoutSeconds is the deployment's own read timeout (nginx
-	// proxy_read_timeout). It is not a per-request setting and operators never touch
-	// it: it exists so the proxy can never be the component that ends a request.
+	// proxy_read_timeout). Operators never touch it: it is a safety net, not a
+	// budget, and it is deliberately far above anything an operator would configure
+	// so that the channel timeout is always the value that decides when a request
+	// stops. Setting it to a day means a channel timeout of an hour, or several
+	// hours, simply works instead of being rejected by an artificial ceiling.
 	//
 	// It is the single source for the limit below, and a test asserts that the
 	// shipped nginx config matches it exactly, so the two cannot drift apart.
-	EdgeProxyTimeoutSeconds = 3600
+	EdgeProxyTimeoutSeconds = 86400
 	// edgeProxyMarginSeconds keeps every accepted channel timeout strictly inside
 	// the proxy budget: at the exact boundary a race could let the proxy cut first.
 	edgeProxyMarginSeconds = 60
