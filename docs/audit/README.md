@@ -1,0 +1,191 @@
+# Airoute 网关审计与修复总结（2026-10-23）
+
+本目录下有三份完整审计报告：
+
+| 文件 | 内容 |
+|---|---|
+| [`billing.md`](billing.md) | 计费/扣费正确性审计，17 项发现（F1–F17） |
+| [`concurrency.md`](concurrency.md) | 并发与热路径审计，16 项发现 + 18 条补丁建议 |
+| [`logs.md`](logs.md) | 日志/指标/DB/Redis 健康检查（含 10:03–10:11 线上 502 事件复盘） |
+
+本文只记录**已经落地的修复**、**验证证据**和**尚未执行**的建议。
+
+---
+
+## 一、日志：为什么"总感觉哪里不对"
+
+审计确认了 6 个具体缺陷，均已修复并线上验证。
+
+### 1. 时间戳精度不一致（P0，已修）
+
+`usage_logs.created_at` 有两条写入路径：
+
+- 批量写入（一次 flush 多行）把时间格式化成 `2006-01-02 15:04:05` → **整秒截断**；
+- 单行写入且 `CreatedAt` 为零时走数据库默认值 → **保留微秒**。
+
+所以同一批 502 全部塌缩成 `02:09:44`，而同一秒的 429 却是 `02:09:44.905597`。后果正是无法回答的三件事：重试间隔、并发度、跨系统关联。
+
+修复：`internal/storage/repo_logs.go` 新增微秒布局 `sqliteTimestampLayout = "2006-01-02 15:04:05.000000"`；`repo_logs_writer.go` 单行/批量两条路径**始终由服务端写入 created_at**（不再依赖列默认值），格式统一。旧数据仍可被时间过滤读取（保留 `legacySecondTimestampLayout`）。
+
+验证：修复后新写入行 `date_trunc('second', created_at) = created_at` 全部为 `f`；回归测试 `internal/storage/usage_log_timestamp_test.go`。
+
+### 2. 路由日志没有 trace_id / attempt（P0，已修）
+
+`router` 分类的日志（attempt / fallback / breaker）此前 **0/891 携带 trace_id**（access 日志是 1950/1950）。一次 `attempt → 429 → 熔断跳过 → 502` 在日志里是几条互不相干的孤立记录。
+
+修复：新增 `internal/router/log.go` 的 `routerLog(ctx)`，从请求 context 取 trace_id 并绑定到 logger；24 处路由日志全部改走它。失败日志额外带 `attempt`。`telemetry.TraceIDFromContext` + `telemetry.ContextKeyTraceID` 作为跨包共享的 context key。
+
+验证：`internal/router/log_trace_test.go`；线上 access 行已带 `trace_id`。
+
+### 3. access 日志无法定位"谁、为什么失败"（P1，已修）
+
+原来只有 `status=502`，没有租户、没有 key、没有原因，只能回查数据库。
+
+修复：`http_access` 增加 `tenant`、`key`（脱敏为 `sk-airoute***`）以及非 2xx 时的 `error`（取自统一的错误记录点，已做敏感信息清洗）。限流拒绝会写入 `cluster/local rate limit exceeded` 等具体原因。
+
+验证：`{"status":404,...,"tenant":"test","key":"sk-airoute***","error":"no upstream provider available for requested model 'no-such-model-xyz'"}`。
+
+### 4. 启动 banner 不是 JSON（P2，已修）
+
+彩色多行 banner 直接写 stdout，在容器里破坏 `jq` / 日志采集器解析。
+
+修复：`cmd/airoute/server.go` 的 `printStartupBanner` 仅在 stdout 是 TTY 时打印；容器内只保留结构化日志（`gateway server listening` 等）。
+
+验证：重启后 `docker logs` 非 JSON 行数为 0。
+
+### 5. 控制台系统日志缓冲区被 access 日志淹没 + 初始化顺序 bug（P1，已修）
+
+- 环形缓冲区容量 2000，且每条请求都写一条 `http_access` → 300 req/s 突发时只够存 **6 秒**，事故现场在被打开控制台前就被挤掉；
+- `GlobalRingBuffer` 原本在 `init()` 中创建，而 logger 的 `init()` 先执行 → **logger 绑定到 nil buffer**，第一次显式 `InitLogger` 之前的所有日志（配置加载、安全告警、启动失败）根本进不了控制台。
+
+修复：`internal/telemetry/ring_buffer.go` 改为变量初始化器（保证在任何 `init()` 之前就绪）、容量 2000→5000、`http_access` 不再进入环形缓冲区（它已经持久化在 `usage_logs`，控制台另有审计日志页）。
+
+验证：`GET /api/v1/admin/system/logs` 现在按启动顺序完整显示（首条是 `starting airoute`，证明 nil-buffer 已修），且 `http_access` 计数为 0。
+
+### 6. 重复告警风暴 + p99 被硬钳制（P2，已修）
+
+- 熔断 OPEN 时**每个被跳过的请求**都打一条 WARN（2 秒内 127 条）；Redis 抖动时按请求/按记录重复告警。新增 `telemetry.WarnLogger(key, interval, ...)`，同类告警 30s 一条。
+- 路由里程碑日志（attempt / success）从 INFO 降为 DEBUG：它们是单请求内部细节，INFO 级别使其日志量翻 3 倍且无法关联。
+- 延迟直方图最高桶为 60s，真实最大 113s 的请求落在桶外 → p99 恒等于 60000。修复：`internal/telemetry/metrics.go` 扩展桶（到 600s），并记录观测最大值作为溢出回退。
+
+验证：`internal/telemetry/metrics_tail_test.go`；日志量在同样流量下约降为原来的 1/3。
+
+### 7. 顺带修复：Postgres 专用 bug（P1）
+
+`DB` 包装器只重绑了 `Exec/Query/QueryRow/QueryContext?`，漏掉了 `*Context` 变体：`QueryRowContext(..., ?)` 在 PostgreSQL 上直接语法错误。受影响的是**每个数据面请求的权威 key 查询**（错误被丢弃，所以静默退回 10s 内存快照）和 `GetUserByIDContext`。
+
+修复：`internal/storage/db.go` 为 `DB` 和 `Tx` 补齐 `ExecContext/QueryContext/QueryRowContext` 的方言重绑。
+
+验证：`internal/storage/postgres_billing_idempotency_test.go`（真实 PostgreSQL 集成测试）。
+
+---
+
+## 二、扣费：需要优化，且重点是结构而非价格
+
+已落地：
+
+| 缺陷 | 修复 |
+|---|---|
+| **F1 无幂等键**：Redis Stream 至少一次投递，commit 成功但 XACK 失败会重放 → 重复流水 + 重复扣款，且无法识别 | `usage_logs.billing_id`（服务端生成，迁移 v21 + 唯一索引）+ `ON CONFLICT (billing_id) DO NOTHING`；批量路径用 `RETURNING billing_id` **只对真正插入的行扣款**；新增指标 `airoute_billing_duplicates_skipped_total` |
+| **F3 流式断连 499 零计费**（可被"收完内容再断开"利用） | `recordUsage` 将"499 且已产生 token"视为可计费；审计状态仍记 499 |
+| **F5 未配价模型自动打 5 折** | 默认价记录的 `OffPeakEnabled` 改为 false（折扣必须由价格规则显式开启） |
+
+验证：
+
+- 幂等：`internal/storage/billing_idempotency_test.go`（SQLite 4 例）+ `postgres_billing_idempotency_test.go`（真实 PG 三次重投只扣一次）；
+- 499：线上 `/v1/messages` 流式中断实测 `status=499, cost=0.000042`（42 prompt tokens），修复前为 0；单测 `internal/api/abort_billing_test.go`；
+- 默认价：`internal/billing/default_price_test.go`；
+- 正常计费无回归：实测一次请求 `cost=0.000064`，钱包余额变动 `-0.000064`，`billing_id` 非空。
+
+未做（建议下一迭代）：F2 第二阶段（同步扣费前置）、F11 Anthropic 非流式 cached token 计价修正、F5 的"未配价模型启动自检"、F9 账本治理（删除不冲账 / 旧 nano 镜像）、F7 若接入付费 moderation 厂商再接按次计费。
+
+---
+
+## 三、并发：真正的墙不是 DB 查询
+
+审计结论修正了初始假设：每请求一次权威 DB 查询只占时延的 0.007%，真正的限制是：
+
+| 瓶颈 | 措施 |
+|---|---|
+| **容器 `ulimit -n = 1024`**：每路流式占 2 个 fd → 单副本约 400 路、集群约 190–230 req/s | `docker-compose.yml` 为 gateway/lb/postgres/redis 增加 `ulimits.nofile = 65536`（已验证：`nofile=65536:65536`） |
+| **PG 连接预算被算死**：2×50 = 100 = `max_connections`，第三副本无法接入，39 条 idle 长期占坑 | 连接池改为环境变量 `GATEWAY_DB_MAX_OPEN_CONNS`（默认 25）/ `GATEWAY_DB_MAX_IDLE_CONNS`（默认 8）；compose 将 `max_connections` 提到 200（下次重建 postgres 生效） |
+| 每请求全量缓冲请求体仅为了保留 32KB 追踪片段（400 并发 ≈ 240–300MB） | `CaptureRequestSnapshot` 改为只读前 32KB，剩余部分通过 `io.MultiReader` 链回请求体 |
+| Redis 调用无界：RPM 校验无超时 + go-redis 重试 3 次，最坏 +3–4s | `internal/middleware/ratelimit.go` 增加 300ms 超时，超时回落到本地令牌桶 |
+
+---
+
+## 四、RPM 限流是否生效（实测）
+
+是，且两条链路都在工作：
+
+- 将某个 key 的 `rpm` 临时改为 3，等待热加载后连续 6 次请求 `/v1/models`：**前 3 次 200，第 4–6 次 429**；
+- 拒绝响应来自**分布式滑动窗口**（`"Cluster rate limit exceeded (RPM limit reached)"`），Redis 中可见 `airoute:ratelimit:rpm:*` 键；
+- 恢复 `rpm=60` 后立即回到 200；
+- 10:09 突发期间的 231 次本地限流 429 也说明本地令牌桶兜底有效。
+
+注意：**key 1（admin, rpm=0）是不限流的**，当前大量内部流量走它，因此限流路径平时几乎不被压测；切换到租户 key 后每请求会多 4 次 Redis 往返。
+
+---
+
+## 四之二、第二轮修复（moderation / F6 / F4）
+
+### `/v1/moderations`：从"伪造安全"改为显式拒绝
+
+该接口是 OpenAI 内容审核协议（返回 11 个风险类别的 flagged/分数，不产生 token）。原实现在没有 `moderation` 协议渠道时**返回伪造的"全部安全"**（flagged=false、分数 0.00001、HTTP 200）——实测"我要杀光所有人"也返回 unflagged，属于假安全。
+
+修复（`internal/api/moderation_handler.go`）：
+
+- 无渠道时返回 **501 + `moderation_not_configured`**，明确说明需要配置 moderation 渠道；
+- 伪造响应保留为本地联调开关 `GATEWAY_MODERATION_STUB=true`，并在使用时限频告警；
+- 计费无需按 token；将来接付费厂商（阿里云内容安全等按调用计费）用按次 `fixed_price` 即可。
+
+### F6：非流式请求缺 usage 时按估算计费
+
+上游不返回 usage 时，5 个非流式处理器把 token 记 0 → 成功请求不收费（实测 148 条 HTTP 200 收费 0，约 ¥2.2）。修复：`internal/api/common.go` 新增 `resolveChatUsage` / `resolveEmbeddingTokens` / `resolveRerankTokens`，与流式处理器使用同一套字符→token 估算，并把 `usage_source=estimated` 写入审计行；覆盖 chat/completions/responses/gemini/anthropic（原生与适配两条路径）/embeddings/rerank。
+
+### F4：钱包透支钳制 + 告警
+
+原来 `balance = balance - cost` 没有下限：一个大请求或 10s 快照窗口内的并发可以把余额扣成任意负数，且无任何告警（在途预留仅 0.0005 元，实测单请求最高 0.65 元）。
+
+修复（`internal/storage/wallet_deduct.go`）：所有扣款（单条/批量/租户回退）统一走 `deductWallet`，SQL 内用可移植 `CASE` 把余额钳制在 `-GATEWAY_MAX_OVERDRAFT_CNY`（默认 1 元，0 = 不允许透支），同时用整数列推导浮点镜像避免双写漂移；`RETURNING balance_units` 检测透支并上报 `airoute_billing_overdrafts_total` + 限频 WARN（区分"刚转负"与"已触底"）。
+
+验证：SQLite 单测 4 例 + 真实 PostgreSQL 集成测试；线上 `/metrics` 已暴露新计数器，moderation 实测返回 501。
+
+### F2（第一阶段）：让"钱"不再依赖日志能否落库 + 对账
+
+原缺陷：扣款发生在审计日志事务里，而日志管道有 4 条丢弃路径（内存队列满 500ms、连续 5 次写库失败、停机重试耗尽、logger 已停止）。任何一条触发，对应的计费记录既不入库也不扣钱，且只在日志里留一句 ERROR——**这是"收入静默消失"，而不是重复扣款**，严重程度高于审计报告里的排序。
+
+第一阶段落地：
+
+1. **磁盘兜底（不再丢弃）**：`internal/storage/usage_spill.go`。四条丢弃路径全部改为写入本地 append-only 文件（`GATEWAY_USAGE_SPILL_DIR`，默认 `data/`，`fsync` 后返回），启动时按批重放并删除已持久化的文件；重放失败的文件保留到下次启动。记录自带 `billing_id`，两个副本共享卷导致的重复重放会被唯一索引拦成 no-op。新增指标 `airoute_usage_log_records_spilled_total`、`airoute_usage_log_spill_replay_failures_total`。
+2. **对账 worker**：`internal/storage/billing_reconcile_job.go`（`GATEWAY_BILLING_RECONCILE_HOURS`，默认 6 小时，0 关闭）。周期比对两个此前无人核对的镜像：
+   - `api_keys.used_cost_units` vs `SUM(usage_logs.cost_units)` → `airoute_billing_ledger_drift_units`
+   - `users.balance_units` vs `ROUND(balance*1e9)` → `airoute_billing_wallet_drift_units`
+   漂移非 0 时限频 WARN。worker 只报告、绝不自动改账。
+3. **告警规则**：`deploy/prometheus/airoute-alerts.yml`，13 条规则覆盖：记录丢弃/落盘/重放损坏、重复投递、透支、两类账本漂移、5xx 率、p99、fallback 风暴、队列积压、写库失败、并发连接。
+
+验证：spill 往返/幂等/损坏行/禁用 4 组单测；对账漂移 3 组单测（人为制造 ¥5 账本差与 ¥7 镜像差，指标精确匹配）。
+
+**首次对账即抓到真实问题**：上线后 worker 立刻报 `ledger_drift = ¥7.1477`（两副本同时告警）。拆解后与审计报告的 F9 完全吻合：
+
+| 来源 | 金额 | 处理 |
+|---|---|---|
+| 969 条旧流水 `cost>0` 但 `cost_units=0`（整数镜像上线前写入） | ¥4.5002 | 迁移 v22 回填 `cost_units = ROUND(cost*1e9)`，漂移降至 **¥2.6475** |
+| 早期被删除的 147 行流水（id<148，无审计痕迹） | ¥2.6475 | 不可重建，作为已知基线保留在指标里 |
+
+修复后线上核对：`used_cost_units - SUM(cost_units)` 只剩该 ¥2.6475，`balance_units` 与浮点镜像漂移为 0。
+
+**刻意保留为第二阶段**：把扣费移到审计写入之前（同步扣费 + 异步审计）。第一阶段已经把"记录可能丢失"这个根因消除（丢不了，最坏落盘），而把扣费前置会新增每请求一次数据库事务、并与余额校验顺序耦合，收益不足以抵消风险。若后续要支持"审计失败也不影响计费"的强隔离，再按此设计演进。
+
+---
+
+## 五、部署与遗留
+
+本次修复通过 `scripts/docker-rebuild.sh` 滚动发布（两副本依次重建 + 健康检查），并已验证：
+
+- 迁移 v21 已应用，`uq_usage_billing_id` 唯一索引存在；
+- 连接池日志 `max_open=25, max_idle=8`；
+- 新写入计费流水均带 `billing_id` 与微秒时间戳；
+- 日志无 ERROR、无丢弃、无 flush 失败。
+
+仍需在下次重建 postgres/redis 时生效：`max_connections=200`、postgres/redis 的 nofile 限制（网关与 LB 已生效）。
