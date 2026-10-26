@@ -174,11 +174,19 @@ const (
 	DefaultChannelTimeoutSeconds = 60
 	// MinChannelTimeoutSeconds rejects a budget so small that no request can finish.
 	MinChannelTimeoutSeconds = 1
-	// MaxChannelTimeoutSeconds is the largest budget an operator may configure. The
-	// edge proxy's own timeout is set well above it, so the channel timeout is the
-	// value that actually decides when a request stops - which is the point of
-	// having it at all.
-	MaxChannelTimeoutSeconds = 1800
+	// EdgeProxyTimeoutSeconds is the deployment's own read timeout (nginx
+	// proxy_read_timeout). It is not a per-request setting and operators never touch
+	// it: it exists so the proxy can never be the component that ends a request.
+	//
+	// It is the single source for the limit below, and a test asserts that the
+	// shipped nginx config matches it exactly, so the two cannot drift apart.
+	EdgeProxyTimeoutSeconds = 3600
+	// edgeProxyMarginSeconds keeps every accepted channel timeout strictly inside
+	// the proxy budget: at the exact boundary a race could let the proxy cut first.
+	edgeProxyMarginSeconds = 60
+	// MaxChannelTimeoutSeconds is derived, not chosen: the largest channel timeout
+	// that still fits inside the proxy budget with margin.
+	MaxChannelTimeoutSeconds = EdgeProxyTimeoutSeconds - edgeProxyMarginSeconds
 )
 
 func (c *ChannelConfig) GetUpstreamModel(requestedModel string) string {

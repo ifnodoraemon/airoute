@@ -9,11 +9,10 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
-// edgeProxyTimeout mirrors nginx's proxy_read_timeout in the shipped deployment. It
-// is deliberately far above model.MaxChannelTimeoutSeconds: the edge must never be
-// the component that ends a request, so the channel timeout - the only knob an
-// operator sets - is always the value that decides.
-const edgeProxyTimeout = time.Hour
+// edgeProxyTimeout is the proxy budget the deployment declares. It comes from the
+// model constant that also bounds every channel timeout, so there is one number in
+// the system rather than three that have to agree by hand.
+var edgeProxyTimeout = time.Duration(model.EdgeProxyTimeoutSeconds) * time.Second
 
 // reportTimeoutChain logs the effective timeout budget for each active channel and
 // warns when the configured numbers contradict each other.

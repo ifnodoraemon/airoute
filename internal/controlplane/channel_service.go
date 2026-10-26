@@ -198,8 +198,10 @@ func normalizeChannelTimeout(seconds int) (int, error) {
 	}
 	if seconds > model.MaxChannelTimeoutSeconds {
 		return 0, &ValidationError{Message: fmt.Sprintf(
-			"渠道超时不能超过 %d 秒（%d 分钟）；这是单次上游调用的总预算，边界代理的超时已设置得比它更高",
-			model.MaxChannelTimeoutSeconds, model.MaxChannelTimeoutSeconds/60)}
+			"渠道超时不能超过 %d 秒（约 %d 分钟）。上限由边界代理预算 %d 秒派生（预留 %d 秒余量），"+
+				"保证网关自己的超时总是先于代理生效；如需更长预算，需要同时调大代理预算",
+			model.MaxChannelTimeoutSeconds, model.MaxChannelTimeoutSeconds/60,
+			model.EdgeProxyTimeoutSeconds, model.EdgeProxyTimeoutSeconds-model.MaxChannelTimeoutSeconds)}
 	}
 	return seconds, nil
 }

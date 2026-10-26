@@ -340,8 +340,11 @@ GATEWAY_DRAIN_TIMEOUT_SEC=120
    （`GetFirstTokenTimeout` 不再返回更小的独立值）：设 300s 就等 300s，不会在 30s 被自己提前放弃。
 2. **边界代理抬高到 1h**（nginx `proxy_read_timeout/proxy_send_timeout 3600s`），
    远高于渠道超时上限，保证"配了就算数"——不会再出现配置被 LB 提前截断的情况。
-3. **保存时校验上限**：`model.MaxChannelTimeoutSeconds = 1800`（30 分钟）。
-   超出范围的渠道超时在保存时直接报错，而不是静默存下一个不生效的数字。
+3. **上限是派生的，不是另一个配置**：`model.EdgeProxyTimeoutSeconds = 3600`（边界代理预算）是唯一的基础设施常量，
+   `MaxChannelTimeoutSeconds = 3600 - 60 = 3540` 由它派生（预留 60 秒余量，避免边界竞态）。
+   保存渠道时超出上限会直接报错并说明派生关系；`cmd/airoute/nginx_timeout_test.go` 会校验
+   `deploy/nginx-compose.conf` 里的 `proxy_read_timeout/proxy_send_timeout` **必须等于**该常量，
+   两者一旦漂移测试就红——因此不可能再出现"配了却被代理提前截断"。
 4. **启动自检**打印实际链路并校验不变量（边界 > 上限）：
 
 ```
