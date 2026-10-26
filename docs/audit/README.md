@@ -225,6 +225,18 @@
 4. 审计时间戳改为**请求完成时刻**（此前为零值，写入器用 flush 时刻兜底，导致同一批被取消的
    8 个请求时间戳完全相同、真实先后顺序丢失）。
 
+### 断连也要计费，且要能归因到渠道
+
+上面的修复让"客户端断开"不再冒充上游故障，但还有一个反向漏洞：这些请求**已经打到上游**，上游按 prompt 计了费，而我们记 0 token / 0 成本 —— 等于自己吸收成本。
+
+修复：
+
+1. **取消错误携带上下文**（`internal/router/errors.go`）：`newCanceledError` 现在返回带 `Trail`（正在等待的渠道）与 `PromptTokens`（请求估算 prompt）的 `DispatchError`，`errors.Is(err, context.Canceled)` 仍然成立，所以 499 判定不变；审计的 `channel` 列也终于有值了。
+2. **断连按估算 prompt 计费**：派发阶段的取消，`recordFailedRequestWithError` 从 `DispatchError.PromptTokens` 取估算值并标 `usage_source=estimated`；流式处理器在 499 分支不再把 prompt 清零（5 个处理器统一）。
+3. **渠道归因补全**：全部候选被熔断器跳过时，"attempted"为空导致 channel 为空 —— 现在用 `exhaustedTrail` 回落到 skipped 渠道，`channel` 列不再是空白（历史 736 条 502 属于此类）。
+
+**线上验证**：`tr-abort-bill-001`（4000 字符 prompt，0.5s 断开）→ `499 / channel=罗总 / prompt_tokens=1000 / usage_source=estimated / cost=¥0.001`，余额精确扣减 ¥0.001。
+
 **线上验证**：迁移后今天的 502 只剩 1 条——真正上游首 token 超时
 （`channel 罗总 timed out waiting for first token (30s)`，41.4s）；9 条为客户端断连（499）。
 新复现请求记录为 499，且 `client_canceled_total` 增长、`requests_failed_total` 不变。

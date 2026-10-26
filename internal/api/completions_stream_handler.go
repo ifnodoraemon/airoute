@@ -114,6 +114,8 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 			statusCode = 499
 		}
 	} else {
+		// Also reached on a client abort (statusCode 499): the prompt was already
+		// sent upstream, so estimate it rather than billing nothing.
 		if totalPromptTokens == 0 {
 			totalPromptTokens = estimateCanonicalPromptTokens(&chatReq)
 			usageSource = "estimated"

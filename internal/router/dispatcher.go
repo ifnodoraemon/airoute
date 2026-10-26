@@ -238,7 +238,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 
 		if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
 			d.circuitBreaker.AbortCanary(ch.Name)
-			return nil, ctx.Err()
+			return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
 		}
 
 		lastErr = err
@@ -277,7 +277,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
 		if fbErr != nil {
 			routerLog(ctx).Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
-			return nil, newExhaustedError(ctx, req.Model, attempted, fmt.Errorf("all %d candidate channels failed for model %s (last error: %v); cannot fallback to %s: %w", len(channels), req.Model, lastErr, fb, fbErr))
+			return nil, newExhaustedError(ctx, req.Model, exhaustedTrail(attempted, skipped), fmt.Errorf("all %d candidate channels failed for model %s (last error: %v); cannot fallback to %s: %w", len(channels), req.Model, lastErr, fb, fbErr))
 		}
 		routerLog(ctx).Warn("all candidate channels failed, triggering cross-model fallback",
 			"requested_model", req.Model,
@@ -290,7 +290,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 	}
 
 	telemetry.GlobalMetrics.RecordRequest(false, 0, 0, 0)
-	return nil, newExhaustedError(ctx, req.Model, attempted, fmt.Errorf("all %d candidate channels failed for model %s. Last error: %w", len(channels), req.Model, lastErr))
+	return nil, newExhaustedError(ctx, req.Model, exhaustedTrail(attempted, skipped), fmt.Errorf("all %d candidate channels failed for model %s. Last error: %w", len(channels), req.Model, lastErr))
 }
 
 func (d *Dispatcher) candidateChannelsForRequest(ctx context.Context, req *model.ChatCompletionRequest, proto string) []*model.ChannelConfig {

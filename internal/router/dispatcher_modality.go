@@ -99,7 +99,7 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 		if err != nil {
 			if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
 				d.circuitBreaker.AbortCanary(ch.Name)
-				return nil, ctx.Err()
+				return nil, newCanceledError(ctx, attempted, ch.Name, model.EstimateTokensFromChars(len(req.Body)))
 			}
 			lastErr = err
 			if provider.IsClientError(err) {
@@ -162,7 +162,7 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 	if lastErr == nil {
 		lastErr = skippedOnlyError(req.Model, skipped)
 	}
-	return nil, newExhaustedError(ctx, req.Model, attempted, fmt.Errorf("all %d providers failed for model '%s'. Last error: %w", len(channels), req.Model, lastErr))
+	return nil, newExhaustedError(ctx, req.Model, exhaustedTrail(attempted, skipped), fmt.Errorf("all %d providers failed for model '%s'. Last error: %w", len(channels), req.Model, lastErr))
 }
 
 // DispatchEmbedding routes an embedding request across matching candidate channels with Circuit Breaking and Safe Fallback.
@@ -209,7 +209,7 @@ func (d *Dispatcher) DispatchEmbedding(ctx context.Context, req *model.Embedding
 		if err != nil {
 			if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
 				d.circuitBreaker.AbortCanary(ch.Name)
-				return nil, ctx.Err()
+				return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
 			}
 			lastErr = err
 			if provider.IsClientError(err) {
@@ -237,7 +237,7 @@ func (d *Dispatcher) DispatchEmbedding(ctx context.Context, req *model.Embedding
 	if lastErr == nil {
 		lastErr = skippedOnlyError(req.Model, skipped)
 	}
-	return nil, newExhaustedError(ctx, req.Model, attempted, fmt.Errorf("all %d providers failed for embedding model '%s'. Last error: %w", len(channels), req.Model, lastErr))
+	return nil, newExhaustedError(ctx, req.Model, exhaustedTrail(attempted, skipped), fmt.Errorf("all %d providers failed for embedding model '%s'. Last error: %w", len(channels), req.Model, lastErr))
 }
 
 // DispatchRerank routes a cross-encoder rerank request across candidate channels with Circuit Breaking and Safe Fallback.
@@ -281,7 +281,7 @@ func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankReques
 		if err != nil {
 			if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
 				d.circuitBreaker.AbortCanary(ch.Name)
-				return nil, ctx.Err()
+				return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
 			}
 			lastErr = err
 			if provider.IsClientError(err) {
@@ -309,5 +309,5 @@ func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankReques
 	if lastErr == nil {
 		lastErr = skippedOnlyError(req.Model, skipped)
 	}
-	return nil, newExhaustedError(ctx, req.Model, attempted, fmt.Errorf("all %d providers failed for rerank model '%s'. Last error: %w", len(channels), req.Model, lastErr))
+	return nil, newExhaustedError(ctx, req.Model, exhaustedTrail(attempted, skipped), fmt.Errorf("all %d providers failed for rerank model '%s'. Last error: %w", len(channels), req.Model, lastErr))
 }

@@ -73,7 +73,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			attemptCancel()
 			if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
 				d.circuitBreaker.AbortCanary(ch.Name)
-				return nil, ctx.Err()
+				return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
 			}
 			// Client syntax/schema errors (400, 422, 413) fail identically on every channel:
 			// do not trip the breaker and do not fan out.
@@ -130,7 +130,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 				timer.Stop()
 				attemptCancel()
 				d.circuitBreaker.AbortCanary(ch.Name)
-				return nil, ctx.Err()
+				return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
 			}
 		}
 		timer.Stop()
@@ -138,7 +138,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			attemptCancel()
 			if ctx.Err() == context.Canceled || errors.Is(firstErr, context.Canceled) {
 				d.circuitBreaker.AbortCanary(ch.Name)
-				return nil, ctx.Err()
+				return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
 			}
 			if isFatalClientPayloadError(firstErr) {
 				d.circuitBreaker.AbortCanary(ch.Name)
@@ -173,7 +173,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
 		if fbErr != nil {
 			routerLog(ctx).Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
-			return nil, newExhaustedError(ctx, req.Model, attempted, fmt.Errorf("all channels failed for stream request on model %s (last error: %v); cannot fallback to %s: %w", req.Model, lastErr, fb, fbErr))
+			return nil, newExhaustedError(ctx, req.Model, exhaustedTrail(attempted, skipped), fmt.Errorf("all channels failed for stream request on model %s (last error: %v); cannot fallback to %s: %w", req.Model, lastErr, fb, fbErr))
 		}
 		routerLog(ctx).Warn("all stream channels failed, triggering cross-model fallback",
 			"requested_model", req.Model,
@@ -185,7 +185,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		return d.DispatchStream(withChannelTrail(nextCtx, attempted), &reqCopy)
 	}
 
-	return nil, newExhaustedError(ctx, req.Model, attempted, fmt.Errorf("all channels failed for stream request on model %s. Last error: %w", req.Model, lastErr))
+	return nil, newExhaustedError(ctx, req.Model, exhaustedTrail(attempted, skipped), fmt.Errorf("all channels failed for stream request on model %s. Last error: %w", req.Model, lastErr))
 }
 
 // pipeStreamEvents pipes events from upstream stream channel to client channel with cancellation guard.

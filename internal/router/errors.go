@@ -25,6 +25,11 @@ type DispatchError struct {
 	Model   string
 	Trail   string // channels actually called, joined with "→"; "" when none
 	NoRoute bool   // true when routing produced no candidate channel
+	// PromptTokens is the estimated prompt size when the failure is a client
+	// cancellation: the request already reached an upstream, so the provider has
+	// consumed (and will bill us for) the prompt even though we got nothing back.
+	// Zero when unknown.
+	PromptTokens int
 
 	Err error
 }
@@ -75,6 +80,36 @@ func newExhaustedError(ctx context.Context, modelName string, attempted []string
 		Trail: formatAttemptedTrail(ctx, attempted),
 		Err:   err,
 	}
+}
+
+// newCanceledError attaches routing context to a request cancellation.
+//
+// When the downstream goes away, the dispatcher used to return the bare
+// ctx.Err(). That error carries no channel, so the audit row had an empty
+// channel column and an operator could not tell which upstream the request was
+// waiting on when the client gave up. The DispatchError keeps errors.Is(err,
+// context.Canceled) working (via Unwrap) while recording the in-flight channel.
+func newCanceledError(ctx context.Context, attempted []string, channel string, promptTokens int) error {
+	cause := context.Canceled
+	if ctx != nil && ctx.Err() != nil {
+		cause = ctx.Err()
+	}
+	return &DispatchError{
+		Trail:        formatChannelTrail(ctx, attempted, channel),
+		PromptTokens: promptTokens,
+		Err:          cause,
+	}
+}
+
+// exhaustedTrail names the channels involved when a dispatch runs out of
+// candidates: normally the ones actually called. When the circuit breaker
+// bypassed every candidate, nothing was "attempted", and the skipped channels
+// are the only attribution an operator can act on.
+func exhaustedTrail(attempted, skipped []string) []string {
+	if len(attempted) > 0 {
+		return attempted
+	}
+	return skipped
 }
 
 // skippedOnlyError explains an exhausted dispatch in which every candidate was

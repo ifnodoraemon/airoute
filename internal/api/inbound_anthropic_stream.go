@@ -92,7 +92,10 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 	var finalCached int
 	var recordOnce sync.Once
 	recordStreamEnd := func(statusCode int) {
-		if statusCode == http.StatusOK {
+		// A client abort still consumed the prompt upstream: the request had been
+		// dispatched before the disconnect, so bill the estimated prompt instead
+		// of recording zero.
+		if statusCode == http.StatusOK || statusCode == statusClientClosed {
 			// Anthropic wire format requires input_tokens on every message. When
 			// the upstream stream omits usage, approximate the prompt from the
 			// request so the audit log does not show a misleading zero.

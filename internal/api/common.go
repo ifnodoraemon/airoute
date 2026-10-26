@@ -332,14 +332,25 @@ func recordFailedRequestWithError(c *gin.Context, sessionID, modelName string, d
 		msg = err.Error()
 		channel = channelFromError(err)
 	}
-	RecordUsage(c, AuditRecordParams{
+	params := AuditRecordParams{
 		SessionID:    sessionID,
 		Model:        modelName,
 		Channel:      channel,
 		Duration:     dur,
 		StatusCode:   statusCode,
 		ErrorMessage: msg,
-	})
+	}
+	// A client that disconnects during dispatch already had its prompt accepted
+	// by the upstream. The dispatcher attaches the request's estimated prompt
+	// size to the cancellation so the provider's cost is not absorbed by us.
+	if statusCode == statusClientClosed {
+		if de, ok := router.AsDispatchError(err); ok && de.PromptTokens > 0 {
+			params.PromptTokens = de.PromptTokens
+			params.TotalTokens = de.PromptTokens
+			params.UsageSource = usageSourceEstimated
+		}
+	}
+	RecordUsage(c, params)
 }
 
 // getAPIKeyConfig returns APIKeyConfig metadata bound to the context.

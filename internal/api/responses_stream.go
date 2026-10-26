@@ -104,7 +104,8 @@ func (h *Handler) handleResponsesStreaming(
 	var streamError error
 
 	recordStreamEnd := func(statusCode int) (float64, float64, int) {
-		if statusCode == http.StatusOK {
+		// A client abort (499) still sent the prompt upstream; estimate it too.
+		if statusCode == http.StatusOK || statusCode == statusClientClosed {
 			if totalPromptTokens == 0 {
 				totalPromptTokens = estimateCanonicalPromptTokens(chatReq)
 			}

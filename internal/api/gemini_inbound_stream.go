@@ -49,7 +49,8 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 
 	var recordOnce sync.Once
 	recordStreamEnd := func(statusCode int) {
-		if statusCode == http.StatusOK {
+		// A client abort (499) still sent the prompt upstream; estimate it too.
+		if statusCode == http.StatusOK || statusCode == statusClientClosed {
 			if totalPromptTokens == 0 {
 				totalPromptTokens = estimateCanonicalPromptTokens(canonicalReq)
 				usageSource = "estimated"

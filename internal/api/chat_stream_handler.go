@@ -65,8 +65,12 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 			if c.Request.Context().Err() != nil {
 				statusCode = 499
 			}
-			if totalCompTokens == 0 && accumulatedCompChars == 0 {
-				totalPromptTokens = 0
+			if totalCompTokens == 0 && accumulatedCompChars == 0 && totalPromptTokens == 0 && approxPromptChars > 0 {
+				// The client left before any output, but the request had already
+				// been dispatched: the upstream consumed the prompt, so bill the
+				// estimate instead of recording a free request.
+				totalPromptTokens = estimateTokens(approxPromptChars)
+				usageSource = usageSourceEstimated
 			}
 		} else {
 			// Fallback token estimation if upstream provider did not report usage on successful completion
