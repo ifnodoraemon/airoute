@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -101,13 +102,24 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 		middleware.GlobalTokenQuota.Consume(cfg.Key, cfg.TPM, totTokens)
 	}
 
-	telemetry.GlobalMetrics.RecordRequestWithModel(
-		params.Model,
-		success,
-		params.Duration,
-		params.PromptTokens,
-		params.CompletionTokens,
-	)
+	// A client that hung up is not a gateway failure: counting it as one inflated
+	// the 5xx rate and hid real upstream problems behind normal mobile aborts.
+	if params.StatusCode == statusClientClosed {
+		telemetry.GlobalMetrics.RecordClientCanceled(
+			params.Model,
+			params.Duration,
+			params.PromptTokens,
+			params.CompletionTokens,
+		)
+	} else {
+		telemetry.GlobalMetrics.RecordRequestWithModel(
+			params.Model,
+			success,
+			params.Duration,
+			params.PromptTokens,
+			params.CompletionTokens,
+		)
+	}
 
 	// The dashboard's live throughput meter is normally fed by the streaming
 	// delta hooks. Non-streaming requests have no deltas, so their tokens are
@@ -142,6 +154,10 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 		StatusCode:       params.StatusCode,
 		UsageSource:      params.UsageSource,
 		ErrorMessage:     params.ErrorMessage,
+		// Stamp the moment the request finished. Leaving it zero made the writer
+		// use the flush time, so a batch of slow requests aborted together all
+		// shared one timestamp and their real order was lost.
+		CreatedAt: time.Now(),
 	}
 
 	// Settle the charge now, independently of the audit pipeline. A failure here
@@ -509,6 +525,20 @@ func resolveUpstreamFailureStatus(err error) (statusCode int, errType string, er
 
 	if err == nil {
 		return statusCode, errType, errCode, channel
+	}
+
+	// The request context being canceled means the *downstream* went away (browser
+	// tab closed, mobile network drop, client timeout): the dispatcher returns
+	// ctx.Err() as soon as it observes it. Reporting that as a 502 upstream
+	// failure blamed the provider for the client's behaviour and made every abort
+	// count against the gateway's error budget.
+	if errors.Is(err, context.Canceled) {
+		return statusClientClosed, "client_closed_request", "client_canceled", channel
+	}
+	// A deadline that we or the transport imposed, on the other hand, is a
+	// gateway-side timeout.
+	if errors.Is(err, context.DeadlineExceeded) {
+		return http.StatusGatewayTimeout, "gateway_error", "upstream_timeout", channel
 	}
 
 	// Routing knows for certain when a model maps to no candidate channel at

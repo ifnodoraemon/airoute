@@ -13,7 +13,11 @@ type Metrics struct {
 	SuccessfulRequests atomic.Uint64
 	FailedRequests     atomic.Uint64
 	FallbackRequests   atomic.Uint64
-	ActiveConnections  atomic.Int64
+	// ClientCanceledRequests counts requests the downstream abandoned. They are
+	// neither success nor failure: a client hanging up must not inflate the
+	// gateway error rate (it used to be recorded as a 502 upstream failure).
+	ClientCanceledRequests atomic.Uint64
+	ActiveConnections      atomic.Int64
 
 	TotalPromptTokens     atomic.Uint64
 	TotalCompletionTokens atomic.Uint64
@@ -99,10 +103,28 @@ func (m *Metrics) DecActiveConns() {
 
 // RecordRequestWithModel records a completed request with its model, duration and token count.
 func (m *Metrics) RecordRequestWithModel(modelName string, success bool, dur time.Duration, promptTokens, completionTokens int) {
-	m.TotalRequests.Add(1)
+	outcome := "failed"
 	if success {
+		outcome = "success"
+	}
+	m.recordRequestStats(modelName, outcome, dur, promptTokens, completionTokens)
+}
+
+// RecordClientCanceled records a request the downstream abandoned (client closed
+// before the gateway finished). It counts toward total requests and latency but
+// not toward failures.
+func (m *Metrics) RecordClientCanceled(modelName string, dur time.Duration, promptTokens, completionTokens int) {
+	m.recordRequestStats(modelName, "canceled", dur, promptTokens, completionTokens)
+}
+
+func (m *Metrics) recordRequestStats(modelName, outcome string, dur time.Duration, promptTokens, completionTokens int) {
+	m.TotalRequests.Add(1)
+	switch outcome {
+	case "success":
 		m.SuccessfulRequests.Add(1)
-	} else {
+	case "canceled":
+		m.ClientCanceledRequests.Add(1)
+	default:
 		m.FailedRequests.Add(1)
 	}
 	m.TotalPromptTokens.Add(uint64(promptTokens))
@@ -134,10 +156,7 @@ func (m *Metrics) RecordRequestWithModel(modelName string, success bool, dur tim
 		if _, exists := m.modelRequests[cleanModel]; !exists && len(m.modelRequests) >= 500 {
 			cleanModel = "_unrecognized"
 		}
-		statusKey := "failed"
-		if success {
-			statusKey = "success"
-		}
+		statusKey := outcome
 		if m.modelRequests[cleanModel] == nil {
 			m.modelRequests[cleanModel] = make(map[string]uint64)
 		}

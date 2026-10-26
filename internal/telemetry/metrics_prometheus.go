@@ -63,6 +63,10 @@ func (m *Metrics) ToPrometheusFormat() string {
 	sb.WriteString("# TYPE airoute_requests_failed_total counter\n")
 	sb.WriteString(fmt.Sprintf("airoute_requests_failed_total %d\n", m.FailedRequests.Load()))
 
+	sb.WriteString("# HELP airoute_requests_client_canceled_total Requests abandoned by the downstream\n")
+	sb.WriteString("# TYPE airoute_requests_client_canceled_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_requests_client_canceled_total %d\n", m.ClientCanceledRequests.Load()))
+
 	sb.WriteString("# HELP airoute_fallback_total Total channel fallback events\n")
 	sb.WriteString("# TYPE airoute_fallback_total counter\n")
 	sb.WriteString(fmt.Sprintf("airoute_fallback_total %d\n", m.FallbackRequests.Load()))

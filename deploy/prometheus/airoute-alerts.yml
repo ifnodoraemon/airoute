@@ -114,6 +114,17 @@ groups:
           summary: "网关 5 分钟失败率 > 1%"
           description: "当前失败率 {{ $value | humanizePercentage }}。结合 router 日志的 trace_id 定位失败渠道。"
 
+      - alert: AirouteClientCancelSpike
+        expr: sum(rate(airoute_requests_client_canceled_total[5m])) > 2
+        labels:
+          severity: warning
+          component: gateway
+        annotations:
+          summary: "客户端主动断连激增"
+          description: >-
+            5 分钟内平均 {{ $value }}/s 的请求被下游放弃（499）。这类请求不算网关失败，
+            但持续升高通常意味着客户端超时设置过短或上游首 token 过慢。
+
       - alert: AirouteLatencyP99High
         expr: airoute_latency_p99_ms > 30000
         labels:

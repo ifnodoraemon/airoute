@@ -203,6 +203,34 @@
 
 ---
 
+## 四之三、客户端断连被误判为上游故障（2026-10-26 修复）
+
+排障时发现审计里 259 条 `502 / context canceled`：
+
+- 全部 `channel` 为空、`prompt/completion = 0`、`cost = 0`；
+- 复现方式：流式请求在**首个 token 之前**断开（`curl -m 0.3`），必现 502 + `context canceled`；
+- 代码原因：`dispatcher` 在 `ctx.Err() == context.Canceled` 时返回 `ctx.Err()`，而
+  `resolveUpstreamFailureStatus` 没有识别取消，落到了兜底的 `502 upstream_failure`。
+
+**这是客户端（或其 HTTP 超时/进程退出）主动断开，不是上游问题**，但被记成 502 造成三个后果：
+把责任归给上游、污染 5xx 率/错误预算、让历史故障复盘把客户端断连算进上游故障。
+
+修复：
+
+1. `context.Canceled` → **499 `client_closed_request` / `client_canceled`**；
+   `context.DeadlineExceeded` → 504 `upstream_timeout`；
+2. 新增 `airoute_requests_client_canceled_total`，499 不再计入 `requests_failed_total`，
+   控制台的服务端错误统计也随之只反映真实 5xx；
+3. 迁移 v24 把历史 260 条误标行改回 499（`error_message = 'context canceled'` 且 502）；
+4. 审计时间戳改为**请求完成时刻**（此前为零值，写入器用 flush 时刻兜底，导致同一批被取消的
+   8 个请求时间戳完全相同、真实先后顺序丢失）。
+
+**线上验证**：迁移后今天的 502 只剩 1 条——真正上游首 token 超时
+（`channel 罗总 timed out waiting for first token (30s)`，41.4s）；9 条为客户端断连（499）。
+新复现请求记录为 499，且 `client_canceled_total` 增长、`requests_failed_total` 不变。
+
+---
+
 ## 五、部署与遗留
 
 本次修复通过 `scripts/docker-rebuild.sh` 滚动发布（两副本依次重建 + 健康检查），并已验证：
