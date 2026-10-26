@@ -31,7 +31,7 @@ func NewDispatcher(channels []model.ChannelConfig) *Dispatcher {
 		channels:       channels,
 		providers:      make(map[model.ProviderType]provider.Provider),
 		wrrWeights:     make(map[string]int),
-		circuitBreaker: NewCircuitBreaker(3, 30*time.Second),
+		circuitBreaker: newConfiguredCircuitBreaker(),
 		modelFallbacks: make(map[string]string),
 	}
 

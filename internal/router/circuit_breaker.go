@@ -170,6 +170,25 @@ type CircuitBreaker struct {
 	successThreshold int
 	maxCanaryProbes  int
 	cooldownDuration time.Duration
+	// disabled keeps the breaker advisory: state is still recorded for operators,
+	// but it never rejects traffic. With a single upstream channel there is nothing
+	// to fail over to, so opening the circuit only converts upstream errors into a
+	// self-inflicted blackout.
+	disabled bool
+}
+
+// SetDisabled turns the breaker into an advisory-only recorder.
+func (cb *CircuitBreaker) SetDisabled(disabled bool) {
+	cb.mu.Lock()
+	cb.disabled = disabled
+	cb.mu.Unlock()
+}
+
+// Disabled reports whether the breaker may reject traffic.
+func (cb *CircuitBreaker) Disabled() bool {
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
+	return cb.disabled
 }
 
 // NewCircuitBreaker creates a circuit breaker instance with tunable thresholds.
@@ -222,6 +241,9 @@ func (cb *CircuitBreaker) CanExecute(name string) bool {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
+	if cb.disabled {
+		return true
+	}
 	status := cb.getOrCreateStatusLocked(name)
 	return status.handler.CanExecute(status, cb, time.Now())
 }
@@ -267,6 +289,9 @@ func (cb *CircuitBreaker) RecordFailure(name string) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
+	if cb.disabled {
+		return
+	}
 	status := cb.getOrCreateStatusLocked(name)
 	status.handler.RecordFailure(status, cb, time.Now())
 }

@@ -98,6 +98,13 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 	var isOffPeak bool
 	var offPeakDiscount float64 = 1.0
 	keyGroup := getKeyGroup(c)
+	// A unary request whose customer has gone away is still billed (the provider
+	// did the work) but recorded as 499 rather than a success: the status must say
+	// what actually happened, independent of the billing decision.
+	if c != nil && c.Request != nil && c.Request.Context().Err() != nil &&
+		params.StatusCode >= 200 && params.StatusCode < 400 {
+		params.StatusCode = statusClientClosed
+	}
 	success := params.StatusCode >= 200 && params.StatusCode < 400
 
 	// Billing is decoupled from the audit status: a streaming client that

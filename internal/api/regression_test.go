@@ -116,7 +116,10 @@ func TestIsChannelFailureClassification(t *testing.T) {
 		{401, true, false},
 		{403, true, false},
 		{408, true, false},
-		{429, true, false},
+		// 429 is backpressure from a healthy upstream, not an outage: tripping the
+		// breaker on it replaces the actionable rate-limit response with gateway
+		// 502s for the whole cooldown window.
+		{429, false, false},
 		{500, true, false},
 		{502, true, false},
 		{503, true, false},

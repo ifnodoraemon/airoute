@@ -80,7 +80,7 @@ func IsChannelFailure(err error) bool {
 		switch {
 		case ue.Status == 401 || ue.Status == 403:
 			return true
-		case ue.Status == 408 || ue.Status == 429:
+		case ue.Status == 408:
 			return true
 		case ue.Status >= 500:
 			return true

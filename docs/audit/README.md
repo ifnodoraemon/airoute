@@ -289,6 +289,41 @@ tr-drain-002       499     罗总      39        300     0.001239    upstream   
 
 ---
 
+## 四之六、熔断器在单渠道下为什么有害（已改为 advisory）
+
+现象：线上只有 `罗总` 一条 active 渠道（`gpustack-cluster` 已 disabled），但日志里仍出现
+`circuit breaker TRIPPED`，以及大量 `all 1 candidate channels failed ... skipped` 的 502
+（10-22/23 共 736 条）。
+
+原因：熔断器原本是为**多渠道 failover** 设计的——某个渠道连续失败就先摘掉它、把流量交给备用渠道。
+但单渠道时没有"备用"可交，摘掉自己只意味着：
+
+1. **限流被误判为故障**：`provider.IsChannelFailure` 把 429 当作渠道故障。上游限流是**健康的背压信号**，
+   连续 3 次就把熔断打开 30 秒 → 之后所有请求在网关侧直接 502，**连上游都不调**；
+   客户拿到的不是可退避重试的 429，而是 502，且这 30 秒是自伤式黑洞。
+2. **抖动放大**：任何 3 次连续超时（包括我们自己 30s 首 token 超时）都会触发 30 秒不可用。
+
+修复：
+
+| 改动 | 说明 |
+|---|---|
+| 429 不再计入渠道故障 | 限流 → 直接透传 429（带 `Retry-After` 语义）给客户，可正常退避；仍会尝试下一条渠道 |
+| 熔断器支持 advisory 模式 | `GATEWAY_BREAKER_ENABLED=false`：**记录状态但不拦截流量**，只有一条渠道时启用 |
+| 参数可配 | `GATEWAY_BREAKER_FAILURES`（默认 3）、`GATEWAY_BREAKER_COOLDOWN_SEC`（默认 30） |
+
+线上当前配置（`.env`）：
+
+```
+GATEWAY_BREAKER_ENABLED=false     # 单渠道：只记录，不拦截
+GATEWAY_DRAIN_ABORTED_UPSTREAM=true
+GATEWAY_DRAIN_TIMEOUT_SEC=120
+```
+
+启动日志会明确提示 `circuit breaker runs in advisory mode`。等新增第二条渠道、真正需要 failover 时，
+把它改回 `true` 即可恢复拦截能力（429 不计故障的规则仍然适用）。
+
+---
+
 ## 五、部署与遗留
 
 本次修复通过 `scripts/docker-rebuild.sh` 滚动发布（两副本依次重建 + 健康检查），并已验证：
