@@ -11,7 +11,6 @@ export default function AnnouncementModal({
   onPublished
 }) {
   const isZh = lang === 'zh';
-  const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [level, setLevel] = useState('info');
@@ -21,7 +20,6 @@ export default function AnnouncementModal({
   useEffect(() => {
     if (!isOpen) return;
     const fetchConfig = async () => {
-      setLoading(true);
       try {
         const fetcher = adminFetch || apiFetch;
         const res = await fetcher('/api/v1/admin/announcement/config');
@@ -37,8 +35,6 @@ export default function AnnouncementModal({
         }
       } catch (e) {
         showToast?.(isZh ? '加载公告配置失败' : 'Failed to load announcement config', 'error');
-      } finally {
-        setLoading(false);
       }
     };
     fetchConfig();

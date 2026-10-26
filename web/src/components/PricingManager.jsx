@@ -13,9 +13,7 @@ import {
   ArrowRight,
   Layers,
   Percent,
-  Sliders,
-  Settings2,
-  Tag
+  Sliders
 } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
 

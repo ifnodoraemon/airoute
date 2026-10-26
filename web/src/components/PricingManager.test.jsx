@@ -194,7 +194,7 @@ describe('PricingManager off-peak display', () => {
   });
 
   it('renders the group discount tiers tab and displays group multipliers', async () => {
-    const { adminFetch } = renderPricing([standardRow], {
+    renderPricing([standardRow], {
       group_multipliers: { default: 1.0, vip: 0.8, enterprise: 1.5 }
     });
 

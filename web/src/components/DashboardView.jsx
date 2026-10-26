@@ -14,7 +14,6 @@ import {
   AlertCircle,
   FileText,
   Flame,
-  Key,
   Gauge,
   X,
   Sliders
@@ -77,11 +76,6 @@ export default function DashboardView({
       try { localStorage.setItem('airoute_dismissed_attention', JSON.stringify(next)); } catch {}
       return next;
     });
-  };
-
-  const handleResetDismissed = () => {
-    setDismissedAttentions([]);
-    try { localStorage.removeItem('airoute_dismissed_attention'); } catch {}
   };
 
   const [recentLogs, setRecentLogs] = useState([]);
@@ -154,6 +148,9 @@ export default function DashboardView({
     fetchRecentLogs(k);
   };
 
+  // Keyed on the prop on purpose: adding selectedKey or the fetch callbacks
+  // would re-run this sync after a local key selection and snap the selection
+  // back to the prop value.
   useEffect(() => {
     if (propSelectedKey !== undefined && propSelectedKey !== selectedKey) {
       setSelectedKey(propSelectedKey);
@@ -161,6 +158,7 @@ export default function DashboardView({
       fetchDrilldownStats(propSelectedKey);
       fetchRecentLogs(propSelectedKey);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [propSelectedKey]);
 
   useEffect(() => {

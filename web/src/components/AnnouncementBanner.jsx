@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Megaphone, AlertTriangle, AlertCircle, Info, X } from 'lucide-react';
+import { AlertTriangle, AlertCircle, Info, X } from 'lucide-react';
 import { apiFetch } from '../api/client';
 
 export default function AnnouncementBanner({ lang = 'zh', adminFetch }) {
