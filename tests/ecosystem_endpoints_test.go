@@ -62,7 +62,9 @@ func TestModelDetailEndpoint(t *testing.T) {
 	}
 }
 
-func TestModerationsEndpoint(t *testing.T) {
+func TestModerationsStubEndpoint(t *testing.T) {
+	// Synthetic verdicts are available only when explicitly enabled for tests.
+	t.Setenv("GATEWAY_MODERATION_STUB", "true")
 	dispatcher := router.NewDispatcher(nil)
 	handler := api.NewHandler(dispatcher)
 

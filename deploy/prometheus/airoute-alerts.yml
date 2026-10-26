@@ -1,0 +1,152 @@
+# Prometheus alerting rules for the Airoute gateway.
+#
+# Load with:
+#   rule_files:
+#     - /etc/prometheus/rules/airoute-alerts.yml
+#
+# Every rule below is backed by a metric that this repository actually exports on
+# GET /metrics. The billing rules exist because the audit showed the costly
+# failures were all silent: a dropped usage row, a replayed stream message, or a
+# wallet driven negative produced no signal at all.
+groups:
+  - name: airoute-billing-integrity
+    rules:
+      - alert: AirouteBillingRecordsDropped
+        expr: increase(airoute_usage_log_records_dropped_total[5m]) > 0
+        labels:
+          severity: critical
+          component: billing
+        annotations:
+          summary: "计费流水被丢弃（收入可能已损失）"
+          description: >-
+            {{ $labels.instance }} 在 5 分钟内有 {{ $value }} 条计费/审计记录被丢弃。
+            billing_id 幂等可防重复扣款，但被丢弃的记录无法补收。检查数据库可用性与
+            GATEWAY_USAGE_SPILL_DIR（磁盘兜底是否可以写入）。
+
+      - alert: AirouteBillingSpillingToDisk
+        expr: increase(airoute_usage_log_records_spilled_total[10m]) > 0
+        labels:
+          severity: warning
+          component: billing
+        annotations:
+          summary: "计费流水已降级落盘（数据未丢）"
+          description: >-
+            {{ $labels.instance }} 把 {{ $value }} 条记录写入了本地 spill 文件，说明
+            Redis / 内存队列 / 数据库至少有一个不可用。记录会在下次启动时重放，
+            但请尽快恢复管道；同时确认 spill 目录不会被填满。
+
+      - alert: AirouteBillingSpillReplayFailed
+        expr: increase(airoute_usage_log_spill_replay_failures_total[1h]) > 0
+        labels:
+          severity: critical
+          component: billing
+        annotations:
+          summary: "spill 文件存在无法解析的记录（已无法补收）"
+          description: "{{ $labels.instance }} 有 {{ $value }} 行 spill 记录损坏，需要人工核对上游账单。"
+
+      - alert: AirouteBillingDuplicateDelivery
+        expr: increase(airoute_billing_duplicates_skipped_total[15m]) > 0
+        labels:
+          severity: warning
+          component: billing
+        annotations:
+          summary: "Redis Stream 发生重复投递（已幂等拦截）"
+          description: >-
+            {{ $labels.instance }} 在 15 分钟内拦截了 {{ $value }} 次重复投递。
+            偶发正常；持续出现说明消费者无法 XACK（Redis 连接抖动 / 消费者被杀）。
+
+      - alert: AirouteBillingOverdraft
+        expr: increase(airoute_billing_overdrafts_total[15m]) > 0
+        labels:
+          severity: warning
+          component: billing
+        annotations:
+          summary: "有账户被透支扣费"
+          description: >-
+            {{ $labels.instance }} 有 {{ $value }} 笔扣费把余额扣成负数（已钳制在
+            GATEWAY_MAX_OVERDRAFT_CNY）。检查是否需要在途预留估算过小。
+
+      - alert: AirouteBillingLedgerDrift
+        expr: airoute_billing_ledger_drift_units > 1000000000
+        labels:
+          severity: critical
+          component: billing
+        annotations:
+          summary: "key 账本与审计流水不一致（> 1 元）"
+          description: >-
+            api_keys.used_cost_units 与 SUM(usage_logs.cost_units) 相差
+            {{ $value }} 个 1e-9 单位。可能原因：历史迁移遗留、流水被删除、写路径异常。
+
+      - alert: AirouteBillingWalletMirrorDrift
+        expr: airoute_billing_wallet_drift_units > 1000000
+        labels:
+          severity: warning
+          component: billing
+        annotations:
+          summary: "用户余额的浮点镜像与整数账本漂移"
+          description: "balance_units 与 ROUND(balance*1e9) 相差 {{ $value }} 个 1e-9 单位。"
+
+  - name: airoute-throughput
+    rules:
+      - alert: AirouteHighErrorRate
+        expr: |
+          sum(rate(airoute_requests_total[5m]))
+            > 0
+          and
+          sum(rate(airoute_requests_failed_total[5m]))
+            / sum(rate(airoute_requests_total[5m])) > 0.01
+        labels:
+          severity: critical
+          component: gateway
+        annotations:
+          summary: "网关 5 分钟失败率 > 1%"
+          description: "当前失败率 {{ $value | humanizePercentage }}。结合 router 日志的 trace_id 定位失败渠道。"
+
+      - alert: AirouteLatencyP99High
+        expr: airoute_latency_p99_ms > 30000
+        labels:
+          severity: warning
+          component: gateway
+        annotations:
+          summary: "网关 p99 时延 > 30s"
+          description: "p99 = {{ $value }}ms。优先检查上游渠道时延与熔断状态。"
+
+      - alert: AirouteFallbackStorm
+        expr: sum(rate(airoute_fallback_total[5m])) > 5
+        labels:
+          severity: warning
+          component: gateway
+        annotations:
+          summary: "上游 fallback 频繁"
+          description: "5 分钟内平均 {{ $value }}/s 次 fallback，通常意味着首选渠道限流或故障。"
+
+  - name: airoute-pipeline-capacity
+    rules:
+      - alert: AirouteUsageLogQueueBacklog
+        expr: airoute_usage_log_queue_depth > 1000
+        labels:
+          severity: critical
+          component: billing
+        annotations:
+          summary: "计费队列积压"
+          description: "本地缓冲积压 {{ $value }} 条，继续增长会触发磁盘兜底并推高请求完成时延。"
+
+      - alert: AirouteUsageLogFlushFailing
+        expr: increase(airoute_usage_log_flush_failures_total[5m]) > 0
+        labels:
+          severity: critical
+          component: billing
+        annotations:
+          summary: "计费批量写入失败"
+          description: "{{ $value }} 次写入失败。连续失败会触发落盘兜底，请同时确认数据库连接数。"
+
+      - alert: AirouteAllocationActiveConnectionsHigh
+        expr: airoute_active_connections > 400
+        labels:
+          severity: warning
+          component: gateway
+        annotations:
+          summary: "并发连接接近 ulimit 上限"
+          description: >-
+            当前 {{ $value }} 路并发。单副本 fd 上限为 65536，但真正受限的是
+            CPU（每请求约 60ms）与上游配额，超过 400 路应评估扩容。

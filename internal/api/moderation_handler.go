@@ -5,11 +5,26 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/router"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
+
+// moderationStubEnabled reports whether the synthetic "everything is safe"
+// response is allowed. It is opt-in on purpose: a fabricated verdict silently
+// defeats any downstream content filtering, so it must never be the default.
+func moderationStubEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("GATEWAY_MODERATION_STUB"))) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
+}
 
 // ModerationRequest represents the OpenAI moderation request body.
 type ModerationRequest struct {
@@ -84,6 +99,29 @@ func (h *Handler) HandleModerations(c *gin.Context) {
 			resp.Stream.Close()
 		}
 	}
+
+	if !moderationStubEnabled() {
+		// Returning a synthetic "everything is safe" verdict is a safety hazard:
+		// a caller that trusts this endpoint to filter content would silently
+		// receive "unflagged" for every input, with plausible-looking scores and
+		// an HTTP 200. Refuse explicitly instead, and say how to fix it.
+		telemetry.ScopedLogger("system").Warn("moderation request rejected: no moderation channel configured",
+			"model", modModel)
+		c.Set(middleware.ContextKeyErrorMessage, "moderation_not_configured")
+		c.JSON(http.StatusNotImplemented, gin.H{
+			"error": gin.H{
+				"message": "No moderation provider is configured on this gateway. A synthetic verdict is not returned; add a channel that handles the 'moderation' protocol.",
+				"type":    "invalid_request_error",
+				"code":    "moderation_not_configured",
+			},
+		})
+		return
+	}
+
+	// Development-only escape hatch, enabled explicitly with GATEWAY_MODERATION_STUB.
+	telemetry.WarnLogger(telemetry.ScopedLogger("system"), "moderation-stub", 5*time.Minute,
+		"returning synthetic moderation verdict; GATEWAY_MODERATION_STUB is enabled",
+		"model", modModel)
 
 	var results []ModerationResult
 	for range inputs {
