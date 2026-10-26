@@ -155,6 +155,11 @@ type UsageLogRecord struct {
 	// genuine requests, so a unique index on it would break billing. A retried
 	// Redis stream delivery carries the same BillingID and is applied once.
 	BillingID string `json:"billing_id,omitempty"`
+	// Settled marks a record whose wallet movement has already been applied
+	// synchronously. The async writer skips the settlement for those rows; the
+	// settlement ledger's unique key is the actual guarantee, this is only an
+	// optimisation that avoids a redundant conflict probe.
+	Settled bool `json:"settled,omitempty"`
 }
 
 // LogFilter defines search/filtering criteria for usage audit logs.

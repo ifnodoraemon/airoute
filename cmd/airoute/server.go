@@ -164,6 +164,10 @@ func runServer(args []string) {
 	// Initialize Real-Time Model Pricing & Prompt-Cache Billing Engine
 	billing.InitGlobalEngine(repo)
 
+	// Enable synchronous charge settlement: money moves at request completion and
+	// no longer waits for the audit log to be persisted.
+	storage.InitBillingSettlement(repo)
+
 	// Initialize redacted request/response trace archiving for troubleshooting
 	traceCapture := storage.InitTraceCapture(repo)
 	defer traceCapture.Stop()

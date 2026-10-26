@@ -104,6 +104,14 @@ func (m *Metrics) ToPrometheusFormat() string {
 	sb.WriteString("# TYPE airoute_billing_overdrafts_total counter\n")
 	sb.WriteString(fmt.Sprintf("airoute_billing_overdrafts_total %d\n", m.BillingOverdrafts.Load()))
 
+	sb.WriteString("# HELP airoute_billing_settled_synchronously_total Charges applied before the audit row was written\n")
+	sb.WriteString("# TYPE airoute_billing_settled_synchronously_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_billing_settled_synchronously_total %d\n", m.BillingSettledSynchronously.Load()))
+
+	sb.WriteString("# HELP airoute_billing_settlements_deferred_total Charges deferred to the async pipeline\n")
+	sb.WriteString("# TYPE airoute_billing_settlements_deferred_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_billing_settlements_deferred_total %d\n", m.BillingSettlementsDeferred.Load()))
+
 	sb.WriteString("# HELP airoute_usage_log_records_spilled_total Billing records written to the local spill file\n")
 	sb.WriteString("# TYPE airoute_usage_log_records_spilled_total counter\n")
 	sb.WriteString(fmt.Sprintf("airoute_usage_log_records_spilled_total %d\n", m.UsageLogRecordsSpilled.Load()))
@@ -119,6 +127,10 @@ func (m *Metrics) ToPrometheusFormat() string {
 	sb.WriteString("# HELP airoute_billing_wallet_drift_units Absolute balance-mirror drift in 1e-9 units\n")
 	sb.WriteString("# TYPE airoute_billing_wallet_drift_units gauge\n")
 	sb.WriteString(fmt.Sprintf("airoute_billing_wallet_drift_units %d\n", m.BillingWalletDriftUnits.Load()))
+
+	sb.WriteString("# HELP airoute_billing_audit_lag_units Absolute settlement-vs-audit difference in 1e-9 units\n")
+	sb.WriteString("# TYPE airoute_billing_audit_lag_units gauge\n")
+	sb.WriteString(fmt.Sprintf("airoute_billing_audit_lag_units %d\n", m.BillingAuditLagUnits.Load()))
 
 	sb.WriteString("# HELP airoute_ttft_avg_ms Average Time To First Token in milliseconds\n")
 	sb.WriteString("# TYPE airoute_ttft_avg_ms gauge\n")

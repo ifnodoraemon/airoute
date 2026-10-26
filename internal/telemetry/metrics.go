@@ -34,6 +34,12 @@ type Metrics struct {
 	// account was served on credit). Sustained non-zero means the in-flight
 	// reserve is too small for the prompts being served.
 	BillingOverdrafts atomic.Uint64
+	// BillingSettledSynchronously counts charges applied at request completion,
+	// before the audit row was written.
+	BillingSettledSynchronously atomic.Uint64
+	// BillingSettlementsDeferred counts charges that fell back to the async
+	// pipeline because the synchronous settlement could not run.
+	BillingSettlementsDeferred atomic.Uint64
 
 	// UsageLogRecordsSpilled counts billing records written to the local
 	// append-only spill file because no queue accepted them. Any non-zero value
@@ -48,6 +54,11 @@ type Metrics struct {
 	// BillingWalletDriftUnits is the absolute difference between users.balance_units
 	// and its float mirror, refreshed by the reconciliation worker.
 	BillingWalletDriftUnits atomic.Int64
+	// BillingAuditLagUnits is the absolute difference between the settlement
+	// ledger (money actually moved) and the audit rows. It is expected to be
+	// non-zero briefly while an audit write is retried; a sustained value means
+	// audit rows are being lost while charges still settle.
+	BillingAuditLagUnits atomic.Int64
 
 	// Latency & TTFT tracking
 	mu             sync.RWMutex

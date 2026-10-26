@@ -13,6 +13,11 @@ import (
 
 const (
 	defaultBillingReconcileHours = 6
+	// A rolling deploy leaves a window where the previous binary still writes
+	// audit rows without settlement rows (it predates the ledger). Those gaps are
+	// repaired by inserting the missing ledger rows, a few hundred per pass.
+	billingSettlementRepairBatch = 500
+	billingSettlementRepairGrace = 5 * time.Minute
 	// Do not compete with migrations and the boot-time hot reload.
 	billingReconcileStartupDelay = 3 * time.Minute
 	billingReconcileDriftLimit   = 500
@@ -95,6 +100,12 @@ func (b *BillingReconciler) worker() {
 // runOnce recomputes both drift gauges. It never mutates balances: reconciliation
 // reports, a human decides.
 func (b *BillingReconciler) runOnce() {
+	if repaired, err := b.repairSettlementGap(); err != nil {
+		telemetry.ScopedLogger("billing").Warn("settlement gap repair failed", "error", err.Error())
+	} else if repaired > 0 {
+		telemetry.ScopedLogger("billing").Info("repaired settlement ledger gaps", "records", repaired)
+	}
+
 	ledgerDrift, ledgerKeys, err := b.ledgerDrift()
 	if err != nil {
 		telemetry.ScopedLogger("billing").Error("billing reconciliation failed", "stage", "ledger", "error", err.Error())
@@ -105,9 +116,15 @@ func (b *BillingReconciler) runOnce() {
 		telemetry.ScopedLogger("billing").Error("billing reconciliation failed", "stage", "wallet", "error", err.Error())
 		return
 	}
+	auditLag, err := b.auditLag()
+	if err != nil {
+		telemetry.ScopedLogger("billing").Error("billing reconciliation failed", "stage", "audit", "error", err.Error())
+		return
+	}
 
 	telemetry.GlobalMetrics.BillingLedgerDriftUnits.Store(ledgerDrift)
 	telemetry.GlobalMetrics.BillingWalletDriftUnits.Store(walletDrift)
+	telemetry.GlobalMetrics.BillingAuditLagUnits.Store(auditLag)
 
 	if ledgerDrift != 0 || walletDrift != 0 {
 		telemetry.WarnLogger(telemetry.ScopedLogger("billing"), "billing-reconcile-drift", 6*time.Hour,
@@ -117,24 +134,79 @@ func (b *BillingReconciler) runOnce() {
 			"keys_with_drift", ledgerKeys,
 		)
 	}
+	if auditLag != 0 {
+		telemetry.WarnLogger(telemetry.ScopedLogger("billing"), "billing-audit-lag", 6*time.Hour,
+			"settlement ledger and audit trail disagree",
+			"audit_lag_cny", FromUnits(auditLag),
+		)
+	}
+}
+
+// repairSettlementGap inserts settlement rows for audit rows that have none.
+//
+// A rolling deploy is the normal source: the previous binary writes usage rows
+// (and moves wallets) but knows nothing about the settlement ledger, so those
+// charges appear as "audit without settlement". Re-recording them is safe and
+// idempotent: the ledger row only states that the charge was already applied,
+// and the wallet was moved by the process that wrote the audit row. Rows newer
+// than the grace window are skipped so in-flight writes are not raced.
+func (b *BillingReconciler) repairSettlementGap() (int, error) {
+	cutoff := time.Now().Add(-billingSettlementRepairGrace).UTC().Format(sqliteTimestampLayout)
+	query := b.repo.db.Rebind(`INSERT INTO billing_settlements (billing_id, api_key, tenant_id, cost_units, total_tokens, created_at)
+		SELECT l.billing_id, COALESCE(l.api_key, ''), COALESCE(l.tenant_id, ''), l.cost_units, l.total_tokens, l.created_at
+		FROM usage_logs l
+		WHERE l.billing_id IS NOT NULL AND l.billing_id <> ''
+		  AND (l.cost_units <> 0 OR l.total_tokens <> 0)
+		  AND l.created_at < ?
+		  AND NOT EXISTS (SELECT 1 FROM billing_settlements s WHERE s.billing_id = l.billing_id)
+		LIMIT ?
+		ON CONFLICT (billing_id) DO NOTHING`)
+	res, err := b.repo.db.Exec(query, cutoff, billingSettlementRepairBatch)
+	if err != nil {
+		return 0, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return 0, nil
+	}
+	return int(affected), nil
 }
 
 // ledgerDrift is the absolute difference, summed over keys, between the key's
-// used_cost_units and the cost recorded in usage_logs.
+// used_cost_units and the charges actually settled for that key.
+//
+// It compares against the settlement ledger rather than usage_logs because the
+// two are now written separately: audit rows may lag a settlement by a retry,
+// which is a pipeline symptom, not a money error. The settlement-vs-audit gap is
+// reported separately by auditLag.
 func (b *BillingReconciler) ledgerDrift() (int64, int, error) {
-	drifts, err := b.repo.ReconcileMoney(billingReconcileDriftLimit)
-	if err != nil {
-		return 0, 0, err
-	}
+	query := `SELECT COUNT(*), COALESCE(SUM(CASE WHEN COALESCE(k.used_cost_units, 0) >= COALESCE(s.settled, 0)
+			THEN COALESCE(k.used_cost_units, 0) - COALESCE(s.settled, 0)
+			ELSE COALESCE(s.settled, 0) - COALESCE(k.used_cost_units, 0) END), 0)
+		FROM api_keys k
+		LEFT JOIN (SELECT api_key, SUM(cost_units) AS settled FROM billing_settlements GROUP BY api_key) s ON s.api_key = k.key
+		WHERE COALESCE(k.used_cost_units, 0) <> COALESCE(s.settled, 0)`
+	var keys int
 	var total int64
-	for _, drift := range drifts {
-		if drift.Difference < 0 {
-			total -= drift.Difference
-		} else {
-			total += drift.Difference
-		}
+	if err := b.repo.db.QueryRow(query).Scan(&keys, &total); err != nil {
+		return 0, 0, fmt.Errorf("ledger drift query: %w", err)
 	}
-	return total, len(drifts), nil
+	return total, keys, nil
+}
+
+// auditLag is the absolute difference between the total settled and the total
+// recorded in the audit trail.
+func (b *BillingReconciler) auditLag() (int64, error) {
+	query := `SELECT COALESCE((SELECT SUM(cost_units) FROM billing_settlements), 0)
+		- COALESCE((SELECT SUM(cost_units) FROM usage_logs), 0)`
+	var lag int64
+	if err := b.repo.db.QueryRow(query).Scan(&lag); err != nil {
+		return 0, fmt.Errorf("audit lag query: %w", err)
+	}
+	if lag < 0 {
+		lag = -lag
+	}
+	return lag, nil
 }
 
 // walletMirrorDrift is the absolute difference between each user's balance_units

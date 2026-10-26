@@ -77,6 +77,18 @@ groups:
             api_keys.used_cost_units 与 SUM(usage_logs.cost_units) 相差
             {{ $value }} 个 1e-9 单位。可能原因：历史迁移遗留、流水被删除、写路径异常。
 
+      - alert: AirouteBillingAuditLag
+        expr: airoute_billing_audit_lag_units > 1000000000
+        for: 15m
+        labels:
+          severity: critical
+          component: billing
+        annotations:
+          summary: "结算账本与审计流水长期不一致（钱已扣、流水缺失）"
+          description: >-
+            结算总额与 usage_logs 总额相差 {{ $value }} 个 1e-9 单位并持续 15 分钟。
+            短暂差异是正常重试；持续差异说明审计行在丢失而扣费仍在进行。
+
       - alert: AirouteBillingWalletMirrorDrift
         expr: airoute_billing_wallet_drift_units > 1000000
         labels:

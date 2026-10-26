@@ -488,6 +488,7 @@ func (db *DB) migratePostgres() error {
 		{Version: 20, Name: "usage_log_sqlite_fts", Up: addUsageLogFTSIndex},
 		{Version: 21, Name: "usage_log_billing_id", Up: addUsageLogBillingID},
 		{Version: 22, Name: "usage_log_cost_units_backfill", Up: backfillUsageLogCostUnits},
+		{Version: 23, Name: "billing_settlements", Up: addBillingSettlements},
 	}
 	return db.runMigrations(migrations)
 }

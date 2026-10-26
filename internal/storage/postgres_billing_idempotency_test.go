@@ -171,3 +171,60 @@ func TestPostgresBackfillUsageLogCostUnits(t *testing.T) {
 		t.Fatalf("cost_units = %d, want %d", units, want)
 	}
 }
+
+// The settlement ledger is the money-side idempotency anchor; exercise it on real
+// PostgreSQL (unique index, ON CONFLICT DO NOTHING RETURNING, backfill).
+func TestPostgresSettlementLedger(t *testing.T) {
+	db, err := OpenDB(testPostgresURL(t))
+	if err != nil {
+		t.Fatalf("open postgres: %v", err)
+	}
+	defer db.Close()
+	repo := NewRepository(db)
+	ctx := context.Background()
+	suffix := itSuffix()
+
+	user := &UserRecord{Username: "pg-settle-" + suffix, PasswordHash: "synthetic", Balance: 10}
+	if err := repo.CreateUser(user); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	key := &APIKeyRecord{Key: "sk-pg-settle-" + suffix, UserID: user.ID, TenantID: user.Username}
+	if err := repo.CreateAPIKey(key); err != nil {
+		t.Fatalf("CreateAPIKey: %v", err)
+	}
+
+	rec := func() *UsageLogRecord {
+		return &UsageLogRecord{
+			TraceID: "tr-pg-settle-" + suffix, APIKey: key.Key, TenantID: user.Username, Model: "m",
+			PromptTokens: 10, TotalTokens: 10, Cost: 1.25, StatusCode: 200, BillingID: "bill-pg-settle-" + suffix,
+		}
+	}
+	for i := 0; i < 3; i++ {
+		if err := repo.SettleUsageCharge(ctx, rec()); err != nil {
+			t.Fatalf("settle %d: %v", i+1, err)
+		}
+	}
+
+	var settlements int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM billing_settlements WHERE billing_id = ?`, "bill-pg-settle-"+suffix).Scan(&settlements); err != nil {
+		t.Fatal(err)
+	}
+	if settlements != 1 {
+		t.Fatalf("settlement rows = %d, want 1", settlements)
+	}
+	gotUser, err := repo.GetUserByID(user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := ToUnits(8.75); gotUser.BalanceUnits != want {
+		t.Fatalf("balance units = %d, want %d", gotUser.BalanceUnits, want)
+	}
+
+	// The migration backfill must agree with the audit trail and stay idempotent.
+	if err := addBillingSettlements(db); err != nil {
+		t.Fatalf("backfill rerun: %v", err)
+	}
+	if err := addBillingSettlements(db); err != nil {
+		t.Fatalf("backfill second rerun: %v", err)
+	}
+}

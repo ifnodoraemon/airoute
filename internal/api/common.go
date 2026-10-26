@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -46,6 +47,11 @@ func RecordUsage(c *gin.Context, params AuditRecordParams) float64 {
 	cost, _, _ := recordUsage(c, params)
 	return cost
 }
+
+// settlementTimeout bounds the synchronous wallet settlement on the request
+// path. The database is local, so this only fires when something is wrong; the
+// record is then deferred to the async pipeline instead of stalling the response.
+const settlementTimeout = 1500 * time.Millisecond
 
 // statusClientClosed is the de-facto "client closed request" status recorded in
 // the audit trail when the downstream disconnects mid-stream. It is not part of
@@ -111,33 +117,45 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 		telemetry.GlobalLiveMetrics.AddTokens(totTokens)
 	}
 
+	tenantID := c.GetString("tenant_id")
+	if tenantID == "" {
+		tenantID = c.GetString(middleware.ContextKeyTenant)
+	}
+	record := &storage.UsageLogRecord{
+		TraceID:          middleware.GetTraceID(c),
+		ChatID:           params.ChatID,
+		Channel:          params.Channel,
+		SessionID:        params.SessionID,
+		APIKey:           getRequestAPIKey(c),
+		TenantID:         tenantID,
+		Model:            params.Model,
+		PromptTokens:     params.PromptTokens,
+		CompletionTokens: params.CompletionTokens,
+		CachedTokens:     params.CachedTokens,
+		TotalTokens:      totTokens,
+		Cost:             cost,
+		PricingSnapshot:  pricingSnapshot,
+		IsOffPeak:        isOffPeak,
+		OffPeakDiscount:  offPeakDiscount,
+		DurationMs:       ceilMillis(params.Duration),
+		TTFTMs:           ceilMillis(params.TTFT),
+		StatusCode:       params.StatusCode,
+		UsageSource:      params.UsageSource,
+		ErrorMessage:     params.ErrorMessage,
+	}
+
+	// Settle the charge now, independently of the audit pipeline. A failure here
+	// (database unavailable, settlement runtime not installed) is not fatal: the
+	// record still travels through Redis/spill and is settled by the async
+	// writer, which is exactly the previous behaviour.
+	if record.Cost > 0 || record.TotalTokens > 0 {
+		settleCtx, cancelSettle := context.WithTimeout(context.Background(), settlementTimeout)
+		_ = storage.SettleChargeNow(settleCtx, record)
+		cancelSettle()
+	}
+
 	if storage.GlobalAsyncLogger != nil {
-		tenantID := c.GetString("tenant_id")
-		if tenantID == "" {
-			tenantID = c.GetString(middleware.ContextKeyTenant)
-		}
-		storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
-			TraceID:          middleware.GetTraceID(c),
-			ChatID:           params.ChatID,
-			Channel:          params.Channel,
-			SessionID:        params.SessionID,
-			APIKey:           getRequestAPIKey(c),
-			TenantID:         tenantID,
-			Model:            params.Model,
-			PromptTokens:     params.PromptTokens,
-			CompletionTokens: params.CompletionTokens,
-			CachedTokens:     params.CachedTokens,
-			TotalTokens:      totTokens,
-			Cost:             cost,
-			PricingSnapshot:  pricingSnapshot,
-			IsOffPeak:        isOffPeak,
-			OffPeakDiscount:  offPeakDiscount,
-			DurationMs:       ceilMillis(params.Duration),
-			TTFTMs:           ceilMillis(params.TTFT),
-			StatusCode:       params.StatusCode,
-			UsageSource:      params.UsageSource,
-			ErrorMessage:     params.ErrorMessage,
-		})
+		storage.GlobalAsyncLogger.Record(record)
 	}
 
 	// Publish the failure reason for the access log. Every failed dispatch funnels
