@@ -87,14 +87,30 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 		})
 	}()
 
+	clientGone := false
+	drainEnabled := upstreamDrainingEnabled()
+	doneCh := c.Request.Context().Done()
 	for {
 		select {
-		case <-c.Request.Context().Done():
-			return
+		case <-doneCh:
+			if !drainEnabled {
+				return
+			}
+			// Customer left: keep reading so the provider's usage report arrives.
+			clientGone = true
+			doneCh = nil
+			markAbortedDrain(0)
 		case event, open := <-streamChan:
 			if !open {
-				recordOnce.Do(func() { recordStreamEnd(http.StatusOK) })
-				writeStreamUsageTrailer(w, flusher, finalCost, finalSaved, finalCached)
+				finalStatus := http.StatusOK
+				if clientGone {
+					finalStatus = statusClientClosed
+					markAbortedDrain(totalCompTokens)
+				}
+				recordOnce.Do(func() { recordStreamEnd(finalStatus) })
+				if !clientGone {
+					writeStreamUsageTrailer(w, flusher, finalCost, finalSaved, finalCached)
+				}
 				return
 			}
 

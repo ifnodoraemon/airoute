@@ -78,7 +78,10 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 
 	// Extract or derive zero-touch LLM Session Affinity key
 	sessionID := resolveSessionID(c, req.Model, req.Messages, req.User)
-	reqCtx := c.Request.Context()
+	// The provider call is detached from the downstream request so a customer
+	// disconnect cannot cancel it before its usage report arrives.
+	reqCtx, cancelUpstream := upstreamRequestContext(c)
+	defer cancelUpstream()
 	if sessionID != "" {
 		reqCtx = context.WithValue(reqCtx, router.ContextKeySessionID, sessionID)
 	}

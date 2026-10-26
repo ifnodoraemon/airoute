@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
@@ -60,18 +61,18 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 	recordStreamEnd := func() {
 		dur := time.Since(start)
 		statusCode := http.StatusOK
-		if streamError != nil || (c.Request.Context().Err() != nil && totalCompTokens == 0 && accumulatedCompChars == 0) {
-			statusCode = http.StatusBadGateway
-			if c.Request.Context().Err() != nil {
-				statusCode = 499
-			}
-			if totalCompTokens == 0 && accumulatedCompChars == 0 && totalPromptTokens == 0 && approxPromptChars > 0 {
-				// The client left before any output, but the request had already
-				// been dispatched: the upstream consumed the prompt, so bill the
-				// estimate instead of recording a free request.
-				totalPromptTokens = estimateTokens(approxPromptChars)
+		// The customer leaving is the truthful status regardless of how many
+		// tokens the provider produced (a drained abort has a full usage report).
+		if ctxErr := c.Request.Context().Err(); ctxErr != nil {
+			statusCode = statusClientClosed
+			if totalPromptTokens == 0 && approxPromptChars > 0 {
+				// Nothing was reported: bill the estimated prompt the provider
+				// consumed instead of recording a free request.
+				totalPromptTokens = calibratedPromptEstimate(req.Model, estimateTokens(approxPromptChars))
 				usageSource = usageSourceEstimated
 			}
+		} else if streamError != nil {
+			statusCode = http.StatusBadGateway
 		} else {
 			// Fallback token estimation if upstream provider did not report usage on successful completion
 			if totalPromptTokens == 0 && approxPromptChars > 0 {
@@ -110,16 +111,33 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 	defer recordOnce.Do(recordStreamEnd)
 
 	w := c.Writer
+	// Draining: when the customer disconnects we keep consuming the provider's
+	// stream so its final usage report still arrives and the charge matches the
+	// provider invoice exactly, instead of being estimated.
+	clientGone := false
+	drainEnabled := upstreamDrainingEnabled()
+	doneCh := c.Request.Context().Done()
 	for {
 		select {
-		case <-c.Request.Context().Done():
-			return
+		case <-doneCh:
+			if !drainEnabled {
+				return
+			}
+			clientGone = true
+			doneCh = nil // the channel is closed; stop selecting on it
+			telemetry.ScopedLogger("billing").Info("downstream disconnected; draining the provider stream for exact usage",
+				"trace_id", middleware.GetTraceID(c), "model", req.Model)
+			markAbortedDrain(0)
 		case event, open := <-streamChan:
 			if !open {
 				recordOnce.Do(recordStreamEnd)
-				writeStreamUsageTrailer(w, flusher, finalCost, finalSaved, finalCached)
-				fmt.Fprintf(w, "data: [DONE]\n\n")
-				flusher.Flush()
+				if !clientGone {
+					writeStreamUsageTrailer(w, flusher, finalCost, finalSaved, finalCached)
+					fmt.Fprintf(w, "data: [DONE]\n\n")
+					flusher.Flush()
+				} else {
+					markAbortedDrain(totalCompTokens)
+				}
 				recordOnce.Do(recordStreamEnd)
 				return
 			}
@@ -133,6 +151,13 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 			}
 
 			if event.Err != nil {
+				if clientGone {
+					// The disconnect is not a provider failure for billing purposes:
+					// keep the usage already collected and stop writing.
+					telemetry.GlobalMetrics.AbortedDrainedCompletionTokens.Add(uint64(max(0, totalCompTokens)))
+					recordOnce.Do(recordStreamEnd)
+					return
+				}
 				streamError = event.Err
 				telemetry.ScopedLogger("router").Error("stream error received mid-flight", "error", event.Err.Error())
 				errJSON, _ := json.Marshal(gin.H{
@@ -149,6 +174,13 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 			}
 
 			if event.IsDone {
+				if clientGone {
+					// Count what the provider generated (and billed) after the
+					// customer left; this is the extra spend exact billing buys.
+					telemetry.GlobalMetrics.AbortedDrainedCompletionTokens.Add(uint64(max(0, totalCompTokens)))
+					recordOnce.Do(recordStreamEnd)
+					return
+				}
 				recordOnce.Do(recordStreamEnd)
 				writeStreamUsageTrailer(w, flusher, finalCost, finalSaved, finalCached)
 				fmt.Fprintf(w, "data: [DONE]\n\n")

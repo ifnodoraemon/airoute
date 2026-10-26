@@ -132,6 +132,14 @@ func (m *Metrics) ToPrometheusFormat() string {
 	sb.WriteString("# TYPE airoute_billing_wallet_drift_units gauge\n")
 	sb.WriteString(fmt.Sprintf("airoute_billing_wallet_drift_units %d\n", m.BillingWalletDriftUnits.Load()))
 
+	sb.WriteString("# HELP airoute_aborted_drained_requests_total Aborted requests whose upstream was drained for exact usage\n")
+	sb.WriteString("# TYPE airoute_aborted_drained_requests_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_aborted_drained_requests_total %d\n", m.AbortedDrainedRequests.Load()))
+
+	sb.WriteString("# HELP airoute_aborted_drained_completion_tokens_total Completion tokens paid for and discarded by abort draining\n")
+	sb.WriteString("# TYPE airoute_aborted_drained_completion_tokens_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_aborted_drained_completion_tokens_total %d\n", m.AbortedDrainedCompletionTokens.Load()))
+
 	sb.WriteString("# HELP airoute_billing_estimate_bias_ppm Local estimate vs upstream tokenizer, parts per million\n")
 	sb.WriteString("# TYPE airoute_billing_estimate_bias_ppm gauge\n")
 	sb.WriteString(fmt.Sprintf("airoute_billing_estimate_bias_ppm %d\n", m.EstimateBiasPPM.Load()))

@@ -112,7 +112,10 @@ func (h *Handler) HandleCompletions(c *gin.Context) {
 	defer telemetry.GlobalMetrics.DecActiveConns()
 
 	sessionID := resolveSessionID(c, req.Model, chatReq.Messages, req.User)
-	reqCtx := c.Request.Context()
+	// The provider call is detached from the downstream request so a customer
+	// disconnect cannot cancel it before its usage report arrives.
+	reqCtx, cancelUpstream := upstreamRequestContext(c)
+	defer cancelUpstream()
 	if sessionID != "" {
 		reqCtx = context.WithValue(reqCtx, router.ContextKeySessionID, sessionID)
 	}

@@ -76,7 +76,10 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 	canonicalReq.AnthropicBeta = c.GetHeader("anthropic-beta")
 
 	sessionID := resolveSessionID(c, canonicalReq.Model, canonicalReq.Messages, "")
-	reqCtx := c.Request.Context()
+	// The provider call is detached from the downstream request so a customer
+	// disconnect cannot cancel it before its usage report arrives.
+	reqCtx, cancelUpstream := upstreamRequestContext(c)
+	defer cancelUpstream()
 	if sessionID != "" {
 		reqCtx = context.WithValue(reqCtx, router.ContextKeySessionID, sessionID)
 	}

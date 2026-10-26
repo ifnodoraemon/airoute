@@ -265,6 +265,30 @@
 
 ---
 
+## 四之五、断连排空（B 方案）：与模型提供方账单逐单对齐
+
+计费原则最终确认为：**模型提供方（上游）收我们多少，我们就向下游客户收多少；上游不收的我们也不收；下游是否断开与计费无关。**
+
+要在"客户断开"时也做到逐单等于上游账单，就不能取消上游请求——否则拿不到该请求的 usage，只能估算。实现为"排空"：
+
+1. **上游调用脱离下游上下文**：入口处用 `upstreamRequestContext`（`context.WithoutCancel` + 排空超时，默认 120s）创建派发上下文，客户断开不再取消模型提供方的调用。
+2. **流式循环继续消费**：客户断开后不再 `return`，而是继续读上游流（只跳过对下游的写出），直到上游结束，收集它最后一帧的 `usage`。
+3. **按上游真实 usage 计费**：审计状态仍记 499（客户确实断了），token 与成本使用上游回报值，`usage_source=upstream`（不再是 estimated）。
+4. **量化代价**：新增 `airoute_aborted_drained_requests_total` 与 `airoute_aborted_drained_completion_tokens_total`——后者就是"已经付费但客户没收到"的 completion token，是排空策略的真实成本。
+5. **可回退**：`GATEWAY_DRAIN_ABORTED_UPSTREAM=false` 恢复"立即取消 + 校准估算"的省钱模式；`GATEWAY_DRAIN_TIMEOUT_SEC` 控制单个排空的最长时间。
+
+**线上验证**（客户 1.0~1.2 秒后断开，`max_tokens=300`）：
+
+```
+trace            status  channel  prompt  completion  cost       usage_source  drained_tokens
+tr-drain-001       499     罗总      38        300     0.001238    upstream          300
+tr-drain-002       499     罗总      39        300     0.001239    upstream          300
+```
+
+对比之前的"估算 prompt"版本：那时只收 ¥0.0004 左右（prompt 估算），上游实际按 300 completion 计费；现在逐单与上游账单一致，差额不再由平台承担。
+
+---
+
 ## 五、部署与遗留
 
 本次修复通过 `scripts/docker-rebuild.sh` 滚动发布（两副本依次重建 + 健康检查），并已验证：

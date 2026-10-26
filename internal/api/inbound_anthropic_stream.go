@@ -177,6 +177,9 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 
 	w := c.Writer
 	pending := firstEvent
+	clientGone := false
+	drainEnabled := upstreamDrainingEnabled()
+	doneCh := c.Request.Context().Done()
 	for {
 		var event *model.StreamEvent
 		var open bool
@@ -185,8 +188,16 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 			pending = nil
 		} else {
 			select {
-			case <-c.Request.Context().Done():
-				return
+			case <-doneCh:
+				if !drainEnabled {
+					return
+				}
+				// Customer left: keep consuming the provider stream so its usage
+				// report still arrives and the charge matches the invoice.
+				clientGone = true
+				doneCh = nil
+				markAbortedDrain(0)
+				continue
 			case event, open = <-streamChan:
 			}
 		}
@@ -194,7 +205,15 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 			if !open {
 				// Stream finished
 				finalizeCompletion()
-				recordOnce.Do(func() { recordStreamEnd(http.StatusOK) })
+				finalStatus := http.StatusOK
+				if clientGone {
+					finalStatus = statusClientClosed
+					markAbortedDrain(totalCompTokens)
+				}
+				recordOnce.Do(func() { recordStreamEnd(finalStatus) })
+				if clientGone {
+					return
+				}
 				if textBlockOpened || toolBlockOpened {
 					fmt.Fprintf(w, "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":%d}\n\n", currentBlockIndex)
 				}
@@ -451,18 +470,32 @@ func (h *Handler) handleNativeAnthropicStream(c *gin.Context, stream <-chan *mod
 	if !write(first) {
 		return
 	}
+	clientGone := false
+	drainEnabled := upstreamDrainingEnabled()
+	doneCh := c.Request.Context().Done()
 	for {
 		select {
-		case <-c.Request.Context().Done():
+		case <-doneCh:
 			// 499 matches the other stream handlers: the *client* went away, the
 			// upstream did not time out.
 			statusCode = 499
-			return
-		case event, open := <-stream:
-			if !open {
+			if !drainEnabled {
 				return
 			}
-			if !write(event) {
+			// Keep reading so the provider's message_delta usage still arrives.
+			clientGone = true
+			doneCh = nil
+			markAbortedDrain(0)
+		case event, open := <-stream:
+			if !open {
+				if clientGone {
+					markAbortedDrain(outputTokens)
+				}
+				return
+			}
+			// write() also accumulates usage; emitting to a dead client is harmless,
+			// so keep calling it but ignore write failures while draining.
+			if ok := write(event); !ok && !clientGone {
 				return
 			}
 		}

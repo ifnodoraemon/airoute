@@ -58,6 +58,12 @@ type Metrics struct {
 	// BillingWalletDriftUnits is the absolute difference between users.balance_units
 	// and its float mirror, refreshed by the reconciliation worker.
 	BillingWalletDriftUnits atomic.Int64
+	// AbortedDrainedRequests and AbortedDrainedCompletionTokens quantify the cost
+	// of keeping an upstream alive after the client left, so the extra spend that
+	// exact billing buys is visible (drained completion tokens are paid for and
+	// then discarded).
+	AbortedDrainedRequests         atomic.Uint64
+	AbortedDrainedCompletionTokens atomic.Uint64
 	// EstimateBiasPPM is how far the local token estimate sits from the upstream
 	// tokenizer for the most recently observed model, in parts per million
 	// (positive = upstream counts more tokens than we estimated).
