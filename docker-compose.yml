@@ -21,6 +21,31 @@ x-gateway-env: &gateway-env
   STORAGE_S3_REGION: ${STORAGE_S3_REGION:-us-east-1}
   STORAGE_S3_PUBLIC_URL_PREFIX: ${STORAGE_S3_PUBLIC_URL_PREFIX:-}
 
+# Shared build definition for both gateway replicas. The binary reports the
+# version baked in at build time, so pass the same value CI publishes:
+#   VERSION=$(sh scripts/build-version.sh) docker compose build
+# `make docker-rebuild` resolves it automatically and restarts the replicas in
+# a rolling fashion; a bare `docker compose build` falls back to the Dockerfile
+# default and reports a development version.
+x-gateway-build: &gateway-build
+  context: .
+  dockerfile: Dockerfile
+  args:
+    VERSION: ${VERSION:-1.1.0-dev}
+
+# Streamed inference holds one descriptor for the downstream client and one for
+# the upstream provider, plus TLS sockets, the Redis pool and the log file.
+# Containers defaulted to `nofile 1024`, which capped the cluster at roughly
+# 400-480 concurrent streams per replica (about 190-230 req/s at the observed
+# 4.2s latency). Raising the limit has no behavioural effect; it just stops the
+# process from running out of descriptors before it runs out of CPU.
+# nginx workers inherit RLIMIT_NOFILE from the master, so the load balancer
+# needs the same bump (worker_connections is already below this value).
+x-nofile-ulimits: &nofile-ulimits
+  nofile:
+    soft: 65536
+    hard: 65536
+
 services:
   # ============================================================================
   # High-Availability Shared Relational Database (PostgreSQL 16)
@@ -30,6 +55,12 @@ services:
     image: postgres:16-alpine
     container_name: airoute-postgres
     restart: always
+    # Each gateway replica sizes its own pool (GATEWAY_DB_MAX_OPEN_CONNS,
+    # default 25). The server ceiling has to leave room for every replica plus
+    # maintenance: the previous 100 was exactly 2 replicas x 50, so a third
+    # replica could never connect and `psql`/migrations had no headroom.
+    command: ["postgres", "-c", "max_connections=200"]
+    ulimits: *nofile-ulimits
     env_file: [.env]
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-airoute}
@@ -54,6 +85,7 @@ services:
     container_name: airoute-redis
     restart: always
     command: redis-server --appendonly yes --save ""
+    ulimits: *nofile-ulimits
     expose:
       - "6379"
     volumes:
@@ -68,12 +100,11 @@ services:
   # High-Availability Gateway Node 1
   # ============================================================================
   gateway-1:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: *gateway-build
     image: airoute:latest
     container_name: airoute-1
     restart: always
+    ulimits: *nofile-ulimits
     env_file: [.env]
     environment:
       <<: *gateway-env
@@ -99,12 +130,11 @@ services:
   # High-Availability Gateway Node 2
   # ============================================================================
   gateway-2:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: *gateway-build
     image: airoute:latest
     container_name: airoute-2
     restart: always
+    ulimits: *nofile-ulimits
     env_file: [.env]
     environment:
       <<: *gateway-env
@@ -156,6 +186,7 @@ services:
     image: nginx:alpine
     container_name: airoute-lb
     restart: always
+    ulimits: *nofile-ulimits
     ports:
       - "${GATEWAY_INGRESS_PORT:-${GATEWAY_PORT:-8080}}:80"
     volumes:

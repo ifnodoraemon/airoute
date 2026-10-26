@@ -1,6 +1,6 @@
 export PATH := /usr/local/go/bin:$(PATH)
 
-.PHONY: all build build-web run test test-web test-integration test-e2e test-e2e-go tidy clean
+.PHONY: all build build-web run test test-web test-integration test-e2e test-e2e-go tidy clean docker-build docker-rebuild
 
 APP_NAME = airoute
 BIN_DIR = bin
@@ -39,6 +39,17 @@ build: build-web
 run: build-web
 	@echo "==> Running $(APP_NAME)..."
 	go run -ldflags "$(LDFLAGS)" $(ENTRY) -config $(CONFIG)
+
+# Docker cluster targets. The image bakes in $(VERSION) the same way CI does
+# (see x-gateway-build in docker-compose.yml), so a bare `docker compose build`
+# reports the development default while these targets stay in sync with the
+# checkout. `docker-rebuild` also rolls both replicas one at a time.
+docker-build:
+	@echo "==> Building Docker image ($(VERSION))..."
+	@VERSION="$(VERSION)" docker compose build
+
+docker-rebuild:
+	@sh scripts/docker-rebuild.sh
 
 test: web/dist/index.html
 	@echo "==> Running tests..."
