@@ -185,6 +185,28 @@ func runServer(args []string) {
 		dispatcher.UpdateChannels(cfg.Channels)
 	}
 
+	// Warn once at startup about models that served traffic recently but have no
+	// price rule: they are billed at the hardcoded fallback rate, which is a guess
+	// in both directions. Runs in the background so a large audit table cannot
+	// delay readiness.
+	go func() {
+		unpriced, err := billing.UnpricedModelsInUse(repo, billing.GlobalEngine, 7*24*time.Hour)
+		if err != nil {
+			telemetry.ScopedLogger("billing").Warn("pricing coverage check failed", "error", err.Error())
+			return
+		}
+		if len(unpriced) == 0 {
+			return
+		}
+		shown := unpriced
+		if len(shown) > 20 {
+			shown = shown[:20]
+		}
+		telemetry.ScopedLogger("billing").Warn("models served without a configured price; the fallback rate card is in use",
+			"count", len(unpriced),
+			"models", strings.Join(shown, ","))
+	}()
+
 	// Subscribe to cluster-wide reload broadcasts via Redis Pub/Sub
 	if redisClient != nil && redisClient.IsActive() {
 		stopRedis := make(chan struct{})

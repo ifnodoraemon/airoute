@@ -15,12 +15,12 @@ import (
 const (
 	// ContextKeyTraceID aliases the telemetry constant so whichever package a
 	// call site imports, the context key is the same string value.
-	ContextKeyTraceID    = telemetry.ContextKeyTraceID
+	ContextKeyTraceID      = telemetry.ContextKeyTraceID
 	ContextKeyErrorMessage = "error_message"
-	HeaderAirouteTraceID = "X-Airoute-Trace-ID"
-	HeaderRequestID      = "X-Request-ID"
-	HeaderTraceID        = "X-Trace-ID"
-	HeaderTraceParent    = "traceparent"
+	HeaderAirouteTraceID   = "X-Airoute-Trace-ID"
+	HeaderRequestID        = "X-Request-ID"
+	HeaderTraceID          = "X-Trace-ID"
+	HeaderTraceParent      = "traceparent"
 )
 
 // GenerateTraceID creates a unique, high-performance distributed trace identifier.

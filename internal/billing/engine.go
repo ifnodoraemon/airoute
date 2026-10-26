@@ -234,8 +234,35 @@ func (e *BillingEngine) GetPrice(modelName string) *storage.ModelPriceRecord {
 	return e.GetPriceWithGroup(modelName, "default")
 }
 
+// Price resolution sources reported by ResolvePriceSource. "default" means no
+// rule matched and the hardcoded fallback rate was applied — the case the startup
+// self-check warns about, because that rate is a guess rather than a decision.
+const (
+	PriceSourceExact    = "exact"
+	PriceSourceWildcard = "wildcard"
+	PriceSourceDefault  = "default"
+)
+
 // GetPriceWithGroup finds the applicable pricing rate for a requested model within a specific pricing tier/group.
 func (e *BillingEngine) GetPriceWithGroup(modelName, groupName string) *storage.ModelPriceRecord {
+	price, _ := e.resolvePriceWithSource(modelName, groupName)
+	return price
+}
+
+// ResolvePriceSource reports how a model's rate was resolved: an exact rule, a
+// wildcard rule, or the hardcoded default fallback. Operators use it to find
+// models that are being served (and billed) at an unconfigured price.
+func (e *BillingEngine) ResolvePriceSource(modelName, groupName string) string {
+	if e == nil {
+		return PriceSourceDefault
+	}
+	_, source := e.resolvePriceWithSource(modelName, groupName)
+	return source
+}
+
+// resolvePriceWithSource is the single price-resolution implementation; source
+// identifies which rule matched so callers can report it.
+func (e *BillingEngine) resolvePriceWithSource(modelName, groupName string) (*storage.ModelPriceRecord, string) {
 	modelLower := strings.ToLower(strings.TrimSpace(modelName))
 	grp := strings.ToLower(strings.TrimSpace(groupName))
 	if grp == "" {
@@ -247,20 +274,20 @@ func (e *BillingEngine) GetPriceWithGroup(modelName, groupName string) *storage.
 
 	// 1. Exact match in requested group
 	if p, ok := e.prices[grp+":"+modelLower]; ok {
-		return p
+		return p, PriceSourceExact
 	}
 
 	// 2. Exact match in default group fallback
 	if grp != "default" {
 		if p, ok := e.prices["default:"+modelLower]; ok {
-			return p
+			return p, PriceSourceExact
 		}
 		if p, ok := e.prices[modelLower]; ok {
-			return p
+			return p, PriceSourceExact
 		}
 	} else {
 		if p, ok := e.prices[modelLower]; ok {
-			return p
+			return p, PriceSourceExact
 		}
 	}
 
@@ -285,24 +312,24 @@ func (e *BillingEngine) GetPriceWithGroup(modelName, groupName string) *storage.
 	}
 
 	if p := prefixMatch(grp); p != nil {
-		return p
+		return p, PriceSourceWildcard
 	}
 	if grp != "default" {
 		if p := prefixMatch("default"); p != nil {
-			return p
+			return p, PriceSourceWildcard
 		}
 	}
 
 	// 4. Group wildcard or global wildcard "*"
 	if p, ok := e.prices[grp+":*"]; ok {
-		return p
+		return p, PriceSourceWildcard
 	}
 	if p, ok := e.prices["*"]; ok {
-		return p
+		return p, PriceSourceWildcard
 	}
 
 	// 5. Default standard fallback
-	return e.deflt
+	return e.deflt, PriceSourceDefault
 }
 
 // IsOffPeak evaluates whether the specified time is within the model's off-peak time window.

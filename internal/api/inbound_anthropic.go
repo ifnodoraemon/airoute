@@ -101,8 +101,11 @@ func (h *Handler) handleAnthropicUnary(c *gin.Context, reqCtx context.Context, r
 		var native map[string]any
 		if err := json.Unmarshal(resp.NativeAnthropicResponse, &native); err == nil {
 			native["model"] = req.Model
-			inputTokens, outputTokens, _, usageSource := resolveChatUsage(canonicalReq, resp)
-			RecordUsage(c, AuditRecordParams{SessionID: sessionID, ChatID: resp.ID, Channel: resp.Channel, Model: req.Model, PromptTokens: inputTokens, CompletionTokens: outputTokens, Duration: time.Since(start), StatusCode: http.StatusOK, UsageSource: usageSource})
+			inputTokens, outputTokens, cachedTokens, usageSource := resolveChatUsage(canonicalReq, resp)
+			// PromptTokens includes cache reads; passing CachedTokens lets the
+			// engine bill them at the cache_read rate instead of the full prompt
+			// rate (this path used to charge ~90% too much for cached prompts).
+			RecordUsage(c, AuditRecordParams{SessionID: sessionID, ChatID: resp.ID, Channel: resp.Channel, Model: req.Model, PromptTokens: inputTokens, CompletionTokens: outputTokens, CachedTokens: cachedTokens, Duration: time.Since(start), StatusCode: http.StatusOK, UsageSource: usageSource})
 			c.JSON(http.StatusOK, native)
 			return
 		}

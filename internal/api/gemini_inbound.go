@@ -168,7 +168,7 @@ func (h *Handler) handleGeminiUnary(c *gin.Context, reqCtx context.Context, cano
 
 	geminiResp := convertCanonicalToGeminiResponse(resp)
 	dur := time.Since(start)
-	pTokens, cTokens, _, usageSource := resolveChatUsage(canonicalReq, resp)
+	pTokens, cTokens, cachedTokens, usageSource := resolveChatUsage(canonicalReq, resp)
 	RecordUsage(c, AuditRecordParams{
 		SessionID:        sessionID,
 		ChatID:           resp.ID,
@@ -176,6 +176,7 @@ func (h *Handler) handleGeminiUnary(c *gin.Context, reqCtx context.Context, cano
 		Model:            modelName,
 		PromptTokens:     pTokens,
 		CompletionTokens: cTokens,
+		CachedTokens:     cachedTokens,
 		Duration:         dur,
 		TTFT:             dur,
 		StatusCode:       http.StatusOK,
