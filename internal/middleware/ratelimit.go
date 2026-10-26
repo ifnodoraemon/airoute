@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"sync"
@@ -10,6 +11,13 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/distributed"
 	"github.com/ifnodoraemon/airoute/internal/model"
 )
+
+// redisRateLimitTimeout bounds the cross-replica RPM check. The request context
+// carries no deadline of its own, and go-redis retries a failed command three
+// times: without this a Redis hiccup added seconds to a request that was
+// otherwise ready to stream. On timeout the middleware falls through to the
+// local token bucket, which is the same fail-open path used for a Redis error.
+const redisRateLimitTimeout = 300 * time.Millisecond
 
 // tokenBucket tracks request tokens for a key.
 type tokenBucket struct {
@@ -166,6 +174,7 @@ func RateLimitMiddleware() gin.HandlerFunc {
 		// already consumed its minute budget. RPM limiting below stays independent.
 		if k.TPM > 0 {
 			if !GlobalTokenQuota.Allow(k.Key, k.TPM) {
+				c.Set(ContextKeyErrorMessage, "token rate limit exceeded (TPM)")
 				c.Header("X-RateLimit-Limit-Tokens", strconv.Itoa(k.TPM))
 				c.Header("Retry-After", "60")
 				c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
@@ -188,9 +197,12 @@ func RateLimitMiddleware() gin.HandlerFunc {
 		// 1. Check Enterprise Distributed Redis cluster rate limit
 		client := distributed.GetClient()
 		if client != nil && client.IsActive() {
-			allowed, err := client.AllowRPM(c.Request.Context(), k.Key, k.RPM)
+			rpmCtx, cancel := context.WithTimeout(c.Request.Context(), redisRateLimitTimeout)
+			allowed, err := client.AllowRPM(rpmCtx, k.Key, k.RPM)
+			cancel()
 			if err == nil {
 				if !allowed {
+					c.Set(ContextKeyErrorMessage, "cluster rate limit exceeded (RPM)")
 					c.Header("X-RateLimit-Limit-Requests", strconv.Itoa(k.RPM))
 					c.Header("Retry-After", "1")
 					c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
@@ -211,6 +223,7 @@ func RateLimitMiddleware() gin.HandlerFunc {
 		// 2. Fallback to high-performance local in-memory token bucket
 		bucket := GlobalRateLimiter.getBucket(k.Key, k.RPM)
 		if !bucket.allow() {
+			c.Set(ContextKeyErrorMessage, "local rate limit exceeded (RPM)")
 			c.Header("X-RateLimit-Limit-Requests", strconv.Itoa(k.RPM))
 			c.Header("Retry-After", "1")
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{

@@ -33,19 +33,31 @@ type LogRingBuffer struct {
 	nodeID      string
 }
 
-// GlobalRingBuffer holds the in-memory circular log buffer.
-var GlobalRingBuffer *LogRingBuffer
-
-func init() {
-	nodeID := os.Getenv("NODE_ID")
-	if nodeID == "" {
-		nodeID = os.Getenv("HOSTNAME")
+// defaultNodeID resolves the node identity shown in the console's log view.
+func defaultNodeID() string {
+	if nodeID := os.Getenv("NODE_ID"); nodeID != "" {
+		return nodeID
 	}
-	if nodeID == "" {
-		nodeID = "airoute-gateway"
+	if hostname := os.Getenv("HOSTNAME"); hostname != "" {
+		return hostname
 	}
-	GlobalRingBuffer = NewLogRingBuffer(2000, nodeID)
+	return "airoute-gateway"
 }
+
+// GlobalRingBuffer holds the in-memory circular log buffer.
+//
+// It is a variable initializer rather than an init() function on purpose:
+// init() functions run only after every package variable has been initialized,
+// but the logger's own init() builds the BroadcastHandler that captures into
+// this buffer. When this was assigned in init(), the logger bound a nil buffer
+// and every line logged before the first explicit InitLogger call (config load,
+// security warnings, startup failures) silently never reached the console.
+//
+// 5000 entries of real events: the buffer used to share its space with one
+// http_access line per request, so during a 300 req/s burst it held about six
+// seconds of history and an incident was evicted before anyone opened the
+// console.
+var GlobalRingBuffer = NewLogRingBuffer(5000, defaultNodeID())
 
 // NewLogRingBuffer creates a thread-safe circular log buffer with subscriber broadcasting.
 func NewLogRingBuffer(capacity int, nodeID string) *LogRingBuffer {
@@ -216,6 +228,14 @@ func (h *BroadcastHandler) Handle(ctx context.Context, r slog.Record) error {
 	}
 
 	if h.buffer != nil {
+		// Per-request access lines are already the audit log (usage_logs) and are
+		// the single highest-volume source in the system. Keeping them in the
+		// in-memory troubleshooting buffer evicted the rare, important events
+		// (breaker trips, billing reloads, sync failures) within seconds of a
+		// traffic burst. The console has a dedicated audit page for requests.
+		if _, skip := ringBufferSkipMessages[r.Message]; skip {
+			return err
+		}
 		attrs := make(map[string]any, len(h.attrs)+8)
 		for _, a := range h.attrs {
 			attrs[a.Key] = a.Value.Any()
@@ -255,6 +275,12 @@ func (h *BroadcastHandler) Handle(ctx context.Context, r slog.Record) error {
 	}
 
 	return err
+}
+
+// ringBufferSkipMessages lists per-request messages that must not consume the
+// in-memory system-log budget. They are persisted in usage_logs instead.
+var ringBufferSkipMessages = map[string]struct{}{
+	"http_access": {},
 }
 
 // knownLogCategories is the set the console renders. An explicit category outside

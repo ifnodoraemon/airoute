@@ -2,6 +2,9 @@ package controlplane
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -91,6 +94,13 @@ type Synchronizer struct {
 	// every part of the configuration was read and installed, which is what makes
 	// "which configuration is live" answerable.
 	version atomic.Uint64
+
+	// lastFingerprint is the digest of the snapshot currently installed. The
+	// periodic 10s reload runs unconditionally, so without this the log carried
+	// an identical "hot reloaded data plane memory state" INFO line every 10s
+	// per replica — about 20% of all log volume — and buried the reloads that
+	// actually changed something.
+	lastFingerprint string
 }
 
 // NewSynchronizer creates a new Synchronizer.
@@ -161,11 +171,25 @@ func (s *Synchronizer) ReloadFromDB() error {
 	// The snapshot is in effect from here on, so the version moves with it even if a
 	// dependent subsystem lags.
 	version := s.version.Add(1)
-	telemetry.ScopedLogger("sync").Info("hot reloaded data plane memory state from database",
-		"version", version,
-		"active_channels", len(snap.Channels),
-		"active_keys", len(snap.APIKeys),
-	)
+	fingerprint := snapshotFingerprint(snap)
+	changed := fingerprint != s.lastFingerprint
+	s.lastFingerprint = fingerprint
+	logger := telemetry.ScopedLogger("sync")
+	if changed {
+		logger.Info("hot reloaded data plane memory state from database",
+			"version", version,
+			"active_channels", len(snap.Channels),
+			"active_keys", len(snap.APIKeys),
+		)
+	} else {
+		// The periodic reload found byte-identical configuration. Keep it visible
+		// at debug level rather than repeating the same INFO line every 10s.
+		logger.Debug("data plane snapshot unchanged; periodic reload was a no-op",
+			"version", version,
+			"active_channels", len(snap.Channels),
+			"active_keys", len(snap.APIKeys),
+		)
+	}
 
 	if s.prices != nil {
 		if err := s.prices.ReloadPrices(); err != nil {
@@ -288,4 +312,33 @@ func (globalKeyConfigSink) UpdateAPIKeys(keys []model.APIKeyConfig, hasConfigure
 	if cfg := config.GetGlobalConfig(); cfg != nil {
 		cfg.UpdateAPIKeys(keys, hasConfiguredKeys)
 	}
+}
+
+// snapshotFingerprint is a stable digest of the configuration a reload would
+// install. It is used only to decide whether the periodic reload log is worth
+// writing, never to decide whether to apply a snapshot.
+//
+// Usage counters are part of the key record but are not configuration: they move
+// with every billed request, so hashing them unchanged would make the digest
+// differ on every reload and the log would keep firing at INFO every 10s — the
+// exact noise this gate exists to remove.
+func snapshotFingerprint(snap *ConfigSnapshot) string {
+	if snap == nil {
+		return ""
+	}
+	configOnly := make([]model.APIKeyConfig, len(snap.APIKeys))
+	copy(configOnly, snap.APIKeys)
+	for i := range configOnly {
+		configOnly[i].UsedCost = 0
+		configOnly[i].UsedCostUnits = 0
+		configOnly[i].UserBalance = 0
+	}
+
+	hasher := sha256.New()
+	encoder := json.NewEncoder(hasher)
+	_ = encoder.Encode(snap.Channels)
+	_ = encoder.Encode(configOnly)
+	_ = encoder.Encode(snap.HasKeys)
+	_ = encoder.Encode(snap.Fallbacks)
+	return hex.EncodeToString(hasher.Sum(nil))
 }

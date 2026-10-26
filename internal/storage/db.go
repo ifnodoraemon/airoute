@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -85,6 +86,28 @@ func (db *DB) Prepare(query string) (*sql.Stmt, error) {
 	return db.DB.Prepare(db.Rebind(query))
 }
 
+// ExecContext is Exec bound to a context, with dialect rebind.
+//
+// Without this override the promoted *sql.DB method sends '?' placeholders to
+// PostgreSQL verbatim, which is a syntax error. That silently disabled the two
+// Context-bound repository queries that used them: the auth middleware's
+// authoritative api-key lookup (whose error was discarded, so every data-plane
+// request quietly fell back to the 10s in-memory snapshot) and
+// GetUserByIDContext.
+func (db *DB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return db.DB.ExecContext(ctx, db.Rebind(query), args...)
+}
+
+// QueryContext is Query bound to a context, with dialect rebind.
+func (db *DB) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	return db.DB.QueryContext(ctx, db.Rebind(query), args...)
+}
+
+// QueryRowContext is QueryRow bound to a context, with dialect rebind.
+func (db *DB) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	return db.DB.QueryRowContext(ctx, db.Rebind(query), args...)
+}
+
 // Tx wraps sql.Tx with dialect-aware query adaptation.
 type Tx struct {
 	*sql.Tx
@@ -109,6 +132,21 @@ func (tx *Tx) Query(query string, args ...any) (*sql.Rows, error) {
 // QueryRow executes a query returning a single row within transaction using dialect rebind.
 func (tx *Tx) QueryRow(query string, args ...any) *sql.Row {
 	return tx.Tx.QueryRow(tx.db.Rebind(query), args...)
+}
+
+// ExecContext is Exec bound to a context, with dialect rebind.
+func (tx *Tx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return tx.Tx.ExecContext(ctx, tx.db.Rebind(query), args...)
+}
+
+// QueryContext is Query bound to a context, with dialect rebind.
+func (tx *Tx) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	return tx.Tx.QueryContext(ctx, tx.db.Rebind(query), args...)
+}
+
+// QueryRowContext is QueryRow bound to a context, with dialect rebind.
+func (tx *Tx) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	return tx.Tx.QueryRowContext(ctx, tx.db.Rebind(query), args...)
 }
 
 // withReturningID appends "RETURNING id" to a statement, tolerating a trailing
@@ -236,13 +274,25 @@ func OpenDB(dataSourceName string) (*DB, error) {
 			return nil, fmt.Errorf("open postgres db error: %w", err)
 		}
 
-		db.SetMaxOpenConns(50)
-		db.SetMaxIdleConns(25)
+		// Pool budget: every replica multiplies this, so it has to fit the
+		// server's max_connections together with maintenance sessions. The old
+		// hardcoded 50 x 2 replicas equalled the whole 100-connection budget, so
+		// a third replica could never connect and idle connections squatted on
+		// slots other replicas needed.
+		maxOpen := envPositiveInt("GATEWAY_DB_MAX_OPEN_CONNS", 25)
+		maxIdle := envPositiveInt("GATEWAY_DB_MAX_IDLE_CONNS", 8)
+		if maxIdle > maxOpen {
+			maxIdle = maxOpen
+		}
+		db.SetMaxOpenConns(maxOpen)
+		db.SetMaxIdleConns(maxIdle)
 		db.SetConnMaxLifetime(10 * time.Minute)
 		// Recycle idle connections too: without this, connections kept open by
 		// the pool can outlive a server-side idle timeout and then fail the first
 		// query issued on them.
 		db.SetConnMaxIdleTime(5 * time.Minute)
+		telemetry.ScopedLogger("system").Info("postgres connection pool configured",
+			"max_open", maxOpen, "max_idle", maxIdle)
 
 		if err := db.Ping(); err != nil {
 			telemetry.ScopedLogger("system").Warn("postgres ping failed, checking connection", "error", err.Error())
@@ -350,4 +400,18 @@ func isSQLBoundary(b byte) bool {
 		return true
 	}
 	return false
+}
+
+// envPositiveInt reads a positive integer override from the environment,
+// falling back to the caller's default when unset, unparsable or non-positive.
+func envPositiveInt(name string, fallback int) int {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return fallback
+	}
+	return value
 }

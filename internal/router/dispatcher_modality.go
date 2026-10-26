@@ -57,7 +57,9 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 	for i, ch := range channels {
 		// Circuit Breaker: fail fast if upstream is down
 		if !d.circuitBreaker.CanExecute(ch.Name) {
-			telemetry.ScopedLogger("router").Warn("circuit breaker is OPEN, bypassing dead upstream", "channel", ch.Name)
+			telemetry.WarnLogger(routerLog(ctx), "breaker-open:"+ch.Name, 30*time.Second,
+				"circuit breaker is OPEN, bypassing dead upstream",
+				"channel", ch.Name, "attempt", i+1)
 			skipped = append(skipped, ch.Name)
 			continue
 		}
@@ -109,7 +111,7 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 				attempted = append(attempted, ch.Name)
 				continue
 			}
-			attempted = append(attempted, d.recordChannelFailure(ch.Name, err, i+1))
+			attempted = append(attempted, d.recordChannelFailure(ctx, ch.Name, err, i+1))
 			continue
 		}
 
@@ -118,7 +120,7 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 			bodyBytes, _ := io.ReadAll(io.LimitReader(httpResp.Body, 64<<10))
 			httpResp.Body.Close()
 			lastErr = provider.NewUpstreamError(ch.Name, httpResp.StatusCode, bodyBytes)
-			attempted = append(attempted, d.recordChannelFailure(ch.Name, lastErr, i+1))
+			attempted = append(attempted, d.recordChannelFailure(ctx, ch.Name, lastErr, i+1))
 			continue
 		}
 
@@ -175,7 +177,9 @@ func (d *Dispatcher) DispatchEmbedding(ctx context.Context, req *model.Embedding
 	var skipped []string   // channels bypassed by the circuit breaker, never called
 	for i, ch := range channels {
 		if !d.circuitBreaker.CanExecute(ch.Name) {
-			telemetry.ScopedLogger("router").Warn("circuit breaker is OPEN, bypassing dead upstream", "channel", ch.Name)
+			telemetry.WarnLogger(routerLog(ctx), "breaker-open:"+ch.Name, 30*time.Second,
+				"circuit breaker is OPEN, bypassing dead upstream",
+				"channel", ch.Name, "attempt", i+1)
 			skipped = append(skipped, ch.Name)
 			continue
 		}
@@ -217,7 +221,7 @@ func (d *Dispatcher) DispatchEmbedding(ctx context.Context, req *model.Embedding
 				attempted = append(attempted, ch.Name)
 				continue
 			}
-			attempted = append(attempted, d.recordChannelFailure(ch.Name, err, i+1))
+			attempted = append(attempted, d.recordChannelFailure(ctx, ch.Name, err, i+1))
 			continue
 		}
 
@@ -248,7 +252,9 @@ func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankReques
 	var skipped []string   // channels bypassed by the circuit breaker, never called
 	for i, ch := range channels {
 		if !d.circuitBreaker.CanExecute(ch.Name) {
-			telemetry.ScopedLogger("router").Warn("circuit breaker is OPEN, bypassing dead upstream", "channel", ch.Name)
+			telemetry.WarnLogger(routerLog(ctx), "breaker-open:"+ch.Name, 30*time.Second,
+				"circuit breaker is OPEN, bypassing dead upstream",
+				"channel", ch.Name, "attempt", i+1)
 			skipped = append(skipped, ch.Name)
 			continue
 		}
@@ -287,7 +293,7 @@ func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankReques
 				attempted = append(attempted, ch.Name)
 				continue
 			}
-			attempted = append(attempted, d.recordChannelFailure(ch.Name, err, i+1))
+			attempted = append(attempted, d.recordChannelFailure(ctx, ch.Name, err, i+1))
 			continue
 		}
 

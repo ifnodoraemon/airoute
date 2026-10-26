@@ -68,3 +68,20 @@ func TestBroadcastHandlerKeepsScopedAttributes(t *testing.T) {
 		t.Fatalf("scoped attribute missing from the entry: %+v", entries[0].Attrs)
 	}
 }
+
+// Access lines are persisted as audit rows; they must not evict the rare events
+// an operator opens the console to find.
+func TestBroadcastHandlerKeepsAccessLinesOutOfRingBuffer(t *testing.T) {
+	buffer, logger := newTestSystemLogger(t)
+
+	logger.With("category", "system").Info("http_access", "status", 200)
+	logger.With("category", "billing").Warn("billing event")
+
+	entries := buffer.GetRecentLogs(10, "", "", "", "")
+	if len(entries) != 1 {
+		t.Fatalf("expected only the billing event in the buffer, got %d entries", len(entries))
+	}
+	if entries[0].Message != "billing event" {
+		t.Fatalf("unexpected entry kept: %+v", entries[0])
+	}
+}

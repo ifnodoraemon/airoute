@@ -44,6 +44,63 @@ func TestCircuitBreaker_AbortCanary(t *testing.T) {
 	}
 }
 
+func TestCircuitBreaker_StaleSuccessDoesNotBypassCooldown(t *testing.T) {
+	cb := NewCircuitBreaker(2, 5*time.Second)
+
+	// Trip the breaker.
+	cb.RecordFailure("flaky")
+	cb.RecordFailure("flaky")
+	if cb.GetStatus("flaky") != StateOpen {
+		t.Fatalf("expected StateOpen, got %v", cb.GetStatus("flaky"))
+	}
+	trippedAt := cb.breakers["flaky"].LastStateChange
+
+	// An in-flight request admitted before the trip completes successfully a few
+	// milliseconds later. It must not close the breaker: the cooldown exists to
+	// stop hammering a rate-limited upstream with new traffic.
+	cb.RecordSuccess("flaky")
+	if cb.GetStatus("flaky") != StateOpen {
+		t.Fatalf("a stale success closed the breaker %v after it tripped", time.Since(trippedAt))
+	}
+	if got := cb.breakers["flaky"].LastStateChange; !got.Equal(trippedAt) {
+		t.Errorf("stale success moved LastStateChange from %v to %v", trippedAt, got)
+	}
+
+	// Stale failures must not extend the cooldown either.
+	cb.RecordFailure("flaky")
+	if got := cb.breakers["flaky"].LastStateChange; !got.Equal(trippedAt) {
+		t.Errorf("stale failure extended the cooldown: %v -> %v", trippedAt, got)
+	}
+	if cb.GetStatus("flaky") != StateOpen {
+		t.Fatalf("expected the breaker to stay OPEN, got %v", cb.GetStatus("flaky"))
+	}
+
+	// New traffic stays blocked until the cooldown actually elapses.
+	if cb.CanExecute("flaky") {
+		t.Fatal("CanExecute admitted traffic before the cooldown elapsed")
+	}
+}
+
+func TestCircuitBreaker_ReopensOnlyThroughHalfOpenCanary(t *testing.T) {
+	cb := NewCircuitBreaker(1, 20*time.Millisecond)
+	cb.RecordFailure("ch")
+	if cb.GetStatus("ch") != StateOpen {
+		t.Fatalf("expected StateOpen, got %v", cb.GetStatus("ch"))
+	}
+
+	time.Sleep(30 * time.Millisecond)
+	if !cb.CanExecute("ch") {
+		t.Fatal("expected a canary probe after the cooldown")
+	}
+	if cb.GetStatus("ch") != StateHalfOpen {
+		t.Fatalf("expected StateHalfOpen, got %v", cb.GetStatus("ch"))
+	}
+	cb.RecordSuccess("ch")
+	if cb.GetStatus("ch") != StateClosed {
+		t.Fatalf("expected a successful canary to close the breaker, got %v", cb.GetStatus("ch"))
+	}
+}
+
 type cancelingTestProvider struct{}
 
 func (m *cancelingTestProvider) Name() string             { return "canceling_test" }

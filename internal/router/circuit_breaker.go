@@ -113,13 +113,21 @@ func (s *openState) CanExecute(b *BreakerStatus, cb *CircuitBreaker, now time.Ti
 	return false
 }
 
-func (s *openState) RecordSuccess(b *BreakerStatus, cb *CircuitBreaker, now time.Time) {
-	b.toClosed(now)
-}
+// RecordSuccess ignores outcomes reported while the breaker is OPEN.
+//
+// Those results belong to requests that were admitted *before* the trip: an
+// upstream that rejects with 429 still completes earlier in-flight calls
+// successfully. Closing on the first such success reset the cooldown timer to
+// zero, so a busy channel produced TRIPPED -> recovered cycles a few
+// milliseconds apart (15 flips in under a second), hammering the rate-limited
+// upstream instead of backing off. Recovery is owned by the cooldown +
+// half-open canary path.
+func (s *openState) RecordSuccess(b *BreakerStatus, cb *CircuitBreaker, now time.Time) {}
 
-func (s *openState) RecordFailure(b *BreakerStatus, cb *CircuitBreaker, now time.Time) {
-	b.LastStateChange = now
-}
+// RecordFailure likewise does not extend the cooldown. It used to reset
+// LastStateChange on every late failure, so a continuous trickle of in-flight
+// failures could keep the breaker OPEN forever.
+func (s *openState) RecordFailure(b *BreakerStatus, cb *CircuitBreaker, now time.Time) {}
 
 // halfOpenState handles canary probe testing during recovery.
 type halfOpenState struct{}

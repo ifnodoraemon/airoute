@@ -19,25 +19,43 @@ const ContextKeyRequestSnapshot = "request_snapshot"
 // snapshotMaxBytes caps how much of the inbound body is retained per request.
 const snapshotMaxBytes = 32 * 1024
 
+// replayBody presents "bytes already consumed for tracing" followed by the
+// still-unread remainder of the original body, and keeps the original Close.
+type replayBody struct {
+	io.Reader
+	closer io.Closer
+}
+
+func (b *replayBody) Close() error {
+	if b.closer == nil {
+		return nil
+	}
+	return b.closer.Close()
+}
+
 // CaptureRequestSnapshot stores a truncated copy of the request body in the gin
 // context. It is a no-op when trace capture is disabled.
+//
+// Only the first snapshotMaxBytes are read and buffered; the rest stays in the
+// network stream and is presented to the handler through a chained reader. The
+// previous implementation read the whole body (600-750 KB on a typical chat
+// request) to keep 32 KB of it, and the full byte slice stayed alive until the
+// response stream finished — hundreds of megabytes under concurrency.
 func CaptureRequestSnapshot(c *gin.Context) {
-	if storage.GlobalTraceCapture == nil {
+	if storage.GlobalTraceCapture == nil || c == nil || c.Request == nil || c.Request.Body == nil {
 		return
 	}
-	raw, err := c.GetRawData()
-	if err != nil {
-		if len(raw) > 0 {
-			c.Request.Body = io.NopCloser(bytes.NewReader(raw))
-		}
+	original := c.Request.Body
+	head, err := io.ReadAll(io.LimitReader(original, snapshotMaxBytes))
+	if len(head) > 0 {
+		c.Set(ContextKeyRequestSnapshot, string(head))
+	}
+	// Put the consumed bytes back in front of the unread remainder so the
+	// handler still sees the complete request body.
+	c.Request.Body = &replayBody{Reader: io.MultiReader(bytes.NewReader(head), original), closer: original}
+	if err != nil && len(head) == 0 {
 		return
 	}
-	snapshot := raw
-	if len(snapshot) > snapshotMaxBytes {
-		snapshot = snapshot[:snapshotMaxBytes]
-	}
-	c.Set(ContextKeyRequestSnapshot, string(snapshot))
-	c.Request.Body = io.NopCloser(bytes.NewReader(raw))
 }
 
 // RecordTrace archives a redacted snapshot for the given response status. The

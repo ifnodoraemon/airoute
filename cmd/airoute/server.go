@@ -173,6 +173,11 @@ func runServer(args []string) {
 	usageLogRetention := storage.InitUsageLogRetention(repo)
 	defer usageLogRetention.Stop()
 
+	// Compare the billing ledgers periodically so drift becomes a metric/alert
+	// instead of something an operator has to discover by hand.
+	billingReconciler := storage.InitBillingReconcile(repo)
+	defer billingReconciler.Stop()
+
 	// Initialize Control Plane Synchronizer & load state into Data Plane memory
 	synchronizer := controlplane.NewSynchronizer(repo, dispatcher)
 	if err := synchronizer.ReloadFromDB(); err != nil {
@@ -231,13 +236,7 @@ func runServer(args []string) {
 			telemetry.ScopedLogger("system").Info("gateway public endpoint configured", "url", pub)
 		}
 
-		fmt.Printf("\n%s🚀 Airoute 网关已成功就绪%s\n", colorBold+colorGreen, colorReset)
-		fmt.Printf("  • 网关服务端口: %shttp://%s%s\n", colorCyan, addr, colorReset)
-		fmt.Printf("  • 控制台工作台: %shttp://%s/app/%s (或 http://%s/)\n", colorCyan, addr, colorReset, addr)
-		if pub := cfg.GetPublicURL(); pub != "" {
-			fmt.Printf("  • 外部公共端点: %s%s%s\n", colorCyan, pub, colorReset)
-		}
-		fmt.Println()
+		printStartupBanner(addr, cfg.GetPublicURL())
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			telemetry.ScopedLogger("system").Error("server fatal error", "error", err.Error())
@@ -260,4 +259,26 @@ func runServer(args []string) {
 	}
 
 	telemetry.ScopedLogger("system").Info("airoute exited smoothly")
+}
+
+// printStartupBanner prints the human-facing readiness banner, but only when
+// stdout is a terminal.
+//
+// Under Docker/Compose/Kubernetes stdout is a pipe, and the colored multi-line
+// banner is not JSON: it breaks `jq`, log-shipper JSON parsing and line-oriented
+// alerting rules. Operators still see everything they need — "gateway server
+// listening" and "gateway public endpoint configured" are emitted as structured
+// logs — so the banner is only worth printing for an interactive `airoute run`.
+func printStartupBanner(addr, publicURL string) {
+	info, err := os.Stdout.Stat()
+	if err != nil || info.Mode()&os.ModeCharDevice == 0 {
+		return
+	}
+	fmt.Printf("\n%s🚀 Airoute 网关已成功就绪%s\n", colorBold+colorGreen, colorReset)
+	fmt.Printf("  • 网关服务端口: %shttp://%s%s\n", colorCyan, addr, colorReset)
+	fmt.Printf("  • 控制台工作台: %shttp://%s/app/%s (或 http://%s/)\n", colorCyan, addr, colorReset, addr)
+	if publicURL != "" {
+		fmt.Printf("  • 外部公共端点: %s%s%s\n", colorCyan, publicURL, colorReset)
+	}
+	fmt.Println()
 }

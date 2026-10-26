@@ -77,7 +77,7 @@ func TestDispatcherCandidateResolutionAndDecorators(t *testing.T) {
 		var attempted []string
 
 		// Channel 1 fails
-		name := d.recordChannelFailure("ch-1", errors.New("timeout"), 1)
+		name := d.recordChannelFailure(ctx, "ch-1", errors.New("timeout"), 1)
 		attempted = append(attempted, name)
 
 		if len(attempted) != 1 || attempted[0] != "ch-1" {

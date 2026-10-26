@@ -13,7 +13,10 @@ import (
 )
 
 const (
-	ContextKeyTraceID    = "trace_id"
+	// ContextKeyTraceID aliases the telemetry constant so whichever package a
+	// call site imports, the context key is the same string value.
+	ContextKeyTraceID    = telemetry.ContextKeyTraceID
+	ContextKeyErrorMessage = "error_message"
 	HeaderAirouteTraceID = "X-Airoute-Trace-ID"
 	HeaderRequestID      = "X-Request-ID"
 	HeaderTraceID        = "X-Trace-ID"
@@ -141,7 +144,11 @@ func AccessLogMiddleware() gin.HandlerFunc {
 			path = path + "?" + sanitizeURLQuery(raw)
 		}
 
-		telemetry.ScopedLogger("system").Info("http_access",
+		// Identity and failure reason are part of the access line on purpose.
+		// Without them an operator staring at "status=502" cannot tell which
+		// tenant/key produced it, nor what the gateway actually reported, and
+		// the only way to find out is a database join against usage_logs.
+		fields := []any{
 			"trace_id", traceID,
 			"method", c.Request.Method,
 			"path", path,
@@ -149,6 +156,26 @@ func AccessLogMiddleware() gin.HandlerFunc {
 			"latency_ms", latency.Milliseconds(),
 			"ip", clientIP,
 			"bytes", c.Writer.Size(),
-		)
+			"tenant", c.GetString(ContextKeyTenant),
+			"key", maskAPIKey(c.GetString(ContextKeyAPIKey)),
+		}
+		if status >= 400 {
+			if message := c.GetString(ContextKeyErrorMessage); message != "" {
+				fields = append(fields, "error", message)
+			}
+		}
+		telemetry.ScopedLogger("system").Info("http_access", fields...)
 	}
+}
+
+// maskAPIKey keeps enough of a key to tell two keys apart while never writing a
+// usable credential to stdout or the log archive.
+func maskAPIKey(key string) string {
+	if key == "" {
+		return ""
+	}
+	if len(key) <= 10 {
+		return key[:2] + "***"
+	}
+	return key[:10] + "***"
 }
