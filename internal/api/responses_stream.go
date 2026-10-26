@@ -107,7 +107,9 @@ func (h *Handler) handleResponsesStreaming(
 		// A client abort (499) still sent the prompt upstream; estimate it too.
 		if statusCode == http.StatusOK || statusCode == statusClientClosed {
 			if totalPromptTokens == 0 {
-				totalPromptTokens = estimateCanonicalPromptTokens(chatReq)
+				totalPromptTokens = calibratedPromptEstimate(chatReq.Model, estimateCanonicalPromptTokens(chatReq))
+			} else {
+				observePromptEstimate(chatReq.Model, estimateCanonicalPromptTokens(chatReq), totalPromptTokens)
 			}
 			if totalCompTokens == 0 && fullContent.Len() > 0 {
 				totalCompTokens = estimateTokens(fullContent.Len())

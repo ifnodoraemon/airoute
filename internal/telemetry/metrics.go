@@ -58,6 +58,10 @@ type Metrics struct {
 	// BillingWalletDriftUnits is the absolute difference between users.balance_units
 	// and its float mirror, refreshed by the reconciliation worker.
 	BillingWalletDriftUnits atomic.Int64
+	// EstimateBiasPPM is how far the local token estimate sits from the upstream
+	// tokenizer for the most recently observed model, in parts per million
+	// (positive = upstream counts more tokens than we estimated).
+	EstimateBiasPPM atomic.Int64
 	// BillingAuditLagUnits is the absolute difference between the settlement
 	// ledger (money actually moved) and the audit rows. It is expected to be
 	// non-zero briefly while an audit write is retried; a sustained value means

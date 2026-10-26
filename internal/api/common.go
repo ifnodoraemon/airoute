@@ -405,6 +405,26 @@ func estimateTokens(chars int) int {
 	return model.EstimateTokensFromChars(chars)
 }
 
+// modelNameOf returns the requested model name of a chat request.
+func modelNameOf(req *model.ChatCompletionRequest) string {
+	if req == nil {
+		return ""
+	}
+	return req.Model
+}
+
+// observePromptEstimate records an upstream-reported prompt count against our local
+// estimate, calibrating the estimator for that model.
+func observePromptEstimate(modelName string, localEstimate, upstreamActual int) {
+	billing.GlobalCalibrator.Observe(modelName, localEstimate, upstreamActual)
+}
+
+// calibratedPromptEstimate applies the learned upstream-tokenizer ratio to a local
+// estimate. It is a no-op until enough upstream reports have been observed.
+func calibratedPromptEstimate(modelName string, localEstimate int) int {
+	return billing.GlobalCalibrator.Adjust(modelName, localEstimate)
+}
+
 // Usage provenance markers recorded on the audit row.
 const (
 	usageSourceUpstream  = "upstream"
@@ -438,16 +458,21 @@ func estimateCompletionFromChoices(choices []model.ChatCompletionChoice) int {
 // row usage_source=estimated so the approximation stays visible.
 func resolveChatUsage(req *model.ChatCompletionRequest, resp *model.ChatCompletionResponse) (promptTokens, completionTokens, cachedTokens int, source string) {
 	source = usageSourceUpstream
+	localEstimate := estimateCanonicalPromptTokens(req)
 	if resp != nil && resp.Usage != nil {
 		promptTokens = resp.Usage.PromptTokens
 		completionTokens = resp.Usage.CompletionTokens
 		cachedTokens = resp.Usage.GetCachedTokens()
 	}
 	if promptTokens == 0 {
-		if estimated := estimateCanonicalPromptTokens(req); estimated > 0 {
+		if estimated := calibratedPromptEstimate(modelNameOf(req), localEstimate); estimated > 0 {
 			promptTokens = estimated
 			source = usageSourceEstimated
 		}
+	} else {
+		// Learn how the upstream tokenizer counts this prompt so later estimates
+		// (client aborts, upstreams that omit usage) converge on its accounting.
+		observePromptEstimate(modelNameOf(req), localEstimate, promptTokens)
 	}
 	if completionTokens == 0 && resp != nil {
 		if estimated := estimateCompletionFromChoices(resp.Choices); estimated > 0 {

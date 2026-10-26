@@ -75,8 +75,10 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 		} else {
 			// Fallback token estimation if upstream provider did not report usage on successful completion
 			if totalPromptTokens == 0 && approxPromptChars > 0 {
-				totalPromptTokens = estimateTokens(approxPromptChars)
+				totalPromptTokens = calibratedPromptEstimate(req.Model, estimateTokens(approxPromptChars))
 				usageSource = "estimated"
+			} else if totalPromptTokens > 0 && approxPromptChars > 0 {
+				observePromptEstimate(req.Model, estimateTokens(approxPromptChars), totalPromptTokens)
 			}
 			if totalCompTokens == 0 && accumulatedCompChars > 0 {
 				totalCompTokens = estimateTokens(accumulatedCompChars)

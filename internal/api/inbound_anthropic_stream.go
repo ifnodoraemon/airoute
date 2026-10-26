@@ -100,10 +100,12 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 			// the upstream stream omits usage, approximate the prompt from the
 			// request so the audit log does not show a misleading zero.
 			if totalPromptTokens == 0 {
-				if estimated := estimateCanonicalPromptTokens(canonicalReq); estimated > 0 {
+				if estimated := calibratedPromptEstimate(canonicalReq.Model, estimateCanonicalPromptTokens(canonicalReq)); estimated > 0 {
 					totalPromptTokens = estimated
 					usageSource = "estimated"
 				}
+			} else {
+				observePromptEstimate(canonicalReq.Model, estimateCanonicalPromptTokens(canonicalReq), totalPromptTokens)
 			}
 			if totalCompTokens == 0 && accumulatedCompChars > 0 {
 				totalCompTokens = estimateTokens(accumulatedCompChars)

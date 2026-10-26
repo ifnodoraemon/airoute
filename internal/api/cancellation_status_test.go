@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
+	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
@@ -57,5 +59,35 @@ func TestClientAbortIsCountedAsCanceledNotFailed(t *testing.T) {
 	}
 	if got := telemetry.GlobalMetrics.FailedRequests.Load(); got != beforeFailed {
 		t.Fatalf("failed counter moved to %d (was %d): a client abort must not count as a failure", got, beforeFailed)
+	}
+}
+
+// Estimators are calibrated from upstream-reported counts and then applied to
+// estimated ones, so aborted requests converge on the provider's tokenizer.
+func TestResolveChatUsageCalibratesEstimator(t *testing.T) {
+	req := &model.ChatCompletionRequest{
+		Model:    "calib-model",
+		Messages: []model.ChatMessage{{Role: "user", Content: strings.Repeat("a", 400)}},
+	}
+	// Upstream consistently counts 20% more than the local heuristic.
+	for i := 0; i < 40; i++ {
+		resp := &model.ChatCompletionResponse{
+			Choices: []model.ChatCompletionChoice{{Message: model.ChatMessage{Content: "ok"}}},
+			Usage:   &model.Usage{PromptTokens: 120, CompletionTokens: 1},
+		}
+		resolveChatUsage(req, resp)
+	}
+	raw := estimateCanonicalPromptTokens(req)
+	_, _, _, source := resolveChatUsage(req, &model.ChatCompletionResponse{
+		Choices: []model.ChatCompletionChoice{{Message: model.ChatMessage{Content: "ok"}}},
+	})
+	prompt, _, _, _ := resolveChatUsage(req, &model.ChatCompletionResponse{
+		Choices: []model.ChatCompletionChoice{{Message: model.ChatMessage{Content: "ok"}}},
+	})
+	if source != usageSourceEstimated {
+		t.Fatalf("source = %q, want estimated", source)
+	}
+	if prompt <= raw {
+		t.Fatalf("estimated prompt = %d, want it calibrated above the raw %d (upstream counts more)", prompt, raw)
 	}
 }

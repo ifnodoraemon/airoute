@@ -132,6 +132,10 @@ func (m *Metrics) ToPrometheusFormat() string {
 	sb.WriteString("# TYPE airoute_billing_wallet_drift_units gauge\n")
 	sb.WriteString(fmt.Sprintf("airoute_billing_wallet_drift_units %d\n", m.BillingWalletDriftUnits.Load()))
 
+	sb.WriteString("# HELP airoute_billing_estimate_bias_ppm Local estimate vs upstream tokenizer, parts per million\n")
+	sb.WriteString("# TYPE airoute_billing_estimate_bias_ppm gauge\n")
+	sb.WriteString(fmt.Sprintf("airoute_billing_estimate_bias_ppm %d\n", m.EstimateBiasPPM.Load()))
+
 	sb.WriteString("# HELP airoute_billing_audit_lag_units Absolute settlement-vs-audit difference in 1e-9 units\n")
 	sb.WriteString("# TYPE airoute_billing_audit_lag_units gauge\n")
 	sb.WriteString(fmt.Sprintf("airoute_billing_audit_lag_units %d\n", m.BillingAuditLagUnits.Load()))

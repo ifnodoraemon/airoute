@@ -172,6 +172,31 @@ func runServer(args []string) {
 	// not by the client-facing alias.
 	api.SetServedModelResolver(dispatcher.ResolveServedModel)
 
+	// Token-estimate calibration describes the upstream tokenizers, so it must
+	// survive restarts and be shared by both replicas.
+	if err := billing.LoadCalibration(repo, billing.GlobalCalibrator); err != nil {
+		telemetry.ScopedLogger("billing").Warn("failed to load token estimate calibration", "error", err.Error())
+	}
+	billing.GlobalCalibrator.SetPersistHook(func() error {
+		return billing.SaveCalibration(repo, billing.GlobalCalibrator)
+	})
+	stopCalibration := make(chan struct{})
+	defer close(stopCalibration)
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stopCalibration:
+				return
+			case <-ticker.C:
+				if err := billing.SaveCalibration(repo, billing.GlobalCalibrator); err != nil {
+					telemetry.ScopedLogger("billing").Warn("failed to persist token estimate calibration", "error", err.Error())
+				}
+			}
+		}
+	}()
+
 	// Initialize redacted request/response trace archiving for troubleshooting
 	traceCapture := storage.InitTraceCapture(repo)
 	defer traceCapture.Stop()
