@@ -162,3 +162,30 @@ func (d *Dispatcher) GetAllSupportedModels() []string {
 	sort.Strings(list)
 	return list
 }
+
+// ResolveServedModel reports the upstream model name that a channel actually
+// calls for a client-facing model.
+//
+// Billing has to use this: the provider invoices us for the model it served, not
+// for the alias the client asked for. Channel 罗总, for example, rewrites
+// deepseek-v4.1-flash to volcengine/deepseek-v4-1-flash-261017 on the wire.
+//
+// Returns "" when the channel is unknown, so callers keep the requested model.
+func (d *Dispatcher) ResolveServedModel(channelName, requestedModel string) string {
+	if d == nil || channelName == "" || requestedModel == "" {
+		return ""
+	}
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	for i := range d.channels {
+		if d.channels[i].Name != channelName {
+			continue
+		}
+		served := d.channels[i].GetUpstreamModel(requestedModel)
+		if served == "" {
+			return requestedModel
+		}
+		return served
+	}
+	return ""
+}

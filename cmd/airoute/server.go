@@ -168,6 +168,10 @@ func runServer(args []string) {
 	// no longer waits for the audit log to be persisted.
 	storage.InitBillingSettlement(repo)
 
+	// Bill by the model the upstream actually served (channel model mapping),
+	// not by the client-facing alias.
+	api.SetServedModelResolver(dispatcher.ResolveServedModel)
+
 	// Initialize redacted request/response trace archiving for troubleshooting
 	traceCapture := storage.InitTraceCapture(repo)
 	defer traceCapture.Stop()
@@ -209,6 +213,25 @@ func runServer(args []string) {
 		telemetry.ScopedLogger("billing").Warn("models served without a configured price; the fallback rate card is in use",
 			"count", len(unpriced),
 			"models", strings.Join(shown, ","))
+
+		// Billing aligns with the provider invoice only if the model the provider
+		// actually served is priced. Channel model mappings can turn a priced alias
+		// into an unpriced upstream model.
+		servedUnpriced, servedErr := billing.UnpricedServedModelsInUse(repo, billing.GlobalEngine, 7*24*time.Hour, dispatcher.ResolveServedModel)
+		if servedErr != nil {
+			telemetry.ScopedLogger("billing").Warn("served-model pricing check failed", "error", servedErr.Error())
+			return
+		}
+		if len(servedUnpriced) == 0 {
+			return
+		}
+		servedShown := servedUnpriced
+		if len(servedShown) > 10 {
+			servedShown = servedShown[:10]
+		}
+		telemetry.ScopedLogger("billing").Warn("upstream models served without their own price; charges fall back to the alias rate",
+			"count", len(servedUnpriced),
+			"served_models", strings.Join(servedShown, "; "))
 	}()
 
 	// Subscribe to cluster-wide reload broadcasts via Redis Pub/Sub

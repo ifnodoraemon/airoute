@@ -49,6 +49,36 @@ func RecordUsage(c *gin.Context, params AuditRecordParams) float64 {
 	return cost
 }
 
+// servedModelResolver maps (serving channel, requested model) to the upstream
+// model name that was actually called. Installed by the server at startup.
+var servedModelResolver func(channel, model string) string
+
+// SetServedModelResolver installs the served-model lookup used for billing.
+func SetServedModelResolver(resolver func(channel, model string) string) {
+	servedModelResolver = resolver
+}
+
+// billingModelFor decides which model's rate card to charge.
+//
+// The upstream invoices us for the model it served, so billing must follow the
+// channel's model mapping (e.g. deepseek-v4.1-flash -> volcengine/...). It only
+// does so when the served model has an explicitly configured price: replacing an
+// operator's alias price with the fallback rate card would silently change what
+// every customer pays.
+func billingModelFor(params AuditRecordParams, keyGroup string) string {
+	if servedModelResolver == nil || params.Channel == "" || params.Model == "" {
+		return params.Model
+	}
+	served := servedModelResolver(params.Channel, params.Model)
+	if served == "" || served == params.Model {
+		return params.Model
+	}
+	if billing.GlobalEngine != nil && billing.GlobalEngine.ResolvePriceSource(served, keyGroup) != billing.PriceSourceDefault {
+		return served
+	}
+	return params.Model
+}
+
 // settlementTimeout bounds the synchronous wallet settlement on the request
 // path. The database is local, so this only fires when something is wrong; the
 // record is then deferred to the async pipeline instead of stalling the response.
@@ -81,7 +111,7 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 
 	if billable && !params.SkipBilling && billing.GlobalEngine != nil {
 		cost, savedCost, _, isOffPeak, offPeakDiscount, pricingSnapshot = billing.GlobalEngine.CalculateCostForUnits(
-			params.Model,
+			billingModelFor(params, keyGroup),
 			keyGroup,
 			params.PromptTokens,
 			params.CompletionTokens,
