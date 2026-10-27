@@ -29,6 +29,11 @@ func (h *AdminHandler) ListUserKeys(c *gin.Context) {
 }
 
 // CreateUserKeyRequest defines personal API key creation.
+//
+// TenantID is accepted for wire compatibility with older consoles but is ignored:
+// the tenant of a self-service key is the authenticated account (see PlanUserKey),
+// so a caller cannot label its traffic as another tenant. Name stays as the key's
+// display name only.
 type CreateUserKeyRequest struct {
 	Name          string   `json:"name"`
 	TenantID      string   `json:"tenant_id"`

@@ -81,6 +81,10 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "用户名至少需要 3 个字符"})
 		return
 	}
+	if isReservedUsername(req.Username) {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "该用户名前缀为第三方登录保留，请更换用户名"})
+		return
+	}
 	if len(req.Password) < 6 {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "密码长度至少需要 6 个字符"})
 		return

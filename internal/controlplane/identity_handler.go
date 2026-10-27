@@ -41,6 +41,23 @@ func registrationGrant(verificationRequired, verified bool) bool {
 	return verified || !verificationRequired
 }
 
+// reservedUsernamePrefixes are namespaces owned by the OAuth providers. A local
+// registration must not take them: gh_<github-id>/gg_<google-sub> is the name the
+// OAuth flow prefers for that person, and squatting it used to make their first
+// third-party login fail.
+var reservedUsernamePrefixes = []string{"gh_", "gg_"}
+
+// isReservedUsername reports whether a username falls in a provider namespace.
+func isReservedUsername(username string) bool {
+	lower := strings.ToLower(strings.TrimSpace(username))
+	for _, prefix := range reservedUsernamePrefixes {
+		if strings.HasPrefix(lower, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // Register registers a new regular user account with email verification and creates initial balance.
 func (h *AdminHandler) Register(c *gin.Context) {
 	if !config.GetGlobalConfig().IsRegistrationAllowed() {
@@ -60,6 +77,10 @@ func (h *AdminHandler) Register(c *gin.Context) {
 
 	if len(username) < 3 {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "用户名至少需要 3 个字符"})
+		return
+	}
+	if isReservedUsername(username) {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "该用户名前缀为第三方登录保留，请更换用户名"})
 		return
 	}
 	if len(req.Password) < 6 {

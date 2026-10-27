@@ -7,6 +7,9 @@ import (
 // TestPlanUserKeyLimits covers the quota rules behind self-service key creation.
 // They were inline in the handler and had no test at all, even though they are the
 // only place a personal key's allowance is decided.
+//
+// A10/A11: the tenant is server-owned (it is the authenticated account) and an
+// omitted RPM is no longer "unlimited".
 func TestPlanUserKeyLimits(t *testing.T) {
 	alice := aliceWithGroup("vip")
 
@@ -22,16 +25,32 @@ func TestPlanUserKeyLimits(t *testing.T) {
 		{
 			name:       "an empty request gets the documented defaults",
 			req:        CreateUserKeyRequest{},
-			wantRPM:    0,
+			wantRPM:    DefaultUserKeyRPM,
 			wantTPM:    DefaultUserKeyTPM,
 			wantBudget: 0,
 			wantTenant: "alice",
 			wantModels: []string{"*"},
 		},
 		{
-			name:       "a negative rpm floors at zero",
+			name:       "a negative rpm falls back to the default instead of unlimited",
 			req:        CreateUserKeyRequest{RPM: -5},
-			wantRPM:    0,
+			wantRPM:    DefaultUserKeyRPM,
+			wantTPM:    DefaultUserKeyTPM,
+			wantTenant: "alice",
+			wantModels: []string{"*"},
+		},
+		{
+			name:       "a zero rpm means the default, not unlimited",
+			req:        CreateUserKeyRequest{RPM: 0},
+			wantRPM:    DefaultUserKeyRPM,
+			wantTPM:    DefaultUserKeyTPM,
+			wantTenant: "alice",
+			wantModels: []string{"*"},
+		},
+		{
+			name:       "an rpm above the self-service cap is clamped",
+			req:        CreateUserKeyRequest{RPM: MaxSelfServiceKeyRPM + 1},
+			wantRPM:    MaxSelfServiceKeyRPM,
 			wantTPM:    DefaultUserKeyTPM,
 			wantTenant: "alice",
 			wantModels: []string{"*"},
@@ -39,6 +58,7 @@ func TestPlanUserKeyLimits(t *testing.T) {
 		{
 			name:       "a negative budget floors at zero",
 			req:        CreateUserKeyRequest{Budget: -12.5},
+			wantRPM:    DefaultUserKeyRPM,
 			wantTPM:    DefaultUserKeyTPM,
 			wantTenant: "alice",
 			wantModels: []string{"*"},
@@ -46,12 +66,21 @@ func TestPlanUserKeyLimits(t *testing.T) {
 		{
 			name:       "a non-positive tpm falls back to the default",
 			req:        CreateUserKeyRequest{TPM: -1},
+			wantRPM:    DefaultUserKeyRPM,
 			wantTPM:    DefaultUserKeyTPM,
 			wantTenant: "alice",
 			wantModels: []string{"*"},
 		},
 		{
-			name:       "positive values are kept as asked",
+			name:       "a tpm above the self-service cap is clamped",
+			req:        CreateUserKeyRequest{TPM: MaxSelfServiceKeyTPM + 1},
+			wantRPM:    DefaultUserKeyRPM,
+			wantTPM:    MaxSelfServiceKeyTPM,
+			wantTenant: "alice",
+			wantModels: []string{"*"},
+		},
+		{
+			name:       "positive values within the caps are kept as asked",
 			req:        CreateUserKeyRequest{RPM: 60, TPM: 500, Budget: 25},
 			wantRPM:    60,
 			wantTPM:    500,
@@ -62,27 +91,34 @@ func TestPlanUserKeyLimits(t *testing.T) {
 		{
 			name:       "an explicit model list is kept",
 			req:        CreateUserKeyRequest{AllowedModels: []string{"gpt-x"}},
+			wantRPM:    DefaultUserKeyRPM,
 			wantTPM:    DefaultUserKeyTPM,
 			wantTenant: "alice",
 			wantModels: []string{"gpt-x"},
 		},
 		{
-			name:       "the tenant falls back to the request name",
+			// A10 regression: the display name is client-controlled and must never
+			// become the tenant identity.
+			name:       "the request name cannot become the tenant",
 			req:        CreateUserKeyRequest{Name: "my-app"},
+			wantRPM:    DefaultUserKeyRPM,
 			wantTPM:    DefaultUserKeyTPM,
-			wantTenant: "my-app",
+			wantTenant: "alice",
 			wantModels: []string{"*"},
 		},
 		{
-			name:       "an explicit tenant wins over the name",
-			req:        CreateUserKeyRequest{TenantID: "explicit", Name: "my-app"},
+			// A10 regression: an explicit tenant_id in the body is ignored too.
+			name:       "an explicit tenant id cannot override the owner",
+			req:        CreateUserKeyRequest{TenantID: "admin", Name: "my-app"},
+			wantRPM:    DefaultUserKeyRPM,
 			wantTPM:    DefaultUserKeyTPM,
-			wantTenant: "explicit",
+			wantTenant: "alice",
 			wantModels: []string{"*"},
 		},
 		{
-			name:       "a blank tenant and name fall back to the username",
+			name:       "a blank tenant and name still yield the username",
 			req:        CreateUserKeyRequest{TenantID: "   ", Name: "  "},
+			wantRPM:    DefaultUserKeyRPM,
 			wantTPM:    DefaultUserKeyTPM,
 			wantTenant: "alice",
 			wantModels: []string{"*"},
@@ -114,6 +150,24 @@ func TestPlanUserKeyLimits(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestPlanUserKeyTenantIsNeverClientControlled is the A10 regression stated as an
+// invariant: for every body shape, the stored tenant is the authenticated account.
+func TestPlanUserKeyTenantIsNeverClientControlled(t *testing.T) {
+	alice := aliceWithGroup("default")
+	for _, req := range []CreateUserKeyRequest{
+		{},
+		{Name: "admin"},
+		{TenantID: "admin"},
+		{TenantID: "admin", Name: "admin"},
+		{TenantID: "   ", Name: "admin"},
+	} {
+		rec := PlanUserKey(alice, req, "sk-airoute-generated")
+		if rec.TenantID != alice.Username {
+			t.Fatalf("req %+v produced tenant %q, want %q", req, rec.TenantID, alice.Username)
+		}
 	}
 }
 
@@ -165,22 +219,25 @@ func TestPlanUserKeyToleratesAMissingUser(t *testing.T) {
 	if rec == nil {
 		t.Fatal("PlanUserKey returned nil")
 	}
-	if rec.UserID != 0 || rec.GroupName != "" {
-		t.Errorf("a missing user should leave identity unset: user=%d group=%q", rec.UserID, rec.GroupName)
+	if rec.UserID != 0 || rec.GroupName != "" || rec.TenantID != "" {
+		t.Errorf("a missing user should leave identity unset: user=%d group=%q tenant=%q",
+			rec.UserID, rec.GroupName, rec.TenantID)
 	}
-	if rec.Status != "active" || rec.TPM != DefaultUserKeyTPM {
-		t.Errorf("the quota rules should still apply: status=%q tpm=%d", rec.Status, rec.TPM)
+	if rec.Status != "active" || rec.TPM != DefaultUserKeyTPM || rec.RPM != DefaultUserKeyRPM {
+		t.Errorf("the quota rules should still apply: status=%q tpm=%d rpm=%d", rec.Status, rec.TPM, rec.RPM)
 	}
 }
 
-// TestAdminAndUserPathsDisagreeOnZeroQuotas pins the asymmetry noted on
-// PlanUserKey, so a future change to either path has to be deliberate.
-func TestAdminAndUserPathsDisagreeOnZeroQuotas(t *testing.T) {
+// TestAdminAndUserPathsDifferOnZeroQuotas pins the remaining asymmetry between the
+// self-service and administrator paths, so a future change to either has to be
+// deliberate: the administrator deliberately configures zero (unlimited) quotas,
+// while the self-service defaults are safe.
+func TestAdminAndUserPathsDifferOnZeroQuotas(t *testing.T) {
 	alice := aliceWithGroup("default")
 
 	personal := PlanUserKey(alice, CreateUserKeyRequest{TPM: 0, RPM: -1, Budget: -1}, "sk-airoute-personal")
-	if personal.TPM != DefaultUserKeyTPM || personal.RPM != 0 || personal.Budget != 0 {
-		t.Errorf("the personal path did not clamp: tpm=%d rpm=%d budget=%v",
+	if personal.TPM != DefaultUserKeyTPM || personal.RPM != DefaultUserKeyRPM || personal.Budget != 0 {
+		t.Errorf("the personal path did not apply its defaults: tpm=%d rpm=%d budget=%v",
 			personal.TPM, personal.RPM, personal.Budget)
 	}
 

@@ -204,15 +204,10 @@ func shouldRevealKey(c *gin.Context) bool {
 }
 
 // maskAPIKey renders a credential as prefix + last 4 characters so audit logs
-// never expose a complete key to the console or exported CSV.
+// never expose a complete key to the console or exported CSV. The single
+// implementation lives in the storage package, next to the fingerprint helper.
 func maskAPIKey(key string) string {
-	if key == "" {
-		return ""
-	}
-	if len(key) <= 12 {
-		return "sk-***"
-	}
-	return key[:8] + "***" + key[len(key)-4:]
+	return storage.MaskAPIKey(key)
 }
 
 // maskUsageLogKeys masks every API key in a log page in place.

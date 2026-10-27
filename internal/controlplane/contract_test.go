@@ -313,6 +313,9 @@ func TestCreateAPIKeyRequestAcceptsExactlyTheWritableColumns(t *testing.T) {
 		"used_cost_units": true,
 		"created_at":      true,
 		"updated_at":      true,
+		// Fingerprint is derived from Key when the row is read or created; it is
+		// never accepted from (or needed in) the creation body.
+		"key_fingerprint": true,
 	}
 
 	for _, name := range sortedNames(record) {
@@ -419,7 +422,7 @@ func TestAdminResponseShapesAreStable(t *testing.T) {
 				"id", "key", "tenant_id", "allowed_models", "rpm", "tpm", "budget",
 				"used_tokens", "used_cost", "budget_units", "used_cost_units",
 				"group_name", "user_id", "status", "format_validation",
-				"created_at", "updated_at",
+				"created_at", "updated_at", "key_fingerprint",
 			},
 		},
 		{

@@ -282,7 +282,9 @@ func TestLogic_RecordUsageLog_FallbackDeduction(t *testing.T) {
 	}
 }
 
-// 6. Self-Service Key Creation options: name, unlimited RPM, custom budget
+// 6. Self-Service Key Creation options: name (display only), safe default RPM,
+// custom budget. The tenant is the authenticated account, never the request name,
+// and an omitted RPM is the default 60 rather than unlimited (A10/A11).
 func TestLogic_CreateUserKey_Options(t *testing.T) {
 	repo, engine, _ := setupAuditTestEnv(t)
 
@@ -320,11 +322,11 @@ func TestLogic_CreateUserKey_Options(t *testing.T) {
 	}
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 
-	if resp.Data.TenantID != "production-bot" {
-		t.Errorf("expected tenant_id to be 'production-bot', got '%s'", resp.Data.TenantID)
+	if resp.Data.TenantID != "charlie" {
+		t.Errorf("expected tenant_id to be the owner 'charlie', got '%s'", resp.Data.TenantID)
 	}
-	if resp.Data.RPM != 0 {
-		t.Errorf("expected RPM to be 0 (unlimited), got %d", resp.Data.RPM)
+	if resp.Data.RPM != 60 {
+		t.Errorf("expected the safe default RPM 60, got %d", resp.Data.RPM)
 	}
 	if resp.Data.Budget != 88.5 {
 		t.Errorf("expected Budget to be 88.5, got %f", resp.Data.Budget)

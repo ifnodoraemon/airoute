@@ -2,7 +2,9 @@ package controlplane
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -124,6 +126,83 @@ func (h *AdminHandler) redirectOAuthResult(c *gin.Context, completed, errMsg str
 	c.Redirect(http.StatusFound, target)
 }
 
+// OAuth account usernames are a namespace of the gateway, but the value is
+// derived from public provider identifiers (a GitHub numeric id, a Google sub),
+// so anyone can register the same name locally before that person first signs in.
+// The base name is therefore only a preference: allocation appends a random suffix
+// until it finds a free name instead of failing the login with a 500.
+const (
+	oauthUsernameMaxLength   = 64
+	oauthUsernameMaxAttempts = 8
+	oauthUsernameSuffixLen   = 4
+)
+
+// oauthUsernameBase builds the preferred username for an identity. The subject is
+// sanitized to characters that are safe in a username; anything else is dropped so
+// a provider value can never smuggle routing or display characters into the name.
+func oauthUsernameBase(provider, subject string) string {
+	prefix := "gh_"
+	if strings.EqualFold(provider, "google") {
+		prefix = "gg_"
+	}
+	var b strings.Builder
+	for _, r := range subject {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+			b.WriteRune(r)
+		}
+	}
+	sanitized := b.String()
+	if sanitized == "" {
+		// A provider that returned nothing usable still gets a stable, unique name
+		// derived from the subject so the account is not shared between identities.
+		sum := sha256.Sum256([]byte(provider + "\x00" + subject))
+		sanitized = hex.EncodeToString(sum[:6])
+	}
+	if len(sanitized) > oauthUsernameMaxLength-len(prefix)-oauthUsernameSuffixLen-1 {
+		sanitized = sanitized[:oauthUsernameMaxLength-len(prefix)-oauthUsernameSuffixLen-1]
+	}
+	return prefix + sanitized
+}
+
+// allocateOAuthUsername returns a free username for a new OAuth account. The
+// preferred name is used when free; otherwise a short random suffix is appended
+// (and retried), so a squatted name degrades to a different valid name instead of
+// blocking the owner's first login.
+func allocateOAuthUsername(repo *storage.Repository, provider, subject, preferred string) (string, error) {
+	base := strings.TrimSpace(preferred)
+	if base == "" {
+		base = oauthUsernameBase(provider, subject)
+	}
+	for attempt := 0; attempt < oauthUsernameMaxAttempts; attempt++ {
+		candidate := base
+		if attempt > 0 {
+			suffix, err := randomUsernameSuffix()
+			if err != nil {
+				return "", err
+			}
+			candidate = base + "_" + suffix
+		}
+		existing, err := repo.GetUserByUsername(candidate)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return "", err
+		}
+		if existing == nil {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("could not allocate a free username for the OAuth identity after %d attempts", oauthUsernameMaxAttempts)
+}
+
+// randomUsernameSuffix returns a short hex suffix from the system entropy source.
+func randomUsernameSuffix() (string, error) {
+	buf := make([]byte, oauthUsernameSuffixLen/2)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
+}
+
 // OAuthCallback handles GitHub/Google OAuth login or 1-click test authorization.
 func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 	provider := strings.ToLower(c.Param("provider"))
@@ -175,7 +254,9 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 				return
 			}
 			subject = realUser
-			username = "gh_" + realUser
+			// The username is allocated when the account is created: the obvious
+			// gh_<id> name can be squatted by local registration.
+			username = ""
 			email = realEmail
 		} else {
 			realUser, realEmail, err := exchangeGoogleOAuth(req.Code, clientID, clientSecret, redirectURI)
@@ -184,7 +265,7 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 				return
 			}
 			subject = realUser
-			username = "gg_" + realUser
+			username = ""
 			email = realEmail
 		}
 	} else if isTestOrDev {
@@ -263,6 +344,12 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 			return
 		}
 
+		allocated, allocErr := allocateOAuthUsername(h.repo, provider, subject, username)
+		if allocErr != nil {
+			h.oauthError(c, http.StatusInternalServerError, "无法为第三方账号分配用户名，请稍后重试")
+			return
+		}
+		username = allocated
 		user = &storage.UserRecord{
 			Username:     username,
 			Email:        email,

@@ -2,7 +2,9 @@ package storage
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -33,6 +35,55 @@ type APIKeyRecord struct {
 	UserBalance      float64   `json:"-"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
+	// Fingerprint is a stable, non-reversible identifier for Key. It lets audit
+	// rows, exports and support tickets refer to a credential without disclosing
+	// it, and is the intended join key for a future migration that stops storing
+	// plaintext keys (see APIKeyFingerprint).
+	Fingerprint string `json:"key_fingerprint,omitempty"`
+}
+
+// APIKeyFingerprint returns a stable, non-reversible identifier for an API key.
+//
+// The key itself has 128 bits of system entropy, so the digest cannot be
+// reversed by guessing; it is only ever used to correlate references to a key
+// (audit rows, exports, operator support) without copying the credential.
+//
+// Residual (documented deliberately, not an oversight): api_keys.key,
+// usage_logs.api_key and billing_settlements.api_key still hold cleartext
+// credentials. Those strings are the ledger's join key — settlement updates
+// counters with UPDATE api_keys ... WHERE key = ?, reconciliation groups by
+// usage_logs.api_key, and the log console filters by key id through
+// api_key IN (SELECT key FROM api_keys WHERE id = ?). Replacing them needs
+// (a) a migration adding key_hash plus usage_logs/settlements key identifiers,
+// (b) the request-path write sites to record the key id, and (c) settlement and
+// reconcile rewritten to join on it. The fingerprint below is the identifier that
+// migration should use, so it is added now (additive, no join changes) to make the
+// later change a column swap instead of a redesign.
+func APIKeyFingerprint(key string) string {
+	if key == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte("airoute-api-key-fingerprint-v1|" + key))
+	return "kfp_" + hex.EncodeToString(sum[:8])
+}
+
+// MaskAPIKey renders a credential as a short, non-reusable prefix so logs and
+// console rows can tell keys apart without exposing them.
+func MaskAPIKey(key string) string {
+	if key == "" {
+		return ""
+	}
+	if len(key) <= 12 {
+		return "sk-***"
+	}
+	return key[:8] + "***" + key[len(key)-4:]
+}
+
+// attachFingerprint fills the derived identifier for a scanned row.
+func (rec *APIKeyRecord) attachFingerprint() {
+	if rec != nil {
+		rec.Fingerprint = APIKeyFingerprint(rec.Key)
+	}
 }
 
 // resolveMoney reconciles the integer ledger mirrors with the legacy float
@@ -73,6 +124,7 @@ func (r *Repository) ListAPIKeys() ([]*APIKeyRecord, error) {
 			_ = json.Unmarshal([]byte(allowedJSON), &rec.AllowedModels)
 		}
 		rec.resolveMoney()
+		rec.attachFingerprint()
 		list = append(list, &rec)
 	}
 	if err := rows.Err(); err != nil {
@@ -101,6 +153,7 @@ func (r *Repository) ListAPIKeysByUser(userID int64) ([]*APIKeyRecord, error) {
 			_ = json.Unmarshal([]byte(allowedJSON), &rec.AllowedModels)
 		}
 		rec.resolveMoney()
+		rec.attachFingerprint()
 		list = append(list, &rec)
 	}
 	if err := rows.Err(); err != nil {
@@ -123,6 +176,7 @@ func (r *Repository) ListHistoricalAPIKeysByUser(userID int64) ([]*APIKeyRecord,
 		if err := rows.Scan(&key.ID, &key.Key); err != nil {
 			return nil, err
 		}
+		key.attachFingerprint()
 		keys = append(keys, &key)
 	}
 	return keys, rows.Err()
@@ -162,6 +216,7 @@ func insertAPIKey(db recordInserter, rec *APIKeyRecord) error {
 		return err
 	}
 	rec.ID = id
+	rec.attachFingerprint()
 	return nil
 }
 
@@ -183,6 +238,7 @@ func (r *Repository) GetAPIKey(id int64) (*APIKeyRecord, error) {
 		_ = json.Unmarshal([]byte(allowedJSON), &rec.AllowedModels)
 	}
 	rec.resolveMoney()
+	rec.attachFingerprint()
 	return &rec, nil
 }
 
@@ -213,6 +269,7 @@ func (r *Repository) GetAPIKeyByKeyContext(ctx context.Context, key string) (*AP
 		_ = json.Unmarshal([]byte(allowedJSON), &rec.AllowedModels)
 	}
 	rec.resolveMoney()
+	rec.attachFingerprint()
 	return &rec, nil
 }
 
