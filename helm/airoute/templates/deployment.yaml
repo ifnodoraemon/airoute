@@ -49,6 +49,10 @@ spec:
               containerPort: {{ .Values.service.port }}
               protocol: TCP
           env:
+            - name: GIN_MODE
+              value: "release"
+            - name: GATEWAY_ALLOW_INSECURE_DEFAULTS
+              value: "false"
             - name: GATEWAY_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:

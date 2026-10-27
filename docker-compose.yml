@@ -12,7 +12,15 @@ x-gateway-env: &gateway-env
   GATEWAY_ADMIN_RESET: ${GATEWAY_ADMIN_RESET:-false}
   ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
   INITIAL_USER_BALANCE: ${INITIAL_USER_BALANCE:-5.0}
-  REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-false}
+  REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-true}
+  # The startup credential check is fail-closed: a placeholder signing secret or
+  # the shipped admin123 password refuses to boot. Local development can opt out
+  # explicitly; never set this in a real deployment.
+  GATEWAY_ALLOW_INSECURE_DEFAULTS: ${GATEWAY_ALLOW_INSECURE_DEFAULTS:-false}
+  # Release mode drives gin and enables production-only warnings (e.g. Stripe).
+  GIN_MODE: ${GIN_MODE:-release}
+  # When set, GET /metrics requires "Authorization: Bearer <token>".
+  GATEWAY_METRICS_TOKEN: ${GATEWAY_METRICS_TOKEN:-}
   STORAGE_DRIVER: ${STORAGE_DRIVER:-s3}
   STORAGE_S3_ENDPOINT: ${STORAGE_S3_ENDPOINT:-http://storage:9000}
   STORAGE_S3_BUCKET: ${STORAGE_S3_BUCKET:-airoute-skills}

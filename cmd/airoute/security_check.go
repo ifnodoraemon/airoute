@@ -2,9 +2,23 @@ package main
 
 import (
 	"os"
+	"strings"
 
 	"github.com/ifnodoraemon/airoute/internal/config"
 )
+
+// allowInsecureDefaults reports whether the operator explicitly opted into the
+// insecure development defaults. The startup check is fail-closed by default: a
+// deployment that forgot to set strong credentials must not silently run with a
+// forgeable admin signing key and a well-known password. The escape hatch exists
+// only for throwaway local development.
+func allowInsecureDefaults() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("GATEWAY_ALLOW_INSECURE_DEFAULTS"))) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
+}
 
 // weakAdminSecrets are placeholder values that ship in documentation, sample
 // manifests or compose files. They must never be trusted in production.

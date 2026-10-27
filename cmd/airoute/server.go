@@ -69,16 +69,25 @@ func runServer(args []string) {
 		dataSource = dbEnv
 	}
 
-	// Security and deployment warnings on startup
+	// Security and deployment warnings on startup.
+	//
+	// The credential check is fail-closed: a forgeable admin signing key or the
+	// shipped admin123 password is never acceptable in a running gateway. Earlier
+	// versions only refused in "release mode" (GIN_MODE=release or log_level
+	// warn/error), which the shipped Compose/Swarm files never set, so the guard
+	// silently did nothing on the deployments it was written for. Local
+	// development can opt out explicitly with GATEWAY_ALLOW_INSECURE_DEFAULTS.
 	isRelease := os.Getenv("GIN_MODE") == "release" || cfg.Server.LogLevel == "warn" || cfg.Server.LogLevel == "error"
 	if issues := productionSecurityIssues(cfg); len(issues) > 0 {
 		for _, issue := range issues {
 			telemetry.ScopedLogger("system").Warn("SECURITY WARNING: "+issue, "remediation", "set GATEWAY_ADMIN_SECRET and GATEWAY_ADMIN_PASSWORD to strong random values")
 		}
-		if isRelease {
-			telemetry.ScopedLogger("system").Error("refusing to start: insecure default credentials detected in release mode; set GATEWAY_ADMIN_SECRET and GATEWAY_ADMIN_PASSWORD")
+		if !allowInsecureDefaults() {
+			telemetry.ScopedLogger("system").Error("refusing to start: insecure default credentials detected; set GATEWAY_ADMIN_SECRET and GATEWAY_ADMIN_PASSWORD",
+				"escape_hatch", "GATEWAY_ALLOW_INSECURE_DEFAULTS=true (local development only)")
 			os.Exit(1)
 		}
+		telemetry.ScopedLogger("system").Warn("starting with insecure default credentials because GATEWAY_ALLOW_INSECURE_DEFAULTS is enabled; never use this in production")
 	}
 	if isRelease && os.Getenv("STRIPE_WEBHOOK_SECRET") == "" {
 		telemetry.ScopedLogger("system").Warn("SECURITY WARNING: STRIPE_WEBHOOK_SECRET is unset in production release mode. Stripe payment webhooks will be rejected.")

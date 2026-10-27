@@ -84,7 +84,12 @@ services:
       - DATABASE_URL=postgres://${DB_USER:-airouteuser}:${DB_PASSWORD:?DB_PASSWORD must be set}@airoute-postgres:5432/${DB_NAME:-airoutedb}?sslmode=disable
       - REDIS_URL=redis://airoute-redis:6379/0
       - GATEWAY_ADMIN_SECRET=${GATEWAY_ADMIN_SECRET:?GATEWAY_ADMIN_SECRET must be set to a strong random value}
-      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - GATEWAY_ADMIN_PASSWORD=${GATEWAY_ADMIN_PASSWORD:?GATEWAY_ADMIN_PASSWORD must be set to a strong random value}
+      # Fail-closed credential gate (never enable the escape hatch in production).
+      - GATEWAY_ALLOW_INSECURE_DEFAULTS=${GATEWAY_ALLOW_INSECURE_DEFAULTS:-false}
+      - GIN_MODE=release
+      # When set, /metrics requires "Authorization: Bearer <token>".
+      - GATEWAY_METRICS_TOKEN=${GATEWAY_METRICS_TOKEN:-}
     networks:
       - airoute-swarm-net
     healthcheck:

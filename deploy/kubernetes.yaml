@@ -42,6 +42,13 @@ spec:
             secretKeyRef:
               name: airoute-secret
               key: admin-secret
+        - name: GATEWAY_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: airoute-secret
+              key: admin-password
+        - name: GATEWAY_ALLOW_INSECURE_DEFAULTS
+          value: "false"
         ports:
         - containerPort: 8080
           name: http
@@ -104,7 +111,8 @@ metadata:
   namespace: default
 type: Opaque
 stringData:
-  # REQUIRED: replace both placeholders with strong random secrets before applying.
-  # The gateway refuses to start in release mode while these placeholders remain.
+  # REQUIRED: replace every placeholder with strong random values before applying.
+  # The gateway refuses to start while weak/placeholder credentials remain.
   database-url: "postgres://airoute:REPLACE_WITH_STRONG_DB_PASSWORD@postgres-svc.default.svc.cluster.local:5432/airoute?sslmode=disable"
   admin-secret: "REPLACE_WITH_STRONG_RANDOM_SECRET"
+  admin-password: "REPLACE_WITH_STRONG_ADMIN_PASSWORD"
