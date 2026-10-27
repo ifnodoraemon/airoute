@@ -1,6 +1,6 @@
 # Airoute 网关审计与修复总结（2026-10-23）
 
-新增：[功能流程与细节审查（18 项）](functional-details-2026-10-26.md) · [对应修复与验证（2026-10-27）](functional-details-remediation-2026-10-27.md)。
+新增：[功能流程与细节审查（18 项）](functional-details-2026-10-26.md) · [对应修复与验证（2026-10-27）](functional-details-remediation-2026-10-27.md) · [重建重启后全面审查（2026-10-27）](2026-10-27-review/README.md)（7 个领域、115 项发现，含线上验证记录）。
 
 本目录下有三份完整审计报告：
 
