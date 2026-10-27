@@ -101,7 +101,9 @@ func (h *AdminHandler) SendVerificationCode(c *gin.Context) {
 	}
 
 	// Rate limiting: max 5 sends per minute per IP, max 1 send per minute per email
-	clientIP := c.ClientIP()
+	// Resolved client address: forwarding headers are only believed when they
+	// arrive from a configured trusted proxy.
+	clientIP := middleware.ResolveClientIP(c)
 	if !middleware.GlobalRateLimiter.GetBucket("vcode:ip:"+clientIP, 5).Allow() {
 		c.JSON(http.StatusTooManyRequests, gin.H{"code": 429, "error": "验证码发送过于频繁，请稍后再试"})
 		return

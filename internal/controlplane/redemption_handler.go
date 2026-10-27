@@ -139,7 +139,7 @@ func (h *AdminHandler) RedeemWalletCode(c *gin.Context) {
 	// Gift-card codes are short enough to be brute-forced; limit attempts per
 	// account and per source IP before the code is even looked up.
 	if !middleware.GlobalRateLimiter.GetBucket("redeem:user:"+claims.Username, 10).Allow() ||
-		!middleware.GlobalRateLimiter.GetBucket("redeem:ip:"+c.ClientIP(), 20).Allow() {
+		!middleware.GlobalRateLimiter.GetBucket("redeem:ip:"+middleware.ResolveClientIP(c), 20).Allow() {
 		c.Header("Retry-After", "60")
 		c.JSON(http.StatusTooManyRequests, gin.H{"code": 429, "error": "兑换尝试过于频繁，请稍后再试"})
 		return

@@ -143,7 +143,7 @@ func AccessLogMiddleware() gin.HandlerFunc {
 		traceID := GetTraceID(c)
 		latency := time.Since(start)
 		status := c.Writer.Status()
-		clientIP := c.ClientIP()
+		clientIP := ResolveClientIP(c)
 
 		if raw != "" {
 			path = path + "?" + sanitizeURLQuery(raw)

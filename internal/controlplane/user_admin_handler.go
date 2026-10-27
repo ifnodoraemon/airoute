@@ -216,6 +216,20 @@ func (h *AdminHandler) DeleteUser(c *gin.Context) {
 // ResetUserPasswordRequest defines reset payload.
 type ResetUserPasswordRequest struct {
 	NewPassword string `json:"new_password" binding:"required"`
+	// OldPassword is required when an administrator resets their own password
+	// through this endpoint, so a hijacked session cannot rotate the credential
+	// it was stolen from without knowing the current one.
+	OldPassword string `json:"old_password"`
+}
+
+// isProtectedAdminAccount reports whether username names the built-in super
+// administrator, which only that account may modify.
+func isProtectedAdminAccount(username string) bool {
+	if username == "admin" {
+		return true
+	}
+	rootAdmin := config.GetGlobalConfig().GetAdminUsername()
+	return rootAdmin != "" && username == rootAdmin
 }
 
 // ResetUserPassword allows administrator to reset password of any user.
@@ -232,6 +246,14 @@ func (h *AdminHandler) ResetUserPassword(c *gin.Context) {
 		return
 	}
 
+	// The built-in super administrator may only be reset by itself: any other
+	// administrator taking it over silently seizes the account, even though
+	// DeleteUser / UpdateUserStatus / UpdateUserRole all refuse to touch it.
+	if isProtectedAdminAccount(targetUsername) && targetUsername != claims.Username {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "禁止重置内置超级管理员的密码，请使用其本人账号操作"})
+		return
+	}
+
 	var req ResetUserPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil || len(req.NewPassword) < 6 {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "新密码长度至少需要 6 个字符"})
@@ -242,6 +264,15 @@ func (h *AdminHandler) ResetUserPassword(c *gin.Context) {
 	if err != nil || targetUser == nil || targetUser.Status == "deleted" {
 		c.JSON(http.StatusNotFound, gin.H{"code": 404, "error": "目标用户不存在"})
 		return
+	}
+
+	// Self-service reset is a credential rotation, not an administrative
+	// override: it must prove knowledge of the current password.
+	if targetUsername == claims.Username {
+		if req.OldPassword == "" || bcrypt.CompareHashAndPassword([]byte(targetUser.PasswordHash), []byte(req.OldPassword)) != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "重置本人密码需要提供正确的旧密码"})
+			return
+		}
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)

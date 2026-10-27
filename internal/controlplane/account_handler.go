@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/config"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -25,8 +26,17 @@ func (h *AdminHandler) Login(c *gin.Context) {
 		return
 	}
 
-	clientIP := c.ClientIP()
-	if ok, retry := globalLoginGuard.check(req.Username, clientIP); !ok {
+	// The throttle identity is the resolved client, not a header the caller can
+	// choose: clientIP comes from X-Forwarded-For only when the direct peer is a
+	// configured trusted proxy.
+	identity := middleware.ResolveClientIdentity(c)
+	client := loginClient{
+		Username:      req.Username,
+		IP:            identity.IP,
+		IPIsForwarded: identity.Forwarded,
+	}
+	ctx := c.Request.Context()
+	if ok, retry := globalLoginGuard.check(ctx, client); !ok {
 		c.Header("Retry-After", strconv.Itoa(int(retry.Seconds())+1))
 		c.JSON(http.StatusTooManyRequests, gin.H{"code": 429, "error": "登录失败次数过多，请稍后再试"})
 		return
@@ -34,7 +44,7 @@ func (h *AdminHandler) Login(c *gin.Context) {
 
 	user, err := h.repo.GetUserByLogin(req.Username)
 	if err != nil || user == nil || user.Status == "deleted" {
-		globalLoginGuard.failure(req.Username, clientIP)
+		globalLoginGuard.failure(ctx, client)
 		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "用户名或密码错误"})
 		return
 	}
@@ -45,11 +55,11 @@ func (h *AdminHandler) Login(c *gin.Context) {
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		globalLoginGuard.failure(req.Username, clientIP)
+		globalLoginGuard.failure(ctx, client)
 		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "用户名或密码错误"})
 		return
 	}
-	globalLoginGuard.success(req.Username, clientIP)
+	globalLoginGuard.success(ctx, client)
 
 	expiryHours := config.GetGlobalConfig().GetTokenExpiryHours()
 	token, err := GenerateAdminToken(user, time.Duration(expiryHours)*time.Hour)

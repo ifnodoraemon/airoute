@@ -2,9 +2,13 @@ package middleware
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/distributed"
@@ -233,4 +237,192 @@ func ReserveUserQuota(userID int64, balance float64) (bool, QuotaBackend) {
 // ReleaseUserQuota frees a reservation acquired with ReserveUserQuota.
 func ReleaseUserQuota(userID int64, backend QuotaBackend) {
 	globalQuotaTracker.Release(userID, backend)
+}
+
+// ---------------------------------------------------------------------------
+// Client identity resolution
+//
+// Gin's default is to trust every peer as a reverse proxy, so c.ClientIP()
+// returns the first X-Forwarded-For entry — a value any client can choose. That
+// made the login lockout, the per-IP rate limiters and the access-log address
+// attacker-controlled: rotating the header created a fresh bucket per attempt.
+// The resolver below only believes forwarding headers that arrive from a peer
+// configured in GATEWAY_TRUSTED_PROXIES, and walks X-Forwarded-For from the
+// right so a client-supplied prefix cannot shadow the real address.
+
+const trustedProxyEnv = "GATEWAY_TRUSTED_PROXIES"
+
+// ClientIdentity is the resolved origin of a request.
+type ClientIdentity struct {
+	// IP is the best available client address (or the TCP peer when no proxy
+	// hop is trusted).
+	IP string
+	// Forwarded reports whether IP came from a trusted proxy's forwarding
+	// header. It is false when the address is merely the TCP peer, which is the
+	// proxy itself in an unconfigured deployment; callers that apply a per-IP
+	// penalty should only do so when this is true.
+	Forwarded bool
+}
+
+type trustedProxyCacheEntry struct {
+	spec string
+	nets []*net.IPNet
+	err  error
+}
+
+var trustedProxyCache atomic.Pointer[trustedProxyCacheEntry]
+
+// ParseTrustedProxies parses a comma/space separated list of CIDRs or bare IP
+// addresses. An empty specification means "trust no proxy".
+func ParseTrustedProxies(spec string) ([]*net.IPNet, error) {
+	spec = strings.TrimSpace(spec)
+	if spec == "" {
+		return nil, nil
+	}
+	fields := strings.FieldsFunc(spec, func(r rune) bool {
+		return r == ',' || r == ' ' || r == '\t' || r == '\n' || r == '\r'
+	})
+	nets := make([]*net.IPNet, 0, len(fields))
+	for _, field := range fields {
+		field = strings.TrimSpace(field)
+		if field == "" {
+			continue
+		}
+		if _, network, err := net.ParseCIDR(field); err == nil {
+			nets = append(nets, network)
+			continue
+		}
+		ip := net.ParseIP(field)
+		if ip == nil {
+			return nil, fmt.Errorf("invalid trusted proxy address %q (want an IP or CIDR)", field)
+		}
+		if v4 := ip.To4(); v4 != nil {
+			nets = append(nets, &net.IPNet{IP: v4, Mask: net.CIDRMask(32, 32)})
+		} else {
+			nets = append(nets, &net.IPNet{IP: ip, Mask: net.CIDRMask(128, 128)})
+		}
+	}
+	return nets, nil
+}
+
+// TrustedProxiesFromEnv returns the configured trusted proxy networks, caching
+// the parse per environment value so it can run on every request.
+func TrustedProxiesFromEnv() ([]*net.IPNet, error) {
+	spec := strings.TrimSpace(os.Getenv(trustedProxyEnv))
+	if cached := trustedProxyCache.Load(); cached != nil && cached.spec == spec {
+		return cached.nets, cached.err
+	}
+	nets, err := ParseTrustedProxies(spec)
+	trustedProxyCache.Store(&trustedProxyCacheEntry{spec: spec, nets: nets, err: err})
+	return nets, err
+}
+
+// TrustedProxyConfigured reports whether any reverse proxy is trusted. Without
+// one, forwarding headers are ignored (there is no way to tell a real client
+// address from a forged one).
+func TrustedProxyConfigured() bool {
+	nets, err := TrustedProxiesFromEnv()
+	return err == nil && len(nets) > 0
+}
+
+// ConfigureTrustedProxies applies GATEWAY_TRUSTED_PROXIES to the Gin engine so
+// every c.ClientIP() caller sees the same, unspoofable address as
+// ResolveClientIdentity. An invalid list is an error rather than a silent
+// fallback, because "trust everything" is exactly the failure being fixed.
+func ConfigureTrustedProxies(engine *gin.Engine) error {
+	if engine == nil {
+		return nil
+	}
+	spec := strings.TrimSpace(os.Getenv(trustedProxyEnv))
+	nets, err := ParseTrustedProxies(spec)
+	if err != nil {
+		return err
+	}
+	if len(nets) == 0 {
+		// Setting an empty list (nil) makes Gin ignore forwarding headers and
+		// report the TCP peer.
+		return engine.SetTrustedProxies(nil)
+	}
+	proxies := make([]string, 0, len(nets))
+	for _, network := range nets {
+		proxies = append(proxies, network.String())
+	}
+	return engine.SetTrustedProxies(proxies)
+}
+
+// ResolveClientIdentity resolves the request origin, honouring forwarding
+// headers only when the direct peer is a configured trusted proxy and the
+// forwarded address itself is not another trusted proxy.
+func ResolveClientIdentity(c *gin.Context) ClientIdentity {
+	if c == nil || c.Request == nil {
+		return ClientIdentity{}
+	}
+	peer := peerIP(c.Request.RemoteAddr)
+	if peer == "" {
+		return ClientIdentity{}
+	}
+	trusted, err := TrustedProxiesFromEnv()
+	peerIPValue := net.ParseIP(peer)
+	if err != nil || !ipInNetworks(peerIPValue, trusted) {
+		// Untrusted (or unconfigured) peer: any forwarding header it sends is
+		// self-asserted, so the peer is the only address we can attribute.
+		return ClientIdentity{IP: peer}
+	}
+
+	// Walk X-Forwarded-For from the right: the last trusted proxy appends the
+	// last untrusted hop, which is the closest thing to the real client.
+	if forwarded := c.Request.Header.Values("X-Forwarded-For"); len(forwarded) > 0 {
+		hops := strings.Split(strings.Join(forwarded, ","), ",")
+		for i := len(hops) - 1; i >= 0; i-- {
+			ip := net.ParseIP(strings.TrimSpace(hops[i]))
+			if ip == nil {
+				break
+			}
+			if !ipInNetworks(ip, trusted) {
+				return ClientIdentity{IP: ip.String(), Forwarded: true}
+			}
+		}
+		// Every hop was itself a trusted proxy; no client attribution exists.
+		return ClientIdentity{IP: peer}
+	}
+
+	// X-Real-IP is the second header the shipped nginx sets.
+	if realIP := net.ParseIP(strings.TrimSpace(c.GetHeader("X-Real-IP"))); realIP != nil && !ipInNetworks(realIP, trusted) {
+		return ClientIdentity{IP: realIP.String(), Forwarded: true}
+	}
+	return ClientIdentity{IP: peer}
+}
+
+// ResolveClientIP is ResolveClientIdentity(...).IP.
+func ResolveClientIP(c *gin.Context) string {
+	return ResolveClientIdentity(c).IP
+}
+
+func peerIP(remoteAddr string) string {
+	remoteAddr = strings.TrimSpace(remoteAddr)
+	if remoteAddr == "" {
+		return ""
+	}
+	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
+		if ip := net.ParseIP(host); ip != nil {
+			return ip.String()
+		}
+		return host
+	}
+	if ip := net.ParseIP(remoteAddr); ip != nil {
+		return ip.String()
+	}
+	return remoteAddr
+}
+
+func ipInNetworks(ip net.IP, networks []*net.IPNet) bool {
+	if ip == nil {
+		return false
+	}
+	for _, network := range networks {
+		if network != nil && network.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }

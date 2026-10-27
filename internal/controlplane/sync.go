@@ -101,6 +101,12 @@ type Synchronizer struct {
 	// per replica — about 20% of all log volume — and buried the reloads that
 	// actually changed something.
 	lastFingerprint string
+
+	// onReady fires exactly once, after the first complete snapshot is installed.
+	// The server uses it to leave the fail-closed startup state.
+	onReady func()
+	// ready records that a snapshot was installed at least once.
+	ready bool
 }
 
 // NewSynchronizer creates a new Synchronizer.
@@ -157,13 +163,52 @@ func (s *Synchronizer) Version() uint64 {
 // partial apply that snapshot really is in effect.
 func (s *Synchronizer) ReloadFromDB() error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	applied, err := s.reloadLocked()
+	firstReady := applied && !s.ready
+	if applied {
+		s.ready = true
+	}
+	onReady := s.onReady
+	s.mu.Unlock()
 
+	// Fire outside the lock: the callback flips the data-plane readiness flag the
+	// auth middleware reads, and running it here keeps "snapshot installed" and
+	// "traffic allowed" ordered (the first load must complete before ListenAndServe).
+	if firstReady && onReady != nil {
+		onReady()
+	}
+	return err
+}
+
+// SetOnReady registers the callback invoked once, after the first snapshot is
+// installed. Subsequent snapshot applications do not fire it again.
+func (s *Synchronizer) SetOnReady(fn func()) {
+	s.mu.Lock()
+	s.onReady = fn
+	ready := s.ready
+	s.mu.Unlock()
+	if ready && fn != nil {
+		// A snapshot was already installed before the callback was registered.
+		fn()
+	}
+}
+
+// Ready reports whether at least one complete snapshot has been installed.
+func (s *Synchronizer) Ready() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ready
+}
+
+// reloadLocked performs one load-and-apply cycle. It reports whether a complete
+// snapshot was installed: a partial apply (model prices failing after the switch)
+// still installed the configuration, and the readiness flag must reflect that.
+func (s *Synchronizer) reloadLocked() (bool, error) {
 	snap, err := s.loadSnapshot()
 	if err != nil {
 		// Nothing was mutated: the data plane still runs the previous snapshot, and
 		// the version still identifies it.
-		return err
+		return false, err
 	}
 
 	s.applySnapshot(snap)
@@ -193,14 +238,14 @@ func (s *Synchronizer) ReloadFromDB() error {
 
 	if s.prices != nil {
 		if err := s.prices.ReloadPrices(); err != nil {
-			return &HotReloadError{
+			return true, &HotReloadError{
 				Stage: "model prices",
 				Err:   fmt.Errorf("reload model prices error: %w", err),
 			}
 		}
 	}
 
-	return nil
+	return true, nil
 }
 
 // loadSnapshot reads every part of the configuration. It performs no mutation,

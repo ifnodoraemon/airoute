@@ -84,10 +84,27 @@ func (h *AdminHandler) oauthError(c *gin.Context, status int, message string) {
 	c.JSON(status, gin.H{"code": status, "error": message})
 }
 
+// oauthRedirectBase returns the origin the post-login redirect may point at.
+//
+// It only ever returns an operator-configured public URL. The previous code
+// derived it from ResolvePublicBaseURL, which falls back to the request's Host
+// and X-Forwarded-Host headers — both chosen by the caller — so an attacker
+// could make a successful login redirect the victim to their own origin. When
+// no public URL is configured the caller redirects to a relative path instead,
+// which stays on whatever origin served the callback.
+func oauthRedirectBase() string {
+	cfg := config.GetGlobalConfig()
+	if cfg == nil {
+		return ""
+	}
+	// GetPublicURL already prefers PUBLIC_URL/GATEWAY_PUBLIC_URL, validates the
+	// scheme and trims the trailing slash.
+	return cfg.GetPublicURL()
+}
+
 // redirectOAuthResult returns to the SPA after setting the session cookie.
 // The URL carries only a completion marker or an error, never credentials.
 func (h *AdminHandler) redirectOAuthResult(c *gin.Context, completed, errMsg string) {
-	base := strings.TrimRight(ResolvePublicBaseURL(c), "/")
 	q := url.Values{}
 	if completed != "" {
 		q.Set("oauth_complete", "1")
@@ -95,9 +112,14 @@ func (h *AdminHandler) redirectOAuthResult(c *gin.Context, completed, errMsg str
 	if errMsg != "" {
 		q.Set("oauth_error", errMsg)
 	}
-	target := base + "/#/login"
+	target := "/#/login"
 	if len(q) > 0 {
-		target = base + "/?" + q.Encode() + "#/login"
+		target = "/?" + q.Encode() + "#/login"
+	}
+	// Configured deployments get an absolute URL; unconfigured ones stay on the
+	// serving origin rather than trusting a request header.
+	if base := oauthRedirectBase(); base != "" {
+		target = base + target
 	}
 	c.Redirect(http.StatusFound, target)
 }

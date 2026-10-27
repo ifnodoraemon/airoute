@@ -56,6 +56,12 @@ func (h *AdminHandler) AdminAuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		// Credentials are accepted from headers and the session cookie only.
+		//
+		// A ?token= fallback used to exist here for EventSource callers that cannot
+		// set headers. It put a 7-day session credential into URLs, where it leaks
+		// through access logs, browser history and Referer headers; the console now
+		// authenticates the log stream with the HttpOnly cookie instead.
 		authHeader := c.GetHeader("Authorization")
 		var token string
 		cookieAuth := false
@@ -66,8 +72,6 @@ func (h *AdminHandler) AdminAuthMiddleware() gin.HandlerFunc {
 		} else if cookieToken := sessionTokenFromCookie(c); cookieToken != "" {
 			token = cookieToken
 			cookieAuth = true
-		} else if qToken := c.Query("token"); qToken != "" {
-			token = qToken
 		}
 
 		if token == "" {

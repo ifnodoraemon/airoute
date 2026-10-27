@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/config"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -19,6 +20,25 @@ type RegisterRequest struct {
 	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
 	Code     string `json:"code"`
+}
+
+// Registration rate limits (per minute, process-local buckets). Registration is
+// the only unauthenticated write that mints spendable credit and a working API
+// key, so it must not be loopable.
+const (
+	registerRatePerIPPerMinute       = 5
+	registerRatePerUsernamePerMinute = 3
+)
+
+// registrationGrant reports whether a registration may receive the trial
+// balance and the initial API key. A deployment that requires email
+// verification only grants them to a verified address; one that explicitly
+// disabled verification accepts unverified signups, so the grant still applies.
+//
+// The distinction exists so a future two-step flow (create account, verify
+// later) cannot accidentally mint credit before the address is verified.
+func registrationGrant(verificationRequired, verified bool) bool {
+	return verified || !verificationRequired
 }
 
 // Register registers a new regular user account with email verification and creates initial balance.
@@ -47,14 +67,44 @@ func (h *AdminHandler) Register(c *gin.Context) {
 		return
 	}
 
-	// Verify verification code if required
-	if isEmailVerificationRequired() {
+	// Throttle registration before any storage work. The client address is the
+	// resolved one (trusted proxy hops only), so rotating a forwarding header
+	// cannot mint a fresh bucket.
+	client := middleware.ResolveClientIdentity(c)
+	if !middleware.GlobalRateLimiter.GetBucket("register:ip:"+client.IP, registerRatePerIPPerMinute).Allow() {
+		c.Header("Retry-After", "60")
+		c.JSON(http.StatusTooManyRequests, gin.H{"code": 429, "error": "注册请求过于频繁，请稍后再试"})
+		return
+	}
+	if !middleware.GlobalRateLimiter.GetBucket("register:user:"+strings.ToLower(username), registerRatePerUsernamePerMinute).Allow() {
+		c.Header("Retry-After", "60")
+		c.JSON(http.StatusTooManyRequests, gin.H{"code": 429, "error": "该用户名注册请求过于频繁，请稍后再试"})
+		return
+	}
+
+	// Verify the email code when the deployment requires it. A code that is
+	// supplied while verification is optional is still honoured (and must be
+	// valid) instead of being silently discarded.
+	verificationRequired := isEmailVerificationRequired()
+	verified := false
+	if verificationRequired {
 		if code == "" || !h.repo.VerifyCode(email, code, "register") {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "验证码无效或已过期，请重新获取"})
 			return
 		}
+		verified = true
 	} else if code != "" {
-		_ = h.repo.VerifyCode(email, code, "register")
+		if !h.repo.VerifyCode(email, code, "register") {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "验证码无效或已过期，请重新获取"})
+			return
+		}
+		verified = true
+	}
+	// Fail closed: an unverified registration must never be granted the trial
+	// balance or an API key.
+	if !registrationGrant(verificationRequired, verified) {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "注册需要先完成邮箱验证"})
+		return
 	}
 
 	// Check if username or email already exists

@@ -17,6 +17,7 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/config"
 	"github.com/ifnodoraemon/airoute/internal/controlplane"
 	"github.com/ifnodoraemon/airoute/internal/distributed"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/router"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
@@ -223,10 +224,18 @@ func runServer(args []string) {
 	billingReconciler := storage.InitBillingReconcile(repo)
 	defer billingReconciler.Stop()
 
-	// Initialize Control Plane Synchronizer & load state into Data Plane memory
+	// Initialize Control Plane Synchronizer & load state into Data Plane memory.
+	//
+	// The data plane starts fail-closed: until the first snapshot is installed the
+	// in-memory API key set is empty, and the auth middleware would treat that as
+	// "no key was ever registered" (the open-dev-mode bypass). Serving 503 until
+	// storage answers keeps a database outage at boot from turning the gateway
+	// into an anonymous proxy.
+	middleware.SetDataPlaneReady(false)
 	synchronizer := controlplane.NewSynchronizer(repo, dispatcher)
+	synchronizer.SetOnReady(func() { middleware.SetDataPlaneReady(true) })
 	if err := synchronizer.ReloadFromDB(); err != nil {
-		telemetry.ScopedLogger("system").Warn("initial sync from db failed, using config file defaults", "error", err.Error())
+		telemetry.ScopedLogger("system").Warn("initial sync from db failed; data plane stays closed until a reload succeeds", "error", err.Error())
 		dispatcher.UpdateChannels(cfg.Channels)
 	}
 
@@ -303,6 +312,18 @@ func runServer(args []string) {
 
 	// Setup HTTP Engine (Data Plane + Control Plane Admin API + Embedded Web UI)
 	engine := api.SetupRouter(dispatcher, adminHandler)
+
+	// Only configured proxy hops may declare the client address. Gin trusts every
+	// peer by default, so an unset GATEWAY_TRUSTED_PROXIES would let any caller
+	// choose the IP that the login lockout, the per-IP rate limiters and the
+	// access log use.
+	if err := middleware.ConfigureTrustedProxies(engine); err != nil {
+		telemetry.ScopedLogger("system").Error("invalid GATEWAY_TRUSTED_PROXIES; refusing to start with forwarding headers trusted", "error", err.Error())
+		os.Exit(1)
+	}
+	if !middleware.TrustedProxyConfigured() {
+		telemetry.ScopedLogger("system").Warn("GATEWAY_TRUSTED_PROXIES is unset: X-Forwarded-For/X-Real-IP are ignored and every request is attributed to its TCP peer. Behind a reverse proxy set GATEWAY_TRUSTED_PROXIES to the proxy CIDRs, otherwise client IPs, per-IP rate limits and access logs show the proxy address.")
+	}
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	srv := &http.Server{

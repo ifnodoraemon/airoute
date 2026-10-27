@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -52,10 +53,54 @@ func auditAuthFailure(c *gin.Context, rawKey string, statusCode int, errMsg stri
 	})
 }
 
+// dataPlaneReady distinguishes "the gateway genuinely has no API keys" from
+// "the runtime configuration has not been loaded yet".
+//
+// It defaults to true so embedders and tests that never wire the startup path
+// keep working; cmd/airoute sets it to false before the first snapshot load and
+// flips it back once storage answered. Without that distinction a failed first
+// snapshot read leaves the in-memory key set empty, and the open-dev-mode
+// branch below would admit every caller anonymously.
+var dataPlaneReady atomic.Bool
+
+func init() { dataPlaneReady.Store(true) }
+
+// SetDataPlaneReady marks whether the runtime configuration has been loaded
+// from durable storage at least once. It is called by the server bootstrap.
+func SetDataPlaneReady(ready bool) { dataPlaneReady.Store(ready) }
+
+// DataPlaneReady reports whether the data plane has a loaded configuration.
+func DataPlaneReady() bool { return dataPlaneReady.Load() }
+
+// DataPlaneUnreadyDenial is the fail-closed response served while the gateway
+// has not loaded its configuration yet.
+func DataPlaneUnreadyDenial() *AccessDenial {
+	return &AccessDenial{
+		StatusCode: http.StatusServiceUnavailable,
+		Message:    "Gateway data plane is not ready: configuration has not been loaded from storage yet. Please retry shortly.",
+		Type:       "service_unavailable",
+		Code:       "data_plane_unready",
+		Headers:    map[string]string{"Retry-After": "5"},
+		LogMessage: "data plane configuration not loaded yet",
+	}
+}
+
 // AuthMiddleware authenticates incoming requests via Bearer API keys.
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cfg := config.GetGlobalConfig()
+
+		// Fail closed until the first successful configuration load. The open-mode
+		// check below must never be reached with a snapshot that was never read.
+		if !DataPlaneReady() {
+			denial := DataPlaneUnreadyDenial()
+			auditAuthFailure(c, "", denial.StatusCode, denial.LogMessage)
+			for header, value := range denial.Headers {
+				c.Header(header, value)
+			}
+			AbortWithDenial(c, denial)
+			return
+		}
 
 		// If no API keys configured in system and no keys ever created, allow all requests in open dev mode.
 		// If keys have been registered in the gateway (even if currently disabled/revoked), strictly enforce auth!
