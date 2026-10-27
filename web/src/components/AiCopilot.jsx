@@ -29,12 +29,16 @@ import { getGatewayOrigin, copyToClipboard as crossOriginCopy } from '../config'
 import { extractErrorMessage } from '../api/client';
 import MarkdownRenderer from './MarkdownRenderer';
 import { inferClientModality } from '../lib/modelModality';
-import { apiKeyHeaders, isUsableAPIKey } from '../lib/apiKey';
+import { apiKeyHeaders, isUsableAPIKey, UNAUTHENTICATED_KEY } from '../lib/apiKey';
+import { availableKeyModels } from '../lib/keyModels';
 import {
   COPILOT_HARNESS_TOOLS,
   HARNESS_BENCHMARKS,
   executeHarnessTool
 } from './copilotHarness';
+
+// Sentinel for "paste a credential that has no row in this account's key list".
+const CUSTOM_KEY_ID = '__custom__';
 
 export default function AiCopilot({
   isOpen,
@@ -276,6 +280,42 @@ export default function AiCopilot({
   const origin = getGatewayOrigin();
   const baseUrl = origin ? `${origin}/v1` : '/v1';
 
+  // Two different things are chosen below, and conflating them was the original
+  // defect: the key *row* only scopes the tenant and the allowed models (the list
+  // carries display masks, never credentials), while the *plaintext* pasted for
+  // this session is what signs the request. The copilot therefore offers the same
+  // selection as Playground, plus an explicit open-gateway mode and a free-form
+  // entry for a credential without a row in this account's list.
+  const activeKeys = useMemo(
+    () => (keys || []).filter(key => !key.status || key.status === 'active'),
+    [keys]
+  );
+  const contextKeys = useMemo(() => activeKeys.filter(key => key.id != null), [activeKeys]);
+  const [selectedKeyId, setSelectedKeyId] = useState(
+    () => (contextKeys[0] ? String(contextKeys[0].id) : UNAUTHENTICATED_KEY)
+  );
+  // The pasted plaintext is kept per selected context: switching to another key
+  // row must not silently keep signing requests with the previous key's
+  // credential, and switching back should not force a second paste.
+  const [plaintextByContext, setPlaintextByContext] = useState({});
+  const sessionApiKey = plaintextByContext[selectedKeyId] || '';
+  const setSessionApiKey = (value) => {
+    setPlaintextByContext(prev => ({ ...prev, [selectedKeyId]: value }));
+  };
+  const selectedKeyObj = useMemo(
+    () => activeKeys.find(key => String(key.id) === selectedKeyId) || null,
+    [activeKeys, selectedKeyId]
+  );
+  const requiresCredential = selectedKeyId !== UNAUTHENTICATED_KEY;
+
+  // Keep the selection valid when the list reloads or the account changes.
+  useEffect(() => {
+    if (selectedKeyId === UNAUTHENTICATED_KEY || selectedKeyId === CUSTOM_KEY_ID) return;
+    if (!contextKeys.some(key => String(key.id) === selectedKeyId)) {
+      setSelectedKeyId(contextKeys[0] ? String(contextKeys[0].id) : UNAUTHENTICATED_KEY);
+    }
+  }, [contextKeys, selectedKeyId]);
+
   const candidateModels = useMemo(() => {
     let list = [];
     if (modelRoutes && modelRoutes.length > 0) {
@@ -286,22 +326,22 @@ export default function AiCopilot({
       const chatModels = models.filter(m => inferClientModality(m) === 'chat');
       list = chatModels.length > 0 ? chatModels : models;
     }
-    return Array.from(new Set(list));
-  }, [models, modelRoutes]);
-
-  // Set default selected model
-  useEffect(() => {
-    if (!selectedModel && candidateModels.length > 0) {
-      const preferred = candidateModels.find(m => m.includes('flash') || m.includes('deepseek') || m.includes('glm')) || candidateModels[0];
-      setSelectedModel(preferred);
+    // A selected key can restrict the models it may call; offering the rest would
+    // produce 403s the operator cannot explain from this panel.
+    const allowed = selectedKeyObj?.allowed_models || [];
+    if (allowed.length > 0 && !allowed.includes('*')) {
+      list = availableKeyModels(selectedKeyObj, list);
     }
-  }, [candidateModels, selectedModel]);
+    return Array.from(new Set(list));
+  }, [models, modelRoutes, selectedKeyObj]);
 
-  // The console key list only carries display masks (credentials are stored as
-  // digests), so the copilot asks for the plaintext it needs and keeps it in
-  // memory for this session. The list stays available to the harness tools as
-  // context, but it is never sent as a credential.
-  const [sessionApiKey, setSessionApiKey] = useState('');
+  // Keep the driving model inside the (possibly narrowed) candidate list.
+  useEffect(() => {
+    if (candidateModels.length === 0) return;
+    if (selectedModel && candidateModels.includes(selectedModel)) return;
+    const preferred = candidateModels.find(m => m.includes('flash') || m.includes('deepseek') || m.includes('glm')) || candidateModels[0];
+    setSelectedModel(preferred);
+  }, [candidateModels, selectedModel]);
 
   // Welcome message with Harness context
   useEffect(() => {
@@ -343,7 +383,7 @@ export default function AiCopilot({
   // Scroll to bottom on new messages
   useEffect(() => {
     if (isOpen) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
     }
   }, [messages, isOpen]);
 
@@ -553,12 +593,13 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
 
     // Refuse before touching the network: sending the list mask would fail auth
     // in a way that looks like a gateway bug, and sending nothing would look like
-    // an auth outage. The bubble states exactly what to do.
+    // an auth outage. The bubble states exactly what to do. Open-gateway mode is
+    // the one deliberate exception: the operator chose to call without a key.
     const plaintextKey = sessionApiKey.trim();
-    if (!isUsableAPIKey(plaintextKey)) {
+    if (requiresCredential && !isUsableAPIKey(plaintextKey)) {
       const guidance = isZh
-        ? '请先在下方粘贴本次会话的 API Key 明文。密钥列表只显示不可还原的掩码，无法用于调用 /v1/chat/completions。'
-        : 'Paste the plaintext API key below first. The key list only shows irreversible display masks, which cannot authenticate /v1/chat/completions.';
+        ? '请先在下方选择密钥并粘贴本次会话的 API Key 明文。密钥列表只显示不可还原的掩码，无法用于调用 /v1/chat/completions；若网关未启用鉴权，可选择“免密直通”。'
+        : 'Select a key and paste its plaintext below first. The key list only shows irreversible display masks, which cannot authenticate /v1/chat/completions; pick the open-gateway mode instead if no key is registered.';
       if (showToast) showToast(guidance, 'warning');
       setMessages(prev => [...prev, {
         id: `nokey_${Date.now()}`,
@@ -601,7 +642,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
     const accumulatedTrace = [];
 
     try {
-      const headers = { 'Content-Type': 'application/json', ...apiKeyHeaders(plaintextKey) };
+      const headers = { 'Content-Type': 'application/json', ...apiKeyHeaders(requiresCredential ? plaintextKey : '') };
 
       // Build conversation history for payload
       const systemPrompt = buildHarnessSystemPrompt();
@@ -946,6 +987,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                   <select
                     value={selectedModel}
                     onChange={(e) => setSelectedModel(e.target.value)}
+                    aria-label={isZh ? '副驾驶驱动模型' : 'Copilot model'}
                     className="bg-transparent text-[#202124] dark:text-[#F1F2F4] font-mono text-xs border-none focus:outline-none cursor-pointer truncate max-w-[130px]"
                     title={isZh ? '切换副驾驶驱动模型' : 'Switch Copilot Model'}
                   >
@@ -1255,21 +1297,49 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
         ))}
       </div>
 
-      {/* 会话密钥：列表只显示掩码，真正发起调用需要明文本地粘贴 */}
-      <div className="px-3 py-1.5 border-t border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] flex items-center gap-2">
-        <Key className={`w-3 h-3 shrink-0 ${isUsableAPIKey(sessionApiKey) ? 'text-emerald-500' : 'text-[#9AA0A6]'}`} />
-        <input
-          type="password"
-          autoComplete="off"
-          value={sessionApiKey}
-          onChange={(e) => setSessionApiKey(e.target.value)}
-          placeholder={isZh ? '粘贴会话 API Key 明文 (仅内存，不落盘)' : 'Paste session API key (memory only)'}
-          aria-label={isZh ? '会话 API Key 明文' : 'Session API key'}
-          className="flex-1 min-w-0 bg-[#F7F7F5] dark:bg-[#22252B] border border-[#E4E6E9] dark:border-[#2C3038] rounded-lg px-2.5 py-1 text-xs font-mono text-[#202124] dark:text-[#F1F2F4] placeholder-[#656B75] dark:placeholder-[#A1A7B0] focus:outline-none focus:ring-1 focus:ring-[#355CFF]"
-        />
-        <span className={`text-[11px] font-mono shrink-0 ${isUsableAPIKey(sessionApiKey) ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
-          {isUsableAPIKey(sessionApiKey) ? (isZh ? '已就绪' : 'ready') : (isZh ? '待粘贴' : 'missing')}
-        </span>
+      {/* 会话密钥：列表只能选择租户/模型范围（回显掩码），发调用仍需粘贴明文 */}
+      <div className="px-3 py-1.5 border-t border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] space-y-1.5">
+        <div className="flex items-center gap-2">
+          <Key className={`w-3 h-3 shrink-0 ${!requiresCredential || isUsableAPIKey(sessionApiKey) ? 'text-emerald-500' : 'text-[#9AA0A6]'}`} />
+          <select
+            value={selectedKeyId}
+            onChange={(e) => setSelectedKeyId(e.target.value)}
+            aria-label={isZh ? '密钥上下文（租户与模型范围）' : 'Key context (tenant and model scope)'}
+            className="min-w-0 max-w-[185px] bg-[#F7F7F5] dark:bg-[#22252B] border border-[#E4E6E9] dark:border-[#2C3038] rounded-lg px-2 py-1 text-xs font-mono text-[#202124] dark:text-[#F1F2F4] focus:outline-none focus:ring-1 focus:ring-[#355CFF] cursor-pointer truncate"
+            title={isZh ? '选择密钥记录以限定租户与可用模型；真正鉴权使用下方粘贴的明文' : 'Pick a key row to scope tenant and allowed models; the pasted plaintext signs the call'}
+          >
+            {contextKeys.map((k) => (
+              <option key={String(k.id)} value={String(k.id)}>
+                {k.tenant_id ? `${k.tenant_id} - ` : ''}{k.key_fingerprint || (isZh ? '无指纹' : 'no fingerprint')}
+              </option>
+            ))}
+            <option value={CUSTOM_KEY_ID}>{isZh ? '手动输入密钥（不在列表）' : 'Paste a key not in the list'}</option>
+            <option value={UNAUTHENTICATED_KEY}>{isZh ? '免密直通（仅开放网关）' : 'Public / unauthenticated'}</option>
+          </select>
+          <span className={`text-[11px] font-mono shrink-0 ${!requiresCredential || isUsableAPIKey(sessionApiKey) ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+            {!requiresCredential
+              ? (isZh ? '免密' : 'no key')
+              : (isUsableAPIKey(sessionApiKey) ? (isZh ? '已就绪' : 'ready') : (isZh ? '待粘贴' : 'missing'))}
+          </span>
+        </div>
+
+        {requiresCredential ? (
+          <input
+            type="password"
+            autoComplete="off"
+            value={sessionApiKey}
+            onChange={(e) => setSessionApiKey(e.target.value)}
+            placeholder={isZh ? '粘贴本次会话的 API Key 明文 (仅内存，不落盘)' : 'Paste the plaintext API key for this session (memory only)'}
+            aria-label={isZh ? '会话 API Key 明文' : 'Session API key'}
+            className="w-full min-w-0 bg-[#F7F7F5] dark:bg-[#22252B] border border-[#E4E6E9] dark:border-[#2C3038] rounded-lg px-2.5 py-1 text-xs font-mono text-[#202124] dark:text-[#F1F2F4] placeholder-[#656B75] dark:placeholder-[#A1A7B0] focus:outline-none focus:ring-1 focus:ring-[#355CFF]"
+          />
+        ) : (
+          <p className="text-[11px] leading-relaxed text-[#656B75] dark:text-[#A1A7B0]">
+            {isZh
+              ? '将以无凭证方式调用：仅当网关尚未注册任何密钥（开放模式）时可用。'
+              : 'Calls will be sent without a credential: only valid while the gateway has no registered keys (open mode).'}
+          </p>
+        )}
       </div>
 
       {/* 底部输入栏 */}
