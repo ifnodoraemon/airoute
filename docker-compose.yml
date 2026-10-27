@@ -31,6 +31,12 @@ x-gateway-env: &gateway-env
   # none. Behind the bundled nginx set the Compose network (e.g. 172.22.0.0/16)
   # so real client IPs reach access logs and per-IP limits.
   GATEWAY_TRUSTED_PROXIES: ${GATEWAY_TRUSTED_PROXIES:-}
+  # D15: control-plane access (/api/v1/admin, /app) defaults to loopback/private
+  # clients. Set an explicit CIDR list to override, or ALLOW_PUBLIC=true to opt
+  # out (not recommended). ALLOWED_HOSTS optionally pins the Host header.
+  GATEWAY_ADMIN_ALLOWED_IPS: ${GATEWAY_ADMIN_ALLOWED_IPS:-}
+  GATEWAY_ADMIN_ALLOWED_HOSTS: ${GATEWAY_ADMIN_ALLOWED_HOSTS:-}
+  GATEWAY_ADMIN_ALLOW_PUBLIC: ${GATEWAY_ADMIN_ALLOW_PUBLIC:-false}
   STORAGE_DRIVER: ${STORAGE_DRIVER:-s3}
   STORAGE_S3_ENDPOINT: ${STORAGE_S3_ENDPOINT:-http://storage:9000}
   STORAGE_S3_BUCKET: ${STORAGE_S3_BUCKET:-airoute-skills}

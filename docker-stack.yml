@@ -92,6 +92,10 @@ services:
       - GATEWAY_METRICS_TOKEN=${GATEWAY_METRICS_TOKEN:-}
       # Proxies whose X-Forwarded-For is trusted (empty = trust none).
       - GATEWAY_TRUSTED_PROXIES=${GATEWAY_TRUSTED_PROXIES:-}
+      # D15: control-plane access defaults to loopback/private clients.
+      - GATEWAY_ADMIN_ALLOWED_IPS=${GATEWAY_ADMIN_ALLOWED_IPS:-}
+      - GATEWAY_ADMIN_ALLOWED_HOSTS=${GATEWAY_ADMIN_ALLOWED_HOSTS:-}
+      - GATEWAY_ADMIN_ALLOW_PUBLIC=${GATEWAY_ADMIN_ALLOW_PUBLIC:-false}
       # In-flight drain window after SIGTERM (keep below stop_grace_period).
       - GATEWAY_SHUTDOWN_TIMEOUT_SEC=${GATEWAY_SHUTDOWN_TIMEOUT_SEC:-135}
     networks:

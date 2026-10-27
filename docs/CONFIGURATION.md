@@ -119,6 +119,9 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `TOKEN_EXPIRY_HOURS` | `168` | Session/token lifetime in hours |
 | `GATEWAY_METRICS_TOKEN` | unset | When set, `/metrics` requires `Authorization: Bearer <token>` |
 | `GATEWAY_TRUSTED_PROXIES` | unset | Comma-separated proxy CIDRs whose `X-Forwarded-For` is trusted for client-IP limits/logging. Empty trusts no forwarding headers (safe default). Behind the bundled nginx set the Compose network, e.g. `172.22.0.0/16`. An invalid list refuses startup |
+| `GATEWAY_ADMIN_ALLOWED_IPS` | unset (loopback + private) | Control-plane CIDR/IP allowlist (`/api/v1/admin`, `/app`). Overrides the default loopback/private rule; an invalid entry fails closed with 503 |
+| `GATEWAY_ADMIN_ALLOWED_HOSTS` | unset | Optional `Host` allowlist for the control plane; supports `*.example.com` |
+| `GATEWAY_ADMIN_ALLOW_PUBLIC` | `false` | Explicitly open the control plane to public clients (not recommended) |
 
 ### 2.3 Runtime tuning: timeouts, breaker, drain
 
@@ -206,7 +209,15 @@ On `SIGTERM`/`SIGINT` the process stops accepting connections and waits up to `G
 
 ### Control-plane exposure
 
-The nginx `api.*` virtual host returns 403 for `/api/v1/admin` and `/app`, but that is a **routing convenience, not a security boundary**: any client can send a different `Host` header or connect to the host IP, and the default virtual host intentionally keeps serving the console so `http://127.0.0.1:8080` works. The real controls are network-level: bind the published port to loopback (`ports: ["127.0.0.1:8080:80"]`), restrict it to a VPN/firewall allowlist, or put the console behind an authenticated proxy. The gateway still authenticates and authorizes every `/api/v1/admin` request.
+The control plane (`/api/v1/admin` and the embedded console under `/app`) is enforced **inside the gateway**, not by the nginx `Host` header. By default only loopback and private-network clients may reach it; public clients receive `403` even through the catch-all virtual host (`deploy/nginx-compose.conf` also applies the same allow/deny list at the edge as defence in depth). This keeps `http://127.0.0.1:8080` and LAN access working without exposing management endpoints to the internet.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `GATEWAY_ADMIN_ALLOWED_IPS` | unset | Comma-separated CIDR/IP allowlist that replaces the loopback/private default. An invalid entry fails closed (`503`) |
+| `GATEWAY_ADMIN_ALLOWED_HOSTS` | unset | Optional comma-separated `Host` allowlist (`*.example.com` wildcard supported) |
+| `GATEWAY_ADMIN_ALLOW_PUBLIC` | `false` | Explicitly allow public clients (not recommended; the guard logs a warning) |
+
+The gateway still authenticates and authorizes every admin request; this guard is an additional network-boundary control. For a stricter posture bind the published port to loopback (`ports: ["127.0.0.1:8080:80"]`) or restrict it with a firewall/VPN.
 
 Helm defaults to one SQLite pod with a ReadWriteOnce volume and creates a Kubernetes Secret for the admin password and signing secret. For multiple replicas, provide `database.existingSecret` with key `url` containing a PostgreSQL URL and set `persistence.enabled=false`; configure shared object storage if artifacts must be accessible from every pod. Helm refuses a multi-replica SQLite deployment. Retrieve the generated admin password with `kubectl get secret <fullname>-auth -o jsonpath='{.data.admin-password}' | base64 -d` (for the default `airoute` release, `<fullname>` is `airoute`). Keep the Secret across upgrades. In the chart, `service.port` is the single port value: it drives the Service, the container port, both probes and the `GATEWAY_PORT` the process listens on, so `--set service.port=…` always keeps them consistent.
 

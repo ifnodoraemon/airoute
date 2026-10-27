@@ -60,6 +60,13 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 		c.Next()
 	})
 
+	// D15: the control plane (/api/v1/admin and the embedded console under /app)
+	// is restricted to loopback/private clients (or the configured allowlist)
+	// before any route can serve it. Host-header routing in nginx is not a
+	// security boundary: the guard is enforced inside the gateway, behind every
+	// proxy, so the default catch-all vhost can no longer expose it.
+	r.Use(middleware.AdminAccessGuard())
+
 	// Mount embedded Web UI
 	web.RegisterStaticRoutes(r)
 
