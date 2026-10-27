@@ -229,3 +229,9 @@ func (r *Repository) CostByModel(start, end string) ([]CostGroup, error) {
 func (r *Repository) CostByOrg(start, end string) ([]CostGroup, error) {
 	return r.costGroups("CAST(ul.org_id AS TEXT)", "LEFT JOIN orgs o ON o.id = ul.org_id", "COALESCE(o.name, '')", start, end)
 }
+
+// ValidateSupplierCost exposes the same validation the repository applies, so
+// bulk import can report every bad row before writing anything.
+func ValidateSupplierCost(rec *SupplierCostRecord) error {
+	return normalizeSupplierCost(rec)
+}

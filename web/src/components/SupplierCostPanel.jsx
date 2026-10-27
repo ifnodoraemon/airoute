@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Download, Plus, RefreshCw, Trash2, Upload } from 'lucide-react';
 
 function money(value) {
   return `¥${Number(value || 0).toFixed(4)}`;
@@ -16,6 +16,7 @@ export default function SupplierCostPanel({ adminFetch, showToast, lang = 'zh' }
   const [form, setForm] = useState(EMPTY);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const notify = useCallback((message, type = 'success') => {
     if (showToast) showToast(message, type);
@@ -79,6 +80,50 @@ export default function SupplierCostPanel({ adminFetch, showToast, lang = 'zh' }
     }
   };
 
+  const exportCSV = async () => {
+    try {
+      const res = await adminFetch('/api/v1/admin/supplier-costs/export');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'supplier-costs.csv';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      notify(err.message, 'error');
+    }
+  };
+
+  const importCSV = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const res = await adminFetch('/api/v1/admin/supplier-costs/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/csv' },
+        body: text,
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || body.code !== 0) throw new Error(body.error || `HTTP ${res.status}`);
+      notify(isZh ? `已导入 ${body.data?.imported ?? 0} 行` : `Imported ${body.data?.imported ?? 0} rows`);
+      await load();
+    } catch (err) {
+      notify(err.message, 'error');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const inputClass = 'w-full px-2.5 py-1.5 rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] text-xs text-[#202124] dark:text-[#F1F2F4]';
 
   return (
@@ -88,9 +133,20 @@ export default function SupplierCostPanel({ adminFetch, showToast, lang = 'zh' }
           <div className="text-xs font-semibold text-[#202124] dark:text-[#F1F2F4]">{isZh ? '供应商价目（成本）' : 'Supplier prices (cost)'}</div>
           <div className="text-[10px] text-[#656B75] dark:text-[#A1A7B0]">{isZh ? '单位：CNY / 百万 tokens；匹配通道名 + 模型。' : 'CNY per 1M tokens, keyed by channel name + model.'}</div>
         </div>
-        <button type="button" onClick={load} disabled={loading} className="p-1.5 rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] text-[#656B75]">
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex items-center space-x-1.5">
+          <label className="inline-flex items-center space-x-1 px-2 py-1.5 rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] text-[11px] text-[#656B75] dark:text-[#A1A7B0] cursor-pointer">
+            <Upload className="w-3.5 h-3.5" />
+            <span>{isZh ? '导入 CSV' : 'Import CSV'}</span>
+            <input type="file" accept=".csv,text/csv" onChange={importCSV} disabled={importing} className="hidden" aria-label={isZh ? '导入 CSV' : 'Import CSV'} />
+          </label>
+          <button type="button" onClick={exportCSV} className="inline-flex items-center space-x-1 px-2 py-1.5 rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] text-[11px] text-[#656B75] dark:text-[#A1A7B0]">
+            <Download className="w-3.5 h-3.5" />
+            <span>{isZh ? '导出 CSV' : 'Export CSV'}</span>
+          </button>
+          <button type="button" onClick={load} disabled={loading} className="p-1.5 rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] text-[#656B75]">
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       <form onSubmit={save} className="grid grid-cols-2 md:grid-cols-5 gap-2">

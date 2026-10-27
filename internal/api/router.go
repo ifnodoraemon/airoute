@@ -209,6 +209,8 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 					adminOnly.GET("/supplier-costs", adminHandler.ListSupplierCosts)
 					adminOnly.POST("/supplier-costs", adminHandler.SaveSupplierCost)
 					adminOnly.DELETE("/supplier-costs/:id", adminHandler.DeleteSupplierCost)
+					adminOnly.GET("/supplier-costs/export", adminHandler.ExportSupplierCosts)
+					adminOnly.POST("/supplier-costs/import", adminHandler.ImportSupplierCosts)
 					adminOnly.GET("/cost/overview", adminHandler.GetCostOverview)
 					adminOnly.GET("/cost/breakdown", adminHandler.GetCostBreakdown)
 					adminOnly.POST("/users/:username/group", adminHandler.UpdateUserGroup)

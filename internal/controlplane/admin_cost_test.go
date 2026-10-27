@@ -95,3 +95,38 @@ func TestSupplierCostAPIAndMarginOverview(t *testing.T) {
 		t.Fatalf("delete status = %d", del.Code)
 	}
 }
+
+func TestSupplierCostCSVImportExport(t *testing.T) {
+	handler, _ := newCostTestHandler(t)
+	body := "channel,model,input_cost,output_cost\nch-a,m-1,2,4\nch-b,m-2,1.5,3\n"
+
+	dry := invokeCost(t, handler.ImportSupplierCosts, http.MethodPost,
+		"/api/v1/admin/supplier-costs/import?dry_run=1", body, nil)
+	if dry.Code != http.StatusOK {
+		t.Fatalf("dry run status=%d %s", dry.Code, dry.Body.String())
+	}
+	dryData := decodeEnvelope(t, dry)["data"].(map[string]interface{})
+	if dryData["valid"] != float64(2) || dryData["dry_run"] != true {
+		t.Fatalf("dry run = %+v", dryData)
+	}
+
+	invalid := invokeCost(t, handler.ImportSupplierCosts, http.MethodPost,
+		"/api/v1/admin/supplier-costs/import?dry_run=1", "channel,model\nch-a,m-1\n", nil)
+	if invalid.Code != http.StatusBadRequest {
+		t.Fatalf("invalid status=%d", invalid.Code)
+	}
+
+	imported := invokeCost(t, handler.ImportSupplierCosts, http.MethodPost,
+		"/api/v1/admin/supplier-costs/import", body, nil)
+	if imported.Code != http.StatusOK {
+		t.Fatalf("import status=%d %s", imported.Code, imported.Body.String())
+	}
+	if decodeEnvelope(t, imported)["data"].(map[string]interface{})["imported"] != float64(2) {
+		t.Fatalf("import response = %s", imported.Body.String())
+	}
+
+	exported := invokeCost(t, handler.ExportSupplierCosts, http.MethodGet, "/api/v1/admin/supplier-costs/export", "", nil)
+	if exported.Code != http.StatusOK || !strings.Contains(exported.Body.String(), "channel,model") || !strings.Contains(exported.Body.String(), "ch-a") {
+		t.Fatalf("export = %d %s", exported.Code, exported.Body.String())
+	}
+}
