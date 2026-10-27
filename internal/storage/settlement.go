@@ -263,6 +263,12 @@ func (r *Repository) applyChargeAggregates(tx *Tx, keyCost map[string]float64, k
 		}
 		if tenant := keyTenant[key]; tenant != "" {
 			orphanTenantCost[tenant] += cost
+		} else {
+			// No owner row and no tenant to fall back to: the ledger row that was
+			// already written records the charge as settled, but no wallet moved.
+			// Keep the two in agreement (the delivery must not be retried) and make
+			// the uncollected money visible instead of dropping it silently.
+			reportUnattributedCharge(key, "", cost)
 		}
 	}
 
@@ -270,12 +276,33 @@ func (r *Repository) applyChargeAggregates(tx *Tx, keyCost map[string]float64, k
 		if cost <= 0 {
 			continue
 		}
-		if _, _, err := r.deductWallet(tx,
-			`(username = ? OR email = ?) AND role != 'admin'`, []any{tenant, tenant}, cost); err != nil {
+		applied, _, err := r.deductWallet(tx,
+			`(username = ? OR email = ?) AND role != 'admin'`, []any{tenant, tenant}, cost)
+		if err != nil {
 			return err
+		}
+		if !applied {
+			// The tenant named on the record no longer matches any billable user.
+			reportUnattributedCharge("", tenant, cost)
 		}
 	}
 	return nil
+}
+
+// reportUnattributedCharge publishes a settled charge that no wallet could absorb.
+//
+// The settlement ledger deliberately still records it: the delivery is
+// at-least-once, so leaving the row out would re-deliver and re-audit the charge
+// forever, and the audit row exists with its cost. What was missing was any
+// signal: without this counter and log an operator could not tell that money was
+// being served but never collected.
+func reportUnattributedCharge(apiKey, tenant string, cost float64) {
+	telemetry.GlobalMetrics.BillingUnattributed.Add(1)
+	telemetry.WarnLogger(telemetry.ScopedLogger("billing"), "billing-charge-unattributed", 30*time.Second,
+		"charge settled with no billable wallet: the amount is uncollected",
+		"api_key", apiKey,
+		"tenant", tenant,
+		"cost_cny", cost)
 }
 
 // rejectUnbillableCharge closes out a record whose charge cannot be applied in

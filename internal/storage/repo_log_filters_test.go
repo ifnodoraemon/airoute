@@ -234,7 +234,7 @@ func TestUsageLogFacetsCacheIsScopedAndInvalidated(t *testing.T) {
 	}
 
 	// Clearing the trail invalidates the cache immediately.
-	if err := repo.ClearAllUsageLogs(); err != nil {
+	if _, _, err := repo.ClearAllUsageLogs(); err != nil {
 		t.Fatal(err)
 	}
 	cleared, err := repo.ListUsageLogFacets(LogFilter{TenantID: "tenant-a"})

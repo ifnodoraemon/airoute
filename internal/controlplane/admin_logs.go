@@ -1,6 +1,7 @@
 package controlplane
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -138,6 +139,11 @@ func (h *AdminHandler) DeleteLog(c *gin.Context) {
 		return
 	}
 	if err := h.repo.DeleteUsageLog(id); err != nil {
+		// A charged row is billing evidence: it cannot be deleted, only reversed.
+		if errors.Is(err, storage.ErrChargedUsageLogImmutable) {
+			c.JSON(http.StatusConflict, gin.H{"code": 409, "error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -155,12 +161,17 @@ func (h *AdminHandler) BatchDeleteLogs(c *gin.Context) {
 	if !ok {
 		return
 	}
-	n, err := h.repo.BatchDeleteUsageLogs(ids)
+	deleted, skipped, err := h.repo.BatchDeleteUsageLogs(ids)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 0, "message": fmt.Sprintf("已批量删除 %d 条调用日志", n), "deleted_count": n})
+	message := fmt.Sprintf("已批量删除 %d 条调用日志", deleted)
+	if skipped > 0 {
+		// The caller must learn why rows survived: they carry a charge.
+		message += fmt.Sprintf("，跳过 %d 条已计费记录（不可删除，请走冲正）", skipped)
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "message": message, "deleted_count": deleted, "skipped_charged_count": skipped})
 }
 
 // ClearLogs clears all audit logs (admin only).
@@ -170,11 +181,16 @@ func (h *AdminHandler) ClearLogs(c *gin.Context) {
 		return
 	}
 
-	if err := h.repo.ClearAllUsageLogs(); err != nil {
+	deleted, skipped, err := h.repo.ClearAllUsageLogs()
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "已清空所有调用日志"})
+	message := fmt.Sprintf("已清空 %d 条未计费调用日志", deleted)
+	if skipped > 0 {
+		message += fmt.Sprintf("，保留 %d 条已计费记录（账单凭证，不可删除）", skipped)
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "message": message, "deleted_count": deleted, "skipped_charged_count": skipped})
 }
 
 // shouldRevealKey reports whether the caller explicitly asked for unmasked keys.

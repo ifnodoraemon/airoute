@@ -120,6 +120,10 @@ func (m *Metrics) ToPrometheusFormat() string {
 	sb.WriteString("# TYPE airoute_billing_charges_rejected_total counter\n")
 	sb.WriteString(fmt.Sprintf("airoute_billing_charges_rejected_total %d\n", m.BillingChargesRejected.Load()))
 
+	sb.WriteString("# HELP airoute_billing_unattributed_total Charges settled with no wallet to bill (uncollected)\n")
+	sb.WriteString("# TYPE airoute_billing_unattributed_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_billing_unattributed_total %d\n", m.BillingUnattributed.Load()))
+
 	sb.WriteString("# HELP airoute_usage_log_records_spilled_total Billing records written to the local spill file\n")
 	sb.WriteString("# TYPE airoute_usage_log_records_spilled_total counter\n")
 	sb.WriteString(fmt.Sprintf("airoute_usage_log_records_spilled_total %d\n", m.UsageLogRecordsSpilled.Load()))
@@ -147,10 +151,21 @@ func (m *Metrics) ToPrometheusFormat() string {
 	sb.WriteString("# HELP airoute_billing_estimate_bias_ppm Local estimate vs upstream tokenizer, parts per million\n")
 	sb.WriteString("# TYPE airoute_billing_estimate_bias_ppm gauge\n")
 	sb.WriteString(fmt.Sprintf("airoute_billing_estimate_bias_ppm %d\n", m.EstimateBiasPPM.Load()))
+	for model, ppm := range m.EstimateBiasByModel() {
+		sb.WriteString(fmt.Sprintf("airoute_billing_estimate_bias_ppm{model=%q} %d\n", escapePrometheusLabel(model), ppm))
+	}
 
 	sb.WriteString("# HELP airoute_billing_audit_lag_units Absolute settlement-vs-audit difference in 1e-9 units\n")
 	sb.WriteString("# TYPE airoute_billing_audit_lag_units gauge\n")
 	sb.WriteString(fmt.Sprintf("airoute_billing_audit_lag_units %d\n", m.BillingAuditLagUnits.Load()))
+
+	sb.WriteString("# HELP airoute_billing_audit_pruned_units Charge units whose audit row was deliberately removed (retention/admin)\n")
+	sb.WriteString("# TYPE airoute_billing_audit_pruned_units gauge\n")
+	sb.WriteString(fmt.Sprintf("airoute_billing_audit_pruned_units %d\n", m.BillingAuditPrunedUnits.Load()))
+
+	sb.WriteString("# HELP airoute_billing_ledger_unlinked_units Settled units with no matching audit row (legacy keys included)\n")
+	sb.WriteString("# TYPE airoute_billing_ledger_unlinked_units gauge\n")
+	sb.WriteString(fmt.Sprintf("airoute_billing_ledger_unlinked_units %d\n", m.BillingLedgerUnlinkedUnits.Load()))
 
 	sb.WriteString("# HELP airoute_ttft_avg_ms Average Time To First Token in milliseconds\n")
 	sb.WriteString("# TYPE airoute_ttft_avg_ms gauge\n")

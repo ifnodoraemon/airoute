@@ -390,6 +390,12 @@ func (h *Handler) handleNativeAnthropicStream(c *gin.Context, stream <-chan *mod
 	}
 	inputTokens, outputTokens := 0, 0
 	cachedReadTokens, cacheCreationTokens := 0, 0
+	// A client can disappear before the closing message_delta that carries
+	// output_tokens, and some providers close the stream without one. Accumulating
+	// the emitted text lets the audit row bill what was generated instead of
+	// recording zero output for a stream the provider charged for.
+	accumulatedOutputChars := 0
+	usageSource := "upstream"
 	var ttftDuration time.Duration
 	var firstContentSeen bool
 	chatID, channel, statusCode := "", first.Channel, http.StatusOK
@@ -398,6 +404,10 @@ func (h *Handler) handleNativeAnthropicStream(c *gin.Context, stream <-chan *mod
 		// Anthropic input_tokens excludes prompt-cache reads/writes; the audit
 		// record must report the full prompt and surface cache hits separately.
 		totalPrompt := inputTokens + cachedReadTokens + cacheCreationTokens
+		if outputTokens == 0 && accumulatedOutputChars > 0 {
+			outputTokens = estimatedStreamCompletionTokens(accumulatedOutputChars)
+			usageSource = usageSourceEstimated
+		}
 		RecordUsage(c, AuditRecordParams{
 			SessionID:        sessionID,
 			ChatID:           chatID,
@@ -406,12 +416,15 @@ func (h *Handler) handleNativeAnthropicStream(c *gin.Context, stream <-chan *mod
 			PromptTokens:     totalPrompt,
 			CompletionTokens: outputTokens,
 			CachedTokens:     cachedReadTokens,
-			Duration:         time.Since(start),
-			TTFT:             ttftDuration,
-			StatusCode:       statusCode,
-			UsageSource:      "upstream",
-			ErrorMessage:     sanitizeErrorMessage(streamErr),
-			LiveTracked:      true, // stream deltas already fed the live token meter
+			// Cache writes cost a premium over the plain input rate; passing them
+			// separately stops them being billed as ordinary prompt tokens.
+			CacheCreationTokens: cacheCreationTokens,
+			Duration:            time.Since(start),
+			TTFT:                ttftDuration,
+			StatusCode:          statusCode,
+			UsageSource:         usageSource,
+			ErrorMessage:        sanitizeErrorMessage(streamErr),
+			LiveTracked:         true, // stream deltas already fed the live token meter
 		})
 	}()
 	write := func(event *model.StreamEvent) bool {
@@ -454,6 +467,7 @@ func (h *Handler) handleNativeAnthropicStream(c *gin.Context, stream <-chan *mod
 				if delta, ok := payload["delta"].(map[string]any); ok {
 					if text, ok := delta["text"].(string); ok && text != "" {
 						telemetry.GlobalLiveMetrics.AddChars(len(text))
+						accumulatedOutputChars += len(text)
 					}
 				}
 			} else if event.NativeAnthropicType == "message_delta" {

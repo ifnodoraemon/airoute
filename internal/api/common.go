@@ -31,15 +31,19 @@ type AuditRecordParams struct {
 	PromptTokens     int
 	CompletionTokens int
 	CachedTokens     int
-	TotalTokens      int
-	Duration         time.Duration
-	TTFT             time.Duration
-	StatusCode       int
-	UsageSource      string // "upstream" (default) or "estimated" when tokens are locally approximated
-	LiveTracked      bool   // true when streaming deltas already fed the live token meter
-	ErrorMessage     string // populated for failed requests so the audit log explains the failure
-	BillableUnits    int
-	SkipBilling      bool
+	// CacheCreationTokens is how many of PromptTokens were written into the
+	// provider's prompt cache (Anthropic's cache_creation_input_tokens). They are
+	// billed at the cache-write premium instead of the plain prompt rate.
+	CacheCreationTokens int
+	TotalTokens         int
+	Duration            time.Duration
+	TTFT                time.Duration
+	StatusCode          int
+	UsageSource         string // "upstream" (default) or "estimated" when tokens are locally approximated
+	LiveTracked         bool   // true when streaming deltas already fed the live token meter
+	ErrorMessage        string // populated for failed requests so the audit log explains the failure
+	BillableUnits       int
+	SkipBilling         bool
 
 	// Caller attribution overrides for non-HTTP entrypoints.
 	//
@@ -138,12 +142,13 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 			(params.PromptTokens > 0 || params.CompletionTokens > 0 || params.BillableUnits > 0))
 
 	if billable && !params.SkipBilling && billing.GlobalEngine != nil {
-		cost, savedCost, _, isOffPeak, offPeakDiscount, pricingSnapshot = billing.GlobalEngine.CalculateCostForUnits(
+		cost, savedCost, _, isOffPeak, offPeakDiscount, pricingSnapshot = billing.GlobalEngine.CalculateCostForUnitsWithCacheCreation(
 			billingModelFor(params, keyGroup),
 			keyGroup,
 			params.PromptTokens,
 			params.CompletionTokens,
 			params.CachedTokens,
+			params.CacheCreationTokens,
 			params.BillableUnits,
 			time.Now(),
 		)
@@ -422,8 +427,13 @@ func recordFailedRequestWithError(c *gin.Context, sessionID, modelName string, d
 	// size to the cancellation so the provider's cost is not absorbed by us.
 	if statusCode == statusClientClosed {
 		if de, ok := router.AsDispatchError(err); ok && de.PromptTokens > 0 {
-			params.PromptTokens = de.PromptTokens
-			params.TotalTokens = de.PromptTokens
+			// The dispatcher can only estimate from the request body; route it
+			// through the same calibrator the other estimated charges use, or an
+			// aborted request is billed on a tokenizer guess the rest of the system
+			// has already learned to correct.
+			estimated := calibratedPromptEstimate(modelName, de.PromptTokens)
+			params.PromptTokens = estimated
+			params.TotalTokens = estimated
 			params.UsageSource = usageSourceEstimated
 		}
 	}

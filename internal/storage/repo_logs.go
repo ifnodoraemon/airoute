@@ -1,8 +1,10 @@
 package storage
 
 import (
+	"database/sql"
 	"encoding/json"
-	"fmt"
+	"errors"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -111,10 +113,15 @@ type UsagePricingSnapshot struct {
 	PromptPrice     float64 `json:"prompt_price"`
 	CompletionPrice float64 `json:"completion_price"`
 	CacheReadPrice  float64 `json:"cache_read_price"`
-	FixedPrice      float64 `json:"fixed_price"`
-	GroupMultiplier float64 `json:"group_multiplier"`
-	OffPeakDiscount float64 `json:"off_peak_discount"`
-	BillableUnits   int     `json:"billable_units"`
+	// CacheWritePrice is the rate applied to prompt-cache *writes*; providers
+	// charge a premium over the plain input rate for them.
+	CacheWritePrice float64 `json:"cache_write_price,omitempty"`
+	// CacheCreationTokens is how many of PromptTokens were written to the cache.
+	CacheCreationTokens int     `json:"cache_creation_tokens,omitempty"`
+	FixedPrice          float64 `json:"fixed_price"`
+	GroupMultiplier     float64 `json:"group_multiplier"`
+	OffPeakDiscount     float64 `json:"off_peak_discount"`
+	BillableUnits       int     `json:"billable_units"`
 }
 
 func encodePricingSnapshot(snapshot *UsagePricingSnapshot) string {
@@ -346,16 +353,87 @@ func (r *Repository) ListUsageLogsWithFilterAndCount(f LogFilter) ([]*UsageLogRe
 	return logs, total, nil
 }
 
-// DeleteUsageLog deletes a single audit log by ID.
-func (r *Repository) DeleteUsageLog(id int64) error {
-	_, err := r.db.Exec(`DELETE FROM usage_logs WHERE id = ?`, id)
+// ErrChargedUsageLogImmutable is returned when an operator tries to delete an
+// audit row that carries a charge.
+//
+// A charged row is the evidence for money that already left a wallet, and the
+// settlement ledger (billing_settlements) records that charge permanently. Hard
+// deleting the row did not reverse anything: it only made the charge
+// unexplainable, and it pushed the audit-vs-ledger reconciliation permanently out
+// of balance. Corrections have to go through a reversal, not a delete.
+var ErrChargedUsageLogImmutable = errors.New("该调用日志已产生计费，不能删除；请通过冲正流程更正")
+
+// usagePrunedUnitsSetting is the running total of charge units whose audit row was
+// deliberately removed. Reconciliation adds it back, so pruning does not look
+// like lost revenue forever.
+const usagePrunedUnitsSetting = "usage_log_pruned_cost_units"
+
+// addUsageAuditPrunedUnits adds units to the pruned-audit baseline inside tx.
+//
+// The addition happens in SQL so two replicas pruning at the same time cannot
+// lose an increment to a read-modify-write race.
+func addUsageAuditPrunedUnits(tx *Tx, units int64) error {
+	if units <= 0 {
+		return nil
+	}
+	_, err := tx.Exec(`INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET value = CAST(CAST(value AS BIGINT) + ? AS TEXT), updated_at = CURRENT_TIMESTAMP`,
+		usagePrunedUnitsSetting, strconv.FormatInt(units, 10), units)
 	return err
 }
 
-// BatchDeleteUsageLogs deletes multiple usage logs by their IDs.
-func (r *Repository) BatchDeleteUsageLogs(ids []int64) (int64, error) {
+// UsageAuditPrunedUnits returns the charge units whose audit rows were removed on
+// purpose (retention pruning). Reconciliation subtracts them from the expected
+// ledger total.
+func (r *Repository) UsageAuditPrunedUnits() int64 {
+	raw := strings.TrimSpace(r.GetSetting(usagePrunedUnitsSetting, "0"))
+	units, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return units
+}
+
+// chargedUsageLogSQL matches an audit row that carries money. Legacy rows written
+// before cost_units existed still have a float cost, so both mirrors are checked.
+const chargedUsageLogSQL = `(COALESCE(cost, 0) <> 0 OR COALESCE(cost_units, 0) <> 0)`
+
+// DeleteUsageLog deletes a single audit log by ID.
+//
+// Only a row that was never charged may be removed; a charged row is billing
+// evidence and returns ErrChargedUsageLogImmutable.
+func (r *Repository) DeleteUsageLog(id int64) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var charged bool
+	switch err := tx.QueryRow(`SELECT CASE WHEN `+chargedUsageLogSQL+` THEN 1 ELSE 0 END FROM usage_logs WHERE id = ?`, id).Scan(&charged); {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil
+	case err != nil:
+		return err
+	case charged:
+		return ErrChargedUsageLogImmutable
+	}
+
+	if _, err := tx.Exec(`DELETE FROM usage_logs WHERE id = ?`, id); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	r.invalidateUsageLogFacetCache()
+	return nil
+}
+
+// BatchDeleteUsageLogs deletes multiple usage logs by their IDs and reports how
+// many were kept because they carry a charge.
+func (r *Repository) BatchDeleteUsageLogs(ids []int64) (deleted int64, skipped int64, err error) {
 	if len(ids) == 0 {
-		return 0, nil
+		return 0, 0, nil
 	}
 	placeholders := make([]string, len(ids))
 	args := make([]interface{}, len(ids))
@@ -363,23 +441,61 @@ func (r *Repository) BatchDeleteUsageLogs(ids []int64) (int64, error) {
 		placeholders[i] = "?"
 		args[i] = id
 	}
-	q := fmt.Sprintf(`DELETE FROM usage_logs WHERE id IN (%s)`, strings.Join(placeholders, ","))
-	res, err := r.db.Exec(q, args...)
+	inList := strings.Join(placeholders, ",")
+
+	tx, err := r.db.Begin()
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return res.RowsAffected()
+	defer func() { _ = tx.Rollback() }()
+
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM usage_logs WHERE id IN (`+inList+`) AND `+chargedUsageLogSQL, args...).
+		Scan(&skipped); err != nil {
+		return 0, 0, err
+	}
+	res, err := tx.Exec(`DELETE FROM usage_logs WHERE id IN (`+inList+`) AND NOT `+chargedUsageLogSQL, args...)
+	if err != nil {
+		return 0, 0, err
+	}
+	if deleted, err = res.RowsAffected(); err != nil {
+		return 0, 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, 0, err
+	}
+	if deleted > 0 {
+		r.invalidateUsageLogFacetCache()
+	}
+	return deleted, skipped, nil
 }
 
-// ClearAllUsageLogs wipes all audit logs.
-func (r *Repository) ClearAllUsageLogs() error {
-	if _, err := r.db.Exec(`DELETE FROM usage_logs`); err != nil {
-		return err
+// ClearAllUsageLogs wipes every audit row that carries no charge and reports how
+// many charged rows were kept (they are billing evidence, see
+// ErrChargedUsageLogImmutable).
+func (r *Repository) ClearAllUsageLogs() (deleted int64, skipped int64, err error) {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return 0, 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM usage_logs WHERE ` + chargedUsageLogSQL).Scan(&skipped); err != nil {
+		return 0, 0, err
+	}
+	res, err := tx.Exec(`DELETE FROM usage_logs WHERE NOT ` + chargedUsageLogSQL)
+	if err != nil {
+		return 0, 0, err
+	}
+	if deleted, err = res.RowsAffected(); err != nil {
+		return 0, 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, 0, err
 	}
 	// The dropdowns are cached; an operator who just cleared the trail must not
 	// keep seeing model/channel options for another TTL window.
 	r.invalidateUsageLogFacetCache()
-	return nil
+	return deleted, skipped, nil
 }
 
 // PurgeUsageLogsBefore deletes audit rows created before cutoff in bounded
@@ -392,15 +508,44 @@ func (r *Repository) PurgeUsageLogsBefore(cutoff time.Time, batchSize int) (int6
 	cutoffValue := cutoff.UTC().Format(sqliteTimestampLayout)
 	var total int64
 	for {
-		res, err := r.db.Exec(
-			`DELETE FROM usage_logs WHERE id IN (SELECT id FROM usage_logs WHERE created_at < ? ORDER BY id LIMIT ?)`,
-			cutoffValue, batchSize,
-		)
+		tx, err := r.db.Begin()
 		if err != nil {
+			return total, err
+		}
+		// Retention may remove charged rows (they are old, but the money moved).
+		// Their units are added to the pruned-audit baseline in the same
+		// transaction, so the reconciliation gauge keeps measuring unexplained
+		// differences instead of the whole pruned history.
+		ids, units, err := usageLogsBefore(tx, cutoffValue, batchSize)
+		if err != nil {
+			_ = tx.Rollback()
+			return total, err
+		}
+		if len(ids) == 0 {
+			_ = tx.Rollback()
+			break
+		}
+		placeholders := make([]string, len(ids))
+		args := make([]interface{}, len(ids))
+		for i, id := range ids {
+			placeholders[i] = "?"
+			args[i] = id
+		}
+		res, err := tx.Exec(`DELETE FROM usage_logs WHERE id IN (`+strings.Join(placeholders, ",")+`)`, args...)
+		if err != nil {
+			_ = tx.Rollback()
 			return total, err
 		}
 		deleted, err := res.RowsAffected()
 		if err != nil {
+			_ = tx.Rollback()
+			return total, err
+		}
+		if err := addUsageAuditPrunedUnits(tx, units); err != nil {
+			_ = tx.Rollback()
+			return total, err
+		}
+		if err := tx.Commit(); err != nil {
 			return total, err
 		}
 		total += deleted
@@ -414,4 +559,30 @@ func (r *Repository) PurgeUsageLogsBefore(cutoff time.Time, batchSize int) (int6
 		r.invalidateUsageLogFacetCache()
 	}
 	return total, nil
+}
+
+// usageLogsBefore returns the ids and the charged units of the oldest rows that
+// are older than cutoff, bounded by batchSize.
+func usageLogsBefore(tx *Tx, cutoffValue string, batchSize int) ([]int64, int64, error) {
+	rows, err := tx.Query(`SELECT id, COALESCE(cost_units, 0) FROM usage_logs WHERE created_at < ? ORDER BY id LIMIT ?`,
+		cutoffValue, batchSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var ids []int64
+	var units int64
+	for rows.Next() {
+		var id, rowUnits int64
+		if err := rows.Scan(&id, &rowUnits); err != nil {
+			return nil, 0, err
+		}
+		ids = append(ids, id)
+		units += rowUnits
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return ids, units, nil
 }

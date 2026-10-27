@@ -78,6 +78,8 @@ func (c *EstimateCalibrator) Observe(modelName string, localEstimate, upstreamAc
 		sample.ratio = sample.ratio*(1-calibrationAlpha) + ratio*calibrationAlpha
 	}
 	sample.count++
+	sampleCount := sample.count
+	sampleRatio := sample.ratio
 	c.observed++
 	c.pending++
 	shouldPersist := c.persist != nil && c.pending >= calibrationPersistEvery
@@ -92,8 +94,11 @@ func (c *EstimateCalibrator) Observe(modelName string, localEstimate, upstreamAc
 	}
 
 	// Publish how far the local heuristic is from the upstream tokenizer, so the
-	// residual misalignment on estimated charges is visible on /metrics.
-	telemetry.GlobalMetrics.EstimateBiasPPM.Store(int64(math.Round((sample.ratio - 1) * 1e6)))
+	// residual misalignment on estimated charges is visible on /metrics. The
+	// per-model value is published alongside a sample-weighted total: storing just
+	// this sample in one global gauge made "the estimator bias" depend on whichever
+	// model happened to be observed last.
+	telemetry.GlobalMetrics.SetEstimateBias(modelName, int64(math.Round((sampleRatio-1)*1e6)), sampleCount)
 }
 
 // Adjust applies the learned ratio to a local estimate. It returns the input

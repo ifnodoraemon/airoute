@@ -49,6 +49,10 @@ type Metrics struct {
 	// (a legacy foreign-currency rate row). The audit row is still written; a
 	// non-zero value means a price row needs re-pricing.
 	BillingChargesRejected atomic.Uint64
+	// BillingUnattributed counts charges whose settlement ledger row was recorded
+	// but which no wallet could absorb: the api key has no owner row and no tenant
+	// matched a user. The money is uncollected, so this must never be silent.
+	BillingUnattributed atomic.Uint64
 
 	// UsageLogRecordsSpilled counts billing records written to the local
 	// append-only spill file because no queue accepted them. Any non-zero value
@@ -70,14 +74,30 @@ type Metrics struct {
 	AbortedDrainedRequests         atomic.Uint64
 	AbortedDrainedCompletionTokens atomic.Uint64
 	// EstimateBiasPPM is how far the local token estimate sits from the upstream
-	// tokenizer for the most recently observed model, in parts per million
-	// (positive = upstream counts more tokens than we estimated).
+	// tokenizer, in parts per million (positive = upstream counts more tokens than
+	// we estimated). It is the sample-weighted mean across every model, not the
+	// last observation: a single traffic burst on one model used to overwrite the
+	// fleet-wide number and hide the others.
 	EstimateBiasPPM atomic.Int64
+	// estimateBiasByModel holds the per-model bias, keyed by model name, so the
+	// metric can report which model is mis-estimated instead of one blended value.
+	// Guarded by mu (the latency maps' lock) to keep the Metrics struct simple.
+	estimateBiasByModel map[string]estimateBiasSample
 	// BillingAuditLagUnits is the absolute difference between the settlement
 	// ledger (money actually moved) and the audit rows. It is expected to be
 	// non-zero briefly while an audit write is retried; a sustained value means
 	// audit rows are being lost while charges still settle.
 	BillingAuditLagUnits atomic.Int64
+	// BillingAuditPrunedUnits is the running total of charge units whose audit row
+	// was deliberately removed (retention pruning, or an admin clearing the trail).
+	// auditLag adds it back so the gauge measures unexplained loss instead of
+	// growing forever after the first cleanup.
+	BillingAuditPrunedUnits atomic.Int64
+	// BillingLedgerUnlinkedUnits is the amount recorded in the settlement ledger
+	// that no audit row can be matched to (using the same legacy-key expression the
+	// reconciler uses). A non-zero value means delivered charges lost their audit
+	// row.
+	BillingLedgerUnlinkedUnits atomic.Int64
 
 	// Latency & TTFT tracking
 	mu             sync.RWMutex
@@ -253,4 +273,50 @@ func (m *Metrics) RecordTTFT(d time.Duration) {
 // RecordFallback records an occurrence of channel fallback.
 func (m *Metrics) RecordFallback() {
 	m.FallbackRequests.Add(1)
+}
+
+// estimateBiasSample is one model's estimator-vs-upstream ratio, expressed in ppm
+// and weighted by how many upstream reports produced it.
+type estimateBiasSample struct {
+	ppm     int64
+	samples uint64
+}
+
+// SetEstimateBias publishes the estimator bias for one model.
+//
+// The per-model value is what an operator needs (a single model with a bad
+// tokenizer guess), and the unlabelled total is its sample-weighted mean, so
+// neither number is decided by whichever request happened to be observed last.
+func (m *Metrics) SetEstimateBias(model string, ppm int64, samples uint64) {
+	m.mu.Lock()
+	if m.estimateBiasByModel == nil {
+		m.estimateBiasByModel = make(map[string]estimateBiasSample)
+	}
+	if model != "" {
+		m.estimateBiasByModel[model] = estimateBiasSample{ppm: ppm, samples: samples}
+	}
+	var signed, total int64
+	for _, sample := range m.estimateBiasByModel {
+		weight := int64(sample.samples)
+		if weight == 0 {
+			weight = 1
+		}
+		signed += sample.ppm * weight
+		total += weight
+	}
+	if total > 0 {
+		m.EstimateBiasPPM.Store(signed / total)
+	}
+	m.mu.Unlock()
+}
+
+// EstimateBiasByModel returns a copy of the per-model bias samples.
+func (m *Metrics) EstimateBiasByModel() map[string]int64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make(map[string]int64, len(m.estimateBiasByModel))
+	for model, sample := range m.estimateBiasByModel {
+		out[model] = sample.ppm
+	}
+	return out
 }

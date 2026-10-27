@@ -380,9 +380,29 @@ func (e *BillingEngine) CalculateCostDetailedWithGroup(modelName, groupName stri
 	return
 }
 
+// cacheWritePriceMultiplier is the premium a provider charges for writing a
+// prompt to its cache, relative to the plain input rate (Anthropic: 1.25x).
+//
+// Cache writes used to be billed at the plain prompt rate, which under-charged
+// every cache miss by 20% and made a heavily cache-writing workload look cheaper
+// than the provider invoice. The multiplier is applied to the resolved prompt
+// price, so no new price column (and no migration) is needed.
+const cacheWritePriceMultiplier = 1.25
+
 // CalculateCostForUnits applies a single resolved price and discounts to every
 // fixed-price unit, while charging the request's token usage only once.
 func (e *BillingEngine) CalculateCostForUnits(modelName, groupName string, promptTokens, completionTokens, cachedTokens, units int, t time.Time) (cost float64, totalSaved float64, cacheSaved float64, isOffPeak bool, discount float64, snapshot *storage.UsagePricingSnapshot) {
+	return e.CalculateCostForUnitsWithCacheCreation(modelName, groupName, promptTokens, completionTokens, cachedTokens, 0, units, t)
+}
+
+// CalculateCostForUnitsWithCacheCreation is CalculateCostForUnits for a request
+// that also wrote tokens into the provider's prompt cache.
+//
+// promptTokens must include the cache-read and cache-write tokens (that is how
+// Anthropic's input_tokens, cache_read_input_tokens and
+// cache_creation_input_tokens compose); this function splits them into three
+// priced buckets so each is billed at its own rate.
+func (e *BillingEngine) CalculateCostForUnitsWithCacheCreation(modelName, groupName string, promptTokens, completionTokens, cachedTokens, cacheCreationTokens, units int, t time.Time) (cost float64, totalSaved float64, cacheSaved float64, isOffPeak bool, discount float64, snapshot *storage.UsagePricingSnapshot) {
 	if e == nil {
 		return 0, 0, 0, false, 1.0, nil
 	}
@@ -405,17 +425,28 @@ func (e *BillingEngine) CalculateCostForUnits(modelName, groupName string, promp
 	if cachedTokens < 0 {
 		cachedTokens = 0
 	}
+	if cacheCreationTokens < 0 {
+		cacheCreationTokens = 0
+	}
 	if cachedTokens > promptTokens {
 		cachedTokens = promptTokens
 	}
+	// Cache writes and cache reads are disjoint and both live inside promptTokens;
+	// clamping the write count after the read count keeps the three buckets from
+	// exceeding the prompt.
+	if cacheCreationTokens > promptTokens-cachedTokens {
+		cacheCreationTokens = promptTokens - cachedTokens
+	}
 
-	uncachedPrompt := promptTokens - cachedTokens
+	uncachedPrompt := promptTokens - cachedTokens - cacheCreationTokens
+	cacheWritePrice := p.PromptPrice * cacheWritePriceMultiplier
 
 	// Standard benchmark token costs
 	promptCost := (float64(uncachedPrompt) * p.PromptPrice) / 1_000_000.0
 	cachedCost := (float64(cachedTokens) * p.CacheReadPrice) / 1_000_000.0
+	cacheWriteCost := (float64(cacheCreationTokens) * cacheWritePrice) / 1_000_000.0
 	compCost := (float64(completionTokens) * p.CompletionPrice) / 1_000_000.0
-	baseTokenCost := promptCost + cachedCost + compCost
+	baseTokenCost := promptCost + cachedCost + cacheWriteCost + compCost
 
 	if cachedTokens > 0 && p.PromptPrice > p.CacheReadPrice {
 		cacheSaved = (float64(cachedTokens) * (p.PromptPrice - p.CacheReadPrice)) / 1_000_000.0
@@ -466,6 +497,7 @@ func (e *BillingEngine) CalculateCostForUnits(modelName, groupName string, promp
 	snapshot = &storage.UsagePricingSnapshot{
 		Model: p.Model, GroupName: groupName, PriceGroup: p.GroupName, Currency: p.Currency,
 		PromptPrice: p.PromptPrice, CompletionPrice: p.CompletionPrice, CacheReadPrice: p.CacheReadPrice,
+		CacheWritePrice: cacheWritePrice, CacheCreationTokens: cacheCreationTokens,
 		FixedPrice: p.FixedPrice, GroupMultiplier: multiplier, OffPeakDiscount: discount, BillableUnits: units,
 	}
 	return cost, totalSaved, cacheSaved, isOffPeak, discount, snapshot

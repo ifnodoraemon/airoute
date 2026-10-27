@@ -122,9 +122,16 @@ func (b *BillingReconciler) runOnce() {
 		return
 	}
 
+	unlinkedUnits, unlinkedRows, err := b.ledgerLinkage()
+	if err != nil {
+		telemetry.ScopedLogger("billing").Error("billing reconciliation failed", "stage", "linkage", "error", err.Error())
+		return
+	}
+
 	telemetry.GlobalMetrics.BillingLedgerDriftUnits.Store(ledgerDrift)
 	telemetry.GlobalMetrics.BillingWalletDriftUnits.Store(walletDrift)
 	telemetry.GlobalMetrics.BillingAuditLagUnits.Store(auditLag)
+	telemetry.GlobalMetrics.BillingLedgerUnlinkedUnits.Store(unlinkedUnits)
 
 	if ledgerDrift != 0 || walletDrift != 0 {
 		telemetry.WarnLogger(telemetry.ScopedLogger("billing"), "billing-reconcile-drift", 6*time.Hour,
@@ -138,6 +145,14 @@ func (b *BillingReconciler) runOnce() {
 		telemetry.WarnLogger(telemetry.ScopedLogger("billing"), "billing-audit-lag", 6*time.Hour,
 			"settlement ledger and audit trail disagree",
 			"audit_lag_cny", FromUnits(auditLag),
+			"audit_pruned_cny", FromUnits(b.repo.UsageAuditPrunedUnits()),
+		)
+	}
+	if unlinkedUnits != 0 {
+		telemetry.WarnLogger(telemetry.ScopedLogger("billing"), "billing-ledger-unlinked", 6*time.Hour,
+			"settled charges have no matching audit row",
+			"unlinked_cny", FromUnits(unlinkedUnits),
+			"unlinked_records", unlinkedRows,
 		)
 	}
 }
@@ -150,15 +165,23 @@ func (b *BillingReconciler) runOnce() {
 // idempotent: the ledger row only states that the charge was already applied,
 // and the wallet was moved by the process that wrote the audit row. Rows newer
 // than the grace window are skipped so in-flight writes are not raced.
+// usageLogBillingIDExpr is the settlement-ledger key of an audit row.
+//
+// Rows written before billing_id existed were recorded in the ledger under the
+// deterministic key "legacy-<id>" (migration 23 backfilled them that way) while
+// usage_logs.billing_id stayed NULL. Anything that joins the two tables has to
+// use this expression instead of the raw column, otherwise every pre-billing_id
+// row looks unlinkable and can never be reconciled.
+const usageLogBillingIDExpr = `COALESCE(NULLIF(l.billing_id, ''), 'legacy-' || l.id)`
+
 func (b *BillingReconciler) repairSettlementGap() (int, error) {
 	cutoff := time.Now().Add(-billingSettlementRepairGrace).UTC().Format(sqliteTimestampLayout)
 	query := b.repo.db.Rebind(`INSERT INTO billing_settlements (billing_id, api_key, tenant_id, cost_units, total_tokens, created_at)
-		SELECT l.billing_id, COALESCE(l.api_key, ''), COALESCE(l.tenant_id, ''), l.cost_units, l.total_tokens, l.created_at
+		SELECT ` + usageLogBillingIDExpr + `, COALESCE(l.api_key, ''), COALESCE(l.tenant_id, ''), l.cost_units, l.total_tokens, l.created_at
 		FROM usage_logs l
-		WHERE l.billing_id IS NOT NULL AND l.billing_id <> ''
-		  AND (l.cost_units <> 0 OR l.total_tokens <> 0)
+		WHERE (l.cost_units <> 0 OR l.total_tokens <> 0)
 		  AND l.created_at < ?
-		  AND NOT EXISTS (SELECT 1 FROM billing_settlements s WHERE s.billing_id = l.billing_id)
+		  AND NOT EXISTS (SELECT 1 FROM billing_settlements s WHERE s.billing_id = ` + usageLogBillingIDExpr + `)
 		LIMIT ?
 		ON CONFLICT (billing_id) DO NOTHING`)
 	res, err := b.repo.db.Exec(query, cutoff, billingSettlementRepairBatch)
@@ -196,17 +219,52 @@ func (b *BillingReconciler) ledgerDrift() (int64, int, error) {
 
 // auditLag is the absolute difference between the total settled and the total
 // recorded in the audit trail.
+//
+// Audit rows are allowed to disappear on purpose: retention prunes expired rows,
+// and both are charged evidence. Those removals are counted in the pruned-units
+// baseline (in the same transaction as the delete), so this gauge keeps meaning
+// "a charge was settled but its audit row is missing" instead of reporting the
+// entire pruned history as a discrepancy forever.
 func (b *BillingReconciler) auditLag() (int64, error) {
+	pruned := b.repo.UsageAuditPrunedUnits()
+	telemetry.GlobalMetrics.BillingAuditPrunedUnits.Store(pruned)
 	query := `SELECT COALESCE((SELECT SUM(cost_units) FROM billing_settlements), 0)
-		- COALESCE((SELECT SUM(cost_units) FROM usage_logs), 0)`
+		- (COALESCE((SELECT SUM(cost_units) FROM usage_logs), 0) + ?)`
 	var lag int64
-	if err := b.repo.db.QueryRow(query).Scan(&lag); err != nil {
+	if err := b.repo.db.QueryRow(query, pruned).Scan(&lag); err != nil {
 		return 0, fmt.Errorf("audit lag query: %w", err)
 	}
 	if lag < 0 {
 		lag = -lag
 	}
 	return lag, nil
+}
+
+// ledgerLinkage reports settled units that no audit row can be matched to.
+//
+// The join uses usageLogBillingIDExpr, so the pre-billing_id rows recorded as
+// "legacy-<id>" link correctly instead of looking orphaned. Only rows inside the
+// retention window are counted: older rows are expected to have been pruned by
+// now, and flagging them would make the gauge unusable. A non-zero value means a
+// charge reached the ledger while its audit row never arrived (or was deleted
+// outside the guarded endpoints).
+func (b *BillingReconciler) ledgerLinkage() (units int64, rows int64, err error) {
+	retention, _ := ResolveUsageLogRetention()
+	cutoff := time.Time{}
+	if retention > 0 {
+		cutoff = time.Now().Add(-retention)
+	}
+	cutoffValue := cutoff.UTC().Format(sqliteTimestampLayout)
+	query := b.repo.db.Rebind(`SELECT COUNT(*), COALESCE(SUM(s.cost_units), 0)
+		FROM billing_settlements s
+		WHERE s.created_at >= ?
+		  AND NOT EXISTS (
+			SELECT 1 FROM usage_logs l WHERE ` + usageLogBillingIDExpr + ` = s.billing_id
+		  )`)
+	if err := b.repo.db.QueryRow(query, cutoffValue).Scan(&rows, &units); err != nil {
+		return 0, 0, fmt.Errorf("ledger linkage query: %w", err)
+	}
+	return units, rows, nil
 }
 
 // walletMirrorDrift is the absolute difference between each user's balance_units
