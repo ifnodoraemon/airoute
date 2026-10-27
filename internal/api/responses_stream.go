@@ -2,190 +2,14 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
-
-// writeSSEJSON sends a named SSE event with JSON-encoded data and flushes the writer.
-func writeSSEJSON(w gin.ResponseWriter, flusher http.Flusher, event string, data any) {
-	bytes, err := json.Marshal(data)
-	if err != nil {
-		return
-	}
-	if event != "" {
-		fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, bytes)
-	} else {
-		fmt.Fprintf(w, "data: %s\n\n", bytes)
-	}
-	flusher.Flush()
-}
-
-// responsesStreamEmitter emits the documented OpenAI Responses API streaming
-// events.
-//
-// A07: the previous implementation sent only {"type": ...} plus raw text, with no
-// item_id/output_index/content_index/sequence_number and with the output item
-// under "output_item" instead of "item". Official SDKs build the final response
-// by correlating those fields, so a stream without them cannot be assembled and
-// the client reports a malformed event (or silently produces no output).
-type responsesStreamEmitter struct {
-	w         gin.ResponseWriter
-	flusher   http.Flusher
-	sequence  int
-	respID    string
-	itemID    string
-	model     string
-	createdAt int64
-	fullText  strings.Builder
-}
-
-func newResponsesStreamEmitter(w gin.ResponseWriter, flusher http.Flusher, respID, itemID, modelStr string) *responsesStreamEmitter {
-	return &responsesStreamEmitter{
-		w:         w,
-		flusher:   flusher,
-		respID:    respID,
-		itemID:    itemID,
-		model:     modelStr,
-		createdAt: time.Now().Unix(),
-	}
-}
-
-// nextSequence returns the next event sequence number. Every documented event
-// carries one and clients rely on it being monotonically increasing.
-func (e *responsesStreamEmitter) nextSequence() int {
-	seq := e.sequence
-	e.sequence++
-	return seq
-}
-
-// emit writes one named event with the sequence number attached.
-func (e *responsesStreamEmitter) emit(event string, payload gin.H) {
-	payload["type"] = event
-	payload["sequence_number"] = e.nextSequence()
-	writeSSEJSON(e.w, e.flusher, event, payload)
-}
-
-// responseObject renders the response envelope shared by created/in_progress/
-// completed.
-func (e *responsesStreamEmitter) responseObject(status string, output []gin.H, usage gin.H) gin.H {
-	obj := gin.H{
-		"id":         e.respID,
-		"object":     "response",
-		"created_at": e.createdAt,
-		"status":     status,
-		"model":      e.model,
-		"output":     output,
-	}
-	if usage != nil {
-		obj["usage"] = usage
-	}
-	return obj
-}
-
-// messageItem renders the assistant message output item.
-func (e *responsesStreamEmitter) messageItem(status string, content []gin.H) gin.H {
-	return gin.H{
-		"id":      e.itemID,
-		"type":    "message",
-		"status":  status,
-		"role":    "assistant",
-		"content": content,
-	}
-}
-
-// contentPart renders an output_text part.
-func (e *responsesStreamEmitter) contentPart(text string) gin.H {
-	return gin.H{
-		"type":        "output_text",
-		"text":        text,
-		"annotations": []any{},
-	}
-}
-
-// created emits response.created and response.in_progress.
-func (e *responsesStreamEmitter) created() {
-	e.emit("response.created", gin.H{
-		"response": e.responseObject("in_progress", []gin.H{}, nil),
-	})
-	e.emit("response.in_progress", gin.H{
-		"response": e.responseObject("in_progress", []gin.H{}, nil),
-	})
-}
-
-// itemAdded emits response.output_item.added and response.content_part.added for
-// the single text output item this gateway streams.
-func (e *responsesStreamEmitter) itemAdded() {
-	e.emit("response.output_item.added", gin.H{
-		"output_index": 0,
-		"item":         e.messageItem("in_progress", []gin.H{}),
-	})
-	e.emit("response.content_part.added", gin.H{
-		"item_id":       e.itemID,
-		"output_index":  0,
-		"content_index": 0,
-		"part":          e.contentPart(""),
-	})
-}
-
-// textDelta emits one response.output_text.delta event.
-func (e *responsesStreamEmitter) textDelta(delta string) {
-	e.emit("response.output_text.delta", gin.H{
-		"item_id":       e.itemID,
-		"output_index":  0,
-		"content_index": 0,
-		"delta":         delta,
-		"logprobs":      []any{},
-	})
-}
-
-// completed emits the three terminal events (part done, item done, response
-// completed) that close the stream.
-func (e *responsesStreamEmitter) completed(usage gin.H) {
-	text := e.fullText.String()
-	e.emit("response.output_text.done", gin.H{
-		"item_id":       e.itemID,
-		"output_index":  0,
-		"content_index": 0,
-		"text":          text,
-		"logprobs":      []any{},
-	})
-	e.emit("response.content_part.done", gin.H{
-		"item_id":       e.itemID,
-		"output_index":  0,
-		"content_index": 0,
-		"part":          e.contentPart(text),
-	})
-	item := e.messageItem("completed", []gin.H{e.contentPart(text)})
-	e.emit("response.output_item.done", gin.H{
-		"output_index": 0,
-		"item":         item,
-	})
-	e.emit("response.completed", gin.H{
-		"response": e.responseObject("completed", []gin.H{item}, usage),
-	})
-}
-
-// failed emits the documented error event. The nested "error" object is kept for
-// clients that predate the documented shape.
-func (e *responsesStreamEmitter) failed(err error) {
-	message := sanitizeErrorMessage(err)
-	e.emit("error", gin.H{
-		"code":    "upstream_error",
-		"message": message,
-		"param":   nil,
-		"error": gin.H{
-			"message": message,
-			"type":    "stream_error",
-		},
-	})
-}
 
 // handleResponsesStreaming handles streaming SSE event translation for the Responses API.
 func (h *Handler) handleResponsesStreaming(
@@ -244,8 +68,10 @@ func (h *Handler) handleResponsesStreaming(
 			} else {
 				observePromptEstimate(chatReq.Model, canonicalEstimate, totalPromptTokens)
 			}
-			if totalCompTokens == 0 && emitter.fullText.Len() > 0 {
-				totalCompTokens = estimatedStreamCompletionTokens(emitter.fullText.Len())
+			// Tool-call arguments are completion tokens too; count them in the
+			// fallback estimate so a tool-only stream is not billed as prompt-only.
+			if totalCompTokens == 0 && emitter.fullText.Len()+emitter.toolChars > 0 {
+				totalCompTokens = estimatedStreamCompletionTokens(emitter.fullText.Len() + emitter.toolChars)
 			}
 		}
 		return recordUsage(c, AuditRecordParams{
@@ -306,6 +132,16 @@ func (h *Handler) handleResponsesStreaming(
 					// 实时吞吐：流式 delta 到达即计入内存 token 计数。
 					telemetry.GlobalLiveMetrics.AddChars(len(deltaText))
 					emitter.textDelta(deltaText)
+				}
+				for _, toolCall := range choice.Delta.ToolCalls {
+					toolIndex := 0
+					if toolCall.Index != nil {
+						toolIndex = *toolCall.Index
+					}
+					emitter.toolCallDelta(toolIndex, toolCall.ID, toolCall.Function.Name, toolCall.Function.Arguments)
+					if toolCall.Function.Arguments != "" {
+						telemetry.GlobalLiveMetrics.AddChars(len(toolCall.Function.Arguments))
+					}
 				}
 			}
 		}
