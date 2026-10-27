@@ -4,10 +4,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/model"
 )
 
@@ -126,6 +128,46 @@ func truncateRunes(s string, n int) string {
 	return s
 }
 
+// sessionIdentity derives a stable, authenticated identity for the caller.
+//
+// The value namespaces the session-affinity routing key, so a client-supplied
+// session identifier can only ever address a namespace it owns. Before this, the
+// routing key was the bare client value and the Redis pin
+// (airoute:session:<model>:<sessionID>) carried no tenant dimension, which let
+// one tenant pre-seed — or collide with — another tenant's channel pin (A18).
+func sessionIdentity(c *gin.Context) string {
+	key := getAPIKeyConfig(c)
+	if key != nil {
+		if key.TenantID != "" {
+			return "t:" + key.TenantID
+		}
+		if key.UserID > 0 {
+			return "u:" + strconv.FormatInt(key.UserID, 10)
+		}
+		if key.Key != "" {
+			digest := sha256.Sum256([]byte(key.Key))
+			return "k:" + hex.EncodeToString(digest[:8])
+		}
+	}
+	if tenant := c.GetString(middleware.ContextKeyTenant); tenant != "" {
+		return "t:" + tenant
+	}
+	if apiKey := getRequestAPIKey(c); apiKey != "" {
+		digest := sha256.Sum256([]byte(apiKey))
+		return "k:" + hex.EncodeToString(digest[:8])
+	}
+	return "anon"
+}
+
+// sessionAffinityKey namespaces a client-visible session id by the authenticated
+// caller identity for the router's session-affinity selector.
+func sessionAffinityKey(c *gin.Context, sessionID string) string {
+	if sessionID == "" {
+		return ""
+	}
+	return sessionIdentity(c) + "|" + sessionID
+}
+
 // resolveSessionID resolves either an explicit session ID or derives a zero-touch context fingerprint.
 // It also writes sticky session headers and cookies onto the HTTP response.
 func resolveSessionID(c *gin.Context, modelName string, messages []model.ChatMessage, userField string) string {
@@ -137,12 +179,27 @@ func resolveSessionID(c *gin.Context, modelName string, messages []model.ChatMes
 		sID = fmt.Sprintf("sess_%d_%x", time.Now().Unix(), time.Now().UnixMicro()%1000000)
 	}
 	if sID != "" {
-		c.Header("X-Airoute-Session-ID", sID)
-		// Set cookie for browser-based clients (NextChat, OpenWebUI, LibreChat, Web App).
-		// HttpOnly: the value is an affinity key, scripts have no reason to read it.
-		c.SetCookie(llmSessionCookie, sID, 1800, "/", "", false, true)
+		publishSession(c, sID)
 	}
 	return sID
+}
+
+// publishSession exposes the client-visible session id to the response headers,
+// the sticky cookie and the tracing hook (A12).
+func publishSession(c *gin.Context, sID string) {
+	if sID == "" {
+		return
+	}
+	c.Header("X-Airoute-Session-ID", sID)
+	// Set cookie for browser-based clients (NextChat, OpenWebUI, LibreChat, Web App).
+	// HttpOnly: the value is an affinity key, scripts have no reason to read it.
+	// Secure follows the request scheme so the cookie is not sent in clear text
+	// once the gateway is fronted by TLS.
+	c.SetCookie(llmSessionCookie, sID, 1800, "/", "", c.Request != nil && c.Request.TLS != nil, true)
+	// A12: the trace archiver reads the session from the gin context; it was
+	// previously only placed into the dispatch context, so every trace row had an
+	// empty session_id.
+	c.Set(ContextKeyLLMSessionID, sID)
 }
 
 // resolveGenericSessionID extracts sticky session identifiers or derives a unique fallback session.
@@ -162,6 +219,6 @@ func resolveGenericSessionID(c *gin.Context, prefix string) string {
 		}
 		sID = fmt.Sprintf("sess_%s_%d_%x", prefix, time.Now().Unix(), time.Now().UnixMicro()%1000000)
 	}
-	c.Header("X-Airoute-Session-ID", sID)
+	publishSession(c, sID)
 	return sID
 }

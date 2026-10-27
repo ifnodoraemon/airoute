@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/gin-gonic/gin"
@@ -32,6 +33,63 @@ func NewMCPHandler(dispatcher *router.Dispatcher, repo *storage.Repository) *MCP
 type mcpContextKey string
 
 const contextKeyCallerKey mcpContextKey = "mcp_caller_key"
+
+// mcpSupportedVersions lists the protocol revisions this server implements,
+// newest first. Negotiation answers with the client's version when it is in this
+// list and with the newest supported version otherwise (MCP lifecycle spec).
+var mcpSupportedVersions = []string{"2026-07-28", "2025-11-25", "2024-11-05"}
+
+// mcpDefaultProtocolVersion is the newest revision this server speaks.
+const mcpDefaultProtocolVersion = "2026-07-28"
+
+// mcpProtocolSupported reports whether version is one we implement.
+func mcpProtocolSupported(version string) bool {
+	for _, v := range mcpSupportedVersions {
+		if v == version {
+			return true
+		}
+	}
+	return false
+}
+
+// negotiateMCPProtocolVersion picks the version to answer with. An empty/unknown
+// request falls back to the newest supported revision.
+func negotiateMCPProtocolVersion(requested string) string {
+	requested = strings.TrimSpace(requested)
+	if requested != "" && mcpProtocolSupported(requested) {
+		return requested
+	}
+	return mcpDefaultProtocolVersion
+}
+
+// requestedProtocolVersion extracts params.protocolVersion from an initialize
+// request.
+func requestedProtocolVersion(req *mcpRequest) string {
+	if req == nil || len(req.Params) == 0 {
+		return ""
+	}
+	var params struct {
+		ProtocolVersion string `json:"protocolVersion"`
+	}
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		return ""
+	}
+	return params.ProtocolVersion
+}
+
+// isJSONRPCNotification reports whether req is a JSON-RPC notification. Per the
+// JSON-RPC 2.0 spec a request without an id is a notification and the server MUST
+// NOT send a response for it; MCP's Streamable HTTP transport answers 202 with an
+// empty body.
+func isJSONRPCNotification(req *mcpRequest) bool {
+	return req != nil && req.ID == nil
+}
+
+// isMCPNotificationMethod reports whether the method is one of MCP's
+// fire-and-forget notifications.
+func isMCPNotificationMethod(method string) bool {
+	return strings.HasPrefix(method, "notifications/")
+}
 
 // authenticateCaller verifies that the caller has a valid active API key once
 // any key has been registered. Open mode is only for a deployment that has
@@ -104,6 +162,26 @@ func (h *MCPHandler) HandleMCPMessages(c *gin.Context) {
 	reqCtx = context.WithValue(reqCtx, contextKeyCallerKey, caller.Key)
 	reqCtx = context.WithValue(reqCtx, contextKeyCallerRecord, caller)
 
+	// A10: a JSON-RPC request without an id is a notification. The spec forbids
+	// replying to it; the Streamable HTTP transport acknowledges with 202 and an
+	// empty body. Answering with a JSON-RPC result made strict clients see a
+	// response to a message that must not have one.
+	if isJSONRPCNotification(&req) {
+		protocolVersion := negotiateMCPProtocolVersion(c.GetHeader("MCP-Protocol-Version"))
+		c.Header("MCP-Protocol-Version", protocolVersion)
+		c.Header("Access-Control-Expose-Headers", "MCP-Protocol-Version")
+		c.Status(http.StatusAccepted)
+		return
+	}
+
+	// A10: protocol version is negotiated per request. initialize answers with
+	// the client's requested revision when supported; every other call echoes the
+	// version the client declared in the MCP-Protocol-Version header.
+	protocolVersion := negotiateMCPProtocolVersion(c.GetHeader("MCP-Protocol-Version"))
+	if req.Method == "initialize" {
+		protocolVersion = negotiateMCPProtocolVersion(requestedProtocolVersion(&req))
+	}
+
 	res := h.ProcessRPC(reqCtx, &req)
 
 	// If this request came via an SSE session, push to SSE channel too
@@ -113,7 +191,7 @@ func (h *MCPHandler) HandleMCPMessages(c *gin.Context) {
 		}
 	}
 
-	c.Header("MCP-Protocol-Version", "2026-07-28")
+	c.Header("MCP-Protocol-Version", protocolVersion)
 	c.Header("Access-Control-Expose-Headers", "MCP-Protocol-Version")
 	c.JSON(http.StatusOK, res)
 }
@@ -129,7 +207,7 @@ func (h *MCPHandler) ProcessRPC(ctx context.Context, req *mcpRequest) mcpRespons
 	case "server/discover":
 		// MCP 2026-07-28 Stateless Core: Mandatory capability discovery RPC
 		return newMCPResultResponse(req.ID, gin.H{
-			"supportedVersions": []string{"2026-07-28", "2025-11-25", "2024-11-05"},
+			"supportedVersions": mcpSupportedVersions,
 			"capabilities": gin.H{
 				"tools":     gin.H{"listChanged": false},
 				"resources": gin.H{},
@@ -149,9 +227,12 @@ func (h *MCPHandler) ProcessRPC(ctx context.Context, req *mcpRequest) mcpRespons
 		})
 
 	case "initialize":
-		// Legacy 2024-2025 handshake backwards compatibility
+		// Legacy 2024-2025 handshake backwards compatibility. A10: honour the
+		// revision the client asked for instead of always claiming the newest one;
+		// clients reject a server version they do not implement.
+		negotiated := negotiateMCPProtocolVersion(requestedProtocolVersion(req))
 		return newMCPResultResponse(req.ID, gin.H{
-			"protocolVersion": "2026-07-28",
+			"protocolVersion": negotiated,
 			"capabilities": gin.H{
 				"tools": gin.H{"listChanged": false},
 			},
@@ -160,10 +241,16 @@ func (h *MCPHandler) ProcessRPC(ctx context.Context, req *mcpRequest) mcpRespons
 				"version": "1.0.0",
 			},
 		}, gin.H{
-			"io.modelcontextprotocol/protocolVersion": "2026-07-28",
+			"io.modelcontextprotocol/protocolVersion": negotiated,
 		})
 
-	case "notifications/initialized":
+	case "notifications/initialized", "notifications/cancelled", "notifications/progress":
+		// A10: notifications must not receive a JSON-RPC response. The HTTP
+		// handler answers 202 with an empty body; this empty value is the
+		// defensive contract for any other transport that reuses ProcessRPC.
+		if isJSONRPCNotification(req) || isMCPNotificationMethod(req.Method) {
+			return mcpResponse{}
+		}
 		return newMCPResultResponse(req.ID, gin.H{})
 
 	case "ping":
@@ -273,9 +360,6 @@ func (h *MCPHandler) ProcessRPC(ctx context.Context, req *mcpRequest) mcpRespons
 		return newMCPResultResponse(req.ID, gin.H{
 			"prompts": []gin.H{},
 		})
-
-	case "notifications/cancelled", "notifications/progress":
-		return newMCPResultResponse(req.ID, gin.H{})
 
 	default:
 		return newMCPErrorResponse(req.ID, -32601, fmt.Sprintf("Method '%s' not found", req.Method))

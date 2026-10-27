@@ -117,7 +117,14 @@ func TestAPI_Rerank_SuccessAndFallback(t *testing.T) {
 func TestAPI_AnthropicCountTokens(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	dispatcher := router.NewDispatcher(nil)
+	// The model is routed to a non-Anthropic upstream, so the handler keeps its
+	// documented local-estimate fallback. (A model with no channel at all is now
+	// a 404 model_not_found — see internal/api/api_batch2_fix_test.go.)
+	dispatcher := router.NewDispatcher([]model.ChannelConfig{{
+		Name: "openai-backend", Type: model.ProviderOpenAI, BaseURL: "https://count-tokens.invalid",
+		Models: []string{"claude-3-5-sonnet"}, Protocols: []string{"openai_chat"},
+		Status: "active", Weight: 1,
+	}})
 	engine := api.SetupRouter(dispatcher, nil)
 
 	reqBody := []byte(`{

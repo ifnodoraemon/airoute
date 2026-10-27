@@ -329,6 +329,11 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 										"type": "tool_use",
 										"id":   tc.ID,
 										"name": tc.Function.Name,
+										// A16: the Anthropic SDKs require tool_use
+										// blocks to carry an (empty) input object on
+										// content_block_start; the arguments then
+										// arrive as input_json_delta fragments.
+										"input": gin.H{},
 									},
 								}
 								tbBytes, _ := json.Marshal(tbStart)
@@ -336,7 +341,11 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 								flusher.Flush()
 							}
 
-							if tc.Function.Arguments != "" {
+							// Argument fragments are only valid inside an open
+							// tool_use block. A frame that carries arguments without
+							// ever opening one must not be written onto the text
+							// block at index 0.
+							if tc.Function.Arguments != "" && toolBlockOpened {
 								stopReason = "tool_use"
 								argDelta := gin.H{
 									"type":  "content_block_delta",

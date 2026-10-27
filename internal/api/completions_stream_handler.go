@@ -40,7 +40,6 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 	upstreamChannel := ""
 	accumulatedChars := 0
 	var streamError error
-	sawDone := false
 	usageSource := "upstream"
 
 	for event := range streamChan {
@@ -61,7 +60,6 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 		}
 
 		if event.IsDone {
-			sawDone = true
 			break
 		}
 
@@ -144,12 +142,12 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 		ErrorMessage:     sanitizeErrorMessage(streamError),
 	})
 
+	// A20: every OpenAI SSE stream must be terminated by the [DONE] sentinel, on
+	// success AND on failure. The error path used to return without it, leaving
+	// clients that wait for the sentinel hanging until the connection closed.
 	if statusCode == http.StatusOK {
 		writeStreamUsageTrailer(w, flusher, cost, savedCost, cachedTokens)
-		fmt.Fprintf(w, "data: [DONE]\n\n")
-		flusher.Flush()
-	} else if sawDone {
-		fmt.Fprintf(w, "data: [DONE]\n\n")
-		flusher.Flush()
 	}
+	fmt.Fprintf(w, "data: [DONE]\n\n")
+	flusher.Flush()
 }

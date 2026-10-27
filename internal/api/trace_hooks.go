@@ -16,6 +16,25 @@ import (
 // trace archiver can persist it on failure without re-reading the stream.
 const ContextKeyRequestSnapshot = "request_snapshot"
 
+// ContextKeyChatID carries the upstream response id of the served request so the
+// trace archiver can persist it.
+const ContextKeyChatID = "chat_id"
+
+// ContextKeyLLMSessionID carries the client-visible LLM affinity session id.
+//
+// The routing context key (router.ContextKeySessionID) now holds a value that is
+// namespaced by the authenticated caller (A18); traces must show the session the
+// client actually sent, so handlers publish that raw value here.
+const ContextKeyLLMSessionID = "llm_session_id"
+
+// traceSessionID resolves the session id to persist in a trace record.
+func traceSessionID(c *gin.Context) string {
+	if s := c.GetString(ContextKeyLLMSessionID); s != "" {
+		return s
+	}
+	return c.GetString(router.ContextKeySessionID)
+}
+
 // snapshotMaxBytes caps how much of the inbound body is retained per request.
 const snapshotMaxBytes = 32 * 1024
 
@@ -71,8 +90,8 @@ func RecordTrace(c *gin.Context, modelName, channel string, statusCode int, errM
 
 	tc.Record(&storage.RequestTraceRecord{
 		TraceID:         middleware.GetTraceID(c),
-		ChatID:          c.GetString("chat_id"),
-		SessionID:       c.GetString(router.ContextKeySessionID),
+		ChatID:          c.GetString(ContextKeyChatID),
+		SessionID:       traceSessionID(c),
 		APIKey:          getRequestAPIKey(c),
 		TenantID:        c.GetString(middleware.ContextKeyTenant),
 		Model:           modelName,

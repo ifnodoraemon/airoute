@@ -14,6 +14,9 @@ import (
 func (h *Handler) HandleRerank(c *gin.Context) {
 	var req model.RerankRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		if respondRequestTooLarge(c, err) {
+			return
+		}
 		RespondOpenAIError(c, http.StatusBadRequest, fmt.Sprintf("Invalid JSON request body: %v", err), "invalid_request_error", "invalid_payload")
 		return
 	}

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -25,11 +26,36 @@ func NewHandler(dispatcher *router.Dispatcher) *Handler {
 	return &Handler{dispatcher: dispatcher}
 }
 
+// isRequestBodyTooLarge reports whether a bind failure came from the request
+// body exceeding middleware.BodyLimit's cap (http.MaxBytesReader) rather than
+// from malformed JSON. The two are different client errors — 413 vs 400 — and
+// collapsing them into "Invalid JSON request body" told clients to fix their
+// JSON when the payload was merely too big.
+func isRequestBodyTooLarge(err error) bool {
+	var maxErr *http.MaxBytesError
+	return errors.As(err, &maxErr)
+}
+
+// respondRequestTooLarge writes the OpenAI-shaped 413 response when the bind
+// error was a body-limit violation, reporting whether it handled the response.
+func respondRequestTooLarge(c *gin.Context, err error) bool {
+	if !isRequestBodyTooLarge(err) {
+		return false
+	}
+	RespondOpenAIError(c, http.StatusRequestEntityTooLarge,
+		"Request body is too large for this endpoint. Reduce it or configure GATEWAY_MAX_BODY_BYTES.",
+		"invalid_request_error", "payload_too_large")
+	return true
+}
+
 // HandleChatCompletions handles POST /v1/chat/completions.
 func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	CaptureRequestSnapshot(c)
 	var req model.ChatCompletionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		if respondRequestTooLarge(c, err) {
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": gin.H{
 				"message": fmt.Sprintf("Invalid JSON request body: %v", err),
@@ -86,7 +112,10 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	reqCtx, cancelUpstream := upstreamRequestContext(c)
 	defer cancelUpstream()
 	if sessionID != "" {
-		reqCtx = context.WithValue(reqCtx, router.ContextKeySessionID, sessionID)
+		// A18: the routing key is namespaced by the authenticated caller so a
+		// client-supplied session identifier can never steer another tenant's
+		// channel affinity.
+		reqCtx = context.WithValue(reqCtx, router.ContextKeySessionID, sessionAffinityKey(c, sessionID))
 	}
 
 	start := time.Now()
@@ -115,6 +144,11 @@ func (h *Handler) handleChatUnary(c *gin.Context, reqCtx context.Context, req *m
 	}
 	if req.Model != "" {
 		resp.Model = req.Model
+	}
+	// A12: publish the upstream chat id on the gin context so the trace archiver
+	// can persist it (it previously read a key nothing ever wrote).
+	if upstreamChatID != "" {
+		c.Set(ContextKeyChatID, upstreamChatID)
 	}
 	pTokens, cTokens, cachedTokens, usageSource := resolveChatUsage(req, resp)
 	RecordUsage(c, AuditRecordParams{

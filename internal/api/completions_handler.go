@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -48,6 +49,9 @@ type TextCompletionResponse struct {
 func (h *Handler) HandleCompletions(c *gin.Context) {
 	var req LegacyCompletionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		if respondRequestTooLarge(c, err) {
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": gin.H{
 				"message": fmt.Sprintf("Invalid JSON request body: %v", err),
@@ -88,6 +92,21 @@ func (h *Handler) HandleCompletions(c *gin.Context) {
 	case string:
 		promptText = v
 	case []any:
+		// A20: an array of integers is a token-id prompt in the OpenAI API, not a
+		// list of text prompts. Flattening it with fmt.Sprint forwarded the token
+		// numbers as literal text ("1\n2\n3"), silently changing what the model
+		// saw. The canonical request has no token-id field, so reject it instead
+		// of guessing.
+		if isTokenIDPrompt(v) {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": gin.H{
+					"message": "Token-id prompts are not supported by this gateway; send 'prompt' as text.",
+					"type":    "invalid_request_error",
+					"code":    "unsupported_prompt_type",
+				},
+			})
+			return
+		}
 		var parts []string
 		for _, item := range v {
 			parts = append(parts, fmt.Sprint(item))
@@ -120,7 +139,7 @@ func (h *Handler) HandleCompletions(c *gin.Context) {
 	reqCtx, cancelUpstream := upstreamRequestContext(c)
 	defer cancelUpstream()
 	if sessionID != "" {
-		reqCtx = context.WithValue(reqCtx, router.ContextKeySessionID, sessionID)
+		reqCtx = context.WithValue(reqCtx, router.ContextKeySessionID, sessionAffinityKey(c, sessionID))
 	}
 
 	start := time.Now()
@@ -131,6 +150,35 @@ func (h *Handler) HandleCompletions(c *gin.Context) {
 	}
 
 	h.handleCompletionsStream(c, reqCtx, req, chatReq, sessionID, start)
+}
+
+// isTokenIDPrompt reports whether a legacy /v1/completions prompt array is an
+// OpenAI token-id sequence ([1,2,3]) or a batch of them ([[1,2],[3,4]]), as
+// opposed to an array of text prompts (["a","b"]).
+func isTokenIDPrompt(items []any) bool {
+	if len(items) == 0 {
+		return false
+	}
+	for _, item := range items {
+		switch v := item.(type) {
+		case float64, float32, int, int64, json.Number:
+			// numeric element: token id
+		case []any:
+			if len(v) == 0 {
+				return false
+			}
+			for _, inner := range v {
+				switch inner.(type) {
+				case float64, float32, int, int64, json.Number:
+				default:
+					return false
+				}
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func (h *Handler) handleCompletionsUnary(c *gin.Context, reqCtx context.Context, req LegacyCompletionRequest, chatReq model.ChatCompletionRequest, sessionID string, start time.Time) {

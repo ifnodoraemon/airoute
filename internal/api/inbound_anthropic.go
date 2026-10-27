@@ -44,6 +44,11 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 	CaptureRequestSnapshot(c)
 	var req AnthropicInboundRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		if isRequestBodyTooLarge(err) {
+			RespondAnthropicError(c, http.StatusRequestEntityTooLarge,
+				"Request body is too large for this endpoint. Reduce it or configure GATEWAY_MAX_BODY_BYTES.", "invalid_request_error")
+			return
+		}
 		RespondAnthropicError(c, http.StatusBadRequest, fmt.Sprintf("Failed to parse Anthropic request: %v", err), "invalid_request_error")
 		return
 	}
@@ -84,7 +89,7 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 	reqCtx, cancelUpstream := upstreamRequestContext(c)
 	defer cancelUpstream()
 	if sessionID != "" {
-		reqCtx = context.WithValue(reqCtx, router.ContextKeySessionID, sessionID)
+		reqCtx = context.WithValue(reqCtx, router.ContextKeySessionID, sessionAffinityKey(c, sessionID))
 	}
 
 	if !req.Stream {
@@ -217,6 +222,11 @@ func (h *Handler) handleAnthropicUnary(c *gin.Context, reqCtx context.Context, r
 func (h *Handler) HandleAnthropicCountTokens(c *gin.Context) {
 	var req model.AnthropicInboundRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		if isRequestBodyTooLarge(err) {
+			RespondAnthropicError(c, http.StatusRequestEntityTooLarge,
+				"Request body is too large for this endpoint. Reduce it or configure GATEWAY_MAX_BODY_BYTES.", "invalid_request_error")
+			return
+		}
 		RespondAnthropicError(c, http.StatusBadRequest, "invalid request body", "invalid_request_error")
 		return
 	}
@@ -229,6 +239,15 @@ func (h *Handler) HandleAnthropicCountTokens(c *gin.Context) {
 	}
 	if !middleware.ValidateModelAllowed(c, req.Model) {
 		RespondAnthropicError(c, http.StatusForbidden, "model is not permitted for this API key", "permission_error")
+		return
+	}
+	// A14: a model that is not routed at all must be a 404, not a local estimate.
+	// Without this, count_tokens answered 200 with a plausible token count for
+	// models the gateway does not serve, so SDK clients kept going and only the
+	// real inference call failed.
+	if len(h.dispatcher.ListChannelsForModel(req.Model, "")) == 0 {
+		RespondAnthropicError(c, http.StatusNotFound,
+			fmt.Sprintf("model '%s' does not exist or is not available", req.Model), "not_found_error")
 		return
 	}
 	channels := h.dispatcher.ResolveCandidateChannels(c.Request.Context(), req.Model, "anthropic_messages")
