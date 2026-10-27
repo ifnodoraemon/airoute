@@ -358,6 +358,83 @@ describe('useChannelActions', () => {
     expect(result.current.probing).toBe(false);
   });
 
+  it('reports a transport-level failure as an error and never auto-fills', async () => {
+    // The gateway answers 200 with `reachable: false` when every probe path failed
+    // to connect. Treating that envelope as success auto-checked protocols and
+    // models the upstream never confirmed.
+    globalThis.fetch.mockResolvedValue(jsonResponse({
+      code: 0,
+      data: {
+        reachable: false,
+        message: 'all probe paths failed',
+        type: 'anthropic',
+        latency_ms: 0,
+        suggested_name: 'ghost',
+        suggested_base_url: 'https://ghost.example/v1',
+        models: ['ghost-model'],
+        protocols: ['anthropic_messages'],
+      },
+    }));
+    const { result, showToast } = setup();
+    act(() => {
+      result.current.setNewChannel(prev => ({ ...prev, base_url: 'https://unreachable.example', name: '', type: 'openai' }));
+    });
+
+    await act(async () => {
+      await result.current.handleProbeChannel();
+    });
+
+    expect(result.current.probeAlert.type).toBe('error');
+    expect(result.current.probeAlert.text).toContain('all probe paths failed');
+    // Nothing discovered by an unreachable probe may reach the form.
+    expect(result.current.newChannel.models_str).toBe('');
+    expect(result.current.newChannel.type).toBe('openai');
+    expect(result.current.newChannel.name).toBe('');
+    expect(result.current.probeAlert.type).not.toBe('success');
+    expect(showToast).toHaveBeenCalledWith(expect.stringContaining('未自动匹配'), 'error');
+  });
+
+  it('treats the HTTP 400 all-paths-failed answer as a probe failure', async () => {
+    globalThis.fetch.mockResolvedValue(jsonResponse({
+      code: 400,
+      error: '上游服务不可达：所有探测路径均在传输层失败',
+      data: { reachable: false, models: ['ghost-model'], protocols: ['openai_chat'] },
+    }, 400));
+    const { result, showToast } = setup();
+    act(() => {
+      result.current.setNewChannel(prev => ({ ...prev, base_url: 'https://unreachable.example', models_str: '', type: 'openai', protocols: [] }));
+    });
+
+    await act(async () => {
+      await result.current.handleProbeChannel();
+    });
+
+    expect(result.current.probeAlert.type).toBe('error');
+    expect(result.current.newChannel.models_str).toBe('');
+    // The form started with no protocols; an unreachable probe added none.
+    expect(result.current.newChannel.protocols).toEqual([]);
+    expect(showToast).toHaveBeenCalledWith(expect.any(String), 'error');
+    expect(showToast).not.toHaveBeenCalledWith(expect.any(String), 'success');
+  });
+
+  it('still reports a genuinely reachable probe as success', async () => {
+    globalThis.fetch.mockResolvedValue(jsonResponse({
+      code: 0,
+      data: { reachable: true, type: 'openai', latency_ms: 7, models: ['m1'], protocols: ['openai_chat'] },
+    }));
+    const { result } = setup();
+    act(() => {
+      result.current.setNewChannel(prev => ({ ...prev, base_url: 'https://ok.example' }));
+    });
+
+    await act(async () => {
+      await result.current.handleProbeChannel();
+    });
+
+    expect(result.current.probeAlert.type).toBe('success');
+    expect(result.current.newChannel.models_str).toBe('m1');
+  });
+
   it('reports a probe failure as an error alert', async () => {
     globalThis.fetch.mockResolvedValue(jsonResponse({ code: 1, error: 'nope' }));
     const { result } = setup();

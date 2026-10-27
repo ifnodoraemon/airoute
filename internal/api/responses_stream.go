@@ -55,6 +55,7 @@ func (h *Handler) handleResponsesStreaming(
 	var ttftDuration time.Duration
 	totalPromptTokens := 0
 	totalCompTokens := 0
+	totalCachedTokens := 0
 	respUpstreamChatID := ""
 	respUpstreamChannel := ""
 	var streamError error
@@ -81,11 +82,15 @@ func (h *Handler) handleResponsesStreaming(
 			Model:            req.Model,
 			PromptTokens:     totalPromptTokens,
 			CompletionTokens: totalCompTokens,
-			Duration:         time.Since(start),
-			TTFT:             ttftDuration,
-			StatusCode:       statusCode,
-			ErrorMessage:     sanitizeErrorMessage(streamError),
-			LiveTracked:      true, // stream deltas already fed the live token meter
+			// Prompt-cache reads are billed at the cache rate; without this the
+			// stream reported every prompt token at the full rate (and the
+			// response.completed usage/detail and trailer all said 0 cached).
+			CachedTokens: totalCachedTokens,
+			Duration:     time.Since(start),
+			TTFT:         ttftDuration,
+			StatusCode:   statusCode,
+			ErrorMessage: sanitizeErrorMessage(streamError),
+			LiveTracked:  true, // stream deltas already fed the live token meter
 		})
 	}
 
@@ -123,6 +128,7 @@ func (h *Handler) handleResponsesStreaming(
 			if event.Chunk.Usage != nil {
 				totalPromptTokens = event.Chunk.Usage.PromptTokens
 				totalCompTokens = event.Chunk.Usage.CompletionTokens
+				totalCachedTokens = event.Chunk.Usage.GetCachedTokens()
 			}
 
 			for _, choice := range event.Chunk.Choices {
@@ -149,6 +155,11 @@ func (h *Handler) handleResponsesStreaming(
 
 	cost, savedCost, cachedTokens := recordStreamEnd(http.StatusOK)
 
+	// Persist before the terminal event: a client that issues a follow-up with
+	// previous_response_id as soon as it sees response.completed must already
+	// find the conversation stored. A failure here is logged, not fatal.
+	persistResponseContext(c, respID, chatReq.Messages, emitter.persistedAssistantMessage())
+
 	// 5-9. output_text.done / content_part.done / output_item.done / response.completed
 	emitter.completed(gin.H{
 		"input_tokens":          totalPromptTokens,
@@ -164,4 +175,29 @@ func (h *Handler) handleResponsesStreaming(
 
 	fmt.Fprintf(w, "data: [DONE]\n\n")
 	flusher.Flush()
+}
+
+// persistedAssistantMessage renders the assistant turn of the completed stream
+// so it can be stored as conversation context for a previous_response_id
+// follow-up. Tool calls are reconstructed from the emitter's accumulated state.
+func (e *responsesStreamEmitter) persistedAssistantMessage() *model.ChatMessage {
+	message := &model.ChatMessage{Role: "assistant"}
+	if text := e.fullText.String(); text != "" {
+		message.Content = text
+	}
+	for _, toolIndex := range e.toolOrder {
+		state := e.toolStates[toolIndex]
+		if state == nil {
+			continue
+		}
+		message.ToolCalls = append(message.ToolCalls, model.ToolCall{
+			ID:       state.callID,
+			Type:     "function",
+			Function: model.FunctionCall{Name: state.name, Arguments: state.arguments.String()},
+		})
+	}
+	if message.Content == nil && len(message.ToolCalls) == 0 {
+		return nil
+	}
+	return message
 }

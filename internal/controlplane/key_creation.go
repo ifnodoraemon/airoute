@@ -130,18 +130,7 @@ func (r *KeyCreationRules) PlanCreate(claims *AdminClaims, req CreateAPIKeyReque
 		// also reachable by regular accounts, so without this clamp a tenant could
 		// submit rpm=0 (which the storage layer treats as unlimited) and bypass
 		// the self-service policy enforced by /user/keys.
-		switch {
-		case rec.RPM <= 0:
-			rec.RPM = DefaultUserKeyRPM
-		case rec.RPM > MaxSelfServiceKeyRPM:
-			rec.RPM = MaxSelfServiceKeyRPM
-		}
-		switch {
-		case rec.TPM <= 0:
-			rec.TPM = DefaultUserKeyTPM
-		case rec.TPM > MaxSelfServiceKeyTPM:
-			rec.TPM = MaxSelfServiceKeyTPM
-		}
+		rec.RPM, rec.TPM = clampSelfServiceQuotas(rec.RPM, rec.TPM)
 		if rec.Budget < 0 {
 			rec.Budget = 0
 		}

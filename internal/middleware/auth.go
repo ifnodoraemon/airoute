@@ -24,6 +24,7 @@ const authStorageTimeout = 2 * time.Second
 
 const (
 	ContextKeyTenant       = "tenant_id"
+	ContextKeyOrg          = "org_id"
 	ContextKeyAPIKey       = "api_key"
 	ContextKeyAPIKeyConfig = "api_key_config"
 	ContextKeyUserRecord   = "user_record"
@@ -170,6 +171,12 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		effectiveKey := *matchedKey
 
+		// A GET video-task query is a read of a job that was already billed when
+		// it was created. It must stay reachable after the wallet/budget is
+		// exhausted, so the admission checks below skip only the spending gates
+		// (balance, per-key budget, in-flight reservation) for this exact path.
+		freeRead := IsFreeReadVideoTaskQuery(c)
+
 		// 1. Key status check (pure in-memory)
 		if denial := KeyStatusDenial(effectiveKey.Status); denial != nil {
 			auditAuthFailure(c, rawKey, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
@@ -180,10 +187,12 @@ func AuthMiddleware() gin.HandlerFunc {
 		// 2. Key budget check (fast in-memory check first). Use the integer
 		// 1e-9-unit mirror when available so repeated float accumulation cannot
 		// drift across the budget boundary.
-		if denial := KeyBudgetDenial(effectiveKey.BudgetUnits, effectiveKey.UsedCostUnits, effectiveKey.Budget, effectiveKey.UsedCost); denial != nil {
-			auditAuthFailure(c, rawKey, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
-			AbortWithDenial(c, denial)
-			return
+		if !freeRead {
+			if denial := KeyBudgetDenial(effectiveKey.BudgetUnits, effectiveKey.UsedCostUnits, effectiveKey.Budget, effectiveKey.UsedCost); denial != nil {
+				auditAuthFailure(c, rawKey, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
+				AbortWithDenial(c, denial)
+				return
+			}
 		}
 
 		// 3. Authoritative storage key check if database repository is available.
@@ -209,7 +218,7 @@ func AuthMiddleware() gin.HandlerFunc {
 				if budgetUnits <= 0 {
 					budgetUnits = effectiveKey.BudgetUnits
 				}
-				if denial := KeyBudgetDenial(budgetUnits, keyRec.UsedCostUnits, effectiveBudget, keyRec.UsedCost); denial != nil {
+				if denial := KeyBudgetDenial(budgetUnits, keyRec.UsedCostUnits, effectiveBudget, keyRec.UsedCost); denial != nil && !freeRead {
 					AbortWithDenial(c, denial)
 					return
 				}
@@ -223,6 +232,9 @@ func AuthMiddleware() gin.HandlerFunc {
 					effectiveKey.UserStatus = keyRec.UserStatus
 					effectiveKey.UserRole = keyRec.UserRole
 					effectiveKey.UserBalance = keyRec.UserBalance
+					if keyRec.OrgID > 0 {
+						effectiveKey.OrgID = keyRec.OrgID
+					}
 				}
 			}
 		}
@@ -245,13 +257,21 @@ func AuthMiddleware() gin.HandlerFunc {
 			}
 		}
 
-		if denial := AccountDenial(userStatus, userRole, userBalance); denial != nil {
+		if freeRead {
+			// Locked/deleted accounts stay blocked; only the wallet balance gate
+			// is waived for a read that never bills.
+			if denial := AccountLockedDenial(userStatus); denial != nil {
+				AbortWithDenial(c, denial)
+				return
+			}
+		} else if denial := AccountDenial(userStatus, userRole, userBalance); denial != nil {
 			AbortWithDenial(c, denial)
 			return
 		}
 
-		// Pre-flight in-flight reservation to prevent concurrent overdraft storm
-		if userStatus != "" && !strings.EqualFold(userRole, "admin") && userID > 0 {
+		// Pre-flight in-flight reservation to prevent concurrent overdraft storm.
+		// A free read reserves nothing because it will never settle a charge.
+		if !freeRead && userStatus != "" && !strings.EqualFold(userRole, "admin") && userID > 0 {
 			acquired, backend := ReserveUserQuota(userID, userBalance)
 			if !acquired {
 				AbortWithDenial(c, &AccessDenial{
@@ -267,6 +287,9 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		// Save context info
 		c.Set(ContextKeyTenant, effectiveKey.TenantID)
+		// Attribution for the audit row and future budget scoping. Migration 30
+		// backfills legacy keys; new keys inherit their owner's organization.
+		c.Set(ContextKeyOrg, effectiveKey.OrgID)
 		// The digest is what audit rows and ledger joins use; the fingerprint is
 		// what logs and the console display.
 		c.Set(ContextKeyAPIKey, effectiveKey.Key)

@@ -109,7 +109,10 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
         const created = data.data || {};
         showToast(isZh ? 'API 访问密钥创建成功' : 'API access key created successfully', 'success');
         // Keep the dialog open: the plaintext credential exists only in this
-        // response, so this is the single chance to show it.
+        // response, so this is the single chance to show it. Re-open it explicitly:
+        // a dismissal may have slipped through while the request was in flight, and
+        // it must not swallow the one-time credential.
+        setShowKeyModal(true);
         setCreatedKey({
           key: created.key || '',
           fingerprint: created.key_fingerprint || '',
@@ -228,12 +231,23 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
     }
   }, [selectedKeyIds, isZh, showToast, refresh]);
 
-  // Copy text helper
+  // Copy text helper. The clipboard helper reports whether the copy really
+  // happened; a failed copy must never be announced as a success, because the
+  // caller may then close the one-time-credential dialog believing the secret
+  // was saved.
   const copyToClipboard = useCallback(async (txt) => {
-    await crossOriginCopy(txt);
+    const copied = await crossOriginCopy(txt);
+    if (!copied) {
+      showToast(
+        isZh ? '复制失败，请手动选中并复制' : 'Copy failed — select the text and copy it manually',
+        'error'
+      );
+      return false;
+    }
     setCopiedKey(txt);
     showToast(isZh ? '已成功复制到剪贴板！' : 'Copied to clipboard!', 'success');
     setTimeout(() => setCopiedKey(''), 2500);
+    return true;
   }, [isZh, showToast]);
 
   const reset = useCallback(() => {

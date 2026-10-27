@@ -77,13 +77,10 @@ func KeyBudgetDenial(budgetUnits, usedUnits int64, budget, used float64) *Access
 	}
 }
 
-// AccountDenial reports a locked/deleted owner or an exhausted wallet. An empty
-// user status means the memory snapshot was not populated; the middleware then
-// falls back to storage, and open/dev-mode keys have no owner at all.
-func AccountDenial(userStatus, userRole string, userBalance float64) *AccessDenial {
-	if userStatus == "" {
-		return nil
-	}
+// AccountLockedDenial reports a locked/deleted owner account. It is split out
+// from AccountDenial so read-only endpoints that are exempt from the wallet
+// balance gate (video task polling) can still refuse a locked/deleted account.
+func AccountLockedDenial(userStatus string) *AccessDenial {
 	if strings.EqualFold(userStatus, "locked") || strings.EqualFold(userStatus, "deleted") {
 		return &AccessDenial{
 			StatusCode: http.StatusForbidden,
@@ -91,6 +88,19 @@ func AccountDenial(userStatus, userRole string, userBalance float64) *AccessDeni
 			Type:       "account_locked",
 			Code:       "account_locked",
 		}
+	}
+	return nil
+}
+
+// AccountDenial reports a locked/deleted owner or an exhausted wallet. An empty
+// user status means the memory snapshot was not populated; the middleware then
+// falls back to storage, and open/dev-mode keys have no owner at all.
+func AccountDenial(userStatus, userRole string, userBalance float64) *AccessDenial {
+	if userStatus == "" {
+		return nil
+	}
+	if denial := AccountLockedDenial(userStatus); denial != nil {
+		return denial
 	}
 	// Admin accounts have unlimited quota.
 	if strings.EqualFold(userRole, "admin") {
@@ -105,6 +115,32 @@ func AccountDenial(userStatus, userRole string, userBalance float64) *AccessDeni
 		}
 	}
 	return nil
+}
+
+// IsFreeReadVideoTaskQuery reports whether the request is exactly a GET for a
+// video task status (/v1/videos/tasks/:id, and the root-mounted
+// /videos/tasks/:id). Those reads are never billed — the task was already
+// charged when it was created — so an exhausted wallet, per-key budget or
+// in-flight reservation must not block a customer from polling a job the
+// provider is still running. Authentication, key status and locked/deleted
+// account checks still apply.
+func IsFreeReadVideoTaskQuery(c *gin.Context) bool {
+	if c == nil || c.Request == nil || c.Request.Method != http.MethodGet {
+		return false
+	}
+	var rest string
+	for _, prefix := range []string{"/v1/videos/tasks/", "/videos/tasks/"} {
+		if strings.HasPrefix(c.Request.URL.Path, prefix) {
+			rest = strings.TrimPrefix(c.Request.URL.Path, prefix)
+			break
+		}
+	}
+	if rest == "" {
+		return false
+	}
+	// Exactly one path segment: a trailing slash is tolerated, a nested path is not.
+	rest = strings.TrimSuffix(rest, "/")
+	return rest != "" && !strings.Contains(rest, "/")
 }
 
 // AuthorizeKey applies the key/account admission rules shared by every

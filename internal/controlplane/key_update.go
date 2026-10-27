@@ -59,6 +59,13 @@ func groupPermitted(target, userGroup string) bool {
 // authorisation concerns stay in one place. Tenant identity remains server-owned
 // for regular users: accepting a new value here would let them re-label a key as
 // another tenant (for example "admin").
+//
+// Quotas for regular callers go through the same clamp as key creation. The
+// update endpoint is not admin-only — the session middleware gates it — so
+// without that, a tenant could PATCH their own key to rpm=0 (which downstream
+// means unlimited) or above the self-service cap, bypassing the policy that
+// creation enforces. An administrator keeps 0 = unlimited and arbitrary values:
+// issuing an unlimited key is an operator decision, never a tenant one.
 func ApplyKeyUpdate(access KeyAccess, existing *storage.APIKeyRecord, req UpdateAPIKeyRequest) KeyUpdateOutcome {
 	if existing == nil {
 		return KeyUpdateOutcome{Denial: KeyUpdateDenied}
@@ -76,9 +83,15 @@ func ApplyKeyUpdate(access KeyAccess, existing *storage.APIKeyRecord, req Update
 	}
 	if req.RPM != nil {
 		existing.RPM = *req.RPM
+		if !access.IsAdmin {
+			existing.RPM = clampSelfServiceRPM(existing.RPM)
+		}
 	}
 	if req.TPM != nil {
 		existing.TPM = *req.TPM
+		if !access.IsAdmin {
+			existing.TPM = clampSelfServiceTPM(existing.TPM)
+		}
 	}
 	if req.Budget != nil {
 		existing.Budget = *req.Budget

@@ -251,6 +251,7 @@ type APIKeyConfig struct {
 	Status           string   `yaml:"status" json:"status"`
 	GroupName        string   `yaml:"group_name" json:"group_name"`                                   // pricing group e.g. default, vip
 	UserID           int64    `yaml:"user_id" json:"user_id"`                                         // owner user id
+	OrgID            int64    `yaml:"org_id,omitempty" json:"org_id,omitempty"`                       // attribution organization
 	FormatValidation string   `yaml:"format_validation,omitempty" json:"format_validation,omitempty"` // "off" | "lenient" | "strict"
 	UserStatus       string   `yaml:"user_status,omitempty" json:"user_status,omitempty"`
 	UserRole         string   `yaml:"user_role,omitempty" json:"user_role,omitempty"`

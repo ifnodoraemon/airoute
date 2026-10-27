@@ -61,8 +61,15 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
       });
       const data = await res.json();
       if (controller.signal.aborted || probeRef.current !== controller) return;
-      if (data.code === 0 && data.data) {
-        const d = data.data;
+      // A probe can complete its HTTP round-trip and still have reached nothing:
+      // the gateway reports `reachable: false` when every candidate path failed at
+      // the transport level (and answers 400 in that case). Success therefore needs
+      // both a healthy envelope and a reachable upstream — otherwise the form
+      // auto-filled protocols from a service it never talked to.
+      const probeData = data && data.data;
+      const unreachable = Boolean(probeData) && probeData.reachable === false;
+      if (res.ok && data.code === 0 && probeData && !unreachable) {
+        const d = probeData;
         setChannelDraft(prev => {
           const shouldUpdateName = !prev.name || prev.name.includes('upstream') || prev.name.includes('cluster') || prev.name.includes('instance') || prev.name.includes('official') || prev.name.includes('direct');
           const shouldUpdateBaseUrl = d.suggested_base_url && (!prev.base_url.includes('/v1-openai') && !prev.base_url.includes('/v1'));
@@ -91,11 +98,23 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
           isAuthWarning ? 'warning' : 'success'
         );
       } else {
+        // No auto-fill on failure: the discovered models/protocols came from a
+        // probe that never established a connection.
+        const failureText = data.error
+          || (probeData && probeData.message)
+          || (unreachable
+            ? (isZh ? '上游服务不可达：所有探测路径均在传输层失败' : 'Upstream unreachable: every probe path failed at the transport level')
+            : (isZh ? '无法连通指定上游服务，请检查网络连通性或服务端口' : 'Cannot connect to upstream endpoint, please check network or port'));
         setProbeAlert({
           type: 'error',
-          text: `❌ ${isZh ? '探测失败: ' : 'Probe failed: '}${data.error || (isZh ? '无法连通指定上游服务，请检查网络连通性或服务端口' : 'Cannot connect to upstream endpoint, please check network or port')}`,
+          text: `❌ ${isZh ? '探测失败: ' : 'Probe failed: '}${failureText}`,
         });
-        showToast(isZh ? '连通测试失败，请检查服务地址' : 'Connection test failed. Please verify endpoint URL', 'error');
+        showToast(
+          unreachable
+            ? (isZh ? '探测未连通上游服务，协议与模型未自动匹配' : 'Probe did not reach the upstream; protocols and models were not auto-filled')
+            : (isZh ? '连通测试失败，请检查服务地址' : 'Connection test failed. Please verify endpoint URL'),
+          'error'
+        );
       }
     } catch (e) {
       if (controller.signal.aborted || probeRef.current !== controller) return;

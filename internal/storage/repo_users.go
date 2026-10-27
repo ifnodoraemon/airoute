@@ -160,7 +160,10 @@ func insertUser(db userInserter, u *UserRecord) error {
 			return ErrEmailAlreadyRegistered
 		}
 	}
-	id, err := db.InsertGetID(`INSERT INTO users (username, email, password_hash, role, status, balance, balance_units, group_name, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+	// New accounts start in the root unit; an administrator can move them later
+	// (the organization UI/API lands in M2). Reading the org in the same INSERT
+	// keeps account creation atomic.
+	id, err := db.InsertGetID(`INSERT INTO users (username, email, password_hash, role, status, balance, balance_units, group_name, org_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT id FROM orgs WHERE code = 'default' LIMIT 1), CURRENT_TIMESTAMP)`,
 		u.Username, u.Email, u.PasswordHash, u.Role, u.Status, u.Balance, ToUnits(u.Balance), u.GroupName)
 	if err != nil {
 		if isEmailConflictError(err) {

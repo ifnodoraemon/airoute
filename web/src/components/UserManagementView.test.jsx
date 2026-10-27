@@ -232,3 +232,105 @@ describe('UserManagementView', () => {
     expect(screen.getByRole('button', { name: /New User/ })).toBeInTheDocument();
   });
 });
+
+// The gateway treats a reset of your own password as a credential rotation: it
+// rejects the request unless old_password matches. The dialog used to send only
+// new_password, so self-reset was impossible from the console (always a 400).
+describe('UserManagementView self password reset', () => {
+  function setupWithRoot() {
+    return setup({ users: [user({ username: 'root', role: 'admin' })] });
+  }
+
+  async function openResetDialog() {
+    await screen.findByText('root');
+    fireEvent.click(screen.getAllByTitle('重置登录密码')[0]);
+    return screen.findByText('重置用户密码');
+  }
+
+  function submitReset() {
+    const form = screen.getByRole('button', { name: /确认重置/ }).closest('form');
+    fireEvent.submit(form);
+  }
+
+  function passwordCalls(adminFetch) {
+    return adminFetch.mock.calls.filter(
+      ([url, opts]) => String(url).endsWith('/password') && opts?.method === 'POST'
+    );
+  }
+
+  it('asks for the current password when resetting your own account', async () => {
+    setupWithRoot();
+    await openResetDialog();
+
+    expect(screen.getByText(/这是您自己的账号/)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('请输入当前登录密码')).toBeInTheDocument();
+  });
+
+  it('does not require the current password when resetting another user', async () => {
+    setup({ users: [user({ username: 'alice' })] });
+    await screen.findByText('alice');
+    fireEvent.click(screen.getAllByTitle('重置登录密码')[0]);
+    await screen.findByText('重置用户密码');
+
+    expect(screen.queryByPlaceholderText('请输入当前登录密码')).not.toBeInTheDocument();
+    expect(screen.queryByText(/这是您自己的账号/)).not.toBeInTheDocument();
+  });
+
+  it('refuses to reset your own password without the current one', async () => {
+    const { adminFetch } = setupWithRoot();
+    await openResetDialog();
+
+    submitReset();
+
+    await waitFor(() => expect(screen.getByText(/重置本人密码需要输入当前登录密码/)).toBeInTheDocument());
+    expect(passwordCalls(adminFetch)).toHaveLength(0);
+  });
+
+  it('sends old_password along with the new one for a self reset', async () => {
+    const { adminFetch } = setupWithRoot();
+    await openResetDialog();
+
+    const newPassword = screen.getByPlaceholderText(/至少 6 个字符/).value;
+    fireEvent.change(screen.getByPlaceholderText('请输入当前登录密码'), { target: { value: 'current-pass-1' } });
+    submitReset();
+
+    await waitFor(() => expect(passwordCalls(adminFetch)).toHaveLength(1));
+    const [url, opts] = passwordCalls(adminFetch)[0];
+    expect(String(url)).toBe('/api/v1/admin/users/root/password');
+    const body = JSON.parse(opts.body);
+    expect(body.old_password).toBe('current-pass-1');
+    expect(body.new_password).toBe(newPassword);
+    // A successful reset closes the dialog.
+    await waitFor(() => expect(screen.queryByText('重置用户密码')).not.toBeInTheDocument());
+  });
+
+  it('sends no old_password when resetting another user', async () => {
+    const { adminFetch } = setup({ users: [user({ username: 'alice' })] });
+    await screen.findByText('alice');
+    fireEvent.click(screen.getAllByTitle('重置登录密码')[0]);
+    await screen.findByText('重置用户密码');
+
+    submitReset();
+
+    await waitFor(() => expect(passwordCalls(adminFetch)).toHaveLength(1));
+    const body = JSON.parse(passwordCalls(adminFetch)[0][1].body);
+    expect(body).not.toHaveProperty('old_password');
+    expect(body.new_password).toEqual(expect.any(String));
+  });
+
+  it('clears the old password when the dialog is closed and reopened', async () => {
+    setupWithRoot();
+    await openResetDialog();
+
+    fireEvent.change(screen.getByPlaceholderText('请输入当前登录密码'), { target: { value: 'current-pass-1' } });
+    // Dismissing a dirty dialog asks first.
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    fireEvent.click(await screen.findByRole('button', { name: '放弃并关闭' }));
+    await waitFor(() => expect(screen.queryByText('重置用户密码')).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getAllByTitle('重置登录密码')[0]);
+    await screen.findByText('重置用户密码');
+
+    expect(screen.getByPlaceholderText('请输入当前登录密码').value).toBe('');
+  });
+});

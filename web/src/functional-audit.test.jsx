@@ -48,7 +48,14 @@ describe('Role journey audit: desired outcomes', () => {
     const { rerender } = render(<OnboardingModal {...props} isOpen={false} keys={[]} models={[]} />);
     rerender(<OnboardingModal {...props} isOpen keys={[key]} models={['audit-chat']} />);
     expect(screen.queryByText('sk-airoute-demo-key')).not.toBeInTheDocument();
-    expect(screen.getByText(key.key)).toBeInTheDocument();
+    // The listed row is only an identifier: the wizard keys off its id and never
+    // renders the stored value (the API replaces it with an irreversible mask).
+    expect(screen.queryByText(key.key)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('密钥上下文（租户与模型范围）')).toHaveValue('77');
+    // The "loaded credential" that matters is the entitlement: the model catalog
+    // is filtered by the key that arrived after the initial empty mount.
+    fireEvent.click(screen.getByRole('button', { name: /下一步：选择/ }));
+    expect(screen.getByRole('combobox')).toHaveValue('audit-chat');
   });
 
   it('removing the final available model should clear the model catalog', async () => {

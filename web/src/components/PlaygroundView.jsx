@@ -26,6 +26,7 @@ import { getGatewayOrigin, copyToClipboard as crossOriginCopy } from '../config'
 import MarkdownRenderer from './MarkdownRenderer';
 import { inferClientModality } from '../lib/modelModality';
 import { availableKeyModels } from '../lib/keyModels';
+import { API_KEY_PLACEHOLDER, UNAUTHENTICATED_KEY, isUsableAPIKey } from '../lib/apiKey';
 
 export default function PlaygroundView({
   keys = [],
@@ -43,27 +44,50 @@ export default function PlaygroundView({
   const [playModality, setPlayModality] = useState(initialModality || 'chat');
 
   const [playMode, setPlayMode] = useState('single'); // 'single' | 'arena'
-  const [playApiKey, setPlayApiKey] = useState('');
-  const [isCustomKey, setIsCustomKey] = useState(false);
-  const [customKeyInput, setCustomKeyInput] = useState('');
+  // Two different things are selected here, and conflating them was the bug:
+  //   * `selectedKeyId` picks a row from the key list for its *context*
+  //     (tenant + allowed models). Its `key` field is a display mask.
+  //   * `sessionApiKey` is the plaintext credential the operator pastes for this
+  //     session; it signs the actual request and lives only in component memory.
   const activeKeys = useMemo(() => keys.filter(key => !key.status || key.status === 'active'), [keys]);
+  // Only rows with an id can scope the request; the selector keys off it.
+  const contextKeys = useMemo(() => activeKeys.filter(key => key.id != null), [activeKeys]);
+  const [selectedKeyId, setSelectedKeyId] = useState(() => (
+    contextKeys[0] ? String(contextKeys[0].id) : UNAUTHENTICATED_KEY
+  ));
+  const [sessionApiKey, setSessionApiKey] = useState('');
 
-  // Auto-select initial key
+  // Auto-select the first key for entitlement context, keyed off its id. A console
+  // with no keys configured keeps its historical public-gateway behaviour, but as
+  // an explicit unauthenticated choice rather than an empty credential.
   useEffect(() => {
-    if (!isCustomKey && playApiKey !== '__none__' && !activeKeys.some(key => key.key === playApiKey)) {
-      setPlayApiKey(activeKeys[0]?.key || '');
+    if (selectedKeyId === UNAUTHENTICATED_KEY) return;
+    if (!contextKeys.some(key => String(key.id) === selectedKeyId)) {
+      setSelectedKeyId(contextKeys[0] ? String(contextKeys[0].id) : UNAUTHENTICATED_KEY);
     }
-  }, [activeKeys, playApiKey, isCustomKey]);
+  }, [contextKeys, selectedKeyId]);
 
-  const getEffectiveApiKey = () => {
-    if (isCustomKey) return customKeyInput.trim();
-    if (playApiKey === '__none__') return '';
-    if (activeKeys.some(key => key.key === playApiKey)) return playApiKey;
-    if (activeKeys.length > 0) return activeKeys[0].key;
-    return '';
+  const selectedKeyObj = useMemo(
+    () => keys.find(k => String(k.id) === selectedKeyId),
+    [keys, selectedKeyId]
+  );
+
+  // Resolves the credential for an outbound call. `null` means the call must be
+  // refused: a listed key was chosen but its plaintext was never pasted, and
+  // sending the list mask would fail authentication while looking like a gateway
+  // fault. The explicit "unauthenticated" choice returns an empty key (no header).
+  const resolveCallCredentials = () => {
+    if (selectedKeyId === UNAUTHENTICATED_KEY) return { key: '' };
+    const typed = sessionApiKey.trim();
+    if (isUsableAPIKey(typed)) return { key: typed };
+    showToast?.(
+      isZh
+        ? '请先在左侧粘贴本次会话的 API Key 明文：密钥列表只显示掩码，不能用于发起调用'
+        : 'Paste the plaintext API key on the left first: the key list only shows display masks, which cannot authenticate a call',
+      'warning'
+    );
+    return null;
   };
-
-  const selectedKeyObj = keys.find(k => k.key === (isCustomKey ? customKeyInput.trim() : (playApiKey === '__none__' ? '' : playApiKey)));
 
   const getPlaygroundModels = (modality) => {
     let list = [];
@@ -307,9 +331,8 @@ Execute the following mission with precision, maintainability, and zero speculat
      Both the fetch handlers below and "Copy cURL" consume these, so the copied
      command can never drift away from what the playground actually sends.
      ------------------------------------------------------------------------- */
-  const buildHeaders = () => {
+  const buildHeaders = (key) => {
     const headers = { 'Content-Type': 'application/json' };
-    const key = getEffectiveApiKey();
     if (key) headers['Authorization'] = `Bearer ${key}`;
     return headers;
   };
@@ -406,12 +429,18 @@ Execute the following mission with precision, maintainability, and zero speculat
   const shellQuote = (value) => `'${String(value).replace(/'/g, "'\\''")}'`;
 
   const formatCurl = (request, extraFlags) => {
-    const key = getEffectiveApiKey();
+    const typed = sessionApiKey.trim();
     const lines = [
       `curl -X ${request.method} "${getGatewayOrigin()}${request.path}"`,
       '  -H "Content-Type: application/json"',
-      `  -H "Authorization: Bearer ${key || 'YOUR_API_KEY'}"`
     ];
+    // Never echo a list mask into a snippet. Use the pasted plaintext when it is
+    // usable, an obvious placeholder when it is not, and no auth header at all
+    // for the explicit unauthenticated mode (which is what the request sends).
+    if (selectedKeyId !== UNAUTHENTICATED_KEY) {
+      const snippetKey = isUsableAPIKey(typed) ? typed : API_KEY_PLACEHOLDER;
+      lines.push(`  -H "Authorization: Bearer ${snippetKey}"`);
+    }
     if (extraFlags) lines.push(`  ${extraFlags}`);
     lines.push(`  -d ${shellQuote(JSON.stringify(request.body))}`);
     return lines.join(' \\\n');
@@ -460,6 +489,8 @@ Execute the following mission with precision, maintainability, and zero speculat
 
   // Run chat invocation
   const handleRunChat = async () => {
+    const credentials = resolveCallCredentials();
+    if (!credentials) return;
     const typed = chatInput.trim();
     let newMessages;
     if (typed) {
@@ -512,7 +543,7 @@ Execute the following mission with precision, maintainability, and zero speculat
 
         const res = await fetch(request.path, {
           method: request.method,
-          headers: buildHeaders(),
+          headers: buildHeaders(credentials.key),
           body: JSON.stringify(request.body),
           signal: controller.signal
         });
@@ -646,6 +677,8 @@ Execute the following mission with precision, maintainability, and zero speculat
 
   // Image generation
   const handleGenerateImage = async () => {
+    const credentials = resolveCallCredentials();
+    if (!credentials) return;
     setPlayLoading(true);
     setPlayStopped(false);
     setImgResult(null);
@@ -656,7 +689,7 @@ Execute the following mission with precision, maintainability, and zero speculat
       const request = buildImageRequest();
       const res = await fetch(request.path, {
         method: request.method,
-        headers: buildHeaders(),
+        headers: buildHeaders(credentials.key),
         body: JSON.stringify(request.body),
         signal: controller.signal
       });
@@ -677,6 +710,8 @@ Execute the following mission with precision, maintainability, and zero speculat
 
   // Audio Speech (TTS)
   const handleGenerateTTS = async () => {
+    const credentials = resolveCallCredentials();
+    if (!credentials) return;
     setPlayLoading(true);
     setPlayStopped(false);
     setTtsAudioUrl(null);
@@ -687,7 +722,7 @@ Execute the following mission with precision, maintainability, and zero speculat
       const request = buildTtsRequest();
       const res = await fetch(request.path, {
         method: request.method,
-        headers: buildHeaders(),
+        headers: buildHeaders(credentials.key),
         body: JSON.stringify(request.body),
         signal: controller.signal
       });
@@ -719,6 +754,8 @@ Execute the following mission with precision, maintainability, and zero speculat
       if (showToast) showToast(isZh ? '请先选择音频文件' : 'Please choose an audio file first', 'warning');
       return;
     }
+    const credentials = resolveCallCredentials();
+    if (!credentials) return;
     setPlayLoading(true);
     setPlayStopped(false);
     setSttResult(null);
@@ -730,11 +767,10 @@ Execute the following mission with precision, maintainability, and zero speculat
       form.append('file', sttFile);
       form.append('model', sttModel);
       if (sttLanguage.trim()) form.append('language', sttLanguage.trim());
-      const key = getEffectiveApiKey();
       const res = await fetch('/v1/audio/transcriptions', {
         method: 'POST',
         // No Content-Type header: the browser must set the multipart boundary.
-        headers: key ? { Authorization: `Bearer ${key}` } : {},
+        headers: credentials.key ? { Authorization: `Bearer ${credentials.key}` } : {},
         body: form,
         signal: controller.signal
       });
@@ -756,6 +792,8 @@ Execute the following mission with precision, maintainability, and zero speculat
   // Video generation. The gateway returns either a finished asset or an async
   // task id that must be polled through /v1/videos/tasks/{id}.
   const handleGenerateVideo = async () => {
+    const credentials = resolveCallCredentials();
+    if (!credentials) return;
     setPlayLoading(true);
     setPlayStopped(false);
     setVideoResult(null);
@@ -767,7 +805,7 @@ Execute the following mission with precision, maintainability, and zero speculat
       const request = buildVideoRequest();
       const res = await fetch(request.path, {
         method: request.method,
-        headers: buildHeaders(),
+        headers: buildHeaders(credentials.key),
         body: JSON.stringify(request.body),
         signal: controller.signal
       });
@@ -780,7 +818,7 @@ Execute the following mission with precision, maintainability, and zero speculat
       const taskId = data.id || data.task_id || data.data?.id || data.data?.task_id;
       if (taskId) {
         setVideoTaskId(taskId);
-        await pollVideoTask(taskId, request.body.model, controller.signal);
+        await pollVideoTask(taskId, request.body.model, controller.signal, credentials.key);
       } else {
         setVideoResult(data);
       }
@@ -792,7 +830,7 @@ Execute the following mission with precision, maintainability, and zero speculat
     }
   };
 
-  const pollVideoTask = async (taskId, taskModel, signal) => {
+  const pollVideoTask = async (taskId, taskModel, signal, callKey) => {
     for (let attempt = 0; attempt < 40; attempt += 1) {
       await new Promise((resolve, reject) => {
         const abort = () => { clearTimeout(timer); reject(new DOMException('Stopped', 'AbortError')); };
@@ -802,7 +840,7 @@ Execute the following mission with precision, maintainability, and zero speculat
       });
       signal.throwIfAborted();
       const res = await fetch(`/v1/videos/tasks/${encodeURIComponent(taskId)}?model=${encodeURIComponent(taskModel)}`, {
-        headers: buildHeaders(), signal,
+        headers: buildHeaders(callKey), signal,
       });
       const data = await res.json();
       signal.throwIfAborted();
@@ -817,6 +855,8 @@ Execute the following mission with precision, maintainability, and zero speculat
 
   // Embeddings
   const handleEmbed = async () => {
+    const credentials = resolveCallCredentials();
+    if (!credentials) return;
     setPlayLoading(true);
     setPlayStopped(false);
     setEmbedResult(null);
@@ -827,7 +867,7 @@ Execute the following mission with precision, maintainability, and zero speculat
       const request = buildEmbeddingRequest();
       const res = await fetch(request.path, {
         method: request.method,
-        headers: buildHeaders(),
+        headers: buildHeaders(credentials.key),
         body: JSON.stringify(request.body),
         signal: controller.signal
       });
@@ -845,6 +885,8 @@ Execute the following mission with precision, maintainability, and zero speculat
 
   // Rerank
   const handleRerank = async () => {
+    const credentials = resolveCallCredentials();
+    if (!credentials) return;
     setPlayLoading(true);
     setPlayStopped(false);
     setRerankResult(null);
@@ -855,7 +897,7 @@ Execute the following mission with precision, maintainability, and zero speculat
       const request = buildRerankRequest();
       const res = await fetch(request.path, {
         method: request.method,
-        headers: buildHeaders(),
+        headers: buildHeaders(credentials.key),
         body: JSON.stringify(request.body),
         signal: controller.signal
       });
@@ -949,44 +991,54 @@ Execute the following mission with precision, maintainability, and zero speculat
             </h3>
           </div>
 
-          {/* Key Selection */}
-          <div>
+          {/* Key context + session credential */}
+          <div className="space-y-2">
             <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between mb-1">
               <span className="flex items-center space-x-1">
                 <Key className="w-3.5 h-3.5 text-indigo-500" />
                 <span>{isZh ? 'API 访问密钥' : 'API Key'}</span>
               </span>
-              {keys.length > 0 && (
-                <button
-                  onClick={() => setIsCustomKey(!isCustomKey)}
-                  className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-                >
-                  {isCustomKey ? (isZh ? '下拉选择' : 'Select') : (isZh ? '自定义' : 'Custom')}
-                </button>
+              {selectedKeyObj?.key_fingerprint && (
+                <span className="ui-meta font-mono normal-case">{selectedKeyObj.key_fingerprint}</span>
               )}
             </label>
 
-            {isCustomKey || keys.length === 0 ? (
-              <input
-                type="text"
-                value={customKeyInput}
-                onChange={(e) => setCustomKeyInput(e.target.value)}
-                placeholder={isZh ? 'sk-airoute-xxxx (留空使用免密直通)' : 'sk-airoute-xxxx (leave empty for unauthenticated)'}
-                className="ui-field font-mono"
-              />
+            {/* The list is only entitlement context; its `key` is a display mask. */}
+            <select
+              value={selectedKeyId}
+              onChange={(e) => setSelectedKeyId(e.target.value)}
+              className="ui-field font-mono"
+              aria-label={isZh ? '密钥上下文（租户与模型范围）' : 'Key context (tenant and model scope)'}
+            >
+              {contextKeys.map((k) => (
+                <option key={String(k.id)} value={String(k.id)}>
+                  {k.tenant_id ? `${k.tenant_id} - ` : ''}{k.key_fingerprint || (isZh ? '无指纹' : 'no fingerprint')}
+                </option>
+              ))}
+              <option value={UNAUTHENTICATED_KEY}>{isZh ? '免密直通 (不带 API Key)' : 'Public / Unauthenticated'}</option>
+            </select>
+
+            {selectedKeyId === UNAUTHENTICATED_KEY ? (
+              <p className="ui-meta">
+                {isZh ? '将以无凭证方式调用（仅适用于开启了公开访问的网关）。' : 'Calls will be sent without a credential (only valid on a gateway with public access enabled).'}
+              </p>
             ) : (
-              <select
-                value={playApiKey}
-                onChange={(e) => setPlayApiKey(e.target.value)}
-                className="ui-field font-mono"
-              >
-                {activeKeys.map((k) => (
-                  <option key={k.key || k.id} value={k.key}>
-                    {k.tenant_id ? `${k.tenant_id} - ` : ''}{k.key_fingerprint || (isZh ? '无指纹' : 'no fingerprint')}
-                  </option>
-                ))}
-                <option value="__none__">{isZh ? '免密直通 (不带 API Key)' : 'Public / Unauthenticated'}</option>
-              </select>
+              <>
+                <input
+                  type="password"
+                  autoComplete="off"
+                  value={sessionApiKey}
+                  onChange={(e) => setSessionApiKey(e.target.value)}
+                  placeholder={isZh ? '粘贴本次会话的 API Key 明文' : 'Paste the plaintext API key for this session'}
+                  aria-label={isZh ? '会话 API Key 明文' : 'Session API key'}
+                  className="ui-field font-mono"
+                />
+                <p className="ui-meta">
+                  {isZh
+                    ? '密钥列表只显示不可还原的掩码；明文仅保存在当前页面内存中，不写入浏览器存储。'
+                    : 'The key list only shows irreversible masks. The plaintext is kept in this page’s memory only and is never written to browser storage.'}
+                </p>
+              </>
             )}
           </div>
 

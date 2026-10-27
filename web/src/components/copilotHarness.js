@@ -4,6 +4,8 @@
  * Conforming to OpenAI Function Calling / OpenCode / Codex / Gemini / DeepSeek tool protocol.
  */
 
+import { API_KEY_PLACEHOLDER } from '../lib/apiKey';
+
 // 1. Formal Tool Contracts (OpenAI Standard Schema)
 export const COPILOT_HARNESS_TOOLS = [
   {
@@ -177,7 +179,6 @@ export async function executeHarnessTool(toolName, args = {}, context = {}) {
     modelRoutes = [],
     logs = [],
     stats = {},
-    keys = [],
     prices = [],
     origin = window.location.origin,
     baseUrl = `${window.location.origin}/v1`,
@@ -417,8 +418,11 @@ export async function executeHarnessTool(toolName, args = {}, context = {}) {
 
       case 'generate_client_config': {
         const clientType = safeArgs.client_type || 'all';
-        const activeKeyObj = keys.find(k => k.status === 'active') || keys[0];
-        const snippetKey = activeKeyObj?.key || 'sk-airoute-xxxxxx';
+        // Key rows only carry display masks (credentials are stored as digests),
+        // so a generated config must not pretend to hold the real credential: the
+        // operator pastes it themselves. A mask in a snippet is unusable and
+        // teaches the wrong copy/paste habit.
+        const snippetKey = API_KEY_PLACEHOLDER;
         const modelName = safeArgs.preferred_model || models[0] || 'deepseek-v4-flash';
 
         const configs = {};

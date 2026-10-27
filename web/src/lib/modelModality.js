@@ -8,8 +8,11 @@ export function inferClientModality(modelName) {
   const lower = (modelName || '').toLowerCase();
   if (lower.includes('rerank') || lower.includes('bge-reranker')) return 'rerank';
   if (lower.includes('embed') || lower.includes('bge-') || lower.includes('text-embedding')) return 'embeddings';
-  if (lower.includes('tts') || lower.includes('speech') || lower.includes('voice') || lower.includes('cosyvoice')) return 'audio_speech';
+  // Transcription must be tested before the speech/voice branch: "SenseVoice" is
+  // a speech-to-text model whose name contains "voice", so the generic speech
+  // check would otherwise classify it as text-to-speech and route it wrongly.
   if (lower.includes('whisper') || lower.includes('sensevoice') || lower.includes('transcription') || lower.includes('asr')) return 'audio_transcription';
+  if (lower.includes('tts') || lower.includes('speech') || lower.includes('voice') || lower.includes('cosyvoice')) return 'audio_speech';
   if (lower.includes('seedance') || lower.includes('sora') || lower.includes('wan') || lower.includes('cogvideox') || lower.includes('kling') || lower.includes('luma') || lower.includes('runway') || lower.includes('pika') || lower.includes('vidu') || lower.includes('video')) return 'videos';
   if (lower.includes('image') || lower.includes('dall-e') || lower.includes('flux') || lower.includes('midjourney') || lower.includes('stable-diffusion') || lower.includes('seedream') || lower.includes('sdxl')) return 'images';
   return 'chat';

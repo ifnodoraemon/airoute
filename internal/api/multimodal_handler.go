@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -32,6 +33,25 @@ func NewMultimodalHandler(dispatcher *router.Dispatcher, repo *storage.Repositor
 // and proxies headers + stream back to the downstream client (Template Method Pattern).
 func (h *MultimodalHandler) dispatchAndForward(c *gin.Context, upReq *router.UpstreamRequest, sessionID string, defaultContentType ...string) {
 	h.dispatchAndTransform(c, upReq, sessionID, nil, defaultContentType...)
+}
+
+// maxMultimodalResponseBytes bounds how much of an upstream modality response is
+// buffered before it is billed and written. Modality payloads (image JSON, audio
+// files, video task JSON) are small; 64 MiB leaves ample room while keeping a
+// runaway or malformed upstream from consuming unbounded memory.
+const maxMultimodalResponseBytes int64 = 64 << 20
+
+// readMultimodalBody reads the whole upstream body up to limit+1 bytes so a
+// truncated/failed read is reported before anything is charged or written.
+func readMultimodalBody(stream io.Reader, limit int64) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(stream, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > limit {
+		return nil, fmt.Errorf("upstream response exceeds %d bytes", limit)
+	}
+	return body, nil
 }
 
 func (h *MultimodalHandler) dispatchAndTransform(c *gin.Context, upReq *router.UpstreamRequest, sessionID string, transform func(*router.UpstreamResponse) error, defaultContentType ...string) {
@@ -79,6 +99,22 @@ func (h *MultimodalHandler) dispatchAndTransform(c *gin.Context, upReq *router.U
 			RespondOpenAIError(c, http.StatusBadGateway, "Unable to persist or read video task", "upstream_error", "video_task_error")
 			return
 		}
+	}
+
+	// Read (and buffer) the upstream body BEFORE charging or writing the
+	// response head. The old flow billed and flushed HTTP 200 first, then copied
+	// the stream and ignored the copy error: a truncated upstream response was
+	// charged as a success while the client received a broken 200. The body is
+	// also what the video transform may already have replaced with its rewritten
+	// JSON, so reading here keeps the persisted task id path intact.
+	if succeeded {
+		body, readErr := readMultimodalBody(resp.Stream, maxMultimodalResponseBytes)
+		if readErr != nil {
+			recordFailedRequestWithError(c, sessionID, upReq.Model, dur, http.StatusBadGateway, readErr)
+			RespondOpenAIError(c, http.StatusBadGateway, "Unable to read upstream response", "upstream_error", "upstream_read_error")
+			return
+		}
+		resp.Stream = io.NopCloser(bytes.NewReader(body))
 	}
 
 	if succeeded {

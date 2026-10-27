@@ -3,6 +3,8 @@ package tests
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -236,9 +238,13 @@ func TestStorageStatusAndSkillDownloadCache(t *testing.T) {
 	// Wait briefly for asynchronous cache write
 	time.Sleep(50 * time.Millisecond)
 
-	// 3. Verify cached file in storage
-	key := storage.FormatSkillKey("git-workflow")
+	// 3. Verify cached file in storage. The artifact is content-addressed: the
+	// storage key embeds a prefix of the SHA-256 of the ZIP we just downloaded, so
+	// editing a skill without bumping its version writes a new object instead of
+	// reusing a stale one.
+	sum := sha256.Sum256(wDl.Body.Bytes())
+	key := "skills/git-workflow/git-workflow-" + hex.EncodeToString(sum[:])[:16] + ".zip"
 	exists, err := artifactStor.Exists(context.Background(), key)
 	assert.NoError(t, err)
-	assert.True(t, exists, "Skill ZIP bundle should be cached in artifact storage")
+	assert.True(t, exists, "Skill ZIP bundle should be cached in artifact storage under its content-addressed key")
 }

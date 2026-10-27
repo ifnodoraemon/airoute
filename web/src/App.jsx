@@ -1510,7 +1510,9 @@ export default function App() {
                     resetOffset();
                     setCurrentTab('logs');
                   } else {
-                    setDashboardSelectedKey(keyStr);
+                    // The dashboard drills down by row id: the list value is a
+                    // display mask and cannot identify a key server-side.
+                    setDashboardSelectedKey(keyId != null ? String(keyId) : '');
                     setCurrentTab('dashboard');
                   }
                 }}

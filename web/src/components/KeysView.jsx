@@ -227,7 +227,14 @@ export default function KeysView({
     "model": "${model}",
     "messages": [{"role": "user", "content": "Hello Airoute!"}]
   }'`;
-    await copyToClipboard(curl);
+    // copyToClipboard reports whether the write succeeded (modern clipboard API or
+    // the execCommand fallback). Claiming success unconditionally left the operator
+    // with an empty clipboard and a "copied" toast.
+    const copied = await copyToClipboard(curl);
+    if (copied === false) {
+      showToast?.(isZh ? 'cURL 示例复制失败，请手动选中并复制' : 'Could not copy the cURL example — select it and copy manually', 'error');
+      return;
+    }
     if (showToast) showToast(isZh ? 'cURL 调用示例已复制到剪贴板' : 'cURL example copied to clipboard', 'success');
   };
 
@@ -463,7 +470,13 @@ export default function KeysView({
                                 {keyIdentifier(k)}
                               </span>
                               <button
-                                onClick={() => copyToClipboard(k.key_fingerprint || keyIdentifier(k))}
+                                onClick={async () => {
+                                  const value = k.key_fingerprint || keyIdentifier(k);
+                                  const copied = await copyToClipboard(value);
+                                  if (copied === false) {
+                                    showToast?.(isZh ? '复制密钥指纹失败，请手动选中复制' : 'Could not copy the key fingerprint — select it and copy manually', 'error');
+                                  }
+                                }}
                                 className="p-1 hover:bg-[#EEF2FF] dark:hover:bg-[#242D48] rounded-md text-[#656B75] dark:text-[#A1A7B0] hover:text-[#355CFF] dark:hover:text-[#91A7FF] transition-colors cursor-pointer"
                                 title={isZh ? '复制密钥指纹' : 'Copy key fingerprint'}
                               >

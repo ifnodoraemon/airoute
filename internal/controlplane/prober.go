@@ -94,16 +94,27 @@ func (p *DownstreamProber) Probe(ctx context.Context, req *ProbeRequest) (*Probe
 		return ollamaRes, nil
 	}
 
-	// If all probes fail, return a best-effort default result with latency
-	dur := time.Since(start).Milliseconds()
-	serverHeader := ""
-	detectedType := inferProviderType(baseURL, serverHeader, nil)
-	msg := "已连接下游服务，但该服务未开放无凭证的模型列表接口。您可以输入 API Key 重新拉取，或在下方手动添加模型。"
-	if err != nil && (strings.Contains(err.Error(), "401") || strings.Contains(err.Error(), "Unauthorized")) {
-		msg = "已成功连通下游服务，但该服务开启了访问鉴权保护 (401 Unauthorized)。请在上方填入 API Key 后再次获取模型。"
-	} else if err != nil {
-		msg = fmt.Sprintf("服务已连通 (响应延迟 %dms)，但自动读取模型列表未成功: %v。请在下方手动输入所需模型。", dur, err)
+	// If every catalogue probe failed, the host may still be reachable — a proxy
+	// that requires a credential answers 401/404/405 to all of them. Confirm that
+	// with one request to the service root before reporting anything: the old code
+	// returned a best-effort success-looking result unconditionally, so an offline
+	// proxy (DNS failure, connection refused, timeout) also produced a result the
+	// console treated as a usable channel. A host that never answered now fails
+	// the probe, which the handler renders as 400.
+	reachStatus, reachErr := p.probeReachability(ctx, baseURL)
+	if reachErr != nil {
+		return nil, fmt.Errorf("无法连接下游服务 %s: %w", baseURL, reachErr)
 	}
+
+	dur := time.Since(start).Milliseconds()
+	detectedType := inferProviderType(baseURL, "", nil)
+	reason := "模型列表接口未返回可解析的清单"
+	if err != nil {
+		reason = err.Error()
+	}
+	// Deliberately does not claim success: the host answered, but nothing about
+	// the catalogue or the credential was verified.
+	msg := fmt.Sprintf("下游服务主机已响应 (HTTP %d)，但未能自动读取模型列表（%s）。请填写 API Key 后重试，或在下方手动添加模型。", reachStatus, reason)
 	return &ProbeResult{
 		Type:          detectedType,
 		SuggestedName: suggestProviderName(detectedType, baseURL, ""),
@@ -112,6 +123,30 @@ func (p *DownstreamProber) Probe(ctx context.Context, req *ProbeRequest) (*Probe
 		LatencyMs:     dur,
 		Message:       msg,
 	}, nil
+}
+
+// probeReachability asks the service root whether anything is listening.
+//
+// Any HTTP response counts as reachable, including 401, 403 and 404: they prove a
+// proxy or upstream answered. A transport error (DNS, connection refused, TLS
+// failure, timeout) means the host is not usable as a channel. A response is
+// returned even when the client also reports an error, because a redirect policy
+// refusal carries the redirecting response.
+func (p *DownstreamProber) probeReachability(ctx context.Context, baseURL string) (int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL, nil)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := p.client.Do(req)
+	if resp != nil {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+		_ = resp.Body.Close()
+		return resp.StatusCode, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return 0, fmt.Errorf("no response from %s", baseURL)
 }
 
 func (p *DownstreamProber) probeOpenAICompatible(ctx context.Context, baseURL, apiKey string, start time.Time) (*ProbeResult, error) {

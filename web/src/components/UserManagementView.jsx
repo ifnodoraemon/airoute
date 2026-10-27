@@ -50,8 +50,14 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
   // Reset Password Modal
   const [resetTargetUser, setResetTargetUser] = useState(null);
   const [resetPassword, setResetPassword] = useState('');
+  // When an administrator resets their *own* password the gateway treats it as a
+  // credential rotation, not an administrative override: it requires the current
+  // password so a hijacked session cannot rotate the credential it stole. The
+  // dialog therefore collects it for the self-reset case only.
+  const [resetOldPassword, setResetOldPassword] = useState('');
   const [resetting, setResetting] = useState(false);
   const [resetModalError, setResetModalError] = useState('');
+  const isSelfPasswordReset = !!resetTargetUser && !!adminUser && resetTargetUser.username === adminUser.username;
 
   // Dismissing a form modal (backdrop / X / Cancel / Esc) must never silently
   // drop typed input, so every dismissal is routed through a per-modal guard.
@@ -82,22 +88,33 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
     discard: discardQuota
   } = useUnsavedGuard({ isOpen: !!quotaTargetUser, isDirty: quotaDirty, onClose: () => setQuotaTargetUser(null) });
 
-  const resetPasswordDraft = { password: resetPassword };
+  // Password visibility
+  const [showNewPassPlain, setShowNewPassPlain] = useState(false);
+  const [showResetPassPlain, setShowResetPassPlain] = useState(false);
+  const [showResetOldPassPlain, setShowResetOldPassPlain] = useState(false);
+
+  const resetPasswordDraft = { oldPassword: resetOldPassword, password: resetPassword };
   const resetPasswordDirty = useFormDirty(!!resetTargetUser, resetPasswordDraft);
+  // Closing the dialog is also what drops the typed credentials; the guard's
+  // onClose must clear them so a reopened dialog never shows a stale password.
+  const closeResetModal = useCallback(() => {
+    setResetTargetUser(null);
+    setResetPassword('');
+    setResetOldPassword('');
+    setResetModalError('');
+    setShowResetPassPlain(false);
+    setShowResetOldPassPlain(false);
+  }, []);
   const {
     confirming: resetConfirming,
     requestClose: requestCloseReset,
     keepEditing: keepEditingReset,
     discard: discardReset
-  } = useUnsavedGuard({ isOpen: !!resetTargetUser, isDirty: resetPasswordDirty, onClose: () => setResetTargetUser(null) });
+  } = useUnsavedGuard({ isOpen: !!resetTargetUser, isDirty: resetPasswordDirty, onClose: closeResetModal });
 
   useModalA11y(showAddModal, requestCloseAddUser);
   useModalA11y(!!quotaTargetUser, requestCloseQuota);
   useModalA11y(!!resetTargetUser, requestCloseReset);
-
-  // Password visibility
-  const [showNewPassPlain, setShowNewPassPlain] = useState(false);
-  const [showResetPassPlain, setShowResetPassPlain] = useState(false);
 
   const generateSecurePassword = () => {
     const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$';
@@ -346,19 +363,28 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
       setResetModalError(isZh ? '新密码长度至少需要 6 个字符' : 'Password must be at least 6 characters');
       return;
     }
+    // Resetting your own password is a rotation: the gateway rejects it without
+    // the current one, so validate locally first instead of eating a 400.
+    if (isSelfPasswordReset && !resetOldPassword.trim()) {
+      setResetModalError(isZh ? '重置本人密码需要输入当前登录密码' : 'Enter your current password to reset your own password');
+      return;
+    }
 
     setResetting(true);
     try {
+      const payload = { new_password: resetPassword };
+      if (isSelfPasswordReset) payload.old_password = resetOldPassword;
       const res = await adminFetch(`/api/v1/admin/users/${encodeURIComponent(resetTargetUser.username)}/password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ new_password: resetPassword })
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
         showToast(isZh ? `账号 [${resetTargetUser.username}] 密码已成功重置` : `Password for [${resetTargetUser.username}] reset successfully`, 'success');
-        // Clear the draft before closing so the guard cannot prompt afterwards.
+        // Clear the drafts before closing so the guard cannot prompt afterwards.
         setResetPassword('');
+        setResetOldPassword('');
         setResetTargetUser(null);
       } else {
         setResetModalError(data.error || (isZh ? '重置密码失败' : 'Failed to reset password'));
@@ -709,6 +735,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
                           onClick={() => {
                             setResetTargetUser(u);
                             setResetPassword(generateSecurePassword());
+                            setResetOldPassword('');
                             setResetModalError('');
                           }}
                           className="p-1.5 hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] rounded-lg text-[#656B75] hover:text-[#355CFF] dark:text-[#A1A7B0] dark:hover:text-[#91A7FF] transition cursor-pointer"
@@ -1072,6 +1099,13 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
               <span className="font-semibold text-[#202124] dark:text-[#F1F2F4]">[{resetTargetUser.username}]</span>
               {isZh ? ' 的登录密码。' : '.'}
             </p>
+            {isSelfPasswordReset && (
+              <p className="text-xs text-amber-700 dark:text-amber-300 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2">
+                {isZh
+                  ? '这是您自己的账号：重置本人密码需要先验证当前登录密码。'
+                  : 'This is your own account: resetting it requires your current password.'}
+              </p>
+            )}
 
             {resetModalError && (
               <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs">
@@ -1080,6 +1114,31 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
             )}
 
             <form onSubmit={handleResetPassword} className="space-y-3">
+              {isSelfPasswordReset && (
+                <div>
+                  <label className="text-xs font-medium text-[#202124] dark:text-[#F1F2F4]">
+                    {isZh ? '当前登录密码 *' : 'Current Password *'}
+                  </label>
+                  <div className="relative mt-1">
+                    <input
+                      type={showResetOldPassPlain ? 'text' : 'password'}
+                      required
+                      value={resetOldPassword}
+                      onChange={(e) => setResetOldPassword(e.target.value)}
+                      placeholder={isZh ? '请输入当前登录密码' : 'Enter your current password'}
+                      autoComplete="current-password"
+                      className="w-full ui-field pl-3 pr-10 text-xs font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowResetOldPassPlain(!showResetOldPassPlain)}
+                      className="absolute right-3 top-2.5 text-[#656B75] hover:text-[#202124] dark:text-[#A1A7B0] dark:hover:text-[#F1F2F4] cursor-pointer"
+                    >
+                      {showResetOldPassPlain ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-xs font-medium text-[#202124] dark:text-[#F1F2F4]">{isZh ? '新密码 *' : 'New Password *'}</label>

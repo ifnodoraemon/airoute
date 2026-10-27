@@ -261,12 +261,30 @@ describe('executeHarnessTool', () => {
       expect(Object.keys(out.result)).toEqual(['python']);
     });
 
-    it('uses an active key', async () => {
+    it('uses a placeholder instead of a listed key', async () => {
+      // The list only carries display masks now (credentials are stored as
+      // digests), so a generated config must not paste one into the snippet.
       const out = await executeHarnessTool('generate_client_config', { client_type: 'cursor' }, context({
         keys: [{ key: 'sk-disabled', status: 'disabled' }, { key: 'sk-active', status: 'active' }],
       }));
 
-      expect(out.result.cursor.api_key).toBe('sk-active');
+      expect(out.result.cursor.api_key).toBe('<YOUR_API_KEY>');
+    });
+
+    it('never embeds a display mask in any snippet', async () => {
+      const masked = '3a4b5c6d***9f8e';
+      const out = await executeHarnessTool('generate_client_config', { client_type: 'all' }, context({
+        keys: [{ id: 1, key: masked, key_fingerprint: 'kfp_1', status: 'active' }],
+        baseUrl: 'https://gw.example/v1',
+        origin: 'https://gw.example',
+      }));
+
+      const serialized = JSON.stringify(out.result);
+      expect(serialized).not.toContain('***');
+      expect(serialized).toContain('<YOUR_API_KEY>');
+      expect(out.result.curl.command).toContain('Authorization: Bearer <YOUR_API_KEY>');
+      expect(out.result.claude_code.bash_env).toContain('ANTHROPIC_API_KEY="<YOUR_API_KEY>"');
+      expect(out.result.python.code_snippet).toContain('api_key="<YOUR_API_KEY>"');
     });
 
     it('falls back to a placeholder when no key exists', async () => {

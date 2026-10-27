@@ -54,6 +54,7 @@ type AuditRecordParams struct {
 	// callers stay unchanged.
 	APIKey    string
 	TenantID  string
+	OrgID     int64
 	KeyGroup  string
 	TraceID   string
 	KeyConfig *model.APIKeyConfig // carries the per-key TPM budget for consumption
@@ -263,6 +264,20 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 		telemetry.GlobalLiveMetrics.AddTokens(totTokens)
 	}
 
+	orgID := params.OrgID
+	if orgID == 0 && c != nil {
+		if raw, ok := c.Get(middleware.ContextKeyOrg); ok {
+			switch typed := raw.(type) {
+			case int64:
+				orgID = typed
+			case int:
+				orgID = int64(typed)
+			}
+		}
+	}
+	if orgID == 0 && params.KeyConfig != nil {
+		orgID = params.KeyConfig.OrgID
+	}
 	tenantID := params.TenantID
 	if tenantID == "" && c != nil {
 		tenantID = c.GetString("tenant_id")
@@ -285,6 +300,7 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 		SessionID:        params.SessionID,
 		APIKey:           apiKey,
 		TenantID:         tenantID,
+		OrgID:            orgID,
 		Model:            params.Model,
 		PromptTokens:     params.PromptTokens,
 		CompletionTokens: params.CompletionTokens,

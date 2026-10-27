@@ -87,7 +87,9 @@ export default function DashboardView({
   const fetchDashboard = useCallback(async () => {
     const request = ++dashboardRequest.current;
     const fetcher = adminFetch || apiFetch;
-    const suffix = selectedKey ? `&key=${encodeURIComponent(selectedKey)}` : '';
+    // `selectedKey` holds the numeric key id (string form). The masked value the
+    // list renders is not a filter key: logs and stats resolve `key_id` server-side.
+    const suffix = selectedKey ? `&key_id=${encodeURIComponent(selectedKey)}` : '';
     const read = async (url) => {
       const res = await fetcher(url);
       const json = await res.json();
@@ -98,7 +100,7 @@ export default function DashboardView({
     const results = await Promise.allSettled([
       read(`/api/v1/admin/logs?limit=10${suffix}`),
       read(`/api/v1/admin/stats/timeseries?timeframe=${timeframe}${suffix}`),
-      selectedKey ? read(`/api/v1/admin/stats/overview?key=${encodeURIComponent(selectedKey)}`) : Promise.resolve(null),
+      selectedKey ? read(`/api/v1/admin/stats/overview?key_id=${encodeURIComponent(selectedKey)}`) : Promise.resolve(null),
     ]);
     if (request !== dashboardRequest.current) return false;
     setRecentLogs(results[0].status === 'fulfilled' && Array.isArray(results[0].value) ? results[0].value : []);
@@ -242,7 +244,7 @@ export default function DashboardView({
   })();
 
   const activeKeyObj = useMemo(() => {
-    return (keys || []).find(k => k.key === selectedKey);
+    return (keys || []).find(k => String(k.id) === selectedKey);
   }, [keys, selectedKey]);
 
   // 1. DYNAMIC HOURLY TIME-SERIES AGGREGATION FROM SERVER OR LOGS FALLBACK
@@ -921,7 +923,7 @@ export default function DashboardView({
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-semibold text-[#202124] dark:text-[#F1F2F4]">
                   {selectedKey
-                    ? (isZh ? `密钥实时速率遥测 · ${activeKeyObj?.tenant_id || activeKeyObj?.name || selectedKey.slice(0, 16)}` : `Key Telemetry · ${activeKeyObj?.tenant_id || activeKeyObj?.name || selectedKey.slice(0, 16)}`)
+                    ? (isZh ? `密钥实时速率遥测 · ${activeKeyObj?.tenant_id || activeKeyObj?.name || `密钥 #${selectedKey}`}` : `Key Telemetry · ${activeKeyObj?.tenant_id || activeKeyObj?.name || `Key #${selectedKey}`}`)
                     : (adminUser?.role === 'admin'
                         ? (isZh ? '全平台实时速率遥测 (Platform Telemetry)' : 'Platform Real-time Telemetry')
                         : (isZh ? '我的密钥聚合实时遥测 (Account Telemetry)' : 'My Keys Real-time Telemetry')
@@ -974,6 +976,7 @@ export default function DashboardView({
                 value={selectedKey}
                 onChange={(e) => handleSelectKeyDrilldown(e.target.value)}
                 className="ui-field ui-field-sm font-mono text-xs w-full pr-8 cursor-pointer"
+                aria-label={isZh ? '下钻密钥' : 'Drill-down key'}
               >
                 <option value="">
                   {adminUser?.role === 'admin' 
@@ -981,7 +984,7 @@ export default function DashboardView({
                     : (isZh ? '👤 我的全量密钥聚合 (My Keys Overall)' : '👤 All My Keys Telemetry')}
                 </option>
                 {(keys || []).map(k => (
-                  <option key={k.id || k.key} value={k.key}>
+                  <option key={String(k.id)} value={String(k.id)}>
                     🔑 {k.tenant_id || k.name || '—'} · {k.key_fingerprint || (isZh ? '无指纹' : 'no fingerprint')} {k.rpm ? `(${k.rpm} RPM)` : ''}
                   </option>
                 ))}

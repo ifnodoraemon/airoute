@@ -18,6 +18,7 @@ import {
   ChevronDown,
   ChevronRight,
   AlertTriangle,
+  Key,
   Layers,
   Wrench,
   CheckCircle2,
@@ -28,6 +29,7 @@ import { getGatewayOrigin, copyToClipboard as crossOriginCopy } from '../config'
 import { extractErrorMessage } from '../api/client';
 import MarkdownRenderer from './MarkdownRenderer';
 import { inferClientModality } from '../lib/modelModality';
+import { apiKeyHeaders, isUsableAPIKey } from '../lib/apiKey';
 import {
   COPILOT_HARNESS_TOOLS,
   HARNESS_BENCHMARKS,
@@ -295,14 +297,11 @@ export default function AiCopilot({
     }
   }, [candidateModels, selectedModel]);
 
-  // Active Key resolution
-  const activeKey = useMemo(() => {
-    if (keys && keys.length > 0) {
-      const activeObj = keys.find(k => k.status === 'active');
-      return activeObj ? activeObj.key : keys[0].key;
-    }
-    return '';
-  }, [keys]);
+  // The console key list only carries display masks (credentials are stored as
+  // digests), so the copilot asks for the plaintext it needs and keeps it in
+  // memory for this session. The list stays available to the harness tools as
+  // context, but it is never sent as a credential.
+  const [sessionApiKey, setSessionApiKey] = useState('');
 
   // Welcome message with Harness context
   useEffect(() => {
@@ -552,6 +551,26 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
     const text = (queryText || '').trim();
     if (!text || isLoading) return;
 
+    // Refuse before touching the network: sending the list mask would fail auth
+    // in a way that looks like a gateway bug, and sending nothing would look like
+    // an auth outage. The bubble states exactly what to do.
+    const plaintextKey = sessionApiKey.trim();
+    if (!isUsableAPIKey(plaintextKey)) {
+      const guidance = isZh
+        ? '请先在下方粘贴本次会话的 API Key 明文。密钥列表只显示不可还原的掩码，无法用于调用 /v1/chat/completions。'
+        : 'Paste the plaintext API key below first. The key list only shows irreversible display masks, which cannot authenticate /v1/chat/completions.';
+      if (showToast) showToast(guidance, 'warning');
+      setMessages(prev => [...prev, {
+        id: `nokey_${Date.now()}`,
+        role: 'assistant',
+        content: guidance,
+        isError: true,
+        errorMessage: guidance,
+        harnessTrace: []
+      }]);
+      return;
+    }
+
     const userMsgId = `u_${Date.now()}`;
     const assistantMsgId = `a_${Date.now()}`;
     const userMsg = { id: userMsgId, role: 'user', content: text };
@@ -582,10 +601,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
     const accumulatedTrace = [];
 
     try {
-      const headers = { 'Content-Type': 'application/json' };
-      if (activeKey) {
-        headers['Authorization'] = `Bearer ${activeKey}`;
-      }
+      const headers = { 'Content-Type': 'application/json', ...apiKeyHeaders(plaintextKey) };
 
       // Build conversation history for payload
       const systemPrompt = buildHarnessSystemPrompt();
@@ -1237,6 +1253,23 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
             <span>{isZh ? bm.label : bm.enLabel}</span>
           </button>
         ))}
+      </div>
+
+      {/* 会话密钥：列表只显示掩码，真正发起调用需要明文本地粘贴 */}
+      <div className="px-3 py-1.5 border-t border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] flex items-center gap-2">
+        <Key className={`w-3 h-3 shrink-0 ${isUsableAPIKey(sessionApiKey) ? 'text-emerald-500' : 'text-[#9AA0A6]'}`} />
+        <input
+          type="password"
+          autoComplete="off"
+          value={sessionApiKey}
+          onChange={(e) => setSessionApiKey(e.target.value)}
+          placeholder={isZh ? '粘贴会话 API Key 明文 (仅内存，不落盘)' : 'Paste session API key (memory only)'}
+          aria-label={isZh ? '会话 API Key 明文' : 'Session API key'}
+          className="flex-1 min-w-0 bg-[#F7F7F5] dark:bg-[#22252B] border border-[#E4E6E9] dark:border-[#2C3038] rounded-lg px-2.5 py-1 text-xs font-mono text-[#202124] dark:text-[#F1F2F4] placeholder-[#656B75] dark:placeholder-[#A1A7B0] focus:outline-none focus:ring-1 focus:ring-[#355CFF]"
+        />
+        <span className={`text-[11px] font-mono shrink-0 ${isUsableAPIKey(sessionApiKey) ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+          {isUsableAPIKey(sessionApiKey) ? (isZh ? '已就绪' : 'ready') : (isZh ? '待粘贴' : 'missing')}
+        </span>
       </div>
 
       {/* 底部输入栏 */}

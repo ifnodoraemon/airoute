@@ -28,6 +28,44 @@ const (
 	MaxSelfServiceKeyTPM = 10_000_000
 )
 
+// clampSelfServiceRPM applies the self-service RPM policy to one value: a
+// non-positive request means "no preference" and gets the safe default, and a
+// request above the cap is clamped rather than rejected.
+//
+// This is the single definition of the policy. It used to be written twice — in
+// self-service creation and in the shared creation rules — and key update was
+// missing it entirely, so a tenant could PATCH a key to rpm=0 (which the storage
+// and routing layers treat as unlimited) and bypass the cap.
+func clampSelfServiceRPM(rpm int) int {
+	switch {
+	case rpm <= 0:
+		return DefaultUserKeyRPM
+	case rpm > MaxSelfServiceKeyRPM:
+		return MaxSelfServiceKeyRPM
+	default:
+		return rpm
+	}
+}
+
+// clampSelfServiceTPM is clampSelfServiceRPM for tokens per minute.
+func clampSelfServiceTPM(tpm int) int {
+	switch {
+	case tpm <= 0:
+		return DefaultUserKeyTPM
+	case tpm > MaxSelfServiceKeyTPM:
+		return MaxSelfServiceKeyTPM
+	default:
+		return tpm
+	}
+}
+
+// clampSelfServiceQuotas clamps both quotas together, which is what the creation
+// paths need: a request that omits or zeroes either value must end up with a
+// bounded key.
+func clampSelfServiceQuotas(rpm, tpm int) (int, int) {
+	return clampSelfServiceRPM(rpm), clampSelfServiceTPM(tpm)
+}
+
 // PlanUserKey turns a personal key request into the row to store.
 //
 // It takes the generated credential rather than minting one, so the rule itself is
@@ -51,25 +89,11 @@ func PlanUserKey(user *storage.UserRecord, req CreateUserKeyRequest, generatedKe
 		allowedModels = []string{"*"}
 	}
 
-	rpm := req.RPM
-	switch {
-	case rpm <= 0:
-		rpm = DefaultUserKeyRPM
-	case rpm > MaxSelfServiceKeyRPM:
-		rpm = MaxSelfServiceKeyRPM
-	}
+	rpm, tpm := clampSelfServiceQuotas(req.RPM, req.TPM)
 
 	budget := req.Budget
 	if budget < 0 {
 		budget = 0
-	}
-
-	tpm := req.TPM
-	switch {
-	case tpm <= 0:
-		tpm = DefaultUserKeyTPM
-	case tpm > MaxSelfServiceKeyTPM:
-		tpm = MaxSelfServiceKeyTPM
 	}
 
 	// Tenant identity is server-owned: a personal key belongs to the authenticated

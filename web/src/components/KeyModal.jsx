@@ -35,12 +35,11 @@ export default function KeyModal({
       onClose?.();
       return;
     }
-    // A save already in flight owns the draft: don't prompt about discarding
-    // it, and never trap the user if the request hangs.
-    if (submitting) {
-      onClose?.();
-      return;
-    }
+    // A create request is in flight. The plaintext credential exists only in that
+    // response, so dismissing now would drop it for good: ignore the attempt and
+    // let the response reveal the key. The request always settles (success or
+    // failure), so this never traps the user permanently.
+    if (submitting) return;
     requestClose();
   };
   useModalA11y(isOpen, guardedClose);

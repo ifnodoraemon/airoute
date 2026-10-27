@@ -436,3 +436,75 @@ describe('DashboardView live telemetry', () => {
     });
   });
 });
+
+
+// ---------------------------------------------------------------------------
+// Key drill-down must filter by numeric id
+// ---------------------------------------------------------------------------
+
+// The key list only carries display masks, so the drill-down cannot send `key=`.
+// The backend resolves `key_id` (logs already do; stats now accept it too), which
+// makes the row id the only value that can scope the dashboard to one key.
+const MASK = '3a4b5c6d***9f8e';
+
+const drillKeys = [
+  { id: 7, key: MASK, key_fingerprint: 'kfp_7', tenant_id: 'acme', name: 'acme-key', status: 'active', rpm: 60 },
+  { id: 8, key: 'ffee0011***22aa', key_fingerprint: 'kfp_8', tenant_id: 'globex', status: 'active' },
+];
+
+function drillFetch() {
+  return vi.fn(async (url) => {
+    const path = String(url).split('?')[0];
+    if (path === '/api/v1/admin/stats/live') {
+      return { ok: true, status: 200, json: async () => ({ code: 0, data: livePayload() }) };
+    }
+    if (path === '/api/v1/admin/stats/overview') {
+      return { ok: true, status: 200, json: async () => ({ code: 0, data: {} }) };
+    }
+    return { ok: true, status: 200, json: async () => ({ code: 0, data: [] }) };
+  });
+}
+
+const queriedUrls = (adminFetch) => adminFetch.mock.calls.map(([url]) => String(url));
+
+describe('DashboardView key drill-down', () => {
+  it('offers key ids — never masked values — as drill-down options', () => {
+    setup({ keys: drillKeys, adminFetch: drillFetch() });
+
+    const select = screen.getByLabelText('下钻密钥');
+    const values = Array.from(select.options).map(o => o.value);
+    // The empty option is the platform-wide view; the rest are row ids.
+    expect(values).toEqual(['', '7', '8']);
+    expect(values.join(',')).not.toContain('***');
+  });
+
+  it('filters logs, timeseries and overview by key_id', async () => {
+    const adminFetch = drillFetch();
+    setup({ keys: drillKeys, adminFetch });
+
+    fireEvent.change(screen.getByLabelText('下钻密钥'), { target: { value: '7' } });
+
+    await waitFor(() => {
+      const urls = queriedUrls(adminFetch);
+      expect(urls.some(u => u.startsWith('/api/v1/admin/logs') && u.includes('key_id=7'))).toBe(true);
+      expect(urls.some(u => u.startsWith('/api/v1/admin/stats/timeseries') && u.includes('key_id=7'))).toBe(true);
+      expect(urls.some(u => u.startsWith('/api/v1/admin/stats/overview') && u.includes('key_id=7'))).toBe(true);
+    });
+
+    // The old `key=` parameter (which would have sent the mask) must be gone.
+    const keyed = queriedUrls(adminFetch).filter(u => /[?&]key=/.test(u));
+    expect(keyed).toEqual([]);
+    expect(queriedUrls(adminFetch).join('\n')).not.toContain('***');
+    expect(queriedUrls(adminFetch).join('\n')).not.toContain(MASK);
+  });
+
+  it('resolves the drill-down label from the row id', async () => {
+    const adminFetch = drillFetch();
+    setup({ keys: drillKeys, adminFetch });
+
+    fireEvent.change(screen.getByLabelText('下钻密钥'), { target: { value: '7' } });
+
+    // The telemetry card names the selected key's tenant, resolved by id.
+    expect(await screen.findByText(/密钥实时速率遥测 · acme/)).toBeInTheDocument();
+  });
+});

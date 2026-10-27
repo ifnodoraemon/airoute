@@ -1,12 +1,9 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -443,7 +440,9 @@ func (h *MCPHandler) executeBuiltinUtilityTools(ctx context.Context, name string
 	return "", false, false
 }
 
-// executeDynamicMCPTool dispatches execution to configured external MCP servers from storage via real JSON-RPC 2.0.
+// executeDynamicMCPTool dispatches execution to configured external MCP servers
+// from storage through the real MCP client transports (streamable HTTP, legacy
+// HTTP/SSE or stdio) in mcp_client*.go.
 func (h *MCPHandler) executeDynamicMCPTool(ctx context.Context, name string, args map[string]interface{}) (string, bool) {
 	if h.repo != nil {
 		servers, _ := h.repo.ListMCPServers()
@@ -453,14 +452,15 @@ func (h *MCPHandler) executeDynamicMCPTool(ctx context.Context, name string, arg
 			}
 			for _, t := range srv.Tools {
 				if t == name {
-					endpoint := srv.Endpoint
+					endpoint := strings.TrimSpace(srv.Endpoint)
 					if endpoint == "" {
 						return fmt.Sprintf("MCP server '%s' has no endpoint configured", srv.Name), true
 					}
 
-					// Forward to real HTTP / SSE MCP server via JSON-RPC 2.0
-					if strings.HasPrefix(endpoint, "http://") || strings.HasPrefix(endpoint, "https://") {
-						return forwardJSONRPCToolCall(ctx, endpoint, name, args)
+					// HTTP(S): run the full MCP lifecycle over streamable HTTP
+					// with a legacy HTTP/SSE fallback.
+					if mcpIsHTTPEndpoint(endpoint) {
+						return forwardHTTPMCPToolCall(ctx, srv.Transport, endpoint, name, args)
 					}
 
 					// Real stdio CLI execution if installed
@@ -480,97 +480,4 @@ func (h *MCPHandler) executeDynamicMCPTool(ctx context.Context, name string, arg
 		}
 	}
 	return fmt.Sprintf("Unknown tool '%s'", name), true
-}
-
-// forwardJSONRPCToolCall transmits a standard tools/call JSON-RPC 2.0 request to an external MCP endpoint.
-func forwardJSONRPCToolCall(ctx context.Context, endpoint, toolName string, args map[string]interface{}) (string, bool) {
-	rpcReq := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"id":      time.Now().UnixMicro(),
-		"method":  "tools/call",
-		"params": map[string]interface{}{
-			"name":      toolName,
-			"arguments": args,
-		},
-	}
-	bodyBytes, err := json.Marshal(rpcReq)
-	if err != nil {
-		return fmt.Sprintf("Failed to serialize MCP request: %v", err), true
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(bodyBytes))
-	if err != nil {
-		return fmt.Sprintf("Failed to initialize HTTP request to '%s': %v", endpoint, err), true
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Accept", "application/json")
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		return fmt.Sprintf("Upstream MCP server '%s' connection failed: %v", endpoint, err), true
-	}
-	defer resp.Body.Close()
-
-	// Cap the response: an untrusted MCP server could otherwise stream gigabytes
-	// into memory within the 30s client timeout.
-	const maxMCPResponseBytes = 8 << 20
-	respBytes, err := io.ReadAll(io.LimitReader(resp.Body, maxMCPResponseBytes))
-	if err != nil {
-		return fmt.Sprintf("Failed reading response from upstream MCP server: %v", err), true
-	}
-
-	if resp.StatusCode >= 400 {
-		return fmt.Sprintf("Upstream MCP server returned HTTP %d: %s", resp.StatusCode, string(respBytes)), true
-	}
-
-	var rpcResp struct {
-		JSONRPC string          `json:"jsonrpc"`
-		Result  json.RawMessage `json:"result"`
-		Error   *struct {
-			Code    int    `json:"code"`
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(respBytes, &rpcResp); err == nil {
-		if rpcResp.Error != nil {
-			return fmt.Sprintf("MCP execution error (code %d): %s", rpcResp.Error.Code, rpcResp.Error.Message), true
-		}
-		if len(rpcResp.Result) > 0 {
-			return string(rpcResp.Result), false
-		}
-	}
-
-	return string(respBytes), false
-}
-
-// executeStdioMCPTool executes a tool on a local stdio MCP server process.
-func executeStdioMCPTool(ctx context.Context, cmdParts []string, toolName string, args map[string]interface{}) (string, bool) {
-	rpcReq := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"id":      time.Now().UnixMicro(),
-		"method":  "tools/call",
-		"params": map[string]interface{}{
-			"name":      toolName,
-			"arguments": args,
-		},
-	}
-	reqBytes, _ := json.Marshal(rpcReq)
-	reqBytes = append(reqBytes, '\n')
-
-	cmd := exec.CommandContext(ctx, cmdParts[0], cmdParts[1:]...)
-	cmd.Stdin = bytes.NewReader(reqBytes)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Sprintf("Stdio process execution error: %v, stderr: %s", err, stderr.String()), true
-	}
-
-	outStr := strings.TrimSpace(stdout.String())
-	if outStr == "" {
-		return "Stdio process completed with empty output", false
-	}
-	return outStr, false
 }

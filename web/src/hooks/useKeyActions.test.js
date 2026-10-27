@@ -35,6 +35,9 @@ describe('useKeyActions', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    // The clipboard helper falls back to document.execCommand in jsdom; stub it
+    // per-test and drop the stub afterwards.
+    delete document.execCommand;
   });
 
   it('opens the create form with a suggested name and no credential', () => {
@@ -323,6 +326,7 @@ describe('useKeyActions', () => {
   });
 
   it('records the copied text and clears it again', async () => {
+    document.execCommand = vi.fn(() => true);
     const { result, showToast } = setup();
 
     await act(async () => {
@@ -337,6 +341,62 @@ describe('useKeyActions', () => {
       vi.advanceTimersByTime(3000);
     });
     expect(result.current.copiedKey).toBe('');
+  });
+
+  it('reports a failed copy instead of a false success', async () => {
+    // The clipboard helper returns false when both the async API and the
+    // execCommand fallback fail. That must not read as "copied": the user may
+    // close the one-time-credential dialog and lose the key for good.
+    document.execCommand = vi.fn(() => false);
+    const { result, showToast } = setup();
+
+    let copied;
+    await act(async () => {
+      copied = await result.current.copyToClipboard('sk-copied');
+    });
+
+    expect(copied).toBe(false);
+    expect(result.current.copiedKey).toBe('');
+    expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/复制失败|Copy failed/), 'error');
+    expect(showToast).not.toHaveBeenCalledWith(expect.any(String), 'success');
+  });
+
+  it('shows the one-time credential even when the dialog was closed mid-request', async () => {
+    // Regression: dismissals are blocked while the request is in flight, but a
+    // close from elsewhere (logout/reset, a stale callback) must not swallow the
+    // response-only plaintext either. The success path re-opens the dialog.
+    let resolveFetch;
+    globalThis.fetch.mockReturnValue(new Promise((resolve) => { resolveFetch = resolve; }));
+    const { result } = setup();
+    act(() => {
+      result.current.handleOpenCreateKey();
+    });
+
+    let pending;
+    act(() => {
+      pending = result.current.handleCreateKey();
+    });
+    expect(result.current.submittingKey).toBe(true);
+
+    act(() => {
+      result.current.closeKeyModal();
+    });
+    expect(result.current.showKeyModal).toBe(false);
+
+    resolveFetch(jsonResponse({
+      code: 0,
+      data: { key: 'sk-airoute-created', key_fingerprint: 'kfp_abc123', tenant_id: 'root', rpm: 60, tpm: 100000 },
+    }));
+    await act(async () => {
+      await pending;
+    });
+
+    // The dialog is open again and holds the only copy of the plaintext.
+    expect(result.current.showKeyModal).toBe(true);
+    expect(result.current.createdKey).toEqual(expect.objectContaining({
+      key: 'sk-airoute-created',
+      fingerprint: 'kfp_abc123',
+    }));
   });
 
   it('clears the tenant-scoped key state on reset', () => {

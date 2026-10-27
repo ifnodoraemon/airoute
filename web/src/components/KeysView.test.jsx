@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import KeysView from './KeysView';
 
 // The console must never render a stored API key: the gateway exposes a stable,
@@ -79,5 +79,53 @@ describe('KeysView credential display', () => {
 
     expect(copyToClipboard).toHaveBeenCalledWith('kfp_9f8e7d6c5b4a3928');
     expect(copyToClipboard).not.toHaveBeenCalledWith('sk-airoute-0123456789abcdef0123456789abcdef');
+  });
+});
+
+
+// #16: the copy helper reports whether the write actually happened. Both keys-page
+// call sites used to discard that boolean, so a blocked clipboard showed a "copied"
+// toast while nothing was on the clipboard.
+describe('KeysView copy feedback', () => {
+  const chatModels = ['gpt-4o'];
+
+  it('reports an error instead of success when the cURL sample cannot be copied', async () => {
+    const copyToClipboard = vi.fn(async () => false);
+    const { showToast } = setup({ copyToClipboard, models: chatModels });
+
+    fireEvent.click(screen.getByTitle('复制 cURL 快速接入命令'));
+
+    await waitFor(() => expect(copyToClipboard).toHaveBeenCalled());
+    expect(showToast).toHaveBeenCalledWith(expect.stringContaining('复制失败'), 'error');
+    expect(showToast).not.toHaveBeenCalledWith(expect.stringContaining('已复制到剪贴板'), 'success');
+  });
+
+  it('confirms the cURL sample once the copy succeeds', async () => {
+    const copyToClipboard = vi.fn(async () => true);
+    const { showToast } = setup({ copyToClipboard, models: chatModels });
+
+    fireEvent.click(screen.getByTitle('复制 cURL 快速接入命令'));
+
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith(expect.stringContaining('已复制到剪贴板'), 'success'));
+  });
+
+  it('reports an error when the fingerprint cannot be copied', async () => {
+    const copyToClipboard = vi.fn(async () => false);
+    const { showToast } = setup({ copyToClipboard });
+
+    fireEvent.click(screen.getByTitle('复制密钥指纹'));
+
+    await waitFor(() => expect(copyToClipboard).toHaveBeenCalledWith('kfp_9f8e7d6c5b4a3928'));
+    expect(showToast).toHaveBeenCalledWith(expect.stringContaining('指纹'), 'error');
+  });
+
+  it('does not claim a copy when the clipboard helper fails on the fingerprint', async () => {
+    const copyToClipboard = vi.fn(async () => false);
+    const { showToast } = setup({ copyToClipboard });
+
+    fireEvent.click(screen.getByTitle('复制密钥指纹'));
+
+    await waitFor(() => expect(showToast).toHaveBeenCalled());
+    expect(showToast).not.toHaveBeenCalledWith(expect.any(String), 'success');
   });
 });

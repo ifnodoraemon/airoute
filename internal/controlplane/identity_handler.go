@@ -103,6 +103,27 @@ func (h *AdminHandler) Register(c *gin.Context) {
 		return
 	}
 
+	// Check if username or email already exists before consuming the email
+	// verification code.
+	//
+	// These checks used to run after VerifyCode, so a caller who mistyped their
+	// username (or raced another signup for the same address) lost a valid code to
+	// a refusal and had to request a new one for a retry that would have succeeded
+	// with the code they already had. The checks stay here, next to the throttle,
+	// so a deterministic refusal costs no storage work and burns nothing. The
+	// insert is still guarded by the unique indexes; a race is reported by
+	// respondRegistrationFailure.
+	existingUser, _ := h.repo.GetUserByUsername(username)
+	if existingUser != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "该用户名已被注册"})
+		return
+	}
+	existingEmail, _ := h.repo.GetUserByEmail(email)
+	if existingEmail != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "该邮箱已被绑定注册"})
+		return
+	}
+
 	// Verify the email code when the deployment requires it. A code that is
 	// supplied while verification is optional is still honoured (and must be
 	// valid) instead of being silently discarded.
@@ -125,18 +146,6 @@ func (h *AdminHandler) Register(c *gin.Context) {
 	// balance or an API key.
 	if !registrationGrant(verificationRequired, verified) {
 		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "注册需要先完成邮箱验证"})
-		return
-	}
-
-	// Check if username or email already exists
-	existingUser, _ := h.repo.GetUserByUsername(username)
-	if existingUser != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "该用户名已被注册"})
-		return
-	}
-	existingEmail, _ := h.repo.GetUserByEmail(email)
-	if existingEmail != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "该邮箱已被绑定注册"})
 		return
 	}
 

@@ -37,6 +37,7 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 
 	totalPromptTokens := 0
 	totalCompTokens := 0
+	totalCachedTokens := 0
 	upstreamChannel := ""
 	accumulatedChars := 0
 	var streamError error
@@ -88,6 +89,10 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 			if event.Chunk.Usage != nil {
 				totalPromptTokens = event.Chunk.Usage.PromptTokens
 				totalCompTokens = event.Chunk.Usage.CompletionTokens
+				// Cache reads are part of prompt_tokens but are billed at the
+				// cache rate; dropping them charged every cached token as fresh
+				// input (same defect the non-streaming paths do not have).
+				totalCachedTokens = max(totalCachedTokens, event.Chunk.Usage.GetCachedTokens())
 			}
 
 			chunkPayload := gin.H{
@@ -134,6 +139,7 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 		Model:            req.Model,
 		PromptTokens:     totalPromptTokens,
 		CompletionTokens: totalCompTokens,
+		CachedTokens:     totalCachedTokens,
 		Duration:         time.Since(start),
 		TTFT:             ttftDuration,
 		StatusCode:       statusCode,

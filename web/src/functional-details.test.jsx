@@ -60,9 +60,13 @@ describe('Functional details regressions', () => {
 
   it('loads selected-key overview when returning to the dashboard', async () => {
     const adminFetch = vi.fn().mockResolvedValue(response({ code: 0, data: [] }));
-    render(<DashboardView selectedKey="sk-selected" keys={[{key:'sk-selected'}]} stats={{total_requests:100}} adminUser={{role:'admin'}} adminFetch={adminFetch} />);
+    // The dashboard drills down by the row id: the list value is a display mask.
+    render(<DashboardView selectedKey="7" keys={[{ id: 7, key: 'sk-12ab***cd34', key_fingerprint: 'kfp_7' }]} stats={{total_requests:100}} adminUser={{role:'admin'}} adminFetch={adminFetch} />);
     await act(async () => {});
-    expect(adminFetch.mock.calls.map(([url]) => url)).toContain('/api/v1/admin/stats/overview?key=sk-selected');
+    const urls = adminFetch.mock.calls.map(([url]) => url);
+    expect(urls).toContain('/api/v1/admin/stats/overview?key_id=7');
+    expect(urls.filter(url => /[?&]key=/.test(url))).toEqual([]);
+    expect(urls.join('\n')).not.toContain('***');
   });
 
   it('prevents editing and saving before the announcement has loaded', async () => {
@@ -114,14 +118,14 @@ describe('Functional details regressions', () => {
 it('uses only the selected key for every summary card and ignores late prior-key data', async () => {
   let finishFirst;
   const adminFetch = vi.fn(async (url) => {
-    if (url.includes('/overview?key=first')) return new Promise(resolve => { finishFirst = resolve; });
-    if (url.includes('/overview?key=second')) return response({code:0,data:{total_requests:222,total_cost:7}});
+    if (url.includes('/overview?key_id=1')) return new Promise(resolve => { finishFirst = resolve; });
+    if (url.includes('/overview?key_id=2')) return response({code:0,data:{total_requests:222,total_cost:7}});
     return response({code:0,data:[]});
   });
-  const props = { keys:[{key:'first'},{key:'second'}], stats:{total_requests:999777,total_cost:9999}, adminUser:{role:'admin'}, adminFetch };
-  const view = render(<DashboardView {...props} selectedKey="first" />);
+  const props = { keys:[{id:1,key:'aaaa1111***bbbb'},{id:2,key:'cccc2222***dddd'}], stats:{total_requests:999777,total_cost:9999}, adminUser:{role:'admin'}, adminFetch };
+  const view = render(<DashboardView {...props} selectedKey="1" />);
   expect(screen.queryByText('999,777')).not.toBeInTheDocument();
-  view.rerender(<DashboardView {...props} selectedKey="second" />);
+  view.rerender(<DashboardView {...props} selectedKey="2" />);
   await waitFor(() => expect(screen.getByText('222')).toBeInTheDocument());
   await act(async () => { finishFirst(response({code:0,data:{total_requests:111,total_cost:9}})); });
   expect(screen.getByText('222')).toBeInTheDocument();
@@ -132,9 +136,9 @@ it('uses only the selected key for every summary card and ignores late prior-key
 it('refreshes the selected key overview on the dashboard timer', async () => {
   vi.useFakeTimers({toFake:['setInterval','clearInterval']});
   const adminFetch = vi.fn().mockResolvedValue(response({code:0,data:{total_requests:321}}));
-  render(<DashboardView selectedKey="selected" stats={{}} adminFetch={adminFetch} />);
+  render(<DashboardView selectedKey="3" stats={{}} adminFetch={adminFetch} />);
   await act(async () => {});
-  const overviewCalls = () => adminFetch.mock.calls.filter(([url]) => url === '/api/v1/admin/stats/overview?key=selected').length;
+  const overviewCalls = () => adminFetch.mock.calls.filter(([url]) => url === '/api/v1/admin/stats/overview?key_id=3').length;
   expect(overviewCalls()).toBe(1);
   await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
   expect(overviewCalls()).toBe(2);

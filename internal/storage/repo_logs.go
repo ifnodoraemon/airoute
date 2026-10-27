@@ -140,6 +140,7 @@ type UsageLogRecord struct {
 	SessionID        string                `json:"session_id,omitempty"`
 	APIKey           string                `json:"api_key"`
 	TenantID         string                `json:"tenant_id"`
+	OrgID            int64                 `json:"org_id"`
 	Model            string                `json:"model"`
 	Channel          string                `json:"channel"`
 	PromptTokens     int                   `json:"prompt_tokens"`
@@ -326,7 +327,7 @@ func (r *Repository) ListUsageLogsWithFilterAndCount(f LogFilter) ([]*UsageLogRe
 		}
 	}
 
-	query := `SELECT id, trace_id, COALESCE(chat_id, ''), COALESCE(session_id, ''), COALESCE(api_key, ''), COALESCE(tenant_id, ''), COALESCE(model, ''), COALESCE(channel, ''), prompt_tokens, completion_tokens, COALESCE(cached_tokens, 0), total_tokens, COALESCE(cost, 0.0), COALESCE(is_off_peak, 0), COALESCE(off_peak_discount, 1.0), duration_ms, ttft_ms, status_code, COALESCE(usage_source, 'upstream'), COALESCE(error_message, ''), COALESCE(pricing_snapshot, ''), created_at FROM usage_logs WHERE 1=1` + where + ` ORDER BY id DESC LIMIT ? OFFSET ?`
+	query := `SELECT id, trace_id, COALESCE(chat_id, ''), COALESCE(session_id, ''), COALESCE(api_key, ''), COALESCE(tenant_id, ''), COALESCE(model, ''), COALESCE(channel, ''), prompt_tokens, completion_tokens, COALESCE(cached_tokens, 0), total_tokens, COALESCE(cost, 0.0), COALESCE(is_off_peak, 0), COALESCE(off_peak_discount, 1.0), duration_ms, ttft_ms, status_code, COALESCE(usage_source, 'upstream'), COALESCE(error_message, ''), COALESCE(pricing_snapshot, ''), COALESCE(org_id, 0), created_at FROM usage_logs WHERE 1=1` + where + ` ORDER BY id DESC LIMIT ? OFFSET ?`
 	args := append(append([]interface{}{}, whereArgs...), f.Limit, f.Offset)
 
 	rows, err := r.db.Query(query, args...)
@@ -341,7 +342,7 @@ func (r *Repository) ListUsageLogsWithFilterAndCount(f LogFilter) ([]*UsageLogRe
 		var isOff int
 		var createdAt time.Time
 		var pricingJSON string
-		if err := rows.Scan(&l.ID, &l.TraceID, &l.ChatID, &l.SessionID, &l.APIKey, &l.TenantID, &l.Model, &l.Channel, &l.PromptTokens, &l.CompletionTokens, &l.CachedTokens, &l.TotalTokens, &l.Cost, &isOff, &l.OffPeakDiscount, &l.DurationMs, &l.TTFTMs, &l.StatusCode, &l.UsageSource, &l.ErrorMessage, &pricingJSON, &createdAt); err != nil {
+		if err := rows.Scan(&l.ID, &l.TraceID, &l.ChatID, &l.SessionID, &l.APIKey, &l.TenantID, &l.Model, &l.Channel, &l.PromptTokens, &l.CompletionTokens, &l.CachedTokens, &l.TotalTokens, &l.Cost, &isOff, &l.OffPeakDiscount, &l.DurationMs, &l.TTFTMs, &l.StatusCode, &l.UsageSource, &l.ErrorMessage, &pricingJSON, &l.OrgID, &createdAt); err != nil {
 			return nil, 0, err
 		}
 		if pricingJSON != "" {

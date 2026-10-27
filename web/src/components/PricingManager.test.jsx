@@ -218,3 +218,87 @@ describe('PricingManager off-peak display', () => {
     await waitFor(() => expect(screen.getByText('gpt-y')).toBeInTheDocument());
   });
 });
+
+// The add/edit rule sheet holds a whole pricing configuration (base rates plus
+// off-peak slots). Dismissing it has to be guarded like every other form modal:
+// backdrop, X, Cancel and Escape all route through the unsaved-changes guard.
+describe('PricingManager add/edit modal unsaved-changes guard', () => {
+  const MODAL_TITLE = '新建模型定价与分时规则';
+  const DISCARD_TITLE = '放弃未保存的定价修改？';
+
+  async function openDirtyAddModal() {
+    const utils = renderPricing([offPeakRow]);
+    await screen.findByText('gpt-x');
+    fireEvent.click(screen.getByRole('button', { name: '新建定价规则' }));
+    await screen.findByText(MODAL_TITLE);
+    // Typing a model makes the draft differ from the values it opened with.
+    fireEvent.change(screen.getByPlaceholderText(/如 deepseek-chat 或点击下方一键选择/), {
+      target: { value: 'gpt-new' },
+    });
+    return utils;
+  }
+
+  it('prompts before discarding typed pricing edits via the close (X) button', async () => {
+    await openDirtyAddModal();
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+
+    expect(await screen.findByText(DISCARD_TITLE)).toBeInTheDocument();
+
+    // Keep editing returns to the same draft, nothing lost.
+    fireEvent.click(screen.getByRole('button', { name: '继续编辑' }));
+    expect(screen.queryByText(DISCARD_TITLE)).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue('gpt-new')).toBeInTheDocument();
+
+    // Discard actually closes.
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+    fireEvent.click(await screen.findByRole('button', { name: '放弃并关闭' }));
+    await waitFor(() => expect(screen.queryByText(MODAL_TITLE)).not.toBeInTheDocument());
+  });
+
+  it('prompts before discarding via Escape', async () => {
+    await openDirtyAddModal();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(await screen.findByText(DISCARD_TITLE)).toBeInTheDocument();
+  });
+
+  it('prompts before discarding via the backdrop', async () => {
+    await openDirtyAddModal();
+
+    fireEvent.click(screen.getByTestId('pricing-modal-overlay'));
+
+    expect(await screen.findByText(DISCARD_TITLE)).toBeInTheDocument();
+  });
+
+  it('closes an untouched modal immediately, without a prompt', async () => {
+    renderPricing([offPeakRow]);
+    await screen.findByText('gpt-x');
+    fireEvent.click(screen.getByRole('button', { name: '新建定价规则' }));
+    await screen.findByText(MODAL_TITLE);
+
+    // The prefilled defaults match the values the sheet opened with.
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+
+    await waitFor(() => expect(screen.queryByText(MODAL_TITLE)).not.toBeInTheDocument());
+    expect(screen.queryByText(DISCARD_TITLE)).not.toBeInTheDocument();
+  });
+
+  it('closes without a prompt after a successful save', async () => {
+    const { adminFetch, showToast } = await openDirtyAddModal();
+    adminFetch.mockImplementation(async (url, options) => {
+      if (options?.method === 'POST') return { ok: true, status: 200, json: async () => ({ code: 0 }) };
+      return String(url).includes('/admin/models') ? modelsResponse() : pricingResponse([offPeakRow]);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '保存定价' }));
+
+    await waitFor(() => expect(screen.queryByText(MODAL_TITLE)).not.toBeInTheDocument());
+    expect(screen.queryByText(DISCARD_TITLE)).not.toBeInTheDocument();
+    expect(showToast.mock.calls.some(([, tone]) => tone === 'success')).toBe(true);
+    // The POST carried the edited model.
+    const post = adminFetch.mock.calls.find(([, options]) => options?.method === 'POST');
+    expect(JSON.parse(post[1].body).model).toBe('gpt-new');
+  });
+});

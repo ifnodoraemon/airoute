@@ -18,6 +18,7 @@ import useUnsavedGuard from '../hooks/useUnsavedGuard';
 import DiscardChangesDialog from './DiscardChangesDialog';
 import { availableKeyModels } from '../lib/keyModels';
 import { inferClientModality } from '../lib/modelModality';
+import { API_KEY_PLACEHOLDER, isUsableAPIKey } from '../lib/apiKey';
 
 export default function OnboardingModal({
   isOpen,
@@ -33,20 +34,28 @@ export default function OnboardingModal({
   const isZh = lang === 'zh';
   const [step, setStep] = useState(1);
   const activeKeys = useMemo(() => keys.filter(key => !key.status || key.status === 'active'), [keys]);
-  const [selectedKey, setSelectedKey] = useState(() => activeKeys[0]?.key || '');
+  // Only rows with an id can scope the request; the selector keys off it.
+  const contextKeys = useMemo(() => activeKeys.filter(key => key.id != null), [activeKeys]);
+  // The wizard keeps two separate selections. `selectedKeyId` picks a listed row
+  // for its tenant/model scope only — its `key` is an irreversible display mask.
+  // `sessionApiKey` is the plaintext the operator pastes for the live probe and
+  // is kept in memory for the lifetime of the modal.
+  const [selectedKeyId, setSelectedKeyId] = useState(() => (contextKeys[0] ? String(contextKeys[0].id) : ''));
+  const [sessionApiKey, setSessionApiKey] = useState('');
   const [selectedProtocol, setSelectedProtocol] = useState('openai');
   const [selectedModel, setSelectedModel] = useState('');
-  const allowedModels = useMemo(() => availableKeyModels(activeKeys.find(key => key.key === selectedKey), models).filter(name => inferClientModality(name) === 'chat'), [activeKeys, models, selectedKey]);
+  const selectedKeyObj = useMemo(() => activeKeys.find(key => String(key.id) === selectedKeyId), [activeKeys, selectedKeyId]);
+  const allowedModels = useMemo(() => availableKeyModels(selectedKeyObj, models).filter(name => inferClientModality(name) === 'chat'), [selectedKeyObj, models]);
   const [snippetTab, setSnippetTab] = useState('python');
   const [copiedKey, setCopiedKey] = useState('');
   const [testingPing, setTestingPing] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
   useEffect(() => {
-    if (!activeKeys.some(k => k.key === selectedKey)) {
-      setSelectedKey(activeKeys[0]?.key || '');
+    if (!contextKeys.some(k => String(k.id) === selectedKeyId)) {
+      setSelectedKeyId(contextKeys[0] ? String(contextKeys[0].id) : '');
     }
-  }, [activeKeys, selectedKey]);
+  }, [contextKeys, selectedKeyId]);
 
   useEffect(() => {
     if (!allowedModels.includes(selectedModel)) {
@@ -56,7 +65,7 @@ export default function OnboardingModal({
 
   // Only the wizard's configuration is a draft: the step indicator and the
   // snippet tab are navigation/view state, so they never trip the guard.
-  const isDirty = useFormDirty(isOpen, { selectedKey, selectedProtocol, selectedModel });
+  const isDirty = useFormDirty(isOpen, { selectedKeyId, selectedProtocol, selectedModel });
   const { confirming, requestClose, keepEditing, discard } = useUnsavedGuard({ isOpen, isDirty, onClose });
 
   // Remember the configuration the wizard opened with, so finishing a run can
@@ -64,7 +73,7 @@ export default function OnboardingModal({
   const openedDraftRef = useRef(null);
   useEffect(() => {
     if (isOpen) {
-      openedDraftRef.current = { selectedKey, selectedProtocol, selectedModel };
+      openedDraftRef.current = { selectedKeyId, selectedProtocol, selectedModel };
     }
     // Snapshot only on open; later edits must not overwrite the baseline.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -77,26 +86,29 @@ export default function OnboardingModal({
 
   const origin = getGatewayOrigin();
   const probeText = isZh ? 'Ping: 首次接入握手测试' : 'Ping: First handshake probe';
-  const probe = selectedProtocol === 'claude' ? {
+  // The credential is a parameter, never a closed-over list value: the snippets
+  // get the placeholder, only the live probe gets the pasted plaintext.
+  const buildProbe = (apiKey) => (selectedProtocol === 'claude' ? {
     path: '/v1/messages',
-    headers: { 'x-api-key': selectedKey, 'anthropic-version': '2023-06-01' },
+    headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
     body: { model: selectedModel, messages: [{ role: 'user', content: probeText }], max_tokens: 30 },
   } : selectedProtocol === 'gemini' ? {
     path: `/v1beta/models/${encodeURIComponent(selectedModel)}:generateContent`,
-    headers: { 'x-goog-api-key': selectedKey },
+    headers: { 'x-goog-api-key': apiKey },
     body: { contents: [{ role: 'user', parts: [{ text: probeText }] }], generationConfig: { maxOutputTokens: 30 } },
   } : {
     path: '/v1/chat/completions',
-    headers: { Authorization: `Bearer ${selectedKey}` },
+    headers: { Authorization: `Bearer ${apiKey}` },
     body: { model: selectedModel, messages: [{ role: 'user', content: probeText }], max_tokens: 30, stream: false },
-  };
+  });
+  const snippetProbe = buildProbe(API_KEY_PLACEHOLDER);
 
   // Completion closes for real: restore the opened configuration first so the
   // dirty draft can never re-open the discard prompt on the way out.
   const completeWizard = (after) => {
     const opened = openedDraftRef.current;
     if (opened) {
-      setSelectedKey(opened.selectedKey);
+      setSelectedKeyId(opened.selectedKeyId);
       setSelectedProtocol(opened.selectedProtocol);
       setSelectedModel(opened.selectedModel);
     }
@@ -112,7 +124,19 @@ export default function OnboardingModal({
   };
 
   const handleTestProbe = async () => {
-    if (!selectedKey || !allowedModels.includes(selectedModel)) return;
+    if (!isUsableAPIKey(sessionApiKey)) {
+      if (showToast) {
+        showToast(
+          isZh
+            ? '请先粘贴本次会话的 API Key 明文：密钥列表只显示掩码，无法用于握手探测'
+            : 'Paste the plaintext API key for this session first: the key list only shows display masks, which cannot authenticate the probe',
+          'warning'
+        );
+      }
+      return;
+    }
+    if (!allowedModels.includes(selectedModel)) return;
+    const probe = buildProbe(sessionApiKey.trim());
     setTestingPing(true);
     setTestResult(null);
     const start = Date.now();
@@ -157,9 +181,9 @@ export default function OnboardingModal({
   };
 
   // A stored credential is never rendered: the console shows the plaintext exactly
-  // once, in the creation dialog. The copyable samples carry a placeholder; the live
-  // "test ping" button still uses the selected key internally to make its request.
-  const KEY_PLACEHOLDER = '<YOUR_API_KEY>';
+  // once, in the creation dialog. Every copyable sample carries a placeholder; the
+  // live "test ping" button uses the plaintext the operator pasted for this session.
+  const KEY_PLACEHOLDER = API_KEY_PLACEHOLDER;
 
   const pythonCode = `from openai import OpenAI
 
@@ -202,10 +226,10 @@ async function main() {
 main();
 `;
 
-  const curlCode = `curl -X POST "${origin}${probe.path}" \\
+  const curlCode = `curl -X POST "${origin}${snippetProbe.path}" \\
   -H "Content-Type: application/json" \\
-${Object.entries(probe.headers).map(([name, value]) => `  -H "${name}: ${value}" \\`).join('\n')}
-  -d '${JSON.stringify(probe.body, null, 2)}'`;
+${Object.entries(snippetProbe.headers).map(([name, value]) => `  -H "${name}: ${value}" \\`).join('\n')}
+  -d '${JSON.stringify(snippetProbe.body, null, 2)}'`;
 
   const claudeCode = `import anthropic
 
@@ -279,7 +303,7 @@ print(message.content[0].text)
 
           <button
             onClick={() => setStep(2)}
-            disabled={!selectedKey}
+            disabled={!selectedKeyId}
             className={`flex items-center space-x-2 pb-1 transition cursor-pointer ${
               step === 2
                 ? 'text-[#355CFF] dark:text-[#91A7FF] border-b-2 border-[#355CFF] dark:border-[#91A7FF] font-bold'
@@ -300,7 +324,7 @@ print(message.content[0].text)
 
           <button
             onClick={() => setStep(3)}
-            disabled={!selectedKey || !selectedModel}
+            disabled={!selectedKeyId || !selectedModel}
             className={`flex items-center space-x-2 pb-1 transition cursor-pointer ${
               step === 3
                 ? 'text-[#355CFF] dark:text-[#91A7FF] border-b-2 border-[#355CFF] dark:border-[#91A7FF] font-bold'
@@ -327,15 +351,16 @@ print(message.content[0].text)
                 <span>{isZh ? '选择用于接入调用的 API 密钥 (API Key)' : 'Select API Key for client requests'}</span>
               </label>
 
-              {activeKeys.length > 0 ? (
+              {contextKeys.length > 0 ? (
                 <div className="space-y-2">
                   <select
-                    value={selectedKey}
-                    onChange={(e) => setSelectedKey(e.target.value)}
+                    value={selectedKeyId}
+                    onChange={(e) => setSelectedKeyId(e.target.value)}
                     className="ui-field font-mono"
+                    aria-label={isZh ? '密钥上下文（租户与模型范围）' : 'Key context (tenant and model scope)'}
                   >
-                    {activeKeys.map((k) => (
-                      <option key={k.id || k.key} value={k.key}>
+                    {contextKeys.map((k) => (
+                      <option key={String(k.id)} value={String(k.id)}>
                         {k.tenant_id ? `[${k.tenant_id}] ` : ''}
                         {k.key_fingerprint || (isZh ? '无指纹' : 'no fingerprint')} (RPM: {k.rpm || 60})
                       </option>
@@ -354,19 +379,26 @@ print(message.content[0].text)
                 </div>
               )}
 
-              <div className="mt-3 flex items-center justify-between bg-white dark:bg-slate-800 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-mono">
-                <span className="text-slate-600 dark:text-slate-300 truncate max-w-sm">
-                  {selectedKey}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(selectedKey, 'key')}
-                  disabled={!selectedKey}
-                  className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-[#EEF2FF] dark:hover:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] rounded-md font-medium transition flex items-center space-x-1 shrink-0"
-                >
-                  {copiedKey === 'key' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedKey === 'key' ? (isZh ? '已复制' : 'Copied') : (isZh ? '复制密钥' : 'Copy Key')}</span>
-                </button>
+              {/* The mask in the list cannot authenticate anything, so the wizard
+                  asks for the plaintext it will actually send. */}
+              <div className="mt-3 space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                  {isZh ? '本次会话 API Key 明文 (仅保存在内存)' : 'Session API key (memory only)'}
+                </label>
+                <input
+                  type="password"
+                  autoComplete="off"
+                  value={sessionApiKey}
+                  onChange={(e) => setSessionApiKey(e.target.value)}
+                  placeholder={isZh ? '粘贴用于握手探测的明文密钥' : 'Paste the plaintext key used by the live probe'}
+                  aria-label={isZh ? '会话 API Key 明文' : 'Session API key'}
+                  className="ui-field font-mono"
+                />
+                <p className="ui-meta">
+                  {isZh
+                    ? '密钥列表只显示不可还原的掩码；明文仅用于握手探测，不写入浏览器存储。'
+                    : 'The key list only shows irreversible display masks. The plaintext is used by the live probe only and is never written to browser storage.'}
+                </p>
               </div>
             </div>
 
@@ -374,7 +406,7 @@ print(message.content[0].text)
               <button
                 type="button"
                 onClick={() => setStep(2)}
-                disabled={!selectedKey}
+                disabled={!selectedKeyId}
                 className="ui-btn-primary"
               >
                 <span>{isZh ? '下一步：选择模型与协议' : 'Next: Protocol & Model'}</span>
@@ -537,12 +569,27 @@ print(message.content[0].text)
                 <button
                   type="button"
                   onClick={handleTestProbe}
-                  disabled={testingPing || !selectedKey || !selectedModel}
+                  disabled={testingPing || !isUsableAPIKey(sessionApiKey) || !allowedModels.includes(selectedModel)}
                   className="px-3.5 py-1.5 bg-[#355CFF] hover:bg-[#2849E6] text-white rounded-lg text-xs font-medium transition flex items-center space-x-1.5 shrink-0 shadow-sm cursor-pointer"
                 >
                   {testingPing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
                   <span>{testingPing ? (isZh ? '探测中...' : 'Probing...') : (isZh ? '立即测试握手' : 'Test Handshake')}</span>
                 </button>
+              </div>
+
+              {/* The probe is where the credential is needed, so it is editable
+                  here too (same in-memory state as step 1). */}
+              <div className="flex items-center gap-2">
+                <Key className="w-3.5 h-3.5 text-[#355CFF] dark:text-[#91A7FF] shrink-0" />
+                <input
+                  type="password"
+                  autoComplete="off"
+                  value={sessionApiKey}
+                  onChange={(e) => setSessionApiKey(e.target.value)}
+                  placeholder={isZh ? '粘贴明文 API Key 后才能握手 (仅内存)' : 'Paste the plaintext API key to enable the probe (memory only)'}
+                  aria-label={isZh ? '会话 API Key 明文' : 'Session API key'}
+                  className="ui-field font-mono text-xs flex-1"
+                />
               </div>
 
               {testResult && (

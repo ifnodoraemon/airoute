@@ -36,6 +36,7 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 	w := c.Writer
 	totalPromptTokens := 0
 	totalCompTokens := 0
+	totalCachedTokens := 0
 	firstTokenRecorded := false
 	var ttftDuration time.Duration
 	upstreamChannel := ""      // populated from the first stream event
@@ -70,6 +71,7 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 			Model:            modelName,
 			PromptTokens:     totalPromptTokens,
 			CompletionTokens: totalCompTokens,
+			CachedTokens:     totalCachedTokens,
 			Duration:         time.Since(start),
 			TTFT:             ttftDuration,
 			StatusCode:       statusCode,
@@ -151,6 +153,9 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 				if event.Chunk.Usage != nil {
 					totalPromptTokens = event.Chunk.Usage.PromptTokens
 					totalCompTokens = event.Chunk.Usage.CompletionTokens
+					// Cache reads are part of prompt_tokens but bill at the cache
+					// rate; not forwarding them charged cached tokens as fresh input.
+					totalCachedTokens = max(totalCachedTokens, event.Chunk.Usage.GetCachedTokens())
 				}
 				if usageOnly {
 					usageChunk := gin.H{

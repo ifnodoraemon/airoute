@@ -1,6 +1,12 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import PlaygroundView from './PlaygroundView';
+
+// The key list can only return display masks (credentials are stored as digests),
+// so the playground must never use a listed key as a credential. The plaintext a
+// caller pastes for the session is what actually signs the request; everything
+// below pins that boundary.
+vi.mock('../utils/clipboard', () => ({ copyToClipboard: vi.fn(async () => true) }));
 
 // Regression guard for a crash that reached the browser:
 //
@@ -18,7 +24,7 @@ import PlaygroundView from './PlaygroundView';
 // before anything reaches the DOM.
 
 const baseProps = {
-  keys: [{ key: 'sk-test', allowed_models: ['*'] }],
+  keys: [{ id: 1, key: '3a4b5c6d***9f8e', key_fingerprint: 'kfp_1', allowed_models: ['*'] }],
   models: ['gpt-4o', 'claude-3-5-sonnet'],
   modelRoutes: [],
   prices: [],
@@ -51,5 +57,151 @@ describe('PlaygroundView', () => {
     render(<PlaygroundView {...baseProps} initialModel="claude-3-5-sonnet" />);
 
     expect(screen.getByDisplayValue('claude-3-5-sonnet')).toBeInTheDocument();
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Masked-key boundary
+// ---------------------------------------------------------------------------
+
+const MASK = '3a4b5c6d***9f8e';
+const PLAINTEXT = 'sk-airoute-0123456789abcdef';
+
+const maskedKeyProps = {
+  keys: [{ id: 11, key: MASK, key_fingerprint: 'kfp_11', tenant_id: 'acme', allowed_models: ['*'], status: 'active' }],
+  models: ['gpt-4o'],
+  modelRoutes: [],
+  prices: [],
+  lang: 'zh',
+};
+
+function renderMasked(props = {}) {
+  const showToast = vi.fn();
+  const utils = render(<PlaygroundView {...maskedKeyProps} showToast={showToast} {...props} />);
+  return { ...utils, showToast };
+}
+
+function typeChatMessage(text = 'hello') {
+  fireEvent.change(screen.getByPlaceholderText(/输入对话 Prompt/), { target: { value: text } });
+}
+
+describe('PlaygroundView masked API keys', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: { message: 'invalid api key' } }),
+    })));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('authenticates with the pasted plaintext, never with the list mask', async () => {
+    renderMasked();
+
+    fireEvent.change(screen.getByLabelText('会话 API Key 明文'), { target: { value: PLAINTEXT } });
+    typeChatMessage();
+    fireEvent.click(screen.getByRole('button', { name: /发送请求/ }));
+
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+    const [url, options] = globalThis.fetch.mock.calls[0];
+    expect(url).toBe('/v1/chat/completions');
+    expect(options.headers.Authorization).toBe(`Bearer ${PLAINTEXT}`);
+    expect(JSON.stringify(options.headers)).not.toContain('***');
+    expect(JSON.stringify(options.headers)).not.toContain(MASK);
+  });
+
+  it('refuses to call when only a display mask is available', async () => {
+    const { showToast } = renderMasked();
+
+    typeChatMessage();
+    fireEvent.click(screen.getByRole('button', { name: /发送请求/ }));
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(showToast).toHaveBeenCalledWith(expect.stringContaining('明文'), 'warning');
+  });
+
+  it('rejects a pasted value that is still a mask', async () => {
+    const { showToast } = renderMasked();
+
+    fireEvent.change(screen.getByLabelText('会话 API Key 明文'), { target: { value: MASK } });
+    typeChatMessage();
+    fireEvent.click(screen.getByRole('button', { name: /发送请求/ }));
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(showToast).toHaveBeenCalledWith(expect.any(String), 'warning');
+  });
+
+  it('puts a placeholder, not the mask, in the copied cURL when no plaintext exists', async () => {
+    const { copyToClipboard } = await import('../utils/clipboard');
+    copyToClipboard.mockClear();
+    renderMasked();
+
+    fireEvent.click(screen.getByRole('button', { name: /复制 cURL/ }));
+
+    await waitFor(() => expect(copyToClipboard).toHaveBeenCalled());
+    const snippet = copyToClipboard.mock.calls[0][0];
+    expect(snippet).not.toContain('***');
+    expect(snippet).toContain('<YOUR_API_KEY>');
+    expect(snippet).toContain('Authorization: Bearer <YOUR_API_KEY>');
+  });
+
+  it('puts the pasted plaintext in the copied cURL so it matches the request', async () => {
+    const { copyToClipboard } = await import('../utils/clipboard');
+    copyToClipboard.mockClear();
+    renderMasked();
+
+    fireEvent.change(screen.getByLabelText('会话 API Key 明文'), { target: { value: PLAINTEXT } });
+    fireEvent.click(screen.getByRole('button', { name: /复制 cURL/ }));
+
+    await waitFor(() => expect(copyToClipboard).toHaveBeenCalled());
+    const snippet = copyToClipboard.mock.calls[0][0];
+    expect(snippet).toContain(`Authorization: Bearer ${PLAINTEXT}`);
+    expect(snippet).not.toContain('***');
+  });
+
+  it('keys the entitlement context off the row id, not the masked value', () => {
+    // The selected row's allowed_models still filter the model list; only the
+    // credential is pasted separately.
+    renderMasked({
+      keys: [{ id: 11, key: MASK, key_fingerprint: 'kfp_11', allowed_models: ['gpt-4o'], status: 'active' }],
+      models: ['gpt-4o', 'claude-3-5-sonnet'],
+    });
+
+    expect(screen.getByDisplayValue('gpt-4o')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('claude-3-5-sonnet')).not.toBeInTheDocument();
+  });
+});
+
+describe('PlaygroundView unauthenticated mode', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: { message: 'invalid api key' } }),
+    })));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps the public gateway usable when no key is configured', async () => {
+    render(<PlaygroundView {...baseProps} keys={[]} showToast={vi.fn()} />);
+
+    // With no listed key the only choice is to call without a credential.
+    const select = screen.getByLabelText(/密钥上下文/);
+    expect(Array.from(select.options).map(o => o.value)).toEqual(['__none__']);
+
+    fireEvent.change(screen.getByPlaceholderText(/输入对话 Prompt/), { target: { value: 'hi' } });
+    fireEvent.click(screen.getByRole('button', { name: /发送请求/ }));
+
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+    const [, options] = globalThis.fetch.mock.calls[0];
+    expect(options.headers.Authorization).toBeUndefined();
+    expect(JSON.stringify(options.headers)).not.toContain('***');
   });
 });

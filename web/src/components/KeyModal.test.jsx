@@ -145,3 +145,67 @@ describe('KeyModal one-time credential reveal', () => {
     expect(screen.getByText(/已按自助密钥上限调整速率\/Token 配额/)).toBeInTheDocument();
   });
 });
+
+// The plaintext credential exists only in the create response. If the dialog can be
+// dismissed while that request is in flight, the response lands for a closed modal
+// and the secret is gone for good. Every dismissal path must be inert until the
+// request settles.
+describe('KeyModal dismissals during an in-flight create', () => {
+  it('ignores the close (X) button while creating', () => {
+    const { onClose, container } = setup({ submitting: true, newKey: draft({ tenant_id: 'team-a' }) });
+
+    fireEvent.click(container.querySelector('.ui-icon-btn'));
+
+    expect(onClose).not.toHaveBeenCalled();
+    // Still on the form, not on a "discard changes" prompt.
+    expect(screen.queryByText('放弃未保存的密钥配置？')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /取消/ })).toBeInTheDocument();
+  });
+
+  it('ignores Escape while creating', () => {
+    const { onClose } = setup({ submitting: true, newKey: draft({ tenant_id: 'team-a' }) });
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('ignores a backdrop click while creating', () => {
+    const { onClose, container } = setup({ submitting: true, newKey: draft({ tenant_id: 'team-a' }) });
+
+    fireEvent.click(container.firstChild);
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('ignores the Cancel button while creating', () => {
+    const { onClose } = setup({ submitting: true, newKey: draft({ tenant_id: 'team-a' }) });
+
+    fireEvent.click(screen.getByRole('button', { name: /取消/ }));
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('closes normally once the request has settled without a created key', () => {
+    // The control: the lock is scoped to the in-flight request, not to the dialog.
+    const { onClose } = setup({ submitting: false, newKey: draft() });
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('keeps the acknowledgement close working once the key has been created', () => {
+    // "Submitting" may still be true in a render that already carries the created
+    // key (state flushes are batched); the one-time view must remain closable.
+    const { onClose } = setup({
+      submitting: true,
+      createdKey: { key: 'sk-airoute-created', fingerprint: 'kfp_abc123', tenant: 'alice', rpm: 60, tpm: 100000 },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '我已保存，关闭' }));
+
+    expect(onClose).toHaveBeenCalled();
+  });
+});
+

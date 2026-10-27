@@ -161,8 +161,8 @@ func (r *Repository) settleCharges(ctx context.Context, logs []*UsageLogRecord) 
 // settlementColumns is the column list used by the batched insert. Six columns
 // per row keeps chunks far below SQLite's bound-parameter limit.
 const (
-	settlementColumns  = `billing_id, api_key, tenant_id, cost_units, total_tokens, created_at`
-	settlementColumnsN = 6
+	settlementColumns  = `billing_id, api_key, tenant_id, org_id, cost_units, total_tokens, created_at`
+	settlementColumnsN = 7
 	settlementChunk    = 100
 )
 
@@ -184,7 +184,7 @@ func (r *Repository) insertSettlementRows(tx *Tx, logs []*UsageLogRecord) (map[s
 			createdAt = time.Now()
 		}
 		args = append(args,
-			log.BillingID, log.APIKey, log.TenantID, ToUnits(log.Cost), int64(log.TotalTokens),
+			log.BillingID, log.APIKey, log.TenantID, log.OrgID, ToUnits(log.Cost), int64(log.TotalTokens),
 			createdAt.UTC().Format(sqliteTimestampLayout),
 		)
 		index = append(index, log.BillingID)
