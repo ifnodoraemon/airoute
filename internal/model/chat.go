@@ -12,6 +12,9 @@ type ChatMessage struct {
 	Name             string     `json:"name,omitempty"`
 	ToolCalls        []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID       string     `json:"tool_call_id,omitempty"`
+	// Extra preserves JSON fields this struct does not model, so they survive a
+	// same-protocol round trip instead of being silently dropped.
+	Extra ExtraFields `json:"-"`
 }
 
 // GetContentString returns string content safely.
@@ -67,6 +70,10 @@ type ChatCompletionRequest struct {
 	User             string         `json:"user,omitempty"`
 	Tools            []Tool         `json:"tools,omitempty"`
 	ToolChoice       any            `json:"tool_choice,omitempty"`
+	// ParallelToolCalls is a standard chat-completions field (and a Responses
+	// field the adapter maps); keeping it modeled means P0-01 passthrough and
+	// the Responses conversion agree on who owns the key.
+	ParallelToolCalls *bool `json:"parallel_tool_calls,omitempty"`
 
 	// Protocol specifies the desired routing protocol (e.g. "openai_text", "openai_chat"). Internal metadata; never serialized.
 	Protocol string `json:"-"`
@@ -75,12 +82,17 @@ type ChatCompletionRequest struct {
 	AnthropicOriginal   *AnthropicInboundRequest `json:"-"`
 	AnthropicNativeOnly bool                     `json:"-"`
 	AnthropicBeta       string                   `json:"-"`
+	// Extra preserves unmodeled top-level fields (response_format, seed,
+	// logprobs, parallel_tool_calls, reasoning_effort, service_tier, ...).
+	Extra ExtraFields `json:"-"`
 }
 
 // PromptTokensDetails provides token breakdown details including cache hits.
 type PromptTokensDetails struct {
 	CachedTokens int `json:"cached_tokens,omitempty"`
 	AudioTokens  int `json:"audio_tokens,omitempty"`
+	// Extra preserves unmodeled token-detail fields.
+	Extra ExtraFields `json:"-"`
 }
 
 // Usage reports token usage for the request.
@@ -89,6 +101,8 @@ type Usage struct {
 	CompletionTokens    int                  `json:"completion_tokens"`
 	TotalTokens         int                  `json:"total_tokens"`
 	PromptTokensDetails *PromptTokensDetails `json:"prompt_tokens_details,omitempty"`
+	// Extra preserves unmodeled usage fields (completion_tokens_details, ...).
+	Extra ExtraFields `json:"-"`
 }
 
 // GetCachedTokens returns the cached prompt tokens if available.
@@ -104,6 +118,8 @@ type ChatCompletionChoice struct {
 	Index        int         `json:"index"`
 	Message      ChatMessage `json:"message"`
 	FinishReason *string     `json:"finish_reason"`
+	// Extra preserves unmodeled choice fields (logprobs, ...).
+	Extra ExtraFields `json:"-"`
 }
 
 // ChatCompletionResponse is the standard OpenAI non-streaming response.
@@ -120,6 +136,9 @@ type ChatCompletionResponse struct {
 	Channel string `json:"-"`
 	// NativeAnthropicResponse is used only for native Messages ingress/egress.
 	NativeAnthropicResponse json.RawMessage `json:"-"`
+	// Extra preserves unmodeled response fields (system_fingerprint,
+	// service_tier, prompt_filter_results, ...).
+	Extra ExtraFields `json:"-"`
 }
 
 // ChunkDelta is the incremental message delta in a stream.
@@ -128,6 +147,8 @@ type ChunkDelta struct {
 	Content          string     `json:"content,omitempty"`
 	ReasoningContent string     `json:"reasoning_content,omitempty"`
 	ToolCalls        []ToolCall `json:"tool_calls,omitempty"`
+	// Extra preserves unmodeled delta fields (refusal, audio, function_call, ...).
+	Extra ExtraFields `json:"-"`
 }
 
 // ChunkChoice is an individual choice in a streaming chunk.
@@ -135,6 +156,8 @@ type ChunkChoice struct {
 	Index        int        `json:"index"`
 	Delta        ChunkDelta `json:"delta"`
 	FinishReason *string    `json:"finish_reason"`
+	// Extra preserves unmodeled choice fields (logprobs, ...).
+	Extra ExtraFields `json:"-"`
 }
 
 // ChatCompletionChunk is the standard OpenAI SSE streaming chunk.
@@ -145,6 +168,9 @@ type ChatCompletionChunk struct {
 	Model   string        `json:"model"`
 	Choices []ChunkChoice `json:"choices"`
 	Usage   *Usage        `json:"usage,omitempty"`
+	// Extra preserves unmodeled chunk fields (system_fingerprint,
+	// service_tier, prompt_filter_results, ...).
+	Extra ExtraFields `json:"-"`
 }
 
 // ModelItem represents a model in the /v1/models response.

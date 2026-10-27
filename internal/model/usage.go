@@ -1,6 +1,9 @@
 package model
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"reflect"
+)
 
 // UnmarshalJSON normalizes usage reported by OpenAI-compatible inference
 // engines. Cache counts are accepted only when the upstream explicitly reports
@@ -52,5 +55,8 @@ func (u *Usage) UnmarshalJSON(data []byte) error {
 	if u.TotalTokens == 0 {
 		u.TotalTokens = u.PromptTokens + u.CompletionTokens
 	}
+	// Preserve usage members this struct does not model (for example
+	// completion_tokens_details) so they reach the client unchanged.
+	u.Extra = captureExtraFields(data, reflect.TypeOf(canonical{}))
 	return nil
 }
