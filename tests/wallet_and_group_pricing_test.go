@@ -32,6 +32,9 @@ func TestUserWallet_RegistrationAndVerification(t *testing.T) {
 	storage.SetGlobalRepository(repo)
 
 	cfg := config.DefaultConfig()
+	// Trial credit is opt-in now (shipped defaults grant 0), so this flow test
+	// opts in explicitly to keep covering the registration + trial-balance path.
+	cfg.Auth.InitialUserBalance = 5
 	config.SetGlobalConfig(cfg)
 	dispatcher := router.NewDispatcher(nil)
 	sync := controlplane.NewSynchronizer(repo, dispatcher)
