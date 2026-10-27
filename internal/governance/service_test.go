@@ -133,9 +133,15 @@ func TestCheckFailsOpenWhenRulesAreUnavailable(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	// No CreateBudgets: the table does not exist, which is the pre-migration
-	// state. The data plane must keep serving instead of failing closed on a
-	// missing optional table.
+	// Simulate the pre-migration state even though v35 now creates the table.
+	// The data plane must keep serving instead of failing closed when the
+	// governance schema is unavailable.
+	if _, err := db.Exec(`DROP TABLE budgets`); err != nil {
+		t.Fatalf("drop budgets: %v", err)
+	}
+	if _, err := db.Exec(`DROP TABLE budget_events`); err != nil {
+		t.Fatalf("drop budget_events: %v", err)
+	}
 	service := NewService(storage.NewRepository(db), budget.NewMemoryCounter(), &fakeNotifier{})
 	decision, blocked, err := service.Check(context.Background(), Subject{KeyID: 9, UserID: 7})
 	if err == nil {
