@@ -341,8 +341,10 @@ func (e *BillingEngine) IsOffPeak(p *storage.ModelPriceRecord, t time.Time) (boo
 
 	discount := p.OffPeakDiscount
 	if discount <= 0 {
-		// Legacy rows without an explicit discount keep the historical 50% default.
-		discount = 0.5
+		// Zero/negative means "no discount", not "use a legacy 50% default".
+		// Silently halving the price for an unset factor under-charged every
+		// enabled window an operator created without an explicit coefficient.
+		discount = 1.0
 	}
 	if discount > 1.0 {
 		// A discount factor above 1.0 would mean a surcharge; clamp to no discount.

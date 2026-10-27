@@ -102,3 +102,40 @@ func TestExplicitOffPeakSlotsArePersistedVerbatim(t *testing.T) {
 		t.Fatalf("slug list rewritten: got %q want %q", stored.OffPeakSlots, slots)
 	}
 }
+
+// A zero discount factor means "no discount", not "apply the historical 50%
+// default". The old normalization rewrote it to 0.5, so a rule enabled without
+// an explicit coefficient silently billed half price.
+func TestZeroOffPeakDiscountMeansNoDiscount(t *testing.T) {
+	repo := newOffPeakRepo(t)
+	rec := &storage.ModelPriceRecord{
+		Model:           "zero-discount-model",
+		PromptPrice:     1,
+		CompletionPrice: 2,
+		OffPeakEnabled:  true,
+		OffPeakMode:     "custom",
+		OffPeakStart:    "22:00",
+		OffPeakEnd:      "06:00",
+		OffPeakDiscount: 0,
+	}
+	if err := repo.SaveModelPrice(rec); err != nil {
+		t.Fatalf("save price: %v", err)
+	}
+	stored, err := repo.GetModelPriceExact("zero-discount-model", "default")
+	if err != nil {
+		t.Fatalf("reload price: %v", err)
+	}
+	if stored.OffPeakDiscount != 1.0 {
+		t.Fatalf("stored discount = %.2f, want 1.0 (no discount)", stored.OffPeakDiscount)
+	}
+
+	engine := billing.NewEngine(repo)
+	at := time.Date(2026, 10, 27, 23, 0, 0, 0, time.FixedZone("CST", 8*3600))
+	isOff, discount := engine.IsOffPeak(stored, at)
+	if !isOff {
+		t.Fatal("23:00 must still be inside the configured off-peak window")
+	}
+	if discount != 1.0 {
+		t.Fatalf("discount = %.2f, want 1.0 (no discount)", discount)
+	}
+}

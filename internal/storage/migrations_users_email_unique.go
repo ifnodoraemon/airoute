@@ -1,6 +1,6 @@
 package storage
 
-import "github.com/ifnodoraemon/airoute/internal/telemetry"
+import "fmt"
 
 // usersEmailUniqueIndex is the name of the partial unique index created by
 // migration 27. The registration path also matches on it when classifying a
@@ -29,12 +29,12 @@ const usersEmailUniqueIndex = "uq_users_email_lower"
 func createUsersEmailUniqueIndex(db *DB) error {
 	statement := `CREATE UNIQUE INDEX IF NOT EXISTS ` + usersEmailUniqueIndex + ` ON users (LOWER(email)) WHERE email <> ''`
 	if _, err := db.DB.Exec(statement); err != nil {
-		telemetry.ScopedLogger("system").Warn(
-			"could not create the case-insensitive unique index on users.email; duplicate email addresses may still exist",
-			"error", err.Error(),
-			"remediation", "merge or clear duplicate users.email values, then restart airoute to enforce uniqueness",
-		)
-		return nil
+		// Deferred, not fatal: record no version so every restart retries, and
+		// keep registration's own conflict check as the fallback until the data
+		// is cleaned up. Aborting startup would leave the gateway down after an
+		// upgrade because of two legacy rows sharing an address.
+		return fmt.Errorf("%w: could not create the case-insensitive unique index on users.email (merge or clear duplicate users.email values, then restart): %v",
+			errMigrationDeferred, err)
 	}
 	return nil
 }

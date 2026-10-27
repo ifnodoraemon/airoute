@@ -202,3 +202,22 @@ func TestCalculateCostWithGroupMultipliers(t *testing.T) {
 		t.Fatalf("expected cost=15.0 for explicit vip override (5 + 10), got %f", costOverride)
 	}
 }
+
+// Defensive clamp for rows constructed outside the storage normalizer (legacy
+// rows, tests, config imports): a zero factor must not become a 50% discount.
+func TestBillingEngine_ZeroDiscountIsNoDiscount(t *testing.T) {
+	engine := &BillingEngine{}
+	rec := &storage.ModelPriceRecord{
+		Model:           "zero-discount",
+		OffPeakEnabled:  true,
+		OffPeakMode:     "custom",
+		OffPeakStart:    "00:00",
+		OffPeakEnd:      "23:59",
+		OffPeakDiscount: 0,
+	}
+	at := time.Date(2026, 10, 27, 12, 0, 0, 0, time.FixedZone("CST", 8*3600))
+	isOff, discount := engine.IsOffPeak(rec, at)
+	if !isOff || discount != 1.0 {
+		t.Fatalf("isOff=%v discount=%.2f, want true/1.0", isOff, discount)
+	}
+}

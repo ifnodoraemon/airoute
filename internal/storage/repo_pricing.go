@@ -215,7 +215,11 @@ func normalizeModelPrice(rec *ModelPriceRecord) {
 		rec.OffPeakEnd = "08:30"
 	}
 	if rec.OffPeakDiscount <= 0 || rec.OffPeakDiscount > 1.0 {
-		rec.OffPeakDiscount = 0.5
+		// 0 (or an unset field) means "no discount". It used to become 0.5, so a
+		// rule the operator created without a coefficient silently billed half
+		// price. An out-of-range factor is clamped to full price for the same
+		// reason: never invent a discount.
+		rec.OffPeakDiscount = 1.0
 	}
 }
 

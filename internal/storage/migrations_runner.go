@@ -2,10 +2,18 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
+
+// errMigrationDeferred marks a migration that could not be applied yet for a
+// reason the operator must fix (for example duplicate rows blocking a unique
+// index). The runner does not record the version, so the next start retries it,
+// but it also does not abort startup: an upgrade must not leave the gateway
+// down. Idempotent migrations make the retry safe.
+var errMigrationDeferred = errors.New("migration deferred")
 
 // Migration represents a versioned database schema migration step.
 type Migration struct {
@@ -74,6 +82,12 @@ func (db *DB) runMigrations(migrations []Migration) error {
 		// written to be idempotent. This comment used to claim the two were
 		// committed together, which they never were.
 		if err := db.applyMigration(m); err != nil {
+			if errors.Is(err, errMigrationDeferred) {
+				telemetry.ScopedLogger("system").Warn(
+					"migration deferred; it will be retried on the next start",
+					"version", m.Version, "name", m.Name, "error", err.Error())
+				continue
+			}
 			return fmt.Errorf("migration %d (%s) failed: %w", m.Version, m.Name, err)
 		}
 	}

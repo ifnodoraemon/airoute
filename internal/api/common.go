@@ -212,6 +212,13 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 			params.BillableUnits,
 			time.Now(),
 		)
+		// Settlement rejects a legacy foreign-currency price and zeroes the audit
+		// row. Do the same before the response headers are written, otherwise
+		// X-Airoute-Cost advertises money that was never charged.
+		if normalizedCost, normalizedSaved, unbillable := normalizeUnbillableCurrency(cost, savedCost, pricingSnapshot); unbillable {
+			cost, savedCost = normalizedCost, normalizedSaved
+			isOffPeak, offPeakDiscount = false, 1.0
+		}
 	}
 
 	totTokens := params.TotalTokens
@@ -851,6 +858,20 @@ func ceilMillis(d time.Duration) int64 {
 		return 1
 	}
 	return ms
+}
+
+// normalizeUnbillableCurrency zeroes a computed charge whose pricing snapshot
+// cannot settle in the wallet currency. The settlement path rejects such a
+// record (and zeroes its audit row); the response header must agree with it.
+func normalizeUnbillableCurrency(cost, savedCost float64, snapshot *storage.UsagePricingSnapshot) (float64, float64, bool) {
+	if snapshot == nil {
+		return cost, savedCost, false
+	}
+	currency := strings.TrimSpace(snapshot.Currency)
+	if currency == "" || strings.EqualFold(currency, "CNY") {
+		return cost, savedCost, false
+	}
+	return 0, 0, true
 }
 
 // The wallet ledger settles only CNY. Reject a legacy foreign rate before work starts.
