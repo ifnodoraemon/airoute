@@ -18,7 +18,7 @@ const usersEmailUniqueIndex = "uq_users_email_lower"
 // row. The unique index makes the database the authority, and the repository
 // maps the resulting violation to ErrEmailAlreadyRegistered.
 //
-// The index is partial: accounts without an email address (NULL or '') keep
+// The index is partial: accounts without an email address (NULL or ”) keep
 // working and are not constrained, including the many legacy rows created before
 // email was collected.
 //
