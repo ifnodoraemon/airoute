@@ -105,20 +105,21 @@ describe('KeyModal quota policy', () => {
 });
 
 describe('KeyModal one-time credential reveal', () => {
-  it('shows the created key, its fingerprint and the single-view warning', () => {
+  it('shows the created key, its key ID and the single-view warning', () => {
     setup({
-      createdKey: { key: 'sk-airoute-created', fingerprint: 'kfp_abc123', tenant: 'alice', rpm: 60, tpm: 100000 },
+      createdKey: { key: 'sk-airoute-created', keyId: 'ak_65d2187e8e6a5444ab12', tenant: 'alice', rpm: 60, tpm: 100000 },
     });
 
     expect(screen.getByText('密钥已创建')).toBeInTheDocument();
     expect(screen.getByTestId('created-key').textContent).toBe('sk-airoute-created');
-    expect(screen.getByText('kfp_abc123')).toBeInTheDocument();
+    expect(screen.getByText('ak_65d2187e8e6a5444ab12')).toBeInTheDocument();
+    expect(screen.getByText(/密钥 ID 仅用于在日志、账单和工单中识别密钥，不能用于鉴权/)).toBeInTheDocument();
     expect(screen.getByText(/唯一一次显示明文/)).toBeInTheDocument();
   });
 
   it('copies the credential only from the reveal panel', () => {
     const { onCopy } = setup({
-      createdKey: { key: 'sk-airoute-created', fingerprint: 'kfp_abc123', tenant: 'alice', rpm: 60, tpm: 100000 },
+      createdKey: { key: 'sk-airoute-created', keyId: 'ak_65d2187e8e6a5444ab12', tenant: 'alice', rpm: 60, tpm: 100000 },
     });
 
     fireEvent.click(screen.getByRole('button', { name: '复制' }));
@@ -128,7 +129,7 @@ describe('KeyModal one-time credential reveal', () => {
 
   it('closes without a discard prompt once the key is created', () => {
     const { onClose } = setup({
-      createdKey: { key: 'sk-airoute-created', fingerprint: 'kfp_abc123', tenant: 'alice', rpm: 60, tpm: 100000 },
+      createdKey: { key: 'sk-airoute-created', keyId: 'ak_65d2187e8e6a5444ab12', tenant: 'alice', rpm: 60, tpm: 100000 },
     });
 
     fireEvent.click(screen.getByRole('button', { name: '我已保存，关闭' }));
@@ -139,7 +140,7 @@ describe('KeyModal one-time credential reveal', () => {
 
   it('notes when the requested quota was clamped to the self-service limit', () => {
     setup({
-      createdKey: { key: 'sk-airoute-created', fingerprint: 'kfp_abc123', tenant: 'alice', rpm: 6000, tpm: 10000000, quotaAdjusted: true },
+      createdKey: { key: 'sk-airoute-created', keyId: 'ak_65d2187e8e6a5444ab12', tenant: 'alice', rpm: 6000, tpm: 10000000, quotaAdjusted: true },
     });
 
     expect(screen.getByText(/已按自助密钥上限调整速率\/Token 配额/)).toBeInTheDocument();
@@ -200,7 +201,7 @@ describe('KeyModal dismissals during an in-flight create', () => {
     // key (state flushes are batched); the one-time view must remain closable.
     const { onClose } = setup({
       submitting: true,
-      createdKey: { key: 'sk-airoute-created', fingerprint: 'kfp_abc123', tenant: 'alice', rpm: 60, tpm: 100000 },
+      createdKey: { key: 'sk-airoute-created', keyId: 'ak_65d2187e8e6a5444ab12', tenant: 'alice', rpm: 60, tpm: 100000 },
     });
 
     fireEvent.click(screen.getByRole('button', { name: '我已保存，关闭' }));

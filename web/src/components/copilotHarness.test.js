@@ -262,24 +262,28 @@ describe('executeHarnessTool', () => {
     });
 
     it('uses a placeholder instead of a listed key', async () => {
-      // The list only carries display masks now (credentials are stored as
-      // digests), so a generated config must not paste one into the snippet.
+      // The list only identifies keys (credentials are stored as digests), so a
+      // generated config must not paste anything from it into the snippet.
       const out = await executeHarnessTool('generate_client_config', { client_type: 'cursor' }, context({
-        keys: [{ key: 'sk-disabled', status: 'disabled' }, { key: 'sk-active', status: 'active' }],
+        keys: [
+          { id: 1, key_id: 'ak_1f0013dea24034ac0001', status: 'disabled' },
+          { id: 2, key_id: 'ak_2f0013dea24034ac0002', status: 'active' },
+        ],
       }));
 
       expect(out.result.cursor.api_key).toBe('<YOUR_API_KEY>');
     });
 
-    it('never embeds a display mask in any snippet', async () => {
-      const masked = '3a4b5c6d***9f8e';
+    it('never embeds a listed key ID in any snippet', async () => {
+      const keyId = 'ak_0f0013dea24034ac1234';
       const out = await executeHarnessTool('generate_client_config', { client_type: 'all' }, context({
-        keys: [{ id: 1, key: masked, key_fingerprint: 'kfp_1', status: 'active' }],
+        keys: [{ id: 1, key_id: keyId, status: 'active' }],
         baseUrl: 'https://gw.example/v1',
         origin: 'https://gw.example',
       }));
 
       const serialized = JSON.stringify(out.result);
+      expect(serialized).not.toContain(keyId);
       expect(serialized).not.toContain('***');
       expect(serialized).toContain('<YOUR_API_KEY>');
       expect(out.result.curl.command).toContain('Authorization: Bearer <YOUR_API_KEY>');

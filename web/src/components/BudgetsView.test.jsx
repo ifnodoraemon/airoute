@@ -25,7 +25,7 @@ function setup() {
     if (url === '/api/v1/admin/budgets') return envelope(budgets);
     if (url === '/api/v1/admin/orgs') return envelope(orgs);
     if (url === '/api/v1/admin/users') return envelope([{ id: 7, username: 'alice' }]);
-    if (url === '/api/v1/admin/keys') return envelope([{ id: 9, key: 'sk-***mask', key_fingerprint: 'kfp_9' }]);
+    if (url === '/api/v1/admin/keys') return envelope([{ id: 9, key_id: 'ak_11112222333344445555' }]);
     throw new Error(`unexpected ${url}`);
   });
   const showToast = vi.fn();

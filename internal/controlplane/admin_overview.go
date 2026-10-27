@@ -17,8 +17,8 @@ import (
 // statsKeyIDFilter resolves the dashboard's key drill-down filter.
 //
 // The console drills into a key by its numeric id (`key_id`), because the key
-// list only exposes a masked display value and the fingerprint — never the stored
-// digest. Resolving the id here, against the authoritative row, is what lets the
+// list exposes the public identifier and never the stored digest. Resolving the
+// id here, against the authoritative row, is what lets the
 // repository be queried with the digest that usage_logs actually stores; the old
 // `key=` filter was fed the masked value, which hashed to a digest that matched
 // no row, so a drill-down showed zero traffic for a busy key.

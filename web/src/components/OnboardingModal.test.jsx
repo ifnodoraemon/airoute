@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import OnboardingModal from './OnboardingModal';
 
-// The list endpoint returns display masks (credentials are stored as digests),
+// The list endpoint returns a public key ID (credentials are stored as digests),
 // so the wizard must never put a listed key into a snippet or a live request.
 // These cases pin that boundary for every snippet format and for the probe.
 
@@ -10,7 +10,7 @@ const MASK = '3a4b5c6d***9f8e';
 const PLAINTEXT = 'sk-airoute-0123456789abcdef';
 
 const keys = [
-  { id: 7, key: MASK, key_fingerprint: 'kfp_7', tenant_id: 'acme', allowed_models: ['*'], rpm: 60, status: 'active' },
+  { id: 7, key_id: 'ak_7f0013dea24034ac0007', tenant_id: 'acme', allowed_models: ['*'], rpm: 60, status: 'active' },
 ];
 const models = ['gpt-4o', 'text-embedding-3-small'];
 
@@ -40,7 +40,7 @@ function snippetText() {
   return document.querySelector('pre').textContent;
 }
 
-describe('OnboardingModal masked keys', () => {
+describe('OnboardingModal listed identifiers', () => {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
@@ -52,7 +52,7 @@ describe('OnboardingModal masked keys', () => {
     globalThis.fetch = originalFetch;
   });
 
-  it('keys the entitlement select off the row id, not the masked value', () => {
+  it('keys the entitlement select off the row id, not the key ID', () => {
     setup();
 
     const select = screen.getByLabelText('密钥上下文（租户与模型范围）');

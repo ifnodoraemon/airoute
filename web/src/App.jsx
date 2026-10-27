@@ -42,6 +42,12 @@ import { useLogsData, LOG_PAGE_SIZE } from './hooks/useLogsData';
 import { useChannelActions } from './hooks/useChannelActions';
 import { useKeyActions } from './hooks/useKeyActions';
 import { getConsoleRoute } from './lib/consoleRoute';
+import {
+  ADMIN_NAV_GROUPS,
+  USER_NAV_GROUPS,
+  navGroupForTab,
+  navGroupLabel,
+} from './lib/navGroups';
 
 // Lazy loaded views and heavy modals for code splitting and fast initial loading.
 const QuickStartModal = lazy(() => import('./components/QuickStartModal'));
@@ -98,6 +104,48 @@ import { useConsoleOverlays } from './hooks/useConsoleOverlays';
 import { useConsoleSelections } from './hooks/useConsoleSelections';
 import { useConsoleChrome } from './hooks/useConsoleChrome';
 import { useConsoleSession } from './hooks/useConsoleSession';
+
+// Sidebar item metadata: one entry per console tab, holding the icon, the label
+// and (where applicable) the count badge. Group membership and order live in
+// lib/navGroups.js; this map only says how a tab looks, so the grouped renderer
+// below is a plain map over the group config and the sidebar and the breadcrumb
+// read the same navigation description.
+//
+// `label`/`title` receive the translation table, the language flag and the role
+// because several tabs have no i18n key yet (orgs, budgets, costs, ledger, and
+// wallet in the admin console) or legitimately read differently per role
+// (wallet is "credits & top-up" for admins, "my wallet" for users). `title` only
+// exists where the tooltip differs from the visible label (users).
+// `count` receives the console data slices (and the role, for the one badge that
+// differs) and returns the badge number, or 0/undefined for tabs without a badge.
+const SIDEBAR_ITEMS = {
+  dashboard: { icon: BarChart3, label: (t) => t.navDashboard },
+  // The loaded-row badge has always been an admin-only detail; the regular-user
+  // sidebar rendered logs without it.
+  logs: { icon: History, label: (t) => t.navLogs, count: (d, isAdmin) => (isAdmin ? d.logs : 0) },
+  models: { icon: Cpu, label: (t) => t.navModels, count: (d) => d.models },
+  channels: { icon: Server, label: (t) => t.navChannels, count: (d) => d.channels },
+  reconciliation: { icon: Coins, label: (t) => t.navReconciliation },
+  pricing: { icon: DollarSign, label: (t) => t.navPricing },
+  costs: { icon: Calculator, label: (t, isZh) => (isZh ? '成本与毛利' : 'Cost & Margin') },
+  wallet: {
+    icon: Wallet,
+    label: (t, isZh, isAdmin) =>
+      isAdmin ? (isZh ? '卡密与充值' : 'Wallet & Credits') : (t.navWallet || (isZh ? '我的钱包' : 'My Wallet')),
+  },
+  ledger: { icon: ReceiptText, label: (t, isZh) => (isZh ? '钱包资金流水' : 'Wallet Ledger') },
+  keys: { icon: Key, label: (t) => t.navKeys, count: (d) => d.keys },
+  users: {
+    icon: ShieldCheck,
+    label: (t, isZh) => t.navUsers || (isZh ? '用户管理' : 'Users'),
+    title: (t, isZh) => t.navUsers || (isZh ? '用户管理' : 'User Management'),
+  },
+  orgs: { icon: Building2, label: (t, isZh) => (isZh ? '组织与成本中心' : 'Organizations') },
+  budgets: { icon: Gauge, label: (t, isZh) => (isZh ? '预算与告警' : 'Budgets & Alerts') },
+  playground: { icon: Terminal, label: (t) => t.navPlayground },
+  skills: { icon: Sparkles, label: (t) => t.navSkills || 'Skill Hub' },
+  mcp: { icon: Cpu, label: (t, isZh) => t.navMcp || (isZh ? 'MCP 广场' : 'MCP Hub') },
+};
 
 export default function App() {
   // Language, theme and the toast each carry their own logic (persistence, the
@@ -897,340 +945,59 @@ export default function App() {
           }`;
           const navIconColor = (tab) => (currentTab === tab ? 'text-[#355CFF] dark:text-[#91A7FF]' : 'text-[#656B75] dark:text-[#A1A7B0]');
 
+          // One grouped navigation for both roles. Membership and order come from
+          // lib/navGroups.js (the same config the breadcrumb reads); appearance
+          // comes from SIDEBAR_ITEMS. The admin and regular-user trees used to be
+          // hand-written separately, which is how the breadcrumb drifted.
+          const isAdmin = adminUser?.role === 'admin';
+          const groups = isAdmin ? ADMIN_NAV_GROUPS : USER_NAV_GROUPS;
+          const counts = {
+            logs: logs.length,
+            models: models.length,
+            channels: channels.length,
+            keys: keys.length,
+          };
+
           return (
             <nav className="flex-1 p-2 space-y-4 overflow-y-auto">
-              {adminUser?.role === 'admin' ? (
-                /* Admin Grouped Enterprise Navigation */
-                <div className="space-y-4">
-                  {/* Group 1: 监控与分析 */}
-                  <div>
+              <div className="space-y-4">
+                {groups.map((group) => (
+                  <div key={group.id}>
                     {!sidebarCollapsed && (
                       <span className="px-2.5 text-[10px] font-semibold tracking-wider text-[#656B75] dark:text-[#A1A7B0] uppercase block mb-1">
-                        {isZh ? '监控与分析' : 'Monitoring'}
+                        {navGroupLabel(group, isZh)}
                       </span>
                     )}
                     <div className="space-y-0.5">
-                      <button
-                        onClick={() => setCurrentTab('dashboard')}
-                        title={t.navDashboard}
-                        className={navBtnClass('dashboard')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <BarChart3 className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('dashboard')}`} />
-                          {!sidebarCollapsed && <span>{t.navDashboard}</span>}
-                        </div>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('logs')}
-                        title={t.navLogs}
-                        className={navBtnClass('logs')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <History className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('logs')}`} />
-                          {!sidebarCollapsed && <span>{t.navLogs}</span>}
-                        </div>
-                        {!sidebarCollapsed && logs.length > 0 && (
-                          <span className={`text-xs font-mono ${currentTab === 'logs' ? 'text-[#355CFF] dark:text-[#91A7FF]' : 'text-[#656B75] dark:text-[#A1A7B0]'}`}>
-                            {logs.length}
-                          </span>
-                        )}
-                      </button>
+                      {group.tabs.map((tab) => {
+                        const item = SIDEBAR_ITEMS[tab];
+                        const Icon = item.icon;
+                        const label = item.label(t, isZh, isAdmin);
+                        const title = item.title ? item.title(t, isZh, isAdmin) : label;
+                        const count = item.count ? item.count(counts, isAdmin) : 0;
+                        return (
+                          <button
+                            key={tab}
+                            onClick={() => setCurrentTab(tab)}
+                            title={title}
+                            className={navBtnClass(tab)}
+                          >
+                            <div className="flex items-center space-x-2.5">
+                              <Icon className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor(tab)}`} />
+                              {!sidebarCollapsed && <span>{label}</span>}
+                            </div>
+                            {!sidebarCollapsed && count > 0 && (
+                              <span className={`text-xs font-mono ${currentTab === tab ? 'text-[#355CFF] dark:text-[#91A7FF]' : 'text-[#656B75] dark:text-[#A1A7B0]'}`}>
+                                {count}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
-
-                  {/* Group 2: 模型网关与调度 */}
-                  <div>
-                    {!sidebarCollapsed && (
-                      <span className="px-2.5 text-[10px] font-semibold tracking-wider text-[#656B75] dark:text-[#A1A7B0] uppercase block mb-1">
-                        {isZh ? '模型网关与调度' : 'Gateway'}
-                      </span>
-                    )}
-                    <div className="space-y-0.5">
-                      <button
-                        onClick={() => setCurrentTab('models')}
-                        title={t.navModels}
-                        className={navBtnClass('models')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Cpu className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('models')}`} />
-                          {!sidebarCollapsed && <span>{t.navModels}</span>}
-                        </div>
-                        {!sidebarCollapsed && models.length > 0 && (
-                          <span className={`text-xs font-mono ${currentTab === 'models' ? 'text-[#355CFF] dark:text-[#91A7FF]' : 'text-[#656B75] dark:text-[#A1A7B0]'}`}>
-                            {models.length}
-                          </span>
-                        )}
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('channels')}
-                        title={t.navChannels}
-                        className={navBtnClass('channels')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Server className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('channels')}`} />
-                          {!sidebarCollapsed && <span>{t.navChannels}</span>}
-                        </div>
-                        {!sidebarCollapsed && channels.length > 0 && (
-                          <span className={`text-xs font-mono ${currentTab === 'channels' ? 'text-[#355CFF] dark:text-[#91A7FF]' : 'text-[#656B75] dark:text-[#A1A7B0]'}`}>
-                            {channels.length}
-                          </span>
-                        )}
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('reconciliation')}
-                        title={t.navReconciliation}
-                        className={navBtnClass('reconciliation')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Coins className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('reconciliation')}`} />
-                          {!sidebarCollapsed && <span>{t.navReconciliation}</span>}
-                        </div>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('pricing')}
-                        title={t.navPricing}
-                        className={navBtnClass('pricing')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <DollarSign className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('pricing')}`} />
-                          {!sidebarCollapsed && <span>{t.navPricing}</span>}
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Group 3: 访问控制与资产 */}
-                  <div>
-                    {!sidebarCollapsed && (
-                      <span className="px-2.5 text-[10px] font-semibold tracking-wider text-[#656B75] dark:text-[#A1A7B0] uppercase block mb-1">
-                        {isZh ? '安全与资产' : 'Security'}
-                      </span>
-                    )}
-                    <div className="space-y-0.5">
-                      <button
-                        onClick={() => setCurrentTab('keys')}
-                        title={t.navKeys}
-                        className={navBtnClass('keys')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Key className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('keys')}`} />
-                          {!sidebarCollapsed && <span>{t.navKeys}</span>}
-                        </div>
-                        {!sidebarCollapsed && keys.length > 0 && (
-                          <span className={`text-xs font-mono ${currentTab === 'keys' ? 'text-[#355CFF] dark:text-[#91A7FF]' : 'text-[#656B75] dark:text-[#A1A7B0]'}`}>
-                            {keys.length}
-                          </span>
-                        )}
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('users')}
-                        title={t.navUsers || (isZh ? '用户管理' : 'User Management')}
-                        className={navBtnClass('users')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <ShieldCheck className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('users')}`} />
-                          {!sidebarCollapsed && <span>{t.navUsers || (isZh ? '用户管理' : 'Users')}</span>}
-                        </div>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('orgs')}
-                        title={isZh ? '组织与成本中心' : 'Organizations'}
-                        className={navBtnClass('orgs')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Building2 className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('orgs')}`} />
-                          {!sidebarCollapsed && <span>{isZh ? '组织与成本中心' : 'Organizations'}</span>}
-                        </div>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('budgets')}
-                        title={isZh ? '预算与告警' : 'Budgets & Alerts'}
-                        className={navBtnClass('budgets')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Gauge className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('budgets')}`} />
-                          {!sidebarCollapsed && <span>{isZh ? '预算与告警' : 'Budgets & Alerts'}</span>}
-                        </div>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('costs')}
-                        title={isZh ? '成本与毛利' : 'Cost & Margin'}
-                        className={navBtnClass('costs')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Calculator className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('costs')}`} />
-                          {!sidebarCollapsed && <span>{isZh ? '成本与毛利' : 'Cost & Margin'}</span>}
-                        </div>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('ledger')}
-                        title={isZh ? '钱包资金流水' : 'Wallet Ledger'}
-                        className={navBtnClass('ledger')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <ReceiptText className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('ledger')}`} />
-                          {!sidebarCollapsed && <span>{isZh ? '钱包资金流水' : 'Wallet Ledger'}</span>}
-                        </div>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('wallet')}
-                        title={isZh ? '卡密与充值' : 'Wallet & Credits'}
-                        className={navBtnClass('wallet')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Wallet className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('wallet')}`} />
-                          {!sidebarCollapsed && <span>{isZh ? '卡密与充值' : 'Wallet & Credits'}</span>}
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Group 4: 演练与协议生态 */}
-                  <div>
-                    {!sidebarCollapsed && (
-                      <span className="px-2.5 text-[10px] font-semibold tracking-wider text-[#656B75] dark:text-[#A1A7B0] uppercase block mb-1">
-                        {isZh ? '演练与生态' : 'Ecosystem'}
-                      </span>
-                    )}
-                    <div className="space-y-0.5">
-                      <button
-                        onClick={() => setCurrentTab('playground')}
-                        title={t.navPlayground}
-                        className={navBtnClass('playground')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Terminal className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('playground')}`} />
-                          {!sidebarCollapsed && <span>{t.navPlayground}</span>}
-                        </div>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('skills')}
-                        title={t.navSkills || 'Skill Hub'}
-                        className={navBtnClass('skills')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Sparkles className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('skills')}`} />
-                          {!sidebarCollapsed && <span>{t.navSkills || 'Skill Hub'}</span>}
-                        </div>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('mcp')}
-                        title={t.navMcp || (isZh ? 'MCP 广场' : 'MCP Hub')}
-                        className={navBtnClass('mcp')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Cpu className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('mcp')}`} />
-                          {!sidebarCollapsed && <span>{t.navMcp || (isZh ? 'MCP 广场' : 'MCP Hub')}</span>}
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                /* Regular User Navigation */
-                <div className="space-y-4">
-                  <div>
-                    {!sidebarCollapsed && (
-                      <span className="px-2.5 text-[10px] font-semibold tracking-wider text-[#656B75] dark:text-[#A1A7B0] uppercase block mb-1">
-                        {isZh ? '资产与凭据' : 'Assets'}
-                      </span>
-                    )}
-                    <div className="space-y-0.5">
-                      <button
-                        onClick={() => setCurrentTab('dashboard')}
-                        title={t.navDashboard}
-                        className={navBtnClass('dashboard')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <BarChart3 className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('dashboard')}`} />
-                          {!sidebarCollapsed && <span>{t.navDashboard}</span>}
-                        </div>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('wallet')}
-                        title={t.navWallet || (isZh ? '我的钱包' : 'My Wallet')}
-                        className={navBtnClass('wallet')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Wallet className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('wallet')}`} />
-                          {!sidebarCollapsed && <span>{t.navWallet || (isZh ? '我的钱包' : 'My Wallet')}</span>}
-                        </div>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('keys')}
-                        title={t.navKeys}
-                        className={navBtnClass('keys')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Key className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('keys')}`} />
-                          {!sidebarCollapsed && <span>{t.navKeys}</span>}
-                        </div>
-                        {!sidebarCollapsed && keys.length > 0 && (
-                          <span className={`text-xs font-mono ${currentTab === 'keys' ? 'text-[#355CFF] dark:text-[#91A7FF]' : 'text-[#656B75] dark:text-[#A1A7B0]'}`}>
-                            {keys.length}
-                          </span>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    {!sidebarCollapsed && (
-                      <span className="px-2.5 text-[10px] font-semibold tracking-wider text-[#656B75] dark:text-[#A1A7B0] uppercase block mb-1">
-                        {isZh ? '演练与使用' : 'Usage'}
-                      </span>
-                    )}
-                    <div className="space-y-0.5">
-                      <button
-                        onClick={() => setCurrentTab('playground')}
-                        title={t.navPlayground}
-                        className={navBtnClass('playground')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Terminal className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('playground')}`} />
-                          {!sidebarCollapsed && <span>{t.navPlayground}</span>}
-                        </div>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('pricing')}
-                        title={t.navPricing}
-                        className={navBtnClass('pricing')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <DollarSign className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('pricing')}`} />
-                          {!sidebarCollapsed && <span>{t.navPricing}</span>}
-                        </div>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('logs')}
-                        title={t.navLogs}
-                        className={navBtnClass('logs')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <History className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('logs')}`} />
-                          {!sidebarCollapsed && <span>{t.navLogs}</span>}
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+                ))}
+              </div>
 
               <div className="pt-2 border-t border-[#E4E6E9] dark:border-[#2C3038]">
                 <button
@@ -1279,17 +1046,12 @@ export default function App() {
             {/* Clean Breadcrumb */}
             <div className="flex items-center space-x-2 text-xs">
               <span className="text-[#656B75] dark:text-[#A1A7B0] font-normal">
-                {adminUser?.role === 'admin'
-                  ? ['dashboard', 'logs'].includes(currentTab)
-                    ? (isZh ? '监控与分析' : 'Monitoring')
-                    : ['models', 'channels', 'reconciliation', 'pricing'].includes(currentTab)
-                    ? (isZh ? '模型网关与调度' : 'Gateway')
-                    : ['keys', 'users', 'wallet'].includes(currentTab)
-                    ? (isZh ? '安全与资产' : 'Security')
-                    : (isZh ? '演练与生态' : 'Ecosystem')
-                  : ['wallet', 'keys'].includes(currentTab)
-                  ? (isZh ? '资产与凭据' : 'Assets')
-                  : (isZh ? '演练与使用' : 'Usage')}
+                {/* The group label is derived from the same config as the
+                    sidebar, so what a tab is filed under can no longer differ
+                    between the two. `docs` is group-less by design and falls
+                    back to its own label. */}
+                {navGroupLabel(navGroupForTab(currentTab, adminUser?.role === 'admin'), isZh)
+                  || (isZh ? '文档' : 'Docs')}
               </span>
               <span className="text-[#E4E6E9] dark:text-[#2C3038]">/</span>
               <span className="font-semibold text-[#202124] dark:text-[#F1F2F4]">
@@ -1577,14 +1339,14 @@ export default function App() {
                 pricingGroups={pricingGroups}
                 groupMultipliers={groupMultipliers}
                 onNavigateToPricing={() => setCurrentTab('pricing')}
-                onNavigateToDashboard={(keyStr, keyId) => {
+                onNavigateToDashboard={(keyId) => {
                   if (adminUser?.role !== 'admin') {
                     setLogFilters({ q: '', key_id: String(keyId), session: '', correlation_type: 'session_id', range: 'all', start: '', end: '', model: 'all', channel: 'all', status: 'all', cache: 'all', latency: 'all' });
                     resetOffset();
                     setCurrentTab('logs');
                   } else {
-                    // The dashboard drills down by row id: the list value is a
-                    // display mask and cannot identify a key server-side.
+                    // The dashboard drills down by row id: the key ID (`ak_…`)
+                    // shown in the list is a display identifier, not a filter.
                     setDashboardSelectedKey(keyId != null ? String(keyId) : '');
                     setCurrentTab('dashboard');
                   }
@@ -1651,7 +1413,6 @@ export default function App() {
               <McpIntegrationView
                 adminFetch={apiFetch}
                 adminToken={adminToken}
-                keys={keys}
                 onCopy={(txt) => {
                   copyToClipboard(txt);
                 }}

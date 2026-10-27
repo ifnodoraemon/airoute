@@ -26,7 +26,13 @@ import { getGatewayOrigin, copyToClipboard as crossOriginCopy } from '../config'
 import MarkdownRenderer from './MarkdownRenderer';
 import { inferClientModality } from '../lib/modelModality';
 import { availableKeyModels } from '../lib/keyModels';
-import { API_KEY_PLACEHOLDER, UNAUTHENTICATED_KEY, isUsableAPIKey } from '../lib/apiKey';
+import {
+  API_KEY_PLACEHOLDER,
+  UNAUTHENTICATED_KEY,
+  credentialProblem,
+  credentialProblemHint,
+  isUsableAPIKey
+} from '../lib/apiKey';
 
 export default function PlaygroundView({
   keys = [],
@@ -46,7 +52,7 @@ export default function PlaygroundView({
   const [playMode, setPlayMode] = useState('single'); // 'single' | 'arena'
   // Two different things are selected here, and conflating them was the bug:
   //   * `selectedKeyId` picks a row from the key list for its *context*
-  //     (tenant + allowed models). Its `key` field is a display mask.
+  //     (tenant + allowed models). It exposes a key ID, never a credential.
   //   * `sessionApiKey` is the plaintext credential the operator pastes for this
   //     session; it signs the actual request and lives only in component memory.
   const activeKeys = useMemo(() => keys.filter(key => !key.status || key.status === 'active'), [keys]);
@@ -74,18 +80,15 @@ export default function PlaygroundView({
 
   // Resolves the credential for an outbound call. `null` means the call must be
   // refused: a listed key was chosen but its plaintext was never pasted, and
-  // sending the list mask would fail authentication while looking like a gateway
+  // sending the listed key ID would fail authentication while looking like a gateway
   // fault. The explicit "unauthenticated" choice returns an empty key (no header).
   const resolveCallCredentials = () => {
     if (selectedKeyId === UNAUTHENTICATED_KEY) return { key: '' };
     const typed = sessionApiKey.trim();
     if (isUsableAPIKey(typed)) return { key: typed };
-    showToast?.(
-      isZh
-        ? '请先在左侧粘贴本次会话的 API Key 明文：密钥列表只显示掩码，不能用于发起调用'
-        : 'Paste the plaintext API key on the left first: the key list only shows display masks, which cannot authenticate a call',
-      'warning'
-    );
+    // Name the actual defect: a key ID copied from the list and a missing value
+    // need different remedies, and both used to surface as a gateway 401.
+    showToast?.(credentialProblemHint(credentialProblem(typed), isZh), 'warning');
     return null;
   };
 
@@ -434,7 +437,7 @@ Execute the following mission with precision, maintainability, and zero speculat
       `curl -X ${request.method} "${getGatewayOrigin()}${request.path}"`,
       '  -H "Content-Type: application/json"',
     ];
-    // Never echo a list mask into a snippet. Use the pasted plaintext when it is
+    // Never echo a listed key ID into a snippet. Use the pasted plaintext when it is
     // usable, an obvious placeholder when it is not, and no auth header at all
     // for the explicit unauthenticated mode (which is what the request sends).
     if (selectedKeyId !== UNAUTHENTICATED_KEY) {
@@ -998,12 +1001,12 @@ Execute the following mission with precision, maintainability, and zero speculat
                 <Key className="w-3.5 h-3.5 text-indigo-500" />
                 <span>{isZh ? 'API 访问密钥' : 'API Key'}</span>
               </span>
-              {selectedKeyObj?.key_fingerprint && (
-                <span className="ui-meta font-mono normal-case">{selectedKeyObj.key_fingerprint}</span>
+              {selectedKeyObj?.key_id && (
+                <span className="ui-meta font-mono normal-case">{selectedKeyObj.key_id}</span>
               )}
             </label>
 
-            {/* The list is only entitlement context; its `key` is a display mask. */}
+            {/* The list is only entitlement context; it carries no credential. */}
             <select
               value={selectedKeyId}
               onChange={(e) => setSelectedKeyId(e.target.value)}
@@ -1012,7 +1015,7 @@ Execute the following mission with precision, maintainability, and zero speculat
             >
               {contextKeys.map((k) => (
                 <option key={String(k.id)} value={String(k.id)}>
-                  {k.tenant_id ? `${k.tenant_id} - ` : ''}{k.key_fingerprint || (isZh ? '无指纹' : 'no fingerprint')}
+                  {k.tenant_id ? `${k.tenant_id} - ` : ''}{k.key_id || `#${k.id}`}
                 </option>
               ))}
               <option value={UNAUTHENTICATED_KEY}>{isZh ? '免密直通 (不带 API Key)' : 'Public / Unauthenticated'}</option>
@@ -1035,8 +1038,8 @@ Execute the following mission with precision, maintainability, and zero speculat
                 />
                 <p className="ui-meta">
                   {isZh
-                    ? '密钥列表只显示不可还原的掩码；明文仅保存在当前页面内存中，不写入浏览器存储。'
-                    : 'The key list only shows irreversible masks. The plaintext is kept in this page’s memory only and is never written to browser storage.'}
+                    ? '粘贴完整明文（sk-airoute-…）。列表里的 ak_… 是密钥 ID，只用于识别，不能用于调用；明文仅在创建密钥时显示一次，遗失请新建一把。本页输入仅保存在内存中，不写入浏览器存储。'
+                    : 'Paste the full plaintext (sk-airoute-…). An ak_… value in the list is a key ID: it identifies the key but cannot be used to call it. The plaintext is shown once at creation — create a new key if it was lost. This page keeps it in memory only and never writes it to browser storage.'}
                 </p>
               </>
             )}

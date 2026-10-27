@@ -115,7 +115,7 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
         setShowKeyModal(true);
         setCreatedKey({
           key: created.key || '',
-          fingerprint: created.key_fingerprint || '',
+          keyId: created.key_id || '',
           tenant: created.tenant_id || (adminUser?.username || ''),
           rpm: created.rpm ?? payload.rpm,
           tpm: created.tpm ?? payload.tpm,
@@ -170,6 +170,8 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
   const handleToggleKeyStatus = useCallback(async (k) => {
     const nextStatus = k.status === 'disabled' ? 'active' : 'disabled';
     const actionText = nextStatus === 'active' ? (isZh ? '启用' : 'enable') : (isZh ? '禁用/停用' : 'disable');
+    // Name the key by its public identifier: the list no longer carries a credential.
+    const keyRef = k.key_id || `#${k.id}`;
     try {
       await apiJSON(`/api/v1/admin/keys/${k.id}`, {
         method: 'PUT',
@@ -178,8 +180,8 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
       });
       showToast(
         isZh
-          ? `已${actionText}密钥 ${k.key}，集群毫秒级热同步完成`
-          : `Key ${k.key} status set to ${nextStatus}, cluster synced`,
+          ? `已${actionText}密钥 ${keyRef}，集群毫秒级热同步完成`
+          : `Key ${keyRef} status set to ${nextStatus}, cluster synced`,
         'success'
       );
       refresh();

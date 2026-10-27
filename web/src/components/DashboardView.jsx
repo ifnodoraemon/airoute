@@ -87,8 +87,9 @@ export default function DashboardView({
   const fetchDashboard = useCallback(async () => {
     const request = ++dashboardRequest.current;
     const fetcher = adminFetch || apiFetch;
-    // `selectedKey` holds the numeric key id (string form). The masked value the
-    // list renders is not a filter key: logs and stats resolve `key_id` server-side.
+    // `selectedKey` holds the numeric key id (string form). The public key ID
+    // (`ak_…`) the list renders is not a filter key: logs and stats resolve the
+    // row id server-side through this `key_id` query parameter.
     const suffix = selectedKey ? `&key_id=${encodeURIComponent(selectedKey)}` : '';
     const read = async (url) => {
       const res = await fetcher(url);
@@ -985,7 +986,7 @@ export default function DashboardView({
                 </option>
                 {(keys || []).map(k => (
                   <option key={String(k.id)} value={String(k.id)}>
-                    🔑 {k.tenant_id || k.name || '—'} · {k.key_fingerprint || (isZh ? '无指纹' : 'no fingerprint')} {k.rpm ? `(${k.rpm} RPM)` : ''}
+                    🔑 {k.tenant_id || k.name || '—'} · {k.key_id || `#${k.id}`} {k.rpm ? `(${k.rpm} RPM)` : ''}
                   </option>
                 ))}
               </select>

@@ -74,7 +74,7 @@ export default function BudgetsView({ adminFetch, showToast, lang = 'zh' }) {
   const scopeOptions = useMemo(() => {
     if (form.scope_type === 'org') return orgs.map((org) => ({ id: org.id, label: `${org.name} (${org.code})` }));
     if (form.scope_type === 'user') return users.map((user) => ({ id: user.id, label: user.username || `#${user.id}` }));
-    return keys.map((key) => ({ id: key.id, label: key.key_fingerprint || key.key || `#${key.id}` }));
+    return keys.map((key) => ({ id: key.id, label: key.key_id || `#${key.id}` }));
   }, [form.scope_type, orgs, users, keys]);
 
   const scopeName = useCallback((budget) => {
@@ -87,7 +87,7 @@ export default function BudgetsView({ adminFetch, showToast, lang = 'zh' }) {
       return user ? user.username : `user#${budget.scope_id}`;
     }
     const key = keys.find((item) => item.id === budget.scope_id);
-    return key ? (key.key_fingerprint || key.key) : `key#${budget.scope_id}`;
+    return key ? (key.key_id || `#${key.id}`) : `key#${budget.scope_id}`;
   }, [orgs, users, keys]);
 
   const resetForm = () => {

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -15,8 +16,16 @@ import (
 
 // APIKeyRecord represents the database row for API keys.
 type APIKeyRecord struct {
-	ID               int64     `json:"id"`
-	Key              string    `json:"key"`
+	ID int64 `json:"id"`
+	// PublicID is the key's public identifier (ak_…). It is minted independently
+	// of the credential (see NewAPIKeyPublicID) and is what the console, logs,
+	// exports and support tickets use to name a key. It never authenticates a
+	// call and carries no material from the secret.
+	PublicID string `json:"key_id"`
+	// Key holds the SHA-256 digest of the credential. It is never serialized: the
+	// console receives PublicID instead, and the plaintext credential appears
+	// only in the one-time creation response (see controlplane.apiKeyView).
+	Key              string    `json:"-"`
 	TenantID         string    `json:"tenant_id"`
 	AllowedModels    []string  `json:"allowed_models"`
 	RPM              int       `json:"rpm"`
@@ -36,11 +45,6 @@ type APIKeyRecord struct {
 	UserBalance      float64   `json:"-"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
-	// Fingerprint is a stable, non-reversible identifier for Key. It lets audit
-	// rows, exports and support tickets refer to a credential without disclosing
-	// it, and is the intended join key for a future migration that stops storing
-	// plaintext keys (see APIKeyFingerprint).
-	Fingerprint string `json:"key_fingerprint,omitempty"`
 }
 
 // HashAPIKey returns the value stored for a bearer credential.
@@ -82,41 +86,36 @@ func IsAPIKeyHash(value string) bool {
 	return true
 }
 
-// MaskStoredAPIKey renders a stored key digest for display. A digest is not a
-// credential, so a short prefix/suffix keeps console rows distinguishable; the
-// plaintext credential is returned only once, by the creation response.
-func MaskStoredAPIKey(stored string) string {
-	if stored == "" {
-		return ""
-	}
-	if !IsAPIKeyHash(stored) {
-		return MaskAPIKey(stored)
-	}
-	return stored[:8] + "***" + stored[len(stored)-4:]
-}
+const (
+	// apiKeyPublicIDPrefix marks a key's public identifier so a value copied out
+	// of the console cannot be mistaken for a bearer credential.
+	apiKeyPublicIDPrefix = "ak_"
+	// apiKeyPublicIDBytes is 80 bits of entropy. Collisions stay negligible at
+	// any realistic key count; the partial unique index from migration 39 is the
+	// backstop, not the primary defence.
+	apiKeyPublicIDBytes = 10
+)
 
-// APIKeyFingerprint returns a stable, non-reversible display identifier for an API
-// key. It accepts either the credential or the stored digest and normalizes to the
-// digest first, so the same key has one fingerprint whether it is derived at
-// creation, from a database row, or from a presented credential during auth.
+// NewAPIKeyPublicID mints the public identifier shown for a key in the console,
+// logs, exports and support tickets.
 //
-// The credential has 128 bits of entropy, so the digest cannot be reversed; the
-// fingerprint is a further digest of it and is used for console rows, audit lines
-// and support references, never for authentication.
-func APIKeyFingerprint(keyOrDigest string) string {
-	if keyOrDigest == "" {
-		return ""
+// It is deliberately independent of the credential: it is not derived from the
+// secret or from its digest, so it reveals nothing about what authenticates a
+// call, does not change when the stored digest is replaced, and cannot be
+// mistaken for a credential (it is not a digest and never matches a stored key).
+func NewAPIKeyPublicID() (string, error) {
+	b := make([]byte, apiKeyPublicIDBytes)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
 	}
-	digest := keyOrDigest
-	if !IsAPIKeyHash(digest) {
-		digest = HashAPIKey(digest)
-	}
-	sum := sha256.Sum256([]byte("airoute-api-key-fingerprint-v2|" + digest))
-	return "kfp_" + hex.EncodeToString(sum[:8])
+	return apiKeyPublicIDPrefix + hex.EncodeToString(b), nil
 }
 
-// MaskAPIKey renders a credential as a short, non-reusable prefix so logs and
-// console rows can tell keys apart without exposing them.
+// MaskAPIKey renders a credential as a short, non-reusable prefix so audit rows
+// can tell unrecognised submissions apart without storing the value.
+//
+// Console key listings use NewAPIKeyPublicID instead: they never show a fragment
+// of a credential, because the fragment is what operators copy by mistake.
 func MaskAPIKey(key string) string {
 	if key == "" {
 		return ""
@@ -125,34 +124,6 @@ func MaskAPIKey(key string) string {
 		return "sk-***"
 	}
 	return key[:8] + "***" + key[len(key)-4:]
-}
-
-// attachFingerprint fills the display identifier for a row read from storage.
-//
-// The stored value is a digest, so the fingerprint is derived from that digest: it
-// is stable for a given credential, non-reversible, and never the credential
-// itself. Console rows, exports and audit filters use it to refer to a key.
-func (rec *APIKeyRecord) attachFingerprint() {
-	if rec == nil {
-		return
-	}
-	if rec.Fingerprint == "" {
-		rec.Fingerprint = APIKeyFingerprint(rec.Key)
-	}
-}
-
-// MaskForDisplay replaces the stored key digest with a display mask so a console
-// response never presents the digest as if it were a usable credential. The
-// fingerprint stays available for correlation.
-func (rec *APIKeyRecord) MaskForDisplay() {
-	if rec == nil {
-		return
-	}
-	rec.Key = MaskStoredAPIKey(rec.Key)
-	if rec.Fingerprint != "" {
-		return
-	}
-	rec.Fingerprint = APIKeyFingerprint(rec.Key)
 }
 
 // resolveMoney reconciles the integer ledger mirrors with the legacy float
@@ -188,7 +159,7 @@ func (r *Repository) APIKeyExists(id int64) (bool, error) {
 
 // ListAPIKeys returns all non-deleted API keys for management.
 func (r *Repository) ListAPIKeys() ([]*APIKeyRecord, error) {
-	rows, err := r.db.Query(`SELECT id, key, tenant_id, COALESCE(allowed_models, ''), rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), COALESCE(org_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE status <> 'deleted' ORDER BY id ASC`)
+	rows, err := r.db.Query(`SELECT id, public_id, key, tenant_id, COALESCE(allowed_models, ''), rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), COALESCE(org_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE status <> 'deleted' ORDER BY id ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +169,7 @@ func (r *Repository) ListAPIKeys() ([]*APIKeyRecord, error) {
 	for rows.Next() {
 		var rec APIKeyRecord
 		var allowedJSON string
-		err := rows.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.BudgetUnits, &rec.UsedCostUnits, &rec.GroupName, &rec.UserID, &rec.OrgID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt)
+		err := rows.Scan(&rec.ID, &rec.PublicID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.BudgetUnits, &rec.UsedCostUnits, &rec.GroupName, &rec.UserID, &rec.OrgID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -206,7 +177,6 @@ func (r *Repository) ListAPIKeys() ([]*APIKeyRecord, error) {
 			_ = json.Unmarshal([]byte(allowedJSON), &rec.AllowedModels)
 		}
 		rec.resolveMoney()
-		rec.attachFingerprint()
 		list = append(list, &rec)
 	}
 	if err := rows.Err(); err != nil {
@@ -217,7 +187,7 @@ func (r *Repository) ListAPIKeys() ([]*APIKeyRecord, error) {
 
 // ListAPIKeysByUser returns API keys belonging to a specific user.
 func (r *Repository) ListAPIKeysByUser(userID int64) ([]*APIKeyRecord, error) {
-	rows, err := r.db.Query(`SELECT id, key, tenant_id, COALESCE(allowed_models, ''), rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), COALESCE(org_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE user_id = ? AND status <> 'deleted' ORDER BY id ASC`, userID)
+	rows, err := r.db.Query(`SELECT id, public_id, key, tenant_id, COALESCE(allowed_models, ''), rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), COALESCE(org_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE user_id = ? AND status <> 'deleted' ORDER BY id ASC`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +197,7 @@ func (r *Repository) ListAPIKeysByUser(userID int64) ([]*APIKeyRecord, error) {
 	for rows.Next() {
 		var rec APIKeyRecord
 		var allowedJSON string
-		err := rows.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.BudgetUnits, &rec.UsedCostUnits, &rec.GroupName, &rec.UserID, &rec.OrgID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt)
+		err := rows.Scan(&rec.ID, &rec.PublicID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.BudgetUnits, &rec.UsedCostUnits, &rec.GroupName, &rec.UserID, &rec.OrgID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -235,7 +205,6 @@ func (r *Repository) ListAPIKeysByUser(userID int64) ([]*APIKeyRecord, error) {
 			_ = json.Unmarshal([]byte(allowedJSON), &rec.AllowedModels)
 		}
 		rec.resolveMoney()
-		rec.attachFingerprint()
 		list = append(list, &rec)
 	}
 	if err := rows.Err(); err != nil {
@@ -258,7 +227,6 @@ func (r *Repository) ListHistoricalAPIKeysByUser(userID int64) ([]*APIKeyRecord,
 		if err := rows.Scan(&key.ID, &key.Key); err != nil {
 			return nil, err
 		}
-		key.attachFingerprint()
 		keys = append(keys, &key)
 	}
 	return keys, rows.Err()
@@ -300,20 +268,27 @@ func insertAPIKey(db recordInserter, rec *APIKeyRecord) error {
 	if rec.GroupName == "" {
 		rec.GroupName = "default"
 	}
+	// The public identifier is minted here, independently of the credential, so a
+	// caller never chooses it and every row created by this binary has one.
+	if rec.PublicID == "" {
+		publicID, err := NewAPIKeyPublicID()
+		if err != nil {
+			return fmt.Errorf("generate api key public id: %w", err)
+		}
+		rec.PublicID = publicID
+	}
 	// Persist only the digest. rec.Key is replaced with it so the in-memory record
 	// matches the stored row; callers that need the plaintext for the one-time
 	// creation response keep their own copy (see the key creation handlers).
 	plaintextKey := rec.Key
-	fingerprint := APIKeyFingerprint(plaintextKey)
 	rec.Key = HashAPIKey(plaintextKey)
-	id, err := db.InsertGetID(`INSERT INTO api_keys (key, tenant_id, allowed_models, rpm, tpm, budget, budget_units, used_tokens, used_cost, used_cost_units, group_name, user_id, org_id, status, format_validation, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-		rec.Key, rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, ToUnits(rec.Budget), rec.UsedTokens, rec.UsedCost, ToUnits(rec.UsedCost), rec.GroupName, rec.UserID, rec.OrgID, rec.Status, rec.FormatValidation)
+	id, err := db.InsertGetID(`INSERT INTO api_keys (key, public_id, tenant_id, allowed_models, rpm, tpm, budget, budget_units, used_tokens, used_cost, used_cost_units, group_name, user_id, org_id, status, format_validation, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		rec.Key, rec.PublicID, rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, ToUnits(rec.Budget), rec.UsedTokens, rec.UsedCost, ToUnits(rec.UsedCost), rec.GroupName, rec.UserID, rec.OrgID, rec.Status, rec.FormatValidation)
 	if err != nil {
 		rec.Key = plaintextKey
 		return err
 	}
 	rec.ID = id
-	rec.Fingerprint = fingerprint
 	return nil
 }
 
@@ -325,17 +300,16 @@ func (r *Repository) DeleteAPIKey(id int64) error {
 
 // GetAPIKey returns a single API key by ID.
 func (r *Repository) GetAPIKey(id int64) (*APIKeyRecord, error) {
-	row := r.db.QueryRow(`SELECT id, key, tenant_id, COALESCE(allowed_models, ''), rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), COALESCE(org_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE id = ? AND status <> 'deleted'`, id)
+	row := r.db.QueryRow(`SELECT id, public_id, key, tenant_id, COALESCE(allowed_models, ''), rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), COALESCE(org_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE id = ? AND status <> 'deleted'`, id)
 	var rec APIKeyRecord
 	var allowedJSON string
-	if err := row.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.BudgetUnits, &rec.UsedCostUnits, &rec.GroupName, &rec.UserID, &rec.OrgID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+	if err := row.Scan(&rec.ID, &rec.PublicID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.BudgetUnits, &rec.UsedCostUnits, &rec.GroupName, &rec.UserID, &rec.OrgID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
 		return nil, err
 	}
 	if allowedJSON != "" {
 		_ = json.Unmarshal([]byte(allowedJSON), &rec.AllowedModels)
 	}
 	rec.resolveMoney()
-	rec.attachFingerprint()
 	return &rec, nil
 }
 
@@ -383,17 +357,16 @@ func (r *Repository) GetAPIKeyByKeyContext(ctx context.Context, key string) (*AP
 	if r == nil || r.db == nil {
 		return nil, sql.ErrNoRows
 	}
-	row := r.db.QueryRowContext(ctx, `SELECT k.id, k.key, k.tenant_id, COALESCE(k.allowed_models, ''), k.rpm, k.tpm, k.budget, k.used_tokens, COALESCE(k.used_cost, 0.0), COALESCE(k.budget_units, 0), COALESCE(k.used_cost_units, 0), COALESCE(k.group_name, 'default'), COALESCE(k.user_id, 0), k.status, COALESCE(k.format_validation, ''), k.created_at, k.updated_at, COALESCE(NULLIF(k.org_id, 0), NULLIF(u.org_id, 0), 0), COALESCE(u.status, ''), COALESCE(u.role, ''), COALESCE(u.balance, 0.0) FROM api_keys k LEFT JOIN users u ON (k.user_id > 0 AND u.id = k.user_id) OR (COALESCE(k.user_id, 0) = 0 AND k.tenant_id != '' AND u.username = k.tenant_id) WHERE k.key = ?`, key)
+	row := r.db.QueryRowContext(ctx, `SELECT k.id, k.public_id, k.key, k.tenant_id, COALESCE(k.allowed_models, ''), k.rpm, k.tpm, k.budget, k.used_tokens, COALESCE(k.used_cost, 0.0), COALESCE(k.budget_units, 0), COALESCE(k.used_cost_units, 0), COALESCE(k.group_name, 'default'), COALESCE(k.user_id, 0), k.status, COALESCE(k.format_validation, ''), k.created_at, k.updated_at, COALESCE(NULLIF(k.org_id, 0), NULLIF(u.org_id, 0), 0), COALESCE(u.status, ''), COALESCE(u.role, ''), COALESCE(u.balance, 0.0) FROM api_keys k LEFT JOIN users u ON (k.user_id > 0 AND u.id = k.user_id) OR (COALESCE(k.user_id, 0) = 0 AND k.tenant_id != '' AND u.username = k.tenant_id) WHERE k.key = ?`, key)
 	var rec APIKeyRecord
 	var allowedJSON string
-	if err := row.Scan(&rec.ID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.BudgetUnits, &rec.UsedCostUnits, &rec.GroupName, &rec.UserID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt, &rec.OrgID, &rec.UserStatus, &rec.UserRole, &rec.UserBalance); err != nil {
+	if err := row.Scan(&rec.ID, &rec.PublicID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.BudgetUnits, &rec.UsedCostUnits, &rec.GroupName, &rec.UserID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt, &rec.OrgID, &rec.UserStatus, &rec.UserRole, &rec.UserBalance); err != nil {
 		return nil, err
 	}
 	if allowedJSON != "" {
 		_ = json.Unmarshal([]byte(allowedJSON), &rec.AllowedModels)
 	}
 	rec.resolveMoney()
-	rec.attachFingerprint()
 	return &rec, nil
 }
 
@@ -485,6 +458,44 @@ func (r *Repository) CountAPIKeys() int {
 	return count
 }
 
+// ToConfig renders the row as the data-plane view of a credential.
+//
+// It is the single conversion used both when the runtime snapshot is built
+// (ToModelAPIKeys) and when the auth middleware has to resolve a credential the
+// snapshot does not know yet (see middleware.lookupStorageCredential). Keeping
+// one mapping means a fallback lookup cannot authenticate with different
+// entitlements than a snapshot lookup would have granted.
+//
+// UserStatus/UserRole/UserBalance are carried when the row was read through a
+// query that joins users (GetAPIKeyByKeyContext does); otherwise they stay empty
+// and the caller can fill them in.
+func (rec *APIKeyRecord) ToConfig() model.APIKeyConfig {
+	if rec == nil {
+		return model.APIKeyConfig{}
+	}
+	return model.APIKeyConfig{
+		ID:               rec.ID,
+		PublicID:         rec.PublicID,
+		Key:              rec.Key,
+		TenantID:         rec.TenantID,
+		AllowedModels:    rec.AllowedModels,
+		RPM:              rec.RPM,
+		TPM:              rec.TPM,
+		Budget:           rec.Budget,
+		UsedCost:         rec.UsedCost,
+		BudgetUnits:      rec.BudgetUnits,
+		UsedCostUnits:    rec.UsedCostUnits,
+		Status:           rec.Status,
+		GroupName:        rec.GroupName,
+		UserID:           rec.UserID,
+		OrgID:            rec.OrgID,
+		FormatValidation: rec.FormatValidation,
+		UserStatus:       rec.UserStatus,
+		UserRole:         rec.UserRole,
+		UserBalance:      rec.UserBalance,
+	}
+}
+
 // ToModelAPIKeys converts database APIKeyRecords to Data Plane model.APIKeyConfigs with full in-memory quota snapshots.
 func (r *Repository) ToModelAPIKeys() ([]model.APIKeyConfig, error) {
 	records, err := r.ListAPIKeys()
@@ -515,35 +526,18 @@ func (r *Repository) ToModelAPIKeys() ([]model.APIKeyConfig, error) {
 			user = userByName[strings.ToLower(rec.TenantID)]
 		}
 
-		userStatus := ""
-		userRole := ""
-		userBalance := 0.0
+		config := rec.ToConfig()
+		// The snapshot resolves the owner from one pass over users rather than a
+		// join per key, so it overwrites whatever the row itself carried.
+		config.UserStatus = ""
+		config.UserRole = ""
+		config.UserBalance = 0
 		if user != nil {
-			userStatus = user.Status
-			userRole = user.Role
-			userBalance = user.Balance
+			config.UserStatus = user.Status
+			config.UserRole = user.Role
+			config.UserBalance = user.Balance
 		}
-
-		res = append(res, model.APIKeyConfig{
-			ID:               rec.ID,
-			Key:              rec.Key,
-			TenantID:         rec.TenantID,
-			AllowedModels:    rec.AllowedModels,
-			RPM:              rec.RPM,
-			TPM:              rec.TPM,
-			Budget:           rec.Budget,
-			UsedCost:         rec.UsedCost,
-			BudgetUnits:      rec.BudgetUnits,
-			UsedCostUnits:    rec.UsedCostUnits,
-			Status:           rec.Status,
-			GroupName:        rec.GroupName,
-			UserID:           rec.UserID,
-			OrgID:            rec.OrgID,
-			FormatValidation: rec.FormatValidation,
-			UserStatus:       userStatus,
-			UserRole:         userRole,
-			UserBalance:      userBalance,
-		})
+		res = append(res, config)
 	}
 	return res, nil
 }

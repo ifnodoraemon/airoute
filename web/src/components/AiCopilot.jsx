@@ -29,7 +29,13 @@ import { getGatewayOrigin, copyToClipboard as crossOriginCopy } from '../config'
 import { extractErrorMessage } from '../api/client';
 import MarkdownRenderer from './MarkdownRenderer';
 import { inferClientModality } from '../lib/modelModality';
-import { apiKeyHeaders, isUsableAPIKey, UNAUTHENTICATED_KEY } from '../lib/apiKey';
+import {
+  apiKeyHeaders,
+  credentialProblem,
+  credentialProblemHint,
+  credentialProblemLabel,
+  UNAUTHENTICATED_KEY
+} from '../lib/apiKey';
 import { availableKeyModels } from '../lib/keyModels';
 import {
   COPILOT_HARNESS_TOOLS,
@@ -282,7 +288,7 @@ export default function AiCopilot({
 
   // Two different things are chosen below, and conflating them was the original
   // defect: the key *row* only scopes the tenant and the allowed models (the list
-  // carries display masks, never credentials), while the *plaintext* pasted for
+  // carries a key ID, never a credential), while the *plaintext* pasted for
   // this session is what signs the request. The copilot therefore offers the same
   // selection as Playground, plus an explicit open-gateway mode and a free-form
   // entry for a credential without a row in this account's list.
@@ -315,6 +321,9 @@ export default function AiCopilot({
     [activeKeys, selectedKeyId]
   );
   const requiresCredential = selectedKeyId !== UNAUTHENTICATED_KEY;
+  // One classification drives the chip, the hint and the send guard, so the panel
+  // cannot claim "ready" for a value the guard would refuse.
+  const sessionKeyProblem = requiresCredential ? credentialProblem(sessionApiKey) : null;
 
   // Keep the selection valid when the list reloads or the account changes. The
   // key list loads asynchronously after the console mounts, so an implicit
@@ -606,15 +615,22 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
     const text = (queryText || '').trim();
     if (!text || isLoading) return;
 
-    // Refuse before touching the network: sending the list mask would fail auth
-    // in a way that looks like a gateway bug, and sending nothing would look like
-    // an auth outage. The bubble states exactly what to do. Open-gateway mode is
-    // the one deliberate exception: the operator chose to call without a key.
+    // Refuse before touching the network: sending the list's key ID would fail
+    // auth in a way that looks like a gateway bug, and sending nothing would look
+    // like an auth outage. The bubble states exactly what to do. Open-gateway mode
+    // is the one deliberate exception: the operator chose to call without a key.
+    //
+    // The reason is spelled out per case: the key list's copy button yields a key
+    // ID (`ak_…`), which is long enough to look like a credential but can never
+    // authenticate, so "paste the plaintext" alone was not enough to diagnose the
+    // 401 it produced.
     const plaintextKey = sessionApiKey.trim();
-    if (requiresCredential && !isUsableAPIKey(plaintextKey)) {
-      const guidance = isZh
-        ? '请先在下方选择密钥并粘贴本次会话的 API Key 明文。密钥列表只显示不可还原的掩码，无法用于调用 /v1/chat/completions；若网关未启用鉴权，可选择“免密直通”。'
-        : 'Select a key and paste its plaintext below first. The key list only shows irreversible display masks, which cannot authenticate /v1/chat/completions; pick the open-gateway mode instead if no key is registered.';
+    const keyProblem = requiresCredential ? credentialProblem(plaintextKey) : null;
+    if (keyProblem) {
+      const openModeHint = isZh
+        ? '若网关未启用鉴权，可选择“免密直通”。'
+        : 'Pick the open-gateway mode instead if no key is registered.';
+      const guidance = [credentialProblemHint(keyProblem, isZh), openModeHint].join(isZh ? '' : ' ');
       if (showToast) showToast(guidance, 'warning');
       setMessages(prev => [...prev, {
         id: `nokey_${Date.now()}`,
@@ -700,17 +716,26 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
           // API, {"error":{"message":…}} for the data plane). Throwing only the
           // status code hid quota/auth failures from the operator.
           let detail = '';
+          let gatewayCode = '';
           try {
             const rawBody = await response.text();
             try {
-              detail = extractErrorMessage(JSON.parse(rawBody), '');
+              const parsed = JSON.parse(rawBody);
+              detail = extractErrorMessage(parsed, '');
+              // The machine-readable code is what distinguishes "this credential is
+              // not accepted" from a quota or routing refusal; the message alone is
+              // not stable enough to branch on.
+              gatewayCode = parsed?.error?.code || parsed?.error?.type || parsed?.code || '';
             } catch {
               detail = (rawBody || '').trim().slice(0, 300);
             }
           } catch {
             detail = '';
           }
-          throw new Error(detail || `HTTP ${response.status}`);
+          const failure = new Error(detail || `HTTP ${response.status}`);
+          failure.gatewayCode = gatewayCode;
+          failure.status = response.status;
+          throw failure;
         }
 
         const reader = response.body.getReader();
@@ -872,7 +897,34 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
       // A failure must always be visible. The old code surfaced only messages
       // matching /stream error/i, so quota/auth/5xx failures left an empty bubble
       // with no explanation.
-      const failureMessage = (err && err.message) || (isZh ? '请求失败' : 'Request failed');
+      //
+      // An authentication refusal gets a targeted remedy: the gateway can only say
+      // "Incorrect or unauthorized API key", which leaves the operator guessing.
+      // The usual causes are a key ID pasted from the key list and a key that
+      // was deleted or disabled after it was copied. A revoked key is its own
+      // case: the gateway now names it, so say what to do instead of echoing it.
+      let failureMessage = (err && err.message) || (isZh ? '请求失败' : 'Request failed');
+      if (err?.gatewayCode === 'api_key_revoked') {
+        failureMessage = isZh
+          ? '这把密钥已被删除或禁用（revoked or disabled），网关拒绝调用。请到「API 密钥」页确认状态，或新建一把并粘贴新明文。'
+          : 'This key has been deleted or disabled (revoked or disabled), so the gateway refused the call. Check its status on the API Keys page, or create a new key and paste its plaintext.';
+      } else {
+        const authRefused = err?.gatewayCode === 'invalid_api_key'
+          || err?.gatewayCode === 'authentication_error'
+          || /incorrect or unauthorized api key|invalid_api_key/i.test(failureMessage);
+        if (authRefused) {
+          const refusalProblem = credentialProblem(plaintextKey);
+          if (refusalProblem) {
+            failureMessage = isZh
+              ? `网关不认可这把密钥：${credentialProblemHint(refusalProblem, true)}`
+              : `The gateway rejected this credential: ${credentialProblemHint(refusalProblem, false)}`;
+          } else {
+            failureMessage = isZh
+              ? '网关不认可这把密钥（Incorrect or unauthorized API key）。粘贴内容看起来是完整明文，因此请依次确认：① 若这把密钥是刚创建的，先重试一次（新密钥需要同步到所有网关副本）；② 是否已被删除或禁用；③ 是否属于当前网关。到「API 密钥」页确认状态，必要时新建一把再粘贴。'
+              : 'The gateway rejected this credential (Incorrect or unauthorized API key). The pasted value looks like a complete plaintext, so check in order: (1) if the key was just created, retry once — a new key needs to reach every gateway replica; (2) whether it was deleted or disabled; (3) whether it belongs to this gateway. Confirm its status on the API Keys page, and create a new key if needed.';
+          }
+        }
+      }
       if (showToast) showToast(failureMessage, 'error');
 
       // Substitute the offline harness template only when nothing streamed in, and
@@ -1312,10 +1364,10 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
         ))}
       </div>
 
-      {/* 会话密钥：列表只能选择租户/模型范围（回显掩码），发调用仍需粘贴明文 */}
+      {/* 会话密钥：列表只能选择租户/模型范围（回显密钥 ID），发调用仍需粘贴明文 */}
       <div className="px-3 py-1.5 border-t border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] space-y-1.5">
         <div className="flex items-center gap-2">
-          <Key className={`w-3 h-3 shrink-0 ${!requiresCredential || isUsableAPIKey(sessionApiKey) ? 'text-emerald-500' : 'text-[#9AA0A6]'}`} />
+          <Key className={`w-3 h-3 shrink-0 ${!sessionKeyProblem ? 'text-emerald-500' : sessionKeyProblem === 'missing' ? 'text-[#9AA0A6]' : 'text-rose-500'}`} />
           <select
             value={selectedKeyId}
             onChange={(e) => selectKeyContext(e.target.value)}
@@ -1325,29 +1377,42 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
           >
             {contextKeys.map((k) => (
               <option key={String(k.id)} value={String(k.id)}>
-                {k.tenant_id ? `${k.tenant_id} - ` : ''}{k.key_fingerprint || (isZh ? '无指纹' : 'no fingerprint')}
+                {k.tenant_id ? `${k.tenant_id} - ` : ''}{k.key_id || `#${k.id}`}
               </option>
             ))}
             <option value={CUSTOM_KEY_ID}>{isZh ? '手动输入密钥（不在列表）' : 'Paste a key not in the list'}</option>
             <option value={UNAUTHENTICATED_KEY}>{isZh ? '免密直通（仅开放网关）' : 'Public / unauthenticated'}</option>
           </select>
-          <span className={`text-[11px] font-mono shrink-0 ${!requiresCredential || isUsableAPIKey(sessionApiKey) ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+          <span className={`text-[11px] font-mono shrink-0 ${!sessionKeyProblem ? 'text-emerald-600 dark:text-emerald-400' : sessionKeyProblem === 'missing' ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'}`}>
             {!requiresCredential
               ? (isZh ? '免密' : 'no key')
-              : (isUsableAPIKey(sessionApiKey) ? (isZh ? '已就绪' : 'ready') : (isZh ? '待粘贴' : 'missing'))}
+              : credentialProblemLabel(sessionKeyProblem, isZh)}
           </span>
         </div>
 
         {requiresCredential ? (
-          <input
-            type="password"
-            autoComplete="off"
-            value={sessionApiKey}
-            onChange={(e) => setSessionApiKey(e.target.value)}
-            placeholder={isZh ? '粘贴本次会话的 API Key 明文 (仅内存，不落盘)' : 'Paste the plaintext API key for this session (memory only)'}
-            aria-label={isZh ? '会话 API Key 明文' : 'Session API key'}
-            className="w-full min-w-0 bg-[#F7F7F5] dark:bg-[#22252B] border border-[#E4E6E9] dark:border-[#2C3038] rounded-lg px-2.5 py-1 text-xs font-mono text-[#202124] dark:text-[#F1F2F4] placeholder-[#656B75] dark:placeholder-[#A1A7B0] focus:outline-none focus:ring-1 focus:ring-[#355CFF]"
-          />
+          <>
+            <input
+              type="password"
+              autoComplete="off"
+              value={sessionApiKey}
+              onChange={(e) => setSessionApiKey(e.target.value)}
+              placeholder={isZh ? '粘贴本次会话的 API Key 明文 (仅内存，不落盘)' : 'Paste the plaintext API key for this session (memory only)'}
+              aria-label={isZh ? '会话 API Key 明文' : 'Session API key'}
+              className={`w-full min-w-0 bg-[#F7F7F5] dark:bg-[#22252B] border rounded-lg px-2.5 py-1 text-xs font-mono text-[#202124] dark:text-[#F1F2F4] placeholder-[#656B75] dark:placeholder-[#A1A7B0] focus:outline-none focus:ring-1 ${
+                sessionKeyProblem && sessionKeyProblem !== 'missing'
+                  ? 'border-rose-400/70 focus:ring-rose-400'
+                  : 'border-[#E4E6E9] dark:border-[#2C3038] focus:ring-[#355CFF]'
+              }`}
+            />
+            <p className={`text-[11px] leading-relaxed ${sessionKeyProblem && sessionKeyProblem !== 'missing' ? 'text-rose-600 dark:text-rose-400' : 'text-[#656B75] dark:text-[#A1A7B0]'}`}>
+              {sessionKeyProblem && sessionKeyProblem !== 'missing'
+                ? credentialProblemHint(sessionKeyProblem, isZh)
+                : (isZh
+                  ? '粘贴完整明文（sk-airoute-…）。列表里的 ak_… 是密钥 ID，只用于识别，不能用于调用；明文仅在创建密钥时显示一次，遗失请新建一把。'
+                  : 'Paste the full plaintext (sk-airoute-…). An ak_… value in the list is a key ID: it identifies the key but cannot be used to call it. The plaintext is shown once at creation — create a new key if it was lost.')}
+            </p>
+          </>
         ) : (
           <p className="text-[11px] leading-relaxed text-[#656B75] dark:text-[#A1A7B0]">
             {isZh

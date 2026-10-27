@@ -51,7 +51,9 @@ describe('Functional details regressions', () => {
       .mockResolvedValueOnce({ done: true }) };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body: { getReader: () => reader } }));
     const showToast = vi.fn();
-    render(<PlaygroundView keys={[{ key: 'sk-audit', allowed_models: ['*'] }]} models={['gpt-audit']} initialModel="gpt-audit" showToast={showToast} />);
+    // No listed key row: the request is sent without a credential, so this test
+    // exercises stream-error surfacing rather than the credential guard.
+    render(<PlaygroundView keys={[]} models={['gpt-audit']} initialModel="gpt-audit" showToast={showToast} />);
     fireEvent.change(screen.getByPlaceholderText('输入对话 Prompt，Enter 发送 / Shift+Enter 换行...'), { target: { value: 'hello' } });
     fireEvent.click(screen.getByRole('button', { name: '发送请求' }));
     await waitFor(() => expect(screen.getByRole('button', { name: '发送请求' })).toBeEnabled());
@@ -60,8 +62,8 @@ describe('Functional details regressions', () => {
 
   it('loads selected-key overview when returning to the dashboard', async () => {
     const adminFetch = vi.fn().mockResolvedValue(response({ code: 0, data: [] }));
-    // The dashboard drills down by the row id: the list value is a display mask.
-    render(<DashboardView selectedKey="7" keys={[{ id: 7, key: 'sk-12ab***cd34', key_fingerprint: 'kfp_7' }]} stats={{total_requests:100}} adminUser={{role:'admin'}} adminFetch={adminFetch} />);
+    // The dashboard drills down by the row id: the list shows a key ID, not a filter.
+    render(<DashboardView selectedKey="7" keys={[{ id: 7, key_id: 'ak_7f0013dea24034ac0007' }]} stats={{total_requests:100}} adminUser={{role:'admin'}} adminFetch={adminFetch} />);
     await act(async () => {});
     const urls = adminFetch.mock.calls.map(([url]) => url);
     expect(urls).toContain('/api/v1/admin/stats/overview?key_id=7');

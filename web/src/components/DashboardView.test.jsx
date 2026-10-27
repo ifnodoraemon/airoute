@@ -442,14 +442,12 @@ describe('DashboardView live telemetry', () => {
 // Key drill-down must filter by numeric id
 // ---------------------------------------------------------------------------
 
-// The key list only carries display masks, so the drill-down cannot send `key=`.
-// The backend resolves `key_id` (logs already do; stats now accept it too), which
+// The key list carries no credential, so the drill-down cannot send `key=`. The
+// backend resolves `key_id` (logs already do; stats now accept it too), which
 // makes the row id the only value that can scope the dashboard to one key.
-const MASK = '3a4b5c6d***9f8e';
-
 const drillKeys = [
-  { id: 7, key: MASK, key_fingerprint: 'kfp_7', tenant_id: 'acme', name: 'acme-key', status: 'active', rpm: 60 },
-  { id: 8, key: 'ffee0011***22aa', key_fingerprint: 'kfp_8', tenant_id: 'globex', status: 'active' },
+  { id: 7, key_id: 'ak_7f0013dea24034ac0007', tenant_id: 'acme', name: 'acme-key', status: 'active', rpm: 60 },
+  { id: 8, key_id: 'ak_8f0013dea24034ac0008', tenant_id: 'globex', status: 'active' },
 ];
 
 function drillFetch() {
@@ -468,7 +466,7 @@ function drillFetch() {
 const queriedUrls = (adminFetch) => adminFetch.mock.calls.map(([url]) => String(url));
 
 describe('DashboardView key drill-down', () => {
-  it('offers key ids — never masked values — as drill-down options', () => {
+  it('offers row ids — never the public key ID — as drill-down options', () => {
     setup({ keys: drillKeys, adminFetch: drillFetch() });
 
     const select = screen.getByLabelText('下钻密钥');
@@ -495,7 +493,7 @@ describe('DashboardView key drill-down', () => {
     const keyed = queriedUrls(adminFetch).filter(u => /[?&]key=/.test(u));
     expect(keyed).toEqual([]);
     expect(queriedUrls(adminFetch).join('\n')).not.toContain('***');
-    expect(queriedUrls(adminFetch).join('\n')).not.toContain(MASK);
+    expect(queriedUrls(adminFetch).join('\n')).not.toContain('ak_');
   });
 
   it('resolves the drill-down label from the row id', async () => {

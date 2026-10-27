@@ -44,7 +44,7 @@ func normalizeUsageLog(log *UsageLogRecord) {
 //     migration wrote into api_keys.key for that credential, so settlement and
 //     reconciliation still attribute the charge correctly - and no cleartext is
 //     persisted;
-//   - an auth-failure audit row (a fingerprint) or an operator-supplied label,
+//   - an auth-failure audit row (a key digest) or an operator-supplied label,
 //     which hashes into a digest that matches no key and therefore behaves as an
 //     unattributed charge, as before.
 //

@@ -61,9 +61,16 @@ export default function KeysView({
   const searchQuery = filters.q || '';
   const statusFilter = filters.status || 'all'; // 'all' | 'active' | 'disabled'
 
+  // The list only carries a public key ID: it identifies the key in logs and
+  // tickets, so it is safe to copy, but it can never authenticate a call. The
+  // tooltip says so on every surface that offers the value.
+  const keyIdTooltip = isZh
+    ? '密钥 ID（仅用于日志与工单识别，不能用于鉴权）'
+    : 'Key ID (identifies a key in logs and tickets; cannot authenticate)';
+
   const columns = useMemo(() => [
     { key: 'name', label: isZh ? '密钥别名' : 'Key Name', sortValue: (k) => k.tenant_id || '' },
-    { key: 'token', label: isZh ? 'API Key 凭据' : 'API Key Token', sortable: false },
+    { key: 'token', label: isZh ? '密钥 ID' : 'Key ID', sortable: false, tooltip: keyIdTooltip },
     { key: 'group', label: isZh ? '计费分组' : 'Pricing Group', sortValue: (k) => (k.group_name || 'default').toLowerCase() },
     { key: 'usage', label: isZh ? '已用额度' : 'Spent', sortValue: (k) => Number(k.used_cost || 0) },
     // Unlimited budgets/rpm sort as the largest finite value so they cluster
@@ -72,7 +79,7 @@ export default function KeysView({
     { key: 'models', label: isZh ? '授权模型范围' : 'Allowed Models', sortValue: (k) => (k.allowed_models || []).length },
     { key: 'rpm', label: isZh ? '速率限流' : 'Rate Limit', sortValue: (k) => (Number(k.rpm) > 0 ? Number(k.rpm) : Number.MAX_SAFE_INTEGER) },
     { key: 'status', label: isZh ? '状态' : 'Status', sortValue: (k) => (k.status === 'disabled' ? 1 : 0) }
-  ], [isZh]);
+  ], [isZh, keyIdTooltip]);
 
   // Column visibility is remembered per browser; default sort puts the heaviest
   // spenders first so quota/budget outliers are visible without scanning.
@@ -148,11 +155,10 @@ export default function KeysView({
     ];
   };
 
-  // A stored credential is never rendered. The server exposes a stable, non-reversible
-  // fingerprint (`kfp_…`) for exactly this purpose; rows created before the column
-  // existed fall back to an opaque mask with no characters from the key itself.
-  const maskKeyString = (kStr) => (kStr ? 'sk-airoute-••••••••••••' : '-');
-  const keyIdentifier = (k) => k.key_fingerprint || maskKeyString(k.key);
+  // A stored credential is never rendered. The server exposes a public key ID
+  // (`ak_…`) for exactly this purpose; rows without one fall back to their row
+  // number, which still identifies the key without exposing anything secret.
+  const keyIdentifier = (k) => k.key_id || `#${k.id}`;
 
   // Filter keys
   const filteredKeys = keys.filter(k => {
@@ -160,7 +166,7 @@ export default function KeysView({
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       const matchTenant = (k.tenant_id || '').toLowerCase().includes(q);
-      const matchKey = (k.key || '').toLowerCase().includes(q);
+      const matchKey = (k.key_id || '').toLowerCase().includes(q);
       const matchGroup = (k.group_name || '').toLowerCase().includes(q);
       if (!matchTenant && !matchKey && !matchGroup) return false;
     }
@@ -177,14 +183,14 @@ export default function KeysView({
       return;
     }
     const headers = isZh ? [
-      'ID', '密钥别名', '密钥指纹', '计费分组', '已用额度(元)', '预算上限(元)', '授权模型', '速率限制(RPM)', '状态', '创建时间'
+      'ID', '密钥别名', '密钥 ID', '计费分组', '已用额度(元)', '预算上限(元)', '授权模型', '速率限制(RPM)', '状态', '创建时间'
     ] : [
-      'ID', 'Alias', 'Key Fingerprint', 'Billing Group', 'Used Cost', 'Budget Cap', 'Allowed Models', 'Rate Limit (RPM)', 'Status', 'Created At'
+      'ID', 'Alias', 'Key ID', 'Billing Group', 'Used Cost', 'Budget Cap', 'Allowed Models', 'Rate Limit (RPM)', 'Status', 'Created At'
     ];
     const rows = sortedKeys.map(k => [
       k.id,
       k.tenant_id || '',
-      // Never export a stored credential: the fingerprint identifies the key.
+      // Never export a credential: the key ID identifies the row, nothing more.
       keyIdentifier(k),
       k.group_name || 'default',
       (k.used_cost || 0).toFixed(4),
@@ -215,12 +221,12 @@ export default function KeysView({
       return;
     }
     // The stored credential is not readable from the console (plaintext is shown
-    // once, at creation), so the snippet carries a placeholder plus the fingerprint
+    // once, at creation), so the snippet carries a placeholder plus the key ID
     // that identifies which key to paste in.
     const keyStr = '<YOUR_API_KEY>';
-    const fingerprint = key.key_fingerprint || '';
+    const keyId = key.key_id || `#${key.id}`;
     const origin = getGatewayOrigin();
-    const curl = `${fingerprint ? `# key fingerprint: ${fingerprint}\n` : ''}curl ${origin}/v1/chat/completions \\
+    const curl = `# key id: ${keyId}\ncurl ${origin}/v1/chat/completions \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer ${keyStr}" \\
   -d '{
@@ -295,7 +301,7 @@ export default function KeysView({
             type="text"
             value={searchQuery}
             onChange={(e) => setFilters({ q: e.target.value })}
-            placeholder={isZh ? '搜索密钥别名 / 密钥 token / 计费分组...' : 'Search tenant, key token, group...'}
+            placeholder={isZh ? '搜索密钥别名 / 密钥 ID / 计费分组...' : 'Search tenant, key ID, group...'}
             className="ui-field pl-9"
           />
         </div>
@@ -466,21 +472,21 @@ export default function KeysView({
                         {isVisible('token') && (
                           <td className={`ui-td font-mono text-[#355CFF] dark:text-[#91A7FF] ${COLUMN_CLASS.token}`}>
                             <div className="flex items-center space-x-1.5">
-                              <span className="select-all" title={isZh ? '密钥指纹（不可反推密钥）' : 'Key fingerprint (not reversible)'}>
+                              <span className="select-all" title={keyIdTooltip}>
                                 {keyIdentifier(k)}
                               </span>
                               <button
                                 onClick={async () => {
-                                  const value = k.key_fingerprint || keyIdentifier(k);
+                                  const value = keyIdentifier(k);
                                   const copied = await copyToClipboard(value);
                                   if (copied === false) {
-                                    showToast?.(isZh ? '复制密钥指纹失败，请手动选中复制' : 'Could not copy the key fingerprint — select it and copy manually', 'error');
+                                    showToast?.(isZh ? '复制密钥 ID 失败，请手动选中复制' : 'Could not copy the key ID — select it and copy manually', 'error');
                                   }
                                 }}
                                 className="p-1 hover:bg-[#EEF2FF] dark:hover:bg-[#242D48] rounded-md text-[#656B75] dark:text-[#A1A7B0] hover:text-[#355CFF] dark:hover:text-[#91A7FF] transition-colors cursor-pointer"
-                                title={isZh ? '复制密钥指纹' : 'Copy key fingerprint'}
+                                title={keyIdTooltip}
                               >
-                                {copiedKey === (k.key_fingerprint || keyIdentifier(k)) ? (
+                                {copiedKey === keyIdentifier(k) ? (
                                   <Check className="w-3.5 h-3.5 text-emerald-500" />
                                 ) : (
                                   <Copy className="w-3.5 h-3.5" />
@@ -562,7 +568,7 @@ export default function KeysView({
                         )}
                         <td className="ui-td text-right whitespace-nowrap space-x-1.5">
                           <button
-                            onClick={() => onNavigateToDashboard && onNavigateToDashboard(k.key, k.id)}
+                            onClick={() => onNavigateToDashboard && onNavigateToDashboard(k.id)}
                             className="text-xs px-2.5 py-1 rounded-lg bg-[#EEF2FF] dark:bg-[#242D48] hover:bg-[#355CFF]/15 text-[#355CFF] dark:text-[#91A7FF] border border-[#355CFF]/30 dark:border-[#91A7FF]/30 font-medium transition-colors inline-flex items-center space-x-1 cursor-pointer"
                             title={isAdmin ? (isZh ? '查看该密钥的 RPM / TPM 指标' : 'View RPM/TPM metrics') : (isZh ? '查看该密钥的调用记录与扣费' : 'View this key’s usage and charges')}
                           >

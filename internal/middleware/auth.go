@@ -30,9 +30,9 @@ const (
 	ContextKeyAPIKey       = "api_key"
 	ContextKeyAPIKeyConfig = "api_key_config"
 	ContextKeyUserRecord   = "user_record"
-	// ContextKeyAPIKeyFingerprint carries the non-reversible display identifier
-	// for the authenticated credential (never the credential or its digest).
-	ContextKeyAPIKeyFingerprint = "api_key_fingerprint"
+	// ContextKeyAPIKeyID carries the key's public identifier (ak_…). Access logs
+	// and audit lines name a key with it; the digest is never displayed.
+	ContextKeyAPIKeyID = "api_key_id"
 )
 
 // auditAuthFailure logs a client-side admission rejection (insufficient balance,
@@ -56,12 +56,13 @@ func auditAuthFailure(c *gin.Context, rawKey string, statusCode int, errMsg stri
 	if storage.GlobalAsyncLogger == nil {
 		return
 	}
-	// Store the non-reversible fingerprint, never a fragment of the credential:
-	// api_keys.key / usage_logs.api_key hold digests now, and a 6+2 character
-	// prefix/suffix would be the last cleartext remnant in the audit trail.
-	maskedKey := ""
+	// Record the digest, exactly as a successful call does: usage_logs.api_key is
+	// the join key back to api_keys, and a digest is not a usable credential. A
+	// value that never matched a row is not recorded (the 401 early-return above
+	// covers it), so no fragment of an unrecognised submission is persisted.
+	auditKey := ""
 	if rawKey != "" {
-		maskedKey = storage.APIKeyFingerprint(rawKey)
+		auditKey = storage.HashAPIKey(rawKey)
 	}
 	traceID := c.GetString("trace_id")
 	if traceID == "" {
@@ -69,7 +70,7 @@ func auditAuthFailure(c *gin.Context, rawKey string, statusCode int, errMsg stri
 	}
 	storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
 		TraceID:      traceID,
-		APIKey:       maskedKey,
+		APIKey:       auditKey,
 		StatusCode:   statusCode,
 		ErrorMessage: errMsg,
 		UsageSource:  "gateway_auth",
@@ -175,19 +176,37 @@ func AuthMiddleware() gin.HandlerFunc {
 		keyHash := storage.HashAPIKey(rawKey)
 		matchedKey := lookupSnapshotKey(cfg, rawKey, keyHash)
 
-		if matchedKey == nil {
-			auditAuthFailure(c, rawKey, http.StatusUnauthorized, "Incorrect or unauthorized API key provided")
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": gin.H{
-					"message": "Incorrect or unauthorized API key provided.",
-					"type":    "authentication_error",
-					"code":    "invalid_api_key",
-				},
-			})
-			return
+		// The snapshot is a cache with a synchronisation lag, so a miss is not proof
+		// that the credential is invalid: a key created on another replica, or one
+		// revoked since the last reload, exists only in durable storage at this
+		// instant. Ask storage once before rejecting, and when it does know the
+		// credential report its real state (revoked/disabled) instead of the generic
+		// invalid-key message.
+		var effectiveKey model.APIKeyConfig
+		resolvedFromStorage := false
+		if matchedKey != nil {
+			effectiveKey = *matchedKey
+		} else {
+			keyRec := lookupStorageCredential(c, rawKey, keyHash)
+			if keyRec == nil {
+				auditAuthFailure(c, rawKey, http.StatusUnauthorized, "Incorrect or unauthorized API key provided")
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+					"error": gin.H{
+						"message": "Incorrect or unauthorized API key provided.",
+						"type":    "authentication_error",
+						"code":    "invalid_api_key",
+					},
+				})
+				return
+			}
+			if denial := KeyStatusDenial(keyRec.Status); denial != nil {
+				auditAuthFailure(c, rawKey, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
+				AbortWithDenial(c, denial)
+				return
+			}
+			effectiveKey = keyRec.ToConfig()
+			resolvedFromStorage = true
 		}
-
-		effectiveKey := *matchedKey
 
 		// A GET video-task query is a read of a job that was already billed when
 		// it was created. It must stay reachable after the wallet/budget is
@@ -217,8 +236,12 @@ func AuthMiddleware() gin.HandlerFunc {
 		// Bounded by a short deadline: this runs on every data-plane request, so a
 		// stalled database must fail the request rather than pin the goroutine
 		// (and, on SQLite's single connection, the whole gateway).
+		//
+		// Skipped when the credential was just resolved from storage in the fallback
+		// above: the row in hand is already the authoritative, newest state, and a
+		// second query would only duplicate the work.
 		repo := storage.GetGlobalRepository()
-		if repo != nil {
+		if repo != nil && !resolvedFromStorage {
 			lookupCtx, cancel := context.WithTimeout(c.Request.Context(), authStorageTimeout)
 			keyRec, _ := repo.GetAPIKeyByKeyContext(lookupCtx, effectiveKey.Key)
 			cancel()
@@ -342,10 +365,10 @@ func AuthMiddleware() gin.HandlerFunc {
 		// Attribution for the audit row and future budget scoping. Migration 30
 		// backfills legacy keys; new keys inherit their owner's organization.
 		c.Set(ContextKeyOrg, effectiveKey.OrgID)
-		// The digest is what audit rows and ledger joins use; the fingerprint is
+		// The digest is what audit rows and ledger joins use; the public id is
 		// what logs and the console display.
 		c.Set(ContextKeyAPIKey, effectiveKey.Key)
-		c.Set(ContextKeyAPIKeyFingerprint, storage.APIKeyFingerprint(rawKey))
+		c.Set(ContextKeyAPIKeyID, effectiveKey.PublicID)
 		c.Set(ContextKeyAPIKeyConfig, &effectiveKey)
 		c.Next()
 	}

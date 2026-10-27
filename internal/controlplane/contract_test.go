@@ -188,7 +188,9 @@ func TestSavePricingRateRequestAcceptsExactlyTheWritableColumns(t *testing.T) {
 	}
 
 	for _, name := range sortedNames(request) {
-		if !record[name] {
+		// Key is writable but has no JSON representation: it holds the digest and
+		// no response may serialize it (see apiKeyView).
+		if name != "key" && !record[name] {
 			t.Errorf("the request accepts %q, which the stored record does not have", name)
 		}
 		if outputOnly[name] {
@@ -313,9 +315,9 @@ func TestCreateAPIKeyRequestAcceptsExactlyTheWritableColumns(t *testing.T) {
 		"used_cost_units": true,
 		"created_at":      true,
 		"updated_at":      true,
-		// Fingerprint is derived from Key when the row is read or created; it is
-		// never accepted from (or needed in) the creation body.
-		"key_fingerprint": true,
+		// The public identifier is minted by the repository when the row is
+		// created; it is never accepted from the creation body.
+		"key_id": true,
 		// Organization attribution is derived server-side (the owner's org) when
 		// CreateAPIKey stores the row; accepting it in the body would let a tenant
 		// label its traffic as another organization.
@@ -332,7 +334,9 @@ func TestCreateAPIKeyRequestAcceptsExactlyTheWritableColumns(t *testing.T) {
 	}
 
 	for _, name := range sortedNames(request) {
-		if !record[name] {
+		// Key is writable but has no JSON representation on the record: it holds the
+		// digest and no response may serialize it (see apiKeyView).
+		if name != "key" && !record[name] {
 			t.Errorf("the request accepts %q, which the stored record does not have", name)
 		}
 		if serverOwned[name] {
@@ -423,10 +427,10 @@ func TestAdminResponseShapesAreStable(t *testing.T) {
 			name: "storage.APIKeyRecord",
 			got:  jsonFieldNames(reflect.TypeOf(storage.APIKeyRecord{})),
 			want: []string{
-				"id", "key", "tenant_id", "allowed_models", "rpm", "tpm", "budget",
+				"id", "key_id", "tenant_id", "allowed_models", "rpm", "tpm", "budget",
 				"used_tokens", "used_cost", "budget_units", "used_cost_units",
 				"group_name", "user_id", "org_id", "status", "format_validation",
-				"created_at", "updated_at", "key_fingerprint",
+				"created_at", "updated_at",
 			},
 		},
 		{

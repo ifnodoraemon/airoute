@@ -16,9 +16,9 @@ export default function QuickStartModal({ apiKey, models = [], onClose, onCopy, 
   const baseUrl = origin ? `${origin}/v1` : '/v1';
   // A stored credential is never rendered: the console shows the plaintext exactly
   // once, in the creation dialog. The snippets therefore carry a placeholder and the
-  // header identifies the key by its fingerprint.
+  // header identifies the key by its key ID.
   const keyStr = '<YOUR_API_KEY>';
-  const keyFingerprint = apiKey?.key_fingerprint || '';
+  const keyId = apiKey?.key_id || '';
   const chatModels = availableKeyModels(apiKey, models).filter(name => inferClientModality(name) === 'chat');
   const model = chatModels[0] || 'YOUR_AVAILABLE_CHAT_MODEL';
 
@@ -226,8 +226,8 @@ for chunk in llm.stream(messages):
                 {isZh ? '接入代码示例' : 'Integration Code Examples'}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                {isZh ? '密钥指纹: ' : 'Fingerprint: '}
-                <code className="font-mono text-indigo-600 dark:text-indigo-400 font-semibold">{keyFingerprint || (isZh ? '未知' : 'unknown')}</code>
+                {isZh ? '密钥 ID: ' : 'Key ID: '}
+                <code className="font-mono text-indigo-600 dark:text-indigo-400 font-semibold">{keyId || (isZh ? '未知' : 'unknown')}</code>
                 {' · '}
                 {isZh ? '归属: ' : 'Tenant: '}{apiKey.tenant_id}
               </p>

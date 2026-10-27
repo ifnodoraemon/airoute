@@ -54,7 +54,7 @@ func TestAuthAcceptsCleartextCredentialAgainstDigestSnapshot(t *testing.T) {
 		c.JSON(http.StatusOK, gin.H{
 			"tenant": c.GetString(ContextKeyTenant),
 			"key":    c.GetString(ContextKeyAPIKey),
-			"fp":     c.GetString(ContextKeyAPIKeyFingerprint),
+			"key_id": c.GetString(ContextKeyAPIKeyID),
 		})
 	})
 
@@ -75,8 +75,11 @@ func TestAuthAcceptsCleartextCredentialAgainstDigestSnapshot(t *testing.T) {
 	if !contains(body, storage.HashAPIKey(credential)) {
 		t.Fatalf("request context does not carry the key digest: %s", body)
 	}
-	if contains(body, "kfp_") == false {
-		t.Fatalf("request context does not carry a display fingerprint: %s", body)
+	if contains(body, rec.PublicID) == false {
+		t.Fatalf("request context does not carry the key's public id: %s", body)
+	}
+	if contains(body, "kfp_") {
+		t.Fatalf("request context still carries the removed fingerprint: %s", body)
 	}
 
 	// The stored digest must not work as a bearer credential: hashing it again can

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import App from './App';
 
 // The first test that renders the whole console. Everything before this exercised
@@ -186,6 +186,77 @@ describe('App integration', () => {
     const urls = requestedUrls();
     expect(urls.some((u) => u.includes('/api/v1/admin/channels'))).toBe(true);
     expect(urls.some((u) => u.includes('/api/v1/admin/models/routes'))).toBe(true);
+  });
+
+  it('renders the admin sidebar in five responsibility-based groups', async () => {
+    // The old third group 「安全与资产 / Security」 mixed credentials, identity
+    // and finance. The sidebar is now generated from lib/navGroups.js, so this
+    // pins the split and that the moved items really render under their new
+    // group header rather than merely being listed somewhere in the nav.
+    signIn();
+    window.history.replaceState(null, '', '/#/costs');
+    stubGateway({
+      '/api/v1/auth/me': () => jsonResponse({ code: 0, data: { user: { username: 'root', role: 'admin' } } }),
+    });
+
+    render(<App />);
+    await waitForConsoleLoad();
+
+    const nav = document.querySelector('aside nav');
+    expect(nav).not.toBeNull();
+    const sidebar = within(nav);
+
+    // The grab-bag label is gone.
+    expect(sidebar.queryByText('安全与资产')).not.toBeInTheDocument();
+
+    // Each header's parent <div> is its group; items are looked up inside it so
+    // an item in the wrong group fails the test.
+    const groupOf = (header) => {
+      const headerEl = sidebar.getByText(header);
+      return within(headerEl.parentElement);
+    };
+
+    const billing = groupOf('计费与财务');
+    expect(billing.getByText('成本与毛利')).toBeInTheDocument();
+    expect(billing.getByText('钱包资金流水')).toBeInTheDocument();
+
+    const identity = groupOf('身份与治理');
+    expect(identity.getByText('用户管理')).toBeInTheDocument();
+    expect(identity.getByText('组织与成本中心')).toBeInTheDocument();
+    expect(identity.getByText('预算与告警')).toBeInTheDocument();
+
+    for (const header of ['监控与分析', '模型网关与调度', '计费与财务', '身份与治理', '演练与生态']) {
+      expect(sidebar.getByText(header)).toBeInTheDocument();
+    }
+
+    // The breadcrumb reads the group from the same config, so a tab that the old
+    // includes() chain sent to 「演练与生态」 now agrees with the sidebar.
+    const header = document.querySelector('header');
+    expect(header.textContent).toContain('计费与财务');
+    expect(header.textContent).toContain('成本与毛利');
+    expect(header.textContent).not.toContain('安全与资产');
+    expect(header.textContent).not.toContain('演练与生态');
+  });
+
+  it('renders the regular-user sidebar under its account and usage groups', async () => {
+    signIn('user', 'alice');
+    window.history.replaceState(null, '', '/#/console');
+    stubGateway({
+      '/api/v1/auth/me': () => jsonResponse({ code: 0, data: { user: { username: 'alice', role: 'user' } } }),
+    });
+
+    render(<App />);
+    await waitForConsoleLoad();
+
+    const sidebar = within(document.querySelector('aside nav'));
+    expect(sidebar.getByText('我的账户')).toBeInTheDocument();
+    expect(sidebar.getByText('使用与计费')).toBeInTheDocument();
+    // Both former group headers are gone, not just renamed in one place.
+    expect(sidebar.queryByText('资产与凭据')).not.toBeInTheDocument();
+    expect(sidebar.queryByText('演练与使用')).not.toBeInTheDocument();
+    // Admin-only destinations stay out of the regular-user navigation.
+    expect(sidebar.queryByText('模型路由')).not.toBeInTheDocument();
+    expect(sidebar.queryByText('用户管理')).not.toBeInTheDocument();
   });
 
   it('leaves the console when the stored session is rejected', async () => {

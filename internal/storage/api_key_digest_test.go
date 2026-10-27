@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -64,33 +65,34 @@ func TestAPIKeyIsStoredAsDigestAndStillAuthenticates(t *testing.T) {
 	}
 }
 
-// The display helpers must never expose the credential.
-func TestKeyDisplayHelpersNeverExposeCredential(t *testing.T) {
+// The console-facing identifier must carry no credential material: it is minted
+// independently of the secret, and the digest has no JSON representation at all.
+func TestKeyPublicIDCarriesNoCredentialMaterial(t *testing.T) {
 	const credential = "sk-airoute-ffffffffffffffffffffffffffffffff"
 	digest := HashAPIKey(credential)
 
-	masked := MaskStoredAPIKey(digest)
-	if strings.Contains(masked, credential) || masked == digest {
-		t.Fatalf("masked value %q leaks or equals the digest", masked)
+	publicID, err := NewAPIKeyPublicID()
+	if err != nil {
+		t.Fatalf("generate public id: %v", err)
 	}
-	if !strings.Contains(masked, "***") {
-		t.Fatalf("masked value %q has no mask marker", masked)
+	if strings.Contains(publicID, credential) || strings.Contains(publicID, digest) {
+		t.Fatalf("public id %q contains credential material", publicID)
 	}
-
-	// The fingerprint must be identical whether derived from the credential or the
-	// digest, and must not contain the credential.
-	if fromSecret, fromDigest := APIKeyFingerprint(credential), APIKeyFingerprint(digest); fromSecret != fromDigest {
-		t.Fatalf("fingerprint differs by input form: %q vs %q", fromSecret, fromDigest)
-	}
-	if fp := APIKeyFingerprint(credential); strings.Contains(fp, credential) || len(fp) > 32 {
-		t.Fatalf("fingerprint %q is not a bounded non-reversible identifier", fp)
+	if IsAPIKeyHash(publicID) {
+		t.Fatalf("public id %q is digest-shaped", publicID)
 	}
 
-	// MaskForDisplay is what list endpoints call.
-	rec := &APIKeyRecord{Key: digest}
-	rec.MaskForDisplay()
-	if rec.Key == digest || strings.Contains(rec.Key, credential) {
-		t.Fatalf("display key %q exposes the stored digest", rec.Key)
+	// Serializing a record (the shape handlers used to return) must expose the
+	// public id and never the digest.
+	payload, err := json.Marshal(&APIKeyRecord{ID: 7, PublicID: publicID, Key: digest, TenantID: "t"})
+	if err != nil {
+		t.Fatalf("marshal record: %v", err)
+	}
+	if strings.Contains(string(payload), digest) {
+		t.Fatalf("serialized record leaks the key digest: %s", payload)
+	}
+	if !strings.Contains(string(payload), `"key_id":"`+publicID+`"`) {
+		t.Fatalf("serialized record does not expose key_id: %s", payload)
 	}
 }
 

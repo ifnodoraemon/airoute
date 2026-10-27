@@ -211,7 +211,7 @@ const getDefaultArgsForTool = (toolName) => {
   return getToolInfo(toolName).defaultArgs;
 };
 
-export default function McpIntegrationView({ adminFetch, adminToken, keys = [], onCopy, showToast, lang = 'zh', t }) {
+export default function McpIntegrationView({ adminFetch, adminToken, onCopy, showToast, lang = 'zh', t }) {
   const isZh = lang === 'zh';
   const [servers, setServers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -1055,7 +1055,7 @@ curl -X POST "${messagesUrl}" \\
             </div>
 
             {/* 注入鉴权 Token 凭证栏 */}
-            <div className="p-3 bg-[#F0F1F2] dark:bg-[#22252B] rounded-xl border border-[#E4E6E9] dark:border-[#2C3038] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="p-3 bg-[#F0F1F2] dark:bg-[#22252B] rounded-xl border border-[#E4E6E9] dark:border-[#2C3038] flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-2.5">
               <div className="flex items-center gap-2">
                 <Lock className="w-4 h-4 text-[#355CFF] dark:text-[#91A7FF]" />
                 <div>
@@ -1068,22 +1068,6 @@ curl -X POST "${messagesUrl}" \\
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {keys && keys.length > 0 && (
-                  <select
-                    onChange={(e) => {
-                      if (e.target.value) setConfigToken(e.target.value);
-                    }}
-                    className="px-2 py-1 text-xs rounded-sm border border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] text-[#202124] dark:text-[#F1F2F4]"
-                    defaultValue=""
-                  >
-                    <option value="" disabled>{isZh ? '选择已发行 Key...' : 'Select issued key...'}</option>
-                    {keys.map(k => (
-                      <option key={k.key} value={k.key}>
-                        {`${k.tenant_id || k.id} · ${k.key_fingerprint || (isZh ? '无指纹' : 'no fingerprint')}`}
-                      </option>
-                    ))}
-                  </select>
-                )}
                 <input
                   type="text"
                   value={configToken}
@@ -1092,6 +1076,11 @@ curl -X POST "${messagesUrl}" \\
                   className="px-2.5 py-1 text-xs font-mono rounded-sm border border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] text-[#202124] dark:text-[#F1F2F4] min-w-[200px]"
                 />
               </div>
+              <p className="basis-full text-xs text-[#656B75] dark:text-[#A1A7B0]">
+                {isZh
+                  ? '列表里的 ak_… 是密钥 ID，只用于日志与工单识别，不能用于调用；明文仅在创建密钥时显示一次，遗失请新建一把。'
+                  : 'An ak_… value in the list is a key ID: it identifies the key in logs and tickets but cannot be used to call. The plaintext is shown once at creation — create a new key if it was lost.'}
+              </p>
             </div>
 
             {/* 客户端选择 Tabs */}
@@ -1382,25 +1371,6 @@ curl -X POST "${messagesUrl}" \\
                     {isZh ? '(支持 Bearer Token 与 X-API-Key 多租户隔离)' : '(Supports Bearer Token & multi-tenant isolation)'}
                   </span>
                 </div>
-                {keys && keys.length > 0 && (
-                  <div className="flex items-center gap-1.5 text-xs">
-                    <span className="text-xs text-[#656B75] dark:text-[#A1A7B0]">{isZh ? '快捷填充:' : 'Quick Fill:'}</span>
-                    <select
-                      onChange={(e) => {
-                        if (e.target.value) setProbeToken(e.target.value);
-                      }}
-                      className="px-2 py-1 text-xs rounded-sm border border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] text-[#202124] dark:text-[#F1F2F4]"
-                      defaultValue=""
-                    >
-                      <option value="" disabled>{isZh ? '选择网关已发行 Key...' : 'Select issued key...'}</option>
-                      {keys.map(k => (
-                        <option key={k.key} value={k.key}>
-                          {`${k.tenant_id || k.id} · ${k.key_fingerprint || (isZh ? '无指纹' : 'no fingerprint')}`}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
               </div>
               <input
                 type="text"
@@ -1409,6 +1379,11 @@ curl -X POST "${messagesUrl}" \\
                 placeholder={isZh ? '输入虚拟 API Key 或管理员 Token (如 sk-airoute-...)' : 'Enter API Key or Admin Token (e.g., sk-airoute-...)'}
                 className="w-full px-3 py-1.5 font-mono text-xs rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] text-[#202124] dark:text-[#F1F2F4] placeholder-[#656B75] dark:placeholder-[#A1A7B0] focus:outline-none focus:ring-1 focus:ring-[#355CFF]"
               />
+              <p className="text-xs text-[#656B75] dark:text-[#A1A7B0]">
+                {isZh
+                  ? '列表里的 ak_… 是密钥 ID，只用于日志与工单识别，不能用于调用；明文仅在创建密钥时显示一次，遗失请新建一把。'
+                  : 'An ak_… value in the list is a key ID: it identifies the key in logs and tickets but cannot be used to call. The plaintext is shown once at creation — create a new key if it was lost.'}
+              </p>
             </div>
 
             {/* 方法、服务与参数选择 */}

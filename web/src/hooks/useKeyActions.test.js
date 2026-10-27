@@ -90,7 +90,7 @@ describe('useKeyActions', () => {
   it('creates a key and keeps the dialog open to show the credential once', async () => {
     globalThis.fetch.mockResolvedValue(jsonResponse({
       code: 0,
-      data: { key: 'sk-airoute-created', key_fingerprint: 'kfp_abc123', tenant_id: 'root', rpm: 60, tpm: 100000 },
+      data: { key: 'sk-airoute-created', key_id: 'ak_abc123abc123abc12345', tenant_id: 'root', rpm: 60, tpm: 100000 },
     }));
     const { result, refresh } = setup();
     act(() => {
@@ -113,7 +113,7 @@ describe('useKeyActions', () => {
     expect(result.current.showKeyModal).toBe(true);
     expect(result.current.createdKey).toEqual(expect.objectContaining({
       key: 'sk-airoute-created',
-      fingerprint: 'kfp_abc123',
+      keyId: 'ak_abc123abc123abc12345',
     }));
     expect(refresh).toHaveBeenCalled();
   });
@@ -121,7 +121,7 @@ describe('useKeyActions', () => {
   it('closing the dialog drops the one-time credential', async () => {
     globalThis.fetch.mockResolvedValue(jsonResponse({
       code: 0,
-      data: { key: 'sk-airoute-created', key_fingerprint: 'kfp_abc123' },
+      data: { key: 'sk-airoute-created', key_id: 'ak_abc123abc123abc12345' },
     }));
     const { result } = setup();
     act(() => {
@@ -229,7 +229,7 @@ describe('useKeyActions', () => {
     const { result, refresh } = setup();
 
     await act(async () => {
-      await result.current.handleToggleKeyStatus({ id: 1, key: 'sk-a', status: 'active' });
+      await result.current.handleToggleKeyStatus({ id: 1, key_id: 'ak_0000aaaa1111bbbb2222', status: 'active' });
     });
 
     const [url, opts] = globalThis.fetch.mock.calls.at(-1);
@@ -242,7 +242,7 @@ describe('useKeyActions', () => {
     const { result } = setup();
 
     await act(async () => {
-      await result.current.handleToggleKeyStatus({ id: 1, key: 'sk-a', status: 'disabled' });
+      await result.current.handleToggleKeyStatus({ id: 1, key_id: 'ak_0000aaaa1111bbbb2222', status: 'disabled' });
     });
 
     expect(JSON.parse(globalThis.fetch.mock.calls.at(-1)[1].body).status).toBe('active');
@@ -385,7 +385,7 @@ describe('useKeyActions', () => {
 
     resolveFetch(jsonResponse({
       code: 0,
-      data: { key: 'sk-airoute-created', key_fingerprint: 'kfp_abc123', tenant_id: 'root', rpm: 60, tpm: 100000 },
+      data: { key: 'sk-airoute-created', key_id: 'ak_abc123abc123abc12345', tenant_id: 'root', rpm: 60, tpm: 100000 },
     }));
     await act(async () => {
       await pending;
@@ -395,7 +395,7 @@ describe('useKeyActions', () => {
     expect(result.current.showKeyModal).toBe(true);
     expect(result.current.createdKey).toEqual(expect.objectContaining({
       key: 'sk-airoute-created',
-      fingerprint: 'kfp_abc123',
+      keyId: 'ak_abc123abc123abc12345',
     }));
   });
 

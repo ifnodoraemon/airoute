@@ -329,6 +329,17 @@ All Admin APIs are under `/api/v1/admin`:
 | `GET` | `/api/v1/admin/stats/overview` | Query aggregated gateway statistics (QPS, TTFT, Tokens) |
 | `GET` | `/api/v1/admin/models` | List all active models across providers |
 
+### API key representations
+
+A client key has two representations and they are not interchangeable:
+
+- `key` — the bearer credential (`sk-airoute-…`, 43 characters). Returned **only** by the creation response, which is marked `key_returned_once: true`. The gateway stores a SHA-256 digest and cannot show the credential again.
+- `key_id` — the public identifier (`ak_` followed by 20 hex characters). Present on every list and creation response; it names the key in logs, exports and support tickets and **cannot authenticate a call**.
+
+List responses contain neither the credential nor its digest.
+
+Note the two different uses of the name: the `key_id` **field** in a key object is the public `ak_…` identifier, while the `key_id` **query parameter** accepted by `/api/v1/admin/logs` and `/api/v1/admin/stats/overview` is the numeric row `id` used for drill-down.
+
 ---
 
 ## 5. Observability Endpoints

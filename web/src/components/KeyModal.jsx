@@ -88,10 +88,18 @@ export default function KeyModal({
             </div>
           </div>
 
-          {createdKey.fingerprint && (
-            <div className="text-xs">
-              <span className="text-[#656B75] dark:text-[#A1A7B0]">{t?.keyFingerprintLabel || copy('密钥指纹', 'Key fingerprint')}: </span>
-              <code className="font-mono select-all">{createdKey.fingerprint}</code>
+          {createdKey.keyId && (
+            <div className="text-xs space-y-0.5">
+              <div>
+                <span className="text-[#656B75] dark:text-[#A1A7B0]">{t?.keyIdLabel || copy('密钥 ID', 'Key ID')}: </span>
+                <code className="font-mono select-all">{createdKey.keyId}</code>
+              </div>
+              <p className="text-[11px] leading-relaxed text-[#656B75] dark:text-[#A1A7B0]">
+                {t?.keyIdHint || copy(
+                  '密钥 ID 仅用于在日志、账单和工单中识别密钥，不能用于鉴权。',
+                  'The key ID identifies the key in logs, billing and support tickets; it cannot authenticate a call.',
+                )}
+              </p>
             </div>
           )}
 

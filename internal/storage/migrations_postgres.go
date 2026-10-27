@@ -504,6 +504,7 @@ func (db *DB) migratePostgres() error {
 		{Version: 36, Name: "wallet_ledger", Up: CreateWalletLedger},
 		{Version: 37, Name: "supplier_costs", Up: CreateSupplierCosts},
 		{Version: 38, Name: "usage_daily", Up: CreateUsageDaily},
+		{Version: 39, Name: "api_key_public_ids", Up: addAPIKeyPublicIDs},
 	}
 	return db.runMigrations(migrations)
 }

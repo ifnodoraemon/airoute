@@ -9,7 +9,7 @@ import { availableKeyModels } from '../lib/keyModels';
 
 const response = data => ({ ok: true, status: 200, json: async () => ({ code: 0, data }) });
 const user = { username: 'alice', role: 'user', balance: 10 };
-const key = { id: 1, key: 'sk-test-only', status: 'active', allowed_models: ['chat-b'] };
+const key = { id: 1, key_id: 'ak_1f0013dea24034ac0001', status: 'active', allowed_models: ['chat-b'] };
 
 beforeEach(() => { window.history.replaceState(null, '', '/'); });
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
@@ -59,7 +59,7 @@ describe('functional journey regressions', () => {
     ['Claude Messages','/v1/messages','x-api-key',{ content:[{text:'hello'}] }],
     ['Google Gemini','/v1beta/models/chat-b:generateContent','x-goog-api-key',{ candidates:[{content:{parts:[{text:'hello'}]}}] }],
   ])('tests the selected %s protocol using an allowed model', async (label,path,header,body) => {
-    // The listed key is a display mask now, so the probe can only work with the
+    // The list only carries a key ID now, so the probe can only work with the
     // plaintext the operator pastes for the session.
     const sessionKey = 'sk-airoute-onboarding-0123456789';
     const fetchMock=vi.fn(async()=>({ok:true,json:async()=>body}));vi.stubGlobal('fetch',fetchMock);
@@ -73,9 +73,9 @@ describe('functional journey regressions', () => {
     fireEvent.click(screen.getByRole('button',{name:'立即测试握手'}));
     await waitFor(()=>expect(fetchMock).toHaveBeenCalledOnce());
     expect(fetchMock.mock.calls[0][0]).toContain(path);
-    // The probe authenticates with the pasted plaintext, never the list mask.
+    // The probe authenticates with the pasted plaintext, never the listed key ID.
     expect(fetchMock.mock.calls[0][1].headers[header]).toBe(sessionKey);
-    expect(fetchMock.mock.calls[0][1].headers[header]).not.toBe(key.key);
+    expect(fetchMock.mock.calls[0][1].headers[header]).not.toBe(key.key_id);
     expect(JSON.stringify(fetchMock.mock.calls[0][1].headers)).not.toContain('***');
     expect(await screen.findByText('hello')).toBeInTheDocument();
   });

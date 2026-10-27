@@ -189,14 +189,14 @@ func AccessLogMiddleware() gin.HandlerFunc {
 	}
 }
 
-// accessLogKey renders the authenticated credential for the access line.
+// accessLogKey renders the authenticated key for the access line.
 //
-// ContextKeyAPIKey holds the stored digest (never the credential), and
-// ContextKeyAPIKeyFingerprint holds the display identifier; the fingerprint is
-// preferred so the line stays comparable with the console's key column.
+// ContextKeyAPIKey holds the stored digest (never the credential) and
+// ContextKeyAPIKeyID holds the public identifier; the identifier is preferred so
+// the line stays comparable with the console's key column.
 func accessLogKey(c *gin.Context) string {
-	if fingerprint := c.GetString(ContextKeyAPIKeyFingerprint); fingerprint != "" {
-		return fingerprint
+	if keyID := c.GetString(ContextKeyAPIKeyID); keyID != "" {
+		return keyID
 	}
 	return maskAPIKey(c.GetString(ContextKeyAPIKey))
 }

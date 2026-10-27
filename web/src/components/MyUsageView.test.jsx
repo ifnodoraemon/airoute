@@ -16,7 +16,7 @@ describe('MyUsageView', () => {
         return envelope({ balance: 10.5 });
       }
       if (url.endsWith('/user/keys')) {
-        return envelope([{ id: 1, key: 'sk-***mask', status: 'active', budget: 5, used_cost: 2.5, rpm: 60, tpm: 100000, used_tokens: 1000 }]);
+        return envelope([{ id: 1, key_id: 'ak_1f0013dea24034ac0001', status: 'active', budget: 5, used_cost: 2.5, rpm: 60, tpm: 100000, used_tokens: 1000 }]);
       }
       throw new Error(`unexpected ${url}`);
     });
@@ -27,7 +27,7 @@ describe('MyUsageView', () => {
     expect(screen.getByText('5,678')).toBeTruthy();
     expect(screen.getByText('¥1.2345')).toBeTruthy();
     expect(screen.getByText('¥10.5000')).toBeTruthy();
-    expect(screen.getByText('sk-***mask')).toBeTruthy();
+    expect(screen.getByText('ak_1f0013dea24034ac0001')).toBeTruthy();
     expect(screen.getByText('¥2.5000')).toBeTruthy();
     expect(screen.getByText('¥5.0000')).toBeTruthy();
     expect(adminFetch).toHaveBeenCalledWith('/api/v1/admin/stats/overview');

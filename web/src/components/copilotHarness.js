@@ -418,9 +418,9 @@ export async function executeHarnessTool(toolName, args = {}, context = {}) {
 
       case 'generate_client_config': {
         const clientType = safeArgs.client_type || 'all';
-        // Key rows only carry display masks (credentials are stored as digests),
+        // Key rows only carry a public key ID (credentials are stored as digests),
         // so a generated config must not pretend to hold the real credential: the
-        // operator pastes it themselves. A mask in a snippet is unusable and
+        // operator pastes it themselves. A key ID in a snippet is unusable and
         // teaches the wrong copy/paste habit.
         const snippetKey = API_KEY_PLACEHOLDER;
         const modelName = safeArgs.preferred_model || models[0] || 'deepseek-v4-flash';

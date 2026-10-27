@@ -18,7 +18,12 @@ import useUnsavedGuard from '../hooks/useUnsavedGuard';
 import DiscardChangesDialog from './DiscardChangesDialog';
 import { availableKeyModels } from '../lib/keyModels';
 import { inferClientModality } from '../lib/modelModality';
-import { API_KEY_PLACEHOLDER, isUsableAPIKey } from '../lib/apiKey';
+import {
+  API_KEY_PLACEHOLDER,
+  credentialProblem,
+  credentialProblemHint,
+  isUsableAPIKey
+} from '../lib/apiKey';
 
 export default function OnboardingModal({
   isOpen,
@@ -37,7 +42,7 @@ export default function OnboardingModal({
   // Only rows with an id can scope the request; the selector keys off it.
   const contextKeys = useMemo(() => activeKeys.filter(key => key.id != null), [activeKeys]);
   // The wizard keeps two separate selections. `selectedKeyId` picks a listed row
-  // for its tenant/model scope only — its `key` is an irreversible display mask.
+  // for its tenant/model scope only — it exposes a key ID, never a credential.
   // `sessionApiKey` is the plaintext the operator pastes for the live probe and
   // is kept in memory for the lifetime of the modal.
   const [selectedKeyId, setSelectedKeyId] = useState(() => (contextKeys[0] ? String(contextKeys[0].id) : ''));
@@ -126,12 +131,7 @@ export default function OnboardingModal({
   const handleTestProbe = async () => {
     if (!isUsableAPIKey(sessionApiKey)) {
       if (showToast) {
-        showToast(
-          isZh
-            ? '请先粘贴本次会话的 API Key 明文：密钥列表只显示掩码，无法用于握手探测'
-            : 'Paste the plaintext API key for this session first: the key list only shows display masks, which cannot authenticate the probe',
-          'warning'
-        );
+        showToast(credentialProblemHint(credentialProblem(sessionApiKey), isZh), 'warning');
       }
       return;
     }
@@ -362,7 +362,7 @@ print(message.content[0].text)
                     {contextKeys.map((k) => (
                       <option key={String(k.id)} value={String(k.id)}>
                         {k.tenant_id ? `[${k.tenant_id}] ` : ''}
-                        {k.key_fingerprint || (isZh ? '无指纹' : 'no fingerprint')} (RPM: {k.rpm || 60})
+                        {k.key_id || `#${k.id}`} (RPM: {k.rpm || 60})
                       </option>
                     ))}
                   </select>
@@ -379,7 +379,7 @@ print(message.content[0].text)
                 </div>
               )}
 
-              {/* The mask in the list cannot authenticate anything, so the wizard
+              {/* The key ID in the list cannot authenticate anything, so the wizard
                   asks for the plaintext it will actually send. */}
               <div className="mt-3 space-y-1.5">
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
@@ -396,8 +396,8 @@ print(message.content[0].text)
                 />
                 <p className="ui-meta">
                   {isZh
-                    ? '密钥列表只显示不可还原的掩码；明文仅用于握手探测，不写入浏览器存储。'
-                    : 'The key list only shows irreversible display masks. The plaintext is used by the live probe only and is never written to browser storage.'}
+                    ? '密钥列表只显示密钥 ID（ak_…），它不能用于鉴权；请粘贴创建时保存的一次性明文，明文仅用于握手探测，不写入浏览器存储。'
+                    : 'The key list only shows key IDs (ak_…), which cannot authenticate. Paste the one-time plaintext you saved at creation; it is used by the live probe only and is never written to browser storage.'}
                 </p>
               </div>
             </div>
