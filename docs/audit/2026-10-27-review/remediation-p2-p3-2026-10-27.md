@@ -28,18 +28,19 @@
 | `68eeb3c` | A12 全量：API key 以 SHA-256 摘要落库（迁移 v29），`api_keys/usage_logs/billing_settlements/request_traces` 全部改为摘要，账本 join 不变；创建仅返回一次明文，列表返回掩码+指纹；摘要不可作为 bearer |
 | `427fc63` | A12 集成测试格式修正 |
 | `4524dc8` | 非管理员经 `/admin/keys` 创建时强制自助配额（rpm 默认 60/上限 6000、tpm 默认 10 万/上限 1000 万、budget 非负、租户服务端派生） |
+| `f198aba` | D15 控制面访问隔离：`/api/v1/admin` 与 `/app` 默认仅允许 loopback/私网客户端；支持 CIDR/Host allowlist 与显式 `ALLOW_PUBLIC`；nginx 默认 vhost 同步边缘 allow/deny；测试入口显式 opt-out |
 
 ## 2. P2/P3 覆盖
 
 | 领域 | 已修复 |
 |---|---|
-| 认证安全 | A06-A17（A12 全量、A14 由 D15 文档化处理、A15 前端） |
+| 认证安全 | A06-A17（A12 全量、A14 由 D15 访问控制、A15 前端） |
 | 计费 | B4-B15 |
 | 路由/协议 | R-05..R-17 |
 | API/流式 | A08-A20（A11/A16/A18-followup/B7 见批 2） |
 | 存储/遥测 | ST-05..ST-16 |
 | 前端 | W01-W12 |
-| 部署 | D01-D18（D15 见 §5） |
+| 部署 | D01-D18 |
 
 ## 3. 回归与线上验证
 
@@ -55,6 +56,7 @@
 | 计费保护 | 删除已计费流水 → 409 且行保留；新指标 `billing_unattributed_total`/`billing_ledger_unlinked_units`/`billing_audit_pruned_units`/`billing_estimate_bias_ppm` 可用 |
 | 其它 | `count_tokens` 200 走原生渠道；时间序列 24h 接口 200；发布后 30 分钟 2501 条 200、0 条 5xx；两副本 0 ERROR；临时 key 全部清理（active=4） |
 | A12 发布方式 | 停机协调重启（先备份 DB，停止两副本，依次启动以单实例执行迁移 v29，再 reload LB）；发布窗口内 LB 有秒级 502，恢复后真实流量 200 |
+| D15 访问控制 | 本机/私网客户端访问 `/api/v1/admin`、`/app` 正常（未认证 admin 为 401，控制台 200）；伪造公网 `X-Forwarded-For` 经 LB 访问两者均 403；`/v1` 数据面不受影响；nginx `nginx -t` 通过 |
 
 ## 4. 行为变化（运维需知）
 
@@ -66,10 +68,10 @@
 6. **路由 URL 语义**：裸 origin 的 OpenAI 风格渠道现在请求 `/v1/...`（控制台预设与线上渠道均带版本/前缀，不受影响）。
 7. **审计不可删**：已计费流水不能删除（409），需冲正流程；报表/导出以指纹标识 key。
 8. **前端**：Escape 只关闭最上层；渠道上游 key 不再展示；自助 key 表单隐藏 tenant、显示配额默认/上限与一次性明文+指纹。
+9. **控制面访问隔离（D15）**：`/api/v1/admin` 与内嵌控制台 `/app` 默认只允许 loopback/私网客户端；公网客户端即使使用默认 vhost 也返回 403。可用 `GATEWAY_ADMIN_ALLOWED_IPS`（CIDR，覆盖默认）、`GATEWAY_ADMIN_ALLOWED_HOSTS`（Host 白名单）收紧/调整；`GATEWAY_ADMIN_ALLOW_PUBLIC=true` 可显式放开（不推荐）。数据面 `/v1/*` 不受此限制。
 
 ## 5. 已知残留（不阻塞目标）
 
-- **D15**：Host 头控制面隔离仍为"文档化限制"而非强制（用户通过 `http://127.0.0.1:8080` 使用控制台，默认拦截会破坏该访问方式）；已有认证、强凭证、metrics token、注册关闭作为补偿控制。若需强制，可按部署批次增加显式 Host/IP allowlist。
 - 历史 `usage_logs` 中仍有 3 条**脱敏片段**（如 `sk-aud...27`，length 11，非可用凭证），迁移只重写真实 key；不影响安全。
 - 测试健壮性：`TestForeignCurrencyRecordDoesNotPoisonBatch` 在 `-count=3` 下因包级 Prometheus 指标状态串扰偶发失败（单次运行稳定）。
 - `off_peak_discount<=0` 仍被强制为 0.5，无法表达"无折扣"。
