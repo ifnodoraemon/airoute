@@ -492,6 +492,7 @@ func (db *DB) migratePostgres() error {
 		{Version: 24, Name: "reclassify_client_canceled", Up: reclassifyClientCanceledUsageLogs},
 		{Version: 25, Name: "oauth_identities", Up: createOAuthIdentities},
 		{Version: 26, Name: "video_tasks", Up: createVideoTasks},
+		{Version: 27, Name: "users_email_unique", Up: createUsersEmailUniqueIndex},
 	}
 	return db.runMigrations(migrations)
 }

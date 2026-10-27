@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lib/pq"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -83,12 +84,15 @@ func (r *Repository) GetUserByIDContext(ctx context.Context, id int64) (*UserRec
 	return &u, nil
 }
 
-// GetUserByEmail finds a user by email address.
+// GetUserByEmail finds a user by email address. The lookup is case-insensitive
+// because the uniqueness guarantee is on LOWER(email); ORDER BY id keeps the
+// result deterministic on databases where the unique index could not be created
+// and duplicate rows still exist.
 func (r *Repository) GetUserByEmail(email string) (*UserRecord, error) {
 	if r == nil || r.db == nil || strings.TrimSpace(email) == "" {
 		return nil, sql.ErrNoRows
 	}
-	row := r.db.QueryRow(`SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE email = ?`, strings.TrimSpace(email))
+	row := r.db.QueryRow(`SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE email <> '' AND LOWER(email) = LOWER(?) ORDER BY id ASC LIMIT 1`, strings.TrimSpace(email))
 	var u UserRecord
 	if err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.Balance, &u.BalanceUnits, &u.GroupName, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		return nil, err
@@ -106,7 +110,33 @@ type recordInserter interface {
 	InsertGetID(query string, args ...any) (int64, error)
 }
 
-func insertUser(db recordInserter, u *UserRecord) error {
+// userInserter is the insert surface used by insertUser: the email conflict
+// pre-check needs a QueryRow in addition to the shared InsertGetID.
+type userInserter interface {
+	recordInserter
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+// ErrEmailAlreadyRegistered is returned when creating an account would duplicate
+// an existing email address (compared case-insensitively). Handlers map it to a
+// client error instead of a generic failure.
+var ErrEmailAlreadyRegistered = errors.New("email already registered")
+
+// isEmailConflictError reports whether err is the unique violation raised by
+// usersEmailUniqueIndex. Both drivers put the index name in the error text;
+// PostgreSQL additionally reports the SQLSTATE code.
+func isEmailConflictError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) && string(pqErr.Code) == "23505" {
+		return strings.Contains(strings.ToLower(pqErr.Constraint), usersEmailUniqueIndex)
+	}
+	return strings.Contains(strings.ToLower(err.Error()), usersEmailUniqueIndex)
+}
+
+func insertUser(db userInserter, u *UserRecord) error {
 	if u.Role == "" {
 		u.Role = "user"
 	}
@@ -116,9 +146,26 @@ func insertUser(db recordInserter, u *UserRecord) error {
 	if u.GroupName == "" {
 		u.GroupName = "default"
 	}
+	// Reject a duplicate email before inserting. This covers the common
+	// sequential case (and databases where the unique index could not be created
+	// because they still hold duplicates); the partial unique index on
+	// LOWER(email) is what makes the concurrent case race-proof, and the insert
+	// error is classified below.
+	if email := strings.TrimSpace(u.Email); email != "" {
+		var taken int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM users WHERE email <> '' AND LOWER(email) = LOWER(?)`, email).Scan(&taken); err != nil {
+			return err
+		}
+		if taken > 0 {
+			return ErrEmailAlreadyRegistered
+		}
+	}
 	id, err := db.InsertGetID(`INSERT INTO users (username, email, password_hash, role, status, balance, balance_units, group_name, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 		u.Username, u.Email, u.PasswordHash, u.Role, u.Status, u.Balance, ToUnits(u.Balance), u.GroupName)
 	if err != nil {
+		if isEmailConflictError(err) {
+			return ErrEmailAlreadyRegistered
+		}
 		return err
 	}
 	u.ID = id

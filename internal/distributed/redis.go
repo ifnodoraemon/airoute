@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -50,7 +52,10 @@ func InitRedis(redisURL string) *Client {
 
 	opt, err := redis.ParseURL(redisURL)
 	if err != nil {
-		telemetry.ScopedLogger("sync").Warn("failed to parse REDIS_URL, falling back to local memory", "error", err.Error(), "url", redisURL)
+		// Never log the raw URL here: it normally carries the Redis password in
+		// the userinfo section, and this branch exists precisely because the URL
+		// is malformed (so the operator needs the address, not the secret).
+		telemetry.ScopedLogger("sync").Warn("failed to parse REDIS_URL, falling back to local memory", "error", err.Error(), "url", redactRedisURL(redisURL))
 		globalClient = nil
 		return nil
 	}
@@ -239,4 +244,33 @@ func (c *Client) GetRDB() *redis.Client {
 		return nil
 	}
 	return c.rdb
+}
+
+// redactRedisURL removes the password from a Redis URL so it can be logged.
+//
+// The URL is logged when it cannot be parsed, which is exactly the case where
+// url.Parse may fail too: the fallback therefore masks the userinfo span by hand
+// rather than falling back to the raw string.
+func redactRedisURL(raw string) string {
+	if raw == "" {
+		return raw
+	}
+	if parsed, err := url.Parse(raw); err == nil && parsed.User != nil {
+		if _, hasPassword := parsed.User.Password(); hasPassword {
+			parsed.User = url.UserPassword(parsed.User.Username(), "REDACTED")
+		}
+		return parsed.String()
+	}
+
+	schemeEnd := strings.Index(raw, "://")
+	hostStart := 0
+	if schemeEnd >= 0 {
+		hostStart = schemeEnd + 3
+	}
+	at := strings.LastIndex(raw, "@")
+	if at <= hostStart || strings.Contains(raw[hostStart:at], "/") {
+		// No userinfo section, or it does not belong to the authority.
+		return raw
+	}
+	return raw[:hostStart] + "REDACTED" + raw[at:]
 }

@@ -137,7 +137,7 @@ func TruncateSnippet(payload string, max int) string {
 	if max <= 0 {
 		max = 4096
 	}
-	cleaned := SensitiveKeyPattern.ReplaceAllString(payload, "$1=[REDACTED]")
+	cleaned := redactSensitiveValues(payload)
 	if len(cleaned) <= max {
 		return cleaned
 	}
@@ -149,6 +149,47 @@ func TruncateSnippet(payload string, max int) string {
 	return cleaned[:cut] + "…(truncated)"
 }
 
-// SensitiveKeyPattern matches common credential fields in JSON/query payloads so
-// archived snippets never retain API keys, tokens or passwords.
-var SensitiveKeyPattern = regexp.MustCompile(`(?i)("?(?:api[_-]?key|authorization|token|secret|password|x-api-key)"?\s*[:=]\s*"?)([^",\s]+)`)
+// redactSensitiveValues removes credential values from a request/response
+// snippet. Four shapes are covered because the gateway archives all of them:
+//
+//	JSON      {"authorization":"Bearer sk-live-..."}
+//	header    Authorization: Bearer sk-live-...
+//	query     ?api_key=sk-live-...&model=...
+//	bare      upstream rejected Bearer sk-live-...
+//
+// The previous single pattern stopped the value at the first whitespace, so
+// `"authorization":"Bearer sk-..."` redacted only the word "Bearer" and stored
+// the actual token in request_traces for the whole retention window.
+func redactSensitiveValues(payload string) string {
+	// 1. JSON / quoted values: replace the whole quoted string, escapes included.
+	payload = sensitiveQuotedValuePattern.ReplaceAllString(payload, `$1"[REDACTED]"`)
+	// 2. Authorization headers: the value may contain a scheme and a token, so it
+	//    runs to the end of the line (or to the next JSON brace).
+	payload = sensitiveAuthorizationPattern.ReplaceAllString(payload, `$1$2$3[REDACTED]`)
+	// 3. Query-string and bare assignments: the value ends at a delimiter.
+	payload = SensitiveKeyPattern.ReplaceAllString(payload, `$1[REDACTED]`)
+	// 4. Schemes left over in free text (e.g. an upstream error message).
+	payload = credentialSchemePattern.ReplaceAllString(payload, `$1 [REDACTED]`)
+	return payload
+}
+
+// sensitiveFieldNames lists the credential-bearing field names used by the
+// gateway's own JSON bodies, query strings and proxy headers.
+const sensitiveFieldNames = `(?:proxy[_-]?authorization|authorization|x[_-]goog[_-]api[_-]key|x[_-]api[_-]key|api[_-]?key|api-key|access[_-]token|refresh[_-]token|id[_-]token|token|client[_-]secret|secret|password|passwd|pwd)`
+
+// SensitiveKeyPattern matches a credential assignment whose value is unquoted
+// (query strings, `key: value` pairs). Quoted values are handled by
+// sensitiveQuotedValuePattern.
+var SensitiveKeyPattern = regexp.MustCompile(`(?i)("?` + sensitiveFieldNames + `"?\s*[:=]\s*)([^\s"'&,;}]+)`)
+
+// sensitiveQuotedValuePattern matches a credential field with a quoted value.
+var sensitiveQuotedValuePattern = regexp.MustCompile(`(?i)("?` + sensitiveFieldNames + `"?\s*[:=]\s*)"(?:[^"\\]|\\.)*"`)
+
+// sensitiveAuthorizationPattern matches an Authorization header, whose value is
+// "<scheme> <credentials>" and therefore contains a space. The leading group
+// keeps the regex from matching a quoted JSON field name (already handled above).
+var sensitiveAuthorizationPattern = regexp.MustCompile(`(?i)(^|[^"\w])((?:proxy[_-]?)?authorization)(\s*[:=]\s*)([^\r\n"{}]+)`)
+
+// credentialSchemePattern matches "Bearer <token>" / "Basic <blob>" wherever the
+// field name is absent.
+var credentialSchemePattern = regexp.MustCompile(`(?i)\b(bearer|basic)\s+([A-Za-z0-9\-._~+/=]{6,})`)

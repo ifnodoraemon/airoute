@@ -199,9 +199,15 @@ func normalizeModelPrice(rec *ModelPriceRecord) {
 	if rec.OffPeakMode == "" {
 		rec.OffPeakMode = "custom"
 	}
-	if rec.OffPeakSlots == "" && rec.OffPeakEnabled {
-		rec.OffPeakSlots = `[{"start":"00:00","end":"08:30","discount":0.5}]`
-	}
+	// Never synthesise an off-peak slot list here.
+	//
+	// This used to write [{"start":"00:00","end":"08:30","discount":0.5}] whenever
+	// a row enabled off-peak without explicit slots. billing.CustomOffPeakStrategy
+	// evaluates the legacy single window (off_peak_start/off_peak_end) only when
+	// the slot list is EMPTY, so the synthetic slot silently replaced the
+	// operator's window: a configured 22:00-06:00 @0.25 window charged full price
+	// at 23:00 and 0.5 (instead of 0.25) at 03:00. An empty slot list is a
+	// legitimate configuration meaning "use the single window".
 	if rec.OffPeakStart == "" {
 		rec.OffPeakStart = "00:00"
 	}

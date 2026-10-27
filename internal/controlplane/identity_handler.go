@@ -1,6 +1,7 @@
 package controlplane
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -103,7 +104,7 @@ func (h *AdminHandler) Register(c *gin.Context) {
 		Budget:        100.0,
 		Status:        "active",
 	}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "创建账号及初始密钥失败，请重试"})
+		respondRegistrationFailure(c, err)
 		return
 	}
 	h.syncDataPlane()
@@ -129,4 +130,20 @@ func (h *AdminHandler) Register(c *gin.Context) {
 			"api_key": newKey,
 		},
 	})
+}
+
+// respondRegistrationFailure renders the account-creation error.
+//
+// A duplicate email is a deterministic client error rather than a server
+// failure. Registration checks whether the email exists and then inserts, so two
+// concurrent requests carrying the same address can both pass the check; the
+// unique index on LOWER(email) (migration 27) makes the database reject the
+// loser, and that rejection is reported here as 409 instead of a generic 500 (or,
+// before the index, a second account silently sharing the address).
+func respondRegistrationFailure(c *gin.Context, err error) {
+	if errors.Is(err, storage.ErrEmailAlreadyRegistered) {
+		c.JSON(http.StatusConflict, gin.H{"code": 409, "error": "该邮箱已被绑定注册"})
+		return
+	}
+	c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "创建账号及初始密钥失败，请重试"})
 }

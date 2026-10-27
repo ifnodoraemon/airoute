@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"os"
-	"regexp"
 	"strings"
 	"sync"
 
@@ -228,16 +227,82 @@ func GetGlobalConfig() *Config {
 	return globalConfig
 }
 
-var configEnvDefault = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*):-([^}]*)\}`)
-
-// expandConfigEnv supports both ${NAME} and the documented ${NAME:-default} form.
+// expandConfigEnv expands ${NAME}, the documented ${NAME:-default} form and
+// $NAME references in a config document, with `$$` as the escape for a literal
+// dollar sign.
+//
+// It deliberately does not delegate to os.ExpandEnv: that pass treats every '$'
+// as a variable reference, so a secret such as `pa$$word` was silently rewritten
+// to `paword` and a value like `pass$2026` to `pass2026` — changing credentials
+// (admin password, channel api_key, S3 secret) with no warning at all. Values
+// substituted from the environment are inserted verbatim and never re-expanded.
 func expandConfigEnv(value string) string {
-	withDefaults := configEnvDefault.ReplaceAllStringFunc(value, func(match string) string {
-		parts := configEnvDefault.FindStringSubmatch(match)
-		if env := os.Getenv(parts[1]); env != "" {
-			return env
+	var out strings.Builder
+	out.Grow(len(value))
+
+	for i := 0; i < len(value); {
+		if value[i] != '$' {
+			out.WriteByte(value[i])
+			i++
+			continue
 		}
-		return parts[2]
-	})
-	return os.ExpandEnv(withDefaults)
+
+		// "$$" is the documented escape for a literal '$'.
+		if i+1 < len(value) && value[i+1] == '$' {
+			out.WriteByte('$')
+			i += 2
+			continue
+		}
+
+		// ${NAME} / ${NAME:-default}
+		if i+1 < len(value) && value[i+1] == '{' {
+			end := strings.IndexByte(value[i+2:], '}')
+			if end < 0 {
+				// Unterminated reference: keep it verbatim instead of eating it.
+				out.WriteByte('$')
+				i++
+				continue
+			}
+			expr := value[i+2 : i+2+end]
+			name, fallback, hasFallback := expr, "", false
+			if sep := strings.Index(expr, ":-"); sep >= 0 {
+				name, fallback, hasFallback = expr[:sep], expr[sep+2:], true
+			}
+			if envValue := os.Getenv(name); envValue != "" {
+				out.WriteString(envValue)
+			} else if hasFallback {
+				out.WriteString(fallback)
+			}
+			i += 2 + end + 1
+			continue
+		}
+
+		// $NAME
+		if i+1 < len(value) && isConfigEnvNameStart(value[i+1]) {
+			end := i + 2
+			for end < len(value) && isConfigEnvNameChar(value[end]) {
+				end++
+			}
+			out.WriteString(os.Getenv(value[i+1 : end]))
+			i = end
+			continue
+		}
+
+		// A '$' that starts no reference (e.g. a trailing '$', or "$1" in text)
+		// stays literal rather than expanding to nothing.
+		out.WriteByte('$')
+		i++
+	}
+
+	return out.String()
+}
+
+// isConfigEnvNameStart reports whether b can start an environment variable name.
+func isConfigEnvNameStart(b byte) bool {
+	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
+}
+
+// isConfigEnvNameChar reports whether b can continue an environment variable name.
+func isConfigEnvNameChar(b byte) bool {
+	return isConfigEnvNameStart(b) || (b >= '0' && b <= '9')
 }

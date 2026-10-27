@@ -92,21 +92,22 @@ func (rb *LogRingBuffer) Append(entry *SystemLogEntry) {
 		rb.entries = append(rb.entries, entry)
 	}
 
-	// Copy subscribers list to avoid holding lock while broadcasting
-	subs := make([]chan *SystemLogEntry, 0, len(rb.subscribers))
+	// Broadcast while still holding the write lock.
+	//
+	// Subscribe's cancel func closes the subscriber channel under this same
+	// lock. Copying the subscriber list, unlocking and only then sending left a
+	// window in which a cancel could close a channel that this loop had already
+	// captured, panicking the logging goroutine with "send on closed channel"
+	// (and taking the whole process down when the call site was a background
+	// worker). Sends are non-blocking, so holding the lock costs nothing.
 	for _, ch := range rb.subscribers {
-		subs = append(subs, ch)
-	}
-	rb.mu.Unlock()
-
-	// Non-blocking broadcast
-	for _, ch := range subs {
 		select {
 		case ch <- entry:
 		default:
 			// Subscriber buffer full; drop to avoid blocking logger
 		}
 	}
+	rb.mu.Unlock()
 }
 
 // GetRecentLogs returns matching entries from newest to oldest.
