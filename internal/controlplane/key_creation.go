@@ -125,6 +125,26 @@ func (r *KeyCreationRules) PlanCreate(claims *AdminClaims, req CreateAPIKeyReque
 			}
 		}
 		rec.GroupName = reqGroup
+
+		// Quotas are server-owned for self-service keys. The /admin/keys route is
+		// also reachable by regular accounts, so without this clamp a tenant could
+		// submit rpm=0 (which the storage layer treats as unlimited) and bypass
+		// the self-service policy enforced by /user/keys.
+		switch {
+		case rec.RPM <= 0:
+			rec.RPM = DefaultUserKeyRPM
+		case rec.RPM > MaxSelfServiceKeyRPM:
+			rec.RPM = MaxSelfServiceKeyRPM
+		}
+		switch {
+		case rec.TPM <= 0:
+			rec.TPM = DefaultUserKeyTPM
+		case rec.TPM > MaxSelfServiceKeyTPM:
+			rec.TPM = MaxSelfServiceKeyTPM
+		}
+		if rec.Budget < 0 {
+			rec.Budget = 0
+		}
 	}
 
 	// The credential is a secret: a non-administrator never chooses it, and an
