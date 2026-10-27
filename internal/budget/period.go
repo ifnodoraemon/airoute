@@ -52,6 +52,19 @@ func (p Period) Key(at time.Time) string {
 	return ""
 }
 
+// TTL is how long a counter may outlive its period. A total budget never
+// expires; daily/monthly keep a safety margin so a late settlement or a clock
+// skew cannot reset the counter before the period actually ended.
+func (p Period) TTL() time.Duration {
+	switch p {
+	case PeriodDaily:
+		return 48 * time.Hour
+	case PeriodMonthly:
+		return 45 * 24 * time.Hour
+	}
+	return 0
+}
+
 // Start is the first instant of the period containing at. A total budget has no
 // start (zero time) because it never resets.
 func (p Period) Start(at time.Time) time.Time {
