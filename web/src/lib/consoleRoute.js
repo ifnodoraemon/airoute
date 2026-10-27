@@ -2,7 +2,7 @@ import { getStoredToken, getStoredUser } from '../api/session';
 
 const CONSOLE_TABS = ['dashboard', 'models', 'pricing', 'channels', 'reconciliation',
   'orgs', 'keys', 'wallet', 'logs', 'skills', 'mcp', 'users', 'playground', 'docs'];
-const USER_TABS = ['wallet', 'keys', 'playground', 'pricing', 'logs', 'docs'];
+const USER_TABS = ['dashboard', 'wallet', 'keys', 'playground', 'pricing', 'logs', 'docs'];
 
 // A cookie cannot be inspected by JavaScript. Preserve console deep links until
 // /auth/me answers; local profile hints are never proof of a valid session.
@@ -11,7 +11,7 @@ export function getConsoleRoute(location, {
 } = {}) {
   const hash = location.hash.replace(/^#\/?/, '').trim().toLowerCase();
   const route = hash || (new URLSearchParams(location.search).get('tab') || '').toLowerCase();
-  const defaultTab = user?.role === 'admin' ? 'dashboard' : 'wallet';
+  const defaultTab = 'dashboard';
   const result = { viewMode: 'landing', tab: defaultTab, authTab: 'login' };
   if (['status', 'service-status'].includes(route)) return { ...result, viewMode: 'status' };
   if (['auth', 'login', 'register'].includes(route)) {
@@ -22,7 +22,7 @@ export function getConsoleRoute(location, {
     return {
       ...result,
       viewMode: pending || token || user ? 'console' : 'auth',
-      tab: !pending && user?.role !== 'admin' && !USER_TABS.includes(tab) ? 'wallet' : tab,
+      tab: !pending && user?.role !== 'admin' && !USER_TABS.includes(tab) ? 'dashboard' : tab,
     };
   }
   return result;

@@ -66,6 +66,7 @@ const SupplierReconciliationView = lazy(() => import('./components/SupplierRecon
 const KeysView = lazy(() => import('./components/KeysView'));
 const LogsView = lazy(() => import('./components/LogsView'));
 const DashboardView = lazy(() => import('./components/DashboardView'));
+const MyUsageView = lazy(() => import('./components/MyUsageView'));
 const PlaygroundView = lazy(() => import('./components/PlaygroundView'));
 const DocsView = lazy(() => import('./components/DocsView'));
 const OnboardingModal = lazy(() => import('./components/OnboardingModal'));
@@ -1109,6 +1110,17 @@ export default function App() {
                     )}
                     <div className="space-y-0.5">
                       <button
+                        onClick={() => setCurrentTab('dashboard')}
+                        title={t.navDashboard}
+                        className={navBtnClass('dashboard')}
+                      >
+                        <div className="flex items-center space-x-2.5">
+                          <BarChart3 className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('dashboard')}`} />
+                          {!sidebarCollapsed && <span>{t.navDashboard}</span>}
+                        </div>
+                      </button>
+
+                      <button
                         onClick={() => setCurrentTab('wallet')}
                         title={t.navWallet || (isZh ? '我的钱包' : 'My Wallet')}
                         className={navBtnClass('wallet')}
@@ -1387,8 +1399,13 @@ export default function App() {
           )}
 
           <Suspense fallback={<ViewLoader />}>
+            {/* 1a. SELF-SERVICE DASHBOARD (regular users) */}
+            {currentTab === 'dashboard' && adminUser?.role !== 'admin' && (
+              <MyUsageView adminFetch={apiFetch} showToast={showToast} lang={lang} />
+            )}
+
             {/* 1. ENTERPRISE BUSINESS & TELEMETRY DASHBOARD */}
-            {currentTab === 'dashboard' && (
+            {currentTab === 'dashboard' && adminUser?.role === 'admin' && (
               <DashboardView
                 stats={stats}
                 onNavigateToErrors={() => {
