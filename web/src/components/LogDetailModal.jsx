@@ -77,6 +77,11 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
     .map((name) => name.trim())
     .filter(Boolean);
   const isErrorLog = !!log && ((log.status_code || 200) >= 400 || hasUpstreamDetail);
+  // 499 ("client closed request") is synthesized by the gateway itself when it
+  // notices the downstream caller hung up; no upstream provider ever returns
+  // it. Every surface that talks about the failure cause must branch on this,
+  // otherwise a client-side abort gets misattributed to the provider.
+  const isClientClosed = !!log && log.status_code === 499;
 
   // Heuristic remediation hint.
   //
@@ -103,6 +108,44 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
           : `Execution optimal. ${isFast ? `TTFT is ${log.ttft_ms}ms (better than P90)` : `Duration: ${log.duration_ms}ms`}. ${isCached ? `Prompt cache hit saved ${log.cached_tokens} tokens.` : 'Consider prompt caching for static system prompts to reduce cost and latency.'}`,
         actionLabel: isZh ? '在 Playground 演练' : 'Test in Playground',
         actionTab: 'playground'
+      };
+    }
+
+    // 499 MUST be classified before the generic upstream-failure heuristics
+    // below (and before the final "upstream returned an error status"
+    // fallback): it is >= 400, so without this explicit branch it would fall
+    // through and be blamed on the provider — including the harmful advice to
+    // shift channel weights. 499 is in fact a gateway-synthesized audit status
+    // meaning the *client* disconnected before the response completed, so the
+    // remediation direction is the caller side, not the upstream side.
+    if (isClientClosed) {
+      const hasBilledOutput = (log.completion_tokens || 0) > 0;
+      // `estimated` means the provider never reported usage before the client
+      // left and the count is the local estimator's approximation. Describing it
+      // as "actually consumed" would overstate the evidence — and inventing
+      // certainty is exactly what this branch exists to stop.
+      const estimatedUsage = log.usage_source === 'estimated';
+      const usageCopy = !hasBilledOutput
+        ? ''
+        : estimatedUsage
+          ? isZh
+            ? `本次记录有 ${log.completion_tokens} 个输出 Token（上游未回报用量，此处为本地估算），已按估算用量计费，并非上游故障。`
+            : ` This record has ${log.completion_tokens} output tokens, estimated locally because the provider did not report usage before the client left; the estimated usage was billed and this is not an upstream failure.`
+          : isZh
+            ? `本次记录仍有 ${log.completion_tokens} 个输出 Token，说明上游已完成生成，用量已按实际消耗计费，并非上游故障。`
+            : ` This record still has ${log.completion_tokens} output tokens, so the provider had already finished generating and the usage was billed — it is not an upstream failure.`;
+      return {
+        type: 'warning',
+        badge: isZh ? '499 客户端断开' : '499 Client Closed',
+        title: isZh
+          ? '本次请求由客户端提前断开（网关合成状态码，非上游返回）'
+          : 'Request aborted by the client (gateway-synthesized status, not an upstream response)',
+        summary: isZh
+          ? `499 是网关检测到下游连接已关闭后写入的合成状态码，上游服务商不会返回该状态码。${usageCopy}排查方向应在调用方一侧：HTTP 客户端超时（例如 120s 请求超时）、反向代理 / LB 空闲超时、网络中断或客户端主动取消。无需切换渠道权重，也无需按上游故障处理。`
+          : `499 is synthesized by the gateway when it detects the downstream connection was closed; an upstream provider never returns this status.${usageCopy} Investigate the caller side: HTTP client timeout (e.g. a 120s request timeout), reverse proxy / LB idle timeout, network drop, or a client-side cancel. No channel-weight failover is needed.`
+        // Intentionally no actionLabel/actionTab: sending the operator to the
+        // channel/models screens would imply an upstream fault that does not
+        // exist. The panel only renders the action button when actionLabel is set.
       };
     }
 
@@ -582,7 +625,11 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
               <div className="font-semibold mb-1 flex items-center justify-between gap-2">
                 <span className="flex items-center space-x-1.5">
                   <AlertCircle className="w-3.5 h-3.5" />
-                  <span>{isZh ? '上游异常原始回包' : 'Raw Upstream Error Message'}</span>
+                  <span>
+                    {isClientClosed
+                      ? (isZh ? '网关记录的断开原因（非上游回包）' : 'Gateway-recorded disconnect reason (not a raw upstream response)')
+                      : (isZh ? '上游异常原始回包' : 'Raw Upstream Error Message')}
+                  </span>
                 </span>
                 <button
                   onClick={() => onCopy(errorMessage)}
@@ -623,16 +670,22 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
               {hasUpstreamDetail && (
                 <div className="mt-2.5 pt-2.5 border-t border-current/10">
                   <span className="block text-xs font-semibold uppercase tracking-wide opacity-75 mb-1">
-                    {isZh ? '上游原始错误（权威依据）' : 'Upstream error (authoritative)'}
+                    {isClientClosed
+                      ? (isZh ? '网关侧记录（非上游回包）' : 'Gateway-side record (not an upstream response)')
+                      : (isZh ? '上游原始错误（权威依据）' : 'Upstream error (authoritative)')}
                   </span>
                   <code className="block font-mono text-[11px] break-all opacity-90">{errorMessage}</code>
                 </div>
               )}
               {!hasUpstreamDetail && isErrorLog && (
                 <p className="mt-2 text-xs opacity-75">
-                  {isZh
-                    ? '本次请求未记录上游错误详情，以上仅为基于状态码的推测，不能作为根因结论。'
-                    : 'No upstream error detail was recorded for this request; the above is inferred from the status code only.'}
+                  {isClientClosed
+                    ? (isZh
+                      ? '说明：该状态码由网关在下游连接断开时生成，不是上游服务商返回的状态码，因此不作为上游故障的依据。'
+                      : 'Note: this status code is synthesized by the gateway on downstream disconnect; it is not an upstream provider status and is not evidence of an upstream failure.')
+                    : (isZh
+                      ? '本次请求未记录上游错误详情，以上仅为基于状态码的推测，不能作为根因结论。'
+                      : 'No upstream error detail was recorded for this request; the above is inferred from the status code only.')}
                 </p>
               )}
               {rca.actionLabel && onNavigate && (

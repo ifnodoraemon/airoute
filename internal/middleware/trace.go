@@ -17,10 +17,17 @@ const (
 	// call site imports, the context key is the same string value.
 	ContextKeyTraceID      = telemetry.ContextKeyTraceID
 	ContextKeyErrorMessage = "error_message"
-	HeaderAirouteTraceID   = "X-Airoute-Trace-ID"
-	HeaderRequestID        = "X-Request-ID"
-	HeaderTraceID          = "X-Trace-ID"
-	HeaderTraceParent      = "traceparent"
+	// ContextKeyAuditStatus carries the status persisted to usage_logs when it
+	// differs from the wire status. A 499 "client closed request" is synthesized
+	// by the gateway: on a streaming response the head was already written as
+	// 200, and a unary success is flipped to 499 in the audit record. Without
+	// this key the access line claimed a clean 200 for an aborted, billed
+	// request, and told the console nothing about the audit status.
+	ContextKeyAuditStatus = "audit_status"
+	HeaderAirouteTraceID  = "X-Airoute-Trace-ID"
+	HeaderRequestID       = "X-Request-ID"
+	HeaderTraceID         = "X-Trace-ID"
+	HeaderTraceParent     = "traceparent"
 )
 
 // GenerateTraceID creates a unique, high-performance distributed trace identifier.
@@ -165,6 +172,15 @@ func AccessLogMiddleware() gin.HandlerFunc {
 			"key", accessLogKey(c),
 		}
 		if status >= 400 {
+			if message := c.GetString(ContextKeyErrorMessage); message != "" {
+				fields = append(fields, "error", message)
+			}
+		} else if auditStatus := c.GetInt(ContextKeyAuditStatus); auditStatus != 0 && auditStatus != status {
+			// The wire and the audit trail disagree: the response head was already
+			// a 200 when the gateway recorded a 499 because the downstream hung up.
+			// Printing only "status=200" hid the abort from stdout and forced a
+			// database join to discover that the request had failed AND been billed.
+			fields = append(fields, "audit_status", auditStatus)
 			if message := c.GetString(ContextKeyErrorMessage); message != "" {
 				fields = append(fields, "error", message)
 			}

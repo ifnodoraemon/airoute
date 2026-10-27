@@ -27,6 +27,13 @@ const ContextKeyChatID = "chat_id"
 // client actually sent, so handlers publish that raw value here.
 const ContextKeyLLMSessionID = "llm_session_id"
 
+// ContextKeyTraceRecorded marks that a trace snapshot for this request was
+// already archived. One request has exactly one trace row: dispatch failures
+// record their trace before the usage recorder runs, and the 499 audit path can
+// be reached more than once (forced flip plus a repeated recordUsage). Without
+// the flag the console showed duplicate rows for one trace_id.
+const ContextKeyTraceRecorded = "trace_recorded"
+
 // traceSessionID resolves the session id to persist in a trace record.
 func traceSessionID(c *gin.Context) string {
 	if s := c.GetString(ContextKeyLLMSessionID); s != "" {
@@ -85,6 +92,15 @@ func RecordTrace(c *gin.Context, modelName, channel string, statusCode int, errM
 	if tc == nil || c == nil || !tc.Enabled(statusCode) {
 		return
 	}
+	// Dedupe per request. The flag is set only once a snapshot is actually
+	// eligible, so a caller that arrives before capture is enabled does not burn
+	// the slot. Callers keep their richer message: a dispatch error recorded
+	// first wins over the synthesized 499 explanation from the usage recorder.
+	if _, recorded := c.Get(ContextKeyTraceRecorded); recorded {
+		return
+	}
+	c.Set(ContextKeyTraceRecorded, true)
+
 	reqSnap, _ := c.Get(ContextKeyRequestSnapshot)
 	reqStr, _ := reqSnap.(string)
 
