@@ -53,7 +53,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			continue
 		}
 
-		prov, exists := d.getProviderForChannel(ch, req)
+		prov, exists := d.getProviderForChannel(ch)
 
 		if !exists {
 			lastErr = fmt.Errorf("unsupported provider type '%s' on channel %s", ch.Type, ch.Name)
@@ -67,7 +67,12 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			"attempt", i+1,
 		)
 
-		attemptCtx, attemptCancel := context.WithCancel(ctx)
+		// The provider call is bounded by the channel's timeout_seconds, exactly
+		// like the non-streaming path: the gateway no longer imposes an absolute
+		// drain deadline on the whole request, so a channel configured for e.g.
+		// 300s is allowed to stream for 300s. The first-token window below is
+		// derived from the same number.
+		attemptCtx, attemptCancel := channelCallContext(ctx, ch)
 		streamChan, err := prov.ChatCompleteStream(attemptCtx, req, ch)
 		if err != nil {
 			attemptCancel()
@@ -118,9 +123,14 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 				}
 				// Role-only chunks and unparsed SSE frames are not evidence of a usable stream.
 				// Keep a bounded preamble so it can be sent if content follows.
-				if len(preamble) < 64 {
-					preamble = append(preamble, event)
+				// The newest event must always be kept: it may be the one that commits
+				// the stream, and dropping it silently swallowed the first content
+				// token once an upstream emitted more than maxPreambleEvents silent
+				// frames. Drop the oldest instead.
+				if len(preamble) >= maxPreambleEvents {
+					preamble = preamble[1:]
 				}
+				preamble = append(preamble, event)
 				if streamEventHasContent(event) || event.IsDone {
 					committed = true
 				}
@@ -131,6 +141,13 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 				attemptCancel()
 				d.circuitBreaker.AbortCanary(ch.Name)
 				return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
+			case <-attemptCtx.Done():
+				// The channel budget ran out before the first token. When the
+				// parent context is still alive this is a channel failure, not a
+				// client cancellation.
+				if ctx.Err() == nil {
+					firstErr = fmt.Errorf("channel %s exceeded its timeout before the first token", ch.Name)
+				}
 			}
 		}
 		timer.Stop()
@@ -187,6 +204,11 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 
 	return nil, newExhaustedError(ctx, req.Model, exhaustedTrail(attempted, skipped), fmt.Errorf("all channels failed for stream request on model %s. Last error: %w", req.Model, lastErr))
 }
+
+// maxPreambleEvents bounds the silent prefix kept before the first content token.
+// It is a memory bound, not a promise to drop the committing event: when it is
+// reached the oldest event is discarded.
+const maxPreambleEvents = 64
 
 // pipeStreamEvents pipes events from upstream stream channel to client channel with cancellation guard.
 func pipeStreamEvents(ctx context.Context, outChan chan<- *model.StreamEvent, preamble []*model.StreamEvent, in <-chan *model.StreamEvent, trail string, cancel context.CancelFunc) {
@@ -255,20 +277,26 @@ var firstTokenTimeoutOverride = sync.OnceValue(func() time.Duration {
 })
 
 func (d *Dispatcher) GetFirstTokenTimeout(ch *model.ChannelConfig, modelName string) time.Duration {
-	// The channel timeout is the only budget an operator configures, and waiting for
-	// the first token cannot outlast it: there is nothing separate to set. A shorter
-	// window only exists to fail over to another channel sooner, which buys nothing
-	// while one channel serves the model.
-	if ch != nil && ch.TimeoutSeconds > 0 {
-		return time.Duration(ch.TimeoutSeconds) * time.Second
-	}
+	return resolveFirstTokenTimeout(ch, modelName, firstTokenTimeoutOverride())
+}
+
+// resolveFirstTokenTimeout derives the first-token window. The channel timeout
+// is the budget an operator configures, so it is also the window a channel may
+// stay silent; the reasoning-model default only applies when the channel sets no
+// timeout. GATEWAY_FIRST_TOKEN_TIMEOUT is documented as an upper bound, so it can
+// shorten that window but never extend it past the channel budget.
+func resolveFirstTokenTimeout(ch *model.ChannelConfig, modelName string, override time.Duration) time.Duration {
 	timeout := 30 * time.Second
-	lowerModel := strings.ToLower(modelName)
-	if strings.Contains(lowerModel, "r1") || strings.Contains(lowerModel, "o1") || strings.Contains(lowerModel, "o3") || strings.Contains(lowerModel, "reasoning") || strings.Contains(lowerModel, "thinking") {
-		timeout = 60 * time.Second
+	if ch != nil && ch.TimeoutSeconds > 0 {
+		timeout = time.Duration(ch.TimeoutSeconds) * time.Second
+	} else {
+		lowerModel := strings.ToLower(modelName)
+		if strings.Contains(lowerModel, "r1") || strings.Contains(lowerModel, "o1") || strings.Contains(lowerModel, "o3") || strings.Contains(lowerModel, "reasoning") || strings.Contains(lowerModel, "thinking") {
+			timeout = 60 * time.Second
+		}
 	}
-	if override := firstTokenTimeoutOverride(); override > 0 {
-		timeout = override
+	if override > 0 && override < timeout {
+		return override
 	}
 	return timeout
 }

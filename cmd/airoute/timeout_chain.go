@@ -3,6 +3,7 @@ package main
 import (
 	"time"
 
+	"github.com/ifnodoraemon/airoute/internal/api"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/router"
 	"github.com/ifnodoraemon/airoute/internal/storage"
@@ -17,12 +18,16 @@ var edgeProxyTimeout = time.Duration(model.EdgeProxyTimeoutSeconds) * time.Secon
 // reportTimeoutChain logs the effective timeout budget for each active channel and
 // warns when the configured numbers contradict each other.
 //
-// There is one operator-facing knob: the channel timeout. The first-token window is
-// derived from it (they are the same number), and the edge proxy's timeout is set
-// far above the maximum accepted channel timeout so it never truncates a request.
-// This check exists to prove that invariant at startup instead of assuming it: the
-// live cluster once ran a 3000s channel timeout behind a 600s nginx, so the
-// configured budget never decided anything.
+// There is one operator-facing knob: the channel timeout. It bounds the whole
+// provider attempt for every protocol (streaming, non-streaming and modality
+// calls), the first-token window is derived from it (GATEWAY_FIRST_TOKEN_TIMEOUT
+// can only shorten it), and the edge proxy's timeout is set far above the maximum
+// accepted channel timeout so it never truncates a request. The drain window
+// (GATEWAY_DRAIN_TIMEOUT_SEC) is reported too, but it is NOT part of this budget:
+// it only starts after the downstream has disconnected, so it cannot cap a
+// request. This check exists to prove that invariant at startup instead of
+// assuming it: the live cluster once ran a 3000s channel timeout behind a 600s
+// nginx, so the configured budget never decided anything.
 func reportTimeoutChain(repo *storage.Repository, dispatcher *router.Dispatcher) {
 	if repo == nil || dispatcher == nil {
 		return
@@ -46,7 +51,9 @@ func reportTimeoutChain(repo *storage.Repository, dispatcher *router.Dispatcher)
 			"channel", record.Name,
 			"first_token", firstToken.String(),
 			"channel_timeout", channelTimeout.String(),
-			"edge_timeout", edge.String())
+			"edge_timeout", edge.String(),
+			"abort_drain", api.UpstreamDrainTimeout().String(),
+			"abort_drain_note", "post-disconnect only; not a request deadline")
 
 		if channelTimeout > time.Hour {
 			// Not an error: the operator asked for it and the proxy allows it. It is

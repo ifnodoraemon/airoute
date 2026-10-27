@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -48,22 +49,74 @@ func upstreamDrainTimeout() time.Duration {
 
 // upstreamRequestContext returns the context used for the provider call.
 //
-// With draining enabled it is detached from the request's cancellation, so a
-// client disconnect no longer aborts the upstream call: the response still
-// arrives and its usage can be billed exactly. The context is always bounded by
-// the drain timeout, which is what stops a forgotten request from running
-// forever.
+// The request budget belongs to the channel, not to this helper: the dispatcher
+// bounds every provider attempt with the channel's timeout_seconds (and the
+// documented default when a channel sets none). This context therefore carries
+// no absolute deadline of its own — the previous implementation applied
+// GATEWAY_DRAIN_TIMEOUT_SEC (120s in the shipped .env) as a hard deadline to
+// every chat/responses/messages request, so any channel timeout above 120s was
+// unreachable and every stream was cut at 120s.
+//
+// With draining enabled the context is detached from the downstream, so a client
+// disconnect does not abort a provider call that has already started: the usage
+// report still arrives and the charge matches the invoice. GATEWAY_DRAIN_TIMEOUT_SEC
+// is applied only as that post-disconnect drain window. With draining disabled the
+// old cancel-with-the-client behaviour is kept.
 func upstreamRequestContext(c *gin.Context) (context.Context, context.CancelFunc) {
 	if c == nil {
-		return context.WithTimeout(context.Background(), upstreamDrainTimeout())
+		return context.WithCancel(context.Background())
 	}
-	base := context.WithoutCancel(c.Request.Context())
+	clientCtx := c.Request.Context()
 	if !upstreamDrainingEnabled() {
-		// Keep the original context so an abort cancels the upstream as before.
-		return context.WithTimeout(c.Request.Context(), upstreamDrainTimeout())
+		// Keep the original cancellation semantics: an abort cancels the upstream.
+		return context.WithCancel(clientCtx)
 	}
-	return context.WithTimeout(base, upstreamDrainTimeout())
+	detached, cancel := context.WithCancel(context.WithoutCancel(clientCtx))
+	return withPostDisconnectDrain(clientCtx, detached, cancel, upstreamDrainTimeout())
 }
+
+// withPostDisconnectDrain returns ctx (an already-detached context) plus the
+// combined cancel func. When the downstream goes away, the provider call is
+// allowed to continue for drain before it is cancelled; before that point the
+// caller's own budget (the channel timeout, applied by the dispatcher) decides.
+//
+// The watchdog goroutine exits as soon as the caller invokes the returned cancel
+// (normal completion), so it does not outlive the request.
+func withPostDisconnectDrain(clientCtx, detached context.Context, cancel context.CancelFunc, drain time.Duration) (context.Context, context.CancelFunc) {
+	var once sync.Once
+	done := make(chan struct{})
+	cleanup := func() {
+		once.Do(func() {
+			close(done)
+			cancel()
+		})
+	}
+	go func() {
+		select {
+		case <-clientCtx.Done():
+		case <-done:
+			return
+		}
+		if drain <= 0 {
+			cancel()
+			return
+		}
+		timer := time.NewTimer(drain)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+			cancel()
+		case <-done:
+		case <-detached.Done():
+		}
+	}()
+	return detached, cleanup
+}
+
+// UpstreamDrainTimeout exposes the configured post-disconnect drain window so the
+// startup timeout-chain report can state the real budget (it is not a request
+// deadline: the channel timeout is).
+func UpstreamDrainTimeout() time.Duration { return upstreamDrainTimeout() }
 
 // markAbortedDrain records that a request was drained after the downstream left.
 func markAbortedDrain(completionTokens int) {

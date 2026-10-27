@@ -127,15 +127,44 @@ func (d *Dispatcher) GetAllModelFallbacks() map[string]string {
 	return res
 }
 
-// getProviderForChannel selects the appropriate Provider implementation for a channel given the request.
-// If the request targets the Anthropic Messages protocol and the channel explicitly supports anthropic_messages,
-// the native Anthropic provider is used.
-func (d *Dispatcher) getProviderForChannel(ch *model.ChannelConfig, req *model.ChatCompletionRequest) (provider.Provider, bool) {
+// AnthropicNativeProtocol is the explicit channel-protocol marker for an upstream
+// that speaks the Anthropic Messages wire format even though the channel's
+// ProviderType is not "anthropic" (for example an OpenAI-compatible proxy in
+// front of Claude). Operators add it to channel.protocols.
+//
+// The ordinary "anthropic_messages" token is NOT such a marker: it is the inbound
+// capability ("serves /v1/messages traffic"). A channel that declares only that
+// token must still talk to its upstream in its own protocol (openai/gemini), with
+// the gateway translating the request; otherwise an OpenAI endpoint receives
+// Anthropic JSON at <base>/v1/messages.
+const AnthropicNativeProtocol = "anthropic_native"
+
+// isAnthropicWireChannel reports whether this channel's upstream speaks the
+// Anthropic Messages protocol natively. Only the channel type and the explicit
+// native marker decide that, never the inbound protocol capability.
+func isAnthropicWireChannel(ch *model.ChannelConfig) bool {
+	if ch == nil {
+		return false
+	}
+	if ch.Type == model.ProviderAnthropic {
+		return true
+	}
+	for _, proto := range ch.Protocols {
+		if proto == AnthropicNativeProtocol {
+			return true
+		}
+	}
+	return false
+}
+
+// getProviderForChannel selects the Provider implementation that talks to the
+// channel's upstream. The native Anthropic provider is used only for channels
+// whose upstream actually speaks Anthropic; OpenAI/Gemini channels translate.
+func (d *Dispatcher) getProviderForChannel(ch *model.ChannelConfig) (provider.Provider, bool) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
-	if req != nil && (req.AnthropicOriginal != nil || req.Protocol == "anthropic_messages") &&
-		(ch.Type == model.ProviderAnthropic || ch.HasExplicitProtocol("anthropic_messages")) {
+	if isAnthropicWireChannel(ch) {
 		if prov, ok := d.providers[model.ProviderAnthropic]; ok {
 			return prov, true
 		}
@@ -145,15 +174,22 @@ func (d *Dispatcher) getProviderForChannel(ch *model.ChannelConfig, req *model.C
 	return prov, exists
 }
 
-// channelCallContext bounds a non-streaming upstream call by the channel's
-// configured timeout_seconds. The shared HTTP client intentionally has no
-// body deadline (long SSE streams need it), so without this the timeout field
-// was dead configuration for non-streaming requests.
+// channelCallContext bounds an upstream call by the channel's configured
+// timeout_seconds. It is the only upstream budget an operator configures, so it
+// works for streaming, non-streaming and modality calls alike: the shared HTTP
+// client no longer imposes a transport-level header deadline (it used to cap
+// every call at 60s, far below the accepted maximum), and the first-token window
+// is derived from the same number. When a channel sets no timeout the documented
+// default applies, so no provider call is left without a deadline.
 func channelCallContext(ctx context.Context, ch *model.ChannelConfig) (context.Context, context.CancelFunc) {
-	if ch != nil && ch.TimeoutSeconds > 0 {
-		return context.WithTimeout(ctx, time.Duration(ch.TimeoutSeconds)*time.Second)
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	return ctx, func() {}
+	timeout := time.Duration(model.DefaultChannelTimeoutSeconds) * time.Second
+	if ch != nil && ch.TimeoutSeconds > 0 {
+		timeout = time.Duration(ch.TimeoutSeconds) * time.Second
+	}
+	return context.WithTimeout(ctx, timeout)
 }
 
 // isFatalClientPayloadError checks if the error is a deterministic client request syntax/payload
@@ -203,7 +239,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 			continue
 		}
 
-		prov, exists := d.getProviderForChannel(ch, req)
+		prov, exists := d.getProviderForChannel(ch)
 
 		if !exists {
 			lastErr = fmt.Errorf("unsupported provider type '%s' on channel %s", ch.Type, ch.Name)
@@ -300,7 +336,7 @@ func (d *Dispatcher) candidateChannelsForRequest(ctx context.Context, req *model
 	}
 	native := make([]*model.ChannelConfig, 0, len(channels))
 	for _, channel := range channels {
-		if channel.Type == model.ProviderAnthropic || channel.HasExplicitProtocol("anthropic_messages") {
+		if isAnthropicWireChannel(channel) {
 			native = append(native, channel)
 		}
 	}

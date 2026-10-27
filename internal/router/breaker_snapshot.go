@@ -33,5 +33,12 @@ func (cb *CircuitBreaker) Snapshot(name string) BreakerSnapshot {
 		snapshot.RecoveryProbe = true
 		snapshot.CanExecute = status.CanaryInFlight < cb.maxCanaryProbes || time.Since(status.LastStateChange) > 2*cb.cooldownDuration
 	}
+	if cb.disabled {
+		// Advisory mode: the recorded state is informational only. Nothing is ever
+		// rejected, so the snapshot must not claim the channel is unusable.
+		snapshot.CanExecute = true
+		snapshot.RecoveryProbe = false
+		snapshot.CooldownRemainingMs = 0
+	}
 	return snapshot
 }

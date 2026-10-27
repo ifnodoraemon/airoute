@@ -34,7 +34,7 @@ func (d *Dispatcher) ValidateModelChannel(ctx context.Context, modelName string,
 		limit := 8
 		req := &model.ChatCompletionRequest{Model: modelName, MaxTokens: &limit,
 			Messages: []model.ChatMessage{{Role: "user", Content: "Reply OK."}}}
-		prov, ok := d.getProviderForChannel(channel, req)
+		prov, ok := d.getProviderForChannel(channel)
 		if !ok {
 			return nil, errors.New("渠道类型没有对应的推理适配器")
 		}

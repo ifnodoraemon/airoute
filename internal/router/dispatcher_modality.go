@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/middleware"
@@ -50,6 +51,23 @@ type UpstreamResponse struct {
 	Channel string
 }
 
+// cancelOnCloseReadCloser releases the channel's per-request budget exactly when
+// the caller is done reading the upstream body. Modality responses (image JSON,
+// audio bytes, video payloads) are streamed to the client after DispatchHTTP
+// returns, so cancelling the timeout context on return would abort the body
+// mid-copy.
+type cancelOnCloseReadCloser struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+	once   sync.Once
+}
+
+func (c *cancelOnCloseReadCloser) Close() error {
+	err := c.ReadCloser.Close()
+	c.once.Do(c.cancel)
+	return err
+}
+
 // DispatchHTTP routes an HTTP request across matching candidate channels with Circuit Breaking and Safe Fallback.
 func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*UpstreamResponse, error) {
 	var channels []*model.ChannelConfig
@@ -87,8 +105,13 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 		}
 
 		targetURL := provider.APIURL(ch.BaseURL, req.Path)
-		httpReq, err := http.NewRequestWithContext(ctx, req.Method, targetURL, bytes.NewReader(targetBody))
+		// The channel timeout bounds the upstream exchange like every other
+		// dispatch path; before this, images/audio/video had no upstream budget
+		// at all and a hung provider held the request until the client left.
+		callCtx, cancelCall := channelCallContext(ctx, ch)
+		httpReq, err := http.NewRequestWithContext(callCtx, req.Method, targetURL, bytes.NewReader(targetBody))
 		if err != nil {
+			cancelCall()
 			lastErr = err
 			d.circuitBreaker.AbortCanary(ch.Name)
 			continue
@@ -113,6 +136,7 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 		start := time.Now()
 		httpResp, err := provider.SharedDefaultHTTPClient.Do(httpReq)
 		if err != nil {
+			cancelCall()
 			if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
 				d.circuitBreaker.AbortCanary(ch.Name)
 				return nil, newCanceledError(ctx, attempted, ch.Name, model.EstimateTokensFromChars(len(req.Body)))
@@ -131,12 +155,27 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 			continue
 		}
 
-		// Check if response indicates server error or rate limit
-		if httpResp.StatusCode == http.StatusTooManyRequests || httpResp.StatusCode >= http.StatusInternalServerError || httpResp.StatusCode == http.StatusUnauthorized || httpResp.StatusCode == http.StatusForbidden {
+		// Upstream status classes follow the same contract as the chat path:
+		// 401/403/408/5xx mean the channel is unhealthy, while 429 is backpressure
+		// from a healthy provider. The previous ad-hoc list charged 429 to the
+		// breaker, so three rate-limit replies opened the circuit and turned
+		// backpressure into a 502 blackout for every image/audio/video request.
+		if status := httpResp.StatusCode; status == http.StatusTooManyRequests || status == http.StatusUnauthorized ||
+			status == http.StatusForbidden || status == http.StatusRequestTimeout || status >= http.StatusInternalServerError {
 			bodyBytes, _ := io.ReadAll(io.LimitReader(httpResp.Body, 64<<10))
 			httpResp.Body.Close()
-			lastErr = provider.NewUpstreamError(ch.Name, httpResp.StatusCode, bodyBytes)
-			attempted = append(attempted, d.recordChannelFailure(ctx, ch.Name, lastErr, i+1))
+			cancelCall()
+			lastErr = provider.NewUpstreamError(ch.Name, status, bodyBytes)
+			if provider.IsChannelFailure(lastErr) {
+				attempted = append(attempted, d.recordChannelFailure(ctx, ch.Name, lastErr, i+1))
+			} else {
+				// Release the half-open canary slot and fail over without charging
+				// the breaker for the provider's rate limit.
+				d.circuitBreaker.AbortCanary(ch.Name)
+				attempted = append(attempted, ch.Name)
+				routerLog(ctx).Warn("upstream rate limited the modality request, trying next channel without tripping breaker",
+					"channel", ch.Name, "status", status, "attempt", i+1)
+			}
 			continue
 		}
 
@@ -146,6 +185,7 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 		if httpResp.StatusCode >= 400 && httpResp.StatusCode < 500 {
 			bodyBytes, _ := io.ReadAll(io.LimitReader(httpResp.Body, 1<<20))
 			httpResp.Body.Close()
+			cancelCall()
 			d.circuitBreaker.AbortCanary(ch.Name)
 
 			// The buffered body must be replayed with a matching Content-Length;
@@ -171,7 +211,7 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 			StatusCode:   httpResp.StatusCode,
 			ProviderName: ch.Name, ChannelID: ch.ID, BaseURL: ch.BaseURL,
 			Headers: httpResp.Header,
-			Stream:  httpResp.Body,
+			Stream:  &cancelOnCloseReadCloser{ReadCloser: httpResp.Body, cancel: cancelCall},
 			Channel: trail,
 		}, nil
 	}
@@ -222,7 +262,9 @@ func (d *Dispatcher) DispatchEmbedding(ctx context.Context, req *model.Embedding
 			d.circuitBreaker.AbortCanary(ch.Name)
 			continue
 		}
-		resp, err = embedProv.Embed(ctx, req, ch)
+		callCtx, cancelCall := channelCallContext(ctx, ch)
+		resp, err = embedProv.Embed(callCtx, req, ch)
+		cancelCall()
 
 		if err != nil {
 			if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
@@ -295,7 +337,9 @@ func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankReques
 			continue
 		}
 
-		resp, err := rerankProv.Rerank(ctx, req, ch)
+		callCtx, cancelCall := channelCallContext(ctx, ch)
+		resp, err := rerankProv.Rerank(callCtx, req, ch)
+		cancelCall()
 		if err != nil {
 			if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
 				d.circuitBreaker.AbortCanary(ch.Name)

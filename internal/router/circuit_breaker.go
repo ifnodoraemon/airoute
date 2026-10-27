@@ -255,6 +255,12 @@ func (cb *CircuitBreaker) Healthy(name string) bool {
 	cb.mu.RLock()
 	defer cb.mu.RUnlock()
 
+	// Advisory mode never rejects traffic, so a channel recorded as failing must
+	// still be treated as usable by routing decisions (session affinity etc.).
+	// Its state is for operators, not for admission control.
+	if cb.disabled {
+		return true
+	}
 	status, exists := cb.breakers[name]
 	if !exists {
 		return true
@@ -278,6 +284,16 @@ func (cb *CircuitBreaker) RecordSuccess(name string) {
 	if !exists {
 		return
 	}
+	if cb.disabled {
+		// Advisory mode: clear the recorded failure state so recovery is visible
+		// to operators (nothing was ever blocked).
+		status.ConsecutiveFailures = 0
+		status.ConsecutiveSuccesses = 0
+		if status.State != StateClosed {
+			status.toClosed(time.Now())
+		}
+		return
+	}
 	if status.handler == nil {
 		status.handler = &closedState{}
 	}
@@ -289,11 +305,36 @@ func (cb *CircuitBreaker) RecordFailure(name string) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
+	status := cb.getOrCreateStatusLocked(name)
 	if cb.disabled {
+		// Advisory mode (GATEWAY_BREAKER_ENABLED=false): the outcome is recorded for
+		// operators, but the breaker never rejects traffic. Returning before
+		// touching the status (the previous behaviour) left every channel reported
+		// as CLOSED with zero failures, so an upstream outage was invisible in the
+		// console and in /api/v1/public/status even though the docs promise that
+		// advisory mode "records failures but never rejects traffic".
+		cb.recordAdvisoryFailureLocked(status, time.Now())
 		return
 	}
-	status := cb.getOrCreateStatusLocked(name)
 	status.handler.RecordFailure(status, cb, time.Now())
+}
+
+// recordAdvisoryFailureLocked records a failure without ever blocking traffic.
+// It mirrors closedState.RecordFailure's threshold logic so the console shows the
+// same TRIPPED state a protective breaker would have shown.
+func (cb *CircuitBreaker) recordAdvisoryFailureLocked(status *BreakerStatus, now time.Time) {
+	status.ConsecutiveFailures++
+	if status.State == StateClosed && status.ConsecutiveFailures >= cb.failureThreshold {
+		status.State = StateOpen
+		status.handler = &openState{}
+		status.CanaryInFlight = 0
+		status.LastStateChange = now
+		telemetry.ScopedLogger("breaker").Warn("circuit breaker advisory: channel is failing (traffic is STILL allowed because GATEWAY_BREAKER_ENABLED=false)",
+			"provider", status.name,
+			"consecutive_failures", status.ConsecutiveFailures,
+			"cooldown_sec", cb.cooldownDuration.Seconds(),
+		)
+	}
 }
 
 // AbortCanary decrements the canary in-flight count if a canary probe was aborted

@@ -67,7 +67,10 @@ func TestNativeAnthropicRequestFallsBackWhenNoNativeProvider(t *testing.T) {
 	}
 }
 
-func TestNativeAnthropicRequestMatchesChannelWithAnthropicMessagesProtocol(t *testing.T) {
+// Declaring the inbound anthropic_messages capability does not make an upstream
+// speak the Anthropic wire protocol: the channel keeps using its own provider and
+// the gateway translates. Native passthrough needs the explicit marker.
+func TestAnthropicMessagesCapabilityDoesNotSelectNativeWire(t *testing.T) {
 	ch := model.ChannelConfig{
 		Name:      "gpustack-cluster",
 		Type:      model.ProviderGPUStack,
@@ -77,20 +80,22 @@ func TestNativeAnthropicRequestMatchesChannelWithAnthropicMessagesProtocol(t *te
 	}
 	d := NewDispatcher([]model.ChannelConfig{ch})
 
-	req := &model.ChatCompletionRequest{
-		Model:               "deepseek-v4.1-flash",
-		Protocol:            "anthropic_messages",
-		AnthropicNativeOnly: true,
-		AnthropicOriginal:   &model.AnthropicInboundRequest{Model: "deepseek-v4.1-flash"},
+	own := &wireProvider{typ: model.ProviderGPUStack}
+	d.RegisterProvider(own)
+
+	prov, ok := d.getProviderForChannel(&ch)
+	if !ok {
+		t.Fatalf("channel has no provider")
+	}
+	if prov.Type() == model.ProviderAnthropic {
+		t.Fatalf("an OpenAI-speaking channel that merely accepts /v1/messages must be translated, not called with the Anthropic wire protocol")
+	}
+	if prov.Type() != model.ProviderGPUStack {
+		t.Fatalf("provider = %v, want the channel's own provider", prov.Type())
 	}
 
-	channels := d.candidateChannelsForRequest(context.Background(), req, "anthropic_messages")
-	if len(channels) != 1 || channels[0].Name != "gpustack-cluster" {
-		t.Fatalf("expected gpustack-cluster to be matched, got: %+v", channels)
-	}
-
-	prov, ok := d.getProviderForChannel(&ch, req)
-	if !ok || prov.Type() != model.ProviderAnthropic {
-		t.Fatalf("expected Anthropic provider for channel with anthropic_messages protocol, got: %v", prov)
+	ch.Protocols = append(ch.Protocols, AnthropicNativeProtocol)
+	if prov, ok := d.getProviderForChannel(&ch); !ok || prov.Type() != model.ProviderAnthropic {
+		t.Fatalf("explicit %q marker must select the native Anthropic provider, got %v", AnthropicNativeProtocol, prov)
 	}
 }
