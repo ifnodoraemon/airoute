@@ -249,3 +249,82 @@ func TestDeductWalletWritesChargeLedger(t *testing.T) {
 		t.Fatalf("ledger sum = %d", sum)
 	}
 }
+
+func TestSetUserBalanceWritesAdjustmentLedger(t *testing.T) {
+	db, err := OpenDB(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := NewRepository(db)
+	user := &UserRecord{Username: "set-user", Email: "set@example.com", PasswordHash: "x", Role: "user", Status: "active", Balance: 100, BalanceUnits: ToUnits(100), GroupName: "default"}
+	if err := repo.CreateUser(user); err != nil {
+		t.Fatal(err)
+	}
+	if err := CreateWalletLedger(db); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SetUserBalance(user.Username, 150); err != nil {
+		t.Fatalf("set balance: %v", err)
+	}
+	entries, err := repo.ListWalletTransactions(user.ID, 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 || entries[0].Type != WalletTypeAdjustment {
+		t.Fatalf("entries = %+v", entries)
+	}
+	if entries[0].DeltaUnits != ToUnits(50) || entries[0].BalanceAfterUnits != ToUnits(150) {
+		t.Fatalf("adjustment = %+v", entries[0])
+	}
+	sum, err := repo.WalletLedgerSumContext(context.Background(), user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum != ToUnits(150) {
+		t.Fatalf("ledger sum = %d", sum)
+	}
+}
+
+func TestUpdateUserBalanceWritesAdjustmentLedger(t *testing.T) {
+	db, err := OpenDB(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := NewRepository(db)
+	user := &UserRecord{Username: "delta-user", Email: "delta@example.com", PasswordHash: "x", Role: "user", Status: "active", Balance: 100, BalanceUnits: ToUnits(100), GroupName: "default"}
+	if err := repo.CreateUser(user); err != nil {
+		t.Fatal(err)
+	}
+	if err := CreateWalletLedger(db); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.UpdateUserBalance(user.Username, 25); err != nil {
+		t.Fatalf("update balance: %v", err)
+	}
+	if err := repo.UpdateUserBalance(user.Username, -40); err != nil {
+		t.Fatalf("second update: %v", err)
+	}
+	entries, err := repo.ListWalletTransactions(user.ID, 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("entries = %d: %+v", len(entries), entries)
+	}
+	// Newest first: -40 then +25.
+	if entries[0].DeltaUnits != -ToUnits(40) || entries[0].BalanceAfterUnits != ToUnits(85) {
+		t.Fatalf("newest adjustment = %+v", entries[0])
+	}
+	if entries[1].DeltaUnits != ToUnits(25) || entries[1].BalanceAfterUnits != ToUnits(125) {
+		t.Fatalf("older adjustment = %+v", entries[1])
+	}
+	sum, err := repo.WalletLedgerSumContext(context.Background(), user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum != ToUnits(85) {
+		t.Fatalf("ledger sum = %d", sum)
+	}
+}
