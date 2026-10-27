@@ -39,7 +39,7 @@ jobs:
             artifact_name: airoute-windows-amd64.exe
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Resolve build version
         id: version
