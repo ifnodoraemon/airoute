@@ -72,11 +72,19 @@ func truncateError(msg string) string {
 }
 
 // normalizeUsageSource clamps the usage provenance marker to a known value.
+//
+// "gateway_auth" marks a client admission rejection (insufficient balance,
+// disabled key, rate limit) recorded by the auth middleware. It used to be
+// silently rewritten to "upstream", which made an operator denial look like an
+// upstream-report row. Anything unknown still falls back to "upstream" so a typo
+// can never invent a provenance the console cannot explain.
 func normalizeUsageSource(src string) string {
-	if src == "estimated" {
-		return "estimated"
+	switch src {
+	case "estimated", "gateway_auth":
+		return src
+	default:
+		return "upstream"
 	}
-	return "upstream"
 }
 
 // RecordUsageLog records an audit row and settles its charge.
