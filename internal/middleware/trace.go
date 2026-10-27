@@ -112,7 +112,12 @@ func sanitizeURLQuery(raw string) string {
 		kv := strings.SplitN(p, "=", 2)
 		if len(kv) == 2 {
 			k := strings.ToLower(kv[0])
-			if k == "key" || k == "apikey" || k == "token" || k == "secret" || k == "password" {
+			// sessionId is a credential of the MCP SSE transport: the POST URL
+			// carries it on every message, so an unredacted access log let any
+			// log reader take over another caller's session (A08). api_key is the
+			// snake_case spelling of the same credential.
+			if k == "key" || k == "apikey" || k == "api_key" || k == "token" ||
+				k == "secret" || k == "password" || k == "sessionid" || k == "session_id" {
 				parts[i] = kv[0] + "=[REDACTED]"
 			}
 		}

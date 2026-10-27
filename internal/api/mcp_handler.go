@@ -70,45 +70,46 @@ func (h *MCPHandler) HandleMCPMessages(c *gin.Context) {
 
 	callerKey := extractMCPKey(c)
 	sessionID := c.Query("sessionId")
+	var sess *mcpSession
 	if sessionID != "" {
 		if sVal, ok := h.sessions.Load(sessionID); ok {
-			if sess, ok := sVal.(*mcpSession); ok && callerKey == "" {
-				callerKey = sess.apiKey
-			}
+			sess, _ = sVal.(*mcpSession)
 		}
+	}
+	// Standard MCP SSE transport: with no credential on the POST, the sessionId
+	// is the capability and the session's key authenticates the request. When an
+	// explicit key IS supplied it must be the session owner's: falling back to the
+	// session key would let any valid key inject responses into another caller's
+	// stream (A17). The mismatch is rejected below instead.
+	if callerKey == "" && sess != nil {
+		callerKey = sess.apiKey
 	}
 
 	reqCtx := c.Request.Context()
-	if callerKey != "" {
-		if _, authErr := h.authenticateCaller(callerKey); authErr != nil {
-			c.JSON(http.StatusUnauthorized, mcpResponse{
-				JSONRPC: "2.0",
-				Error:   &mcpError{Code: -32000, Message: "Unauthorized: " + authErr.Error()},
-			})
-			return
-		}
-		reqCtx = context.WithValue(reqCtx, contextKeyCallerKey, callerKey)
-	} else if h.repo != nil && h.repo.CountAPIKeys() > 0 {
-		// Once the gateway has issued API keys, MCP must not be reachable
-		// anonymously: tools/list would otherwise enumerate skills and remote
-		// MCP servers to unauthenticated callers.
-		c.JSON(http.StatusUnauthorized, mcpResponse{
+	caller, accessErr := h.resolveCaller(callerKey)
+	if accessErr != nil {
+		respondMCPAccessError(c, accessErr)
+		return
+	}
+	if sess != nil && sess.apiKey != "" && callerKey != sess.apiKey {
+		c.JSON(http.StatusForbidden, mcpResponse{
 			JSONRPC: "2.0",
-			Error:   &mcpError{Code: -32000, Message: "Unauthorized: an API key is required for MCP access"},
+			Error:   &mcpError{Code: -32000, Message: "Forbidden: this SSE session belongs to a different API key"},
 		})
 		return
 	}
+	if !h.checkCallerRateLimits(reqCtx, c, caller) {
+		return
+	}
+	reqCtx = context.WithValue(reqCtx, contextKeyCallerKey, caller.Key)
+	reqCtx = context.WithValue(reqCtx, contextKeyCallerRecord, caller)
 
 	res := h.ProcessRPC(reqCtx, &req)
 
 	// If this request came via an SSE session, push to SSE channel too
-	if sessionID != "" {
-		if sVal, ok := h.sessions.Load(sessionID); ok {
-			if sess, ok := sVal.(*mcpSession); ok {
-				if resBytes, err := json.Marshal(res); err == nil {
-					sess.Send(resBytes)
-				}
-			}
+	if sessionID != "" && sess != nil {
+		if resBytes, err := json.Marshal(res); err == nil {
+			sess.Send(resBytes)
 		}
 	}
 

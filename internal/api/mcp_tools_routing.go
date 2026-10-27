@@ -9,11 +9,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/airoute/internal/billing"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/router"
-	"github.com/ifnodoraemon/airoute/internal/storage"
-	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
 // executeRoutingTools executes prompt optimizer, model recommender, deep search, and chat completions.
@@ -152,6 +150,9 @@ func (h *MCPHandler) executeRoutingTools(ctx context.Context, name string, args 
 			return "Error: 'model' and 'message' are required arguments", true, true
 		}
 
+		// Prefer the transport-authenticated caller. The legacy 'api_key'
+		// argument stays supported for the stdio adapter, which has no HTTP
+		// request to carry the credential.
 		apiKey, _ := ctx.Value(contextKeyCallerKey).(string)
 		if apiKey == "" {
 			if k, ok := args["api_key"].(string); ok && k != "" {
@@ -159,17 +160,50 @@ func (h *MCPHandler) executeRoutingTools(ctx context.Context, name string, args 
 			}
 		}
 
-		var callerKeyRec *storage.APIKeyRecord
-		if h.repo != nil {
-			if apiKey != "" {
-				kRec, err := h.repo.GetAPIKeyByKey(apiKey)
-				if err != nil || kRec == nil || kRec.Status != "active" {
+		caller := callerFromContext(ctx)
+		if caller == nil || caller.Key != apiKey {
+			resolved, accessErr := h.resolveCaller(apiKey)
+			if accessErr != nil {
+				if accessErr.StatusCode == http.StatusUnauthorized && strings.TrimSpace(apiKey) == "" {
+					return "Error: Authentication required for airoute_chat. Please provide a valid API key via Authorization header, ?apiKey= query param, or 'api_key' argument.", true, true
+				}
+				if accessErr.StatusCode == http.StatusUnauthorized {
 					return "Error: Invalid or disabled API key provided", true, true
 				}
-				callerKeyRec = kRec
-			} else if h.repo.CountAPIKeys() > 0 {
-				return "Error: Authentication required for airoute_chat. Please provide a valid API key via Authorization header, ?apiKey= query param, or 'api_key' argument.", true, true
+				return "Error: " + accessErr.Message, true, true
 			}
+			caller = resolved
+		}
+
+		// airoute_chat is the billable path, so the data-plane admission rules are
+		// re-applied here too: a direct tool invocation (stdio adapter) must not
+		// skip what the HTTP transport enforced (A02/A04).
+		keyGroup := "default"
+		if caller != nil && caller.Config != nil && caller.Config.GroupName != "" {
+			keyGroup = caller.Config.GroupName
+		}
+		if caller != nil && caller.Record != nil {
+			if denial := middleware.AuthorizeKey(caller.Config); denial != nil {
+				return "Error: " + denial.Message, true, true
+			}
+			if !middleware.ModelAllowed(caller.Record.AllowedModels, modelName) {
+				return fmt.Sprintf("Error: Model %q is not permitted for this API key", modelName), true, true
+			}
+			// Pre-flight in-flight reservation, as the HTTP middleware does, so a
+			// burst of concurrent tool calls cannot overdraft the wallet.
+			if !strings.EqualFold(caller.Record.UserRole, "admin") && caller.Record.UserID > 0 {
+				acquired, backend := middleware.ReserveUserQuota(caller.Record.UserID, caller.Record.UserBalance)
+				if !acquired {
+					return "Error: Concurrent requests exceed available wallet balance reserve. Please wait for pending requests to finish or recharge.", true, true
+				}
+				defer middleware.ReleaseUserQuota(caller.Record.UserID, backend)
+			}
+		}
+		// Reject a legacy foreign-currency rate before any upstream work starts,
+		// exactly like the HTTP data plane (the recorded pricing snapshot lets
+		// settlement validate it a second time).
+		if err := validateMCPModelCurrency(modelName, keyGroup); err != nil {
+			return "Error: " + err.Error(), true, true
 		}
 
 		chatReq := &model.ChatCompletionRequest{
@@ -188,57 +222,59 @@ func (h *MCPHandler) executeRoutingTools(ctx context.Context, name string, args 
 		if h.dispatcher != nil {
 			start := time.Now()
 			resp, err := h.dispatcher.Dispatch(reqCtx, chatReq)
+			dur := time.Since(start)
+			identity := newMCPUsageIdentity(caller)
+
 			if err != nil {
+				statusCode, _, _, channel := resolveUpstreamFailureStatus(err)
+				params := AuditRecordParams{
+					SessionID:    sessionID,
+					Model:        chatReq.Model,
+					Channel:      channel,
+					Duration:     dur,
+					StatusCode:   statusCode,
+					ErrorMessage: err.Error(),
+					APIKey:       identity.apiKey,
+					TenantID:     identity.tenantID,
+					KeyGroup:     identity.keyGroup,
+					TraceID:      identity.traceID,
+					KeyConfig:    identity.keyConfig,
+				}
+				// A caller that already closed the POST still handed the prompt to
+				// the upstream: mirror the HTTP abort accounting.
+				if statusCode == statusClientClosed {
+					if de, ok := router.AsDispatchError(err); ok && de.PromptTokens > 0 {
+						params.PromptTokens = de.PromptTokens
+						params.TotalTokens = de.PromptTokens
+						params.UsageSource = usageSourceEstimated
+					}
+				}
+				RecordUsage(nil, params)
 				return fmt.Sprintf("Upstream Dispatch Error: %v", err), true, true
 			}
-			dur := time.Since(start)
 
-			pTokens, cTokens, cachedTokens := 0, 0, 0
-			if resp.Usage != nil {
-				pTokens = resp.Usage.PromptTokens
-				cTokens = resp.Usage.CompletionTokens
-				cachedTokens = resp.Usage.GetCachedTokens()
-			}
-
-			callerGroup := "default"
-			callerAPIKey := "mcp-session"
-			callerTenantID := "mcp"
-			if callerKeyRec != nil {
-				if callerKeyRec.GroupName != "" {
-					callerGroup = callerKeyRec.GroupName
-				}
-				callerAPIKey = callerKeyRec.Key
-				callerTenantID = callerKeyRec.TenantID
-			}
-
-			var cost float64
-			var isOffPeak bool
-			var offPeakDiscount float64 = 1.0
-			if billing.GlobalEngine != nil {
-				cost, _, _, isOffPeak, offPeakDiscount = billing.GlobalEngine.CalculateCostDetailedWithGroup(chatReq.Model, callerGroup, pTokens, cTokens, cachedTokens, time.Now())
-			}
-
-			telemetry.GlobalMetrics.RecordRequest(true, dur, pTokens, cTokens)
-			if storage.GlobalAsyncLogger != nil {
-				storage.GlobalAsyncLogger.Record(&storage.UsageLogRecord{
-					TraceID:          fmt.Sprintf("tr-mcp-%d", time.Now().UnixMicro()),
-					ChatID:           resp.ID,
-					Channel:          resp.Channel,
-					SessionID:        sessionID,
-					APIKey:           callerAPIKey,
-					TenantID:         callerTenantID,
-					Model:            chatReq.Model,
-					PromptTokens:     pTokens,
-					CompletionTokens: cTokens,
-					CachedTokens:     cachedTokens,
-					TotalTokens:      pTokens + cTokens,
-					Cost:             cost,
-					IsOffPeak:        isOffPeak,
-					OffPeakDiscount:  offPeakDiscount,
-					DurationMs:       dur.Milliseconds(),
-					StatusCode:       http.StatusOK,
-				})
-			}
+			// Same accounting semantics as HTTP: shared estimate fallback when the
+			// upstream omits usage, pricing snapshot from the billing engine,
+			// synchronous settlement and full caller attribution (B3/B7).
+			pTokens, cTokens, cachedTokens, usageSource := resolveChatUsage(chatReq, resp)
+			RecordUsage(nil, AuditRecordParams{
+				SessionID:        sessionID,
+				ChatID:           resp.ID,
+				Channel:          resp.Channel,
+				Model:            chatReq.Model,
+				PromptTokens:     pTokens,
+				CompletionTokens: cTokens,
+				CachedTokens:     cachedTokens,
+				TotalTokens:      pTokens + cTokens,
+				Duration:         dur,
+				StatusCode:       http.StatusOK,
+				UsageSource:      usageSource,
+				APIKey:           identity.apiKey,
+				TenantID:         identity.tenantID,
+				KeyGroup:         identity.keyGroup,
+				TraceID:          identity.traceID,
+				KeyConfig:        identity.keyConfig,
+			})
 
 			if len(resp.Choices) > 0 {
 				return resp.Choices[0].Message.GetContentString(), false, true

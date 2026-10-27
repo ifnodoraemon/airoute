@@ -67,7 +67,11 @@ func extractMCPKey(c *gin.Context) string {
 }
 
 func genSessionID() string {
-	b := make([]byte, 8)
+	// 128 bits: when no API key is supplied on the POST, the sessionId itself is
+	// the only capability protecting the SSE channel, so it must not be
+	// brute-forceable (A08 raised the previous 64-bit value). The POST binding
+	// below is the primary control; entropy is defence in depth for log leaks.
+	b := make([]byte, 16)
 	_, _ = rand.Read(b)
 	return "mcp-" + hex.EncodeToString(b)
 }
@@ -94,15 +98,24 @@ func (h *MCPHandler) HandleMCPSSE(c *gin.Context) {
 	}
 
 	callerKey := extractMCPKey(c)
-	if _, authErr := h.authenticateCaller(callerKey); authErr != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Authentication required for MCP SSE connection: " + authErr.Error(),
-		})
+	reqCtx := c.Request.Context()
+	caller, accessErr := h.resolveCaller(callerKey)
+	if accessErr != nil {
+		// Preserve the historical wording for a credential failure; data-plane
+		// rejections (locked account, exhausted budget/wallet) speak for themselves.
+		message := accessErr.Message
+		if accessErr.StatusCode == http.StatusUnauthorized {
+			message = "Authentication required for MCP SSE connection: " + strings.TrimPrefix(message, "Unauthorized: ")
+		}
+		c.JSON(accessErr.StatusCode, gin.H{"error": message})
+		return
+	}
+	if !h.checkCallerRateLimits(reqCtx, c, caller) {
 		return
 	}
 
 	sessionID := genSessionID()
-	sess := &mcpSession{ch: make(chan []byte, 32), apiKey: callerKey}
+	sess := &mcpSession{ch: make(chan []byte, 32), apiKey: caller.Key}
 	h.sessions.Store(sessionID, sess)
 	defer func() {
 		h.sessions.Delete(sessionID)

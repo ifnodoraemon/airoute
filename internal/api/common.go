@@ -40,6 +40,19 @@ type AuditRecordParams struct {
 	ErrorMessage     string // populated for failed requests so the audit log explains the failure
 	BillableUnits    int
 	SkipBilling      bool
+
+	// Caller attribution overrides for non-HTTP entrypoints.
+	//
+	// The MCP JSON-RPC transport has no gin context to derive the identity from,
+	// yet its usage must be attributed (and settled) exactly like /v1/* traffic:
+	// the old MCP path wrote a hand-built record with a fixed "mcp-session" key and
+	// no pricing snapshot. Empty values fall back to the gin context, so HTTP
+	// callers stay unchanged.
+	APIKey    string
+	TenantID  string
+	KeyGroup  string
+	TraceID   string
+	KeyConfig *model.APIKeyConfig // carries the per-key TPM budget for consumption
 }
 
 // RecordUsage executes the cross-cutting concern of calculating billing cost (with off-peak discount and cached tokens),
@@ -97,7 +110,10 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 	var pricingSnapshot *storage.UsagePricingSnapshot
 	var isOffPeak bool
 	var offPeakDiscount float64 = 1.0
-	keyGroup := getKeyGroup(c)
+	keyGroup := params.KeyGroup
+	if keyGroup == "" {
+		keyGroup = getKeyGroup(c)
+	}
 	// A unary request whose customer has gone away is still billed (the provider
 	// did the work) but recorded as 499 rather than a success: the status must say
 	// what actually happened, independent of the billing decision.
@@ -140,8 +156,12 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 
 	// Feed actual consumption back into the per-minute token budget so the next
 	// requests from this key are gated by real usage rather than an estimate.
-	if cfg := getAPIKeyConfig(c); cfg != nil && cfg.TPM > 0 {
-		middleware.GlobalTokenQuota.Consume(cfg.Key, cfg.TPM, totTokens)
+	keyCfg := params.KeyConfig
+	if keyCfg == nil {
+		keyCfg = getAPIKeyConfig(c)
+	}
+	if keyCfg != nil && keyCfg.TPM > 0 {
+		middleware.GlobalTokenQuota.Consume(keyCfg.Key, keyCfg.TPM, totTokens)
 	}
 
 	// A client that hung up is not a gateway failure: counting it as one inflated
@@ -171,16 +191,27 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 		telemetry.GlobalLiveMetrics.AddTokens(totTokens)
 	}
 
-	tenantID := c.GetString("tenant_id")
-	if tenantID == "" {
-		tenantID = c.GetString(middleware.ContextKeyTenant)
+	tenantID := params.TenantID
+	if tenantID == "" && c != nil {
+		tenantID = c.GetString("tenant_id")
+		if tenantID == "" {
+			tenantID = c.GetString(middleware.ContextKeyTenant)
+		}
+	}
+	traceID := params.TraceID
+	if traceID == "" {
+		traceID = middleware.GetTraceID(c)
+	}
+	apiKey := params.APIKey
+	if apiKey == "" {
+		apiKey = getRequestAPIKey(c)
 	}
 	record := &storage.UsageLogRecord{
-		TraceID:          middleware.GetTraceID(c),
+		TraceID:          traceID,
 		ChatID:           params.ChatID,
 		Channel:          params.Channel,
 		SessionID:        params.SessionID,
-		APIKey:           getRequestAPIKey(c),
+		APIKey:           apiKey,
 		TenantID:         tenantID,
 		Model:            params.Model,
 		PromptTokens:     params.PromptTokens,

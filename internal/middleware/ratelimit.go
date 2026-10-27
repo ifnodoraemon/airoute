@@ -1,14 +1,11 @@
 package middleware
 
 import (
-	"context"
-	"net/http"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/airoute/internal/distributed"
 	"github.com/ifnodoraemon/airoute/internal/model"
 )
 
@@ -170,72 +167,20 @@ func RateLimitMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Token-per-minute gate: reject before any upstream call when the key has
-		// already consumed its minute budget. RPM limiting below stays independent.
-		if k.TPM > 0 {
-			if !GlobalTokenQuota.Allow(k.Key, k.TPM) {
-				c.Set(ContextKeyErrorMessage, "token rate limit exceeded (TPM)")
-				c.Header("X-RateLimit-Limit-Tokens", strconv.Itoa(k.TPM))
-				c.Header("Retry-After", "60")
-				c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
-					"error": gin.H{
-						"message": "Token rate limit exceeded (TPM limit reached). Please slow down requests.",
-						"type":    "rate_limit_error",
-						"code":    "token_rate_limit_exceeded",
-					},
-				})
-				return
-			}
-			c.Header("X-RateLimit-Remaining-Tokens", strconv.Itoa(GlobalTokenQuota.Remaining(k.Key, k.TPM)))
+		// The TPM/RPM rules live in CheckKeyRateLimits so the MCP transport
+		// applies the same limits; this handler only renders the outcome.
+		outcome := CheckKeyRateLimits(c.Request.Context(), k)
+		if outcome.RemainingTPM >= 0 {
+			c.Header("X-RateLimit-Remaining-Tokens", strconv.Itoa(outcome.RemainingTPM))
 		}
-
-		if k.RPM <= 0 {
+		if outcome.Denial == nil {
 			c.Next()
 			return
 		}
-
-		// 1. Check Enterprise Distributed Redis cluster rate limit
-		client := distributed.GetClient()
-		if client != nil && client.IsActive() {
-			rpmCtx, cancel := context.WithTimeout(c.Request.Context(), redisRateLimitTimeout)
-			allowed, err := client.AllowRPM(rpmCtx, k.Key, k.RPM)
-			cancel()
-			if err == nil {
-				if !allowed {
-					c.Set(ContextKeyErrorMessage, "cluster rate limit exceeded (RPM)")
-					c.Header("X-RateLimit-Limit-Requests", strconv.Itoa(k.RPM))
-					c.Header("Retry-After", "1")
-					c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
-						"error": gin.H{
-							"message": "Cluster rate limit exceeded (RPM limit reached). Please slow down requests.",
-							"type":    "rate_limit_error",
-							"code":    "rate_limit_exceeded",
-						},
-					})
-					return
-				}
-				c.Next()
-				return
-			}
-			// On Redis error/timeout, gracefully fall through to local in-memory token bucket
+		c.Set(ContextKeyErrorMessage, outcome.Denial.LogMessage)
+		for name, value := range outcome.Denial.Headers {
+			c.Header(name, value)
 		}
-
-		// 2. Fallback to high-performance local in-memory token bucket
-		bucket := GlobalRateLimiter.getBucket(k.Key, k.RPM)
-		if !bucket.allow() {
-			c.Set(ContextKeyErrorMessage, "local rate limit exceeded (RPM)")
-			c.Header("X-RateLimit-Limit-Requests", strconv.Itoa(k.RPM))
-			c.Header("Retry-After", "1")
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
-				"error": gin.H{
-					"message": "Rate limit exceeded (RPM limit reached). Please slow down requests.",
-					"type":    "rate_limit_error",
-					"code":    "rate_limit_exceeded",
-				},
-			})
-			return
-		}
-
-		c.Next()
+		AbortWithDenial(c, outcome.Denial)
 	}
 }

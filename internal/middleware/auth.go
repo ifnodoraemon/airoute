@@ -117,30 +117,18 @@ func AuthMiddleware() gin.HandlerFunc {
 		effectiveKey := *matchedKey
 
 		// 1. Key status check (pure in-memory)
-		if effectiveKey.Status != "" && effectiveKey.Status != "active" {
-			auditAuthFailure(c, rawKey, http.StatusUnauthorized, "The API key has been revoked or disabled")
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": gin.H{
-					"message": "The API key has been revoked or disabled.",
-					"type":    "invalid_request_error",
-					"code":    "api_key_revoked",
-				},
-			})
+		if denial := KeyStatusDenial(effectiveKey.Status); denial != nil {
+			auditAuthFailure(c, rawKey, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
+			AbortWithDenial(c, denial)
 			return
 		}
 
 		// 2. Key budget check (fast in-memory check first). Use the integer
 		// 1e-9-unit mirror when available so repeated float accumulation cannot
 		// drift across the budget boundary.
-		if budgetExceeded(effectiveKey.BudgetUnits, effectiveKey.UsedCostUnits, effectiveKey.Budget, effectiveKey.UsedCost) {
-			auditAuthFailure(c, rawKey, http.StatusPaymentRequired, "This API key has exceeded its assigned quota budget limit")
-			c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
-				"error": gin.H{
-					"message": "This API key has exceeded its assigned quota budget limit.",
-					"type":    "key_budget_exceeded",
-					"code":    "key_budget_exceeded",
-				},
-			})
+		if denial := KeyBudgetDenial(effectiveKey.BudgetUnits, effectiveKey.UsedCostUnits, effectiveKey.Budget, effectiveKey.UsedCost); denial != nil {
+			auditAuthFailure(c, rawKey, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
+			AbortWithDenial(c, denial)
 			return
 		}
 
@@ -154,15 +142,9 @@ func AuthMiddleware() gin.HandlerFunc {
 			keyRec, _ := repo.GetAPIKeyByKeyContext(lookupCtx, effectiveKey.Key)
 			cancel()
 			if keyRec != nil {
-				if keyRec.Status != "" && keyRec.Status != "active" {
-					auditAuthFailure(c, rawKey, http.StatusUnauthorized, "The API key has been revoked or disabled")
-					c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-						"error": gin.H{
-							"message": "The API key has been revoked or disabled.",
-							"type":    "invalid_request_error",
-							"code":    "api_key_revoked",
-						},
-					})
+				if denial := KeyStatusDenial(keyRec.Status); denial != nil {
+					auditAuthFailure(c, rawKey, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
+					AbortWithDenial(c, denial)
 					return
 				}
 				effectiveBudget := keyRec.Budget
@@ -173,14 +155,8 @@ func AuthMiddleware() gin.HandlerFunc {
 				if budgetUnits <= 0 {
 					budgetUnits = effectiveKey.BudgetUnits
 				}
-				if budgetExceeded(budgetUnits, keyRec.UsedCostUnits, effectiveBudget, keyRec.UsedCost) {
-					c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
-						"error": gin.H{
-							"message": "This API key has exceeded its assigned quota budget limit.",
-							"type":    "key_budget_exceeded",
-							"code":    "key_budget_exceeded",
-						},
-					})
+				if denial := KeyBudgetDenial(budgetUnits, keyRec.UsedCostUnits, effectiveBudget, keyRec.UsedCost); denial != nil {
+					AbortWithDenial(c, denial)
 					return
 				}
 				if keyRec.GroupName != "" {
@@ -215,48 +191,24 @@ func AuthMiddleware() gin.HandlerFunc {
 			}
 		}
 
-		if userStatus != "" {
-			// Account lock check
-			if strings.EqualFold(userStatus, "locked") || strings.EqualFold(userStatus, "deleted") {
-				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-					"error": gin.H{
-						"message": "User account is locked. Please contact administrator.",
-						"type":    "account_locked",
-						"code":    "account_locked",
-					},
+		if denial := AccountDenial(userStatus, userRole, userBalance); denial != nil {
+			AbortWithDenial(c, denial)
+			return
+		}
+
+		// Pre-flight in-flight reservation to prevent concurrent overdraft storm
+		if userStatus != "" && !strings.EqualFold(userRole, "admin") && userID > 0 {
+			acquired, backend := ReserveUserQuota(userID, userBalance)
+			if !acquired {
+				AbortWithDenial(c, &AccessDenial{
+					StatusCode: http.StatusPaymentRequired,
+					Message:    "Concurrent requests exceed available wallet balance reserve. Please wait for pending requests to finish or recharge.",
+					Type:       "insufficient_quota",
+					Code:       "insufficient_quota",
 				})
 				return
 			}
-
-			// Wallet balance check (admin accounts have unlimited quota)
-			if !strings.EqualFold(userRole, "admin") {
-				if userBalance <= 0 {
-					c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
-						"error": gin.H{
-							"message": "You have exceeded your current balance/quota (insufficient_quota). Please recharge your wallet at the console.",
-							"type":    "insufficient_quota",
-							"code":    "insufficient_quota",
-						},
-					})
-					return
-				}
-
-				// Pre-flight in-flight reservation to prevent concurrent overdraft storm
-				if userID > 0 {
-					acquired, backend := globalQuotaTracker.TryAcquire(userID, userBalance)
-					if !acquired {
-						c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{
-							"error": gin.H{
-								"message": "Concurrent requests exceed available wallet balance reserve. Please wait for pending requests to finish or recharge.",
-								"type":    "insufficient_quota",
-								"code":    "insufficient_quota",
-							},
-						})
-						return
-					}
-					defer globalQuotaTracker.Release(userID, backend)
-				}
-			}
+			defer ReleaseUserQuota(userID, backend)
 		}
 
 		// Save context info
@@ -275,22 +227,10 @@ func ValidateModelAllowed(c *gin.Context, requestedModel string) bool {
 	}
 
 	keyCfg, ok := keyAny.(*model.APIKeyConfig)
-	if !ok || len(keyCfg.AllowedModels) == 0 {
+	if !ok {
 		return true // all models allowed
 	}
-
-	for _, m := range keyCfg.AllowedModels {
-		if m == "*" || m == requestedModel {
-			return true
-		}
-		if strings.HasSuffix(m, "/*") {
-			prefix := strings.TrimSuffix(m, "/*") + "/"
-			if strings.HasPrefix(requestedModel, prefix) {
-				return true
-			}
-		}
-	}
-	return false
+	return ModelAllowed(keyCfg.AllowedModels, requestedModel)
 }
 
 // budgetExceeded compares spend against a budget using integer nano-units when
