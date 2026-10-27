@@ -211,6 +211,12 @@ func isFatalClientPayloadError(err error) bool {
 
 // Dispatch executes non-streaming chat with automatic fallback.
 func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequest) (*model.ChatCompletionResponse, error) {
+	// Bound the total time this request may spend across channels. A caller
+	// deadline (if any) wins; a cross-model fallback recursion carries the same
+	// budget because it derives its context from this one.
+	ctx, cancelBudget := withRequestBudget(ctx)
+	defer cancelBudget()
+
 	proto := "chat"
 	if req.Protocol != "" {
 		proto = req.Protocol
@@ -238,6 +244,16 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 	var attempted []string // channels actually called and failed for this model
 	var skipped []string   // channels bypassed by the circuit breaker, never called
 	for i, ch := range channels {
+		// The budget may have expired while waiting on the previous attempt (or
+		// the loop may start already expired). Stop here instead of paying the
+		// next channel timeout as well.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			if requestBudgetExceeded(ctx, ctxErr) {
+				return nil, newRequestBudgetError(req.Model, attempted, lastErr)
+			}
+			return nil, newCanceledError(ctx, attempted, "", 0)
+		}
+
 		// High-Availability Circuit Breaker: fail fast if upstream is down
 		if !d.circuitBreaker.CanExecute(ch.Name) {
 			telemetry.WarnLogger(routerLog(ctx), "breaker-open:"+ch.Name, 30*time.Second,
@@ -280,6 +296,15 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 			return resp, nil
 		}
 
+		// A budget expiry surfaces as DeadlineExceeded on the attempt context;
+		// classify it as ours rather than charging the channel and retrying.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			d.circuitBreaker.AbortCanary(ch.Name)
+			if requestBudgetExceeded(ctx, ctxErr) {
+				return nil, newRequestBudgetError(req.Model, append(attempted, ch.Name), err)
+			}
+			return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
+		}
 		if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
 			d.circuitBreaker.AbortCanary(ch.Name)
 			return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())

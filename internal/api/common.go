@@ -762,6 +762,13 @@ func resolveUpstreamFailureStatus(err error) (statusCode int, errType string, er
 		return statusCode, errType, errCode, channel
 	}
 
+	// The gateway's own total budget ran out. This is a gateway-side deadline,
+	// but reporting it as a plain upstream_timeout hides that no single provider
+	// failed: every candidate was simply still running when we stopped waiting.
+	if errors.Is(err, router.ErrRequestBudgetExceeded) {
+		return http.StatusGatewayTimeout, "gateway_error", "request_budget_exceeded", channel
+	}
+
 	// The request context being canceled means the *downstream* went away (browser
 	// tab closed, mobile network drop, client timeout): the dispatcher returns
 	// ctx.Err() as soon as it observes it. Reporting that as a 502 upstream
