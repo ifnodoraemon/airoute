@@ -1,5 +1,10 @@
 package storage
 
+import (
+	"database/sql"
+	"errors"
+)
+
 // addWalletLedger creates the append-only wallet ledger. It is exported through
 // CreateWalletLedger so the migration registration (blocked by a concurrent
 // migration-list edit) and tests can call it directly.
@@ -49,8 +54,14 @@ func addWalletLedger(db *DB) error {
 		WHERE NOT EXISTS (
 			SELECT 1 FROM wallet_transactions w WHERE w.user_id = u.id AND w.type = 'opening'
 		)`
-	if _, err := db.DB.Exec(backfill); err != nil {
-		return err
+	// Some migration fixtures and very old partial databases do not have a users
+	// table at all; there is nothing to backfill there, and failing the whole
+	// migration would block upgrading them. A real database always has users.
+	var probe int
+	if err := db.QueryRow(`SELECT 1 FROM users LIMIT 1`).Scan(&probe); err == nil || errors.Is(err, sql.ErrNoRows) {
+		if _, err := db.DB.Exec(backfill); err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -497,6 +497,8 @@ func (db *DB) migrate() error {
 		{Version: 32, Name: "legacy_usage_log_reasons", Up: rewriteLegacyUsageLogReasons},
 		{Version: 33, Name: "billing_counter_artifact_repair", Up: repairDeletedAuditCounterDrift},
 		{Version: 34, Name: "drop_legacy_nano_money_mirrors", Up: dropLegacyNanoMoneyColumns},
+		{Version: 35, Name: "budgets", Up: CreateBudgets},
+		{Version: 36, Name: "wallet_ledger", Up: CreateWalletLedger},
 	}
 	return db.runMigrations(migrations)
 }
