@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/billing"
+	"github.com/ifnodoraemon/airoute/internal/governance"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/provider"
@@ -337,6 +338,26 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 
 	if storage.GlobalAsyncLogger != nil {
 		storage.GlobalAsyncLogger.Record(record)
+	}
+
+	// Budget accounting runs off the request path: the response is already
+	// decided, and a slow/absent budget table must not turn a successful call
+	// into a failure. The service evaluates the effective rules with its live
+	// counters; threshold events and notifications are deduped per period.
+	if cost > 0 {
+		keyCfg := params.KeyConfig
+		if keyCfg == nil {
+			keyCfg = getAPIKeyConfig(c)
+		}
+		if service := governance.GlobalService(); service != nil && keyCfg != nil && keyCfg.ID > 0 {
+			subject := governance.Subject{KeyID: keyCfg.ID, UserID: keyCfg.UserID, OrgID: keyCfg.OrgID}
+			units := storage.ToUnits(cost)
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				service.RecordSpend(ctx, subject, units)
+			}()
+		}
 	}
 
 	// A 499 can live only in the audit trail: on a streaming request the wire

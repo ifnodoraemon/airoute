@@ -9,8 +9,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/config"
+	"github.com/ifnodoraemon/airoute/internal/governance"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
 // authStorageTimeout bounds the per-request authoritative key/user lookups.
@@ -33,8 +35,24 @@ const (
 	ContextKeyAPIKeyFingerprint = "api_key_fingerprint"
 )
 
-// auditAuthFailure logs client-side authentication rejection into the audit table so 401s/402s are visible to operators.
+// auditAuthFailure logs a client-side admission rejection (insufficient balance,
+// disabled or throttled key) into the audit table so 402/403/429 denials stay
+// visible to operators.
+//
+// A 401 is deliberately not persisted. It means the caller never authenticated:
+// no key matched, no request reached routing, nothing was billed. The row could
+// only carry an empty model and channel, so it added noise to the request log and
+// skewed the error rate. The access log still records the same trace id with its
+// path, peer address and user agent.
+//
+// The opposite direction is unaffected: a 401/403 returned by an upstream
+// provider is a channel failure on a real, billable request and is persisted
+// with the upstream status text, because that means our own credential to the
+// provider is broken.
 func auditAuthFailure(c *gin.Context, rawKey string, statusCode int, errMsg string) {
+	if statusCode == http.StatusUnauthorized {
+		return
+	}
 	if storage.GlobalAsyncLogger == nil {
 		return
 	}
@@ -228,13 +246,47 @@ func AuthMiddleware() gin.HandlerFunc {
 				if keyRec.UserID > 0 {
 					effectiveKey.UserID = keyRec.UserID
 				}
+				if keyRec.ID > 0 {
+					effectiveKey.ID = keyRec.ID
+				}
 				if keyRec.UserStatus != "" {
 					effectiveKey.UserStatus = keyRec.UserStatus
 					effectiveKey.UserRole = keyRec.UserRole
 					effectiveKey.UserBalance = keyRec.UserBalance
-					if keyRec.OrgID > 0 {
-						effectiveKey.OrgID = keyRec.OrgID
-					}
+				}
+				if keyRec.OrgID > 0 {
+					effectiveKey.OrgID = keyRec.OrgID
+				}
+			}
+		}
+
+		// 3b. Organization/user budget gate. The check is deliberately after the
+		// authoritative key refresh (so a stale snapshot cannot miss a newly
+		// lowered budget) and before the wallet reservation. A missing budget
+		// table is treated as fail-open and logged once: budgets are an optional
+		// governance layer, not a reason to take the data plane down.
+		if !freeRead && effectiveKey.ID > 0 {
+			if service := governance.GlobalService(); service != nil {
+				checkCtx, cancel := context.WithTimeout(c.Request.Context(), 500*time.Millisecond)
+				decision, blocked, checkErr := service.Check(checkCtx, governance.Subject{
+					KeyID:  effectiveKey.ID,
+					UserID: effectiveKey.UserID,
+					OrgID:  effectiveKey.OrgID,
+				})
+				cancel()
+				if checkErr != nil {
+					telemetry.WarnLogger(telemetry.ScopedLogger("budget"), "budget-check:"+effectiveKey.Key, 30*time.Second,
+						"budget check failed; allowing request", "error", checkErr.Error(), "key", effectiveKey.Key)
+				} else if blocked {
+					auditAuthFailure(c, rawKey, http.StatusPaymentRequired, "Budget exhausted")
+					AbortWithDenial(c, &AccessDenial{
+						StatusCode: http.StatusPaymentRequired,
+						Message:    "Organization or account budget exhausted. Please contact an administrator.",
+						Type:       "insufficient_quota",
+						Code:       "budget_exceeded",
+					})
+					_ = decision
+					return
 				}
 			}
 		}

@@ -15,10 +15,13 @@ import (
 
 	"github.com/ifnodoraemon/airoute/internal/api"
 	"github.com/ifnodoraemon/airoute/internal/billing"
+	"github.com/ifnodoraemon/airoute/internal/budget"
 	"github.com/ifnodoraemon/airoute/internal/config"
 	"github.com/ifnodoraemon/airoute/internal/controlplane"
 	"github.com/ifnodoraemon/airoute/internal/distributed"
+	"github.com/ifnodoraemon/airoute/internal/governance"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
+	"github.com/ifnodoraemon/airoute/internal/notify"
 	"github.com/ifnodoraemon/airoute/internal/router"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
@@ -139,6 +142,19 @@ func runServer(args []string) {
 	defer db.Close()
 
 	repo := storage.NewRepository(db)
+
+	// Budget governance: rules/counters/events and the optional alert fan-out.
+	// The memory counter is the single-replica implementation; a Redis-backed
+	// counter is wired once the shared KV adapter lands.
+	alertMulti, alertWarnings := notify.FromEnv(nil)
+	for _, warning := range alertWarnings {
+		telemetry.ScopedLogger("system").Warn("alert configuration warning", "warning", warning)
+	}
+	var alertSender notify.Sender
+	if alertMulti.Configured() {
+		alertSender = alertMulti
+	}
+	governance.SetGlobal(governance.NewService(repo, budget.NewMemoryCounter(), alertSender))
 
 	// Readiness signal for orchestrators and scripts/docker-rebuild.sh:
 	// /health stays a cheap process-liveness probe, while /health/ready also

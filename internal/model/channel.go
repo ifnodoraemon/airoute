@@ -239,6 +239,7 @@ func (c *ChannelConfig) GetUpstreamModel(requestedModel string) string {
 
 // APIKeyConfig defines an API key configured on the gateway.
 type APIKeyConfig struct {
+	ID               int64    `yaml:"id,omitempty" json:"id,omitempty"`
 	Key              string   `yaml:"key" json:"key"` // e.g. "sk-airoute-8f92a1c4b7e3"
 	TenantID         string   `yaml:"tenant_id" json:"tenant_id"`
 	AllowedModels    []string `yaml:"allowed_models" json:"allowed_models"` // empty means all allowed

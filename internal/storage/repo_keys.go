@@ -525,6 +525,7 @@ func (r *Repository) ToModelAPIKeys() ([]model.APIKeyConfig, error) {
 		}
 
 		res = append(res, model.APIKeyConfig{
+			ID:               rec.ID,
 			Key:              rec.Key,
 			TenantID:         rec.TenantID,
 			AllowedModels:    rec.AllowedModels,

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/governance"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
@@ -113,6 +114,7 @@ func (h *AdminHandler) SaveBudget(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "保存预算失败: " + err.Error()})
 		return
 	}
+	invalidateBudgetCache()
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": toBudgetView(rec)})
 }
 
@@ -150,6 +152,7 @@ func (h *AdminHandler) UpdateBudget(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "更新预算失败: " + err.Error()})
 		return
 	}
+	invalidateBudgetCache()
 	stored, err := h.repo.GetBudget(existing.ID)
 	if err != nil {
 		respondBudgetError(c, err)
@@ -168,6 +171,7 @@ func (h *AdminHandler) DeleteBudget(c *gin.Context) {
 		respondBudgetError(c, err)
 		return
 	}
+	invalidateBudgetCache()
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": gin.H{"id": id}})
 }
 
@@ -216,4 +220,12 @@ func respondBudgetError(c *gin.Context, err error) {
 		return
 	}
 	c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": err.Error()})
+}
+
+// invalidateBudgetCache makes a console edit visible to the data plane without
+// waiting for the 30s rule TTL.
+func invalidateBudgetCache() {
+	if service := governance.GlobalService(); service != nil {
+		service.Invalidate()
+	}
 }
