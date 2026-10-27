@@ -54,10 +54,10 @@
 ### 5. ⚡ 转发与审计 (Forwarding & Audit)
 - **内存路由缓存**：渠道与密钥配置热加载到内存；计费及控制面仍可能访问数据库。
 - **连接复用**：HTTP Transport 最多保留 2048 个空闲连接，每个 Host 最多 512 个；连接按需建立，支持 HTTP/2。
-- **异步审计**：默认使用 10000 容量队列并定期批量入库；数据库写入失败会保留批次重试，队列满时对请求施加背压。
+- **异步审计**：默认使用 10000 容量队列并定期批量入库；数据库写入失败会保留批次重试，队列满时先把记录落到本地 spill 文件（`GATEWAY_USAGE_SPILL_DIR`）并在下次启动/下一轮重放；只有落盘也失败才会丢弃并计入 `airoute_usage_log_records_dropped_total`（不再对请求施加背压）。
 
 ### 6. 🛡️ 极致高可用与容灾 (Extreme High Availability)
-- **三态智能熔断器 (Tri-State Circuit Breaker)**：每个 Provider 独立跟踪健康度。发生 3 次连续故障（500/429/超时）即刻熔断 30 秒，旁路死节点避免雪崩；冷却后自动进行半开探活与自愈。
+- **三态智能熔断器 (Tri-State Circuit Breaker)**：每个 Provider 独立跟踪健康度。默认连续 3 次渠道故障（401/403/408、5xx、网络错误/超时）后熔断 30 秒并进入半开探活；**HTTP 429 不计入渠道故障**（作为可退避的背压直接透传）。单渠道部署可设 `GATEWAY_BREAKER_ENABLED=false` 进入 advisory 模式（只记录不拦截）。
 - **首字前容灾窗 (Safe Fallback Window)**：首个内容分块或工具调用前发生上游错误时尝试备用渠道；切换耗时取决于上游和超时配置。
 - **集群 10 秒定期无锁自同步**：任意实例修改配置，多副本集群后台自动热重载，无需人工重启服务。
 
@@ -124,8 +124,14 @@ flowchart TD
 # 1. 编译自包含单二进制（包含内嵌 Web UI）
 make build
 
-# 2. 启动网关
+# 2. 启动网关（配置文件必须存在；缺失会直接报错退出，不再回退默认配置）
+#    启动前必须设置强管理员凭证，否则进程会拒绝启动（fail-closed）：
+export GATEWAY_ADMIN_PASSWORD='<至少 16 位随机口令>'
+export GATEWAY_ADMIN_SECRET='<至少 32 位随机字符串>'
 ./bin/airoute -config configs/config.yaml
+
+# 仅一次性本地开发可跳过凭证要求（生产环境绝不能这样做）：
+# GATEWAY_ALLOW_INSECURE_DEFAULTS=true ./bin/airoute -config configs/config.yaml
 ```
 - 工作台地址：`http://localhost:8080/app/` 或 `http://localhost:8080/`
 - Prometheus 指标：`http://localhost:8080/metrics`
@@ -140,7 +146,9 @@ docker compose up -d --build
 # 推荐：按当前提交重建镜像（二进制报告 1.1.0-dev+g<commit>）并滚动重启两个副本
 make docker-rebuild
 ```
-Nginx 会自动在 `http://localhost:8080` 暴露统一入口（宿主端口见 `docker-compose.yml` 的 `8080:80` 映射），并以 `least_conn` 算法向双节点分发流量，自动关闭 SSE 缓冲 (`proxy_buffering off`)。
+Nginx 会自动在 `http://localhost:8080` 暴露统一入口（宿主端口由 `.env` 的 `GATEWAY_INGRESS_PORT` 决定，默认 8080，映射到容器 80），并以 `least_conn` 算法向双节点分发流量，自动关闭 SSE 缓冲 (`proxy_buffering off`)。Compose/Swarm/Helm 都会以 release 语义启动，弱管理员凭证会直接拒绝启动。
+
+> **控制面暴露说明**：`deploy/nginx-compose.conf` 里 `api.*` 主机的 `/api/v1/admin` 403 只是按 Host 的**路由**约定，不是安全边界（客户端可以伪造 Host 或直接走默认 vhost / IP，控制台因此保持可用）。生产环境请把 LB 端口绑定到 `127.0.0.1`（`ports: ["127.0.0.1:8080:80"]`）或放入 VPN/防火墙之后；网关自身仍会对每个 `/api/v1/admin` 请求做认证与管理员鉴权。
 
 ### 方式 C: Kubernetes Helm Chart 部署
 ```bash

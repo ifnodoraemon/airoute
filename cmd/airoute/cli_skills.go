@@ -10,28 +10,28 @@ import (
 	"time"
 )
 
-// handleSkills manages MCP skills via CLI.
-func handleSkills(endpoint, token string, args []string) {
+// handleSkills manages MCP skills via CLI. It returns a process exit code so a
+// failed list/toggle is visible to scripts.
+func handleSkills(endpoint, token string, args []string) int {
 	if len(args) == 0 || args[0] == "list" {
-		listSkills(endpoint, token)
-		return
+		return listSkills(endpoint, token)
 	}
 
 	subCmd := args[0]
 	if subCmd == "enable" || subCmd == "disable" {
 		if len(args) < 2 {
 			fmt.Printf("%s请指定要操作的技能 ID，例如: airoute skills %s web_search%s\n", colorYellow, subCmd, colorReset)
-			return
+			return cliExitFail
 		}
 		targetSkill := args[1]
-		toggleSkill(endpoint, token, targetSkill, subCmd == "enable")
-		return
+		return toggleSkill(endpoint, token, targetSkill, subCmd == "enable")
 	}
 
 	fmt.Printf("%s未知 skills 子命令: %s (可用: list, enable, disable)%s\n", colorRed, subCmd, colorReset)
+	return cliExitFail
 }
 
-func listSkills(endpoint, token string) {
+func listSkills(endpoint, token string) int {
 	client := &http.Client{Timeout: 5 * time.Second}
 	req, _ := http.NewRequest(http.MethodGet, endpoint+"/api/v1/admin/skills", nil)
 	if token != "" {
@@ -40,7 +40,7 @@ func listSkills(endpoint, token string) {
 	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Printf("%s请求技能列表失败: %v%s\n", colorRed, err, colorReset)
-		return
+		return cliExitFail
 	}
 	defer resp.Body.Close()
 
@@ -59,9 +59,15 @@ func listSkills(endpoint, token string) {
 	}
 
 	if resp.StatusCode == http.StatusOK {
-		_ = json.NewDecoder(resp.Body).Decode(&res)
+		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+			fmt.Printf("%s解析技能列表失败: %v%s\n", colorRed, err, colorReset)
+			return cliExitFail
+		}
 	} else {
-		// Fallback to public MCP discovery protocol for downstream agents
+		// Fallback to public MCP discovery protocol for downstream agents.
+		// Without this fallback working there is nothing to print, so report the
+		// admin-endpoint failure instead of silently showing an empty table.
+		fallbackOK := false
 		mcpPayload := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"airoute_search_skills","arguments":{}}}`)
 		mcpReq, _ := http.NewRequest(http.MethodPost, endpoint+"/mcp/messages", bytes.NewReader(mcpPayload))
 		mcpReq.Header.Set("Content-Type", "application/json")
@@ -78,8 +84,13 @@ func listSkills(endpoint, token string) {
 				for i := range res.Data {
 					res.Data[i].Enabled = true
 				}
+				fallbackOK = true
 			}
 			mcpResp.Body.Close()
+		}
+		if !fallbackOK {
+			fmt.Printf("%s请求技能列表失败 (HTTP %d)，MCP 发现协议回退也不可用%s\n", colorRed, resp.StatusCode, colorReset)
+			return cliExitFail
 		}
 	}
 
@@ -101,9 +112,10 @@ func listSkills(endpoint, token string) {
 		fmt.Printf("   %s%s%s\n", colorDim, s.Description, colorReset)
 	}
 	fmt.Printf("\n%s提示: 可使用 'airoute skills enable <id>' 或 'airoute skills disable <id>' 按需开关%s\n", colorDim, colorReset)
+	return cliExitOK
 }
 
-func toggleSkill(endpoint, token, skillID string, enable bool) {
+func toggleSkill(endpoint, token, skillID string, enable bool) int {
 	client := &http.Client{Timeout: 5 * time.Second}
 	payload, _ := json.Marshal(map[string]bool{"enabled": enable})
 	req, _ := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/admin/skills/%s/toggle", endpoint, skillID), bytes.NewReader(payload))
@@ -114,18 +126,19 @@ func toggleSkill(endpoint, token, skillID string, enable bool) {
 	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Printf("%s切换失败: %v%s\n", colorRed, err, colorReset)
-		return
+		return cliExitFail
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == 200 {
-		stateWord := colorGreen + "已开启" + colorReset
-		if !enable {
-			stateWord = colorYellow + "已关闭" + colorReset
-		}
-		fmt.Printf("✔ 技能 [%s] %s\n", skillID, stateWord)
-	} else {
-		body, _ := io.ReadAll(resp.Body)
-		fmt.Printf("%s操作失败 (HTTP %d): %s%s\n", colorRed, resp.StatusCode, string(body), colorReset)
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		fmt.Printf("%s操作失败 (HTTP %d): %s%s\n", colorRed, resp.StatusCode, strings.TrimSpace(string(body)), colorReset)
+		return cliExitFail
 	}
+	stateWord := colorGreen + "已开启" + colorReset
+	if !enable {
+		stateWord = colorYellow + "已关闭" + colorReset
+	}
+	fmt.Printf("✔ 技能 [%s] %s\n", skillID, stateWord)
+	return cliExitOK
 }

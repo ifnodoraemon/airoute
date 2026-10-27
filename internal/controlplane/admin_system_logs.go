@@ -63,6 +63,13 @@ func (h *AdminHandler) StreamSystemLogs(c *gin.Context) {
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
 	c.Writer.Header().Set("X-Accel-Buffering", "no") // Disable Nginx proxy buffering
+
+	// The live log stream is meant to stay open for as long as the operator keeps
+	// the console page open. http.Server.WriteTimeout is an absolute deadline for
+	// the whole response, so without clearing it the stream dies at 600s with the
+	// shipped Compose config (180s with the Helm chart). Mirror InitSSEStream.
+	_ = http.NewResponseController(c.Writer).SetWriteDeadline(time.Time{})
+
 	c.Writer.Flush()
 
 	ch, cancel := rb.Subscribe()

@@ -115,4 +115,8 @@ stringData:
   # The gateway refuses to start while weak/placeholder credentials remain.
   database-url: "postgres://airoute:REPLACE_WITH_STRONG_DB_PASSWORD@postgres-svc.default.svc.cluster.local:5432/airoute?sslmode=disable"
   admin-secret: "REPLACE_WITH_STRONG_RANDOM_SECRET"
+  # Required by the GATEWAY_ADMIN_PASSWORD secretKeyRef above; without this key the
+  # pod fails with CreateContainerConfigError before the startup check can explain why.
+  # Must be at least 16 characters and not admin123.
+  admin-password: "REPLACE_WITH_STRONG_ADMIN_PASSWORD"
   admin-password: "REPLACE_WITH_STRONG_ADMIN_PASSWORD"

@@ -49,6 +49,13 @@ spec:
               containerPort: {{ .Values.service.port }}
               protocol: TCP
           env:
+            # service.port is the single port value for this chart: the Service,
+            # containerPort and probes all derive from it, so the process must
+            # listen on it too. Without this the app kept listening on
+            # config.server.port (8080) while kubelet probed service.port, and any
+            # --set service.port=<other> left the pod permanently un-ready.
+            - name: GATEWAY_PORT
+              value: {{ .Values.service.port | quote }}
             - name: GIN_MODE
               value: "release"
             - name: GATEWAY_ALLOW_INSECURE_DEFAULTS

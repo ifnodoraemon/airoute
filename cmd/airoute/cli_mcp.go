@@ -8,11 +8,13 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
-// handleMCP manages MCP gateway settings and runs the stdio bridge.
-func handleMCP(endpoint, token string, args []string) {
+// handleMCP manages MCP gateway settings and runs the stdio bridge. It returns a
+// process exit code so a failed status/update is visible to scripts.
+func handleMCP(endpoint, token string, args []string) int {
 	if len(args) == 0 || args[0] == "status" {
 		client := &http.Client{Timeout: 5 * time.Second}
 		req, _ := http.NewRequest(http.MethodGet, endpoint+"/api/v1/admin/mcp/settings", nil)
@@ -22,7 +24,7 @@ func handleMCP(endpoint, token string, args []string) {
 		resp, err := client.Do(req)
 		if err != nil {
 			fmt.Printf("%s查询 MCP 状态失败: %v%s\n", colorRed, err, colorReset)
-			return
+			return cliExitFail
 		}
 		defer resp.Body.Close()
 
@@ -35,18 +37,25 @@ func handleMCP(endpoint, token string, args []string) {
 				SSEEndpoint        string `json:"sse_endpoint"`
 			} `json:"data"`
 		}
-		if err := json.NewDecoder(resp.Body).Decode(&res); err == nil && res.Code == 0 {
-			statusStr := colorGreen + "● 已开启 (ENABLED)" + colorReset
-			if !res.Data.MCPEnabled {
-				statusStr = colorRed + "○ 已按需关闭 (DISABLED)" + colorReset
-			}
-			fmt.Printf("\n%sMCP (Model Context Protocol) 服务状态:%s\n", colorBold, colorReset)
-			fmt.Printf("  • 服务开关: %s\n", statusStr)
-			fmt.Printf("  • 挂载技能: %d 个活跃技能\n", res.Data.EnabledSkillsCount)
-			fmt.Printf("  • 暴露工具: %d 个动态工具\n", res.Data.ActiveToolsCount)
-			fmt.Printf("  • SSE 路径: %s%s\n", endpoint, res.Data.SSEEndpoint)
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+			fmt.Printf("%s查询 MCP 状态失败 (HTTP %d): %s%s\n", colorRed, resp.StatusCode, strings.TrimSpace(string(body)), colorReset)
+			return cliExitFail
 		}
-		return
+		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil || res.Code != 0 {
+			fmt.Printf("%s查询 MCP 状态失败: 网关拒绝请求或响应无法解析 (code=%d, err=%v)%s\n", colorRed, res.Code, err, colorReset)
+			return cliExitFail
+		}
+		statusStr := colorGreen + "● 已开启 (ENABLED)" + colorReset
+		if !res.Data.MCPEnabled {
+			statusStr = colorRed + "○ 已按需关闭 (DISABLED)" + colorReset
+		}
+		fmt.Printf("\n%sMCP (Model Context Protocol) 服务状态:%s\n", colorBold, colorReset)
+		fmt.Printf("  • 服务开关: %s\n", statusStr)
+		fmt.Printf("  • 挂载技能: %d 个活跃技能\n", res.Data.EnabledSkillsCount)
+		fmt.Printf("  • 暴露工具: %d 个动态工具\n", res.Data.ActiveToolsCount)
+		fmt.Printf("  • SSE 路径: %s%s\n", endpoint, res.Data.SSEEndpoint)
+		return cliExitOK
 	}
 
 	subCmd := args[0]
@@ -61,24 +70,31 @@ func handleMCP(endpoint, token string, args []string) {
 		resp, err := client.Do(req)
 		if err != nil {
 			fmt.Printf("%s更新 MCP 设置失败: %v%s\n", colorRed, err, colorReset)
-			return
+			return cliExitFail
 		}
 		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+			fmt.Printf("%s更新 MCP 设置失败 (HTTP %d): %s%s\n", colorRed, resp.StatusCode, strings.TrimSpace(string(body)), colorReset)
+			return cliExitFail
+		}
 		fmt.Printf("✔ MCP 服务已成功更新为: %s\n", subCmd)
-		return
+		return cliExitOK
 	}
 
 	if subCmd == "stdio" {
-		// Run stdio JSON-RPC bridge for Claude Desktop / Cursor
-		runMCPStdioBridge(endpoint)
-		return
+		// Run stdio JSON-RPC bridge for Claude Desktop / Cursor. A bridge that
+		// ends because the client closed stdin is a normal exit: report failure
+		// only when stdin itself could not be read.
+		return runMCPStdioBridge(endpoint)
 	}
 
 	fmt.Printf("%s未知 mcp 子命令: %s (可用: status, enable, disable, stdio)%s\n", colorRed, subCmd, colorReset)
+	return cliExitFail
 }
 
 // runMCPStdioBridge translates local Stdin/Stdout JSON-RPC into HTTP MCP messages.
-func runMCPStdioBridge(endpoint string) {
+func runMCPStdioBridge(endpoint string) int {
 	scanner := bufio.NewScanner(os.Stdin)
 	client := &http.Client{Timeout: 60 * time.Second}
 
@@ -105,4 +121,9 @@ func runMCPStdioBridge(endpoint string) {
 		resp.Body.Close()
 		fmt.Println(string(respBody))
 	}
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "读取 stdin 失败: %v\n", err)
+		return cliExitFail
+	}
+	return cliExitOK
 }

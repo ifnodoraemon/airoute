@@ -36,7 +36,7 @@
 
 `internal/buildinfo/version.go` 的 `BaseVersion` 表示下一计划版本，`web/package.json` 及锁文件中的项目版本必须与它一致。未注入链接参数的 Go 构建显示 `<BaseVersion>-dev`。
 
-`sh scripts/build-version.sh` 为 Makefile、镜像 CI 和二进制发布统一解析构建版本。CI 会拒绝 Go 与前端基线不一致、标签与基线不一致以及非法候选编号。Dockerfile 的默认开发版本也应同步调整。`/health`、`/v1`、`/v1beta` 和 CLI 报告同一构建版本。
+`sh scripts/build-version.sh` 为 Makefile、镜像 CI 和二进制发布统一解析构建版本。CI 会拒绝 Go 与前端基线不一致、标签与基线不一致以及非法候选编号。Dockerfile 的默认开发版本（`ARG VERSION=...`）与 `docker-compose.yml` 的 `${VERSION:-...}` 回退值也必须等于 `<BaseVersion>-dev`：CI 的 `Validate version metadata` 步骤会静态比对这三个来源，忘记同步会直接失败。`/health`、`/v1`、`/v1beta` 和 CLI 报告同一构建版本。
 
 调整版本时：先按本规范确定下一目标版本，再同步修改上述来源并提交。不要仅为使版本显示成新数字而移动已有标签。
 

@@ -9,8 +9,9 @@ import (
 	"time"
 )
 
-// handleUsers manages system user accounts and roles via CLI.
-func handleUsers(endpoint, token string, args []string) {
+// handleUsers manages system user accounts and roles via CLI. It returns a
+// process exit code so failed admin calls are visible to scripts and CI.
+func handleUsers(endpoint, token string, args []string) int {
 	authToken := ensureAdminToken(endpoint, token)
 	client := &http.Client{Timeout: 5 * time.Second}
 
@@ -22,7 +23,7 @@ func handleUsers(endpoint, token string, args []string) {
 		resp, err := client.Do(req)
 		if err != nil {
 			fmt.Printf("%s查询用户失败: %v%s\n", colorRed, err, colorReset)
-			return
+			return cliExitFail
 		}
 		defer resp.Body.Close()
 
@@ -43,7 +44,7 @@ func handleUsers(endpoint, token string, args []string) {
 				errMsg = "鉴权失败，请设置环境变量 AIROUTE_TOKEN=<admin_token>"
 			}
 			fmt.Printf("%s获取用户列表失败: %s%s\n", colorRed, errMsg, colorReset)
-			return
+			return cliExitFail
 		}
 
 		fmt.Printf("\n%s系统账号列表%s (共 %d 个用户):\n", colorBold, colorReset, len(res.Data))
@@ -57,7 +58,7 @@ func handleUsers(endpoint, token string, args []string) {
 			fmt.Printf("%-6d %-18s %-26s %s\n", u.ID, colorBold+u.Username+colorReset, roleStr, u.CreatedAt)
 		}
 		fmt.Println()
-		return
+		return cliExitOK
 	}
 
 	subCmd := args[0]
@@ -65,7 +66,7 @@ func handleUsers(endpoint, token string, args []string) {
 	case "create", "add":
 		if len(args) < 3 {
 			fmt.Printf("%s参数不足%s: 用法: airoute users create <username> <password> [role]\n示例: airoute users create ops_bob bob123456 operator\n", colorRed, colorReset)
-			return
+			return cliExitFail
 		}
 		username := args[1]
 		password := args[2]
@@ -86,7 +87,7 @@ func handleUsers(endpoint, token string, args []string) {
 		resp, err := client.Do(req)
 		if err != nil {
 			fmt.Printf("%s创建账号失败: %v%s\n", colorRed, err, colorReset)
-			return
+			return cliExitFail
 		}
 		defer resp.Body.Close()
 
@@ -95,17 +96,21 @@ func handleUsers(endpoint, token string, args []string) {
 			Message string `json:"message"`
 			Error   string `json:"error"`
 		}
-		_ = json.NewDecoder(resp.Body).Decode(&res)
-		if res.Code == 0 {
-			fmt.Printf("✔ %s成功创建系统账号%s: [%s] (角色: %s)\n", colorGreen, colorReset, username, role)
-		} else {
-			fmt.Printf("%s创建账号失败: %s%s\n", colorRed, res.Error, colorReset)
+		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+			fmt.Printf("%s创建账号失败: 无法解析响应 (%v)%s\n", colorRed, err, colorReset)
+			return cliExitFail
 		}
+		if res.Code != 0 {
+			fmt.Printf("%s创建账号失败: %s%s\n", colorRed, res.Error, colorReset)
+			return cliExitFail
+		}
+		fmt.Printf("✔ %s成功创建系统账号%s: [%s] (角色: %s)\n", colorGreen, colorReset, username, role)
+		return cliExitOK
 
 	case "delete", "rm":
 		if len(args) < 2 {
 			fmt.Printf("%s参数不足%s: 用法: airoute users delete <username>\n", colorRed, colorReset)
-			return
+			return cliExitFail
 		}
 		targetUser := args[1]
 		req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/api/v1/admin/users/%s", endpoint, targetUser), nil)
@@ -115,7 +120,7 @@ func handleUsers(endpoint, token string, args []string) {
 		resp, err := client.Do(req)
 		if err != nil {
 			fmt.Printf("%s删除账号失败: %v%s\n", colorRed, err, colorReset)
-			return
+			return cliExitFail
 		}
 		defer resp.Body.Close()
 
@@ -124,17 +129,21 @@ func handleUsers(endpoint, token string, args []string) {
 			Message string `json:"message"`
 			Error   string `json:"error"`
 		}
-		_ = json.NewDecoder(resp.Body).Decode(&res)
-		if res.Code == 0 {
-			fmt.Printf("✔ 成功删除账号 [%s]\n", targetUser)
-		} else {
-			fmt.Printf("%s删除账号失败: %s%s\n", colorRed, res.Error, colorReset)
+		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+			fmt.Printf("%s删除账号失败: 无法解析响应 (%v)%s\n", colorRed, err, colorReset)
+			return cliExitFail
 		}
+		if res.Code != 0 {
+			fmt.Printf("%s删除账号失败: %s%s\n", colorRed, res.Error, colorReset)
+			return cliExitFail
+		}
+		fmt.Printf("✔ 成功删除账号 [%s]\n", targetUser)
+		return cliExitOK
 
 	case "passwd", "reset":
 		if len(args) < 3 {
 			fmt.Printf("%s参数不足%s: 用法: airoute users passwd <username> <new_password>\n", colorRed, colorReset)
-			return
+			return cliExitFail
 		}
 		targetUser := args[1]
 		newPass := args[2]
@@ -149,7 +158,7 @@ func handleUsers(endpoint, token string, args []string) {
 		resp, err := client.Do(req)
 		if err != nil {
 			fmt.Printf("%s重置密码失败: %v%s\n", colorRed, err, colorReset)
-			return
+			return cliExitFail
 		}
 		defer resp.Body.Close()
 
@@ -158,14 +167,19 @@ func handleUsers(endpoint, token string, args []string) {
 			Message string `json:"message"`
 			Error   string `json:"error"`
 		}
-		_ = json.NewDecoder(resp.Body).Decode(&res)
-		if res.Code == 0 {
-			fmt.Printf("✔ 账号 [%s] 密码已成功重设\n", targetUser)
-		} else {
-			fmt.Printf("%s重置密码失败: %s%s\n", colorRed, res.Error, colorReset)
+		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+			fmt.Printf("%s重置密码失败: 无法解析响应 (%v)%s\n", colorRed, err, colorReset)
+			return cliExitFail
 		}
+		if res.Code != 0 {
+			fmt.Printf("%s重置密码失败: %s%s\n", colorRed, res.Error, colorReset)
+			return cliExitFail
+		}
+		fmt.Printf("✔ 账号 [%s] 密码已成功重设\n", targetUser)
+		return cliExitOK
 
 	default:
 		fmt.Printf("%s未知 users 子命令: %s (可用: list, create, delete, passwd)%s\n", colorRed, subCmd, colorReset)
+		return cliExitFail
 	}
 }

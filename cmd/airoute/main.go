@@ -79,30 +79,35 @@ func main() {
 	endpoint := resolveDefaultCLIEndpoint()
 	token := os.Getenv("AIROUTE_TOKEN")
 
+	var exitCode int
 	switch command {
 	case "status":
-		handleStatus(endpoint, token)
+		exitCode = handleStatus(endpoint, token)
 
 	case "models":
-		handleModels(endpoint, token)
+		exitCode = handleModels(endpoint, token)
 
 	case "skills":
-		handleSkills(endpoint, token, os.Args[2:])
+		exitCode = handleSkills(endpoint, token, os.Args[2:])
 
 	case "mcp":
-		handleMCP(endpoint, token, os.Args[2:])
+		exitCode = handleMCP(endpoint, token, os.Args[2:])
 
 	case "chat":
-		handleChat(endpoint, token, os.Args[2:])
+		exitCode = handleChat(endpoint, token, os.Args[2:])
 
 	case "keys":
-		handleKeys(endpoint, token, os.Args[2:])
+		exitCode = handleKeys(endpoint, token, os.Args[2:])
 
 	case "users":
-		handleUsers(endpoint, token, os.Args[2:])
+		exitCode = handleUsers(endpoint, token, os.Args[2:])
 
 	default:
 		fmt.Fprintf(os.Stderr, "%s未知命令 '%s'%s\n运行 'airoute help' 查看可用命令\n", colorRed, command, colorReset)
 		os.Exit(1)
+	}
+
+	if exitCode != cliExitOK {
+		os.Exit(exitCode)
 	}
 }

@@ -163,15 +163,19 @@ func DefaultConfig() *Config {
 }
 
 // LoadConfig loads the configuration from a YAML file.
+//
+// The file is required: a missing path is an operator error (typo'd -config,
+// failed bind mount, wrong working directory), and silently continuing with
+// DefaultConfig() used to start a gateway on the default SQLite path with no
+// channels and the built-in admin123 password. Fail where the operator can see
+// it instead of running a half-configured gateway.
 func LoadConfig(path string) (*Config, error) {
 	cfg := DefaultConfig()
 
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// Return default config if file not found
-			SetGlobalConfig(cfg)
-			return cfg, nil
+			return nil, fmt.Errorf("config file %q does not exist; pass -config <path> or set GATEWAY_CONFIG", path)
 		}
 		return nil, fmt.Errorf("read config file error: %w", err)
 	}

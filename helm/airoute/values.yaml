@@ -33,6 +33,10 @@ securityContext:
 
 service:
   type: ClusterIP
+  # Single source of truth for the container port: it drives the Service port,
+  # containerPort, both probes and the GATEWAY_PORT env var the process listens
+  # on. config.server.port is kept for the embedded config file but is overridden
+  # by GATEWAY_PORT, so changing only config.server.port has no effect.
   port: 8080
 
 ingress:
@@ -40,8 +44,8 @@ ingress:
   className: "nginx"
   annotations:
     nginx.ingress.kubernetes.io/proxy-buffering: "off"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "86400"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "86400"
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
   hosts:
     - host: gateway.local

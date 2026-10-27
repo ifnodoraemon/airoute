@@ -32,9 +32,11 @@ func printHelp() {
 
 %s环境变量 (Environment Variables):%s
   AIROUTE_ENDPOINT  CLI 连接的网关地址 (默认: 动态解析或 http://$GATEWAY_HOST:$GATEWAY_PORT)
-  AIROUTE_TOKEN     CLI 认证 Token
+  AIROUTE_TOKEN     CLI 认证凭据 (chat 需虚拟 API Key；keys/users/skills/mcp 需管理员 Token)
   DATABASE_URL      PostgreSQL 连接串 (配置后自动激活集群分布式存储)
   REDIS_URL         Redis 连接串 (配置后自动激活多节点分布式缓存与热更新)
+
+  退出码: 0 = 成功；1 = 无法连接网关或请求被拒绝 (便于脚本/CI 判断)。
 
 %s示例 (Examples):%s
   # 1. 启动网关服务
@@ -53,6 +55,15 @@ func printHelp() {
 		colorBold, colorReset,
 	)
 }
+
+// CLI exit codes. Every subcommand reports its outcome through the process exit
+// status: printing an error and returning 0 made an unreachable gateway or a
+// rejected admin call indistinguishable from success in shell scripts and CI
+// (`airoute keys || alert` never fired).
+const (
+	cliExitOK   = 0
+	cliExitFail = 1
+)
 
 func getAuthHeader(token string) string {
 	if token == "" {

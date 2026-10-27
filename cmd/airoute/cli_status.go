@@ -3,22 +3,26 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
 
 // handleStatus probes the Airoute gateway health and active channel topology.
-func handleStatus(endpoint, token string) {
+// It returns a process exit code: a gateway that cannot be reached or that
+// answers /health with a non-200 status is a failure for scripts (`airoute status
+// || page_someone`). The detailed output is still printed either way.
+func handleStatus(endpoint, token string) int {
 	fmt.Printf("%s正在探测 Airoute 路由网关 [%s]...%s\n", colorDim, endpoint, colorReset)
 
+	exitCode := cliExitOK
 	client := &http.Client{Timeout: 5 * time.Second}
 	req, _ := http.NewRequest(http.MethodGet, endpoint+"/health", nil)
 	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Printf("%s✕ 无法连接到 Airoute 路由网关服务 (%v)%s\n请确认网关容器或服务正在运行 (当前目标端点: %s)\n", colorRed, err, colorReset, endpoint)
-		os.Exit(1)
+		return cliExitFail
 	}
 	defer resp.Body.Close()
 
@@ -26,6 +30,7 @@ func handleStatus(endpoint, token string) {
 		fmt.Printf("%s● 网关健康状态: 在线正常 (200 OK)%s\n\n", colorGreen+colorBold, colorReset)
 	} else {
 		fmt.Printf("%s▲ 网关响应异常 (HTTP %d)%s\n\n", colorYellow, resp.StatusCode, colorReset)
+		exitCode = cliExitFail
 	}
 
 	// Fetch public status
@@ -81,10 +86,12 @@ func handleStatus(endpoint, token string) {
 		}
 		respMcp.Body.Close()
 	}
+
+	return exitCode
 }
 
 // handleModels lists all available models registered on the gateway.
-func handleModels(endpoint, token string) {
+func handleModels(endpoint, token string) int {
 	client := &http.Client{Timeout: 5 * time.Second}
 	req, _ := http.NewRequest(http.MethodGet, endpoint+"/v1/models", nil)
 	if token != "" {
@@ -93,9 +100,15 @@ func handleModels(endpoint, token string) {
 	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Printf("%s请求失败: %v%s\n", colorRed, err, colorReset)
-		return
+		return cliExitFail
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		fmt.Printf("%s请求失败 (HTTP %d): %s%s\n", colorRed, resp.StatusCode, strings.TrimSpace(string(body)), colorReset)
+		return cliExitFail
+	}
 
 	var modelsResp struct {
 		Data []struct {
@@ -105,7 +118,7 @@ func handleModels(endpoint, token string) {
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
 		fmt.Printf("%s解析响应失败: %v%s\n", colorRed, err, colorReset)
-		return
+		return cliExitFail
 	}
 
 	fmt.Printf("%sAiroute 统一模型目录%s (共 %d 个模型):\n", colorBold+colorCyan, colorReset, len(modelsResp.Data))
@@ -119,4 +132,5 @@ func handleModels(endpoint, token string) {
 		}
 		fmt.Printf("%-32s %-20s %s\n", colorGreen+m.ID+colorReset, m.OwnedBy, colorDim+rateDesc+colorReset)
 	}
+	return cliExitOK
 }

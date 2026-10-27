@@ -74,6 +74,13 @@ jobs:
         run: |
           go mod verify
 
+      # `go test` runs only a subset of vet's analyzers. The web side already has
+      # a lint gate; the Go side had none, so staticcheck-class mistakes (bad
+      # Printf verbs, unreachable code, lock copying) could only surface at runtime.
+      - name: Vet Go Sources
+        run: |
+          go vet ./...
+
       - name: Run Unit Tests with Race Detector
         run: |
           go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
@@ -142,3 +149,88 @@ jobs:
           AIROUTE_TEST_REDIS_URL: redis://localhost:6379/0
         run: |
           go test -race -tags=integration ./internal/storage/ ./internal/distributed/
+
+  # The repository ships an nginx edge, a Compose stack, a Swarm stack and a Helm
+  # chart, but CI only ever linted the chart. A broken edge config, a chart value
+  # that no longer matches the app (service.port vs the listen port, proxy
+  # timeouts vs the model's edge budget) or a Dockerfile default version that
+  # drifted from BaseVersion all merged green. These steps are cheap and catch
+  # exactly that class of drift before it reaches a deployment.
+  deploy-artifacts:
+    name: Validate Deployment Artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Validate version metadata consistency
+        run: |
+          set -eu
+          sh scripts/build-version.sh >/dev/null
+          base=$(sed -n 's/^const BaseVersion = "\([^"]*\)"$/\1/p' internal/buildinfo/version.go)
+          test -n "$base" || { echo "cannot read BaseVersion from internal/buildinfo/version.go"; exit 1; }
+          want="${base}-dev"
+          dockerfile_default=$(sed -n 's/^ARG VERSION=//p' Dockerfile | head -n1)
+          compose_default=$(sed -n 's/.*VERSION:-\([^}]*\)}.*/\1/p' docker-compose.yml | head -n1)
+          if [ "$dockerfile_default" != "$want" ]; then
+            echo "Dockerfile ARG VERSION=$dockerfile_default but BaseVersion implies $want"; exit 1
+          fi
+          if [ "$compose_default" != "$want" ]; then
+            echo "docker-compose.yml VERSION fallback=$compose_default but BaseVersion implies $want"; exit 1
+          fi
+          echo "version defaults agree: $want"
+
+      - name: Validate nginx edge configs
+        run: |
+          set -eu
+          # The upstream hostnames only exist inside the Compose/Swarm networks;
+          # map them to localhost so `nginx -t` can resolve them during validation.
+          docker run --rm -v "$PWD/deploy/nginx-compose.conf":/etc/nginx/conf.d/default.conf:ro \
+            --add-host gateway-1:127.0.0.1 --add-host gateway-2:127.0.0.1 \
+            nginx:alpine nginx -t
+          docker run --rm -v "$PWD/deploy/swarm/nginx-swarm.conf":/etc/nginx/conf.d/default.conf:ro \
+            --add-host airoute:127.0.0.1 nginx:alpine nginx -t
+          docker run --rm -v "$PWD/deploy/nginx.conf":/etc/nginx/conf.d/default.conf:ro \
+            nginx:alpine nginx -t
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
+      - name: Validate Helm chart renders
+        run: |
+          set -eu
+          helm lint helm/airoute
+          helm template airoute helm/airoute >/dev/null
+          helm template airoute helm/airoute --set ingress.enabled=true >/dev/null
+          helm template airoute helm/airoute \
+            --set replicaCount=2,database.existingSecret=airoute-db,persistence.enabled=false >/dev/null
+          helm template airoute helm/airoute \
+            --set autoscaling.enabled=true,autoscaling.maxReplicas=3,database.existingSecret=airoute-db,persistence.enabled=false >/dev/null
+
+          # service.port is the single port value: the process must listen on it
+          # (GATEWAY_PORT) and containerPort/probes must use it too.
+          rendered=$(helm template airoute helm/airoute --set service.port=9090)
+          echo "$rendered" | grep -q 'name: GATEWAY_PORT' || { echo "GATEWAY_PORT env missing from rendered deployment"; exit 1; }
+          echo "$rendered" | grep -A1 'name: GATEWAY_PORT' | grep -q '"9090"' || { echo "GATEWAY_PORT is not derived from service.port"; exit 1; }
+          echo "$rendered" | grep -q 'containerPort: 9090' || { echo "containerPort is not derived from service.port"; exit 1; }
+
+      - name: Validate docker compose interpolation
+        run: |
+          set -eu
+          # The compose file requires several secrets via ${VAR:?}; fill them with
+          # throwaway values so interpolation can be validated in CI.
+          cleanup() { rm -f .env; }
+          trap cleanup EXIT
+          cp .env.example .env
+          sed -i \
+            -e 's|^DATABASE_URL=.*|DATABASE_URL=postgres://airoute:ci@postgres:5432/airoute?sslmode=disable|' \
+            -e 's|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=ci-placeholder|' \
+            -e 's|^GATEWAY_ADMIN_PASSWORD=.*|GATEWAY_ADMIN_PASSWORD=ci-placeholder-password|' \
+            -e 's|^GATEWAY_ADMIN_SECRET=.*|GATEWAY_ADMIN_SECRET=ci-placeholder-signing-secret-0123456789|' \
+            -e 's|^STORAGE_S3_ACCESS_KEY=.*|STORAGE_S3_ACCESS_KEY=ci-placeholder|' \
+            -e 's|^STORAGE_S3_SECRET_KEY=.*|STORAGE_S3_SECRET_KEY=ci-placeholder|' \
+            .env
+          docker compose config -q
+          echo "compose interpolation OK"

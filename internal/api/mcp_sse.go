@@ -97,6 +97,14 @@ func (h *MCPHandler) HandleMCPSSE(c *gin.Context) {
 		return
 	}
 
+	// An MCP SSE channel is a persistent connection: it lives until the client
+	// goes away, not until the current request is done. http.Server.WriteTimeout
+	// is an absolute deadline for the whole response (not an idle timeout), so
+	// without clearing it here the channel is cut mid-stream at 600s with the
+	// shipped Compose config and 180s with the Helm chart. This mirrors what
+	// InitSSEStream does for the data-plane inference streams.
+	_ = http.NewResponseController(c.Writer).SetWriteDeadline(time.Time{})
+
 	callerKey := extractMCPKey(c)
 	reqCtx := c.Request.Context()
 	caller, accessErr := h.resolveCaller(callerKey)
