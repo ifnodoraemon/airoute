@@ -207,3 +207,60 @@ func walletLedgerReadyTx(tx *Tx) bool {
 	err := tx.QueryRow(`SELECT 1 FROM wallet_transactions LIMIT 1`).Scan(&one)
 	return err == nil || errors.Is(err, sql.ErrNoRows)
 }
+
+// WalletTransactionWithUser is an admin-facing row: the movement plus the
+// account name. Username is empty when the user row was deleted.
+type WalletTransactionWithUser struct {
+	WalletTransactionRecord
+	Username string `json:"username"`
+}
+
+func scanWalletTransactionWithUser(row interface{ Scan(...any) error }) (*WalletTransactionWithUser, error) {
+	var rec WalletTransactionWithUser
+	if err := row.Scan(&rec.ID, &rec.UserID, &rec.Type, &rec.DeltaUnits, &rec.BalanceAfterUnits,
+		&rec.Operator, &rec.Reason, &rec.RefID, &rec.CreatedAt, &rec.Username); err != nil {
+		return nil, err
+	}
+	return &rec, nil
+}
+
+func (r *Repository) listWalletTransactionsWithUser(userID int64, limit, offset int) ([]*WalletTransactionWithUser, error) {
+	rows, err := r.db.Query(`SELECT w.id, w.user_id, w.type, w.delta_units, w.balance_after_units,
+		w.operator, w.reason, w.ref_id, w.created_at, COALESCE(u.username, '')
+		FROM wallet_transactions w LEFT JOIN users u ON u.id = w.user_id
+		WHERE (? = 0 OR w.user_id = ?) ORDER BY w.id DESC LIMIT ? OFFSET ?`,
+		userID, userID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	list := make([]*WalletTransactionWithUser, 0)
+	for rows.Next() {
+		rec, err := scanWalletTransactionWithUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, rec)
+	}
+	return list, rows.Err()
+}
+
+// ListWalletTransactionsAdmin returns ledger rows across users, optionally
+// filtered to one account.
+func (r *Repository) ListWalletTransactionsAdmin(userID int64, limit, offset int) ([]*WalletTransactionWithUser, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	return r.listWalletTransactionsWithUser(userID, limit, offset)
+}
+
+// ListWalletTransactionsForExport returns up to max rows for CSV export.
+func (r *Repository) ListWalletTransactionsForExport(userID int64, max int) ([]*WalletTransactionWithUser, error) {
+	if max <= 0 || max > 10000 {
+		max = 10000
+	}
+	return r.listWalletTransactionsWithUser(userID, max, 0)
+}

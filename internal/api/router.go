@@ -148,6 +148,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 			userGroup.GET("/wallet/recharge/sandbox", adminHandler.SandboxRecharge)
 			userGroup.GET("/wallet/orders", adminHandler.ListUserRechargeOrders)
 			userGroup.GET("/wallet/orders/:order_no", adminHandler.GetUserRechargeOrder)
+			userGroup.GET("/wallet/transactions", adminHandler.ListUserWalletTransactions)
 			userGroup.GET("/keys", adminHandler.ListUserKeys)
 			userGroup.POST("/keys", adminHandler.CreateUserKey)
 			userGroup.DELETE("/keys/:id", adminHandler.DeleteUserKey)
@@ -203,6 +204,8 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 					adminOnly.POST("/users/:username/password", adminHandler.ResetUserPassword)
 					adminOnly.POST("/users/:username/status", adminHandler.UpdateUserStatus)
 					adminOnly.POST("/users/:username/balance", adminHandler.UpdateUserBalance)
+					adminOnly.GET("/wallet/transactions", adminHandler.ListWalletTransactions)
+					adminOnly.GET("/wallet/transactions/export", adminHandler.ExportWalletTransactions)
 					adminOnly.POST("/users/:username/group", adminHandler.UpdateUserGroup)
 					adminOnly.POST("/users/:username/role", adminHandler.UpdateUserRole)
 

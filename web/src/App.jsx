@@ -4,6 +4,7 @@ import {
   Server,
   Building2,
   Gauge,
+  ReceiptText,
   Key,
   Terminal,
   ShieldAlert,
@@ -62,6 +63,7 @@ const McpIntegrationView = lazy(() => import('./components/McpIntegrationView'))
 const UserManagementView = lazy(() => import('./components/UserManagementView'));
 const OrganizationsView = lazy(() => import('./components/OrganizationsView'));
 const BudgetsView = lazy(() => import('./components/BudgetsView'));
+const WalletLedgerView = lazy(() => import('./components/WalletLedgerView'));
 const WalletManagementView = lazy(() => import('./components/WalletManagementView'));
 const ChannelsView = lazy(() => import('./components/ChannelsView'));
 const SupplierReconciliationView = lazy(() => import('./components/SupplierReconciliationView'));
@@ -1057,6 +1059,17 @@ export default function App() {
                       </button>
 
                       <button
+                        onClick={() => setCurrentTab('ledger')}
+                        title={isZh ? '钱包资金流水' : 'Wallet Ledger'}
+                        className={navBtnClass('ledger')}
+                      >
+                        <div className="flex items-center space-x-2.5">
+                          <ReceiptText className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('ledger')}`} />
+                          {!sidebarCollapsed && <span>{isZh ? '钱包资金流水' : 'Wallet Ledger'}</span>}
+                        </div>
+                      </button>
+
+                      <button
                         onClick={() => setCurrentTab('wallet')}
                         title={isZh ? '卡密与充值' : 'Wallet & Credits'}
                         className={navBtnClass('wallet')}
@@ -1280,6 +1293,7 @@ export default function App() {
                 {currentTab === 'users' && (t.navUsers || (isZh ? '用户管理' : 'User Management'))}
                 {currentTab === 'orgs' && (isZh ? '组织与成本中心' : 'Organizations')}
                 {currentTab === 'budgets' && (isZh ? '预算与告警' : 'Budgets & Alerts')}
+                {currentTab === 'ledger' && (isZh ? '钱包资金流水' : 'Wallet Ledger')}
                 {currentTab === 'playground' && t.navPlayground}
                 {currentTab === 'docs' && t.navDocs}
               </span>
@@ -1657,6 +1671,11 @@ export default function App() {
             {/* 7. BUDGETS & ALERTS */}
             {currentTab === 'budgets' && (
               <BudgetsView adminFetch={apiFetch} showToast={showToast} lang={lang} />
+            )}
+
+            {/* 7. WALLET LEDGER */}
+            {currentTab === 'ledger' && (
+              <WalletLedgerView adminFetch={apiFetch} showToast={showToast} lang={lang} />
             )}
 
             {/* 7. WALLET MANAGEMENT TAB */}
