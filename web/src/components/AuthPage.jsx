@@ -95,7 +95,6 @@ export default function AuthPage({
       const data = await res.json();
 
       if (res.ok && data.code === 0 && data.data?.token) {
-        localStorage.setItem('airoute_token', data.data.token);
         localStorage.setItem('airoute_user', JSON.stringify(data.data.user));
         onLoginSuccess(data.data.token, data.data.user);
       } else {
@@ -176,7 +175,6 @@ export default function AuthPage({
       const data = await res.json();
 
       if (res.ok && data.code === 0 && data.data?.token) {
-        localStorage.setItem('airoute_token', data.data.token);
         localStorage.setItem('airoute_user', JSON.stringify(data.data.user));
         onLoginSuccess(data.data.token, data.data.user);
       } else {

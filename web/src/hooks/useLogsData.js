@@ -178,10 +178,12 @@ export function useLogsData({ filters, showToast, isZh }) {
       if (facets.end) endTime = new Date(facets.end).toISOString();
     }
 
-    for (;;) {
+    // One page of the export. `limit`/`offset` are arguments because the cap check
+    // needs a single-row probe past the last page.
+    const fetchExportPage = async (pageOffset, pageLimit) => {
       const p = new URLSearchParams();
-      p.set('limit', String(EXPORT_PAGE_SIZE));
-      p.set('offset', String(offset));
+      p.set('limit', String(pageLimit));
+      p.set('offset', String(pageOffset));
       // The export walks pages of rows; totals and facets are not part of the CSV.
       p.set('count', '0');
       p.set('facets', '0');
@@ -202,13 +204,19 @@ export function useLogsData({ filters, showToast, isZh }) {
       // is gone rather than assembling a report from another account's rows.
       if (generation !== generationRef.current) throw new Error('Export cancelled: session changed');
       if (!res.ok || data.code !== 0) throw new Error(data.error || `Export failed (HTTP ${res.status})`);
-      const batch = data.data || [];
+      return data.data || [];
+    };
+
+    for (;;) {
+      const batch = await fetchExportPage(offset, EXPORT_PAGE_SIZE);
       collected.push(...batch);
       if (onProgress) onProgress({ collected: Math.min(collected.length, maxRows), maxRows });
       if (batch.length < EXPORT_PAGE_SIZE) break;
       if (collected.length >= maxRows) {
-        // More rows exist than the cap allows; the caller must surface this.
-        truncated = true;
+        // Confirm that more rows exist instead of assuming the cap was exceeded:
+        // a result set that is exactly the cap used to be reported as truncated.
+        const nextRow = await fetchExportPage(offset + EXPORT_PAGE_SIZE, 1);
+        truncated = collected.length > maxRows || nextRow.length > 0;
         break;
       }
       offset += EXPORT_PAGE_SIZE;

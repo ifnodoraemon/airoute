@@ -191,6 +191,50 @@ describe('DashboardView', () => {
 
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
   });
+
+  it('does not invent latency or a success rate for a channel with no samples', () => {
+    // A configured channel that has served nothing (and was never probed) used to
+    // be reported as 160 ms with a 100.0% SLA, which also outranked measured
+    // providers in the benchmark list.
+    setup({ channels: [{ id: 7, name: 'never-used', status: 'active', breaker_status: 'CLOSED' }] });
+
+    const panel = screen.getByText('服务商实时时延与可用性跑分').closest('.ui-card');
+    expect(within(panel).getByText('never-used')).toBeInTheDocument();
+    expect(within(panel).getByText('无样本')).toBeInTheDocument();
+    expect(within(panel).getByText('SLA 未知')).toBeInTheDocument();
+    expect(within(panel).queryByText('160 ms')).not.toBeInTheDocument();
+    expect(within(panel).queryByText(/SLA 100\.0%/)).not.toBeInTheDocument();
+  });
+
+  it('computes the error budget against the 99.9% target its label names', () => {
+    // 1000 requests with 15 failures is 1.5% — fifteen times the 0.1% a three-nines
+    // target allows, so the budget must be exhausted instead of reading "25% left".
+    setup({
+      stats: {
+        total_requests: 1000,
+        success_requests: 985,
+        client_error_requests: 10,
+        server_error_requests: 5,
+      },
+    });
+
+    const card = screen.getByText('剩余错误预算').closest('div');
+    expect(within(card).getByText('0%')).toBeInTheDocument();
+  });
+
+  it('keeps the error budget at 100% while every request succeeds', () => {
+    setup({ stats: { total_requests: 1000, success_requests: 1000 } });
+
+    const card = screen.getByText('剩余错误预算').closest('div');
+    expect(within(card).getByText('100%')).toBeInTheDocument();
+  });
+
+  it('shows the error budget as unknown when nothing has been served', () => {
+    setup({ stats: { total_requests: 0 } });
+
+    const card = screen.getByText('剩余错误预算').closest('div');
+    expect(within(card).getByText('—')).toBeInTheDocument();
+  });
 });
 
 // The live endpoint is additive: with it the cockpit reports in-flight work; without

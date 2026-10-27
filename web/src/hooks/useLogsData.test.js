@@ -328,10 +328,66 @@ describe('useLogsData', () => {
     });
 
     // The cap is a hard limit: the report must not grow to 400 rows, and the
-    // caller has to be able to tell the report was shortened.
+    // caller has to be able to tell the report was shortened. The third request
+    // is the one-row probe that confirms more rows really do exist.
     expect(outcome.rows).toHaveLength(300);
     expect(outcome.truncated).toBe(true);
-    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(3);
+    const probe = String(globalThis.fetch.mock.calls.at(-1)[0]);
+    const probeQuery = new URLSearchParams(probe.split('?')[1] || '');
+    expect(probeQuery.get('limit')).toBe('1');
+    expect(probeQuery.get('offset')).toBe('400');
+  });
+
+  it('does not claim truncation when the result set is exactly the cap', async () => {
+    // Regression: with exactly 5000 matching rows the loop reached the cap on a
+    // page boundary and reported truncated=true without ever asking for the next
+    // row, so the UI warned about a shortened report that was in fact complete.
+    const total = 400;
+    globalThis.fetch.mockImplementation(async (url) => {
+      const q = new URLSearchParams(String(url).split('?')[1] || '');
+      const limit = Number(q.get('limit'));
+      const offset = Number(q.get('offset'));
+      const count = Math.max(0, Math.min(limit, total - offset));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ code: 0, data: Array.from({ length: count }, (_, i) => ({ id: offset + i })) }),
+      };
+    });
+    const { result } = renderHook(() => useLogsData({ filters: filters() }));
+
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.fetchAllLogsForExport(400);
+    });
+
+    expect(outcome.rows).toHaveLength(400);
+    expect(outcome.truncated).toBe(false);
+  });
+
+  it('reports truncation when the result set exceeds the cap by a single row', async () => {
+    const total = 401;
+    globalThis.fetch.mockImplementation(async (url) => {
+      const q = new URLSearchParams(String(url).split('?')[1] || '');
+      const limit = Number(q.get('limit'));
+      const offset = Number(q.get('offset'));
+      const count = Math.max(0, Math.min(limit, total - offset));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ code: 0, data: Array.from({ length: count }, (_, i) => ({ id: offset + i })) }),
+      };
+    });
+    const { result } = renderHook(() => useLogsData({ filters: filters() }));
+
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.fetchAllLogsForExport(400);
+    });
+
+    expect(outcome.rows).toHaveLength(400);
+    expect(outcome.truncated).toBe(true);
   });
 
   it('applies the filters to the export too', async () => {

@@ -25,6 +25,7 @@ import {
   GripVertical
 } from 'lucide-react';
 import { getGatewayOrigin, copyToClipboard as crossOriginCopy } from '../config';
+import { extractErrorMessage } from '../api/client';
 import MarkdownRenderer from './MarkdownRenderer';
 import { inferClientModality } from '../lib/modelModality';
 import {
@@ -579,7 +580,6 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
     let fullContent = '';
     let fullReasoning = '';
     const accumulatedTrace = [];
-    let usedLiveLlm = false;
 
     try {
       const headers = { 'Content-Type': 'application/json' };
@@ -592,7 +592,10 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
       const payloadMessages = [
         { role: 'system', content: systemPrompt },
         ...messages
-          .filter(m => m.id !== 'welcome' && !m.id.startsWith('err_'))
+          // Failed/fallback replies are console diagnostics, not conversation:
+          // replaying them would feed either a local template or a truncated
+          // answer back to the model.
+          .filter(m => m.id !== 'welcome' && !m.id.startsWith('err_') && !m.isError && !m.isFallback)
           .slice(-6)
           .map(m => ({ role: m.role, content: m.content })),
         { role: 'user', content: text }
@@ -621,89 +624,111 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
         });
 
         if (!response.ok || !response.body) {
-          throw new Error(`HTTP ${response.status}`);
+          // The gateway explains refusals in the body ({"error":"…"} for the admin
+          // API, {"error":{"message":…}} for the data plane). Throwing only the
+          // status code hid quota/auth failures from the operator.
+          let detail = '';
+          try {
+            const rawBody = await response.text();
+            try {
+              detail = extractErrorMessage(JSON.parse(rawBody), '');
+            } catch {
+              detail = (rawBody || '').trim().slice(0, 300);
+            }
+          } catch {
+            detail = '';
+          }
+          throw new Error(detail || `HTTP ${response.status}`);
         }
 
-        usedLiveLlm = true;
         const reader = response.body.getReader();
         const decoder = new TextDecoder('utf-8');
         let done = false;
         let buffer = '';
         let streamedToolCalls = {};
 
-        while (!done) {
-          const { value, done: readerDone } = await reader.read();
-          done = readerDone;
-          if (value) {
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
+        // Handle one SSE event. A malformed event carries no content and must not
+        // abort the stream, but an error event is a real failure: it is thrown so
+        // the caller reports it instead of returning an empty answer.
+        const handleDataEvent = (dataStr) => {
+          if (!dataStr || dataStr === '[DONE]') return;
+          let parsed;
+          try {
+            parsed = JSON.parse(dataStr);
+          } catch {
+            return;
+          }
+          if (!parsed.choices?.length && (parsed.error || parsed.type === 'error')) {
+            const eventError = new Error(extractErrorMessage(parsed, isZh ? '模型流式响应出错' : 'Model stream error'));
+            eventError.streamError = true;
+            throw eventError;
+          }
+          const choice = parsed.choices?.[0];
+          if (!choice) return;
 
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (trimmed.startsWith('data:')) {
-                const dataStr = trimmed.slice(5).trim();
-                if (!dataStr || dataStr === '[DONE]') continue;
-                try {
-                  const parsed = JSON.parse(dataStr);
-                  if (parsed.error && !parsed.choices) {
-                    throw new Error(parsed.error.message || 'stream error');
-                  }
-                  const choice = parsed.choices?.[0];
-                  if (!choice) continue;
+          const delta = choice.delta;
+          if (!delta) return;
 
-                  const delta = choice.delta;
-                  if (!delta) continue;
+          if (delta.reasoning_content) {
+            fullReasoning += delta.reasoning_content;
+          }
+          if (delta.content) {
+            fullContent += delta.content;
+          }
 
-                  if (delta.reasoning_content) {
-                    fullReasoning += delta.reasoning_content;
-                  }
-                  if (delta.content) {
-                    fullContent += delta.content;
-                  }
+          // Accumulate streamed tool calls
+          if (delta.tool_calls) {
+            for (const tc of delta.tool_calls) {
+              const idx = tc.index ?? 0;
+              if (!streamedToolCalls[idx]) {
+                streamedToolCalls[idx] = {
+                  id: tc.id || `call_${Date.now()}_${idx}`,
+                  name: '',
+                  arguments: ''
+                };
+              }
+              if (tc.id) streamedToolCalls[idx].id = tc.id;
+              if (tc.function?.name) streamedToolCalls[idx].name += tc.function.name;
+              if (tc.function?.arguments) streamedToolCalls[idx].arguments += tc.function.arguments;
+            }
+          }
 
-                  // Accumulate streamed tool calls
-                  if (delta.tool_calls) {
-                    for (const tc of delta.tool_calls) {
-                      const idx = tc.index ?? 0;
-                      if (!streamedToolCalls[idx]) {
-                        streamedToolCalls[idx] = {
-                          id: tc.id || `call_${Date.now()}_${idx}`,
-                          name: '',
-                          arguments: ''
-                        };
-                      }
-                      if (tc.id) streamedToolCalls[idx].id = tc.id;
-                      if (tc.function?.name) streamedToolCalls[idx].name += tc.function.name;
-                      if (tc.function?.arguments) streamedToolCalls[idx].arguments += tc.function.arguments;
-                    }
-                  }
+          // Update UI reactively
+          setMessages(prev => prev.map(m => {
+            if (m.id === assistantMsgId) {
+              return {
+                ...m,
+                content: fullContent,
+                reasoning: fullReasoning,
+                harnessTrace: [...accumulatedTrace]
+              };
+            }
+            return m;
+          }));
+        };
 
-                  // Update UI reactively
-                  setMessages(prev => prev.map(m => {
-                    if (m.id === assistantMsgId) {
-                      return {
-                        ...m,
-                        content: fullContent,
-                        reasoning: fullReasoning,
-                        harnessTrace: [...accumulatedTrace]
-                      };
-                    }
-                    return m;
-                  }));
-                } catch (e) {
-                  if (e && /stream error/i.test(e.message || '')) {
-                    if (showToast) showToast(e.message, 'error');
-                  }
-                }
+        // Release the reader on every path, including an error event or a stop.
+        try {
+          while (!done) {
+            const { value, done: readerDone } = await reader.read();
+            done = readerDone;
+            if (value) {
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || '';
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (trimmed.startsWith('data:')) handleDataEvent(trimmed.slice(5).trim());
               }
             }
           }
           // Flush a trailing event that arrived without a final newline.
+          buffer += decoder.decode();
           const tail = buffer.trim();
-          if (tail && tail.startsWith('data:')) {
-            buffer = '';
-          }
+          if (tail.startsWith('data:')) handleDataEvent(tail.slice(5).trim());
+        } finally {
+          try { await reader.cancel(); } catch { /* stream already closed */ }
+          try { reader.releaseLock?.(); } catch { /* lock already released */ }
         }
 
         const toolCallsArray = Object.values(streamedToolCalls).filter(tc => tc.name);
@@ -772,21 +797,31 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
     } catch (err) {
       if (err.name === 'AbortError') return;
 
-      // Graceful Autonomous Harness Fallback
-      const fallbackResult = await executeLocalHarnessDiagnostic(text);
-      fullContent = fallbackResult.text;
-      accumulatedTrace.push(...fallbackResult.trace);
+      // A failure must always be visible. The old code surfaced only messages
+      // matching /stream error/i, so quota/auth/5xx failures left an empty bubble
+      // with no explanation.
+      const failureMessage = (err && err.message) || (isZh ? '请求失败' : 'Request failed');
+      if (showToast) showToast(failureMessage, 'error');
+
+      // Substitute the offline harness template only when nothing streamed in, and
+      // label it as a local template — never present it as the model's answer.
+      const fallbackResult = fullContent ? null : await executeLocalHarnessDiagnostic(text);
+      if (fallbackResult) {
+        fullContent = fallbackResult.text;
+        accumulatedTrace.push(...fallbackResult.trace);
+      }
 
       setMessages(prev => prev.map(m => {
-        if (m.id === assistantMsgId) {
-          return {
-            ...m,
-            content: fallbackResult.text,
-            harnessTrace: [...accumulatedTrace],
-            isFallback: !usedLiveLlm
-          };
-        }
-        return m;
+        if (m.id !== assistantMsgId) return m;
+        return {
+          ...m,
+          content: fullContent,
+          reasoning: fullReasoning,
+          harnessTrace: [...accumulatedTrace],
+          isError: true,
+          errorMessage: failureMessage,
+          isFallback: Boolean(fallbackResult)
+        };
       }));
     } finally {
       setIsLoading(false);
@@ -1017,6 +1052,16 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                   >
                     {copiedId === m.id ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                   </button>
+                )}
+
+                {/* 调用失败原因：错误必须可见，不能被静默吞掉 */}
+                {!isUser && m.isError && m.errorMessage && (
+                  <div
+                    role="alert"
+                    className="mb-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs leading-relaxed text-rose-900 dark:text-rose-200"
+                  >
+                    ⚠️ {isZh ? '模型调用失败' : 'Model call failed'}：{m.errorMessage}
+                  </div>
                 )}
 
                 {/* 离线降级提示：本地模板不是实时遥测 */}

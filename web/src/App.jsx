@@ -676,6 +676,10 @@ export default function App() {
               toggleLang={toggleLang}
               t={t}
               onLoginSuccess={(token, user) => {
+                // Every login path must start from a clean workspace: without this
+                // a session begun here inherited the previous account's keys, logs,
+                // stats, selections and log filters.
+                resetWorkspaceState();
                 signIn(user, { token, tab: user.role === 'admin' ? 'dashboard' : 'wallet' });
                 showToast(isZh ? `欢迎回来，${user.username}！` : `Welcome back, ${user.username}!`, 'success');
                 fetchData(token);
@@ -1682,19 +1686,10 @@ export default function App() {
           }}
         />
 
-        {/* Login Modal */}
-        <LoginModal
-          isOpen={showLoginModal}
-          onClose={() => setShowLoginModal(false)}
-          lang={lang}
-          t={t}
-          onLoginSuccess={(token, user) => {
-            signIn(user, { token, tab: user.role === 'admin' ? 'dashboard' : 'wallet' });
-            showToast(isZh ? `欢迎回来，${user.username}！` : `Welcome back, ${user.username}!`, 'success');
-            fetchData(token);
-            fetchLogs({}, token);
-          }}
-        />
+        {/* The login dialog is rendered by the landing and status views only: the
+            session-expiry transition switches to the landing view before it asks
+            for credentials, so a copy here could never render and had already
+            drifted (it was missing the workspace teardown). */}
 
         {/* 3-Step Guided Developer Onboarding Modal */}
         <OnboardingModal

@@ -88,11 +88,14 @@ export default function SystemLogConsole({
     let attempt = 0;
     const connect = () => {
       if (!active) return;
-      const token = localStorage.getItem('airoute_token') || '';
-      const streamUrl = token ? `/api/v1/admin/system/logs/stream?token=${encodeURIComponent(token)}` : '/api/v1/admin/system/logs/stream';
+      // The session lives in an HttpOnly cookie. EventSource cannot set an
+      // Authorization header, but withCredentials sends the cookie, which the
+      // admin auth middleware accepts for GET requests. The old `?token=` query
+      // parameter came from a localStorage credential that is no longer written
+      // (and a credential in a URL leaks into proxy/access logs).
       let source;
       try {
-        source = new EventSource(streamUrl, { withCredentials: true });
+        source = new EventSource('/api/v1/admin/system/logs/stream', { withCredentials: true });
       } catch {
         startPolling();
         return;

@@ -512,18 +512,23 @@ export default function DashboardView({
   // 9. ENTERPRISE SLA TARGET & ERROR BUDGET (99.9% THREE-NINES OBJECTIVE)
   const errorBudget = useMemo(() => {
     const targetSla = 99.9;
-    const allowedErrorRate = 0.001;
+    // A 99.9% target allows 0.1% of requests to fail. The old expression also
+    // multiplied by 20, so the budget bar read "healthy" at twenty times the
+    // error rate its own label promised.
+    const allowedErrorRate = 1 - targetSla / 100;
     const total = totalRequests > 0 ? totalRequests : Math.max(1, (logs || []).length);
-    const allowedErrors = Math.max(1, Math.ceil(total * allowedErrorRate * 20));
+    const allowedErrors = Math.max(1, Math.ceil(total * allowedErrorRate));
     const actualErrors = totalRequests > 0 ? totalErrorRequests : errorLogs.length;
-    const remainingBudgetPct = actualErrors === 0 
-      ? 100 
-      : Math.max(0, Math.min(100, Math.round(((allowedErrors - actualErrors) / allowedErrors) * 100)));
     // No traffic means the SLA is unknown, not perfect. parseFloat('—') is NaN, and
     // `NaN || 100` used to report a flawless error budget for a gateway that had
     // served nothing at all.
     const parsedSla = parseFloat(slaAvailability);
     const slaKnown = Number.isFinite(parsedSla);
+    const remainingBudgetPct = !slaKnown
+      ? null
+      : actualErrors === 0
+        ? 100
+        : Math.max(0, Math.min(100, Math.round(((allowedErrors - actualErrors) / allowedErrors) * 100)));
     return {
       targetSla,
       actualSla: slaKnown ? parsedSla : null,
@@ -566,25 +571,42 @@ export default function DashboardView({
       }
     });
     return Object.values(providerMap).map(p => {
-      const avgTtft = p.ttfts.length 
-        ? Math.round(p.ttfts.reduce((a, b) => a + b, 0) / p.ttfts.length) 
-        : (p.latencyMs || 160);
-      const successRate = p.totalCalls > 0 
-        ? (((p.totalCalls - p.errors) / p.totalCalls) * 100).toFixed(1) 
-        : '100.0';
+      // Unknown is not "fast" or "perfect": a channel with no samples used to be
+      // reported as 160 ms with a 100.0% SLA and could outrank measured providers.
+      const avgTtft = p.ttfts.length
+        ? Math.round(p.ttfts.reduce((a, b) => a + b, 0) / p.ttfts.length)
+        : (typeof p.latencyMs === 'number' && p.latencyMs > 0 ? p.latencyMs : null);
+      const successRate = p.totalCalls > 0
+        ? Number((((p.totalCalls - p.errors) / p.totalCalls) * 100).toFixed(1))
+        : null;
       return {
         ...p,
         avgTtft,
+        // A probe-only latency is not a success rate either: keep it unknown
+        // unless there is at least one logged call to judge.
         successRate
       };
-    }).sort((a, b) => (a.avgTtft || 9999) - (b.avgTtft || 9999));
+    }).sort((a, b) => {
+      // Measured providers first (fastest first); unknowns last.
+      if (a.avgTtft === null && b.avgTtft === null) return 0;
+      if (a.avgTtft === null) return 1;
+      if (b.avgTtft === null) return -1;
+      return a.avgTtft - b.avgTtft;
+    });
   }, [channels, logs, channelLatencies]);
 
   const [copiedReport, setCopiedReport] = useState(false);
 
   const handleExportExecutiveReport = async () => {
     const totalCalls = stats.total_requests || logs.length;
-    const avgTtft = stats.avg_ttft_ms || 180;
+    // No sample means unknown, not a made-up 180 ms in a report an operator may
+    // paste into a ticket or send to a customer.
+    const avgTtftValue = typeof stats.avg_ttft_ms === 'number' && stats.avg_ttft_ms > 0
+      ? stats.avg_ttft_ms
+      : null;
+    const avgTtftText = avgTtftValue === null
+      ? (isZh ? '无样本' : 'n/a')
+      : `${avgTtftValue}ms`;
     const report = isZh
       ? `# 📊 Airoute AI 网关集群运营与 SLA 遥测报告
 
@@ -597,7 +619,7 @@ export default function DashboardView({
 ## 1. 核心关键指标 (KPIs)
 - **累计调用量**：${totalCalls.toLocaleString()} 次
 - **Token 总吞吐**：${(stats.total_tokens || 0).toLocaleString()} Tokens (输入占比 ${tokenMetrics.promptPctStr}, 输出占比 ${tokenMetrics.compPctStr})
-- **首字时延 SLA (TTFT)**：平均 ${avgTtft}ms (P50: ${fmtPct(percentiles.p50)}, P90: ${fmtPct(percentiles.p90)}, P99: ${fmtPct(percentiles.p99)}; 样本 ${percentiles.sampled}/${percentiles.total})
+- **首字时延 SLA (TTFT)**：平均 ${avgTtftText} (P50: ${fmtPct(percentiles.p50)}, P90: ${fmtPct(percentiles.p90)}, P99: ${fmtPct(percentiles.p99)}; 样本 ${percentiles.sampled}/${percentiles.total})
 - **接入上游通道**：${channels.length} 个服务商 (活跃: ${channels.filter(c => c.status === 'active').length} 个, 熔断: ${channels.filter(c => ['OPEN', 'HALF-OPEN'].includes(String(c.breaker_status || '').toUpperCase())).length} 个)
 
 ## 2. FinOps 成本优化与缓存成效
@@ -618,7 +640,7 @@ export default function DashboardView({
 ## 1. Core KPIs
 - **Total Invocations**: ${totalCalls.toLocaleString()}
 - **Token Throughput**: ${(stats.total_tokens || 0).toLocaleString()} Tokens (Prompt: ${tokenMetrics.promptPctStr}, Completion: ${tokenMetrics.compPctStr})
-- **TTFT SLA Latency**: Avg ${avgTtft}ms (P50: ${fmtPct(percentiles.p50)}, P90: ${fmtPct(percentiles.p90)}, P99: ${fmtPct(percentiles.p99)}; ${percentiles.sampled}/${percentiles.total} samples)
+- **TTFT SLA Latency**: Avg ${avgTtftText} (P50: ${fmtPct(percentiles.p50)}, P90: ${fmtPct(percentiles.p90)}, P99: ${fmtPct(percentiles.p99)}; ${percentiles.sampled}/${percentiles.total} samples)
 - **Upstream Channels**: ${channels.length} providers (${channels.filter(c => c.status === 'active').length} active, ${channels.filter(c => ['OPEN', 'HALF-OPEN'].includes(String(c.breaker_status || '').toUpperCase())).length} tripped)
 
 ## 2. FinOps Cost Optimization
@@ -1477,8 +1499,12 @@ export default function DashboardView({
           ) : (
             <div className="space-y-3.5 pt-1">
               {providerSlaStats.slice(0, 5).map((p, idx) => {
-                const maxTtft = Math.max(...providerSlaStats.map(s => s.avgTtft || 100), 500);
-                const barWidth = Math.max(10, Math.min(100, Math.round(((p.avgTtft || 150) / maxTtft) * 100)));
+                const measured = providerSlaStats.filter(s => typeof s.avgTtft === 'number');
+                const maxTtft = Math.max(...measured.map(s => s.avgTtft), 500);
+                const hasLatency = typeof p.avgTtft === 'number';
+                const barWidth = hasLatency
+                  ? Math.max(10, Math.min(100, Math.round((p.avgTtft / maxTtft) * 100)))
+                  : 0;
 
                 return (
                   <div key={p.id} className="space-y-1.5">
@@ -1490,10 +1516,12 @@ export default function DashboardView({
                       </div>
                       <div className="flex items-center space-x-3 font-mono tabular-nums">
                         <span className="font-medium text-[#202124] dark:text-[#F1F2F4]">
-                          {p.avgTtft} ms
+                          {hasLatency ? `${p.avgTtft} ms` : (isZh ? '无样本' : 'n/a')}
                         </span>
-                        <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                          SLA {p.successRate}%
+                        <span className={p.successRate === null ? 'text-[#656B75] dark:text-[#A1A7B0] font-medium' : 'text-emerald-600 dark:text-emerald-400 font-medium'}>
+                          {p.successRate === null
+                            ? (isZh ? 'SLA 未知' : 'SLA n/a')
+                            : `SLA ${p.successRate}%`}
                         </span>
                       </div>
                     </div>
@@ -1566,12 +1594,12 @@ export default function DashboardView({
                 {isZh ? '剩余错误预算' : 'Error Budget Remaining'}
               </span>
               <span className="font-mono tabular-nums font-semibold text-[#202124] dark:text-[#F1F2F4]">
-                {errorBudget.remainingBudgetPct}%
+                {errorBudget.remainingBudgetPct === null ? '—' : `${errorBudget.remainingBudgetPct}%`}
               </span>
             </div>
             <div className="w-full bg-[#F0F1F2] dark:bg-[#22252B] h-2 rounded-full overflow-hidden">
               <div
-                style={{ width: `${errorBudget.remainingBudgetPct}%` }}
+                style={{ width: `${errorBudget.remainingBudgetPct ?? 0}%` }}
                 className="h-full rounded-full transition-all duration-300 bg-[#355CFF]"
               />
             </div>
