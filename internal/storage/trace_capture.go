@@ -1,13 +1,14 @@
 package storage
 
 import (
-	"log/slog"
 	"math/rand"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
 // TraceCapture archives redacted request/response snippets for troubleshooting.
@@ -129,7 +130,8 @@ func (tc *TraceCapture) Record(rec *RequestTraceRecord) {
 		tc.mu.Lock()
 		tc.dropped++
 		tc.mu.Unlock()
-		slog.Default().Warn("trace capture queue full, dropping snapshot", "trace_id", rec.TraceID)
+		telemetry.WarnLogger(telemetry.ScopedLogger("system"), "trace-capture-queue-full", 30*time.Second,
+			"trace capture queue full, dropping snapshots", "trace_id", rec.TraceID)
 	}
 }
 
@@ -145,11 +147,12 @@ func (tc *TraceCapture) worker() {
 			return
 		case rec := <-tc.queue:
 			if err := tc.repo.RecordRequestTrace(rec); err != nil {
-				slog.Default().Warn("failed to persist request trace", "error", err.Error(), "trace_id", rec.TraceID)
+				telemetry.WarnLogger(telemetry.ScopedLogger("system"), "trace-capture-persist-failed", 30*time.Second,
+					"failed to persist request trace", "error", err.Error(), "trace_id", rec.TraceID)
 			}
 		case <-purge.C:
 			if n, err := tc.repo.PurgeRequestTraces(time.Now().Add(-tc.ttl)); err == nil && n > 0 {
-				slog.Default().Info("purged expired request traces", "count", n)
+				telemetry.ScopedLogger("system").Info("purged expired request traces", "count", n)
 			}
 		}
 	}

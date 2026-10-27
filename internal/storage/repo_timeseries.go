@@ -3,7 +3,9 @@ package storage
 import (
 	"fmt"
 	"math"
+	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -44,6 +46,27 @@ type TimeSeriesData struct {
 }
 
 const maxTsCacheEntries = 128
+
+// defaultTTFTSampleLimit bounds how many TTFT observations are pulled for the
+// percentile estimate. LatencyPercentiles.Sampled reports the actual sample size,
+// so a bounded newest-first sample keeps the dashboard query cost constant instead
+// of growing with the audit trail.
+const defaultTTFTSampleLimit = 5000
+
+// ttftSampleLimit resolves the percentile sample bound, overridable through
+// GATEWAY_TIMESERIES_TTFT_SAMPLE for deployments that want a larger or smaller
+// sample. Invalid values fall back to the default.
+func ttftSampleLimit() int {
+	raw := strings.TrimSpace(os.Getenv("GATEWAY_TIMESERIES_TTFT_SAMPLE"))
+	if raw == "" {
+		return defaultTTFTSampleLimit
+	}
+	sample, err := strconv.Atoi(raw)
+	if err != nil || sample <= 0 {
+		return defaultTTFTSampleLimit
+	}
+	return sample
+}
 
 var (
 	tsCacheMu sync.RWMutex
@@ -138,8 +161,6 @@ func (r *Repository) GetStatsTimeSeries(timeframe string, keys []string) (*TimeS
 
 	now := time.Now()
 	buckets := make([]*TimeSeriesBucket, numBuckets)
-	bucketTTFTs := make([][]int64, numBuckets)
-
 	for i := 0; i < numBuckets; i++ {
 		bTime := now.Add(-time.Duration(numBuckets-1-i) * interval)
 		var label string
@@ -155,129 +176,146 @@ func (r *Repository) GetStatsTimeSeries(timeframe string, keys []string) (*TimeS
 			Label:     label,
 			Timestamp: bTime.UnixMilli(),
 		}
-		bucketTTFTs[i] = make([]int64, 0)
 	}
 
 	startTime := now.Add(-time.Duration(numBuckets) * interval)
-	var args []interface{}
-	where := "WHERE created_at >= ?"
-	args = append(args, startTime.UTC().Format(sqliteTimestampLayout))
+	startValue := startTime.UTC().Format(sqliteTimestampLayout)
 
+	// Only the authorization scope filters here; all aggregation happens in SQL.
+	keyCond := ""
+	keyArgs := make([]any, 0, len(sortedKeys))
 	if len(sortedKeys) > 0 {
 		placeholders := make([]string, len(sortedKeys))
 		for i, k := range sortedKeys {
 			placeholders[i] = "?"
-			args = append(args, k)
+			keyArgs = append(keyArgs, k)
 		}
-		where += " AND api_key IN (" + strings.Join(placeholders, ",") + ")"
+		keyCond = " AND api_key IN (" + strings.Join(placeholders, ",") + ")"
+	}
+	windowArgs := append([]any{startValue}, keyArgs...)
+
+	epochExpr := `CAST(strftime('%s', created_at) AS INTEGER)`
+	if r.db.Dialect() == "postgres" {
+		epochExpr = `CAST(EXTRACT(EPOCH FROM created_at) AS BIGINT)`
 	}
 
-	query := `SELECT created_at, COALESCE(model, ''), COALESCE(total_tokens, 0), COALESCE(status_code, 200), COALESCE(error_message, ''), COALESCE(ttft_ms, 0), COALESCE(cost, 0.0) FROM usage_logs ` + where
+	// 1. Per-bucket aggregates computed by the database.
+	//
+	// The previous implementation pulled every row in the window into Go (48k rows
+	// for 7d on the live cluster, growing linearly with traffic) only to fold them
+	// into fixed-width buckets. GROUP BY does the same work inside the database and
+	// returns at most numBuckets rows, so the cost no longer depends on volume.
+	intervalSeconds := int64(interval / time.Second)
+	if intervalSeconds <= 0 {
+		intervalSeconds = 1
+	}
+	aggQuery := fmt.Sprintf(`SELECT (%d - 1) - ((? - %s) / ?) AS bucket_idx,
+		COUNT(*) AS requests,
+		COALESCE(SUM(total_tokens), 0) AS tokens,
+		COALESCE(SUM(cost), 0.0) AS costs,
+		COALESCE(SUM(CASE WHEN COALESCE(status_code, 200) >= 400 OR COALESCE(status_code, 200) < 200 OR COALESCE(error_message, '') <> '' THEN 1 ELSE 0 END), 0) AS errors,
+		COALESCE(SUM(CASE WHEN ttft_ms > 0 THEN 1 ELSE 0 END), 0) AS ttft_samples,
+		COALESCE(SUM(CASE WHEN ttft_ms > 0 THEN ttft_ms ELSE 0 END), 0) AS ttft_sum
+		FROM usage_logs WHERE created_at >= ?%s
+		GROUP BY 1`, numBuckets, epochExpr, keyCond)
 
-	rows, err := r.db.Query(query, args...)
+	aggArgs := append([]any{now.Unix(), intervalSeconds}, windowArgs...)
+	aggRows, err := r.db.Query(aggQuery, aggArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("query timeseries logs error: %w", err)
+		return nil, fmt.Errorf("query timeseries buckets error: %w", err)
 	}
-	defer rows.Close()
-
-	var allTTFTs []int64
 	var totalRequests int64
-	modalityCounts := map[string]int64{
-		"chat": 0, "images": 0, "audio": 0, "video": 0, "embeddings": 0, "rerank": 0,
-	}
-	minuteReqs := make(map[int64]int64)
-	minuteTokens := make(map[int64]int64)
-	var currentRPM, currentTPM int64
-
-	for rows.Next() {
-		var rawTime interface{}
-		var model string
-		var totalTokens int64
-		var statusCode int
-		var errorMsg string
-		var ttftMs int64
-		var cost float64
-
-		if err := rows.Scan(&rawTime, &model, &totalTokens, &statusCode, &errorMsg, &ttftMs, &cost); err != nil {
-			return nil, fmt.Errorf("scan timeseries row error: %w", err)
+	for aggRows.Next() {
+		var bucketIdx, requests, tokens, errors, ttftSamples, ttftSum int64
+		var costs float64
+		if err := aggRows.Scan(&bucketIdx, &requests, &tokens, &costs, &errors, &ttftSamples, &ttftSum); err != nil {
+			aggRows.Close()
+			return nil, fmt.Errorf("scan timeseries bucket error: %w", err)
 		}
-
-		t := parseSQLTime(rawTime)
-		if t == nil {
+		if bucketIdx < 0 || bucketIdx >= int64(numBuckets) {
 			continue
 		}
-
-		minKey := t.Unix() / 60
-		minuteReqs[minKey]++
-		minuteTokens[minKey] += totalTokens
-		if now.Sub(*t) <= 60*time.Second && now.Sub(*t) >= 0 {
-			currentRPM++
-			currentTPM += totalTokens
+		bucket := buckets[bucketIdx]
+		bucket.Requests = requests
+		bucket.Tokens = tokens
+		bucket.Costs = costs
+		bucket.Errors = errors
+		if ttftSamples > 0 {
+			bucket.AvgTTFT = ttftSum / ttftSamples
 		}
-
-		diff := now.Sub(*t)
-		idx := numBuckets - 1 - int(diff/interval)
-		if idx >= 0 && idx < numBuckets {
-			totalRequests++
-			buckets[idx].Requests++
-			buckets[idx].Tokens += totalTokens
-			buckets[idx].Costs += cost
-			if statusCode >= 400 || statusCode < 200 || errorMsg != "" {
-				buckets[idx].Errors++
-			}
-			if ttftMs > 0 {
-				bucketTTFTs[idx] = append(bucketTTFTs[idx], ttftMs)
-				allTTFTs = append(allTTFTs, ttftMs)
-			}
-			mod := inferModalityCategory(model)
-			modalityCounts[mod]++
-		}
+		totalRequests += requests
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate timeseries rows error: %w", err)
+	if err := aggRows.Err(); err != nil {
+		aggRows.Close()
+		return nil, fmt.Errorf("iterate timeseries buckets error: %w", err)
 	}
+	aggRows.Close()
 
 	intervalMinutes := int64(interval / time.Minute)
 	if intervalMinutes <= 0 {
 		intervalMinutes = 1
 	}
-
 	for i := 0; i < numBuckets; i++ {
 		buckets[i].RPM = int64(math.Round(float64(buckets[i].Requests) / float64(intervalMinutes)))
 		buckets[i].TPM = int64(math.Round(float64(buckets[i].Tokens) / float64(intervalMinutes)))
-		if len(bucketTTFTs[i]) > 0 {
-			var sum int64
-			for _, v := range bucketTTFTs[i] {
-				sum += v
-			}
-			buckets[i].AvgTTFT = sum / int64(len(bucketTTFTs[i]))
-		}
 	}
 
+	// 2. Real-time rates over the trailing 60 seconds.
+	recentValue := now.Add(-60 * time.Second).UTC().Format(sqliteTimestampLayout)
+	recentArgs := append([]any{recentValue}, keyArgs...)
+	var currentRPM, currentTPM int64
+	if err := r.db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(total_tokens), 0) FROM usage_logs WHERE created_at >= ?`+keyCond, recentArgs...).
+		Scan(&currentRPM, &currentTPM); err != nil {
+		return nil, fmt.Errorf("query timeseries realtime rates error: %w", err)
+	}
+
+	// 3. Peak per-minute volume inside the window.
 	var peakRPM, peakTPM int64
-	for _, reqCount := range minuteReqs {
-		if reqCount > peakRPM {
-			peakRPM = reqCount
-		}
+	peakQuery := fmt.Sprintf(`SELECT COALESCE(MAX(reqs), 0), COALESCE(MAX(toks), 0) FROM (
+		SELECT COUNT(*) AS reqs, COALESCE(SUM(total_tokens), 0) AS toks
+		FROM usage_logs WHERE created_at >= ?%s
+		GROUP BY %s / 60) AS minute_agg`, keyCond, epochExpr)
+	if err := r.db.QueryRow(peakQuery, windowArgs...).Scan(&peakRPM, &peakTPM); err != nil {
+		return nil, fmt.Errorf("query timeseries peak rates error: %w", err)
 	}
-	for _, tokCount := range minuteTokens {
-		if tokCount > peakTPM {
-			peakTPM = tokCount
-		}
+
+	// 4. Latency percentiles from a bounded sample.
+	//
+	// The dashboard only needs the shape of the tail and LatencyPercentiles reports
+	// its sample size, so the newest ttftSampleLimit() observations are enough; the
+	// previous code materialised every ttft value in the window.
+	sampleArgs := append(append([]any{startValue}, keyArgs...), ttftSampleLimit())
+	sampleRows, err := r.db.Query(`SELECT ttft_ms FROM usage_logs WHERE created_at >= ?`+keyCond+` AND ttft_ms > 0 ORDER BY id DESC LIMIT ?`, sampleArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("query timeseries ttft sample error: %w", err)
 	}
+	ttftSample := make([]int64, 0, 256)
+	for sampleRows.Next() {
+		var ttft int64
+		if err := sampleRows.Scan(&ttft); err != nil {
+			sampleRows.Close()
+			return nil, fmt.Errorf("scan timeseries ttft sample error: %w", err)
+		}
+		ttftSample = append(ttftSample, ttft)
+	}
+	if err := sampleRows.Err(); err != nil {
+		sampleRows.Close()
+		return nil, fmt.Errorf("iterate timeseries ttft sample error: %w", err)
+	}
+	sampleRows.Close()
 
 	percentiles := LatencyPercentiles{
-		Sampled: int64(len(allTTFTs)),
+		Sampled: int64(len(ttftSample)),
 		Total:   totalRequests,
 	}
-	if len(allTTFTs) > 0 {
-		sort.Slice(allTTFTs, func(i, j int) bool { return allTTFTs[i] < allTTFTs[j] })
+	if len(ttftSample) > 0 {
+		sort.Slice(ttftSample, func(i, j int) bool { return ttftSample[i] < ttftSample[j] })
 		at := func(q float64) int64 {
-			idx := int(math.Floor(float64(len(allTTFTs)) * q))
-			if idx >= len(allTTFTs) {
-				idx = len(allTTFTs) - 1
+			idx := int(math.Floor(float64(len(ttftSample)) * q))
+			if idx >= len(ttftSample) {
+				idx = len(ttftSample) - 1
 			}
-			return allTTFTs[idx]
+			return ttftSample[idx]
 		}
 		p50 := at(0.50)
 		p90 := at(0.90)
@@ -286,6 +324,31 @@ func (r *Repository) GetStatsTimeSeries(timeframe string, keys []string) (*TimeS
 		percentiles.P90 = &p90
 		percentiles.P99 = &p99
 	}
+
+	// 5. Modality distribution. Grouping by model keeps this bounded by the number
+	// of distinct models rather than the number of requests; the modality itself is
+	// a name heuristic that lives in Go.
+	modalityCounts := map[string]int64{
+		"chat": 0, "images": 0, "audio": 0, "video": 0, "embeddings": 0, "rerank": 0,
+	}
+	modalityRows, err := r.db.Query(`SELECT COALESCE(model, ''), COUNT(*) FROM usage_logs WHERE created_at >= ?`+keyCond+` GROUP BY COALESCE(model, '')`, windowArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("query timeseries modality error: %w", err)
+	}
+	for modalityRows.Next() {
+		var modelName string
+		var count int64
+		if err := modalityRows.Scan(&modelName, &count); err != nil {
+			modalityRows.Close()
+			return nil, fmt.Errorf("scan timeseries modality error: %w", err)
+		}
+		modalityCounts[inferModalityCategory(modelName)] += count
+	}
+	if err := modalityRows.Err(); err != nil {
+		modalityRows.Close()
+		return nil, fmt.Errorf("iterate timeseries modality error: %w", err)
+	}
+	modalityRows.Close()
 
 	res := &TimeSeriesData{
 		Timeframe:     timeframe,

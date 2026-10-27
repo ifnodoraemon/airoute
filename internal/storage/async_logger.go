@@ -124,7 +124,7 @@ func (al *AsyncLogger) Record(rec *UsageLogRecord) {
 			if err == nil {
 				return
 			}
-			telemetry.ScopedLogger("system").Warn("failed to push log to Redis Stream, falling back to local memory buffer", "error", err.Error())
+			warnUsageLogXAddFallback(err)
 		}
 	}
 
@@ -447,4 +447,18 @@ func (al *AsyncLogger) redisStreamWorker(client *distributed.Client) {
 			}
 		}
 	}
+}
+
+// usageLogXAddFallbackWarnKey throttles the Redis-stream fallback warning.
+const usageLogXAddFallbackWarnKey = "usage-log-xadd-fallback"
+
+// warnUsageLogXAddFallback reports that a usage record had to fall back from the
+// Redis stream to the local buffer.
+//
+// This runs once per usage record while Redis is unavailable, so an unthrottled
+// WARN turned a Redis hiccup into a log storm proportional to request volume (the
+// same defect class as the per-request circuit-breaker alerts).
+func warnUsageLogXAddFallback(err error) {
+	telemetry.WarnLogger(telemetry.ScopedLogger("system"), usageLogXAddFallbackWarnKey, 30*time.Second,
+		"failed to push log to Redis Stream, falling back to local memory buffer", "error", err.Error())
 }

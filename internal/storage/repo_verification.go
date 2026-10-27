@@ -17,11 +17,20 @@ type VerificationCodeRecord struct {
 }
 
 // SaveVerificationCode stores a verification code with an expiration window.
+//
+// Expired codes used to accumulate forever: nothing in the gateway ever deleted a
+// row, so the table grew by one row per verification mail for the lifetime of the
+// deployment. The write path now prunes a bounded batch of long-expired codes at
+// most once per hour (see retention_maintenance.go).
 func (r *Repository) SaveVerificationCode(email, code, purpose string, duration time.Duration) error {
 	expiresAt := time.Now().Add(duration)
 	_, err := r.db.Exec(`INSERT INTO verification_codes (email, code, purpose, expires_at, used) VALUES (?, ?, ?, ?, 0)`,
 		strings.ToLower(strings.TrimSpace(email)), strings.TrimSpace(code), purpose, expiresAt.UTC().Format("2006-01-02 15:04:05"))
-	return err
+	if err != nil {
+		return err
+	}
+	r.maybePruneVerificationCodes()
+	return nil
 }
 
 // VerifyCode validates and consumes a verification code, invalidating after 5 failed attempts.

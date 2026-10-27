@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
 // StatsOverview aggregates system stats for the dashboard.
@@ -52,6 +55,14 @@ type Repository struct {
 	// probing sqlite_master on every request.
 	ftsOnce      sync.Once
 	ftsAvailable bool
+
+	// Retention maintenance is opportunistic: the gateway has no dedicated
+	// migration/retention process and these tables are written rarely, so the
+	// cheapest place to prune is the write path itself. Each slot records the
+	// last prune attempt (UnixNano) so a burst of writes only prunes once per
+	// interval.
+	verificationPruneAt atomic.Int64
+	videoTaskPruneAt    atomic.Int64
 }
 
 var globalRepo *Repository
@@ -114,8 +125,7 @@ func (r *Repository) GetStatsOverview() (*StatsOverview, error) {
 	}
 
 	if stats.TotalCachedTokens > 0 {
-		// Benchmark prompt cache savings (e.g. 1.8 CNY per 1M cached tokens discount)
-		stats.SavedCost = float64(stats.TotalCachedTokens) * 1.8 / 1000000.0
+		stats.SavedCost = r.cachedTokenSavings("", nil)
 	}
 
 	_ = r.db.QueryRow(`SELECT COUNT(*) FROM channels WHERE status='active'`).Scan(&stats.ActiveChannels)
@@ -191,7 +201,7 @@ func (r *Repository) GetStatsOverviewForKeys(keys []string) (*StatsOverview, err
 		return nil, err
 	}
 	if stats.TotalCachedTokens > 0 {
-		stats.SavedCost = float64(stats.TotalCachedTokens) * 1.8 / 1000000.0
+		stats.SavedCost = r.cachedTokenSavings(clause, args)
 	}
 	activeQuery := fmt.Sprintf(`SELECT COUNT(*) FROM api_keys WHERE status='active' AND key IN (%s)`, clause)
 	_ = r.db.QueryRow(activeQuery, args...).Scan(&stats.ActiveKeys)
@@ -203,4 +213,48 @@ func (r *Repository) GetStatsOverviewForKeys(keys []string) (*StatsOverview, err
 	_ = r.db.QueryRow(rtQuery, rtArgs...).Scan(&stats.CurrentRPM, &stats.CurrentTPM)
 
 	return stats, nil
+}
+
+// cachedTokenSavings derives the prompt-cache saving from the configured price
+// list instead of a built-in constant.
+//
+// The console used to report cached_tokens * 1.8 CNY/1M — a hardcoded benchmark
+// rate that had no relationship to model_prices.cache_read_price, so the "saved
+// cost" figure was fabricated whenever the real cache price differed (which is
+// the normal case: prices are configured per model).
+//
+// Derivation: only the cached prompt tokens are discounted, by the difference
+// between the model's prompt price and its cache-read price. Models without a
+// price row (or with cache_read_price >= prompt_price, i.e. no discount) are
+// skipped: the documented fallback is that such traffic contributes no saving,
+// because its cache rate is not knowable from configuration. The default pricing
+// group is used, matching how a request without a special group is billed.
+//
+// scopeClause/scopeArgs optionally restrict the calculation to a set of API keys
+// (the tenant-scoped dashboard); clause "" means all traffic.
+func (r *Repository) cachedTokenSavings(scopeClause string, scopeArgs []any) float64 {
+	if r == nil || r.db == nil {
+		return 0
+	}
+	query := `SELECT COALESCE(SUM(u.cached_tokens * (p.prompt_price - p.cache_read_price) / 1000000.0), 0)
+		FROM usage_logs u
+		JOIN model_prices p ON p.model = u.model AND COALESCE(p.group_name, 'default') = 'default'
+		WHERE COALESCE(u.cached_tokens, 0) > 0
+		  AND p.cache_read_price >= 0
+		  AND p.prompt_price > p.cache_read_price`
+	args := []any{}
+	if scopeClause != "" {
+		query += ` AND u.api_key IN (` + scopeClause + `)`
+		args = append(args, scopeArgs...)
+	}
+	var savings float64
+	if err := r.db.QueryRow(query, args...).Scan(&savings); err != nil {
+		// A missing/unreadable price join must not fail the whole dashboard.
+		telemetry.ScopedLogger("billing").Warn("failed to derive cached token savings from model_prices", "error", err.Error())
+		return 0
+	}
+	if savings < 0 {
+		return 0
+	}
+	return savings
 }
