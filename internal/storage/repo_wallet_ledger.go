@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -185,7 +186,7 @@ func markWalletLedgerReady(db *DB) {
 // no-op before the ledger migration has run, so enabling the feature does not
 // make recharge/redemption/charge fail on older databases.
 func (r *Repository) appendWalletLedger(tx *Tx, userID int64, typ string, delta, balanceAfter int64, operator, reason, ref string) error {
-	if tx == nil || userID <= 0 || !walletLedgerAvailable(r.db) {
+	if tx == nil || userID <= 0 || !walletLedgerReadyTx(tx) {
 		return nil
 	}
 	_, err := r.RecordWalletTransaction(tx, &WalletTransactionRecord{
@@ -193,4 +194,16 @@ func (r *Repository) appendWalletLedger(tx *Tx, userID int64, typ string, delta,
 		Operator: operator, Reason: reason, RefID: ref,
 	})
 	return err
+}
+
+// walletLedgerReadyTx is the transaction-safe variant used by money paths that
+// already hold a transaction. Asking the *DB* from inside a transaction can
+// deadlock on single-connection SQLite, so this check stays on the tx connection.
+func walletLedgerReadyTx(tx *Tx) bool {
+	if tx == nil {
+		return false
+	}
+	var one int
+	err := tx.QueryRow(`SELECT 1 FROM wallet_transactions LIMIT 1`).Scan(&one)
+	return err == nil || errors.Is(err, sql.ErrNoRows)
 }

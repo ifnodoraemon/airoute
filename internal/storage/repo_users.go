@@ -242,17 +242,32 @@ func (r *Repository) UpdateUserBalance(username string, delta float64) error {
 	}
 	units := ToUnits(delta)
 	limit := ToUnits(MaxUserBalance)
-	err := requireUserUpdated(r.db.Exec(`UPDATE users SET balance = balance + ?, balance_units = COALESCE(balance_units, 0) + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ? AND status <> 'deleted' AND COALESCE(balance_units, 0) BETWEEN ? AND ?`, delta, units, username, -limit-units, limit-units))
-	if errors.Is(err, sql.ErrNoRows) {
-		user, lookupErr := r.GetUserByUsername(username)
-		if lookupErr != nil {
-			return lookupErr
-		}
-		if user.Status != "deleted" {
-			return ErrBalanceOutOfRange
-		}
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
 	}
-	return err
+	defer func() { _ = tx.Rollback() }()
+
+	var userID, oldUnits int64
+	var status string
+	if err := tx.QueryRow(`SELECT id, COALESCE(status, 'active'), COALESCE(balance_units, 0) FROM users WHERE username = ?`, username).Scan(&userID, &status, &oldUnits); err != nil {
+		return err
+	}
+	if status == "deleted" {
+		return ErrBalanceOutOfRange
+	}
+	newUnits := oldUnits + units
+	if newUnits < -limit || newUnits > limit {
+		return ErrBalanceOutOfRange
+	}
+	if err := requireUserUpdated(tx.Exec(`UPDATE users SET balance = ?, balance_units = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status <> 'deleted'`, FromUnits(newUnits), newUnits, userID)); err != nil {
+		return err
+	}
+	if err := r.appendWalletLedger(tx, userID, WalletTypeAdjustment, units, newUnits, "admin", "balance delta", ""); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // SetUserBalance sets an exact wallet balance for a user.
@@ -260,7 +275,28 @@ func (r *Repository) SetUserBalance(username string, balance float64) error {
 	if !validUserBalance(balance) {
 		return ErrBalanceOutOfRange
 	}
-	return requireUserUpdated(r.db.Exec(`UPDATE users SET balance = ?, balance_units = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ? AND status <> 'deleted'`, balance, ToUnits(balance), username))
+	newUnits := ToUnits(balance)
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var userID, oldUnits int64
+	var status string
+	if err := tx.QueryRow(`SELECT id, COALESCE(status, 'active'), COALESCE(balance_units, 0) FROM users WHERE username = ?`, username).Scan(&userID, &status, &oldUnits); err != nil {
+		return err
+	}
+	if status == "deleted" {
+		return sql.ErrNoRows
+	}
+	if err := requireUserUpdated(tx.Exec(`UPDATE users SET balance = ?, balance_units = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status <> 'deleted'`, balance, newUnits, userID)); err != nil {
+		return err
+	}
+	if err := r.appendWalletLedger(tx, userID, WalletTypeAdjustment, newUnits-oldUnits, newUnits, "admin", "balance set", ""); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // UpdateUserGroup updates a user's pricing group.

@@ -71,9 +71,10 @@ func (r *Repository) deductWallet(tx *Tx, where string, whereArgs []any, cost fl
 	}
 	args = append(args, whereArgs...)
 
+	ledgerReady := walletLedgerReadyTx(tx)
 	var oldUnits int64
 	oldKnown := false
-	if walletLedgerAvailable(r.db) {
+	if ledgerReady {
 		if err := tx.QueryRow(`SELECT COALESCE(balance_units, 0) FROM users WHERE `+where, whereArgs...).Scan(&oldUnits); err == nil {
 			oldKnown = true
 		}
@@ -97,7 +98,7 @@ func (r *Repository) deductWallet(tx *Tx, where string, whereArgs []any, cost fl
 		return false, 0, err
 	}
 
-	if applied && oldKnown && balanceUnits != oldUnits {
+	if applied && ledgerReady && oldKnown && balanceUnits != oldUnits {
 		var userID int64
 		if err := tx.QueryRow(`SELECT id FROM users WHERE `+where, whereArgs...).Scan(&userID); err != nil {
 			return false, 0, err
