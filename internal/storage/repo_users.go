@@ -236,6 +236,10 @@ func requireUserUpdated(result sql.Result, err error) error {
 }
 
 // UpdateUserBalance adjusts a user's wallet balance by a delta amount.
+//
+// The update is atomic: it must not read the balance, compute a new value and
+// write it back, or a concurrent settlement deduction would be lost. RETURNING
+// gives the ledger the resulting balance without a second read.
 func (r *Repository) UpdateUserBalance(username string, delta float64) error {
 	if !validUserBalance(delta) {
 		return ErrBalanceOutOfRange
@@ -249,19 +253,28 @@ func (r *Repository) UpdateUserBalance(username string, delta float64) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	var userID, oldUnits int64
+	var userID int64
 	var status string
-	if err := tx.QueryRow(`SELECT id, COALESCE(status, 'active'), COALESCE(balance_units, 0) FROM users WHERE username = ?`, username).Scan(&userID, &status, &oldUnits); err != nil {
+	if err := tx.QueryRow(`SELECT id, COALESCE(status, 'active') FROM users WHERE username = ?`, username).Scan(&userID, &status); err != nil {
 		return err
 	}
 	if status == "deleted" {
 		return ErrBalanceOutOfRange
 	}
-	newUnits := oldUnits + units
-	if newUnits < -limit || newUnits > limit {
+
+	var newUnits int64
+	err = tx.QueryRow(`UPDATE users SET
+			balance_units = COALESCE(balance_units, 0) + ?,
+			balance = (COALESCE(balance_units, 0) + ?) * 1.0 / 1000000000.0,
+			updated_at = CURRENT_TIMESTAMP
+		WHERE id = ? AND status <> 'deleted'
+			AND COALESCE(balance_units, 0) + ? BETWEEN ? AND ?
+		RETURNING balance_units`,
+		units, units, userID, units, -limit, limit).Scan(&newUnits)
+	if errors.Is(err, sql.ErrNoRows) {
 		return ErrBalanceOutOfRange
 	}
-	if err := requireUserUpdated(tx.Exec(`UPDATE users SET balance = ?, balance_units = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status <> 'deleted'`, FromUnits(newUnits), newUnits, userID)); err != nil {
+	if err != nil {
 		return err
 	}
 	if err := r.appendWalletLedger(tx, userID, WalletTypeAdjustment, units, newUnits, "admin", "balance delta", ""); err != nil {
@@ -282,13 +295,20 @@ func (r *Repository) SetUserBalance(username string, balance float64) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	var userID, oldUnits int64
+	var userID int64
 	var status string
-	if err := tx.QueryRow(`SELECT id, COALESCE(status, 'active'), COALESCE(balance_units, 0) FROM users WHERE username = ?`, username).Scan(&userID, &status, &oldUnits); err != nil {
+	if err := tx.QueryRow(`SELECT id, COALESCE(status, 'active') FROM users WHERE username = ?`, username).Scan(&userID, &status); err != nil {
 		return err
 	}
 	if status == "deleted" {
 		return sql.ErrNoRows
+	}
+	if err := r.lockWalletUserRows(tx, `id = ?`, []any{userID}); err != nil {
+		return err
+	}
+	var oldUnits int64
+	if err := tx.QueryRow(`SELECT COALESCE(balance_units, 0) FROM users WHERE id = ?`, userID).Scan(&oldUnits); err != nil {
+		return err
 	}
 	if err := requireUserUpdated(tx.Exec(`UPDATE users SET balance = ?, balance_units = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status <> 'deleted'`, balance, newUnits, userID)); err != nil {
 		return err

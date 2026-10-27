@@ -72,6 +72,10 @@ func (r *Repository) deductWallet(tx *Tx, where string, whereArgs []any, cost fl
 	args = append(args, whereArgs...)
 
 	ledgerReady := walletLedgerReadyTx(tx)
+	if err := r.lockWalletUserRows(tx, where, whereArgs); err != nil {
+		return false, 0, err
+	}
+
 	var oldUnits int64
 	oldKnown := false
 	if ledgerReady {
@@ -127,4 +131,31 @@ func (r *Repository) deductWallet(tx *Tx, where string, whereArgs []any, cost fl
 		}
 	}
 	return applied, balanceUnits, nil
+}
+
+// lockWalletUserRows serializes balance changes for the matched users before the
+// caller reads the old balance. PostgreSQL uses FOR UPDATE; SQLite has no row
+// locks, so a no-op update acquires the database write lock instead. This keeps
+// the ledger delta equal to the balance movement even when a settlement and an
+// admin adjustment race on the same account.
+func (r *Repository) lockWalletUserRows(tx *Tx, where string, whereArgs []any) error {
+	if tx == nil {
+		return nil
+	}
+	if r.db.Dialect() == "postgres" {
+		rows, err := tx.Query(`SELECT id FROM users WHERE `+where+` FOR UPDATE`, whereArgs...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				return err
+			}
+		}
+		return rows.Err()
+	}
+	_, err := tx.Exec(`UPDATE users SET updated_at = updated_at WHERE `+where, whereArgs...)
+	return err
 }
