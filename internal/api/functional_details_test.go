@@ -180,8 +180,10 @@ func TestVideoTaskOwnershipAndPinnedFailure(t *testing.T) {
 	upstreamFails = true
 	before = calls
 	w = invoke("GET", "/v1/videos/tasks/"+payload.ID, payload.ID, 1, nil)
-	if w.Code != 502 || calls != before+1 {
-		t.Fatalf("task query failed over: status=%d calls=%d->%d", w.Code, before, calls)
+	// A pinned task query must not fail over to the second channel, and the
+	// provider's own status (503) is surfaced instead of a generic 502.
+	if w.Code != 503 || calls != before+1 {
+		t.Fatalf("task query status=%d calls=%d->%d, want 503 and no extra attempt", w.Code, before, calls)
 	}
 }
 

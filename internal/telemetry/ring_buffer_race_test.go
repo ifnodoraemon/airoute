@@ -19,6 +19,9 @@ import (
 // subscriptions while the writers are appending. Run with -race.
 func TestAppendWhileSubscribersCancelDoesNotPanic(t *testing.T) {
 	rb := NewLogRingBuffer(64, "test-node")
+	// Seed one entry so the final assertion does not depend on the writer
+	// goroutines having been scheduled under a loaded -race test binary.
+	rb.Append(&SystemLogEntry{Message: "seed", Level: "INFO"})
 
 	// Persistent subscribers widen the broadcast loop (the old code sent to a
 	// copied snapshot after unlocking, which is exactly the window under test).
