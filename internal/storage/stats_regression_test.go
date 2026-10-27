@@ -13,6 +13,14 @@ import (
 // percentiles with an explicit sample size.
 func TestTimeSeriesAggregatesInSQLWithBoundedPercentileSample(t *testing.T) {
 	repo := newRetentionRepo(t)
+	// tsCache is package-level with a 3s TTL, so a previous test's "24h" result
+	// would otherwise be served here and hide the aggregation under test.
+	tsCacheMu.Lock()
+	tsCache = make(map[string]struct {
+		data *TimeSeriesData
+		at   time.Time
+	})
+	tsCacheMu.Unlock()
 	t.Setenv("GATEWAY_TIMESERIES_TTFT_SAMPLE", "3")
 	now := time.Now()
 
