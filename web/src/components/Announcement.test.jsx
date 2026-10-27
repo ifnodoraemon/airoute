@@ -138,4 +138,40 @@ describe('Announcement System', () => {
       expect(onClose).toHaveBeenCalled();
     });
   });
+
+  it('hides a withdrawn notice when the refresh fails', async () => {
+    // A 401/500 used to leave the previous announcement rendered, so an operator
+    // could act on a notice that had already been taken down.
+    const mockAdminFetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ code: 0, data: { id: 'ann_1', title: '旧公告', content: '已下线', level: 'info', enabled: true } }),
+      })
+      .mockResolvedValue({ ok: false, status: 500, json: async () => ({ error: 'boom' }) });
+
+    const { rerender } = render(<AnnouncementBanner adminFetch={mockAdminFetch} lang="zh" refreshKey={0} />);
+    await waitFor(() => expect(screen.getByText('旧公告:')).toBeInTheDocument());
+
+    rerender(<AnnouncementBanner adminFetch={mockAdminFetch} lang="zh" refreshKey={1} />);
+
+    await waitFor(() => expect(screen.queryByText('旧公告:')).not.toBeInTheDocument());
+  });
+
+  it('refreshes immediately when the console publishes an announcement', async () => {
+    const mockAdminFetch = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ code: 0, data: null }) })
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({ code: 0, data: { id: 'ann_2', title: '新公告', content: '刚发布', level: 'critical', enabled: true } }),
+      });
+
+    const { rerender } = render(<AnnouncementBanner adminFetch={mockAdminFetch} lang="zh" refreshKey={0} />);
+    await waitFor(() => expect(screen.queryByText('新公告:')).not.toBeInTheDocument());
+
+    // Publishing bumps the key: the banner must not wait for its 60s poll.
+    rerender(<AnnouncementBanner adminFetch={mockAdminFetch} lang="zh" refreshKey={1} />);
+
+    await waitFor(() => expect(screen.getByText('新公告:')).toBeInTheDocument());
+    expect(mockAdminFetch.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
 });

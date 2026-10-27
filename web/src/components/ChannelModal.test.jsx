@@ -50,6 +50,37 @@ function setup({ isOpen = true, editingChannelId = null, newChannel = draft(), .
 }
 
 describe('ChannelModal', () => {
+  it('never renders a stored credential and explains how to keep it', () => {
+    // The draft must not carry the stored secret, so the input is empty and the form
+    // says the key is already configured instead of round-tripping it.
+    const { container } = setup({
+      editingChannelId: 7,
+      newChannel: draft({ name: 'upstream', base_url: 'https://a.example', api_key: '', api_key_configured: true }),
+    });
+
+    const apiKeyInput = container.querySelector('input[type="password"]');
+    expect(apiKeyInput).toBeTruthy();
+    expect(apiKeyInput.value).toBe('');
+    expect(screen.getByText('已配置')).toBeInTheDocument();
+    // The field explains that blank means "keep the stored key".
+    expect(apiKeyInput.placeholder).toContain('留空保持不变');
+    expect(document.body.textContent).not.toContain('sk-upstream');
+  });
+
+  it('reports a typed replacement key through setNewChannel', () => {
+    const { setNewChannel, container } = setup({
+      editingChannelId: 7,
+      newChannel: draft({ name: 'upstream', base_url: 'https://a.example', api_key: '', api_key_configured: true }),
+    });
+
+    fireEvent.change(container.querySelector('input[type="password"]'), { target: { value: 'sk-rotated' } });
+
+    expect(setNewChannel).toHaveBeenCalled();
+    const next = setNewChannel.mock.calls.at(-1)[0];
+    expect(next.api_key).toBe('sk-rotated');
+    expect(next.api_key_configured).toBe(true);
+  });
+
   it('renders nothing when closed', () => {
     const { container } = setup({ isOpen: false });
 

@@ -174,6 +174,74 @@ describe('useChannelActions', () => {
     expect(sent.model_mapping).toEqual({ 'gpt-4': 'gpt-4o', claude: 'sonnet' });
   });
 
+  it('never loads the upstream credential into the edit form', () => {
+    // The list endpoint returns the stored key in cleartext. Putting it back into the
+    // form meant the secret was rendered into the DOM and re-submitted on every save.
+    const { result } = setup();
+    act(() => {
+      result.current.handleEditChannel({
+        id: 7, name: 'x', base_url: 'https://a.example', api_key: 'sk-upstream-secret', models: [],
+      });
+    });
+
+    expect(result.current.newChannel.api_key).toBe('');
+    expect(result.current.newChannel.api_key_configured).toBe(true);
+  });
+
+  it('omits the key when an edit leaves the credential untouched', async () => {
+    const { result } = setup();
+    act(() => {
+      result.current.handleEditChannel({
+        id: 7, name: 'x', base_url: 'https://a.example', api_key: 'sk-upstream-secret', models: [],
+      });
+    });
+
+    await act(async () => {
+      await result.current.handleCreateChannel({ preventDefault() {} });
+    });
+
+    const sent = JSON.parse(globalThis.fetch.mock.calls.at(-1)[1].body);
+    // Absent means "keep the stored key" for the update handler.
+    expect(sent).not.toHaveProperty('api_key');
+    expect(JSON.stringify(sent)).not.toContain('sk-upstream-secret');
+    // Form bookkeeping must not leak into the API payload either.
+    expect(sent.api_key_configured).toBeUndefined();
+  });
+
+  it('sends a key the operator typed in this session', async () => {
+    const { result } = setup();
+    act(() => {
+      result.current.handleEditChannel({
+        id: 7, name: 'x', base_url: 'https://a.example', api_key: 'sk-old', models: [],
+      });
+      result.current.setNewChannel(prev => ({ ...prev, api_key: 'sk-rotated' }));
+    });
+
+    await act(async () => {
+      await result.current.handleCreateChannel({ preventDefault() {} });
+    });
+
+    const sent = JSON.parse(globalThis.fetch.mock.calls.at(-1)[1].body);
+    expect(sent.api_key).toBe('sk-rotated');
+  });
+
+  it('keeps a channel save from dropping protocol ids the console does not know', async () => {
+    const { result } = setup();
+    act(() => {
+      result.current.handleEditChannel({
+        id: 7, name: 'x', base_url: 'https://a.example', models: [],
+        protocols: ['openai_chat', 'future_protocol'],
+      });
+    });
+
+    await act(async () => {
+      await result.current.handleCreateChannel({ preventDefault() {} });
+    });
+
+    const sent = JSON.parse(globalThis.fetch.mock.calls.at(-1)[1].body);
+    expect(sent.protocols).toEqual(['openai_chat', 'future_protocol']);
+  });
+
   it('keeps the form open when the save fails', async () => {
     globalThis.fetch.mockRejectedValue(new Error('boom'));
     const { result, refresh } = setup();

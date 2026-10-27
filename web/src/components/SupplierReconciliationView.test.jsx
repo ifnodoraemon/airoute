@@ -204,3 +204,63 @@ describe('SupplierReconciliationView', () => {
     expect(screen.getByPlaceholderText(/Channel, engine, url/)).toBeInTheDocument();
   });
 });
+
+// A report request is driven by the time preset and the filters. Switching them
+// quickly used to issue overlapping requests with no ordering guarantee, so the
+// slower (older) response could replace the newer report and the table then showed
+// one time window's totals under another window's selection.
+describe('SupplierReconciliationView request ordering', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.history.replaceState(null, '', window.location.pathname);
+  });
+
+  it('ignores a superseded response that resolves after the newer one', async () => {
+    const stale = {};
+    const stalePromise = new Promise((resolve) => { stale.resolve = resolve; });
+    let call = 0;
+    const adminFetch = vi.fn(async () => {
+      call += 1;
+      if (call === 1) return stalePromise;
+      return jsonResponse({
+        code: 0,
+        data: report({ suppliers: [supplier({ channel_name: 'fresh-report' })] }),
+      });
+    });
+
+    render(<SupplierReconciliationView adminFetch={adminFetch} showToast={vi.fn()} lang="zh" />);
+
+    // First (slow) request is in flight; switch the preset to start a second one.
+    fireEvent.click(screen.getByText('近7天'));
+    expect(await screen.findByText('fresh-report')).toBeInTheDocument();
+    expect(adminFetch).toHaveBeenCalledTimes(2);
+
+    // The stale response arrives last: it must not replace the newer report.
+    stale.resolve(jsonResponse({ code: 0, data: report({ suppliers: [supplier({ channel_name: 'stale-report' })] }) }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(screen.queryByText('stale-report')).not.toBeInTheDocument();
+    expect(screen.getByText('fresh-report')).toBeInTheDocument();
+  });
+
+  it('cancels the in-flight report when the view unmounts', async () => {
+    const signals = [];
+    let resolveRequest;
+    const adminFetch = vi.fn((_url, options) => {
+      signals.push(options?.signal);
+      return new Promise((resolve) => { resolveRequest = resolve; });
+    });
+    const { unmount } = render(
+      <SupplierReconciliationView adminFetch={adminFetch} showToast={vi.fn()} lang="zh" />,
+    );
+
+    // The report is still in the air when the operator leaves the view.
+    expect(adminFetch).toHaveBeenCalledTimes(1);
+    expect(signals[0].aborted).toBe(false);
+    unmount();
+    expect(signals[0].aborted).toBe(true);
+
+    resolveRequest?.(jsonResponse({ code: 0, data: report() }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+});

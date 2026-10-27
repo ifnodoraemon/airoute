@@ -5,6 +5,19 @@ const CAPABILITIES = [
   { id: 'openai_response', name: 'Responses', nameZh: '智能体响应', path: '/v1/responses', icon: Zap, color: 'text-emerald-500' },
   { id: 'openai_text', name: 'Text Completions', nameZh: 'Text 补全', path: '/v1/completions', icon: Terminal, color: 'text-sky-500' },
   { id: 'anthropic_messages', name: 'Claude Messages', nameZh: 'Claude 消息', path: '/v1/messages', icon: Sparkles, color: 'text-amber-500' },
+  // A marker, not an extra route: it records that the upstream already speaks the
+  // Anthropic protocol natively, so the gateway forwards instead of translating.
+  // It is opt-in — a new channel does not claim native support by default.
+  {
+    id: 'anthropic_native',
+    name: 'Anthropic Native',
+    nameZh: 'Anthropic 原生',
+    path: 'upstream-native',
+    hint: 'Upstream speaks Anthropic natively (no protocol translation)',
+    hintZh: '上游原生支持 Anthropic 协议，网关不再做协议转换',
+    icon: Sparkles,
+    color: 'text-orange-500',
+  },
   { id: 'images', name: 'Images', nameZh: '图像生成', path: '/v1/images/generations', icon: Image, color: 'text-pink-500' },
   { id: 'audio_speech', name: 'TTS', nameZh: '语音合成', path: '/v1/audio/speech', icon: Volume2, color: 'text-cyan-500' },
   { id: 'audio_transcription', name: 'STT', nameZh: '语音识别', path: '/v1/audio/transcriptions', icon: Mic, color: 'text-teal-500' },
@@ -16,16 +29,21 @@ const CAPABILITIES = [
 export default function CapabilitiesSelector({ protocols = [], onToggle, onSetProtocols, lang = 'zh' }) {
   const isZh = lang === 'zh';
 
+  // Protocol ids the console does not know about (a newer gateway, or a value set
+  // through the API) must survive a bulk action: silently dropping them would make
+  // saving this form rewrite a channel's capabilities.
+  const unknownProtocols = protocols.filter(id => !CAPABILITIES.some(cap => cap.id === id));
+
   const handleSelectAll = () => {
-    onSetProtocols(CAPABILITIES.map(c => c.id));
+    onSetProtocols([...CAPABILITIES.map(c => c.id), ...unknownProtocols]);
   };
 
   const handleSelectChatOnly = () => {
-    onSetProtocols(['openai_chat', 'openai_response', 'openai_text', 'anthropic_messages']);
+    onSetProtocols(['openai_chat', 'openai_response', 'openai_text', 'anthropic_messages', ...unknownProtocols]);
   };
 
   const handleClear = () => {
-    onSetProtocols([]);
+    onSetProtocols([...unknownProtocols]);
   };
 
   return (
@@ -71,6 +89,7 @@ export default function CapabilitiesSelector({ protocols = [], onToggle, onSetPr
               key={cap.id}
               type="button"
               onClick={() => onToggle(cap.id)}
+              title={isZh ? (cap.hintZh || cap.path) : (cap.hint || cap.path)}
               className={`p-2.5 rounded-lg border text-left transition flex flex-col justify-between ${
                 isChecked
                   ? 'bg-[#EEF2FF] dark:bg-[#242D48] border-[#355CFF]/30 dark:border-[#91A7FF]/40 text-[#202124] dark:text-[#F1F2F4] shadow-sm'

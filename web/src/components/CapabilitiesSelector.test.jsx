@@ -2,11 +2,13 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import CapabilitiesSelector from './CapabilitiesSelector';
 
-// The ten capabilities the gateway can expose. Pinned here because the "Chat
-// Only" bulk action hardcodes a subset of these ids: if the list changes, that
-// subset has to change with it, and nothing else would notice.
+// Every capability the gateway can expose. Pinned here because the "Chat Only"
+// bulk action hardcodes a subset of these ids: if the list changes, that subset
+// has to change with it, and nothing else would notice.
+// `anthropic_native` is a marker (the upstream speaks Claude natively), not an
+// extra route, but it is a selectable protocol like the rest.
 const ALL_IDS = [
-  'openai_chat', 'openai_response', 'openai_text', 'anthropic_messages',
+  'openai_chat', 'openai_response', 'openai_text', 'anthropic_messages', 'anthropic_native',
   'images', 'audio_speech', 'audio_transcription', 'embeddings', 'rerank', 'videos',
 ];
 const CHAT_IDS = ['openai_chat', 'openai_response', 'openai_text', 'anthropic_messages'];
@@ -32,13 +34,13 @@ describe('CapabilitiesSelector', () => {
   it('counts the selected protocols', () => {
     setup({ protocols: ['openai_chat', 'images'] });
 
-    expect(screen.getByText('协议能力 (2/10)')).toBeInTheDocument();
+    expect(screen.getByText('协议能力 (2/11)')).toBeInTheDocument();
   });
 
   it('counts zero when nothing is selected', () => {
     setup();
 
-    expect(screen.getByText('协议能力 (0/10)')).toBeInTheDocument();
+    expect(screen.getByText('协议能力 (0/11)')).toBeInTheDocument();
   });
 
   it('reports the toggle for the capability that was clicked', () => {
@@ -86,10 +88,34 @@ describe('CapabilitiesSelector', () => {
     expect(ticks).toHaveLength(1);
   });
 
+  it('offers the Anthropic-native marker with zh and en labels', () => {
+    const { rerender, onToggle } = setup({ lang: 'zh' });
+    expect(screen.getByText('Anthropic 原生')).toBeInTheDocument();
+
+    rerender(<CapabilitiesSelector protocols={[]} lang="en" onToggle={onToggle} onSetProtocols={vi.fn()} />);
+    expect(screen.getByText('Anthropic Native')).toBeInTheDocument();
+  });
+
+  it('keeps protocol ids it does not know about when using a bulk action', () => {
+    // A newer gateway may report a capability this console has never heard of.
+    // Selecting "all" must not silently drop it, which would rewrite the channel on
+    // the next save.
+    const { onSetProtocols } = setup({ protocols: ['openai_chat', 'future_protocol'] });
+
+    fireEvent.click(screen.getByRole('button', { name: '全选' }));
+    expect(onSetProtocols.mock.calls[0][0]).toContain('future_protocol');
+
+    fireEvent.click(screen.getByRole('button', { name: '仅对话' }));
+    expect(onSetProtocols.mock.calls[1][0]).toContain('future_protocol');
+
+    fireEvent.click(screen.getByRole('button', { name: '清空' }));
+    expect(onSetProtocols.mock.calls[2][0]).toEqual(['future_protocol']);
+  });
+
   it('renders English labels when asked', () => {
     setup({ lang: 'en', protocols: ['openai_chat'] });
 
-    expect(screen.getByText('Protocol Capabilities (1/10)')).toBeInTheDocument();
+    expect(screen.getByText('Protocol Capabilities (1/11)')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Select All' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Chat Only' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument();

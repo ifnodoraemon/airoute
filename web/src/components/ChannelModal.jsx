@@ -192,17 +192,28 @@ export default function ChannelModal({
             </div>
           </div>
 
-          {/* Field 3: API Key */}
+          {/* Field 3: API Key. A configured credential is never loaded back into the
+              form: the input stays empty and only a value the operator types here is
+              sent on save, so the secret does not round-trip through the DOM. */}
           <div>
             <label className="ui-label">
               API Key
+              {newChannel.api_key_configured && !newChannel.api_key && (
+                <span className="ml-2 text-[11px] font-normal text-emerald-600 dark:text-emerald-400">
+                  {isZh ? '已配置' : 'configured'}
+                </span>
+              )}
             </label>
             <div className="relative">
               <input
                 type={showApiKeyPlain ? 'text' : 'password'}
                 value={newChannel.api_key}
                 onChange={(e) => setNewChannel({ ...newChannel, api_key: e.target.value })}
-                placeholder={isZh ? '留空或填 none 表示免密' : 'Leave empty or none for no auth'}
+                placeholder={
+                  newChannel.api_key_configured
+                    ? (isZh ? '已配置密钥，留空保持不变；输入新值将覆盖' : 'Key configured — leave blank to keep, type to replace')
+                    : (isZh ? '留空或填 none 表示免密' : 'Leave empty or none for no auth')
+                }
                 className="ui-field pl-3 pr-10 font-mono"
               />
               <button
@@ -214,6 +225,13 @@ export default function ChannelModal({
                 {showApiKeyPlain ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
+            {newChannel.api_key_configured && !newChannel.api_key && (
+              <p className="ui-meta-sm mt-1">
+                {isZh
+                  ? '出于安全考虑不回显已保存的密钥；保持留空即沿用原密钥。'
+                  : 'The saved key is not shown for security; leave this field blank to keep it.'}
+              </p>
+            )}
           </div>
 
           {/* Field 4: Models */}

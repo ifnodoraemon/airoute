@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { AlertTriangle, AlertCircle, Info, X } from 'lucide-react';
 import { apiFetch } from '../api/client';
 
-export default function AnnouncementBanner({ lang = 'zh', adminFetch }) {
+export default function AnnouncementBanner({ lang = 'zh', adminFetch, refreshKey = 0 }) {
   const isZh = lang === 'zh';
   const [announcement, setAnnouncement] = useState(null);
   const [dismissed, setDismissed] = useState(false);
@@ -11,37 +11,44 @@ export default function AnnouncementBanner({ lang = 'zh', adminFetch }) {
     try {
       const fetcher = adminFetch || apiFetch;
       const res = await fetcher('/api/v1/announcement');
-      if (res && res.ok) {
-        const json = await res.json();
-        if (json && json.code === 0 && json.data && json.data.enabled) {
-          const ann = json.data;
-          setAnnouncement(ann);
-          // Check if previously dismissed
-          try {
-            const savedDismissedId = localStorage.getItem('airoute_dismissed_announcement');
-            if (savedDismissedId === ann.id) {
-              setDismissed(true);
-            } else {
-              setDismissed(false);
-            }
-          } catch {
+      // A failed refresh must not leave a withdrawn notice on screen: hide it and
+      // let the next successful poll bring it back if it is still active.
+      if (!res || !res.ok) {
+        setAnnouncement(null);
+        return;
+      }
+      const json = await res.json();
+      if (json && json.code === 0 && json.data && json.data.enabled) {
+        const ann = json.data;
+        setAnnouncement(ann);
+        // Check if previously dismissed
+        try {
+          const savedDismissedId = localStorage.getItem('airoute_dismissed_announcement');
+          if (savedDismissedId === ann.id) {
+            setDismissed(true);
+          } else {
             setDismissed(false);
           }
-        } else {
-          setAnnouncement(null);
+        } catch {
+          setDismissed(false);
         }
+      } else {
+        setAnnouncement(null);
       }
     } catch {
-      // Quietly ignore
+      // The request itself failed: treat it like any other failed refresh.
+      setAnnouncement(null);
     }
   }, [adminFetch]);
 
   useEffect(() => {
     fetchAnnouncement();
-    // Poll every 60s for new announcements
+    // Poll every 60s for new announcements. `refreshKey` lets the console publish a
+    // change and have the banner reflect it immediately instead of up to a minute
+    // later.
     const timer = setInterval(fetchAnnouncement, 60000);
     return () => clearInterval(timer);
-  }, [fetchAnnouncement]);
+  }, [fetchAnnouncement, refreshKey]);
 
   const handleDismiss = () => {
     if (announcement) {

@@ -1,5 +1,5 @@
 import { toCSV } from '../config';
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   DollarSign,
   Download,
@@ -40,6 +40,14 @@ export default function SupplierReconciliationView({
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedSuppliers, setExpandedSuppliers] = useState({});
 
+  // Every filter change starts a new report request. Two guards keep a slow
+  // older response from overwriting the report of the filter the operator is
+  // actually looking at: the previous request is aborted, and a sequence number
+  // marks which response is still current (an abort does not always beat a
+  // response that is already being parsed).
+  const requestSeqRef = useRef(0);
+  const requestAbortRef = useRef(null);
+
   const getTimeRangeDates = useCallback((preset) => {
     const now = new Date();
     const pad = (n) => String(n).padStart(2, '0');
@@ -69,6 +77,12 @@ export default function SupplierReconciliationView({
   }, [customStart, customEnd]);
 
   const fetchReconciliation = useCallback(async () => {
+    const seq = ++requestSeqRef.current;
+    requestAbortRef.current?.abort();
+    const controller = new AbortController();
+    requestAbortRef.current = controller;
+    const isCurrent = () => seq === requestSeqRef.current && !controller.signal.aborted;
+
     setLoading(true);
     try {
       const range = getTimeRangeDates(timePreset);
@@ -78,23 +92,34 @@ export default function SupplierReconciliationView({
       if (channelFilter !== 'all') params.set('channel', channelFilter);
       if (modelFilter !== 'all') params.set('model', modelFilter);
 
-      const res = await adminFetch(`/api/v1/admin/channels/reconciliation?${params.toString()}`);
+      const res = await adminFetch(`/api/v1/admin/channels/reconciliation?${params.toString()}`, { signal: controller.signal });
       const data = await res.json();
+      // A superseded response must not replace the newer filter's report.
+      if (!isCurrent()) return;
       if (res.ok && data.code === 0) {
         setReport(data.data);
       } else {
         showToast(data.error || (isZh ? '获取对账数据失败' : 'Failed to fetch reconciliation'), 'warning');
       }
     } catch (err) {
+      if (controller.signal.aborted || seq !== requestSeqRef.current) return;
       showToast((isZh ? '网络请求异常: ' : 'Network error: ') + err.message, 'warning');
     } finally {
-      setLoading(false);
+      if (seq === requestSeqRef.current) setLoading(false);
+      if (requestAbortRef.current === controller) requestAbortRef.current = null;
     }
   }, [adminFetch, showToast, isZh, getTimeRangeDates, timePreset, channelFilter, modelFilter]);
 
   useEffect(() => {
     fetchReconciliation();
   }, [fetchReconciliation, timePreset, channelFilter, modelFilter]);
+
+  // Leaving the view cancels the report that is still in the air.
+  useEffect(() => () => {
+    requestSeqRef.current += 1;
+    requestAbortRef.current?.abort();
+    requestAbortRef.current = null;
+  }, []);
 
   const toggleExpand = (channelName) => {
     setExpandedSuppliers(prev => ({

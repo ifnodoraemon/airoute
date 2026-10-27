@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -15,6 +15,9 @@ import {
   Check
 } from 'lucide-react';
 import { copyToClipboard as crossOriginCopy } from '../config';
+
+// Public status polling cadence.
+const AUTO_REFRESH_MS = 30000;
 
 export default function ServiceStatus({
   isStandalone = true,
@@ -44,7 +47,7 @@ export default function ServiceStatus({
   const [selectedModality, setSelectedModality] = useState('all');
   const [copiedModel, setCopiedModel] = useState('');
 
-  const fetchPublicStatus = async () => {
+  const fetchPublicStatus = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch('/api/v1/public/status');
@@ -60,32 +63,50 @@ export default function ServiceStatus({
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchPublicStatus();
   }, []);
 
-  // 30-Second Auto-refresh timer
+  // This page is public: an anonymous visitor must only ever reach public
+  // endpoints. `onRefresh` is the console's tenant loader (it calls /admin/*),
+  // which answered 401 four times per visitor every 30 seconds here, so the
+  // console data is refreshed only for a signed-in session.
+  const onRefreshRef = useRef(onRefresh);
+  const isLoggedInRef = useRef(isLoggedIn);
   useEffect(() => {
-    if (!autoRefresh) return;
-    const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          fetchPublicStatus();
-          if (onRefresh) onRefresh();
-          return 30;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    onRefreshRef.current = onRefresh;
+    isLoggedInRef.current = isLoggedIn;
+  }, [onRefresh, isLoggedIn]);
+
+  const nextAutoRefreshAtRef = useRef(Date.now() + AUTO_REFRESH_MS);
+
+  const refreshAll = useCallback(() => {
+    fetchPublicStatus();
+    if (isLoggedInRef.current) onRefreshRef.current?.();
+  }, [fetchPublicStatus]);
+
+  useEffect(() => {
+    refreshAll();
+  }, [refreshAll]);
+
+  // 30-second auto-refresh. The tick only computes the remaining time; the
+  // requests run in the timer callback, never inside a state updater (a updater
+  // may be replayed, which duplicated the requests).
+  useEffect(() => {
+    if (!autoRefresh) return undefined;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((nextAutoRefreshAtRef.current - Date.now()) / 1000));
+      setCountdown(remaining);
+      if (remaining > 0) return;
+      nextAutoRefreshAtRef.current = Date.now() + AUTO_REFRESH_MS;
+      refreshAll();
+    };
+    const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
-  }, [autoRefresh, onRefresh]);
+  }, [autoRefresh, refreshAll]);
 
   const handleManualRefresh = () => {
-    fetchPublicStatus();
-    setCountdown(30);
-    if (onRefresh) onRefresh();
+    nextAutoRefreshAtRef.current = Date.now() + AUTO_REFRESH_MS;
+    setCountdown(Math.ceil(AUTO_REFRESH_MS / 1000));
+    refreshAll();
     if (showToast) showToast(isZh ? '服务状态已实时刷新' : 'Service status refreshed', 'info');
   };
 

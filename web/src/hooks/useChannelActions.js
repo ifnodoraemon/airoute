@@ -188,6 +188,7 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
       modelMapping[from] = to;
     }
 
+    const typedApiKey = (newChannel.api_key || '').trim();
     const payload = {
       ...newChannel,
       name: (newChannel.name || '').trim(),
@@ -197,6 +198,14 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
     };
     delete payload.models_str;
     delete payload.mapping_rules;
+    // Client-side form bookkeeping, not part of the channel schema.
+    delete payload.api_key_configured;
+    // An edit that did not touch the credential must not send one: the service
+    // keeps the stored key when `api_key` is absent/empty, and re-submitting a
+    // masked placeholder would otherwise overwrite the real credential.
+    if (editingChannelId && !typedApiKey) {
+      delete payload.api_key;
+    }
 
     setSubmittingChannel(true);
     try {
@@ -236,7 +245,13 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
       name: ch.name || '',
       type: ch.type || 'openai',
       base_url: ch.base_url || '',
-      api_key: ch.api_key || '',
+      // The list endpoint returns the upstream credential in cleartext. Keep it out
+      // of the form (and therefore out of the DOM and the console devtools tree):
+      // an unchanged field must not round-trip the secret. `api_key_configured`
+      // tells the form to say "already set — leave blank to keep it"; the update
+      // handler preserves the stored key when the request omits it.
+      api_key: '',
+      api_key_configured: Boolean(ch.api_key),
       priority: ch.priority || 1,
       weight: ch.weight || 10,
       timeout_seconds: ch.timeout_seconds || 60,

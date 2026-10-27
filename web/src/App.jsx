@@ -143,14 +143,17 @@ export default function App() {
   } = useConsoleOverlays();
 
 
-  // Global Command Palette shortcut (Cmd+K / Ctrl+K)
+  // Global Command Palette shortcut (Cmd+K / Ctrl+K).
+  //
+  // Escape is deliberately not handled here: open overlays register themselves in
+  // the escape layer stack (src/lib/escapeLayer.js) and only the topmost one acts,
+  // so one Escape closes the palette without also dismissing a form modal opened
+  // underneath it (which raised an unsaved-changes prompt).
   useEffect(() => {
     const handleGlobalKeyDown = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setShowCommandPalette(prev => !prev);
-      } else if (e.key === 'Escape') {
-        setShowCommandPalette(false);
       }
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
@@ -307,6 +310,9 @@ export default function App() {
   } = useConsoleSelections();
   const [dashboardSelectedKey, setDashboardSelectedKey] = useState('');
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
+  // Bumped after an announcement is published so the banner refreshes at once
+  // instead of waiting for its 60s poll.
+  const [announcementRefreshKey, setAnnouncementRefreshKey] = useState(0);
   const {
     sidebarCollapsed,
     mobileMenuOpen, setMobileMenuOpen,
@@ -341,9 +347,14 @@ export default function App() {
     }
 
     if (viewMode === 'status' || viewMode === 'landing' || viewMode === 'auth') {
-      const cleanUrl = window.location.pathname + targetHash;
       if (window.location.hash !== targetHash || window.location.search) {
-        window.history.replaceState(null, '', cleanUrl);
+        // Only the hash identifies the public page; the query string carries the
+        // audit-log/channel filters (logs.*, channels.*). Rebuilding the URL from
+        // the pathname dropped them, so a filtered view could not be shared or
+        // reloaded after stopping by the portal.
+        const url = new URL(window.location.href);
+        url.hash = targetHash || '';
+        window.history.replaceState(null, '', url);
       }
     } else if (targetHash && window.location.hash !== targetHash) {
       window.history.replaceState(null, '', targetHash);
@@ -1310,7 +1321,7 @@ export default function App() {
         </header>
 
         {/* Global System Announcement Banner */}
-        <AnnouncementBanner lang={lang} adminFetch={apiFetch} />
+        <AnnouncementBanner lang={lang} adminFetch={apiFetch} refreshKey={announcementRefreshKey} />
 
         <div className="px-4 sm:px-6 lg:px-8 xl:px-10 py-7 max-w-[1536px] w-full mx-auto space-y-7">
           {/* Default Password Security Warning Banner for Admins */}
@@ -1741,6 +1752,7 @@ export default function App() {
             adminFetch={apiFetch}
             showToast={showToast}
             lang={lang}
+            onPublished={() => setAnnouncementRefreshKey(key => key + 1)}
           />
         )}
 

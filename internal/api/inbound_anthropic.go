@@ -253,7 +253,11 @@ func (h *Handler) HandleAnthropicCountTokens(c *gin.Context) {
 	channels := h.dispatcher.ResolveCandidateChannels(c.Request.Context(), req.Model, "anthropic_messages")
 	var lastErr error
 	for _, channel := range channels {
-		if channel.Type != model.ProviderAnthropic && !channel.HasExplicitProtocol("anthropic_messages") {
+		// count_tokens is an Anthropic-wire endpoint: only send it to channels
+		// whose upstream actually speaks that protocol (type=anthropic or an
+		// explicit anthropic_native marker). OpenAI/Gemini channels fall through
+		// to the local estimate below instead of receiving Anthropic JSON.
+		if !router.IsAnthropicWireChannel(channel) {
 			continue
 		}
 		payload := map[string]any{"model": channel.GetUpstreamModel(req.Model), "messages": req.Messages}

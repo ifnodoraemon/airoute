@@ -228,6 +228,96 @@ describe('App integration', () => {
     }, { timeout: 8000 });
   });
 
+  it('keeps the log filters in the URL when the visitor stops by the public pages', async () => {
+    // logs.*/channels.* live in the query string so a filtered audit view can be
+    // shared and reloaded. Navigating to the public status page rebuilt the URL from
+    // the pathname, which silently dropped them.
+    signIn();
+    window.history.replaceState(null, '', '/?logs.q=boom&logs.status=error#/dashboard');
+    stubGateway({
+      '/api/v1/auth/me': () => jsonResponse({ code: 0, data: { user: { username: 'root', role: 'admin' } } }),
+    });
+
+    render(<App />);
+    await waitForConsoleLoad();
+
+    fireEvent.click(await screen.findByTitle('查看公开服务状态', {}, { timeout: 8000 }));
+
+    await waitFor(() => expect(window.location.hash).toBe('#/status'), { timeout: 8000 });
+    const params = new URLSearchParams(window.location.search);
+    expect(params.get('logs.q')).toBe('boom');
+    expect(params.get('logs.status')).toBe('error');
+  });
+
+  it('does not show the previous account data when the next account signs in on the auth page', async () => {
+    // Tenant teardown. Every login entry point must start from an empty workspace;
+    // the auth page (#/login) skips the reset, so an account that signed in there
+    // inherited the previous session's keys. That only becomes visible when the new
+    // account's own load does not replace the slice — here the key list fails, which
+    // must leave an empty list rather than the previous tenant's keys on screen.
+    signIn('admin', 'alice');
+    window.history.replaceState(null, '', '/#/keys');
+    let signedInAs = 'alice';
+    let expired = false;
+    let keyListFails = false;
+    stubGateway({
+      '/api/v1/auth/me': () => jsonResponse({ code: 0, data: { user: { username: signedInAs, role: 'admin' } } }),
+      '/api/v1/auth/login': () => {
+        signedInAs = 'bob';
+        return jsonResponse({ code: 0, data: { token: 'token-bob', user: { username: 'bob', role: 'admin' } } });
+      },
+      '/api/v1/admin/keys': () => {
+        if (expired && !keyListFails) return jsonResponse({ code: 401, error: 'expired' }, 401);
+        if (keyListFails) return jsonResponse({ error: 'keys unavailable' }, 500);
+        return jsonResponse({
+          code: 0,
+          data: [{
+            id: signedInAs === 'alice' ? 11 : 22,
+            key: signedInAs === 'alice' ? 'sk-alice-key' : 'sk-bob-key',
+            tenant_id: signedInAs === 'alice' ? 'tenant-alice' : 'tenant-bob',
+            status: 'active',
+            rpm: 60,
+          }],
+        });
+      },
+      '/api/v1/admin/stats/overview': () => (expired
+        ? jsonResponse({ code: 401, error: 'expired' }, 401)
+        : jsonResponse({ code: 0, data: {} })),
+      '/api/v1/admin/logs': () => (expired
+        ? jsonResponse({ code: 401, error: 'expired' }, 401)
+        : jsonResponse({ code: 0, data: [], total: 0 })),
+    });
+
+    render(<App />);
+
+    // Account A is looking at its own key.
+    expect(await screen.findByText('tenant-alice', {}, { timeout: 8000 })).toBeInTheDocument();
+
+    // Expire the session: the dashboard refresh issues tenant-scoped requests, which
+    // now answer 401, and the shell moves the visitor out of the console.
+    fireEvent.click(await screen.findByTitle('概览', {}, { timeout: 8000 }));
+    const refreshButton = await screen.findByTitle('重新拉取统计、渠道与日志数据', {}, { timeout: 8000 });
+    expired = true;
+    fireEvent.click(refreshButton);
+    await waitFor(() => expect(screen.queryByTitle('重新拉取统计、渠道与日志数据')).not.toBeInTheDocument(), { timeout: 8000 });
+
+    // With no session left, the auth route renders the sign-in page.
+    window.history.replaceState(null, '', '/#/login');
+    fireEvent(window, new Event('popstate'));
+
+    const username = await screen.findByPlaceholderText('输入用户名或登录邮箱', {}, { timeout: 8000 });
+    fireEvent.change(username, { target: { value: 'bob' } });
+    fireEvent.change(screen.getByPlaceholderText('输入账户密码'), { target: { value: 'secret123' } });
+    // The new account's key list is unavailable, so nothing may replace the old one.
+    keyListFails = true;
+    expired = false;
+    fireEvent.submit(username.closest('form'));
+
+    // Account B's console must not show account A's key.
+    fireEvent.click(await screen.findByTitle('API 密钥', {}, { timeout: 8000 }));
+    await waitFor(() => expect(screen.queryByText('tenant-alice')).not.toBeInTheDocument(), { timeout: 8000 });
+  }, 30000);
+
   it('sends the audit-log query when the logs tab is routed to', async () => {
     signIn();
     window.history.replaceState(null, '', '/#/logs');

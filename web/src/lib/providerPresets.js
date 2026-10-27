@@ -8,7 +8,10 @@
 // and protocol set for a known provider, and keeps whatever base_url and api_key
 // the operator has already typed.
 
-// The full protocol set a channel starts with.
+// The full protocol *interface* set a channel starts with. `anthropic_native` is
+// deliberately absent: it is a marker for an upstream that already speaks the
+// Anthropic protocol, so it must be opted into per channel instead of being
+// claimed by every new channel.
 export const ALL_PROTOCOLS = [
   'openai_chat', 'openai_response', 'openai_text', 'anthropic_messages',
   'embeddings', 'rerank', 'images', 'audio_speech', 'audio_transcription', 'videos',
@@ -20,7 +23,11 @@ export function emptyChannel() {
     name: '',
     type: 'openai',
     base_url: '',
+    // The form never carries an existing credential: `api_key` holds only a value
+    // the operator typed in this session, and `api_key_configured` says whether the
+    // channel already has one on the server (so "leave blank" means "keep it").
     api_key: '',
+    api_key_configured: false,
     priority: 1,
     weight: 10,
     timeout_seconds: 60,
@@ -134,7 +141,9 @@ export const PROVIDER_PRESETS = {
       timeout_seconds: 60,
       models_str: 'claude-opus-5.5, claude-sonnet-5.5, claude-haiku-5.5, claude-3-7-sonnet',
       mapping_rules: [],
-      protocols: ['openai_chat', 'openai_response', 'anthropic_messages'],
+      // The official Anthropic endpoint speaks the Claude protocol natively, so the
+      // template marks it instead of leaving the operator to guess.
+      protocols: ['openai_chat', 'openai_response', 'anthropic_messages', 'anthropic_native'],
     },
     zh: '已载入 Claude 官方模板及模型列表',
     en: 'Loaded Claude official template and models',
