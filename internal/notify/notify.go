@@ -93,3 +93,6 @@ func (m MultiSender) Send(ctx context.Context, msg Message) error {
 
 // Name identifies the composite sender in logs.
 func (m MultiSender) Name() string { return "multi" }
+
+// Configured reports whether at least one transport is active.
+func (m MultiSender) Configured() bool { return len(m.Senders) > 0 }
