@@ -3,6 +3,7 @@ import {
   Zap,
   Server,
   Building2,
+  Gauge,
   Key,
   Terminal,
   ShieldAlert,
@@ -60,6 +61,7 @@ const SkillHubView = lazy(() => import('./components/SkillHubView'));
 const McpIntegrationView = lazy(() => import('./components/McpIntegrationView'));
 const UserManagementView = lazy(() => import('./components/UserManagementView'));
 const OrganizationsView = lazy(() => import('./components/OrganizationsView'));
+const BudgetsView = lazy(() => import('./components/BudgetsView'));
 const WalletManagementView = lazy(() => import('./components/WalletManagementView'));
 const ChannelsView = lazy(() => import('./components/ChannelsView'));
 const SupplierReconciliationView = lazy(() => import('./components/SupplierReconciliationView'));
@@ -1044,6 +1046,17 @@ export default function App() {
                       </button>
 
                       <button
+                        onClick={() => setCurrentTab('budgets')}
+                        title={isZh ? '预算与告警' : 'Budgets & Alerts'}
+                        className={navBtnClass('budgets')}
+                      >
+                        <div className="flex items-center space-x-2.5">
+                          <Gauge className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('budgets')}`} />
+                          {!sidebarCollapsed && <span>{isZh ? '预算与告警' : 'Budgets & Alerts'}</span>}
+                        </div>
+                      </button>
+
+                      <button
                         onClick={() => setCurrentTab('wallet')}
                         title={isZh ? '卡密与充值' : 'Wallet & Credits'}
                         className={navBtnClass('wallet')}
@@ -1266,6 +1279,7 @@ export default function App() {
                 {currentTab === 'mcp' && (t.navMcp || (isZh ? 'MCP 广场' : 'MCP Hub'))}
                 {currentTab === 'users' && (t.navUsers || (isZh ? '用户管理' : 'User Management'))}
                 {currentTab === 'orgs' && (isZh ? '组织与成本中心' : 'Organizations')}
+                {currentTab === 'budgets' && (isZh ? '预算与告警' : 'Budgets & Alerts')}
                 {currentTab === 'playground' && t.navPlayground}
                 {currentTab === 'docs' && t.navDocs}
               </span>
@@ -1638,6 +1652,11 @@ export default function App() {
                 showToast={showToast}
                 lang={lang}
               />
+            )}
+
+            {/* 7. BUDGETS & ALERTS */}
+            {currentTab === 'budgets' && (
+              <BudgetsView adminFetch={apiFetch} showToast={showToast} lang={lang} />
             )}
 
             {/* 7. WALLET MANAGEMENT TAB */}

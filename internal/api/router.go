@@ -217,6 +217,12 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 					adminOnly.POST("/orgs/:id/members", adminHandler.AddOrgMember)
 					adminOnly.DELETE("/orgs/:id/members/:user_id", adminHandler.RemoveOrgMember)
 
+					adminOnly.GET("/budgets", adminHandler.ListBudgets)
+					adminOnly.POST("/budgets", adminHandler.SaveBudget)
+					adminOnly.PUT("/budgets/:id", adminHandler.UpdateBudget)
+					adminOnly.DELETE("/budgets/:id", adminHandler.DeleteBudget)
+					adminOnly.GET("/budgets/:id/events", adminHandler.ListBudgetEvents)
+
 					adminOnly.GET("/redemptions", adminHandler.ListRedemptions)
 					adminOnly.POST("/redemptions/generate", adminHandler.GenerateRedemptions)
 					adminOnly.DELETE("/redemptions/:id", adminHandler.DeleteRedemption)

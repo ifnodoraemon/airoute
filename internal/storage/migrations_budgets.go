@@ -77,3 +77,10 @@ func addBudgets(db *DB) error {
 	}
 	return nil
 }
+
+// CreateBudgets is the exported schema entrypoint. The migration list is owned
+// by another edit while this slice lands, so version 32 will call this function
+// once that change is committed; tests call it directly in the meantime.
+func CreateBudgets(db *DB) error {
+	return addBudgets(db)
+}

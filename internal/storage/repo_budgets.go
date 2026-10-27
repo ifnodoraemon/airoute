@@ -151,8 +151,18 @@ func (r *Repository) ListBudgets(scopeType string, scopeID int64) ([]*BudgetReco
 
 // DeleteBudget removes a rule; its historical events remain.
 func (r *Repository) DeleteBudget(id int64) error {
-	_, err := r.db.Exec(`DELETE FROM budgets WHERE id = ?`, id)
-	return err
+	result, err := r.db.Exec(`DELETE FROM budgets WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 // SetBudgetStatus enables or disables a rule.
