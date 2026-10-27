@@ -1,0 +1,9 @@
+=== RUN   TestAuditReviewMultimodalPreservesAPIBasePath
+    audit_review_test.go:41: base URL ending /v1 produced upstream path /v1/v1/images/generations
+--- FAIL: TestAuditReviewMultimodalPreservesAPIBasePath (0.00s)
+=== RUN   TestAuditReviewVideoPollReturnsToCreatingProvider
+    audit_review_test.go:65: created on video-a.invalid, polled on video-b.invalid, status=404
+--- FAIL: TestAuditReviewVideoPollReturnsToCreatingProvider (0.00s)
+FAIL
+FAIL	github.com/ifnodoraemon/airoute/internal/api	0.007s
+FAIL

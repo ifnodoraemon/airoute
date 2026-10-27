@@ -104,6 +104,7 @@ func (h *AdminHandler) TestChannel(c *gin.Context) {
 		APIKey:         target.APIKey,
 		Models:         target.Models,
 		ModelMapping:   target.ModelMapping,
+		Protocols:      target.Protocols,
 		TimeoutSeconds: 15,
 	}
 

@@ -1,0 +1,18 @@
+ok  	github.com/ifnodoraemon/airoute/cmd/airoute	1.023s
+ok  	github.com/ifnodoraemon/airoute/internal/adapter	1.014s
+ok  	github.com/ifnodoraemon/airoute/internal/api	7.248s
+ok  	github.com/ifnodoraemon/airoute/internal/billing	2.076s
+?   	github.com/ifnodoraemon/airoute/internal/buildinfo	[no test files]
+ok  	github.com/ifnodoraemon/airoute/internal/config	1.118s
+ok  	github.com/ifnodoraemon/airoute/internal/controlplane	23.404s
+ok  	github.com/ifnodoraemon/airoute/internal/distributed	1.019s
+ok  	github.com/ifnodoraemon/airoute/internal/middleware	1.033s
+ok  	github.com/ifnodoraemon/airoute/internal/model	1.027s
+ok  	github.com/ifnodoraemon/airoute/internal/provider	1.060s
+ok  	github.com/ifnodoraemon/airoute/internal/router	1.144s
+ok  	github.com/ifnodoraemon/airoute/internal/storage	17.525s
+ok  	github.com/ifnodoraemon/airoute/internal/telemetry	1.060s
+ok  	github.com/ifnodoraemon/airoute/internal/validator	1.056s
+ok  	github.com/ifnodoraemon/airoute/tests	42.956s
+ok  	github.com/ifnodoraemon/airoute/web	1.039s
+?   	github.com/ifnodoraemon/airoute/web/node_modules/flatted/golang/pkg/flatted	[no test files]

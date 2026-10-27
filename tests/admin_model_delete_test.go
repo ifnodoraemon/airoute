@@ -29,7 +29,7 @@ func setupModelDeleteTest(t *testing.T) (*storage.Repository, *router.Dispatcher
 	dispatcher := router.NewDispatcher(nil)
 	sync := controlplane.NewSynchronizer(repo, dispatcher)
 	handler := controlplane.NewAdminHandler(repo, sync, dispatcher)
-	token, err := controlplane.GenerateAdminToken("admin", "admin", time.Minute)
+	token, err := tokenForTestUser("admin", "admin", time.Minute)
 	require.NoError(t, err)
 	return repo, dispatcher, sync, api.SetupRouter(dispatcher, handler), token
 }
@@ -126,7 +126,7 @@ func TestAPI_DeletePricingIdentifiers(t *testing.T) {
 func TestAPI_DeleteModelRequiresAdminAndIdentifier(t *testing.T) {
 	repo, _, _, engine, token := setupModelDeleteTest(t)
 	require.NoError(t, repo.CreateUser(&storage.UserRecord{Username: "reader", Role: "user", Status: "active"}))
-	userToken, err := controlplane.GenerateAdminToken("reader", "user", time.Minute)
+	userToken, err := tokenForTestUser("reader", "user", time.Minute)
 	require.NoError(t, err)
 	for _, path := range []string{"/api/v1/admin/models/routes", "/api/v1/admin/pricing"} {
 		t.Run(path, func(t *testing.T) {

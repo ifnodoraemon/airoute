@@ -109,7 +109,7 @@ func (h *AdminHandler) Register(c *gin.Context) {
 	h.syncDataPlane()
 
 	// Generate login token
-	token, _ := GenerateAdminToken(user.Username, user.Role, 7*24*time.Hour)
+	token, _ := GenerateAdminToken(user, 7*24*time.Hour)
 	SetSessionCookies(c, token)
 
 	c.JSON(http.StatusOK, gin.H{

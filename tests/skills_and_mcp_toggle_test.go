@@ -214,7 +214,7 @@ func TestSkills_OnDemandTogglingAndMCP(t *testing.T) {
 	assert.Contains(t, wRec.Body.String(), "deepseek-chat")
 
 	// 4.3 Test /api/v1/admin/mcp/toggle endpoint
-	adminToken, err := controlplane.GenerateAdminToken("admin", "admin", 24*time.Hour)
+	adminToken, err := tokenForTestUser("admin", "admin", 24*time.Hour)
 	assert.NoError(t, err)
 	toggleReq := httptest.NewRequest(http.MethodPost, "/api/v1/admin/mcp/toggle", bytes.NewReader([]byte(`{"mcp_enabled": false}`)))
 	toggleReq.Header.Set("Authorization", "Bearer "+adminToken)

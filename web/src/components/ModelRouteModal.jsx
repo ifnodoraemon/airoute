@@ -13,6 +13,9 @@ import {
   Edit3
 } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
+import useFormDirty from '../hooks/useFormDirty';
+import useUnsavedGuard from '../hooks/useUnsavedGuard';
+import DiscardChangesDialog from './DiscardChangesDialog';
 
 export const getChannelModels = (ch) => {
   if (!ch) return [];
@@ -55,7 +58,6 @@ export default function ModelRouteModal({
   lang = 'zh',
   t
 }) {
-  useModalA11y(isOpen, onClose);
 
   const isZh = lang === 'zh';
   const isNew = !modelRoute || modelRoute.isNew;
@@ -93,6 +95,11 @@ export default function ModelRouteModal({
   const [customModeMap, setCustomModeMap] = useState({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  const isDirty = useFormDirty(isOpen, { modelName, fallbackModel, promptPrice, completionPrice, cacheReadPrice, fixedPrice, currency, offPeakEnabled, providers });
+  const { confirming, requestClose, keepEditing, discard } = useUnsavedGuard({ isOpen, isDirty, onClose });
+  const dismiss = () => { if (!saving) requestClose(); };
+  useModalA11y(isOpen, dismiss);
 
   const handleWeightChange = (channelId, val) => {
     const num = Math.max(1, parseInt(val) || 1);
@@ -267,7 +274,7 @@ export default function ModelRouteModal({
     <div
       className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) dismiss();
       }}
     >
       <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-6 max-w-xl w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
@@ -289,7 +296,7 @@ export default function ModelRouteModal({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={dismiss}
             className="p-1.5 hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] rounded-xl text-[#656B75] hover:text-[#202124] dark:hover:text-[#F1F2F4] transition cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -695,7 +702,7 @@ export default function ModelRouteModal({
           <div className="flex justify-end space-x-3 pt-3 border-t border-[#E4E6E9] dark:border-[#2C3038] shrink-0">
             <button
               type="button"
-              onClick={onClose}
+              onClick={dismiss}
               className="ui-btn-secondary"
             >
               {isZh ? '取消' : 'Cancel'}
@@ -710,6 +717,7 @@ export default function ModelRouteModal({
             </button>
           </div>
         </form>
+        <DiscardChangesDialog open={confirming} onKeepEditing={keepEditing} onDiscard={discard} lang={lang} />
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 package controlplane
 
 import (
+	"crypto/hmac"
 	"net/http"
 	"strings"
 
@@ -95,6 +96,10 @@ func (h *AdminHandler) AdminAuthMiddleware() gin.HandlerFunc {
 			}
 			if strings.EqualFold(user.Status, "locked") {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": 403, "error": "该账户已被管理员锁定，无法继续访问"})
+				return
+			}
+			if !hmac.Equal([]byte(claims.CredentialTag), []byte(sessionCredentialTag(user))) {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "登录凭证已撤销，请重新登录"})
 				return
 			}
 			// A role change invalidates previously issued tokens immediately.

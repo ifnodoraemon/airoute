@@ -17,7 +17,7 @@ type ModelPriceRecord struct {
 	CompletionPrice float64   `json:"completion_price"`  // per 1,000,000 completion tokens
 	CacheReadPrice  float64   `json:"cache_read_price"`  // per 1,000,000 cached tokens
 	FixedPrice      float64   `json:"fixed_price"`       // per request (e.g. image/video)
-	Currency        string    `json:"currency"`          // CNY or USD
+	Currency        string    `json:"currency"`          // CNY; wallets settle exclusively in CNY
 	OffPeakEnabled  bool      `json:"off_peak_enabled"`  // whether time-of-use discount is active
 	OffPeakMode     string    `json:"off_peak_mode"`     // "custom", "night", "none"
 	OffPeakSlots    string    `json:"off_peak_slots"`    // JSON array of OffPeakSlot
@@ -215,6 +215,9 @@ func normalizeModelPrice(rec *ModelPriceRecord) {
 
 // SaveModelPrice inserts or updates pricing rates for a model within a specific group.
 func (r *Repository) SaveModelPrice(rec *ModelPriceRecord) error {
+	if err := ValidatePriceCurrency(rec); err != nil {
+		return err
+	}
 	normalizeModelPrice(rec)
 
 	offEnabled := 0
@@ -260,4 +263,12 @@ func (r *Repository) DeleteModelPriceWithGroup(modelName, groupName string) erro
 	}
 	_, err := r.db.Exec(`DELETE FROM model_prices WHERE model = ? AND group_name = ?`, modelName, groupName)
 	return err
+}
+
+// ValidatePriceCurrency rejects currencies the CNY ledger cannot settle.
+func ValidatePriceCurrency(rec *ModelPriceRecord) error {
+	if rec != nil && rec.Currency != "" && rec.Currency != "CNY" {
+		return errors.New("当前钱包仅支持 CNY 定价；请明确换算后以 CNY 保存")
+	}
+	return nil
 }

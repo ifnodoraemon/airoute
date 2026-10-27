@@ -64,10 +64,10 @@ func exchangeGitHubOAuth(code, clientID, clientSecret string) (string, string, e
 		return "", "", err
 	}
 
-	username := ghUser.Login
-	if username == "" {
-		username = fmt.Sprintf("gh_%d", ghUser.ID)
+	if userResp.StatusCode != http.StatusOK || ghUser.ID <= 0 {
+		return "", "", fmt.Errorf("invalid GitHub identity")
 	}
+	username := fmt.Sprintf("%d", ghUser.ID)
 	email := ghUser.Email
 	if email == "" {
 		email = fmt.Sprintf("%s@github.oauth.local", username)
@@ -122,9 +122,8 @@ func exchangeGoogleOAuth(code, clientID, clientSecret, redirectURI string) (stri
 		return "", "", err
 	}
 
-	username := ggUser.Name
-	if username == "" {
-		username = "google_user_" + ggUser.ID
+	if userResp.StatusCode != http.StatusOK || ggUser.ID == "" {
+		return "", "", fmt.Errorf("invalid Google identity")
 	}
-	return username, ggUser.Email, nil
+	return ggUser.ID, ggUser.Email, nil
 }

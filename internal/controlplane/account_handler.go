@@ -52,7 +52,7 @@ func (h *AdminHandler) Login(c *gin.Context) {
 	globalLoginGuard.success(req.Username, clientIP)
 
 	expiryHours := config.GetGlobalConfig().GetTokenExpiryHours()
-	token, err := GenerateAdminToken(user.Username, user.Role, time.Duration(expiryHours)*time.Hour)
+	token, err := GenerateAdminToken(user, time.Duration(expiryHours)*time.Hour)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "生成鉴权 Token 失败"})
 		return
@@ -182,6 +182,7 @@ func (h *AdminHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 
+	ClearSessionCookies(c)
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "密码修改成功，请使用新密码重新登录"})
 }
 

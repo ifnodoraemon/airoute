@@ -109,8 +109,6 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 			authGroup.POST("/oauth/:provider/callback", adminHandler.OAuthCallback)
 			authGroup.GET("/oauth/:provider/callback", adminHandler.OAuthCallback)
 			// Exchanges the one-time code from the browser redirect for a session.
-			authGroup.POST("/oauth-exchange", adminHandler.OAuthExchange)
-			authGroup.GET("/oauth-exchange", adminHandler.OAuthExchange)
 			authGroup.GET("/me", adminHandler.AdminAuthMiddleware(), adminHandler.GetMe)
 			authGroup.POST("/logout", adminHandler.Logout)
 		}
@@ -244,7 +242,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 		}
 	}
 
-	mmHandler := NewMultimodalHandler(dispatcher)
+	mmHandler := NewMultimodalHandler(dispatcher, repo)
 
 	// OpenAI & Anthropic v1 Data Plane API group
 	v1 := r.Group("/v1")

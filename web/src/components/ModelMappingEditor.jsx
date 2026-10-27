@@ -1,82 +1,15 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { ArrowRight, Plus, X, GitMerge, ChevronDown, ChevronUp } from 'lucide-react';
 
-let idCounter = 0;
-function nextId() {
-  idCounter += 1;
-  return `rule-${Date.now()}-${idCounter}`;
-}
-
-export default function ModelMappingEditor({ mappingStr = '', onChange, lang = 'zh' }) {
+export default function ModelMappingEditor({ rows = [], onChange, lang = 'zh' }) {
   const isZh = lang === 'zh';
-
-  // Parse mappingStr (e.g. "gpt-4o:deepseek-chat, dept/*:*") into array of objects with stable IDs
-  const parseMapping = (str) => {
-    if (!str || !str.trim()) return [];
-    return str
-      .split(',')
-      .map(part => {
-        const colonIdx = part.indexOf(':');
-        if (colonIdx === -1) return null;
-        const from = part.slice(0, colonIdx).trim();
-        const to = part.slice(colonIdx + 1).trim();
-        if (!from && !to) return null;
-        return {
-          id: nextId(),
-          from,
-          to
-        };
-      })
-      .filter(Boolean);
-  };
-
-  const serializeMapping = (list) => {
-    return list
-      .map(item => ({ from: (item.from || '').trim(), to: (item.to || '').trim() }))
-      .filter(item => item.from && item.to)
-      .map(item => `${item.from}:${item.to}`)
-      .join(', ');
-  };
-
-  const [rows, setRows] = useState(() => parseMapping(mappingStr));
-  const [isOpen, setIsOpen] = useState(() => Boolean(mappingStr && mappingStr.trim()));
-  const lastSerializedRef = useRef(serializeMapping(rows));
-
-  // Sync internal rows when parent passes a new mappingStr that didn't originate from our own onChange
-  useEffect(() => {
-    const trimmed = (mappingStr || '').trim();
-    if (trimmed !== lastSerializedRef.current) {
-      lastSerializedRef.current = trimmed;
-      const parsed = parseMapping(trimmed);
-      setRows(parsed);
-      if (parsed.length > 0) {
-        setIsOpen(true);
-      }
-    }
-  }, [mappingStr]);
-
-  const updateRowsAndNotify = (newRows) => {
-    setRows(newRows);
-    const serialized = serializeMapping(newRows);
-    lastSerializedRef.current = serialized;
-    onChange?.(serialized);
-  };
-
+  const [isOpen, setIsOpen] = useState(rows.length > 0);
   const handleAddRow = () => {
-    const newRows = [...rows, { id: nextId(), from: '', to: '' }];
-    updateRowsAndNotify(newRows);
-    if (!isOpen) setIsOpen(true);
+    onChange([...rows, { from: '', to: '' }]);
+    setIsOpen(true);
   };
-
-  const handleRemoveRow = (id) => {
-    const newRows = rows.filter(r => r.id !== id);
-    updateRowsAndNotify(newRows);
-  };
-
-  const handleChangeRow = (id, field, value) => {
-    const newRows = rows.map(r => (r.id === id ? { ...r, [field]: value } : r));
-    updateRowsAndNotify(newRows);
-  };
+  const handleRemoveRow = (index) => onChange(rows.filter((_, i) => i !== index));
+  const handleChangeRow = (index, field, value) => onChange(rows.map((row, i) => i === index ? { ...row, [field]: value } : row));
 
   const configuredCount = rows.filter(r => r.from.trim() && r.to.trim()).length;
 
@@ -116,13 +49,13 @@ export default function ModelMappingEditor({ mappingStr = '', onChange, lang = '
             </p>
           ) : (
             <div className="space-y-2">
-              {rows.map((row) => (
-                <div key={row.id} className="flex items-center space-x-2">
+              {rows.map((row, index) => (
+                <div key={index} className="flex items-center space-x-2">
                   <input
                     type="text"
                     placeholder={isZh ? "原模型 (如 gpt-4o)" : "Source Model (e.g. gpt-4o)"}
                     value={row.from}
-                    onChange={(e) => handleChangeRow(row.id, 'from', e.target.value)}
+                    onChange={(e) => handleChangeRow(index, 'from', e.target.value)}
                     className="ui-field ui-field-sm font-mono flex-1"
                   />
                   <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -130,12 +63,12 @@ export default function ModelMappingEditor({ mappingStr = '', onChange, lang = '
                     type="text"
                     placeholder={isZh ? "映射模型 (如 deepseek-chat)" : "Target Model (e.g. deepseek-chat)"}
                     value={row.to}
-                    onChange={(e) => handleChangeRow(row.id, 'to', e.target.value)}
+                    onChange={(e) => handleChangeRow(index, 'to', e.target.value)}
                     className="ui-field ui-field-sm font-mono flex-1"
                   />
                   <button
                     type="button"
-                    onClick={() => handleRemoveRow(row.id)}
+                    onClick={() => handleRemoveRow(index)}
                     className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition cursor-pointer"
                     title={isZh ? "删除该映射" : "Remove mapping"}
                   >

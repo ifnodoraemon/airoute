@@ -73,11 +73,11 @@ describe('providerPresets', () => {
   });
 
   it('always clears a stale mapping string', () => {
-    const previous = { ...emptyChannel(), mapping_str: 'a:b' };
+    const previous = { ...emptyChannel(), mapping_rules: [{from:'a',to:'b'}] };
 
     const built = buildPresetChannel('deepseek', previous);
 
-    expect(built.channel.mapping_str).toBe('');
+    expect(built.channel.mapping_rules).toEqual([]);
   });
 
   it('reports a message in both languages', () => {

@@ -200,8 +200,8 @@ export function useLogsData({ filters, showToast, isZh }) {
       const data = await res.json();
       // An export can span many pages; stop as soon as the session it belongs to
       // is gone rather than assembling a report from another account's rows.
-      if (generation !== generationRef.current) break;
-      if (!res.ok || data.code !== 0) break;
+      if (generation !== generationRef.current) throw new Error('Export cancelled: session changed');
+      if (!res.ok || data.code !== 0) throw new Error(data.error || `Export failed (HTTP ${res.status})`);
       const batch = data.data || [];
       collected.push(...batch);
       if (onProgress) onProgress({ collected: Math.min(collected.length, maxRows), maxRows });

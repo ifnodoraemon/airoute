@@ -81,6 +81,9 @@ func (h *Handler) HandleGeminiAction(c *gin.Context) {
 
 	isStream := strings.Contains(action, "streamGenerateContent") || c.Query("alt") == "sse"
 
+	if !validateModelCurrency(c, modelName) {
+		return
+	}
 	if !middleware.ValidateModelAllowed(c, modelName) {
 		c.JSON(http.StatusForbidden, gin.H{
 			"error": gin.H{

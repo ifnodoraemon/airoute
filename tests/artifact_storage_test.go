@@ -217,7 +217,7 @@ func TestStorageStatusAndSkillDownloadCache(t *testing.T) {
 	engine := api.SetupRouter(dispatcher, adminHandler)
 
 	// 1. Test /api/v1/admin/storage/status
-	token, _ := controlplane.GenerateAdminToken("admin", "admin", time.Hour)
+	token, _ := tokenForTestUser("admin", "admin", time.Hour)
 	reqStatus := httptest.NewRequest(http.MethodGet, "/api/v1/admin/storage/status", nil)
 	reqStatus.Header.Set("Authorization", "Bearer "+token)
 	wStatus := httptest.NewRecorder()

@@ -1,0 +1,66 @@
+package api
+
+import (
+ "io"
+ "net/http"
+ "net/http/httptest"
+ "strings"
+ "testing"
+
+ "github.com/gin-gonic/gin"
+ "github.com/ifnodoraemon/airoute/internal/billing"
+ "github.com/ifnodoraemon/airoute/internal/model"
+ "github.com/ifnodoraemon/airoute/internal/provider"
+ "github.com/ifnodoraemon/airoute/internal/router"
+)
+
+type auditReviewTransport func(*http.Request)(*http.Response,error)
+func (f auditReviewTransport) RoundTrip(r *http.Request)(*http.Response,error){ return f(r) }
+func auditReviewResponse(status int, body string)*http.Response {
+ return &http.Response{StatusCode:status,Header:http.Header{"Content-Type":[]string{"application/json"}},Body:io.NopCloser(strings.NewReader(body))}
+}
+func auditReviewMultimodal(t *testing.T, channels []model.ChannelConfig, transport auditReviewTransport)*MultimodalHandler {
+ t.Helper()
+ previousClient,previousEngine := provider.SharedDefaultHTTPClient,billing.GlobalEngine
+ provider.SharedDefaultHTTPClient = &http.Client{Transport:transport}
+ billing.GlobalEngine = nil
+ t.Cleanup(func(){provider.SharedDefaultHTTPClient=previousClient;billing.GlobalEngine=previousEngine})
+ return NewMultimodalHandler(router.NewDispatcher(channels))
+}
+
+func TestAuditReviewMultimodalPreservesAPIBasePath(t *testing.T) {
+ var calledPath string
+ h := auditReviewMultimodal(t,[]model.ChannelConfig{{Name:"multi",BaseURL:"https://audit.invalid/v1",Models:[]string{"image-model"},Protocols:[]string{"images"},Status:"active"}},func(r *http.Request)(*http.Response,error){
+   calledPath=r.URL.Path
+   return auditReviewResponse(200,`{"data":[{"url":"https://asset.invalid/image.png"}]}`),nil
+ })
+ w:=httptest.NewRecorder()
+ c,_:=gin.CreateTestContext(w)
+ c.Request=httptest.NewRequest("POST","/v1/images/generations",strings.NewReader(`{"model":"image-model","prompt":"hello"}`))
+ h.HandleImageGenerations(c)
+ if calledPath!="/v1/images/generations" {t.Fatalf("base URL ending /v1 produced upstream path %s",calledPath)}
+}
+
+func TestAuditReviewVideoPollReturnsToCreatingProvider(t *testing.T) {
+ var creator,poller string
+ h := auditReviewMultimodal(t,[]model.ChannelConfig{
+  {Name:"video-a",BaseURL:"https://video-a.invalid",Models:[]string{"video-model"},Protocols:[]string{"videos"},Status:"active",Weight:10,Priority:1},
+  {Name:"video-b",BaseURL:"https://video-b.invalid",Models:[]string{"video-model"},Protocols:[]string{"videos"},Status:"active",Weight:10,Priority:1},
+ },func(r *http.Request)(*http.Response,error){
+  if r.Method=="POST" {creator=r.URL.Host;return auditReviewResponse(200,`{"id":"audit-task","status":"processing"}`),nil}
+  poller=r.URL.Host
+  if poller!=creator{return auditReviewResponse(404,`{"error":{"message":"task not found on this provider"}}`),nil}
+  return auditReviewResponse(200,`{"id":"audit-task","status":"succeeded"}`),nil
+ })
+ w:=httptest.NewRecorder()
+ c,_:=gin.CreateTestContext(w)
+ c.Request=httptest.NewRequest("POST","/v1/videos/generations",strings.NewReader(`{"model":"video-model","prompt":"hello"}`))
+ h.HandleVideoGenerations(c)
+ if w.Code!=200{t.Fatalf("create failed: %d %s",w.Code,w.Body.String())}
+ w=httptest.NewRecorder()
+ c,_=gin.CreateTestContext(w)
+ c.Request=httptest.NewRequest("GET","/v1/videos/tasks/audit-task?model=video-model",nil)
+ c.Params=gin.Params{{Key:"id",Value:"audit-task"}}
+ h.HandleVideoTask(c)
+ if w.Code!=200 || poller!=creator {t.Fatalf("created on %s, polled on %s, status=%d",creator,poller,w.Code)}
+}

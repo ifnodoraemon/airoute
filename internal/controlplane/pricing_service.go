@@ -160,6 +160,9 @@ func ValidatePriceRecord(rec *storage.ModelPriceRecord) error {
 	if rec == nil {
 		return nil
 	}
+	if err := storage.ValidatePriceCurrency(rec); err != nil {
+		return &ValidationError{Message: err.Error()}
+	}
 	for _, f := range []struct {
 		name  string
 		value float64

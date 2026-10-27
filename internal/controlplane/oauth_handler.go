@@ -2,6 +2,8 @@ package controlplane
 
 import (
 	"crypto/rand"
+	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -82,14 +84,13 @@ func (h *AdminHandler) oauthError(c *gin.Context, status int, message string) {
 	c.JSON(status, gin.H{"code": status, "error": message})
 }
 
-// redirectOAuthResult sends the browser back to the console with either a
-// short-lived, single-use exchange code or an error message. The session token
-// itself is never placed in the URL.
-func (h *AdminHandler) redirectOAuthResult(c *gin.Context, exchangeCode, errMsg string) {
+// redirectOAuthResult returns to the SPA after setting the session cookie.
+// The URL carries only a completion marker or an error, never credentials.
+func (h *AdminHandler) redirectOAuthResult(c *gin.Context, completed, errMsg string) {
 	base := strings.TrimRight(ResolvePublicBaseURL(c), "/")
 	q := url.Values{}
-	if exchangeCode != "" {
-		q.Set("oauth_code", exchangeCode)
+	if completed != "" {
+		q.Set("oauth_complete", "1")
 	}
 	if errMsg != "" {
 		q.Set("oauth_error", errMsg)
@@ -130,7 +131,7 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 
 	isTestOrDev := strings.HasSuffix(os.Args[0], ".test") || strings.Contains(os.Args[0], "/_test/") || strings.EqualFold(os.Getenv("ENABLE_SIMULATED_OAUTH"), "true")
 
-	var email, username string
+	var email, username, subject string
 	realExchange := false
 
 	if clientID != "" && clientSecret != "" && req.Code != "" && req.Code != "demo" && !req.Simulated {
@@ -151,6 +152,7 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 				h.oauthError(c, http.StatusBadRequest, "GitHub 授权失败: "+err.Error())
 				return
 			}
+			subject = realUser
 			username = "gh_" + realUser
 			email = realEmail
 		} else {
@@ -159,6 +161,7 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 				h.oauthError(c, http.StatusBadRequest, "Google 授权失败: "+err.Error())
 				return
 			}
+			subject = realUser
 			username = "gg_" + realUser
 			email = realEmail
 		}
@@ -187,20 +190,40 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 		return
 	}
 
-	// Find or create user. Usernames are looked up first, then emails; both use
-	// explicit lookups so an email can never be mistaken for a username.
-	user, _ := h.repo.GetUserByUsername(username)
-	if user == nil && email != "" {
-		user, _ = h.repo.GetUserByEmail(email)
+	var user *storage.UserRecord
+	var lookupErr error
+	if realExchange {
+		user, lookupErr = h.repo.GetUserByOAuthIdentity(provider, subject)
+	} else {
+		user, lookupErr = h.repo.GetUserByUsername(username)
 	}
-
-	// Security: a simulated/demo authorization may never log in to an existing
-	// administrator account, even if the caller forged an arbitrary code.
+	if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
+		h.oauthError(c, http.StatusInternalServerError, "无法读取账号，请稍后重试")
+		return
+	}
+	if !realExchange && user == nil && email != "" {
+		user, lookupErr = h.repo.GetUserByEmail(email)
+		if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
+			h.oauthError(c, 500, "无法验证邮箱")
+			return
+		}
+	}
 	if !realExchange && user != nil {
-		h.oauthError(c, http.StatusForbidden, "模拟登录不能接管已存在的账号，请使用标准密码或真实 OAuth 登录")
+		h.oauthError(c, http.StatusForbidden, "模拟登录不能接管已有账号")
 		return
 	}
 
+	if user == nil && realExchange && email != "" {
+		owner, err := h.repo.GetUserByEmail(email)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			h.oauthError(c, 500, "无法验证邮箱")
+			return
+		}
+		if owner != nil {
+			h.oauthError(c, http.StatusConflict, "该邮箱已有账号，请使用原账号登录；第三方身份不会自动关联")
+			return
+		}
+	}
 	if user == nil {
 		if !config.GetGlobalConfig().IsRegistrationAllowed() {
 			h.oauthError(c, http.StatusForbidden, "自主注册已关闭，请联系管理员分配账号")
@@ -233,7 +256,7 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 			h.oauthError(c, http.StatusInternalServerError, "安全随机源不可用，无法生成密钥")
 			return
 		}
-		if err := h.repo.CreateUserWithAPIKey(user, &storage.APIKeyRecord{
+		if err := h.repo.CreateOAuthUserWithAPIKey(provider, subject, user, &storage.APIKeyRecord{
 			Key:           newKey,
 			TenantID:      username,
 			UserID:        user.ID,
@@ -255,21 +278,17 @@ func (h *AdminHandler) OAuthCallback(c *gin.Context) {
 		return
 	}
 
-	token, err := GenerateAdminToken(user.Username, user.Role, 7*24*time.Hour)
+	token, err := GenerateAdminToken(user, 7*24*time.Hour)
 	if err != nil {
 		h.oauthError(c, http.StatusInternalServerError, "生成鉴权 Token 失败")
 		return
 	}
 	SetSessionCookies(c, token)
 
-	// Browser flow: hand the SPA a one-time code instead of rendering JSON.
+	// The callback already installed the HttpOnly session. Any replica can
+	// authenticate it; the SPA does not exchange a process-local code.
 	if c.Request.Method == http.MethodGet {
-		exchangeCode, err := issueOAuthExchangeCode(token, user)
-		if err != nil {
-			h.oauthError(c, http.StatusInternalServerError, "生成授权交换码失败")
-			return
-		}
-		h.redirectOAuthResult(c, exchangeCode, "")
+		h.redirectOAuthResult(c, "1", "")
 		return
 	}
 

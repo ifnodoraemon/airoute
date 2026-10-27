@@ -26,7 +26,7 @@ func TestAuthRejectsDeletedAndDemotedUsers(t *testing.T) {
 	r := gin.New()
 	r.Use(handler.AdminAuthMiddleware())
 	r.GET("/private", func(c *gin.Context) { c.Status(http.StatusOK) })
-	token, err := GenerateAdminToken("operator", "admin", time.Hour)
+	token, err := GenerateAdminToken(user, time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}

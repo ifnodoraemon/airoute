@@ -1,0 +1,110 @@
+=== RUN   TestAuditReviewGoogleDisplayNameDoesNotIdentifyAccount
+{"time":"2026-10-26T09:09:34.140174312+08:00","level":"INFO","msg":"applying database migration","category":"system","version":1,"name":"initial_authoritative_schema_v1","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.141955952+08:00","level":"INFO","msg":"applying database migration","category":"system","version":2,"name":"seed_system_defaults","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.142050933+08:00","level":"INFO","msg":"applying database migration","category":"system","version":3,"name":"purge_legacy_deepseek_mode","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.142126063+08:00","level":"INFO","msg":"applying database migration","category":"system","version":4,"name":"rename_virtual_keys_to_api_keys","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.142200768+08:00","level":"INFO","msg":"applying database migration","category":"system","version":5,"name":"add_format_validation_to_api_keys","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.142309988+08:00","level":"INFO","msg":"applying database migration","category":"system","version":6,"name":"clean_legacy_orphan_api_keys","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.142491955+08:00","level":"INFO","msg":"applying database migration","category":"system","version":7,"name":"add_chat_id_to_usage_logs","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.142701503+08:00","level":"INFO","msg":"applying database migration","category":"system","version":8,"name":"create_system_skills_and_mcp_servers","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.142777205+08:00","level":"INFO","msg":"applying database migration","category":"system","version":9,"name":"add_attempts_to_verification_codes","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.142857401+08:00","level":"INFO","msg":"applying database migration","category":"system","version":10,"name":"add_usage_logs_channel_indexes","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.142911702+08:00","level":"INFO","msg":"applying database migration","category":"system","version":11,"name":"add_usage_source_to_usage_logs","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.143299711+08:00","level":"INFO","msg":"applying database migration","category":"system","version":12,"name":"add_integer_money_columns","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.144533558+08:00","level":"INFO","msg":"applying database migration","category":"system","version":13,"name":"create_request_traces","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.14482866+08:00","level":"INFO","msg":"applying database migration","category":"system","version":14,"name":"add_error_message_to_usage_logs","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.145204233+08:00","level":"INFO","msg":"applying database migration","category":"system","version":15,"name":"repair_integer_money_units_columns","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.145463984+08:00","level":"INFO","msg":"applying database migration","category":"system","version":16,"name":"independent_model_routes","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.145592447+08:00","level":"INFO","msg":"applying database migration","category":"system","version":17,"name":"usage_pricing_snapshot","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.145975886+08:00","level":"INFO","msg":"applying database migration","category":"system","version":18,"name":"usage_log_query_indexes","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.146187441+08:00","level":"INFO","msg":"applying database migration","category":"system","version":19,"name":"usage_log_search_indexes","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.146231755+08:00","level":"INFO","msg":"applying database migration","category":"system","version":20,"name":"usage_log_sqlite_fts","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.146906669+08:00","level":"INFO","msg":"applying database migration","category":"system","version":21,"name":"usage_log_billing_id","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.147626974+08:00","level":"INFO","msg":"applying database migration","category":"system","version":22,"name":"usage_log_cost_units_backfill","dialect":"sqlite"}
+    audit_review_test.go:54: a distinct provider subject/email was authenticated as existing account "gg_Common Name" with role "admin"
+--- FAIL: TestAuditReviewGoogleDisplayNameDoesNotIdentifyAccount (0.01s)
+=== RUN   TestAuditReviewPasswordChangeRevokesOldSession
+{"time":"2026-10-26T09:09:34.148779735+08:00","level":"INFO","msg":"applying database migration","category":"system","version":1,"name":"initial_authoritative_schema_v1","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.150028569+08:00","level":"INFO","msg":"applying database migration","category":"system","version":2,"name":"seed_system_defaults","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.150106743+08:00","level":"INFO","msg":"applying database migration","category":"system","version":3,"name":"purge_legacy_deepseek_mode","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.150173095+08:00","level":"INFO","msg":"applying database migration","category":"system","version":4,"name":"rename_virtual_keys_to_api_keys","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.150241343+08:00","level":"INFO","msg":"applying database migration","category":"system","version":5,"name":"add_format_validation_to_api_keys","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.1503252+08:00","level":"INFO","msg":"applying database migration","category":"system","version":6,"name":"clean_legacy_orphan_api_keys","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.150459216+08:00","level":"INFO","msg":"applying database migration","category":"system","version":7,"name":"add_chat_id_to_usage_logs","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.150575239+08:00","level":"INFO","msg":"applying database migration","category":"system","version":8,"name":"create_system_skills_and_mcp_servers","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.150637293+08:00","level":"INFO","msg":"applying database migration","category":"system","version":9,"name":"add_attempts_to_verification_codes","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.150692511+08:00","level":"INFO","msg":"applying database migration","category":"system","version":10,"name":"add_usage_logs_channel_indexes","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.150744412+08:00","level":"INFO","msg":"applying database migration","category":"system","version":11,"name":"add_usage_source_to_usage_logs","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.151193667+08:00","level":"INFO","msg":"applying database migration","category":"system","version":12,"name":"add_integer_money_columns","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.152507331+08:00","level":"INFO","msg":"applying database migration","category":"system","version":13,"name":"create_request_traces","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.152820988+08:00","level":"INFO","msg":"applying database migration","category":"system","version":14,"name":"add_error_message_to_usage_logs","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.153232928+08:00","level":"INFO","msg":"applying database migration","category":"system","version":15,"name":"repair_integer_money_units_columns","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.153538295+08:00","level":"INFO","msg":"applying database migration","category":"system","version":16,"name":"independent_model_routes","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.153705316+08:00","level":"INFO","msg":"applying database migration","category":"system","version":17,"name":"usage_pricing_snapshot","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.154131036+08:00","level":"INFO","msg":"applying database migration","category":"system","version":18,"name":"usage_log_query_indexes","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.154311002+08:00","level":"INFO","msg":"applying database migration","category":"system","version":19,"name":"usage_log_search_indexes","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.154371354+08:00","level":"INFO","msg":"applying database migration","category":"system","version":20,"name":"usage_log_sqlite_fts","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.155254199+08:00","level":"INFO","msg":"applying database migration","category":"system","version":21,"name":"usage_log_billing_id","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.155807108+08:00","level":"INFO","msg":"applying database migration","category":"system","version":22,"name":"usage_log_cost_units_backfill","dialect":"sqlite"}
+    audit_review_test.go:78: session issued before password change still authorizes /me with HTTP 200
+--- FAIL: TestAuditReviewPasswordChangeRevokesOldSession (0.08s)
+=== RUN   TestAuditReviewPartialPriceUpdatePreservesCurrency
+    audit_review_test.go:86: omitting currency rewrites USD as CNY
+--- FAIL: TestAuditReviewPartialPriceUpdatePreservesCurrency (0.00s)
+=== RUN   TestAuditReviewPriceReadFailureDoesNotOverwriteRates
+    audit_review_test.go:94: read error ignored: applyCalls=1; written prompt=0 completion=0
+--- FAIL: TestAuditReviewPriceReadFailureDoesNotOverwriteRates (0.00s)
+=== RUN   TestAuditReviewChannelTestRespectsTextProtocol
+{"time":"2026-10-26T09:09:34.230984538+08:00","level":"INFO","msg":"applying database migration","category":"system","version":1,"name":"initial_authoritative_schema_v1","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.232673085+08:00","level":"INFO","msg":"applying database migration","category":"system","version":2,"name":"seed_system_defaults","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.232762208+08:00","level":"INFO","msg":"applying database migration","category":"system","version":3,"name":"purge_legacy_deepseek_mode","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.232807797+08:00","level":"INFO","msg":"applying database migration","category":"system","version":4,"name":"rename_virtual_keys_to_api_keys","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.232904951+08:00","level":"INFO","msg":"applying database migration","category":"system","version":5,"name":"add_format_validation_to_api_keys","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.233011515+08:00","level":"INFO","msg":"applying database migration","category":"system","version":6,"name":"clean_legacy_orphan_api_keys","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.233166869+08:00","level":"INFO","msg":"applying database migration","category":"system","version":7,"name":"add_chat_id_to_usage_logs","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.233256032+08:00","level":"INFO","msg":"applying database migration","category":"system","version":8,"name":"create_system_skills_and_mcp_servers","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.23333189+08:00","level":"INFO","msg":"applying database migration","category":"system","version":9,"name":"add_attempts_to_verification_codes","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.233397889+08:00","level":"INFO","msg":"applying database migration","category":"system","version":10,"name":"add_usage_logs_channel_indexes","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.23342914+08:00","level":"INFO","msg":"applying database migration","category":"system","version":11,"name":"add_usage_source_to_usage_logs","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.233923052+08:00","level":"INFO","msg":"applying database migration","category":"system","version":12,"name":"add_integer_money_columns","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.235290109+08:00","level":"INFO","msg":"applying database migration","category":"system","version":13,"name":"create_request_traces","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.235677555+08:00","level":"INFO","msg":"applying database migration","category":"system","version":14,"name":"add_error_message_to_usage_logs","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.236092976+08:00","level":"INFO","msg":"applying database migration","category":"system","version":15,"name":"repair_integer_money_units_columns","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.236349183+08:00","level":"INFO","msg":"applying database migration","category":"system","version":16,"name":"independent_model_routes","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.23647825+08:00","level":"INFO","msg":"applying database migration","category":"system","version":17,"name":"usage_pricing_snapshot","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.237046929+08:00","level":"INFO","msg":"applying database migration","category":"system","version":18,"name":"usage_log_query_indexes","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.237260405+08:00","level":"INFO","msg":"applying database migration","category":"system","version":19,"name":"usage_log_search_indexes","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.237318013+08:00","level":"INFO","msg":"applying database migration","category":"system","version":20,"name":"usage_log_sqlite_fts","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.238227679+08:00","level":"INFO","msg":"applying database migration","category":"system","version":21,"name":"usage_log_billing_id","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.238939039+08:00","level":"INFO","msg":"applying database migration","category":"system","version":22,"name":"usage_log_cost_units_backfill","dialect":"sqlite"}
+    audit_review_test.go:115: text-only configured channel tested with /v1/chat/completions; response={"code":1,"error":"upstream text-only returned status 404: {\"error\":{\"message\":\"endpoint not supported\"}}","latency_ms":0,"success":false}
+--- FAIL: TestAuditReviewChannelTestRespectsTextProtocol (0.01s)
+=== RUN   TestAuditReviewForeignCurrencyDoesNotDebitCNYAtFaceValue
+{"time":"2026-10-26T09:09:34.239955394+08:00","level":"INFO","msg":"applying database migration","category":"system","version":1,"name":"initial_authoritative_schema_v1","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.241211879+08:00","level":"INFO","msg":"applying database migration","category":"system","version":2,"name":"seed_system_defaults","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.241292953+08:00","level":"INFO","msg":"applying database migration","category":"system","version":3,"name":"purge_legacy_deepseek_mode","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.241335916+08:00","level":"INFO","msg":"applying database migration","category":"system","version":4,"name":"rename_virtual_keys_to_api_keys","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.241406311+08:00","level":"INFO","msg":"applying database migration","category":"system","version":5,"name":"add_format_validation_to_api_keys","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.241507838+08:00","level":"INFO","msg":"applying database migration","category":"system","version":6,"name":"clean_legacy_orphan_api_keys","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.241643061+08:00","level":"INFO","msg":"applying database migration","category":"system","version":7,"name":"add_chat_id_to_usage_logs","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.241739129+08:00","level":"INFO","msg":"applying database migration","category":"system","version":8,"name":"create_system_skills_and_mcp_servers","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.241802896+08:00","level":"INFO","msg":"applying database migration","category":"system","version":9,"name":"add_attempts_to_verification_codes","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.241862702+08:00","level":"INFO","msg":"applying database migration","category":"system","version":10,"name":"add_usage_logs_channel_indexes","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.241918059+08:00","level":"INFO","msg":"applying database migration","category":"system","version":11,"name":"add_usage_source_to_usage_logs","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.242268312+08:00","level":"INFO","msg":"applying database migration","category":"system","version":12,"name":"add_integer_money_columns","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.243462254+08:00","level":"INFO","msg":"applying database migration","category":"system","version":13,"name":"create_request_traces","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.243846848+08:00","level":"INFO","msg":"applying database migration","category":"system","version":14,"name":"add_error_message_to_usage_logs","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.244213353+08:00","level":"INFO","msg":"applying database migration","category":"system","version":15,"name":"repair_integer_money_units_columns","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.244475463+08:00","level":"INFO","msg":"applying database migration","category":"system","version":16,"name":"independent_model_routes","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.244594683+08:00","level":"INFO","msg":"applying database migration","category":"system","version":17,"name":"usage_pricing_snapshot","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.244954201+08:00","level":"INFO","msg":"applying database migration","category":"system","version":18,"name":"usage_log_query_indexes","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.245118364+08:00","level":"INFO","msg":"applying database migration","category":"system","version":19,"name":"usage_log_search_indexes","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.245160783+08:00","level":"INFO","msg":"applying database migration","category":"system","version":20,"name":"usage_log_sqlite_fts","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.245762221+08:00","level":"INFO","msg":"applying database migration","category":"system","version":21,"name":"usage_log_billing_id","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.246285996+08:00","level":"INFO","msg":"applying database migration","category":"system","version":22,"name":"usage_log_cost_units_backfill","dialect":"sqlite"}
+{"time":"2026-10-26T09:09:34.246741764+08:00","level":"INFO","msg":"reloaded model pricing engine","category":"billing","rules_count":1,"groups_count":3}
+    audit_review_test.go:133: USD 1 pricing was accepted and charged as CNY 1 (CNY wallet 10 -> 9)
+--- FAIL: TestAuditReviewForeignCurrencyDoesNotDebitCNYAtFaceValue (0.01s)
+FAIL
+FAIL	github.com/ifnodoraemon/airoute/internal/controlplane	0.115s
+FAIL

@@ -28,7 +28,7 @@ var (
 			if _, err := rand.Read(b); err == nil {
 				sec = hex.EncodeToString(b)
 			} else {
-				sec = fmt.Sprintf("airoute-rnd-%d", time.Now().UnixMicro())
+				panic("secure randomness unavailable: " + err.Error())
 			}
 		}
 		return []byte(sec)
@@ -58,37 +58,38 @@ func EnsureAdminSecret(repo *storage.Repository) {
 	if os.Getenv("GATEWAY_ADMIN_SECRET") != "" || repo == nil {
 		return
 	}
-	const settingKey = "admin_jwt_secret"
-	stored := repo.GetSetting(settingKey, "")
-	if stored != "" {
-		SetAdminSecret([]byte(stored))
-		return
-	}
 	b := make([]byte, 32)
-	var generated string
-	if _, err := rand.Read(b); err == nil {
-		generated = hex.EncodeToString(b)
-	} else {
-		generated = fmt.Sprintf("airoute-rnd-%d", time.Now().UnixMicro())
+	if _, err := rand.Read(b); err != nil {
+		panic("secure randomness unavailable: " + err.Error())
 	}
-	_ = repo.SetSetting(settingKey, generated)
-	finalSecret := repo.GetSetting(settingKey, generated)
-	SetAdminSecret([]byte(finalSecret))
+	secret, err := repo.GetOrCreateSetting("admin_jwt_secret", hex.EncodeToString(b))
+	if err != nil {
+		panic("cannot initialize shared session secret: " + err.Error())
+	}
+	if secret == "" {
+		panic("shared session secret is empty")
+	}
+	SetAdminSecret([]byte(secret))
 }
 
 // AdminClaims holds stateless token payload.
 type AdminClaims struct {
-	Username  string `json:"sub"`
-	Role      string `json:"role"`
-	ExpiresAt int64  `json:"exp"`
+	Username      string `json:"sub"`
+	Role          string `json:"role"`
+	ExpiresAt     int64  `json:"exp"`
+	CredentialTag string `json:"credentials"`
 }
 
 // GenerateAdminToken creates an HMAC-SHA256 signed stateless token.
-func GenerateAdminToken(username, role string, duration time.Duration) (string, error) {
+func GenerateAdminToken(user *storage.UserRecord, duration time.Duration) (string, error) {
+	if user == nil || user.ID <= 0 {
+		return "", errors.New("必须提供持久化账号")
+	}
 	claims := AdminClaims{
-		Username:  username,
-		Role:      role,
-		ExpiresAt: time.Now().Add(duration).Unix(),
+		Username:      user.Username,
+		Role:          user.Role,
+		CredentialTag: sessionCredentialTag(user),
+		ExpiresAt:     time.Now().Add(duration).Unix(),
 	}
 	data, err := json.Marshal(claims)
 	if err != nil {
@@ -132,4 +133,11 @@ func VerifyAdminToken(token string) (*AdminClaims, error) {
 	}
 
 	return &claims, nil
+}
+
+// sessionCredentialTag is opaque; no password hash is exposed in the token.
+func sessionCredentialTag(user *storage.UserRecord) string {
+	mac := hmac.New(sha256.New, getAdminSecret())
+	fmt.Fprintf(mac, "airoute-session-credentials-v1|%d|%s", user.ID, user.PasswordHash)
+	return hex.EncodeToString(mac.Sum(nil))
 }

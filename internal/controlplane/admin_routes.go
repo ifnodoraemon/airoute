@@ -77,6 +77,9 @@ func writeRouteError(c *gin.Context, err error) {
 	var serr *RouteStageError
 	if errors.As(err, &serr) {
 		switch serr.Stage {
+		case RouteStageRead:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "读取现有定价失败，未保存任何配置: " + serr.Err.Error()})
+			return
 		case RouteStageCollect:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "更新渠道配置失败: " + serr.Err.Error()})
 			return

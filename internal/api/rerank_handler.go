@@ -33,6 +33,9 @@ func (h *Handler) HandleRerank(c *gin.Context) {
 		return
 	}
 
+	if !validateModelCurrency(c, req.Model) {
+		return
+	}
 	if !middleware.ValidateModelAllowed(c, req.Model) {
 		RespondOpenAIError(c, http.StatusForbidden, fmt.Sprintf("Your API key is not permitted to access model '%s'", req.Model), "forbidden", "model_not_allowed")
 		return

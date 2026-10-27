@@ -127,7 +127,7 @@ export default function ChannelsView({
       weight: 10,
       timeout_seconds: 60,
       models_str: '',
-      mapping_str: '',
+      mapping_rules: [],
       protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings', 'rerank', 'images'],
     });
     setProbeAlert(null);

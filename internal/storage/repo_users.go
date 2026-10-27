@@ -128,6 +128,10 @@ func insertUser(db recordInserter, u *UserRecord) error {
 // CreateUserWithAPIKey keeps onboarding atomic: a failed key insert must not
 // leave behind an account that the customer cannot register again.
 func (r *Repository) CreateUserWithAPIKey(user *UserRecord, key *APIKeyRecord) error {
+	return r.CreateOAuthUserWithAPIKey("", "", user, key)
+}
+
+func (r *Repository) CreateOAuthUserWithAPIKey(provider, subject string, user *UserRecord, key *APIKeyRecord) error {
 	tx, err := r.db.Begin()
 	if err != nil {
 		return err
@@ -135,6 +139,11 @@ func (r *Repository) CreateUserWithAPIKey(user *UserRecord, key *APIKeyRecord) e
 	defer tx.Rollback()
 	if err := insertUser(tx, user); err != nil {
 		return err
+	}
+	if subject != "" {
+		if _, err := tx.Exec(`INSERT INTO oauth_identities (provider, subject, user_id) VALUES (?, ?, ?)`, provider, subject, user.ID); err != nil {
+			return err
+		}
 	}
 	key.UserID = user.ID
 	key.TenantID = user.Username

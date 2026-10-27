@@ -69,6 +69,9 @@ func (h *Handler) HandleCompletions(c *gin.Context) {
 		return
 	}
 
+	if !validateModelCurrency(c, req.Model) {
+		return
+	}
 	if !middleware.ValidateModelAllowed(c, req.Model) {
 		c.JSON(http.StatusForbidden, gin.H{
 			"error": gin.H{

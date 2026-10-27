@@ -31,6 +31,9 @@ func (h *MultimodalHandler) HandleAudioSpeech(c *gin.Context) {
 		req.Model = "tts-1"
 	}
 
+	if !validateModelCurrency(c, req.Model) {
+		return
+	}
 	if !middleware.ValidateModelAllowed(c, req.Model) {
 		RespondOpenAIError(c, http.StatusForbidden, fmt.Sprintf("Model '%s' is not allowed for your API key", req.Model), "forbidden", "model_not_allowed")
 		return
@@ -61,6 +64,9 @@ func (h *MultimodalHandler) HandleAudioTranscriptions(c *gin.Context) {
 		modelName = "whisper-1"
 	}
 
+	if !validateModelCurrency(c, modelName) {
+		return
+	}
 	if !middleware.ValidateModelAllowed(c, modelName) {
 		RespondOpenAIError(c, http.StatusForbidden, fmt.Sprintf("Model '%s' is not allowed for your API key", modelName), "forbidden", "model_not_allowed")
 		return
@@ -99,6 +105,9 @@ func (h *MultimodalHandler) HandleAudioTranslations(c *gin.Context) {
 		modelName = "whisper-1"
 	}
 
+	if !validateModelCurrency(c, modelName) {
+		return
+	}
 	if !middleware.ValidateModelAllowed(c, modelName) {
 		RespondOpenAIError(c, http.StatusForbidden, fmt.Sprintf("Model '%s' is not allowed for your API key", modelName), "forbidden", "model_not_allowed")
 		return

@@ -17,7 +17,7 @@ function draft(over = {}) {
     weight: 10,
     timeout_seconds: 60,
     models_str: '',
-    mapping_str: '',
+    mapping_rules: [],
     protocols: ['openai_chat'],
     ...over,
   };

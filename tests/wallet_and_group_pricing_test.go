@@ -134,7 +134,7 @@ func TestUserWallet_RedemptionAndRecharge(t *testing.T) {
 		t.Fatalf("seed admin user failed: %v", err)
 	}
 
-	token, _ := controlplane.GenerateAdminToken("bob", "user", time.Hour)
+	token, _ := tokenForTestUser("bob", "user", time.Hour)
 
 	// 1. Admin generates redemption cards
 	genBody, _ := json.Marshal(map[string]interface{}{
@@ -142,7 +142,7 @@ func TestUserWallet_RedemptionAndRecharge(t *testing.T) {
 		"amount": 25.5,
 		"name":   "测试VIP充值卡",
 	})
-	adminToken, _ := controlplane.GenerateAdminToken("admin", "admin", time.Hour)
+	adminToken, _ := tokenForTestUser("admin", "admin", time.Hour)
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/v1/admin/redemptions/generate", bytes.NewReader(genBody))
 	req.Header.Set("Authorization", "Bearer "+adminToken)
@@ -421,7 +421,7 @@ func TestUserKeyScopingAndBatchPriceDelete(t *testing.T) {
 		GroupName:    "vip",
 	})
 	bob, _ := repo.GetUserByUsername("bob")
-	bobToken, _ := controlplane.GenerateAdminToken("bob", "user", 24*time.Hour)
+	bobToken, _ := tokenForTestUser("bob", "user", 24*time.Hour)
 
 	// Bob creates a key via /api/v1/admin/keys
 	keyBody, _ := json.Marshal(map[string]interface{}{
@@ -706,7 +706,7 @@ func TestUser_SelfServiceChangePassword(t *testing.T) {
 	})
 	user, _ := repo.GetUserByUsername("pw-user")
 
-	token, _ := controlplane.GenerateAdminToken(user.Username, user.Role, 24*time.Hour)
+	token, _ := tokenForTestUser(user.Username, user.Role, 24*time.Hour)
 
 	// Call POST /api/v1/user/password
 	pwBody, _ := json.Marshal(map[string]string{

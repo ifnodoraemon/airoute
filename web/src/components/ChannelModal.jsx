@@ -252,8 +252,8 @@ export default function ChannelModal({
               </div>
 
               <ModelMappingEditor
-                mappingStr={newChannel.mapping_str}
-                onChange={(val) => setNewChannel(prev => ({ ...prev, mapping_str: val }))}
+                rows={newChannel.mapping_rules}
+                onChange={(val) => setNewChannel(prev => ({ ...prev, mapping_rules: val }))}
                 lang={lang}
               />
 

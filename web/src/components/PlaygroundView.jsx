@@ -132,6 +132,7 @@ export default function PlaygroundView({
   // neutral state instead of an error; `abortRef` holds the in-flight request.
   const [playStopped, setPlayStopped] = useState(false);
   const abortRef = useRef(null);
+  useEffect(() => () => abortRef.current?.abort(), []);
   const chatInputRef = useRef(null);
 
   // Single Model Output & Live Telemetry
@@ -519,7 +520,8 @@ Execute the following mission with precision, maintainability, and zero speculat
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
           setOutput(`[Error ${res.status}] ${errData.error?.message || res.statusText}`);
-          return;
+          showToast?.(errData.error?.message || res.statusText, 'error');
+          return { failed: true };
         }
 
         if (playStream && res.body) {
@@ -546,22 +548,14 @@ Execute the following mission with precision, maintainability, and zero speculat
             if (!trimmed.startsWith('data:')) return;
             const dataStr = trimmed.slice(5).trim();
             if (!dataStr || dataStr === '[DONE]') return;
-            try {
-              const parsed = JSON.parse(dataStr);
-              if (parsed.error && !parsed.choices) {
-                throw new Error(parsed.error.message || 'stream error');
-              }
-              if (parsed.usage?.completion_tokens) {
-                serverReportedTokens = parsed.usage.completion_tokens;
-              }
-              applyChunk(parsed);
-            } catch (e) {
-              if (e && /stream error/i.test(e.message || '')) {
-                if (showToast) showToast(e.message, 'error');
-              }
-            }
+            let parsed;
+            try { parsed = JSON.parse(dataStr); } catch { return; }
+            if (parsed.error) throw new Error(parsed.error.message || String(parsed.error));
+            if (parsed.usage?.completion_tokens) serverReportedTokens = parsed.usage.completion_tokens;
+            applyChunk(parsed);
           };
 
+          try {
           while (!done) {
             const { value, done: readerDone } = await reader.read();
             done = readerDone;
@@ -578,6 +572,10 @@ Execute the following mission with precision, maintainability, and zero speculat
           }
           // Flush a trailing event that arrived without a final newline.
           if (buffer.trim()) handleLine(buffer);
+          } finally {
+            try { await reader.cancel?.(); } catch { /* The stream may already be closed. */ }
+            reader.releaseLock?.();
+          }
         } else {
           const data = await res.json();
           firstByteTime = Date.now();
@@ -608,9 +606,9 @@ Execute the following mission with precision, maintainability, and zero speculat
         if (isAbortError(e)) {
           return { content: fullContent, reasoning: fullReasoning, aborted: true };
         }
-        const errMsg = `[Network Error] ${e.message}`;
-        setOutput(errMsg);
-        return { content: errMsg, reasoning: '' };
+        showToast?.(e.message, 'error');
+        if (!fullContent) setOutput(`[Error] ${e.message}`);
+        return { content: fullContent, reasoning: fullReasoning, failed: true };
       }
     };
 
@@ -628,7 +626,7 @@ Execute the following mission with precision, maintainability, and zero speculat
       // If single model chat mode, commit completed response into conversational
       // messages. A stopped run keeps its partial output in the live bubble
       // instead of being committed as a complete assistant turn.
-      if (!aborted && playMode === 'single' && results[0]?.content) {
+      if (!aborted && !results.some(r => r?.failed) && playMode === 'single' && results[0]?.content) {
         setMessages(prev => [
           ...prev,
           {
@@ -782,7 +780,7 @@ Execute the following mission with precision, maintainability, and zero speculat
       const taskId = data.id || data.task_id || data.data?.id || data.data?.task_id;
       if (taskId) {
         setVideoTaskId(taskId);
-        await pollVideoTask(taskId);
+        await pollVideoTask(taskId, request.body.model, controller.signal);
       } else {
         setVideoResult(data);
       }
@@ -794,32 +792,27 @@ Execute the following mission with precision, maintainability, and zero speculat
     }
   };
 
-  const pollVideoTask = async (taskId, attempt = 0) => {
-    // Bounded polling: give up after ~2 minutes instead of polling forever.
-    if (attempt > 40) {
-      if (showToast) showToast(isZh ? '视频任务仍在处理中，请稍后在任务查询接口查看' : 'Video task still running; check the task endpoint later', 'warning');
-      return;
-    }
-    await new Promise(r => setTimeout(r, 3000));
-    try {
-      const res = await fetch(`/v1/videos/tasks/${encodeURIComponent(taskId)}`, {
-        headers: buildHeaders()
+  const pollVideoTask = async (taskId, taskModel, signal) => {
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      await new Promise((resolve, reject) => {
+        const abort = () => { clearTimeout(timer); reject(new DOMException('Stopped', 'AbortError')); };
+        const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve(); }, 3000);
+        if (signal.aborted) { abort(); return; }
+        signal.addEventListener('abort', abort, { once: true });
       });
-      const data = await res.json().catch(() => ({}));
+      signal.throwIfAborted();
+      const res = await fetch(`/v1/videos/tasks/${encodeURIComponent(taskId)}?model=${encodeURIComponent(taskModel)}`, {
+        headers: buildHeaders(), signal,
+      });
+      const data = await res.json();
+      signal.throwIfAborted();
+      if (!res.ok) throw new Error(data.error?.message || `Video task query failed (HTTP ${res.status})`);
       const status = String(data.status || data.data?.status || '').toLowerCase();
-      if (status === 'succeeded' || status === 'completed' || status === 'success') {
-        setVideoResult(data.data || data);
-        return;
-      }
-      if (status === 'failed' || status === 'error') {
-        if (showToast) showToast(isZh ? '视频任务失败' : 'Video task failed', 'error');
-        return;
-      }
       setVideoResult(data.data || data);
-      await pollVideoTask(taskId, attempt + 1);
-    } catch (e) {
-      if (showToast) showToast((isZh ? '任务查询异常: ' : 'Task polling error: ') + e.message, 'warning');
+      if (['succeeded', 'completed', 'success'].includes(status)) return;
+      if (['failed', 'error', 'cancelled', 'canceled'].includes(status)) throw new Error(data.error?.message || (isZh ? '视频任务失败或已取消' : 'Video task failed or was cancelled'));
     }
+    showToast?.(isZh ? '视频任务仍在处理中，请稍后查询' : 'Video task still running; check again later', 'warning');
   };
 
   // Embeddings

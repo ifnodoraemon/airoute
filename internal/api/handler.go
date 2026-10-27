@@ -52,6 +52,9 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	}
 
 	// Validate authorization for requested model
+	if !validateModelCurrency(c, req.Model) {
+		return
+	}
 	if !middleware.ValidateModelAllowed(c, req.Model) {
 		c.JSON(http.StatusForbidden, gin.H{
 			"error": gin.H{

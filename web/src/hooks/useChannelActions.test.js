@@ -71,7 +71,7 @@ describe('useChannelActions', () => {
     expect(result.current.editingChannelId).toBe(7);
     expect(form.name).toBe('upstream');
     expect(form.models_str).toBe('m1, m2');
-    expect(form.mapping_str).toBe('a:b');
+    expect(form.mapping_rules).toEqual([{from:'a',to:'b'}]);
     expect(form.weight).toBe(42);
   });
 
@@ -137,7 +137,7 @@ describe('useChannelActions', () => {
     expect(sent.models).toEqual(['a', 'b']);
     // The form-only fields must not reach the API.
     expect(sent.models_str).toBeUndefined();
-    expect(sent.mapping_str).toBeUndefined();
+    expect(sent.mapping_rules).toBeUndefined();
 
     expect(result.current.showChannelModal).toBe(false);
     expect(refresh).toHaveBeenCalled();
@@ -162,7 +162,7 @@ describe('useChannelActions', () => {
     const { result } = setup();
     act(() => {
       result.current.setNewChannel(prev => ({
-        ...prev, name: 'x', base_url: 'https://a.example', mapping_str: 'gpt-4: gpt-4o, claude: sonnet',
+        ...prev, name: 'x', base_url: 'https://a.example', mapping_rules: [{from:'gpt-4',to:'gpt-4o'}, {from:'claude',to:'sonnet'}],
       }));
     });
 

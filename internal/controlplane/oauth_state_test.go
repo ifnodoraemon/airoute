@@ -12,13 +12,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
 // signedOAuthStateForTest builds a state with an arbitrary payload so tests can
 // exercise expiry and provider-mismatch paths without waiting.
 func signedOAuthStateForTest(payload string) string {
-	mac := hmac.New(sha256.New, oauthStateKey)
+	mac := hmac.New(sha256.New, oauthStateKey())
 	mac.Write([]byte(payload))
 	return base64.RawURLEncoding.EncodeToString([]byte(payload)) + "." + hex.EncodeToString(mac.Sum(nil))
 }
@@ -92,24 +91,17 @@ func TestBindOAuthStateRequiresMatchingCookie(t *testing.T) {
 	}
 }
 
-func TestOAuthExchangeCodeIsSingleUse(t *testing.T) {
-	user := &storage.UserRecord{Username: "oauth-user", Role: "user", Status: "active"}
-	code, err := issueOAuthExchangeCode("session-token", user)
-	if err != nil {
-		t.Fatalf("issueOAuthExchangeCode: %v", err)
+func TestOAuthStateUsesCurrentClusterSecret(t *testing.T) {
+	old := append([]byte(nil), getAdminSecret()...)
+	t.Cleanup(func() { SetAdminSecret(old) })
+	SetAdminSecret([]byte("initial-node-secret"))
+	before, _ := newOAuthState("google")
+	SetAdminSecret([]byte("persisted-shared-cluster-secret"))
+	if verifyOAuthState(before, "google") == nil {
+		t.Fatal("state signed by old node secret accepted")
 	}
-	entry, ok := consumeOAuthExchangeCode(code)
-	if !ok || entry == nil || entry.token != "session-token" {
-		t.Fatalf("expected the first exchange to succeed, got ok=%v entry=%+v", ok, entry)
-	}
-	// Replaying the same code (e.g. from browser history) must fail.
-	if _, ok := consumeOAuthExchangeCode(code); ok {
-		t.Fatal("expected the exchange code to be single-use")
-	}
-	if _, ok := consumeOAuthExchangeCode("does-not-exist"); ok {
-		t.Fatal("expected an unknown exchange code to be rejected")
-	}
-	if _, ok := consumeOAuthExchangeCode(""); ok {
-		t.Fatal("expected an empty exchange code to be rejected")
+	after, _ := newOAuthState("google")
+	if err := verifyOAuthState(after, "google"); err != nil {
+		t.Fatal(err)
 	}
 }

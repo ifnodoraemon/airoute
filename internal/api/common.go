@@ -683,3 +683,15 @@ func ceilMillis(d time.Duration) int64 {
 	}
 	return ms
 }
+
+// The wallet ledger settles only CNY. Reject a legacy foreign rate before work starts.
+func validateModelCurrency(c *gin.Context, modelName string) bool {
+	if billing.GlobalEngine == nil {
+		return true
+	}
+	if err := storage.ValidatePriceCurrency(billing.GlobalEngine.GetPriceWithGroup(modelName, getKeyGroup(c))); err != nil {
+		RespondOpenAIError(c, http.StatusUnprocessableEntity, err.Error(), "invalid_request_error", "unsupported_pricing_currency")
+		return false
+	}
+	return true
+}

@@ -127,6 +127,9 @@ func (r *Repository) ListModelRouteRules() (map[string]model.ModelRouteRule, err
 
 // upsertModelPriceTx mirrors SaveModelPrice but participates in a transaction.
 func upsertModelPriceTx(tx *Tx, rec *ModelPriceRecord) error {
+	if err := ValidatePriceCurrency(rec); err != nil {
+		return err
+	}
 	normalizeModelPrice(rec)
 
 	offEnabled := 0

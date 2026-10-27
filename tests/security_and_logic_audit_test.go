@@ -59,7 +59,7 @@ func TestSecurity_LockedUserCannotAccessControlPlane(t *testing.T) {
 	_ = repo.CreateUser(user)
 
 	// Generate valid token
-	token, err := controlplane.GenerateAdminToken("activeuser", "user", 24*time.Hour)
+	token, err := tokenForTestUser("activeuser", "user", 24*time.Hour)
 	if err != nil {
 		t.Fatalf("failed to generate token: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestSecurity_NonAdminCannotAccessAdminEndpoints(t *testing.T) {
 	}
 	_ = repo.CreateUser(user)
 
-	token, _ := controlplane.GenerateAdminToken("normaluser", "user", 24*time.Hour)
+	token, _ := tokenForTestUser("normaluser", "user", 24*time.Hour)
 
 	adminEndpoints := []struct {
 		method string
@@ -164,7 +164,7 @@ func TestSecurity_IDOR_APIKeyBatchOperations(t *testing.T) {
 	}
 	_ = repo.CreateAPIKey(keyB)
 
-	tokenB, _ := controlplane.GenerateAdminToken("userB", "user", 24*time.Hour)
+	tokenB, _ := tokenForTestUser("userB", "user", 24*time.Hour)
 
 	// User B tries to batch-delete User A's key
 	delPayload, _ := json.Marshal(map[string]interface{}{
@@ -295,7 +295,7 @@ func TestLogic_CreateUserKey_Options(t *testing.T) {
 	}
 	_ = repo.CreateUser(user)
 
-	token, _ := controlplane.GenerateAdminToken("charlie", "user", 24*time.Hour)
+	token, _ := tokenForTestUser("charlie", "user", 24*time.Hour)
 
 	payload, _ := json.Marshal(map[string]interface{}{
 		"name":           "production-bot",
@@ -341,14 +341,14 @@ func TestSecurity_UpdateUserRole_RBAC(t *testing.T) {
 	// Admin account
 	admin := &storage.UserRecord{Username: "superadmin", Role: "admin", Status: "active"}
 	_ = repo.CreateUser(admin)
-	adminToken, _ := controlplane.GenerateAdminToken("superadmin", "admin", 24*time.Hour)
+	adminToken, _ := tokenForTestUser("superadmin", "admin", 24*time.Hour)
 
 	// Target user
 	userDave := &storage.UserRecord{Username: "dave", Role: "user", Status: "active"}
 	_ = repo.CreateUser(userDave)
 
 	// Non-admin token
-	daveToken, _ := controlplane.GenerateAdminToken("dave", "user", 24*time.Hour)
+	daveToken, _ := tokenForTestUser("dave", "user", 24*time.Hour)
 
 	// 1. Non-admin trying to update role should be 403
 	bodyUser, _ := json.Marshal(map[string]string{"role": "admin"})

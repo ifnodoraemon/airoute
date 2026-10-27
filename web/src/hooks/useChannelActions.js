@@ -5,14 +5,14 @@
 // interleaved with the render tree. The hook takes the few things it does not own
 // — the toast, the language, the channel list, the console refresh — as options.
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useRef, useEffect } from 'react';
 import { apiFetch, apiJSON } from '../api/client';
 import { buildPresetChannel, emptyChannel } from '../lib/providerPresets';
 
 export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
   const [showChannelModal, setShowChannelModal] = useState(false);
   const [editingChannelId, setEditingChannelId] = useState(null);
-  const [newChannel, setNewChannel] = useState(() => emptyChannel());
+  const [newChannel, setChannelDraft] = useState(() => emptyChannel());
   const [submittingChannel, setSubmittingChannel] = useState(false);
   const [probing, setProbing] = useState(false);
   const [probeAlert, setProbeAlert] = useState(null);
@@ -21,16 +21,36 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
   const [channelLatencies, setChannelLatencies] = useState({});
   const [selectedChannelIds, setSelectedChannelIds] = useState([]);
 
+  const probeRef = useRef(null);
+  const cancelProbe = useCallback(() => {
+    probeRef.current?.abort();
+    probeRef.current = null;
+    setProbing(false);
+  }, []);
+  const setNewChannel = useCallback((update) => {
+    cancelProbe();
+    setChannelDraft(update);
+  }, [cancelProbe]);
+  useEffect(() => () => probeRef.current?.abort(), []);
+  const setModalVisibility = useCallback((visible) => {
+    cancelProbe();
+    setShowChannelModal(visible);
+  }, [cancelProbe]);
+
   // Automatic Zero-Choice Debounced Probe
   const triggerProbe = useCallback(async (url, apiKey, currentType) => {
     if (!url || !url.trim()) {
       showToast(isZh ? '请先输入下游服务的 Base URL' : 'Please enter the downstream Base URL first', 'warning');
       return;
     }
+    cancelProbe();
+    const controller = new AbortController();
+    probeRef.current = controller;
     setProbing(true);
     setProbeAlert(null);
     try {
       const res = await apiFetch('/api/v1/admin/channels/probe', {
+        signal: controller.signal,
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -40,9 +60,10 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
         }),
       });
       const data = await res.json();
+      if (controller.signal.aborted || probeRef.current !== controller) return;
       if (data.code === 0 && data.data) {
         const d = data.data;
-        setNewChannel(prev => {
+        setChannelDraft(prev => {
           const shouldUpdateName = !prev.name || prev.name.includes('upstream') || prev.name.includes('cluster') || prev.name.includes('instance') || prev.name.includes('official') || prev.name.includes('direct');
           const shouldUpdateBaseUrl = d.suggested_base_url && (!prev.base_url.includes('/v1-openai') && !prev.base_url.includes('/v1'));
           return {
@@ -77,15 +98,16 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
         showToast(isZh ? '连通测试失败，请检查服务地址' : 'Connection test failed. Please verify endpoint URL', 'error');
       }
     } catch (e) {
+      if (controller.signal.aborted || probeRef.current !== controller) return;
       setProbeAlert({
         type: 'error',
         text: `${isZh ? '探测网络异常: ' : 'Network probe error: '}${e.message}`,
       });
       showToast(isZh ? `网络请求异常: ${e.message}` : `Network request error: ${e.message}`, 'error');
     } finally {
-      setProbing(false);
+      if (probeRef.current === controller) { probeRef.current = null; setProbing(false); }
     }
-  }, [isZh, showToast]);
+  }, [isZh, showToast, cancelProbe]);
 
   const handleProbeChannel = useCallback(() => {
     triggerProbe(newChannel.base_url, newChannel.api_key, newChannel.type);
@@ -101,7 +123,7 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
       }
       return prev;
     });
-  }, [isZh, showToast]);
+  }, [isZh, showToast, setNewChannel]);
 
   // Toggle protocol checkbox
   const toggleProtocol = useCallback((proto) => {
@@ -112,7 +134,7 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
       }
       return { ...prev, protocols: [...prev.protocols, proto] };
     });
-  }, []);
+  }, [setNewChannel]);
 
   const handleBatchPing = useCallback(async () => {
     if (channels.length === 0) return;
@@ -155,15 +177,15 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
       return;
     }
 
-    const modelMapping = {};
-    if (newChannel.mapping_str && newChannel.mapping_str.trim()) {
-      const parts = newChannel.mapping_str.split(',');
-      for (const p of parts) {
-        const [k, v] = p.split(':').map(s => s.trim());
-        if (k && v) {
-          modelMapping[k] = v;
-        }
+    const modelMapping = Object.create(null);
+    for (const rule of newChannel.mapping_rules || []) {
+      const from = rule.from.trim();
+      const to = rule.to.trim();
+      if (!from || !to || Object.hasOwn(modelMapping, from)) {
+        showToast(isZh ? '请补全模型映射，且来源模型不能重复' : 'Complete each mapping and use unique source models', 'warning');
+        return;
       }
+      modelMapping[from] = to;
     }
 
     const payload = {
@@ -174,7 +196,7 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
       model_mapping: modelMapping,
     };
     delete payload.models_str;
-    delete payload.mapping_str;
+    delete payload.mapping_rules;
 
     setSubmittingChannel(true);
     try {
@@ -205,15 +227,11 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
     setProbeAlert(null);
     setNewChannel(emptyChannel());
     refresh();
-  }, [submittingChannel, newChannel, editingChannelId, isZh, showToast, refresh]);
+  }, [submittingChannel, newChannel, editingChannelId, isZh, showToast, refresh, setNewChannel]);
 
   // Handle Channel Editing
   const handleEditChannel = useCallback((ch) => {
     setEditingChannelId(ch.id);
-    let mappingStr = '';
-    if (ch.model_mapping) {
-      mappingStr = Object.entries(ch.model_mapping).map(([k, v]) => `${k}:${v}`).join(',');
-    }
     setNewChannel({
       name: ch.name || '',
       type: ch.type || 'openai',
@@ -223,12 +241,12 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
       weight: ch.weight || 10,
       timeout_seconds: ch.timeout_seconds || 60,
       models_str: (ch.models || []).join(', '),
-      mapping_str: mappingStr,
+      mapping_rules: Object.entries(ch.model_mapping || {}).map(([from, to]) => ({ from, to })),
       protocols: ch.protocols || emptyChannel().protocols,
     });
     setProbeAlert(null);
     setShowChannelModal(true);
-  }, []);
+  }, [setNewChannel]);
 
   // Handle Channel Deletion
   const handleDeleteChannel = useCallback(async (id) => {
@@ -324,11 +342,12 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
     setProbeAlert(null);
     setNewChannel(emptyChannel());
     setShowChannelModal(true);
-  }, []);
+  }, [setNewChannel]);
 
   const closeChannelModal = useCallback(() => {
+    cancelProbe();
     setShowChannelModal(false);
-  }, []);
+  }, [cancelProbe]);
 
   // Clear the tenant-scoped parts on logout: the selection and the measured
   // latencies belong to the session that measured them.
@@ -341,7 +360,7 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
     setChannelLatencies({});
     setTestingId(null);
     setBatchTesting(false);
-  }, []);
+  }, [setNewChannel]);
 
   return {
     // state
@@ -357,7 +376,7 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
     selectedChannelIds,
     // setters the form binds to
     setNewChannel,
-    setShowChannelModal,
+    setShowChannelModal: setModalVisibility,
     setEditingChannelId,
     setSelectedChannelIds,
     setProbeAlert,

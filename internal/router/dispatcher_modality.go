@@ -23,22 +23,28 @@ import (
 
 // UpstreamRequest represents a generic HTTP request across any modality.
 type UpstreamRequest struct {
-	Path          string            // e.g. "/v1/images/generations", "/v1/audio/speech"
-	Method        string            // "POST", "GET"
-	Headers       map[string]string // custom headers
-	Body          []byte            // serialized payload
-	ContentType   string            // "application/json", "multipart/form-data"
-	Model         string            // requested model for routing
-	Protocol      string            // e.g. "images", "audio_speech", "videos"
-	BillableUnits int               // fixed-price units; e.g. requested image count
+	PinnedChannel   string
+	PinnedChannelID int64
+	PinnedBaseURL   string
+	Path            string            // e.g. "/v1/images/generations", "/v1/audio/speech"
+	Method          string            // "POST", "GET"
+	Headers         map[string]string // custom headers
+	Body            []byte            // serialized payload
+	ContentType     string            // "application/json", "multipart/form-data"
+	Model           string            // requested model for routing
+	Protocol        string            // e.g. "images", "audio_speech", "videos"
+	BillableUnits   int               // fixed-price units; e.g. requested image count
 }
 
 // UpstreamResponse encapsulates a generic HTTP response across any modality.
 type UpstreamResponse struct {
-	StatusCode int
-	Headers    http.Header
-	Body       []byte
-	Stream     io.ReadCloser
+	ProviderName string
+	ChannelID    int64
+	BaseURL      string
+	StatusCode   int
+	Headers      http.Header
+	Body         []byte
+	Stream       io.ReadCloser
 	// Channel is the routing chain that served this request (e.g. "A" or
 	// "A→B" after fallback). Internal-only metadata for audit logging.
 	Channel string
@@ -46,7 +52,17 @@ type UpstreamResponse struct {
 
 // DispatchHTTP routes an HTTP request across matching candidate channels with Circuit Breaking and Safe Fallback.
 func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*UpstreamResponse, error) {
-	channels := d.ResolveCandidateChannels(ctx, req.Model, req.Protocol)
+	var channels []*model.ChannelConfig
+	if req.PinnedChannel != "" {
+		for _, ch := range d.ListChannelsForModel(req.Model, req.Protocol) {
+			if ((req.PinnedChannelID > 0 && ch.ID == req.PinnedChannelID) || (req.PinnedChannelID == 0 && ch.Name == req.PinnedChannel)) && ch.BaseURL == req.PinnedBaseURL {
+				channels = append(channels, ch)
+				break
+			}
+		}
+	} else {
+		channels = d.ResolveCandidateChannels(ctx, req.Model, req.Protocol)
+	}
 	if len(channels) == 0 {
 		return nil, newNoRouteError(ctx, req.Model, fmt.Errorf("no upstream provider available for model '%s' and protocol '%s'", req.Model, req.Protocol))
 	}
@@ -70,7 +86,7 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 			targetBody = RewriteJSONModel(targetBody, targetModel)
 		}
 
-		targetURL := strings.TrimRight(ch.BaseURL, "/") + req.Path
+		targetURL := provider.APIURL(ch.BaseURL, req.Path)
 		httpReq, err := http.NewRequestWithContext(ctx, req.Method, targetURL, bytes.NewReader(targetBody))
 		if err != nil {
 			lastErr = err
@@ -140,10 +156,11 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 			headers.Del("Content-Encoding")
 			headers.Set("Content-Length", strconv.Itoa(len(bodyBytes)))
 			return &UpstreamResponse{
-				StatusCode: httpResp.StatusCode,
-				Headers:    headers,
-				Stream:     io.NopCloser(bytes.NewReader(bodyBytes)),
-				Channel:    formatChannelTrail(ctx, attempted, ch.Name),
+				StatusCode:   httpResp.StatusCode,
+				ProviderName: ch.Name, ChannelID: ch.ID, BaseURL: ch.BaseURL,
+				Headers: headers,
+				Stream:  io.NopCloser(bytes.NewReader(bodyBytes)),
+				Channel: formatChannelTrail(ctx, attempted, ch.Name),
 			}, nil
 		}
 
@@ -151,10 +168,11 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 		trail := d.recordChannelSuccess(ctx, attempted, ch.Name, time.Since(start), 0, 0)
 
 		return &UpstreamResponse{
-			StatusCode: httpResp.StatusCode,
-			Headers:    httpResp.Header,
-			Stream:     httpResp.Body,
-			Channel:    trail,
+			StatusCode:   httpResp.StatusCode,
+			ProviderName: ch.Name, ChannelID: ch.ID, BaseURL: ch.BaseURL,
+			Headers: httpResp.Header,
+			Stream:  httpResp.Body,
+			Channel: trail,
 		}, nil
 	}
 

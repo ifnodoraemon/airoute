@@ -71,6 +71,11 @@ func (r *Repository) settleCharges(ctx context.Context, logs []*UsageLogRecord) 
 		if log == nil || log.Settled {
 			continue
 		}
+		if log.PricingSnapshot != nil && log.Cost > 0 {
+			if err := ValidatePriceCurrency(&ModelPriceRecord{Currency: log.PricingSnapshot.Currency}); err != nil {
+				return err
+			}
+		}
 		if log.Cost <= 0 && log.TotalTokens <= 0 {
 			// Nothing to move; mark it so the writer does not reconsider it.
 			log.Settled = true

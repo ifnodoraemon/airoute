@@ -152,6 +152,17 @@ func (r *Repository) SetSetting(key, val string) error {
 	return err
 }
 
+// GetOrCreateSetting lets concurrent replicas agree on a single generated value.
+func (r *Repository) GetOrCreateSetting(key, initial string) (string, error) {
+	if _, err := r.db.Exec(`INSERT INTO system_settings (key, value, updated_at)
+		VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO NOTHING`, key, initial); err != nil {
+		return "", err
+	}
+	var value string
+	err := r.db.QueryRow(`SELECT value FROM system_settings WHERE key = ?`, key).Scan(&value)
+	return value, err
+}
+
 // GetStatsOverviewForKeys returns the same aggregate metrics as GetStatsOverview
 // but scoped to the supplied API keys. It is used to keep tenant dashboards from
 // exposing cluster-wide business volume to regular users.

@@ -1,0 +1,134 @@
+package controlplane
+
+import (
+ "context"
+ "encoding/json"
+ "errors"
+ "io"
+ "net/http"
+ "net/http/httptest"
+ "strconv"
+ "strings"
+ "testing"
+ "time"
+
+ "github.com/gin-gonic/gin"
+ "github.com/ifnodoraemon/airoute/internal/billing"
+ "github.com/ifnodoraemon/airoute/internal/model"
+ "github.com/ifnodoraemon/airoute/internal/provider"
+ "github.com/ifnodoraemon/airoute/internal/storage"
+ "golang.org/x/crypto/bcrypt"
+)
+
+// These are review probes: they assert the expected safe behavior and are
+// intentionally run against the unchanged checkout through Go's overlay.
+func TestAuditReviewGoogleDisplayNameDoesNotIdentifyAccount(t *testing.T) {
+ gin.SetMode(gin.TestMode)
+ t.Setenv("GOOGLE_CLIENT_ID", "audit-client")
+ t.Setenv("GOOGLE_CLIENT_SECRET", "audit-secret")
+ h, repo := newSecurityTestHandler(t)
+ victim := &storage.UserRecord{Username:"gg_Common Name", Email:"victim@example.invalid", PasswordHash:"unused", Role:"admin", Status:"active"}
+ if err := repo.CreateUser(victim); err != nil { t.Fatal(err) }
+ previousTransport := http.DefaultTransport
+ t.Cleanup(func(){ http.DefaultTransport = previousTransport })
+ http.DefaultTransport = regressionTransport(func(r *http.Request) (*http.Response,error) {
+   body := `{"access_token":"synthetic-provider-token"}`
+   if r.URL.Path == "/oauth2/v2/userinfo" {
+     body = `{"id":"different-google-subject","name":"Common Name","email":"different-person@example.invalid","verified_email":true}`
+   }
+   return &http.Response{StatusCode:200, Header:make(http.Header), Body:io.NopCloser(strings.NewReader(body))},nil
+ })
+ state, err := newOAuthState("google")
+ if err != nil { t.Fatal(err) }
+ body, _ := json.Marshal(map[string]string{"code":"valid-synthetic-code", "state":state})
+ w := httptest.NewRecorder()
+ c, _ := gin.CreateTestContext(w)
+ c.Params = gin.Params{{Key:"provider",Value:"google"}}
+ c.Request = httptest.NewRequest("POST","/api/v1/auth/oauth/google/callback",strings.NewReader(string(body)))
+ c.Request.Header.Set("Content-Type","application/json")
+ c.Request.AddCookie(&http.Cookie{Name:OAuthStateCookieName,Value:state})
+ h.OAuthCallback(c)
+ var result struct { Data struct { User struct { Username string `json:"username"`; Role string `json:"role"` } `json:"user"` } `json:"data"` }
+ if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil { t.Fatal(err) }
+ if w.Code == 200 && result.Data.User.Username == victim.Username {
+   t.Fatalf("a distinct provider subject/email was authenticated as existing account %q with role %q",result.Data.User.Username,result.Data.User.Role)
+ }
+}
+
+func TestAuditReviewPasswordChangeRevokesOldSession(t *testing.T) {
+ gin.SetMode(gin.TestMode)
+ h, repo := newSecurityTestHandler(t)
+ hash, _ := bcrypt.GenerateFromPassword([]byte("old-password"),bcrypt.MinCost)
+ if err := repo.CreateUser(&storage.UserRecord{Username:"audit-user",Email:"audit@example.invalid",PasswordHash:string(hash),Role:"user",Status:"active"}); err != nil { t.Fatal(err) }
+ token, _ := GenerateAdminToken("audit-user","user",time.Hour)
+ router := gin.New()
+ router.Use(h.AdminAuthMiddleware())
+ router.POST("/password",h.ChangePassword)
+ router.GET("/me",h.GetMe)
+ w := httptest.NewRecorder()
+ req := httptest.NewRequest("POST","/password",strings.NewReader(`{"old_password":"old-password","new_password":"new-password"}`))
+ req.Header.Set("Content-Type","application/json")
+ req.Header.Set("Authorization","Bearer "+token)
+ router.ServeHTTP(w,req)
+ if w.Code != 200 { t.Fatalf("password fixture failed: %d %s",w.Code,w.Body.String()) }
+ w = httptest.NewRecorder()
+ req = httptest.NewRequest("GET","/me",nil)
+ req.Header.Set("Authorization","Bearer "+token)
+ router.ServeHTTP(w,req)
+ if w.Code == 200 { t.Fatal("session issued before password change still authorizes /me with HTTP 200") }
+}
+
+func TestAuditReviewPartialPriceUpdatePreservesCurrency(t *testing.T) {
+ store := newFakeRouteStore()
+ store.seedPrice(&storage.ModelPriceRecord{Model:"audit-model",GroupName:"default",Currency:"USD",PromptPrice:2,CompletionPrice:8})
+ service := NewRouteService(store,nil,nil)
+ if err := service.UpdateModelRoute(context.Background(),&UpdateModelRouteRequest{Model:"audit-model",PromptPrice:priceFloat(3)}); err != nil { t.Fatal(err) }
+ if store.lastBundle.Price.Currency != "USD" { t.Fatalf("omitting currency rewrites USD as %s",store.lastBundle.Price.Currency) }
+}
+
+func TestAuditReviewPriceReadFailureDoesNotOverwriteRates(t *testing.T) {
+ store := newFakeRouteStore()
+ store.getPriceErr = errors.New("temporary database read failure")
+ service := NewRouteService(store,nil,nil)
+ err := service.UpdateModelRoute(context.Background(),&UpdateModelRouteRequest{Model:"audit-model",FixedPrice:priceFloat(1)})
+ if err == nil || store.applyCalls != 0 { t.Fatalf("read error ignored: applyCalls=%d; written prompt=%v completion=%v",store.applyCalls,store.lastBundle.Price.PromptPrice,store.lastBundle.Price.CompletionPrice) }
+}
+
+func TestAuditReviewChannelTestRespectsTextProtocol(t *testing.T) {
+ h, repo := newSecurityTestHandler(t)
+ ch := &storage.ChannelRecord{Name:"text-only",Type:model.ProviderOpenAI,BaseURL:"https://audit.invalid/v1",Models:[]string{"text-model"},Protocols:[]string{"openai_text"},Status:"active"}
+ if err := repo.CreateChannel(ch); err != nil { t.Fatal(err) }
+ previousClient := provider.SharedDefaultHTTPClient
+ t.Cleanup(func(){ provider.SharedDefaultHTTPClient = previousClient })
+ var calledPath string
+ provider.SharedDefaultHTTPClient = &http.Client{Transport:regressionTransport(func(r *http.Request)(*http.Response,error){
+   calledPath = r.URL.Path
+   body, status := `{"choices":[{"text":"pong","finish_reason":"stop"}]}`,200
+   if calledPath != "/v1/completions" { body,status = `{"error":{"message":"endpoint not supported"}}`,404 }
+   return &http.Response{StatusCode:status,Header:make(http.Header),Body:io.NopCloser(strings.NewReader(body))},nil
+ })}
+ w := httptest.NewRecorder()
+ c,_ := gin.CreateTestContext(w)
+ c.Params = gin.Params{{Key:"id",Value:strconv.FormatInt(ch.ID,10)}}
+ c.Request = httptest.NewRequest("POST","/channels/test",nil)
+ h.TestChannel(c)
+ if calledPath != "/v1/completions" { t.Fatalf("text-only configured channel tested with %s; response=%s",calledPath,w.Body.String()) }
+}
+
+func TestAuditReviewForeignCurrencyDoesNotDebitCNYAtFaceValue(t *testing.T) {
+ _,repo := newSecurityTestHandler(t)
+ u := &storage.UserRecord{Username:"currency-user",Email:"currency@example.invalid",PasswordHash:"unused",Role:"user",Status:"active",Balance:10}
+ if err := repo.CreateUser(u); err != nil { t.Fatal(err) }
+ key := &storage.APIKeyRecord{Key:"sk-currency-audit",TenantID:u.Username,UserID:u.ID,Status:"active"}
+ if err := repo.CreateAPIKey(key); err != nil { t.Fatal(err) }
+ svc := NewPricingService(repo,nil,nil,nil)
+ err := svc.SaveRate(context.Background(), &storage.ModelPriceRecord{Model:"currency-model",GroupName:"default",Currency:"USD",PromptPrice:1,OffPeakEnabled:false})
+ if err != nil { return } // A single-currency wallet may correctly reject USD.
+ engine := billing.NewEngine(repo)
+ cost,_,_,_,_,snapshot := engine.CalculateCostForUnits("currency-model","default",1_000_000,0,0,1,time.Now())
+ rec := &storage.UsageLogRecord{APIKey:key.Key,TenantID:u.Username,Model:"currency-model",PromptTokens:1_000_000,TotalTokens:1_000_000,Cost:cost,PricingSnapshot:snapshot,StatusCode:200}
+ if err := repo.BatchRecordUsageLogsContext(context.Background(),[]*storage.UsageLogRecord{rec}); err != nil { t.Fatal(err) }
+ after,err := repo.GetUserByUsername(u.Username)
+ if err != nil { t.Fatal(err) }
+ if snapshot.Currency == "USD" && after.Balance == 9 { t.Fatalf("USD 1 pricing was accepted and charged as CNY 1 (CNY wallet 10 -> %v)",after.Balance) }
+}

@@ -460,13 +460,10 @@ describe('useLogsData in-flight invalidation', () => {
       return { ok: true, status: 200, json: async () => ({ code: 0, data: Array.from({ length: 200 }, (_, i) => ({ id: i })) }) };
     });
 
-    let outcome;
     await act(async () => {
-      outcome = await result.current.fetchAllLogsForExport();
+      await expect(result.current.fetchAllLogsForExport()).rejects.toThrow('Export cancelled: session changed');
     });
-
-    // Only the first page was collected before the generation changed.
-    expect(outcome.rows).toHaveLength(200);
+    expect(calls).toBe(2);
   });
 
   it('still applies rows when no reset happened', async () => {

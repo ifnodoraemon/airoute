@@ -191,20 +191,17 @@ export default function App() {
       .catch(() => {});
   }, []);
 
-  // Complete the browser OAuth redirect. The gateway returns a single-use
-  // exchange code (never the session token itself) plus, on failure, an error
-  // message. Exchange it for the HttpOnly cookie session and then strip both
-  // parameters from the URL so a refresh or a shared link cannot replay them.
+  // The callback sets the session cookie; restore it through any replica.
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     const params = new URLSearchParams(window.location.search);
-    const code = params.get('oauth_code');
+    const completed = params.get('oauth_complete');
     const oauthError = params.get('oauth_error');
-    if (!code && !oauthError) return undefined;
+    if (!completed && !oauthError) return undefined;
 
     const stripParams = () => {
       const url = new URL(window.location.href);
-      url.searchParams.delete('oauth_code');
+      url.searchParams.delete('oauth_complete');
       url.searchParams.delete('oauth_error');
       const search = url.searchParams.toString();
       window.history.replaceState({}, '', url.pathname + (search ? `?${search}` : '') + url.hash);
@@ -219,17 +216,13 @@ export default function App() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/v1/auth/oauth-exchange', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify({ code }),
-        });
+        const res = await fetch('/api/v1/auth/me', { credentials: 'same-origin' });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || data.code !== 0) {
           throw new Error(data.error || (isZh ? 'OAuth 登录失败' : 'OAuth sign-in failed'));
         }
-        const user = data.data?.user;
+        if (cancelled) return;
+        const user = data.data?.user || data.data;
         signIn(user);
         setCurrentTab(user?.role === 'admin' ? 'dashboard' : 'wallet');
         showToast(
@@ -1783,7 +1776,7 @@ export default function App() {
               weight: 10,
               timeout_seconds: 60,
               models_str: '',
-              mapping_str: '',
+              mapping_rules: [],
               protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings', 'rerank', 'images'],
             });
             setProbeAlert(null);

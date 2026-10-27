@@ -366,7 +366,7 @@ func TestAudit_CORSAndSandboxRecharge(t *testing.T) {
 		Balance:      0.0,
 	}
 	require.NoError(t, repo.CreateUser(user))
-	token, _ := controlplane.GenerateAdminToken("tester", "admin", time.Hour)
+	token, _ := tokenForTestUser("tester", "admin", time.Hour)
 
 	reqGet := httptest.NewRequest(http.MethodGet, "/api/v1/user/wallet/recharge/sandbox?order_no=SANDBOX123&amount=88.8", nil)
 	reqGet.Header.Set("Authorization", "Bearer "+token)

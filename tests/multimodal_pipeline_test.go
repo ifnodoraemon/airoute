@@ -12,8 +12,11 @@ import (
 
 	"github.com/ifnodoraemon/airoute/internal/api"
 	"github.com/ifnodoraemon/airoute/internal/config"
+	"github.com/ifnodoraemon/airoute/internal/controlplane"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/router"
+	"github.com/ifnodoraemon/airoute/internal/storage"
+	"strings"
 )
 
 func TestMultimodalPipeline_ImageAudioVideo(t *testing.T) {
@@ -81,7 +84,13 @@ func TestMultimodalPipeline_ImageAudioVideo(t *testing.T) {
 	}
 
 	dispatcher := router.NewDispatcher(channels)
-	engine := api.SetupRouter(dispatcher, nil)
+	db, err := storage.OpenDB(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := storage.NewRepository(db)
+	engine := api.SetupRouter(dispatcher, controlplane.NewAdminHandler(repo, nil, nil))
 
 	// Open access mode for tests
 	config.SetGlobalConfig(&config.Config{APIKeys: nil})
@@ -156,9 +165,15 @@ func TestMultimodalPipeline_ImageAudioVideo(t *testing.T) {
 
 	// 6. Test Video Generation & Task Polling (/v1/videos/generations)
 	t.Run("Video Generation and Task Status", func(t *testing.T) {
+		key := &storage.APIKeyRecord{Key: "sk-video-owner", TenantID: "video-owner", Status: "active", AllowedModels: []string{"*"}}
+		if err := repo.CreateAPIKey(key); err != nil {
+			t.Fatal(err)
+		}
+		config.SetGlobalConfig(&config.Config{APIKeys: []model.APIKeyConfig{{Key: key.Key, TenantID: key.TenantID, Status: "active", AllowedModels: []string{"*"}}}})
 		reqBody := `{"model": "cogvideox", "prompt": "hyperspace warp drive animation"}`
 		req := httptest.NewRequest(http.MethodPost, "/v1/videos/generations", bytes.NewReader([]byte(reqBody)))
 		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer sk-video-owner")
 		w := httptest.NewRecorder()
 
 		engine.ServeHTTP(w, req)
@@ -170,12 +185,13 @@ func TestMultimodalPipeline_ImageAudioVideo(t *testing.T) {
 		if err := json.Unmarshal(w.Body.Bytes(), &videoTask); err != nil {
 			t.Fatalf("failed to parse video response: %v", err)
 		}
-		if videoTask.ID != "video-task-9988" || videoTask.Status != "processing" {
+		if !strings.HasPrefix(videoTask.ID, "vid_") || videoTask.Status != "processing" {
 			t.Fatalf("unexpected video task response: %v", videoTask)
 		}
 
 		// Poll task
-		pollReq := httptest.NewRequest(http.MethodGet, "/v1/videos/tasks/video-task-9988?model=cogvideox", nil)
+		pollReq := httptest.NewRequest(http.MethodGet, "/v1/videos/tasks/"+videoTask.ID+"?model=cogvideox", nil)
+		pollReq.Header.Set("Authorization", "Bearer sk-video-owner")
 		pollW := httptest.NewRecorder()
 
 		engine.ServeHTTP(pollW, pollReq)

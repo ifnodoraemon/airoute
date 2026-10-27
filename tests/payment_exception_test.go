@@ -41,7 +41,7 @@ func TestPaymentException_StripeErrorDoesNotFallbackToSandbox(t *testing.T) {
 		Balance:      10.0,
 	}
 	require.NoError(t, repo.CreateUser(user))
-	token, _ := controlplane.GenerateAdminToken("customer1", "user", time.Hour)
+	token, _ := tokenForTestUser("customer1", "user", time.Hour)
 
 	// Spin up isolated mock payment server that returns an HTTP 500 error
 	mockStripe := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -103,7 +103,7 @@ func TestPaymentException_DBWriteFailureDoesNotLeakCheckoutURL(t *testing.T) {
 		Balance:      20.0,
 	}
 	require.NoError(t, repo.CreateUser(user))
-	token, _ := controlplane.GenerateAdminToken("customer2", "user", time.Hour)
+	token, _ := tokenForTestUser("customer2", "user", time.Hour)
 
 	// Spin up isolated mock Stripe server that returns a valid checkout URL
 	mockStripe := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -163,7 +163,7 @@ func TestPaymentException_UnconfiguredGatewayPromptsRedemption(t *testing.T) {
 		Balance:      0.0,
 	}
 	require.NoError(t, repo.CreateUser(user))
-	token, _ := controlplane.GenerateAdminToken("customer3", "user", time.Hour)
+	token, _ := tokenForTestUser("customer3", "user", time.Hour)
 
 	_ = os.Unsetenv("STRIPE_API_KEY")
 

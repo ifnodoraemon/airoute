@@ -118,7 +118,7 @@ func TestAPI_AdminCRUDAndHotReload(t *testing.T) {
 	}
 	payload, _ := json.Marshal(newCh)
 
-	token, _ := controlplane.GenerateAdminToken("admin", "admin", time.Hour)
+	token, _ := tokenForTestUser("admin", "admin", time.Hour)
 	reqCreate := httptest.NewRequest(http.MethodPost, "/api/v1/admin/channels", bytes.NewReader(payload))
 	reqCreate.Header.Set("Authorization", "Bearer "+token)
 	reqCreate.Header.Set("Content-Type", "application/json")

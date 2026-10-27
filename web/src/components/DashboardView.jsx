@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   Activity,
   Zap,
@@ -29,9 +29,9 @@ const LIVE_POLL_MS = 2000;
 const DASHBOARD_REFRESH_MS = 15000;
 
 export default function DashboardView({
-  stats = {},
+  stats: overviewStats = {},
   channels = [],
-  logs = [],
+  logs: overviewLogs = [],
   keys = [],
   channelLatencies = {},
   testingId,
@@ -82,89 +82,51 @@ export default function DashboardView({
   const [recentLogsLoading, setRecentLogsLoading] = useState(false);
   const [liveStats, setLiveStats] = useState(null);
 
-  const fetchRecentLogs = useCallback(async (keyOverride) => {
-    try {
-      setRecentLogsLoading(true);
-      const targetKey = keyOverride !== undefined ? keyOverride : selectedKey;
-      const fetcher = adminFetch || apiFetch;
-      const url = `/api/v1/admin/logs?limit=10${targetKey ? `&key=${encodeURIComponent(targetKey)}` : ''}`;
+  const dashboardRequest = useRef(0);
+  const [statsKey, setStatsKey] = useState(null);
+  const fetchDashboard = useCallback(async () => {
+    const request = ++dashboardRequest.current;
+    const fetcher = adminFetch || apiFetch;
+    const suffix = selectedKey ? `&key=${encodeURIComponent(selectedKey)}` : '';
+    const read = async (url) => {
       const res = await fetcher(url);
-      if (res && res.ok) {
-        const json = await res.json();
-        if (json && json.code === 0 && Array.isArray(json.data)) {
-          setRecentLogs(json.data);
-          return true;
-        }
-      }
-    } catch {
-      // Fallback gracefully
-    } finally {
-      setRecentLogsLoading(false);
-    }
-    return false;
-  }, [selectedKey, adminFetch]);
+      const json = await res.json();
+      if (!res.ok || json.code !== 0) throw new Error(json.error || 'Dashboard request failed');
+      return json.data;
+    };
+    setRecentLogsLoading(true);
+    const results = await Promise.allSettled([
+      read(`/api/v1/admin/logs?limit=10${suffix}`),
+      read(`/api/v1/admin/stats/timeseries?timeframe=${timeframe}${suffix}`),
+      selectedKey ? read(`/api/v1/admin/stats/overview?key=${encodeURIComponent(selectedKey)}`) : Promise.resolve(null),
+    ]);
+    if (request !== dashboardRequest.current) return false;
+    setRecentLogs(results[0].status === 'fulfilled' && Array.isArray(results[0].value) ? results[0].value : []);
+    setTimeseriesData(results[1].status === 'fulfilled' ? results[1].value : null);
+    setKeyStats(results[2].status === 'fulfilled' ? results[2].value : null);
+    setStatsKey(selectedKey);
+    setRecentLogsLoading(false);
+    return results.every(r => r.status === 'fulfilled');
+  }, [selectedKey, timeframe, adminFetch]);
 
-  const fetchTimeseries = useCallback(async (keyOverride) => {
-    try {
-      const targetKey = keyOverride !== undefined ? keyOverride : selectedKey;
-      const fetcher = adminFetch || apiFetch;
-      const url = `/api/v1/admin/stats/timeseries?timeframe=${timeframe}${targetKey ? `&key=${encodeURIComponent(targetKey)}` : ''}`;
-      const res = await fetcher(url);
-      if (res && res.ok) {
-        const json = await res.json();
-        if (json && json.code === 0 && json.data) {
-          setTimeseriesData(json.data);
-          return true;
-        }
-      }
-    } catch {
-      // Graceful fallback to client-side logs aggregation
-    }
-    return false;
-  }, [timeframe, selectedKey, adminFetch]);
-
-  const fetchDrilldownStats = useCallback(async (targetKey) => {
-    if (!targetKey) {
-      setKeyStats(null);
-      return;
-    }
-    try {
-      const fetcher = adminFetch || apiFetch;
-      const res = await fetcher(`/api/v1/admin/stats/overview?key=${encodeURIComponent(targetKey)}`);
-      if (res && res.ok) {
-        const json = await res.json();
-        if (json && json.code === 0 && json.data) {
-          setKeyStats(json.data);
-        }
-      }
-    } catch {}
-  }, [adminFetch]);
-
-  const handleSelectKeyDrilldown = (k) => {
-    setSelectedKey(k);
-    if (onSelectKey) onSelectKey(k);
-    fetchTimeseries(k);
-    fetchDrilldownStats(k);
-    fetchRecentLogs(k);
+  const handleSelectKeyDrilldown = (key) => {
+    setSelectedKey(key);
+    onSelectKey?.(key);
   };
-
-  // Keyed on the prop on purpose: adding selectedKey or the fetch callbacks
-  // would re-run this sync after a local key selection and snap the selection
-  // back to the prop value.
   useEffect(() => {
-    if (propSelectedKey !== undefined && propSelectedKey !== selectedKey) {
-      setSelectedKey(propSelectedKey);
-      fetchTimeseries(propSelectedKey);
-      fetchDrilldownStats(propSelectedKey);
-      fetchRecentLogs(propSelectedKey);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (propSelectedKey !== undefined) setSelectedKey(propSelectedKey || '');
   }, [propSelectedKey]);
-
   useEffect(() => {
-    fetchTimeseries();
-    fetchRecentLogs();
-  }, [fetchTimeseries, fetchRecentLogs]);
+    const requestRef = dashboardRequest;
+    setKeyStats(null);
+    setTimeseriesData(null);
+    setRecentLogs([]);
+    fetchDashboard();
+    const timer = setInterval(() => {
+      if (!document.hidden) fetchDashboard();
+    }, DASHBOARD_REFRESH_MS);
+    return () => { ++requestRef.current; clearInterval(timer); };
+  }, [fetchDashboard]);
 
   // Real-time gateway telemetry (in-flight requests and streams).
   //
@@ -230,23 +192,12 @@ export default function DashboardView({
     };
   }, [adminFetch]);
 
-  // The time-series chart and its "period peak" only loaded at mount, so they
-  // went stale as soon as the page stayed open. Refresh them periodically, in
-  // the background and without touching the shell's own polling.
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (document.hidden) return;
-      fetchTimeseries();
-      fetchRecentLogs();
-    }, DASHBOARD_REFRESH_MS);
-    return () => clearInterval(timer);
-  }, [fetchTimeseries, fetchRecentLogs]);
-
-  const effectiveStats = keyStats || stats;
-  const currentRPM = effectiveStats.current_rpm ?? timeseriesData?.current_rpm ?? 0;
-  const currentTPM = effectiveStats.current_tpm ?? timeseriesData?.current_tpm ?? 0;
-  const peakRPM = timeseriesData?.peak_rpm ?? effectiveStats.peak_rpm ?? 0;
-  const peakTPM = timeseriesData?.peak_tpm ?? effectiveStats.peak_tpm ?? 0;
+  const stats = useMemo(() => selectedKey ? (statsKey === selectedKey ? keyStats || {} : {}) : overviewStats, [selectedKey, statsKey, keyStats, overviewStats]);
+  const logs = useMemo(() => selectedKey ? (statsKey === selectedKey ? recentLogs : []) : overviewLogs, [selectedKey, statsKey, recentLogs, overviewLogs]);
+  const currentRPM = stats.current_rpm ?? timeseriesData?.current_rpm ?? 0;
+  const currentTPM = stats.current_tpm ?? timeseriesData?.current_tpm ?? 0;
+  const peakRPM = timeseriesData?.peak_rpm ?? stats.peak_rpm ?? 0;
+  const peakTPM = timeseriesData?.peak_tpm ?? stats.peak_tpm ?? 0;
 
   // Live gateway state, or null when the endpoint is unavailable. `livePhase`
   // collapses it into the four states the header badge and the TPM card speak:
@@ -691,8 +642,8 @@ export default function DashboardView({
     if (refreshing) return;
     setRefreshing(true);
     try {
-      const [a, b, c, d] = await Promise.all([fetchData?.(), fetchLogs?.(), fetchTimeseries(), fetchRecentLogs()]);
-      const ok = a !== false && b !== false && c !== false && d !== false;
+      const [a, b, c] = await Promise.all([fetchData?.(), fetchLogs?.(), fetchDashboard()]);
+      const ok = a !== false && b !== false && c !== false;
       if (ok) showToast?.(isZh ? '遥测数据已更新' : 'Telemetry refreshed', 'success');
       else showToast?.(isZh ? '部分数据刷新失败，请检查网络或后端服务' : 'Some data failed to refresh — check the network or backend', 'error');
     } catch (e) {

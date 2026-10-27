@@ -2,6 +2,7 @@ package controlplane
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 
@@ -30,6 +31,7 @@ type PriceReloader interface {
 // Stages of a route save, reported by RouteStageError so the HTTP layer can keep
 // a stage-specific message.
 const (
+	RouteStageRead    = "read_pricing"
 	RouteStageCollect = "collect_channels"
 	RouteStagePersist = "persist"
 	RouteStageApply   = "apply"
@@ -88,6 +90,10 @@ func (s *RouteService) UpdateModelRoute(ctx context.Context, req *UpdateModelRou
 
 	price, err := s.buildRoutePricing(req)
 	if err != nil {
+		var stageErr *RouteStageError
+		if errors.As(err, &stageErr) {
+			return err
+		}
 		return &ValidationError{Message: err.Error()}
 	}
 	bundle.Price = price
@@ -135,13 +141,10 @@ func (s *RouteService) UpdateModelRoute(ctx context.Context, req *UpdateModelRou
 func (s *RouteService) buildRoutePricing(req *UpdateModelRouteRequest) (*storage.ModelPriceRecord, error) {
 	if req.PromptPrice == nil && req.CompletionPrice == nil && req.CacheReadPrice == nil && req.FixedPrice == nil &&
 		req.OffPeakEnabled == nil && req.OffPeakMode == "" && req.OffPeakSlots == "" &&
-		req.WeekendAllDay == nil && req.OffPeakStart == "" && req.OffPeakEnd == "" && req.OffPeakDiscount == nil {
+		req.WeekendAllDay == nil && req.OffPeakStart == "" && req.OffPeakEnd == "" && req.OffPeakDiscount == nil && req.Currency == "" {
 		return nil, nil
 	}
 	currency := req.Currency
-	if currency == "" {
-		currency = "CNY"
-	}
 	groupName := strings.TrimSpace(req.GroupName)
 	if groupName == "" {
 		groupName = "default"
@@ -149,7 +152,16 @@ func (s *RouteService) buildRoutePricing(req *UpdateModelRouteRequest) (*storage
 	var pPrice, cPrice, cachePrice, fPrice float64
 	// Read the exact group first; fall back to the default group only when this
 	// group has no row yet (that mirrors how the billing engine resolves rates).
-	existing, _ := s.store.GetModelPriceWithGroup(req.Model, groupName)
+	existing, err := s.store.GetModelPriceWithGroup(req.Model, groupName)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, &RouteStageError{Stage: RouteStageRead, Err: err}
+	}
+	if currency == "" && existing != nil {
+		currency = existing.Currency
+	}
+	if currency == "" {
+		currency = "CNY"
+	}
 	if existing != nil {
 		// Start from the stored prices so a partial update (e.g. only the fixed
 		// price) cannot silently reset prompt/completion prices to zero.

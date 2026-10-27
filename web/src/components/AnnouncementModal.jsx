@@ -12,38 +12,44 @@ export default function AnnouncementModal({
 }) {
   const isZh = lang === 'zh';
   const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [reload, setReload] = useState(0);
   const [enabled, setEnabled] = useState(false);
   const [level, setLevel] = useState('info');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) return undefined;
+    const controller = new AbortController();
+    setLoading(true);
+    setLoadError('');
     const fetchConfig = async () => {
       try {
-        const fetcher = adminFetch || apiFetch;
-        const res = await fetcher('/api/v1/admin/announcement/config');
-        if (res && res.ok) {
-          const json = await res.json();
-          if (json && json.code === 0 && json.data) {
-            const d = json.data;
-            setEnabled(!!d.enabled);
-            setLevel(d.level || 'info');
-            setTitle(d.title || '');
-            setContent(d.content || '');
-          }
-        }
+        const res = await (adminFetch || apiFetch)('/api/v1/admin/announcement/config', { signal: controller.signal });
+        const json = await res.json();
+        if (!res.ok || json.code !== 0 || !json.data) throw new Error(json.error || 'Failed to load announcement config');
+        if (controller.signal.aborted) return;
+        setEnabled(!!json.data.enabled);
+        setLevel(json.data.level || 'info');
+        setTitle(json.data.title || '');
+        setContent(json.data.content || '');
       } catch (e) {
-        showToast?.(isZh ? '加载公告配置失败' : 'Failed to load announcement config', 'error');
+        if (!controller.signal.aborted) setLoadError(e.message);
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
     fetchConfig();
-  }, [isOpen, adminFetch, showToast, isZh]);
+    return () => controller.abort();
+  }, [isOpen, adminFetch, reload]);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading || loadError || submitting) return;
     if (enabled && (!title.trim() || !content.trim())) {
       showToast?.(isZh ? '开启公告时标题和内容不可为空' : 'Title and content are required when enabling', 'error');
       return;
@@ -138,6 +144,9 @@ export default function AnnouncementModal({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {loading && <p role="status">{isZh ? '正在加载公告…' : 'Loading announcement…'}</p>}
+          {loadError && <div role="alert">{loadError}<button type="button" onClick={() => setReload(v => v + 1)}>{isZh ? '重试' : 'Retry'}</button></div>}
+          <fieldset disabled={loading || !!loadError || submitting} className="space-y-5">
           {/* Status Toggle */}
           <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038]">
             <div>
@@ -262,6 +271,7 @@ export default function AnnouncementModal({
                 : (isZh ? '保存草稿并下线' : 'Save & Unpublish')}
             </button>
           </div>
+          </fieldset>
         </form>
       </div>
     </div>
