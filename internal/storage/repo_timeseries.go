@@ -132,7 +132,9 @@ func (r *Repository) GetStatsTimeSeries(timeframe string, keys []string) (*TimeS
 	}
 
 	sortedKeys := make([]string, len(keys))
-	copy(sortedKeys, keys)
+	for i, k := range keys {
+		sortedKeys[i] = NormalizeStoredAPIKeyReference(k)
+	}
 	sort.Strings(sortedKeys)
 	cacheKey := fmt.Sprintf("%s:%s", timeframe, strings.Join(sortedKeys, ","))
 

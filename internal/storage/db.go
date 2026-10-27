@@ -450,3 +450,23 @@ func envPositiveInt(name string, fallback int) int {
 	}
 	return value
 }
+
+// tableExists reports whether a table is present in the current schema. Migrations
+// that touch optional/legacy tables use it so an upgrade from an older schema does
+// not fail on a table a later migration creates.
+func (db *DB) tableExists(table string) (bool, error) {
+	if db == nil || db.DB == nil {
+		return false, nil
+	}
+	var query string
+	if db.Dialect() == "postgres" {
+		query = `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = ?`
+	} else {
+		query = `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`
+	}
+	var count int
+	if err := db.QueryRow(query, table).Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}

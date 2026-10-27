@@ -494,6 +494,7 @@ func (db *DB) migratePostgres() error {
 		{Version: 26, Name: "video_tasks", Up: createVideoTasks},
 		{Version: 27, Name: "users_email_unique", Up: createUsersEmailUniqueIndex},
 		{Version: 28, Name: "operational_indexes", Up: addOperationalIndexes},
+		{Version: 29, Name: "api_key_digests", Up: migrateAPIKeysToDigests},
 	}
 	return db.runMigrations(migrations)
 }

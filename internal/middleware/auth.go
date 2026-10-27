@@ -27,6 +27,9 @@ const (
 	ContextKeyAPIKey       = "api_key"
 	ContextKeyAPIKeyConfig = "api_key_config"
 	ContextKeyUserRecord   = "user_record"
+	// ContextKeyAPIKeyFingerprint carries the non-reversible display identifier
+	// for the authenticated credential (never the credential or its digest).
+	ContextKeyAPIKeyFingerprint = "api_key_fingerprint"
 )
 
 // auditAuthFailure logs client-side authentication rejection into the audit table so 401s/402s are visible to operators.
@@ -34,11 +37,12 @@ func auditAuthFailure(c *gin.Context, rawKey string, statusCode int, errMsg stri
 	if storage.GlobalAsyncLogger == nil {
 		return
 	}
+	// Store the non-reversible fingerprint, never a fragment of the credential:
+	// api_keys.key / usage_logs.api_key hold digests now, and a 6+2 character
+	// prefix/suffix would be the last cleartext remnant in the audit trail.
 	maskedKey := ""
-	if len(rawKey) > 8 {
-		maskedKey = rawKey[:6] + "..." + rawKey[len(rawKey)-2:]
-	} else if rawKey != "" {
-		maskedKey = "***"
+	if rawKey != "" {
+		maskedKey = storage.APIKeyFingerprint(rawKey)
 	}
 	traceID := c.GetString("trace_id")
 	if traceID == "" {
@@ -145,7 +149,12 @@ func AuthMiddleware() gin.HandlerFunc {
 			})
 			return
 		}
-		matchedKey := cfg.GetAPIKey(rawKey)
+		// The snapshot is keyed by the stored digest (api_keys.key holds
+		// HashAPIKey(credential)), so the presented credential is hashed before
+		// the lookup. Hashing is deterministic, which keeps every existing
+		// credential authenticating after the migration.
+		keyHash := storage.HashAPIKey(rawKey)
+		matchedKey := lookupSnapshotKey(cfg, rawKey, keyHash)
 
 		if matchedKey == nil {
 			auditAuthFailure(c, rawKey, http.StatusUnauthorized, "Incorrect or unauthorized API key provided")
@@ -258,7 +267,10 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		// Save context info
 		c.Set(ContextKeyTenant, effectiveKey.TenantID)
+		// The digest is what audit rows and ledger joins use; the fingerprint is
+		// what logs and the console display.
 		c.Set(ContextKeyAPIKey, effectiveKey.Key)
+		c.Set(ContextKeyAPIKeyFingerprint, storage.APIKeyFingerprint(rawKey))
 		c.Set(ContextKeyAPIKeyConfig, &effectiveKey)
 		c.Next()
 	}
@@ -291,4 +303,34 @@ func budgetExceeded(budgetUnits, usedUnits int64, budget, used float64) bool {
 		return usedUnits >= budgetUnits
 	}
 	return budget > 0 && used >= budget
+}
+
+// lookupSnapshotKey resolves a presented credential against the in-memory snapshot.
+//
+// The snapshot is keyed by the stored digest. A snapshot built before migration 29
+// (or seeded directly by a test) still holds cleartext identifiers; in that case the
+// raw value is tried as well, which is exactly the pre-migration behaviour.
+//
+// The raw fallback is deliberately limited to values that cannot themselves be a
+// digest: otherwise the stored digest — which is not a credential — would become
+// replayable as a bearer token.
+func lookupSnapshotKey(cfg *config.Config, presented, presentedHash string) *model.APIKeyConfig {
+	if cfg == nil {
+		return nil
+	}
+	if matched := cfg.GetAPIKey(presentedHash); matched != nil {
+		return matched
+	}
+	if presented == "" || storage.IsAPIKeyHash(presented) {
+		return nil
+	}
+	legacy := cfg.GetAPIKey(presented)
+	if legacy == nil {
+		return nil
+	}
+	// Hand downstream code the digest rather than the legacy identifier: the
+	// authoritative database check, audit rows and ledger joins all key off it.
+	normalized := *legacy
+	normalized.Key = presentedHash
+	return &normalized
 }

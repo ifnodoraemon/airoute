@@ -25,6 +25,7 @@ func (h *AdminHandler) ListUserKeys(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "查询密钥列表失败: " + err.Error()})
 		return
 	}
+	maskKeysForDisplay(keys)
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": keys})
 }
 
@@ -73,10 +74,15 @@ func (h *AdminHandler) CreateUserKey(c *gin.Context) {
 	}
 	h.syncDataPlane()
 
+	// CreateAPIKey stores only the digest and leaves it in rec.Key, so the
+	// plaintext (held in newKey) is returned exactly once, in this response.
+	created := *rec
+	created.Key = newKey
 	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"message": "API 密钥创建成功",
-		"data":    rec,
+		"code":              0,
+		"key_returned_once": true,
+		"message":           "API 密钥创建成功",
+		"data":              &created,
 	})
 }
 

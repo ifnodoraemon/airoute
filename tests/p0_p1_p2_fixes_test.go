@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"bytes"
 	"encoding/json"
 	"net/http"
@@ -207,7 +208,7 @@ func Test_UserDeletion_CascadesAPIKeys(t *testing.T) {
 	}
 
 	// Verify key exists
-	k, err := repo.GetAPIKeyByKey("sk-del-user-test-key")
+	k, err := repo.GetAPIKeyBySecret(context.Background(), "sk-del-user-test-key")
 	if err != nil || k == nil {
 		t.Fatalf("expected key to exist")
 	}
@@ -218,7 +219,7 @@ func Test_UserDeletion_CascadesAPIKeys(t *testing.T) {
 	}
 
 	// Verify key was cleaned up
-	kAfter, _ := repo.GetAPIKeyByKey("sk-del-user-test-key")
+	kAfter, _ := repo.GetAPIKeyBySecret(context.Background(), "sk-del-user-test-key")
 	if kAfter != nil {
 		t.Fatalf("expected key to be deleted when user was deleted, but it remained: %+v", kAfter)
 	}
@@ -250,7 +251,7 @@ func Test_CleanLegacyTechDebt_OrphanKeysAndAdminExemption(t *testing.T) {
 		t.Fatalf("failed to create key: %v", err)
 	}
 
-	savedKey, err := repo.GetAPIKeyByKey("sk-unassigned-test-key")
+	savedKey, err := repo.GetAPIKeyBySecret(context.Background(), "sk-unassigned-test-key")
 	if err != nil || savedKey == nil {
 		t.Fatalf("failed to get key: %v", err)
 	}

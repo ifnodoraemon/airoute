@@ -577,7 +577,8 @@ func TestAPIKey_BudgetLimitEnforcement(t *testing.T) {
 	}
 
 	// 2. Simulate exceeding key budget: used_cost = 10.5
-	_, _ = db.Exec(`UPDATE api_keys SET used_cost = 10.5 WHERE key = ?`, vkKey)
+	// api_keys.key stores the digest of the credential.
+	_, _ = db.Exec(`UPDATE api_keys SET used_cost = 10.5 WHERE key = ?`, storage.HashAPIKey(vkKey))
 
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest("GET", "/v1/models", nil)

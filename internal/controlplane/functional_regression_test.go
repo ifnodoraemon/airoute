@@ -41,13 +41,18 @@ func regressionHandler(t *testing.T) (*AdminHandler, *storage.Repository) {
 	repo := storage.NewRepository(db)
 	return &AdminHandler{repo: repo}, repo
 }
+
+// regressionCredential is the caller-side credential for regressionUsage; the
+// repository stores only its digest.
+const regressionCredential = "sk-regression-synthetic-only"
+
 func regressionUsage(t *testing.T, repo *storage.Repository) *storage.APIKeyRecord {
 	t.Helper()
 	u := &storage.UserRecord{Username: "regression-client", Email: "regression@example.invalid", PasswordHash: "synthetic", Role: "user", Status: "active", Balance: 100, GroupName: "default"}
 	if err := repo.CreateUser(u); err != nil {
 		t.Fatal(err)
 	}
-	k := &storage.APIKeyRecord{Key: "sk-regression-synthetic-only", TenantID: u.Username, UserID: u.ID, AllowedModels: []string{"*"}, Status: "active"}
+	k := &storage.APIKeyRecord{Key: regressionCredential, TenantID: u.Username, UserID: u.ID, AllowedModels: []string{"*"}, Status: "active"}
 	if err := repo.CreateAPIKey(k); err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +154,8 @@ func TestDeletingLastKeyKeepsAuthenticationEnforced(t *testing.T) {
 					t.Fatalf("auth status = %d, want %d: %s", w.Code, want, w.Body.String())
 				}
 			}
-			request(key.Key, http.StatusOK)
+			// Clients hold the plaintext credential; api_keys.key is its digest.
+			request(regressionCredential, http.StatusOK)
 			var err error
 			if operation == "batch" {
 				_, err = repo.BatchDeleteAPIKeys([]int64{key.ID})

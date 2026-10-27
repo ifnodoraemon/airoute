@@ -102,7 +102,20 @@ func (h *MCPHandler) authenticateCaller(key string) (*storage.APIKeyRecord, erro
 	if key == "" {
 		return nil, fmt.Errorf("API key required for MCP access")
 	}
-	rec, err := h.repo.GetAPIKeyByKey(key)
+	// A presented credential is cleartext; compare in digest space.
+	return h.authenticateCallerDigest(storage.HashAPIKey(key))
+}
+
+// authenticateCallerDigest resolves a caller whose key is already the stored
+// digest (the SSE session path stores caller.Key, which is the digest).
+func (h *MCPHandler) authenticateCallerDigest(keyDigest string) (*storage.APIKeyRecord, error) {
+	if h.repo == nil || h.repo.CountAPIKeys() == 0 {
+		return nil, nil // Open mode only when no key has ever been created
+	}
+	if keyDigest == "" {
+		return nil, fmt.Errorf("API key required for MCP access")
+	}
+	rec, err := h.repo.GetAPIKeyByKey(keyDigest)
 	if err != nil || rec == nil || rec.Status != "active" {
 		return nil, fmt.Errorf("invalid or inactive API key")
 	}
@@ -126,7 +139,10 @@ func (h *MCPHandler) HandleMCPMessages(c *gin.Context) {
 		return
 	}
 
-	callerKey := extractMCPKey(c)
+	// Normalize the presented credential to the stored digest immediately: session
+	// pinning, the caller context and the downstream lookups all compare/record
+	// digests, never cleartext.
+	callerKey := storage.HashAPIKey(extractMCPKey(c))
 	sessionID := c.Query("sessionId")
 	var sess *mcpSession
 	if sessionID != "" {
@@ -144,7 +160,7 @@ func (h *MCPHandler) HandleMCPMessages(c *gin.Context) {
 	}
 
 	reqCtx := c.Request.Context()
-	caller, accessErr := h.resolveCaller(callerKey)
+	caller, accessErr := h.resolveCallerDigest(callerKey)
 	if accessErr != nil {
 		respondMCPAccessError(c, accessErr)
 		return

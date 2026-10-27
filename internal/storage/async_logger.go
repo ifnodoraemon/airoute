@@ -113,6 +113,11 @@ func (al *AsyncLogger) Record(rec *UsageLogRecord) {
 		rec.BillingID = NewBillingID()
 	}
 
+	// The Redis payload and the spill file are persisted outside the database, so
+	// they must not carry a cleartext credential either: normalize before either
+	// transport sees the record.
+	rec.APIKey = NormalizeStoredAPIKeyReference(rec.APIKey)
+
 	// Try distributed message queue first if active
 	redisClient := distributed.GetClient()
 	if redisClient != nil && redisClient.IsActive() {

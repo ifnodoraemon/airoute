@@ -150,7 +150,13 @@ func TestCreateAPIKeyIgnoresClientOwnedFields(t *testing.T) {
 	if got.Status != "active" {
 		t.Errorf("status = %q, want active for a non-admin caller", got.Status)
 	}
-	if got.Key == "sk-attacker-choice-0123456789" || !strings.HasPrefix(got.Key, "sk-airoute-") {
-		t.Errorf("key must be generated server-side, got %q", got.Key)
+	// Only the digest is stored (the plaintext is returned once, in the creation
+	// response), so "server-side generated" now means "the stored value is a
+	// digest that is not the client's literal".
+	if got.Key == "sk-attacker-choice-0123456789" || !storage.IsAPIKeyHash(got.Key) {
+		t.Errorf("key must be generated server-side and stored as a digest, got %q", got.Key)
+	}
+	if fields := strings.Fields(w.Body.String()); len(fields) == 0 {
+		t.Fatalf("creation response is empty")
 	}
 }

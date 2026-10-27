@@ -63,9 +63,10 @@ func TestAuthMiddleware_APIKeyContextAndLogging(t *testing.T) {
 		t.Fatalf("expected 200 OK, got %d", w.Code)
 	}
 
-	// Verify c.GetString(middleware.ContextKeyAPIKey) is NOT empty string
-	if capturedKey != testKey {
-		t.Fatalf("api key was lost in context! expected '%s', got '%s'", testKey, capturedKey)
+	// The request context carries the stored digest (audit rows and ledger joins use
+	// it), never the cleartext credential.
+	if capturedKey != storage.HashAPIKey(testKey) {
+		t.Fatalf("api key digest was lost in context! expected '%s', got '%s'", storage.HashAPIKey(testKey), capturedKey)
 	}
 	if capturedTenant != testTenant {
 		t.Fatalf("tenant id was lost in context! expected '%s', got '%s'", testTenant, capturedTenant)

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"path/filepath"
 	"testing"
@@ -96,8 +97,18 @@ func TestMoneyUnitsRepairMigration(t *testing.T) {
 		t.Fatalf("balance_units not backfilled from legacy nano: got %d", balanceUnits)
 	}
 
+	// api_keys.key holds the credential digest after migration 29, so the legacy
+	// plaintext is no longer queryable (and must not be).
+	var plaintextRows int
+	if err := db.DB.QueryRow(`SELECT COUNT(*) FROM api_keys WHERE key = 'sk-legacy'`).Scan(&plaintextRows); err != nil {
+		t.Fatalf("count legacy plaintext keys: %v", err)
+	}
+	if plaintextRows != 0 {
+		t.Fatalf("legacy cleartext key survived migration 29")
+	}
+
 	var usedUnits, budgetUnits int64
-	if err := db.DB.QueryRow(`SELECT used_cost_units, budget_units FROM api_keys WHERE key = 'sk-legacy'`).Scan(&usedUnits, &budgetUnits); err != nil {
+	if err := db.DB.QueryRow(`SELECT used_cost_units, budget_units FROM api_keys WHERE key = ?`, HashAPIKey("sk-legacy")).Scan(&usedUnits, &budgetUnits); err != nil {
 		t.Fatalf("read api_keys units: %v", err)
 	}
 	if usedUnits != 1250000000 || budgetUnits != 5000000000 {
@@ -131,9 +142,9 @@ func TestMoneyUnitsRepairMigration(t *testing.T) {
 	defer db2.Close()
 
 	// The data plane read path that originally failed must now work.
-	rec, err := NewRepository(db2).GetAPIKeyByKey("sk-legacy")
+	rec, err := NewRepository(db2).GetAPIKeyBySecret(context.Background(), "sk-legacy")
 	if err != nil {
-		t.Fatalf("GetAPIKeyByKey failed after repair: %v", err)
+		t.Fatalf("GetAPIKeyBySecret failed after repair: %v", err)
 	}
 	if rec.UsedCostUnits != 1250000000 {
 		t.Fatalf("repository read wrong units: %d", rec.UsedCostUnits)

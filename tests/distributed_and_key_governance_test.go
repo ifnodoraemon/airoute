@@ -47,9 +47,11 @@ func TestAPIKey_ActiveVsDisabled(t *testing.T) {
 	synchronizer := controlplane.NewSynchronizer(repo, dispatcher)
 	adminHandler := controlplane.NewAdminHandler(repo, synchronizer, dispatcher)
 
-	// Create test API key
+	// Create test API key. The client holds this credential; the repository stores
+	// only its digest.
+	const governanceCredential = "sk-airoute-test-toggle-key"
 	keyRec := &storage.APIKeyRecord{
-		Key:           "sk-airoute-test-toggle-key",
+		Key:           governanceCredential,
 		TenantID:      "qa-department",
 		AllowedModels: []string{"gpt-4o"},
 		RPM:           100,
@@ -69,7 +71,7 @@ func TestAPIKey_ActiveVsDisabled(t *testing.T) {
 
 	// 1. Initial State: Key is active -> Auth should succeed
 	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
-	req.Header.Set("Authorization", "Bearer "+keyRec.Key)
+	req.Header.Set("Authorization", "Bearer "+governanceCredential)
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -99,7 +101,7 @@ func TestAPIKey_ActiveVsDisabled(t *testing.T) {
 
 	// 3. Hot Path Check: The disabled key MUST be rejected with 401 Unauthorized
 	reqDisabled := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
-	reqDisabled.Header.Set("Authorization", "Bearer "+keyRec.Key)
+	reqDisabled.Header.Set("Authorization", "Bearer "+governanceCredential)
 	wDisabled := httptest.NewRecorder()
 	engine.ServeHTTP(wDisabled, reqDisabled)
 	if wDisabled.Code != http.StatusUnauthorized {
@@ -122,7 +124,7 @@ func TestAPIKey_ActiveVsDisabled(t *testing.T) {
 
 	// 5. Hot Path Check: The re-enabled key MUST succeed again
 	reqReEnabled := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
-	reqReEnabled.Header.Set("Authorization", "Bearer "+keyRec.Key)
+	reqReEnabled.Header.Set("Authorization", "Bearer "+governanceCredential)
 	wReEnabled := httptest.NewRecorder()
 	engine.ServeHTTP(wReEnabled, reqReEnabled)
 	if wReEnabled.Code != http.StatusOK {

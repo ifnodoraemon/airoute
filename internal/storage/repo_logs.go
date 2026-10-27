@@ -243,6 +243,10 @@ func (r *Repository) buildUsageLogWhere(f LogFilter) (string, []interface{}) {
 	if len(f.APIKeys) > 0 {
 		placeholders := make([]string, 0, len(f.APIKeys))
 		for _, k := range f.APIKeys {
+			// Callers may pass the stored digest (the console resolves key ids to
+			// api_keys.key) or a bare identifier; both normalize to the digest form
+			// that the api_key column holds.
+			k = NormalizeStoredAPIKeyReference(k)
 			placeholders = append(placeholders, "?")
 			args = append(args, k)
 		}

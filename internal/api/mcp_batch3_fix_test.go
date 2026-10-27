@@ -123,13 +123,16 @@ func TestFixMCPInfraToolsRequireAdmin(t *testing.T) {
 		Models: []string{"m"}, Status: "active", Weight: 1, Protocols: []string{"openai_chat"},
 	}})
 	h := NewMCPHandler(dispatcher, repo)
-	_, tenantKey := seedMCPUserKey(t, repo, "sk-tenant-infra", "active", 10, nil, 100, 0)
-	adminKey := seedMCPAdminKey(t, repo, "sk-admin-infra")
+	// The client holds these credentials; the repository stores only their digests.
+	const tenantCredential = "sk-tenant-infra"
+	const adminCredential = "sk-admin-infra"
+	seedMCPUserKey(t, repo, tenantCredential, "active", 10, nil, 100, 0)
+	seedMCPAdminKey(t, repo, adminCredential)
 
 	for _, tool := range []string{"airoute_cluster_status", "airoute_model_topology"} {
 		t.Run(tool+"/tenant denied", func(t *testing.T) {
 			resp := postMCPMessages(t, h, "/mcp/messages",
-				mcpToolsCallBody(t, tool, map[string]any{}), "Bearer "+tenantKey.Key)
+				mcpToolsCallBody(t, tool, map[string]any{}), "Bearer "+tenantCredential)
 			if resp.Code != http.StatusOK {
 				t.Fatalf("transport status = %d (body: %s)", resp.Code, resp.Body.String())
 			}
@@ -143,7 +146,7 @@ func TestFixMCPInfraToolsRequireAdmin(t *testing.T) {
 
 		t.Run(tool+"/admin allowed", func(t *testing.T) {
 			resp := postMCPMessages(t, h, "/mcp/messages",
-				mcpToolsCallBody(t, tool, map[string]any{}), "Bearer "+adminKey.Key)
+				mcpToolsCallBody(t, tool, map[string]any{}), "Bearer "+adminCredential)
 			if resp.Code != http.StatusOK {
 				t.Fatalf("transport status = %d (body: %s)", resp.Code, resp.Body.String())
 			}
@@ -172,7 +175,7 @@ func TestFixMCPInfraToolsRequireAdmin(t *testing.T) {
 
 	// Defence in depth: a direct in-process invocation (stdio adapter path) must
 	// not skip the gate.
-	ctx := context.WithValue(context.Background(), contextKeyCallerKey, tenantKey.Key)
+	ctx := context.WithValue(context.Background(), contextKeyCallerKey, storage.HashAPIKey(tenantCredential))
 	out, isErr, handled := h.executeOpsTools(ctx, "airoute_cluster_status", map[string]any{})
 	if !handled || !isErr || !strings.Contains(out, "administrators") {
 		t.Errorf("direct tenant invocation was not denied: handled=%v isErr=%v out=%q", handled, isErr, out)
@@ -261,13 +264,14 @@ func TestFixMCPChatSessionAffinityTenantScoped(t *testing.T) {
 		t.Fatal("could not find a session id that separates the two tenants")
 	}
 
-	call := func(key string) {
-		ctx := context.WithValue(context.Background(), contextKeyCallerKey, key)
+	call := func(keyDigest string) {
+		// Context values carry the stored digest (the MCP handler stores caller.Key).
+		ctx := context.WithValue(context.Background(), contextKeyCallerKey, keyDigest)
 		out, isErr, handled := h.executeRoutingTools(ctx, "airoute_chat", map[string]any{
 			"model": modelName, "message": "hi", "session_id": sessionID,
 		})
 		if !handled || isErr {
-			t.Fatalf("airoute_chat failed for %s: handled=%v isErr=%v out=%q", key, handled, isErr, out)
+			t.Fatalf("airoute_chat failed for %s: handled=%v isErr=%v out=%q", keyDigest, handled, isErr, out)
 		}
 	}
 	call(keyA.Key)

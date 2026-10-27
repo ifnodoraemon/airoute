@@ -186,7 +186,7 @@ func (r *Repository) GetStatsOverviewForKeys(keys []string) (*StatsOverview, err
 	args := make([]any, 0, len(keys))
 	for _, k := range keys {
 		placeholders = append(placeholders, "?")
-		args = append(args, k)
+		args = append(args, NormalizeStoredAPIKeyReference(k))
 	}
 	clause := strings.Join(placeholders, ",")
 

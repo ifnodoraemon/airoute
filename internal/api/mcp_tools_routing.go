@@ -154,6 +154,9 @@ func (h *MCPHandler) executeRoutingTools(ctx context.Context, name string, args 
 		// argument stays supported for the stdio adapter, which has no HTTP
 		// request to carry the credential.
 		apiKey, _ := ctx.Value(contextKeyCallerKey).(string)
+		// The context value is already the stored digest (the transport
+		// authenticated it); the legacy argument is a cleartext credential.
+		keyIsDigest := apiKey != ""
 		if apiKey == "" {
 			if k, ok := args["api_key"].(string); ok && k != "" {
 				apiKey = k
@@ -162,7 +165,13 @@ func (h *MCPHandler) executeRoutingTools(ctx context.Context, name string, args 
 
 		caller := callerFromContext(ctx)
 		if caller == nil || caller.Key != apiKey {
-			resolved, accessErr := h.resolveCaller(apiKey)
+			var resolved *mcpCaller
+			var accessErr *mcpAccessError
+			if keyIsDigest {
+				resolved, accessErr = h.resolveCallerDigest(apiKey)
+			} else {
+				resolved, accessErr = h.resolveCaller(apiKey)
+			}
 			if accessErr != nil {
 				if accessErr.StatusCode == http.StatusUnauthorized && strings.TrimSpace(apiKey) == "" {
 					return "Error: Authentication required for airoute_chat. Please provide a valid API key via Authorization header, ?apiKey= query param, or 'api_key' argument.", true, true

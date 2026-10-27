@@ -110,6 +110,8 @@ func (h *MCPHandler) executeOpsTools(ctx context.Context, name string, args map[
 			return "Storage repository not initialized", true, true
 		}
 		apiKey, _ := ctx.Value(contextKeyCallerKey).(string)
+		// Context carries the stored digest; the legacy argument is cleartext.
+		keyIsDigest := apiKey != ""
 		if apiKey == "" {
 			if k, ok := args["api_key"].(string); ok && k != "" {
 				apiKey = k
@@ -118,7 +120,11 @@ func (h *MCPHandler) executeOpsTools(ctx context.Context, name string, args map[
 
 		var callerKeyRec *storage.APIKeyRecord
 		if apiKey != "" {
-			kRec, err := h.repo.GetAPIKeyByKey(apiKey)
+			lookupKey := apiKey
+			if !keyIsDigest {
+				lookupKey = storage.HashAPIKey(apiKey)
+			}
+			kRec, err := h.repo.GetAPIKeyByKey(lookupKey)
 			if err == nil && kRec != nil {
 				callerKeyRec = kRec
 			}

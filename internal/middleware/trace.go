@@ -162,7 +162,7 @@ func AccessLogMiddleware() gin.HandlerFunc {
 			"ip", clientIP,
 			"bytes", c.Writer.Size(),
 			"tenant", c.GetString(ContextKeyTenant),
-			"key", maskAPIKey(c.GetString(ContextKeyAPIKey)),
+			"key", accessLogKey(c),
 		}
 		if status >= 400 {
 			if message := c.GetString(ContextKeyErrorMessage); message != "" {
@@ -173,8 +173,20 @@ func AccessLogMiddleware() gin.HandlerFunc {
 	}
 }
 
-// maskAPIKey keeps enough of a key to tell two keys apart while never writing a
-// usable credential to stdout or the log archive.
+// accessLogKey renders the authenticated credential for the access line.
+//
+// ContextKeyAPIKey holds the stored digest (never the credential), and
+// ContextKeyAPIKeyFingerprint holds the display identifier; the fingerprint is
+// preferred so the line stays comparable with the console's key column.
+func accessLogKey(c *gin.Context) string {
+	if fingerprint := c.GetString(ContextKeyAPIKeyFingerprint); fingerprint != "" {
+		return fingerprint
+	}
+	return maskAPIKey(c.GetString(ContextKeyAPIKey))
+}
+
+// maskAPIKey keeps enough of a value to tell two entries apart while never
+// writing a usable credential to stdout or the log archive.
 func maskAPIKey(key string) string {
 	if key == "" {
 		return ""

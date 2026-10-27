@@ -111,9 +111,10 @@ func TestMCPChatRejectsLockedAccount(t *testing.T) {
 	repo := newMCPRegressionRepo(t)
 	dispatcher, hits := newMCPChatUpstream(t, "m")
 	h := NewMCPHandler(dispatcher, repo)
-	_, keyRec := seedMCPUserKey(t, repo, "sk-mcp-locked", "locked", 10, nil, 100, 0)
+	seedMCPUserKey(t, repo, "sk-mcp-locked", "locked", 10, nil, 100, 0)
 
-	resp := postMCPMessages(t, h, "/mcp/messages", mcpChatBody(t, "m", "hi"), "Bearer "+keyRec.Key)
+	// The client presents the credential; api_keys.key stores only its digest.
+	resp := postMCPMessages(t, h, "/mcp/messages", mcpChatBody(t, "m", "hi"), "Bearer sk-mcp-locked")
 
 	if resp.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403 (body: %s)", resp.Code, resp.Body.String())
@@ -131,9 +132,9 @@ func TestMCPChatRejectsKeyOverBudget(t *testing.T) {
 	repo := newMCPRegressionRepo(t)
 	dispatcher, hits := newMCPChatUpstream(t, "m")
 	h := NewMCPHandler(dispatcher, repo)
-	_, keyRec := seedMCPUserKey(t, repo, "sk-mcp-budget", "active", 10, nil, 1, 500)
+	seedMCPUserKey(t, repo, "sk-mcp-budget", "active", 10, nil, 1, 500)
 
-	resp := postMCPMessages(t, h, "/mcp/messages", mcpChatBody(t, "m", "hi"), "Bearer "+keyRec.Key)
+	resp := postMCPMessages(t, h, "/mcp/messages", mcpChatBody(t, "m", "hi"), "Bearer sk-mcp-budget")
 
 	if resp.Code != http.StatusPaymentRequired {
 		t.Fatalf("status = %d, want 402 (body: %s)", resp.Code, resp.Body.String())
@@ -259,7 +260,7 @@ func TestMCPMessagesRejectsCrossSessionInjection(t *testing.T) {
 	seedMCPUserKey(t, repo, "sk-mcp-attacker", "active", 10, nil, 100, 0)
 
 	sessionID := "mcp-0123456789abcdef0123456789abcdef"
-	victim := &mcpSession{ch: make(chan []byte, 4), apiKey: "sk-mcp-victim"}
+	victim := &mcpSession{ch: make(chan []byte, 4), apiKey: storage.HashAPIKey("sk-mcp-victim")}
 	h.sessions.Store(sessionID, victim)
 	t.Cleanup(func() { h.sessions.Delete(sessionID) })
 
@@ -283,7 +284,7 @@ func TestMCPMessagesRejectsMismatchedSessionKey(t *testing.T) {
 	seedMCPUserKey(t, repo, "sk-mcp-other", "active", 10, nil, 100, 0)
 
 	sessionID := "mcp-abcdef0123456789abcdef0123456789"
-	sess := &mcpSession{ch: make(chan []byte, 4), apiKey: "sk-mcp-owner"}
+	sess := &mcpSession{ch: make(chan []byte, 4), apiKey: storage.HashAPIKey("sk-mcp-owner")}
 	h.sessions.Store(sessionID, sess)
 	t.Cleanup(func() { h.sessions.Delete(sessionID) })
 
@@ -316,7 +317,7 @@ func TestMCPMessagesAcceptsMatchingSessionKey(t *testing.T) {
 	seedMCPUserKey(t, repo, "sk-mcp-normal", "active", 10, nil, 100, 0)
 
 	sessionID := "mcp-00112233445566778899aabbccddeeff"
-	sess := &mcpSession{ch: make(chan []byte, 4), apiKey: "sk-mcp-normal"}
+	sess := &mcpSession{ch: make(chan []byte, 4), apiKey: storage.HashAPIKey("sk-mcp-normal")}
 	h.sessions.Store(sessionID, sess)
 	t.Cleanup(func() { h.sessions.Delete(sessionID) })
 

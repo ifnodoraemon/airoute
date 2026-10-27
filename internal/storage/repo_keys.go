@@ -42,28 +42,75 @@ type APIKeyRecord struct {
 	Fingerprint string `json:"key_fingerprint,omitempty"`
 }
 
-// APIKeyFingerprint returns a stable, non-reversible identifier for an API key.
+// HashAPIKey returns the value stored for a bearer credential.
 //
-// The key itself has 128 bits of system entropy, so the digest cannot be
-// reversed by guessing; it is only ever used to correlate references to a key
-// (audit rows, exports, operator support) without copying the credential.
+// Credentials are never persisted in cleartext: api_keys.key holds this digest,
+// and the ledger columns that reference a key (usage_logs.api_key,
+// billing_settlements.api_key, request_traces.api_key) hold the same digest. That
+// keeps every existing join intact - settlement still runs
+// "UPDATE api_keys ... WHERE key = ?", reconciliation still groups by
+// usage_logs.api_key, and the log console still filters by
+// "api_key IN (SELECT key FROM api_keys WHERE id = ?)" - while no readable
+// credential exists at rest.
 //
-// Residual (documented deliberately, not an oversight): api_keys.key,
-// usage_logs.api_key and billing_settlements.api_key still hold cleartext
-// credentials. Those strings are the ledger's join key — settlement updates
-// counters with UPDATE api_keys ... WHERE key = ?, reconciliation groups by
-// usage_logs.api_key, and the log console filters by key id through
-// api_key IN (SELECT key FROM api_keys WHERE id = ?). Replacing them needs
-// (a) a migration adding key_hash plus usage_logs/settlements key identifiers,
-// (b) the request-path write sites to record the key id, and (c) settlement and
-// reconcile rewritten to join on it. The fingerprint below is the identifier that
-// migration should use, so it is added now (additive, no join changes) to make the
-// later change a column swap instead of a redesign.
-func APIKeyFingerprint(key string) string {
-	if key == "" {
+// The credential has 128 bits of system entropy, so a plain SHA-256 digest cannot
+// be brute-forced and needs no salt (a per-row salt would make the deterministic
+// ledger join impossible). Authentication hashes the presented credential and
+// compares digests.
+func HashAPIKey(secret string) string {
+	if secret == "" {
 		return ""
 	}
-	sum := sha256.Sum256([]byte("airoute-api-key-fingerprint-v1|" + key))
+	sum := sha256.Sum256([]byte(secret))
+	return hex.EncodeToString(sum[:])
+}
+
+// IsAPIKeyHash reports whether value has the shape of a stored key digest (64
+// lowercase hex characters). The migration uses it to stay idempotent, and the
+// ingestion path uses it to refuse legacy cleartext credentials.
+func IsAPIKeyHash(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// MaskStoredAPIKey renders a stored key digest for display. A digest is not a
+// credential, so a short prefix/suffix keeps console rows distinguishable; the
+// plaintext credential is returned only once, by the creation response.
+func MaskStoredAPIKey(stored string) string {
+	if stored == "" {
+		return ""
+	}
+	if !IsAPIKeyHash(stored) {
+		return MaskAPIKey(stored)
+	}
+	return stored[:8] + "***" + stored[len(stored)-4:]
+}
+
+// APIKeyFingerprint returns a stable, non-reversible display identifier for an API
+// key. It accepts either the credential or the stored digest and normalizes to the
+// digest first, so the same key has one fingerprint whether it is derived at
+// creation, from a database row, or from a presented credential during auth.
+//
+// The credential has 128 bits of entropy, so the digest cannot be reversed; the
+// fingerprint is a further digest of it and is used for console rows, audit lines
+// and support references, never for authentication.
+func APIKeyFingerprint(keyOrDigest string) string {
+	if keyOrDigest == "" {
+		return ""
+	}
+	digest := keyOrDigest
+	if !IsAPIKeyHash(digest) {
+		digest = HashAPIKey(digest)
+	}
+	sum := sha256.Sum256([]byte("airoute-api-key-fingerprint-v2|" + digest))
 	return "kfp_" + hex.EncodeToString(sum[:8])
 }
 
@@ -79,11 +126,32 @@ func MaskAPIKey(key string) string {
 	return key[:8] + "***" + key[len(key)-4:]
 }
 
-// attachFingerprint fills the derived identifier for a scanned row.
+// attachFingerprint fills the display identifier for a row read from storage.
+//
+// The stored value is a digest, so the fingerprint is derived from that digest: it
+// is stable for a given credential, non-reversible, and never the credential
+// itself. Console rows, exports and audit filters use it to refer to a key.
 func (rec *APIKeyRecord) attachFingerprint() {
-	if rec != nil {
+	if rec == nil {
+		return
+	}
+	if rec.Fingerprint == "" {
 		rec.Fingerprint = APIKeyFingerprint(rec.Key)
 	}
+}
+
+// MaskForDisplay replaces the stored key digest with a display mask so a console
+// response never presents the digest as if it were a usable credential. The
+// fingerprint stays available for correlation.
+func (rec *APIKeyRecord) MaskForDisplay() {
+	if rec == nil {
+		return
+	}
+	rec.Key = MaskStoredAPIKey(rec.Key)
+	if rec.Fingerprint != "" {
+		return
+	}
+	rec.Fingerprint = APIKeyFingerprint(rec.Key)
 }
 
 // resolveMoney reconciles the integer ledger mirrors with the legacy float
@@ -210,13 +278,20 @@ func insertAPIKey(db recordInserter, rec *APIKeyRecord) error {
 	if rec.GroupName == "" {
 		rec.GroupName = "default"
 	}
+	// Persist only the digest. rec.Key is replaced with it so the in-memory record
+	// matches the stored row; callers that need the plaintext for the one-time
+	// creation response keep their own copy (see the key creation handlers).
+	plaintextKey := rec.Key
+	fingerprint := APIKeyFingerprint(plaintextKey)
+	rec.Key = HashAPIKey(plaintextKey)
 	id, err := db.InsertGetID(`INSERT INTO api_keys (key, tenant_id, allowed_models, rpm, tpm, budget, budget_units, used_tokens, used_cost, used_cost_units, group_name, user_id, status, format_validation, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 		rec.Key, rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, ToUnits(rec.Budget), rec.UsedTokens, rec.UsedCost, ToUnits(rec.UsedCost), rec.GroupName, rec.UserID, rec.Status, rec.FormatValidation)
 	if err != nil {
+		rec.Key = plaintextKey
 		return err
 	}
 	rec.ID = id
-	rec.attachFingerprint()
+	rec.Fingerprint = fingerprint
 	return nil
 }
 
@@ -242,7 +317,34 @@ func (r *Repository) GetAPIKey(id int64) (*APIKeyRecord, error) {
 	return &rec, nil
 }
 
-// GetAPIKeyByKey returns a single API key by key string.
+// GetAPIKeyBySecret resolves a presented bearer credential.
+//
+// The credential is hashed and matched against the stored digest, so the database
+// never sees - and never stores - the cleartext value. This is the lookup the
+// request-path authentication must use; GetAPIKeyByKey expects an already hashed
+// identifier and is for internal/administrative use.
+func (r *Repository) GetAPIKeyBySecret(ctx context.Context, secret string) (*APIKeyRecord, error) {
+	if secret == "" {
+		return nil, sql.ErrNoRows
+	}
+	// Revoked keys are not resolvable through the credential-facing API, matching
+	// GetAPIKeyByKey. (GetAPIKeyByKeyContext stays unfiltered for the auth path,
+	// which needs to see a deleted row in order to reject it explicitly.)
+	rec, err := r.GetAPIKeyByKeyContext(ctx, HashAPIKey(secret))
+	if err != nil {
+		return nil, err
+	}
+	if rec.Status == "deleted" {
+		return nil, sql.ErrNoRows
+	}
+	return rec, nil
+}
+
+// GetAPIKeyByKey returns a single API key by its stored identifier.
+//
+// The identifier is the SHA-256 digest stored in api_keys.key (see HashAPIKey),
+// not the bearer credential. Callers that hold the credential must use
+// GetAPIKeyBySecret.
 func (r *Repository) GetAPIKeyByKey(key string) (*APIKeyRecord, error) {
 	rec, err := r.GetAPIKeyByKeyContext(context.Background(), key)
 	if err == nil && rec.Status == "deleted" {

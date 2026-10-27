@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"github.com/ifnodoraemon/airoute/internal/storage"
 	"net/http"
 	"strings"
 	"sync"
@@ -90,9 +91,9 @@ func (h *MCPHandler) HandleMCPSSE(c *gin.Context) {
 	// the request after the SSE headers were installed served a JSON error body
 	// labelled text/event-stream — strict MCP clients then tried to parse the
 	// rejection as an event stream and reported an unreadable handshake failure.
-	callerKey := extractMCPKey(c)
+	callerKey := storage.HashAPIKey(extractMCPKey(c))
 	reqCtx := c.Request.Context()
-	caller, accessErr := h.resolveCaller(callerKey)
+	caller, accessErr := h.resolveCallerDigest(callerKey)
 	if accessErr != nil {
 		// Preserve the historical wording for a credential failure; data-plane
 		// rejections (locked account, exhausted budget/wallet) speak for themselves.

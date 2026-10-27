@@ -38,7 +38,17 @@ type mcpAccessError struct {
 //
 // Before this, MCP only checked "key exists and status == active", so a locked
 // or insolvent tenant kept consuming billable inference (A02/A04).
-func (h *MCPHandler) resolveCaller(key string) (*mcpCaller, *mcpAccessError) {
+func (h *MCPHandler) resolveCaller(secret string) (*mcpCaller, *mcpAccessError) {
+	// A caller-supplied credential is cleartext; normalize it to the stored digest.
+	return h.resolveCallerDigest(storage.HashAPIKey(secret), secret)
+}
+
+// resolveCallerDigest resolves a caller whose key is already the stored digest
+// (the SSE session path stores caller.Key, which is the digest). Hashing it again
+// would never match, so the two entry points are kept separate instead of making
+// the lookup guess which form it received - guessing would also let a digest be
+// replayed as a bearer credential.
+func (h *MCPHandler) resolveCallerDigest(key string, rawKey ...string) (*mcpCaller, *mcpAccessError) {
 	// Preserve the historical message for a caller that supplied no key at all.
 	if h.repo != nil && h.repo.CountAPIKeys() > 0 && strings.TrimSpace(key) == "" {
 		return nil, &mcpAccessError{
@@ -48,7 +58,7 @@ func (h *MCPHandler) resolveCaller(key string) (*mcpCaller, *mcpAccessError) {
 		}
 	}
 
-	rec, err := h.authenticateCaller(key)
+	rec, err := h.authenticateCallerDigest(key)
 	if err != nil {
 		return nil, &mcpAccessError{
 			StatusCode: http.StatusUnauthorized,

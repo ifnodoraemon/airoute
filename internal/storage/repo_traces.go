@@ -93,6 +93,7 @@ func (r *Repository) ListRequestTraces(f TraceFilter) ([]*RequestTraceRecord, er
 	if len(f.APIKeys) > 0 {
 		placeholders := make([]string, 0, len(f.APIKeys))
 		for _, k := range f.APIKeys {
+			k = NormalizeStoredAPIKeyReference(k)
 			placeholders = append(placeholders, "?")
 			args = append(args, k)
 		}

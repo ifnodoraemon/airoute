@@ -31,6 +31,7 @@ func (h *AdminHandler) ListAPIKeys(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		maskKeysForDisplay(keys)
 		c.JSON(http.StatusOK, gin.H{"code": 0, "data": keys})
 		return
 	}
@@ -58,7 +59,17 @@ func (h *AdminHandler) ListAPIKeys(c *gin.Context) {
 		}
 	}
 
+	maskKeysForDisplay(keys)
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": keys})
+}
+
+// maskKeysForDisplay replaces stored key digests with a display mask. The
+// plaintext credential is unrecoverable by design, so a list response must not
+// present the digest as if it were a usable key.
+func maskKeysForDisplay(keys []*storage.APIKeyRecord) {
+	for _, k := range keys {
+		k.MaskForDisplay()
+	}
 }
 
 // CreateAPIKeyRequest is the wire shape of an API key creation.
@@ -125,6 +136,9 @@ func (h *AdminHandler) CreateAPIKey(c *gin.Context) {
 		return
 	}
 
+	// The repository stores only the digest and overwrites Record.Key with it, so
+	// the plaintext has to be captured first: it is returned exactly once, here.
+	plaintextKey := outcome.Record.Key
 	if err := h.repo.CreateAPIKey(outcome.Record); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -132,7 +146,9 @@ func (h *AdminHandler) CreateAPIKey(c *gin.Context) {
 
 	h.syncDataPlane("api_key_created")
 
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": outcome.Record, "message": "API 密钥已成功创建并同步"})
+	created := *outcome.Record
+	created.Key = plaintextKey
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": &created, "key_returned_once": true, "message": "API 密钥已成功创建并同步"})
 }
 
 // writeKeyCreationDenial renders a key creation refusal. Every branch keeps the

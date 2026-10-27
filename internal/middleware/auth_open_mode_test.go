@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/config"
 	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
 // TestAuthMiddlewareOpenModeRequiresNoKeyEverRegistered pins the gateway's most
@@ -69,7 +70,9 @@ func TestAuthMiddlewareOpenModeRequiresNoKeyEverRegistered(t *testing.T) {
 		{
 			name: "an active key is accepted",
 			keys: []model.APIKeyConfig{
-				{Key: "sk-live", TenantID: "t", Status: "active"},
+				// The runtime snapshot is keyed by the stored digest: reload reads
+				// api_keys.key, which holds HashAPIKey(credential).
+				{Key: storage.HashAPIKey("sk-live"), TenantID: "t", Status: "active"},
 			},
 			hasRegistered: true,
 			header:        "Bearer sk-live",

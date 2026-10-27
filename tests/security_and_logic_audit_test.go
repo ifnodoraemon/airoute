@@ -223,7 +223,7 @@ func TestLogic_APIKeyRPM0_Unlimited(t *testing.T) {
 		t.Fatalf("failed to create api key: %v", err)
 	}
 
-	saved, err := repo.GetAPIKeyByKey("sk-airoute-unlimited-rpm")
+	saved, err := repo.GetAPIKeyBySecret(context.Background(), "sk-airoute-unlimited-rpm")
 	if err != nil {
 		t.Fatalf("failed to get api key: %v", err)
 	}

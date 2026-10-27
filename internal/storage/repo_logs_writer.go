@@ -30,7 +30,33 @@ func normalizeUsageLog(log *UsageLogRecord) {
 	log.Model = clampRunes(log.Model, 128)
 	log.Channel = clampRunes(log.Channel, 128)
 	log.TenantID = clampRunes(log.TenantID, 128)
+	log.APIKey = NormalizeStoredAPIKeyReference(log.APIKey)
 	log.APIKey = clampRunes(log.APIKey, 255)
+}
+
+// NormalizeStoredAPIKeyReference turns any api_key column/JSON field value into the
+// stored digest form.
+//
+// The request path already supplies the digest. The remaining sources are:
+//
+//   - a Redis Stream message or spill file written by a pre-migration binary, which
+//     carries the cleartext credential. Hashing it yields exactly the digest the
+//     migration wrote into api_keys.key for that credential, so settlement and
+//     reconciliation still attribute the charge correctly - and no cleartext is
+//     persisted;
+//   - an auth-failure audit row (a fingerprint) or an operator-supplied label,
+//     which hashes into a digest that matches no key and therefore behaves as an
+//     unattributed charge, as before.
+//
+// Either way the column never holds a readable credential.
+func NormalizeStoredAPIKeyReference(value string) string {
+	if value == "" {
+		return ""
+	}
+	if IsAPIKeyHash(value) {
+		return value
+	}
+	return HashAPIKey(value)
 }
 
 // truncateError keeps persisted error strings bounded (2 KiB).

@@ -80,10 +80,11 @@ func TestMCPCallerIsAdminGatesSQLTools(t *testing.T) {
 		return context.WithValue(context.Background(), contextKeyCallerKey, key)
 	}
 
-	if !h.callerIsAdmin(withKey("sk-admin-key")) {
+	// Context values carry the stored digest (the MCP handler stores caller.Key).
+	if !h.callerIsAdmin(withKey(adminKey.Key)) {
 		t.Fatal("expected the admin-owned key to be treated as administrator")
 	}
-	if h.callerIsAdmin(withKey("sk-user-key")) {
+	if h.callerIsAdmin(withKey(userKey.Key)) {
 		t.Fatal("expected a regular user's key to be denied SQL tools")
 	}
 	if h.callerIsAdmin(context.Background()) {
