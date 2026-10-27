@@ -188,3 +188,31 @@ func TestSpillReplayWithoutBillingIDChargesOnce(t *testing.T) {
 		t.Fatalf("settlement rows = %d, want 1", settlements)
 	}
 }
+
+// A keyless record with no timestamp has no stable identity to derive from. It
+// must still be persisted: collapsing two look-alike rows into one would silently
+// lose an audit row, which is worse than losing idempotency for a caller that
+// never reports when the charge happened.
+func TestKeylessRecordWithoutTimestampIsNeverDropped(t *testing.T) {
+	r, key, u := billingIDTestRepo(t)
+	ctx := context.Background()
+
+	payload := func() *UsageLogRecord {
+		// CreatedAt intentionally zero, as the direct repository callers in the
+		// wild leave it.
+		return billingRecord(key, u.Username, "", "", 1.00)
+	}
+	for attempt := 1; attempt <= 2; attempt++ {
+		if err := r.BatchRecordUsageLogsContext(ctx, []*UsageLogRecord{payload()}); err != nil {
+			t.Fatalf("delivery %d: %v", attempt, err)
+		}
+	}
+
+	var audits int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM usage_logs`).Scan(&audits); err != nil {
+		t.Fatal(err)
+	}
+	if audits != 2 {
+		t.Fatalf("audit rows = %d, want 2: a record without a stable identity must not be deduplicated", audits)
+	}
+}

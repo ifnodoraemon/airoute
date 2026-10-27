@@ -67,8 +67,13 @@ func BillingIDFromSpillLine(file string, line int) string {
 // different requests cannot collapse into one charge. Only the transport
 // boundaries (stream entry, spill line) can produce a more precise key; they run
 // first.
+//
+// A record with no timestamp has no stable identity to hash: two different audit
+// rows that happen to share every other field would collapse into one, and
+// silently losing an audit row is worse than losing idempotency for a caller that
+// never reports when it happened. Those records keep a fresh random key.
 func DerivedBillingID(log *UsageLogRecord) string {
-	if log == nil {
+	if log == nil || log.CreatedAt.IsZero() {
 		return NewBillingID()
 	}
 	hasher := sha256.New()

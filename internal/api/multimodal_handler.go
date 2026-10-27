@@ -52,10 +52,17 @@ func (h *MultimodalHandler) dispatchAndTransform(c *gin.Context, upReq *router.U
 
 	resp, err := h.dispatcher.DispatchHTTP(reqCtx, upReq)
 	if err != nil {
-		// Map the failure instead of hardcoding 502: a canceled dispatch is a
-		// client abort (499, not a gateway error), and the audit row keeps the
-		// sanitized reason and the failing channel.
-		respondUpstreamDispatchError(c, sessionID, upReq.Model, time.Since(start), err)
+		// A cancelled dispatch means the customer went away, not that the provider
+		// failed: report and audit 499 instead of blaming the upstream with the
+		// blanket 502 these endpoints used to return. Other dispatch failures keep
+		// the established 502 contract, now with the reason and channel in the
+		// audit row.
+		if resolved, _, _, _ := resolveUpstreamFailureStatus(err); resolved == statusClientClosed {
+			respondUpstreamDispatchError(c, sessionID, upReq.Model, time.Since(start), err)
+			return
+		}
+		recordFailedRequestWithError(c, sessionID, upReq.Model, time.Since(start), http.StatusBadGateway, err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": sanitizeErrorMessage(err)})
 		return
 	}
 	defer resp.Stream.Close()

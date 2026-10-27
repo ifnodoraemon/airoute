@@ -32,18 +32,8 @@ func TestPricingSnapshotsSurvivePriceChangesAndBatchWrites(t *testing.T) {
 	defer db.Close()
 	r := NewRepository(db)
 	snapshot := &UsagePricingSnapshot{Model: "images", Currency: "CNY", FixedPrice: 10, GroupMultiplier: .8, OffPeakDiscount: 1, BillableUnits: 2}
-	// Every record needs a distinct completion timestamp: records that reach
-	// settlement without a transport key get a deterministic billing_id, so two
-	// otherwise-identical records with a zero timestamp are by design the same
-	// charge and the second one is deduplicated.
-	base := time.Now()
-	seq := 0
 	for _, batch := range []bool{false, true} {
-		logs := []*UsageLogRecord{
-			{Model: "images", Cost: 16, PricingSnapshot: snapshot, StatusCode: 200, CreatedAt: base.Add(time.Duration(seq) * time.Millisecond)},
-			{Model: "images", Cost: 16, PricingSnapshot: snapshot, StatusCode: 200, CreatedAt: base.Add(time.Duration(seq+1) * time.Millisecond)},
-		}
-		seq += 2
+		logs := []*UsageLogRecord{{Model: "images", Cost: 16, PricingSnapshot: snapshot, StatusCode: 200}, {Model: "images", Cost: 16, PricingSnapshot: snapshot, StatusCode: 200, CreatedAt: time.Now()}}
 		if batch {
 			err = r.BatchRecordUsageLogs(logs)
 		} else {
