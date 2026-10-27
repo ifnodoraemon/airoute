@@ -116,3 +116,136 @@ func TestWalletTransactionsAppendAndDedupeByRef(t *testing.T) {
 		t.Fatal("missing user must be rejected")
 	}
 }
+
+func TestRedeemCodeWritesRedemptionLedger(t *testing.T) {
+	db, err := OpenDB(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := NewRepository(db)
+	user := &UserRecord{Username: "redeem-user", Email: "redeem@example.com", PasswordHash: "x", Role: "user", Status: "active", Balance: 100, BalanceUnits: ToUnits(100), GroupName: "default"}
+	if err := repo.CreateUser(user); err != nil {
+		t.Fatal(err)
+	}
+	if err := CreateWalletLedger(db); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO redemption_codes (code, name, amount, status) VALUES ('CODE-1', 'test', 10, 'active')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.RedeemCode("CODE-1", user.Username); err != nil {
+		t.Fatalf("redeem: %v", err)
+	}
+
+	entries, err := repo.ListWalletTransactions(user.ID, 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 || entries[0].Type != WalletTypeRedemption {
+		t.Fatalf("entries = %+v", entries)
+	}
+	if entries[0].DeltaUnits != ToUnits(10) || entries[0].BalanceAfterUnits != ToUnits(110) {
+		t.Fatalf("redemption entry = %+v", entries[0])
+	}
+	sum, err := repo.WalletLedgerSumContext(context.Background(), user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum != ToUnits(110) {
+		t.Fatalf("ledger sum = %d", sum)
+	}
+}
+
+func TestCompleteRechargeOrderWritesRechargeLedgerOnce(t *testing.T) {
+	db, err := OpenDB(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := NewRepository(db)
+	user := &UserRecord{Username: "recharge-user", Email: "recharge@example.com", PasswordHash: "x", Role: "user", Status: "active", Balance: 100, BalanceUnits: ToUnits(100), GroupName: "default"}
+	if err := repo.CreateUser(user); err != nil {
+		t.Fatal(err)
+	}
+	if err := CreateWalletLedger(db); err != nil {
+		t.Fatal(err)
+	}
+	order := &RechargeOrderRecord{OrderNo: "order-1", Username: user.Username, Amount: 25, Currency: "CNY", Channel: "stripe", Status: "pending"}
+	if err := repo.CreateRechargeOrder(order); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.CompleteRechargeOrder("order-1"); err != nil {
+		t.Fatalf("complete: %v", err)
+	}
+	// Webhook retries return the paid order without crediting again.
+	if _, err := repo.CompleteRechargeOrder("order-1"); err != nil {
+		t.Fatalf("repeat complete: %v", err)
+	}
+
+	entries, err := repo.ListWalletTransactions(user.ID, 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recharges := 0
+	for _, entry := range entries {
+		if entry.Type == WalletTypeRecharge {
+			recharges++
+			if entry.DeltaUnits != ToUnits(25) || entry.BalanceAfterUnits != ToUnits(125) {
+				t.Fatalf("recharge entry = %+v", entry)
+			}
+		}
+	}
+	if recharges != 1 {
+		t.Fatalf("recharge entries = %d", recharges)
+	}
+}
+
+func TestDeductWalletWritesChargeLedger(t *testing.T) {
+	db, err := OpenDB(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := NewRepository(db)
+	user := &UserRecord{Username: "charge-user", Email: "charge@example.com", PasswordHash: "x", Role: "user", Status: "active", Balance: 100, BalanceUnits: ToUnits(100), GroupName: "default"}
+	if err := repo.CreateUser(user); err != nil {
+		t.Fatal(err)
+	}
+	if err := CreateWalletLedger(db); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	tx, err := db.BeginTx(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	applied, balance, err := repo.deductWallet(tx, "id = ? AND role != 'admin'", []any{user.ID}, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !applied || balance != ToUnits(97) {
+		t.Fatalf("deduct applied=%v balance=%d", applied, balance)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := repo.ListWalletTransactions(user.ID, 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 || entries[0].Type != WalletTypeCharge {
+		t.Fatalf("entries = %+v", entries)
+	}
+	if entries[0].DeltaUnits != -ToUnits(3) || entries[0].BalanceAfterUnits != ToUnits(97) {
+		t.Fatalf("charge entry = %+v", entries[0])
+	}
+	sum, err := repo.WalletLedgerSumContext(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum != ToUnits(97) {
+		t.Fatalf("ledger sum = %d", sum)
+	}
+}

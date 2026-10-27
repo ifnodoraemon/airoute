@@ -58,5 +58,9 @@ func addWalletLedger(db *DB) error {
 // CreateWalletLedger is the exported schema entrypoint used by the migration
 // registration once the concurrent migration-list edit is committed.
 func CreateWalletLedger(db *DB) error {
-	return addWalletLedger(db)
+	if err := addWalletLedger(db); err != nil {
+		return err
+	}
+	markWalletLedgerReady(db)
+	return nil
 }

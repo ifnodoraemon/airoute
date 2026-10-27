@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -153,4 +154,43 @@ func (r *Repository) LatestWalletBalanceContext(ctx context.Context, userID int6
 		return 0, nil
 	}
 	return balance, err
+}
+
+// walletLedgerReady caches whether a DB has the ledger table. The feature is
+// rolled out by migration, and the money paths must keep working on databases
+// where it has not run yet; the check is one cheap query per DB process.
+var walletLedgerReady sync.Map // *DB -> bool
+
+func walletLedgerAvailable(db *DB) bool {
+	if db == nil {
+		return false
+	}
+	if cached, ok := walletLedgerReady.Load(db); ok {
+		return cached.(bool)
+	}
+	var one int
+	err := db.QueryRow(`SELECT 1 FROM wallet_transactions LIMIT 1`).Scan(&one)
+	ready := err == nil || err == sql.ErrNoRows
+	walletLedgerReady.Store(db, ready)
+	return ready
+}
+
+func markWalletLedgerReady(db *DB) {
+	if db != nil {
+		walletLedgerReady.Store(db, true)
+	}
+}
+
+// appendWalletLedger is the single write helper for the money paths. It is a
+// no-op before the ledger migration has run, so enabling the feature does not
+// make recharge/redemption/charge fail on older databases.
+func (r *Repository) appendWalletLedger(tx *Tx, userID int64, typ string, delta, balanceAfter int64, operator, reason, ref string) error {
+	if tx == nil || userID <= 0 || !walletLedgerAvailable(r.db) {
+		return nil
+	}
+	_, err := r.RecordWalletTransaction(tx, &WalletTransactionRecord{
+		UserID: userID, Type: typ, DeltaUnits: delta, BalanceAfterUnits: balanceAfter,
+		Operator: operator, Reason: reason, RefID: ref,
+	})
+	return err
 }
