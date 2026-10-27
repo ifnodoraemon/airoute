@@ -982,7 +982,7 @@ export default function DashboardView({
                 </option>
                 {(keys || []).map(k => (
                   <option key={k.id || k.key} value={k.key}>
-                    🔑 {k.tenant_id || k.name || k.key.slice(0, 12)} {k.rpm ? `(${k.rpm} RPM)` : ''}
+                    🔑 {k.tenant_id || k.name || '—'} · {k.key_fingerprint || (isZh ? '无指纹' : 'no fingerprint')} {k.rpm ? `(${k.rpm} RPM)` : ''}
                   </option>
                 ))}
               </select>

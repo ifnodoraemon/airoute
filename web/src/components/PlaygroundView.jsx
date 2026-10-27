@@ -982,7 +982,7 @@ Execute the following mission with precision, maintainability, and zero speculat
               >
                 {activeKeys.map((k) => (
                   <option key={k.key || k.id} value={k.key}>
-                    {k.tenant_id ? `${k.tenant_id} - ` : ''}{k.key.slice(0, 10)}...{k.key.slice(-4)}
+                    {k.tenant_id ? `${k.tenant_id} - ` : ''}{k.key_fingerprint || (isZh ? '无指纹' : 'no fingerprint')}
                   </option>
                 ))}
                 <option value="__none__">{isZh ? '免密直通 (不带 API Key)' : 'Public / Unauthenticated'}</option>

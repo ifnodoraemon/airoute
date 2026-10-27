@@ -8,15 +8,41 @@ import { useCallback, useState } from 'react';
 import { apiFetch, apiJSON } from '../api/client';
 import { copyToClipboard as crossOriginCopy } from '../config';
 
+// Self-service key quotas. The gateway applies these to keys created through the
+// personal-key endpoint, and clamps rather than rejects: the form states the same
+// numbers up front instead of pretending 0 means "unlimited" for everyone.
+// An unlimited key is an administrator decision, so only the admin form offers it.
+export const SELF_SERVICE_DEFAULT_RPM = 60;
+export const SELF_SERVICE_MAX_RPM = 6000;
+export const SELF_SERVICE_DEFAULT_TPM = 100000;
+export const SELF_SERVICE_MAX_TPM = 10000000;
+
+export function clampSelfServiceRpm(value) {
+  const parsed = Number.isFinite(Number(value)) ? Math.floor(Number(value)) : 0;
+  if (parsed <= 0) return SELF_SERVICE_DEFAULT_RPM;
+  return Math.min(parsed, SELF_SERVICE_MAX_RPM);
+}
+
+export function clampSelfServiceTpm(value) {
+  const parsed = Number.isFinite(Number(value)) ? Math.floor(Number(value)) : 0;
+  if (parsed <= 0) return SELF_SERVICE_DEFAULT_TPM;
+  return Math.min(parsed, SELF_SERVICE_MAX_TPM);
+}
+
 function emptyKey(adminUser, isZh, keyCount) {
+  const isAdmin = adminUser?.role === 'admin';
   const tenantNum = (keyCount || 0) + 1;
   return {
-    tenant_id: isZh ? `密钥-${tenantNum}` : `Key-${tenantNum}`,
+    // Only an administrator chooses the tenant; for a self-service key the gateway
+    // derives it from the account, so the form keeps it empty and never sends it.
+    tenant_id: isAdmin ? (isZh ? `密钥-${tenantNum}` : `Key-${tenantNum}`) : '',
     key: '',
-    rpm: 0,
+    // 0 means "unlimited" for an admin-created key only.
+    rpm: isAdmin ? 0 : SELF_SERVICE_DEFAULT_RPM,
+    tpm: isAdmin ? 0 : SELF_SERVICE_DEFAULT_TPM,
     budget: 0,
     allowed_models: [],
-    group_name: adminUser?.role === 'admin' ? 'default' : (adminUser?.group_name || 'default'),
+    group_name: isAdmin ? 'default' : (adminUser?.group_name || 'default'),
   };
 }
 
@@ -26,33 +52,72 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
   const [submittingKey, setSubmittingKey] = useState(false);
   const [selectedKeyIds, setSelectedKeyIds] = useState([]);
   const [copiedKey, setCopiedKey] = useState('');
+  // The plaintext credential of the key that was just created. The server returns it
+  // exactly once; it is never read back from the list, so this is the only place the
+  // console can show it (and it is dropped as soon as the dialog closes).
+  const [createdKey, setCreatedKey] = useState(null);
 
   // Handle Key Modal Opening. Credentials are always generated server-side with
   // crypto/rand; the browser never invents an authentication secret.
   const handleOpenCreateKey = useCallback(() => {
     setNewKey(emptyKey(adminUser, isZh, keys?.length || 0));
+    setCreatedKey(null);
     setShowKeyModal(true);
   }, [adminUser, isZh, keys]);
+
+  // Closing the dialog is also what drops the one-time plaintext credential.
+  const closeKeyModal = useCallback(() => {
+    setShowKeyModal(false);
+    setCreatedKey(null);
+  }, []);
 
   // Handle Key Creation
   const handleCreateKey = useCallback(async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (submittingKey) return;
-    if (!newKey.tenant_id.trim()) {
+    const isAdmin = adminUser?.role === 'admin';
+    if (isAdmin && !(newKey.tenant_id || '').trim()) {
       showToast(isZh ? '请输入密钥名称' : 'Please enter key name', 'warning');
       return;
     }
+
+    // The tenant comes from the session for a self-service key: sending one would be
+    // ignored at best, so the form does not pretend it can choose.
+    const requestedRpm = Number(newKey.rpm) || 0;
+    const requestedTpm = Number(newKey.tpm) || 0;
+    const payload = {
+      allowed_models: newKey.allowed_models || [],
+      budget: Number(newKey.budget) || 0,
+      group_name: newKey.group_name,
+      rpm: isAdmin ? Math.max(0, requestedRpm) : clampSelfServiceRpm(requestedRpm),
+      tpm: isAdmin ? Math.max(0, requestedTpm) : clampSelfServiceTpm(requestedTpm),
+    };
+    if (isAdmin) {
+      payload.tenant_id = newKey.tenant_id.trim();
+      payload.key = newKey.key || '';
+    }
+
     setSubmittingKey(true);
     try {
       const res = await apiFetch('/api/v1/admin/keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newKey),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
+        const created = data.data || {};
         showToast(isZh ? 'API 访问密钥创建成功' : 'API access key created successfully', 'success');
-        setShowKeyModal(false);
+        // Keep the dialog open: the plaintext credential exists only in this
+        // response, so this is the single chance to show it.
+        setCreatedKey({
+          key: created.key || '',
+          fingerprint: created.key_fingerprint || '',
+          tenant: created.tenant_id || (adminUser?.username || ''),
+          rpm: created.rpm ?? payload.rpm,
+          tpm: created.tpm ?? payload.tpm,
+          quotaAdjusted: !isAdmin && (payload.rpm !== requestedRpm || payload.tpm !== requestedTpm),
+        });
         // fetchKeys() did not exist, so the success path threw a ReferenceError and
         // the list never refreshed. The console loader is the real refresh.
         refresh();
@@ -64,7 +129,7 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
     } finally {
       setSubmittingKey(false);
     }
-  }, [submittingKey, newKey, isZh, showToast, refresh]);
+  }, [submittingKey, newKey, adminUser, isZh, showToast, refresh]);
 
   // Handle Key Group Update
   const handleUpdateKeyGroup = useCallback(async (keyId, newGroup) => {
@@ -173,6 +238,7 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
 
   const reset = useCallback(() => {
     setShowKeyModal(false);
+    setCreatedKey(null);
     setSelectedKeyIds([]);
     setCopiedKey('');
   }, []);
@@ -183,8 +249,10 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
     submittingKey,
     selectedKeyIds,
     copiedKey,
+    createdKey,
     setNewKey,
     setShowKeyModal,
+    closeKeyModal,
     setSelectedKeyIds,
     setCopiedKey,
     handleOpenCreateKey,

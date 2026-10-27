@@ -220,14 +220,13 @@ export default function McpIntegrationView({ adminFetch, adminToken, keys = [], 
   const [togglingServer, setTogglingServer] = useState({});
   const [copiedKey, setCopiedKey] = useState('');
 
-  // Token Management
-  const getInitialToken = useCallback(() => {
-    if (keys && keys.length > 0) {
-      const active = keys.find(k => k.status === 'active' || k.status === 1 || !k.status);
-      return active ? active.key : keys[0].key;
-    }
-    return adminToken || '';
-  }, [keys, adminToken]);
+  // Token Management.
+  //
+  // The snippets used to be pre-filled with a stored API key, which rendered a saved
+  // credential into the page (and into every copied cURL/config block). Plaintext is
+  // shown once, at creation, so the fields start with the placeholder and the
+  // operator either pastes a key they kept or explicitly selects one below.
+  const getInitialToken = useCallback(() => '', []);
 
   const [probeToken, setProbeToken] = useState('');
   const [configToken, setConfigToken] = useState('');
@@ -239,7 +238,7 @@ export default function McpIntegrationView({ adminFetch, adminToken, keys = [], 
     if (!configToken && initTok) setConfigToken(initTok);
     // The guards above make the extra dependencies harmless: once a token is set,
     // re-running cannot overwrite it.
-  }, [keys, adminToken, getInitialToken, probeToken, configToken]);
+  }, [getInitialToken, probeToken, configToken]);
 
   // MCP Master Switch & Stats
   const [mcpSettings, setMcpSettings] = useState({
@@ -1080,7 +1079,7 @@ curl -X POST "${messagesUrl}" \\
                     <option value="" disabled>{isZh ? '选择已发行 Key...' : 'Select issued key...'}</option>
                     {keys.map(k => (
                       <option key={k.key} value={k.key}>
-                        {k.name ? `${k.name} (${k.key.slice(0, 10)}...)` : k.key}
+                        {`${k.tenant_id || k.id} · ${k.key_fingerprint || (isZh ? '无指纹' : 'no fingerprint')}`}
                       </option>
                     ))}
                   </select>
@@ -1396,7 +1395,7 @@ curl -X POST "${messagesUrl}" \\
                       <option value="" disabled>{isZh ? '选择网关已发行 Key...' : 'Select issued key...'}</option>
                       {keys.map(k => (
                         <option key={k.key} value={k.key}>
-                          {k.name ? `${k.name} (${k.key.slice(0, 10)}...)` : k.key}
+                          {`${k.tenant_id || k.id} · ${k.key_fingerprint || (isZh ? '无指纹' : 'no fingerprint')}`}
                         </option>
                       ))}
                     </select>

@@ -156,11 +156,16 @@ export default function OnboardingModal({
     }
   };
 
+  // A stored credential is never rendered: the console shows the plaintext exactly
+  // once, in the creation dialog. The copyable samples carry a placeholder; the live
+  // "test ping" button still uses the selected key internally to make its request.
+  const KEY_PLACEHOLDER = '<YOUR_API_KEY>';
+
   const pythonCode = `from openai import OpenAI
 
 client = OpenAI(
     base_url="${origin}/v1",
-    api_key="${selectedKey}",
+    api_key="${KEY_PLACEHOLDER}",
 )
 
 response = client.chat.completions.create(
@@ -179,7 +184,7 @@ for chunk in response:
 
 const client = new OpenAI({
   baseURL: "${origin}/v1",
-  apiKey: "${selectedKey}",
+  apiKey: "${KEY_PLACEHOLDER}",
 });
 
 async function main() {
@@ -206,7 +211,7 @@ ${Object.entries(probe.headers).map(([name, value]) => `  -H "${name}: ${value}"
 
 client = anthropic.Anthropic(
     base_url="${origin}",
-    api_key="${selectedKey}",
+    api_key="${KEY_PLACEHOLDER}",
 )
 
 message = client.messages.create(
@@ -332,7 +337,7 @@ print(message.content[0].text)
                     {activeKeys.map((k) => (
                       <option key={k.id || k.key} value={k.key}>
                         {k.tenant_id ? `[${k.tenant_id}] ` : ''}
-                        {k.key.slice(0, 10)}...{k.key.slice(-4)} (RPM: {k.rpm || 60})
+                        {k.key_fingerprint || (isZh ? '无指纹' : 'no fingerprint')} (RPM: {k.rpm || 60})
                       </option>
                     ))}
                   </select>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import {
   Key,
   Plus,
@@ -8,8 +8,6 @@ import {
   Sparkles,
   DollarSign,
   Search,
-  Eye,
-  EyeOff,
   FileSpreadsheet,
   Terminal,
   Activity
@@ -62,7 +60,6 @@ export default function KeysView({
   const [filters, setFilters, resetFilters] = useUrlFilters('keys', { q: '', status: 'all' });
   const searchQuery = filters.q || '';
   const statusFilter = filters.status || 'all'; // 'all' | 'active' | 'disabled'
-  const [isMasked, setIsMasked] = useState(true);
 
   const columns = useMemo(() => [
     { key: 'name', label: isZh ? '密钥别名' : 'Key Name', sortValue: (k) => k.tenant_id || '' },
@@ -151,12 +148,11 @@ export default function KeysView({
     ];
   };
 
-  const maskKeyString = (kStr) => {
-    if (!kStr) return '-';
-    if (!isMasked) return kStr;
-    if (kStr.length <= 12) return 'sk-••••••••';
-    return `${kStr.slice(0, 6)}••••••••${kStr.slice(-4)}`;
-  };
+  // A stored credential is never rendered. The server exposes a stable, non-reversible
+  // fingerprint (`kfp_…`) for exactly this purpose; rows created before the column
+  // existed fall back to an opaque mask with no characters from the key itself.
+  const maskKeyString = (kStr) => (kStr ? 'sk-airoute-••••••••••••' : '-');
+  const keyIdentifier = (k) => k.key_fingerprint || maskKeyString(k.key);
 
   // Filter keys
   const filteredKeys = keys.filter(k => {
@@ -181,14 +177,15 @@ export default function KeysView({
       return;
     }
     const headers = isZh ? [
-      'ID', '密钥别名', 'API Key', '计费分组', '已用额度(元)', '预算上限(元)', '授权模型', '速率限制(RPM)', '状态', '创建时间'
+      'ID', '密钥别名', '密钥指纹', '计费分组', '已用额度(元)', '预算上限(元)', '授权模型', '速率限制(RPM)', '状态', '创建时间'
     ] : [
-      'ID', 'Alias', 'API Key', 'Billing Group', 'Used Cost', 'Budget Cap', 'Allowed Models', 'Rate Limit (RPM)', 'Status', 'Created At'
+      'ID', 'Alias', 'Key Fingerprint', 'Billing Group', 'Used Cost', 'Budget Cap', 'Allowed Models', 'Rate Limit (RPM)', 'Status', 'Created At'
     ];
     const rows = sortedKeys.map(k => [
       k.id,
       k.tenant_id || '',
-      k.key || '',
+      // Never export a stored credential: the fingerprint identifies the key.
+      keyIdentifier(k),
       k.group_name || 'default',
       (k.used_cost || 0).toFixed(4),
       k.budget > 0 ? k.budget.toFixed(2) : (isZh ? '不限' : 'Unlimited'),
@@ -217,9 +214,13 @@ export default function KeysView({
       showToast?.(isZh ? '该密钥暂无可用聊天模型，请检查授权范围和模型配置' : 'No available chat model for this key. Check model access and configuration.', 'warning');
       return;
     }
-    const keyStr = key.key;
+    // The stored credential is not readable from the console (plaintext is shown
+    // once, at creation), so the snippet carries a placeholder plus the fingerprint
+    // that identifies which key to paste in.
+    const keyStr = '<YOUR_API_KEY>';
+    const fingerprint = key.key_fingerprint || '';
     const origin = getGatewayOrigin();
-    const curl = `curl ${origin}/v1/chat/completions \\
+    const curl = `${fingerprint ? `# key fingerprint: ${fingerprint}\n` : ''}curl ${origin}/v1/chat/completions \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer ${keyStr}" \\
   -d '{
@@ -261,14 +262,6 @@ export default function KeysView({
               <span>{isZh ? '组内费率明细' : 'Pricing Rates'}</span>
             </button>
           )}
-          <button
-            onClick={() => setIsMasked(!isMasked)}
-            className="ui-btn-secondary"
-            title={isMasked ? (isZh ? '显示明文密钥' : 'Show plaintext key') : (isZh ? '脱敏隐藏密钥' : 'Mask key')}
-          >
-            {isMasked ? <Eye className="w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0]" /> : <EyeOff className="w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0]" />}
-            <span>{isMasked ? (isZh ? '显示明文' : 'Show Key') : (isZh ? '脱敏遮蔽' : 'Mask Key')}</span>
-          </button>
           <button
             onClick={handleExportKeysCSV}
             className="ui-btn-secondary"
@@ -466,13 +459,15 @@ export default function KeysView({
                         {isVisible('token') && (
                           <td className={`ui-td font-mono text-[#355CFF] dark:text-[#91A7FF] ${COLUMN_CLASS.token}`}>
                             <div className="flex items-center space-x-1.5">
-                              <span className="select-all">{maskKeyString(k.key)}</span>
+                              <span className="select-all" title={isZh ? '密钥指纹（不可反推密钥）' : 'Key fingerprint (not reversible)'}>
+                                {keyIdentifier(k)}
+                              </span>
                               <button
-                                onClick={() => copyToClipboard(k.key)}
+                                onClick={() => copyToClipboard(k.key_fingerprint || keyIdentifier(k))}
                                 className="p-1 hover:bg-[#EEF2FF] dark:hover:bg-[#242D48] rounded-md text-[#656B75] dark:text-[#A1A7B0] hover:text-[#355CFF] dark:hover:text-[#91A7FF] transition-colors cursor-pointer"
-                                title={isZh ? "复制完整 API Key" : "Copy full API Key"}
+                                title={isZh ? '复制密钥指纹' : 'Copy key fingerprint'}
                               >
-                                {copiedKey === k.key ? (
+                                {copiedKey === (k.key_fingerprint || keyIdentifier(k)) ? (
                                   <Check className="w-3.5 h-3.5 text-emerald-500" />
                                 ) : (
                                   <Copy className="w-3.5 h-3.5" />

@@ -84,7 +84,11 @@ describe('useKeyActions', () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
-  it('creates a key, closes the form and refreshes the console', async () => {
+  it('creates a key and keeps the dialog open to show the credential once', async () => {
+    globalThis.fetch.mockResolvedValue(jsonResponse({
+      code: 0,
+      data: { key: 'sk-airoute-created', key_fingerprint: 'kfp_abc123', tenant_id: 'root', rpm: 60, tpm: 100000 },
+    }));
     const { result, refresh } = setup();
     act(() => {
       result.current.handleOpenCreateKey();
@@ -102,8 +106,90 @@ describe('useKeyActions', () => {
     expect(sent.key).toBe('');
     expect(sent.tenant_id).toBe('密钥-3');
 
-    expect(result.current.showKeyModal).toBe(false);
+    // The dialog stays open because the plaintext exists only in this response.
+    expect(result.current.showKeyModal).toBe(true);
+    expect(result.current.createdKey).toEqual(expect.objectContaining({
+      key: 'sk-airoute-created',
+      fingerprint: 'kfp_abc123',
+    }));
     expect(refresh).toHaveBeenCalled();
+  });
+
+  it('closing the dialog drops the one-time credential', async () => {
+    globalThis.fetch.mockResolvedValue(jsonResponse({
+      code: 0,
+      data: { key: 'sk-airoute-created', key_fingerprint: 'kfp_abc123' },
+    }));
+    const { result } = setup();
+    act(() => {
+      result.current.handleOpenCreateKey();
+    });
+    await act(async () => {
+      await result.current.handleCreateKey();
+    });
+
+    act(() => {
+      result.current.closeKeyModal();
+    });
+
+    expect(result.current.showKeyModal).toBe(false);
+    expect(result.current.createdKey).toBeNull();
+  });
+
+  it('does not send a tenant for a self-service key', async () => {
+    // The gateway derives the tenant from the session; sending one is ignored at
+    // best, so the console must not pretend it can choose.
+    const { result } = setup({ adminUser: { username: 'alice', role: 'user', group_name: 'default' } });
+    act(() => {
+      result.current.handleOpenCreateKey();
+    });
+
+    await act(async () => {
+      await result.current.handleCreateKey();
+    });
+
+    const sent = JSON.parse(globalThis.fetch.mock.calls.at(-1)[1].body);
+    expect(sent).not.toHaveProperty('tenant_id');
+    expect(sent).not.toHaveProperty('key');
+  });
+
+  it('applies the self-service quota defaults and caps instead of unlimited', async () => {
+    // A self-service form used to default to 0, which the gateway read as
+    // "unlimited". The documented policy is 60/100k by default with 6000/10M caps.
+    const { result } = setup({ adminUser: { username: 'alice', role: 'user', group_name: 'default' } });
+    act(() => {
+      result.current.handleOpenCreateKey();
+    });
+    expect(result.current.newKey.rpm).toBe(60);
+    expect(result.current.newKey.tpm).toBe(100000);
+
+    act(() => {
+      result.current.setNewKey(prev => ({ ...prev, rpm: 999999, tpm: 999999999 }));
+    });
+    await act(async () => {
+      await result.current.handleCreateKey();
+    });
+
+    const sent = JSON.parse(globalThis.fetch.mock.calls.at(-1)[1].body);
+    expect(sent.rpm).toBe(6000);
+    expect(sent.tpm).toBe(10000000);
+  });
+
+  it('still lets an administrator create an unlimited key', async () => {
+    const { result } = setup();
+    act(() => {
+      result.current.handleOpenCreateKey();
+    });
+    expect(result.current.newKey.rpm).toBe(0);
+    expect(result.current.newKey.tpm).toBe(0);
+
+    await act(async () => {
+      await result.current.handleCreateKey();
+    });
+
+    const sent = JSON.parse(globalThis.fetch.mock.calls.at(-1)[1].body);
+    expect(sent.rpm).toBe(0);
+    expect(sent.tpm).toBe(0);
   });
 
   it('keeps the form open when creation fails', async () => {

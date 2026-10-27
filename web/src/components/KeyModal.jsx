@@ -1,4 +1,10 @@
 import { X, Loader2 } from 'lucide-react';
+import {
+  SELF_SERVICE_DEFAULT_RPM,
+  SELF_SERVICE_MAX_RPM,
+  SELF_SERVICE_DEFAULT_TPM,
+  SELF_SERVICE_MAX_TPM,
+} from '../hooks/useKeyActions';
 import useModalA11y from '../hooks/useModalA11y';
 import useFormDirty from '../hooks/useFormDirty';
 import useUnsavedGuard from '../hooks/useUnsavedGuard';
@@ -14,6 +20,8 @@ export default function KeyModal({
   adminUser,
   onSubmit,
   submitting = false,
+  createdKey = null,
+  onCopy,
   lang = 'zh',
   t
 }) {
@@ -21,6 +29,12 @@ export default function KeyModal({
   const isDirty = useFormDirty(isOpen, newKey);
   const { confirming, requestClose, keepEditing, discard } = useUnsavedGuard({ isOpen, isDirty, onClose });
   const guardedClose = () => {
+    // The creation succeeded: the form draft is gone and the only thing on screen is
+    // the one-time credential, which must not trigger a "discard changes" prompt.
+    if (createdKey) {
+      onClose?.();
+      return;
+    }
     // A save already in flight owns the draft: don't prompt about discarding
     // it, and never trap the user if the request hangs.
     if (submitting) {
@@ -33,6 +47,74 @@ export default function KeyModal({
 
   if (!isOpen) return null;
   const isZh = lang === 'zh';
+  const isAdmin = adminUser?.role === 'admin';
+  const copy = (zh, en) => (isZh ? zh : en);
+
+  // The plaintext credential is only ever available in the creation response.
+  if (createdKey) {
+    return (
+      <div
+        className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) guardedClose();
+        }}
+      >
+        <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
+          <div className="border-b border-[#E4E6E9] dark:border-[#2C3038] pb-3">
+            <h3 className="font-semibold text-base text-[#202124] dark:text-[#F1F2F4] tracking-tight">
+              {t?.keyCreatedTitle || copy('密钥已创建', 'Key created')}
+            </h3>
+          </div>
+
+          <p role="alert" className="text-xs leading-relaxed rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-900 dark:text-amber-200">
+            {t?.keyCreatedOnceWarning || copy(
+              '这是该密钥唯一一次显示明文，请立即复制并妥善保存；关闭后无法再次查看。',
+              'This is the only time the plaintext key is shown. Copy and store it now; it cannot be viewed again.',
+            )}
+          </p>
+
+          <div>
+            <label className="ui-label">{copy('API 密钥（仅此一次显示）', 'API key (shown once)')}</label>
+            <div className="flex items-start space-x-2">
+              <code data-testid="created-key" className="flex-1 break-all rounded-lg bg-[#F0F1F2] dark:bg-[#22252B] border border-[#E4E6E9] dark:border-[#2C3038] px-3 py-2 font-mono text-xs select-all">
+                {createdKey.key}
+              </code>
+              <button
+                type="button"
+                onClick={() => onCopy?.(createdKey.key)}
+                className="ui-btn-secondary ui-btn-sm shrink-0"
+              >
+                {copy('复制', 'Copy')}
+              </button>
+            </div>
+          </div>
+
+          {createdKey.fingerprint && (
+            <div className="text-xs">
+              <span className="text-[#656B75] dark:text-[#A1A7B0]">{t?.keyFingerprintLabel || copy('密钥指纹', 'Key fingerprint')}: </span>
+              <code className="font-mono select-all">{createdKey.fingerprint}</code>
+            </div>
+          )}
+
+          <div className="ui-meta-sm space-y-1">
+            <div>{copy('归属租户', 'Tenant')}: <span className="font-mono">{createdKey.tenant}</span></div>
+            <div>RPM: <span className="font-mono">{createdKey.rpm}</span> · TPM: <span className="font-mono">{createdKey.tpm}</span></div>
+            {createdKey.quotaAdjusted && (
+              <div className="text-amber-600 dark:text-amber-400">
+                {t?.keyQuotaClamped || copy('已按自助密钥上限调整速率/Token 配额', 'Rate/token quotas were adjusted to the self-service limits')}
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end pt-2 border-t border-[#E4E6E9] dark:border-[#2C3038]">
+            <button type="button" onClick={guardedClose} className="ui-btn-primary">
+              {t?.keyDismissCreated || copy('我已保存，关闭', 'Saved — close')}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -62,18 +144,39 @@ export default function KeyModal({
         </div>
 
         <div className="space-y-4 text-xs">
-          <div>
-            <label className="ui-label">
-              {isZh ? '密钥名称' : 'Key Name / Description'} <span className="text-rose-500">*</span>
-            </label>
-            <input
-              required
-              value={newKey.tenant_id}
-              onChange={(e) => setNewKey({ ...newKey, tenant_id: e.target.value })}
-              placeholder={isZh ? '如 个人开发 / Cursor / Claude Code' : 'e.g. Cursor, Claude Code, Dev Team'}
-              className="ui-field"
-            />
-          </div>
+          {isAdmin ? (
+            <div>
+              <label className="ui-label">
+                {t?.keyTenantLabel || (isZh ? '租户标识' : 'Tenant identifier')} <span className="text-rose-500">*</span>
+              </label>
+              <input
+                required
+                value={newKey.tenant_id}
+                onChange={(e) => setNewKey({ ...newKey, tenant_id: e.target.value })}
+                placeholder={isZh ? '如 个人开发 / Cursor / Claude Code' : 'e.g. Cursor, Claude Code, Dev Team'}
+                className="ui-field"
+              />
+              <p className="ui-meta-sm mt-1">
+                {t?.keyTenantAdminHint || (isZh
+                  ? '管理员可指定该密钥归属的租户标识，将用于用量与账单归属。'
+                  : 'Administrators may set which tenant the key belongs to; usage and billing are attributed to it.')}
+              </p>
+            </div>
+          ) : (
+            <div>
+              <label className="ui-label">
+                {t?.keyTenantServerAssigned || (isZh ? '归属租户（由服务器分配）' : 'Tenant (assigned by the server)')}
+              </label>
+              <div className="ui-field bg-[#F0F1F2] dark:bg-[#22252B] font-mono flex items-center">
+                {adminUser?.username || adminUser?.tenant_id || '—'}
+              </div>
+              <p className="ui-meta-sm mt-1">
+                {t?.keyTenantServerAssignedHint || (isZh
+                  ? '个人密钥自动归属您的账号，无需也无法自行填写。'
+                  : 'A personal key always belongs to your account; this cannot be chosen.')}
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="ui-label text-xs">
@@ -161,24 +264,32 @@ export default function KeyModal({
             )}
           </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="font-semibold text-[#202124] dark:text-[#F1F2F4]">{isZh ? 'API 密钥' : 'API Key'}</label>
-              <button
-                type="button"
-                onClick={() => setNewKey(prev => ({ ...prev, key: '' }))}
-                className="text-xs text-[#355CFF] dark:text-[#91A7FF] hover:underline flex items-center space-x-1 cursor-pointer"
-              >
-                <span>{isZh ? '由服务端安全生成' : 'Generate server-side'}</span>
-              </button>
+          {isAdmin ? (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="font-semibold text-[#202124] dark:text-[#F1F2F4]">{isZh ? 'API 密钥' : 'API Key'}</label>
+                <button
+                  type="button"
+                  onClick={() => setNewKey(prev => ({ ...prev, key: '' }))}
+                  className="text-xs text-[#355CFF] dark:text-[#91A7FF] hover:underline flex items-center space-x-1 cursor-pointer"
+                >
+                  <span>{isZh ? '由服务端安全生成' : 'Generate server-side'}</span>
+                </button>
+              </div>
+              <input
+                value={newKey.key}
+                onChange={(e) => setNewKey({ ...newKey, key: e.target.value })}
+                placeholder={isZh ? '留空自动生成' : 'Leave empty to auto-generate'}
+                className="ui-field font-mono"
+              />
             </div>
-            <input
-              value={newKey.key}
-              onChange={(e) => setNewKey({ ...newKey, key: e.target.value })}
-              placeholder={isZh ? '留空自动生成' : 'Leave empty to auto-generate'}
-              className="ui-field font-mono"
-            />
-          </div>
+          ) : (
+            <p className="ui-meta-sm rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 px-3 py-2">
+              {t?.keySecretUnavailable || (isZh
+                ? '密钥明文仅在创建时显示一次，创建后请立即复制保存。'
+                : 'The plaintext key is shown once, at creation — copy it before closing.')}
+            </p>
+          )}
 
           <div>
             <div className="flex items-center justify-between mb-1">
@@ -216,15 +327,17 @@ export default function KeyModal({
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="font-semibold text-[#202124] dark:text-[#F1F2F4]">
-                {isZh ? '速率限制 (RPM, 0 为不限)' : 'Rate Limit (RPM, 0 for unlimited)'}
+                {isAdmin
+                  ? (t?.keyRpmLabel || (isZh ? '速率上限 (RPM)' : 'Rate limit (RPM)'))
+                  : `${t?.keyRpmLabel || (isZh ? '速率上限 (RPM)' : 'Rate limit (RPM)')} (${SELF_SERVICE_DEFAULT_RPM}–${SELF_SERVICE_MAX_RPM})`}
               </label>
               <div className="flex items-center space-x-1.5 text-xs">
-                {[
-                  { label: isZh ? '不限' : 'Unlimited', val: 0 },
-                  { label: '60', val: 60 },
-                  { label: '120', val: 120 },
-                  { label: '600', val: 600 },
-                ].map(p => (
+                {(isAdmin
+                  ? [{ label: isZh ? '不限' : 'Unlimited', val: 0 }, { label: '60', val: 60 }, { label: '120', val: 120 }, { label: '600', val: 600 }]
+                  // Self-service keys cannot be unlimited: 0 would silently become
+                  // the default, so the presets only offer real allowances.
+                  : [{ label: '60', val: 60 }, { label: '120', val: 120 }, { label: '600', val: 600 }, { label: '6000', val: 6000 }]
+                ).map(p => (
                   <button
                     key={p.label}
                     type="button"
@@ -238,10 +351,61 @@ export default function KeyModal({
             </div>
             <input
               type="number"
-              value={newKey.rpm}
-              onChange={(e) => setNewKey({ ...newKey, rpm: parseInt(e.target.value) || 0 })}
+              min={isAdmin ? 0 : 1}
+              max={isAdmin ? undefined : SELF_SERVICE_MAX_RPM}
+              step="1"
+              value={newKey.rpm ?? 0}
+              onChange={(e) => setNewKey(prev => ({ ...prev, rpm: parseInt(e.target.value, 10) || 0 }))}
               className="ui-field font-mono"
             />
+            <p className="ui-meta-sm mt-1">
+              {isAdmin
+                ? (t?.keyRpmAdminHint || (isZh ? '0 表示不限速（仅管理员可创建不限速密钥）。' : '0 means unlimited — only an administrator can create an unlimited key.'))
+                : (t?.keyRpmSelfServiceHint || (isZh
+                  ? '默认 60 RPM，自助创建最高 6000 RPM；如需不限速请联系管理员。'
+                  : 'Defaults to 60 RPM; self-service keys cap at 6000 RPM. Contact an administrator for unlimited.'))}
+            </p>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="font-semibold text-[#202124] dark:text-[#F1F2F4]">
+                {isAdmin
+                  ? (t?.keyTpmLabel || (isZh ? 'Token 上限 (TPM)' : 'Token limit (TPM)'))
+                  : `${t?.keyTpmLabel || (isZh ? 'Token 上限 (TPM)' : 'Token limit (TPM)')} (${SELF_SERVICE_DEFAULT_TPM}–${SELF_SERVICE_MAX_TPM})`}
+              </label>
+              <div className="flex items-center space-x-1.5 text-xs">
+                {(isAdmin
+                  ? [{ label: isZh ? '不限' : 'Unlimited', val: 0 }, { label: '100K', val: 100000 }, { label: '1M', val: 1000000 }]
+                  : [{ label: '100K', val: 100000 }, { label: '1M', val: 1000000 }, { label: '10M', val: SELF_SERVICE_MAX_TPM }]
+                ).map(p => (
+                  <button
+                    key={p.label}
+                    type="button"
+                    onClick={() => setNewKey(prev => ({ ...prev, tpm: p.val }))}
+                    className="text-[#355CFF] dark:text-[#91A7FF] hover:underline px-1 cursor-pointer"
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <input
+              type="number"
+              min={isAdmin ? 0 : 1}
+              max={isAdmin ? undefined : SELF_SERVICE_MAX_TPM}
+              step="1"
+              value={newKey.tpm ?? 0}
+              onChange={(e) => setNewKey(prev => ({ ...prev, tpm: parseInt(e.target.value, 10) || 0 }))}
+              className="ui-field font-mono"
+            />
+            <p className="ui-meta-sm mt-1">
+              {isAdmin
+                ? (t?.keyTpmAdminHint || (isZh ? '0 表示不限量（仅管理员可创建不限量密钥）。' : '0 means unlimited — only an administrator can create an unlimited key.'))
+                : (t?.keyTpmSelfServiceHint || (isZh
+                  ? '默认 100,000 TPM，自助创建最高 10,000,000 TPM；如需更高请联系管理员。'
+                  : 'Defaults to 100,000 TPM; self-service keys cap at 10,000,000 TPM. Contact an administrator for more.'))}
+            </p>
           </div>
         </div>
 

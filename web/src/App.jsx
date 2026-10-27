@@ -502,7 +502,7 @@ export default function App() {
   } = channelActions;
 
   const {
-    showKeyModal, newKey, submittingKey, selectedKeyIds, copiedKey,
+    showKeyModal, newKey, submittingKey, selectedKeyIds, copiedKey, createdKey,
     setNewKey, setShowKeyModal, setSelectedKeyIds,
     handleOpenCreateKey, handleCreateKey, handleUpdateKeyGroup,
     handleDeleteKey, handleToggleKeyStatus,
@@ -1677,6 +1677,8 @@ export default function App() {
           adminUser={adminUser}
           onSubmit={handleCreateKey}
           submitting={submittingKey}
+          createdKey={createdKey}
+          onCopy={(txt) => copyToClipboard(txt)}
           lang={lang}
           t={t}
         />
