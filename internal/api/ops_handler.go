@@ -1,18 +1,111 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/buildinfo"
 	"github.com/ifnodoraemon/airoute/internal/config"
 	"github.com/ifnodoraemon/airoute/internal/controlplane"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/router"
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
+
+// Readiness checks are the difference between "the process is alive" and "this
+// replica can serve traffic". /health is a cheap liveness answer used by the
+// edge and by humans; /health/ready additionally pings the dependencies that the
+// request path needs, so an orchestrator (or scripts/docker-rebuild.sh, which
+// gates rolling restarts on the container health status) never routes to a
+// replica whose database or Redis is unreachable.
+//
+// The registry lives in this package instead of on Handler so cmd/airoute can
+// register probes without changing NewHandler's signature.
+var (
+	readinessMu     sync.RWMutex
+	readinessChecks []readinessCheck
+)
+
+type readinessCheck struct {
+	name string
+	fn   func(context.Context) error
+}
+
+// readinessCheckTimeout bounds a single /health/ready evaluation: a hung
+// dependency must not hang the probe (kubelet would simply report 504).
+const readinessCheckTimeout = 2 * time.Second
+
+// RegisterReadinessCheck adds a dependency probe used by GET /health/ready.
+func RegisterReadinessCheck(name string, fn func(context.Context) error) {
+	if name == "" || fn == nil {
+		return
+	}
+	readinessMu.Lock()
+	defer readinessMu.Unlock()
+	readinessChecks = append(readinessChecks, readinessCheck{name: name, fn: fn})
+}
+
+// ResetReadinessChecks removes every registered probe. Tests use it to isolate
+// cases; production code registers once at startup.
+func ResetReadinessChecks() {
+	readinessMu.Lock()
+	defer readinessMu.Unlock()
+	readinessChecks = nil
+}
+
+// HandleReadiness handles GET /health/ready. It answers 200 only when the data
+// plane has loaded a configuration snapshot and every registered dependency
+// probe succeeds; otherwise 503 with a per-dependency breakdown.
+func (h *Handler) HandleReadiness(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), readinessCheckTimeout)
+	defer cancel()
+
+	dependencies := make(map[string]string, 4)
+	ready := true
+
+	if middleware.DataPlaneReady() {
+		dependencies["data_plane"] = "ok"
+	} else {
+		dependencies["data_plane"] = "not_loaded"
+		ready = false
+	}
+
+	readinessMu.RLock()
+	checks := append([]readinessCheck(nil), readinessChecks...)
+	readinessMu.RUnlock()
+
+	for _, check := range checks {
+		if err := check.fn(ctx); err != nil {
+			// Do not echo the raw error: ping errors can contain connection
+			// strings with credentials, and this endpoint is unauthenticated.
+			dependencies[check.name] = "unavailable"
+			ready = false
+			telemetry.WarnLogger(telemetry.ScopedLogger("system"), "readiness:"+check.name, 30*time.Second,
+				"readiness probe failed", "dependency", check.name, "error", err.Error())
+		} else {
+			dependencies[check.name] = "ok"
+		}
+	}
+
+	status := http.StatusOK
+	state := "ready"
+	if !ready {
+		status = http.StatusServiceUnavailable
+		state = "not_ready"
+	}
+	c.JSON(status, gin.H{
+		"status":       state,
+		"service":      "airoute",
+		"version":      buildinfo.Version,
+		"timestamp":    time.Now().Unix(),
+		"dependencies": dependencies,
+	})
+}
 
 // HandleHealth handles GET /health.
 func (h *Handler) HandleHealth(c *gin.Context) {

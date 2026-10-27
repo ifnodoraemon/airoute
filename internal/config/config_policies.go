@@ -79,10 +79,10 @@ func (c *Config) GetInitialUserBalance() float64 {
 			"variable", name, "value", raw, "reason", "must be a non-negative number")
 		return 0
 	}
-	if c != nil && c.Auth.InitialUserBalance >= 0 {
+	if c != nil && c.Auth.InitialUserBalance > 0 {
 		return c.Auth.InitialUserBalance
 	}
-	return 5.0
+	return 0
 }
 
 // GetTokenExpiryHours returns JWT token expiration duration in hours.

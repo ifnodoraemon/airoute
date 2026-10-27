@@ -17,6 +17,7 @@ spec:
       labels:
         app: airoute
     spec:
+      terminationGracePeriodSeconds: 180
       containers:
       - name: gateway
         image: ghcr.io/ifnodoraemon/airoute:latest
@@ -49,6 +50,9 @@ spec:
               key: admin-password
         - name: GATEWAY_ALLOW_INSECURE_DEFAULTS
           value: "false"
+        # Drain window after SIGTERM; keep below terminationGracePeriodSeconds.
+        - name: GATEWAY_SHUTDOWN_TIMEOUT_SEC
+          value: "135"
         ports:
         - containerPort: 8080
           name: http
@@ -65,12 +69,15 @@ spec:
             port: 8080
           initialDelaySeconds: 5
           periodSeconds: 10
+        # Readiness must reflect dependency reachability (Service endpoints and
+        # rolling updates use it); liveness keeps the cheap /health probe.
         readinessProbe:
           httpGet:
-            path: /health
+            path: /health/ready
             port: 8080
-          initialDelaySeconds: 2
+          initialDelaySeconds: 3
           periodSeconds: 5
+          failureThreshold: 3
         volumeMounts:
         - name: config-vol
           mountPath: /etc/airoute

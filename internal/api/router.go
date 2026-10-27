@@ -65,11 +65,22 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 
 	handler := NewHandler(dispatcher)
 
-	// Public health and observability endpoints
+	// Public health and observability endpoints.
+	//
+	// /health answers "is the process alive" and stays dependency-free so the edge
+	// proxy and humans get a fast answer; /health/ready additionally verifies the
+	// dependencies a request needs (storage, Redis, data-plane snapshot) and is
+	// what readiness probes and the rolling-rebuild gate must use.
 	r.GET("/health", handler.HandleHealth)
 	r.HEAD("/health", handler.HandleHealth)
 	r.GET("/healthz", handler.HandleHealth)
 	r.HEAD("/healthz", handler.HandleHealth)
+	r.GET("/health/ready", handler.HandleReadiness)
+	r.HEAD("/health/ready", handler.HandleReadiness)
+	r.GET("/healthz/ready", handler.HandleReadiness)
+	r.HEAD("/healthz/ready", handler.HandleReadiness)
+	r.GET("/readyz", handler.HandleReadiness)
+	r.HEAD("/readyz", handler.HandleReadiness)
 	r.GET("/v1/health", handler.HandleHealth)
 	r.HEAD("/v1/health", handler.HandleHealth)
 	r.GET("/metrics", metricsAuthGuard(), handler.HandleMetrics)

@@ -80,6 +80,10 @@ api_keys:
 
 ---
 
+Shipped defaults in this file are safe by design: `auth.allow_registration: false`, `auth.initial_user_balance: 0` (no free credit), and `storage.driver: local` with **no** S3 credentials. `s3`/`rustfs` deployments must set `STORAGE_S3_ACCESS_KEY` and `STORAGE_S3_SECRET_KEY` explicitly — startup fails with a clear error instead of silently using a default credential or falling back to a local directory.
+
+---
+
 ## 2. Environment Variables
 
 The following environment variables are read by the server. YAML supports `${NAME}` and `${NAME:-default}` expansion. `.env.example` lists every variable below with its default, so it can be copied as a starting point.
@@ -108,8 +112,8 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `GATEWAY_ADMIN_SECRET` | — | HMAC signing secret. Empty or well-known placeholder values abort startup; use one stable random value (≥ 32 chars) shared by every replica |
 | `GATEWAY_ALLOW_INSECURE_DEFAULTS` | `false` | Escape hatch for throwaway local development: `true` downgrades the credential gate to a warning. Never enable in production |
 | `GATEWAY_ADMIN_RESET` | `false` | One-shot: force the stored admin password back to `GATEWAY_ADMIN_PASSWORD` on the next start, then set it back to `false` |
-| `ALLOW_REGISTRATION` | `false` (`.env.example`) | Public self-registration |
-| `INITIAL_USER_BALANCE` | `5.0` | Trial balance granted on registration |
+| `ALLOW_REGISTRATION` | `false` (shipped config & `.env.example`) | Public self-registration. Off in the shipped `configs/config.yaml`; enable deliberately |
+| `INITIAL_USER_BALANCE` | `0` | Trial balance granted on registration. Opt-in: no free credit unless the operator configures a positive value |
 | `DEFAULT_TRIAL_BALANCE` | unset | Legacy alias of `INITIAL_USER_BALANCE`, used only when the latter is empty |
 | `REQUIRE_EMAIL_VERIFICATION` | `true` (`.env.example`) | Require the e-mail verification code during registration (needs SMTP) |
 | `TOKEN_EXPIRY_HOURS` | `168` | Session/token lifetime in hours |
@@ -126,6 +130,7 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `GATEWAY_BREAKER_COOLDOWN_SEC` | `30` | Open-state cooldown before half-open probing |
 | `GATEWAY_DRAIN_ABORTED_UPSTREAM` | `true` | Keep consuming the upstream after the client disconnects and bill the upstream-reported usage; `false` = cancel immediately and bill an estimate |
 | `GATEWAY_DRAIN_TIMEOUT_SEC` | `120` | Maximum time a single aborted request may be drained |
+| `GATEWAY_SHUTDOWN_TIMEOUT_SEC` | derived: `GATEWAY_DRAIN_TIMEOUT_SEC + 15` (135) | How long in-flight requests may finish after SIGTERM. Must be below the container's `stop_grace_period` / `terminationGracePeriodSeconds` |
 | `GATEWAY_PUBLIC_STATUS` | `true` | Set `false` to hide the model catalog on the public status page |
 | `GATEWAY_BLOCK_PRIVATE_PROBE` | `false` | Reject probing RFC1918 private upstream addresses |
 | `GATEWAY_BLOCK_LOOPBACK_PROBE` | `false` | Reject probing loopback upstream addresses |
@@ -142,16 +147,20 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `GATEWAY_TRACE_MAX_SNIPPET` | `4096` | Maximum bytes retained per request/response snippet |
 | `GATEWAY_USAGE_LOG_RETENTION_DAYS` | `365` | Retention window for audit (`usage_logs`) rows; `0` keeps every row |
 | `GATEWAY_USAGE_LOG_PRUNE_INTERVAL_HOURS` | `6` | How often expired audit rows are pruned |
+| `GATEWAY_VERIFICATION_RETENTION_DAYS` | `7` | Retention for e-mail verification codes; `0` keeps every row |
+| `GATEWAY_VIDEO_TASK_RETENTION_DAYS` | `30` | Retention for video task records; `0` keeps every row |
+| `GATEWAY_TIMESERIES_TTFT_SAMPLE` | `5000` | Row cap for TTFT percentile sampling in the dashboard time series |
 | `GATEWAY_MAX_OVERDRAFT_CNY` | `1.0` | Maximum wallet overdraft in CNY; `0` forbids negative balances |
 | `GATEWAY_USAGE_SPILL_DIR` | `data` | Disk fallback for billing records when Redis/DB fail (`-` disables, not recommended) |
 | `GATEWAY_USAGE_SPILL_MAX_MB` | `256` | Disk fallback size ceiling |
+| `GATEWAY_USAGE_SPILL_CLAIM_GRACE_SEC` | `600` | Grace period before another replica may claim a spilled record (shared spill directory) |
 | `GATEWAY_BILLING_RECONCILE_HOURS` | `6` | Ledger reconciliation period; `0` disables |
 | `GATEWAY_MODERATION_STUB` | `false` | Return a local fake "all safe" moderation response when no moderation channel exists (development only) |
 | `GATEWAY_DB_MAX_OPEN_CONNS` | `25` | PostgreSQL pool size **per replica**; keep `replicas × value` below the server `max_connections` |
 | `GATEWAY_DB_MAX_IDLE_CONNS` | `8` | PostgreSQL idle connections per replica |
 | `STORAGE_DRIVER` | `local` | Artifact storage: `local`, `s3` or `rustfs` |
 | `STORAGE_LOCAL_PATH` | `data/storage` | Directory used by the `local` driver |
-| `STORAGE_S3_ENDPOINT` / `STORAGE_S3_BUCKET` / `STORAGE_S3_ACCESS_KEY` / `STORAGE_S3_SECRET_KEY` / `STORAGE_S3_REGION` / `STORAGE_S3_USE_SSL` / `STORAGE_S3_PATH_STYLE` / `STORAGE_S3_PUBLIC_URL_PREFIX` | see `.env.example` | S3-compatible artifact storage |
+| `STORAGE_S3_ENDPOINT` / `STORAGE_S3_BUCKET` / `STORAGE_S3_ACCESS_KEY` / `STORAGE_S3_SECRET_KEY` / `STORAGE_S3_REGION` / `STORAGE_S3_USE_SSL` / `STORAGE_S3_PATH_STYLE` / `STORAGE_S3_PUBLIC_URL_PREFIX` | endpoint/bucket/region have defaults; credentials are **empty** | S3-compatible artifact storage. `s3`/`rustfs` without explicit access key + secret key refuses to start (no default credential ships); partial `storage:` blocks are merged field-by-field over the defaults |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | unset | E-mail delivery for verification codes and password resets; disabled when `SMTP_HOST` is empty |
 | `STRIPE_API_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_SUCCESS_URL` / `STRIPE_API_BASE` | unset | Stripe payments; webhooks are rejected while `STRIPE_WEBHOOK_SECRET` is empty |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` / `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | unset | OAuth login providers |
@@ -177,7 +186,27 @@ There is one operator-facing timeout: each channel's `timeout_seconds`, which al
 
 * channel timeout ≤ `model.MaxChannelTimeoutSeconds` (86340s, derived from the 86400s edge budget);
 * every shipped edge proxy must allow the same 86400s budget — `cmd/airoute/nginx_timeout_test.go` asserts this for `deploy/nginx-compose.conf`, `deploy/swarm/nginx-swarm.conf`, `deploy/nginx.conf` and the Helm ingress annotations, so a drifting edge turns the test red;
-* streaming (SSE) responses clear the Go `http.Server.WriteTimeout` deadline (`write_timeout_sec`, 600s in `configs/config.yaml`, 180s in the Helm chart) so long generations are not cut mid-stream; **non-streaming** responses remain bounded by that value.
+* streaming (SSE) responses clear the Go `http.Server.WriteTimeout` deadline (`write_timeout_sec`, 600s in `configs/config.yaml`, 180s in the Helm chart) so long generations are not cut mid-stream; **non-streaming** responses remain bounded by that value;
+* the SIGTERM drain budget (`GATEWAY_SHUTDOWN_TIMEOUT_SEC`, derived from `GATEWAY_DRAIN_TIMEOUT_SEC + 15s`) must fit inside the deployment's stop grace period — the Compose/Swarm services set `stop_grace_period: 150s` and the Helm chart sets `terminationGracePeriodSeconds: 180`.
+
+### Health probes
+
+Two endpoints, on purpose:
+
+| Endpoint | Semantics | Who should use it |
+| :--- | :--- | :--- |
+| `GET /health` (also `/healthz`, `/v1/health`) | Cheap liveness: the HTTP process answers. Never touches the database or Redis | Edge/nginx probes, humans, liveness where "process wedged" is the failure you care about |
+| `GET /health/ready` (also `/healthz/ready`, `/readyz`) | Readiness: 200 only when the data plane has loaded a snapshot **and** the registered dependency probes pass (PostgreSQL/SQLite `PingContext`, Redis `PING` when configured). 503 otherwise, with an unauthenticated-safe per-dependency breakdown (`ok`/`unavailable`) | Kubernetes `readinessProbe`, the Docker/Swarm healthcheck, and the rolling restart gate (`scripts/docker-rebuild.sh` polls the container health status) |
+
+The dependency probes are registered by `cmd/airoute` at startup (`api.RegisterReadinessCheck`). A hung dependency cannot hang the probe: each evaluation is bounded (2s) and a failure is reported as `unavailable` without echoing the raw error (connection strings can contain credentials). Compose/Dockerfile, the Swarm stack, the Helm chart and `deploy/kubernetes.yaml` all probe `/health/ready` for readiness; `cmd/airoute/deploy_readiness_test.go` keeps them aligned with the code.
+
+### Shutdown & drain
+
+On `SIGTERM`/`SIGINT` the process stops accepting connections and waits up to `GATEWAY_SHUTDOWN_TIMEOUT_SEC` for in-flight requests (the aborted-request drain can legitimately take up to `GATEWAY_DRAIN_TIMEOUT_SEC`), then stops the async audit logger (flushing the queue) and closes the database. The signal handler is installed before initialization, so a signal during migrations/bootstrap still runs that cleanup instead of killing the process. Set the orchestrator grace period above the shutdown budget: Compose/Swarm `stop_grace_period: 150s`, Helm `terminationGracePeriodSeconds: 180` (both configurable in the chart).
+
+### Control-plane exposure
+
+The nginx `api.*` virtual host returns 403 for `/api/v1/admin` and `/app`, but that is a **routing convenience, not a security boundary**: any client can send a different `Host` header or connect to the host IP, and the default virtual host intentionally keeps serving the console so `http://127.0.0.1:8080` works. The real controls are network-level: bind the published port to loopback (`ports: ["127.0.0.1:8080:80"]`), restrict it to a VPN/firewall allowlist, or put the console behind an authenticated proxy. The gateway still authenticates and authorizes every `/api/v1/admin` request.
 
 Helm defaults to one SQLite pod with a ReadWriteOnce volume and creates a Kubernetes Secret for the admin password and signing secret. For multiple replicas, provide `database.existingSecret` with key `url` containing a PostgreSQL URL and set `persistence.enabled=false`; configure shared object storage if artifacts must be accessible from every pod. Helm refuses a multi-replica SQLite deployment. Retrieve the generated admin password with `kubectl get secret <fullname>-auth -o jsonpath='{.data.admin-password}' | base64 -d` (for the default `airoute` release, `<fullname>` is `airoute`). Keep the Secret across upgrades. In the chart, `service.port` is the single port value: it drives the Service, the container port, both probes and the `GATEWAY_PORT` the process listens on, so `--set service.port=…` always keeps them consistent.
 

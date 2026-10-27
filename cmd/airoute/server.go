@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -25,6 +26,23 @@ import (
 
 // runServer starts the authoritative AI Gateway server and control plane.
 func runServer(args []string) {
+	// Install the signal handler before the potentially slow initialization (DB
+	// open, migrations, seeding, Redis bootstrap). Previously it was registered
+	// only after the listener started, so a SIGTERM during startup killed the
+	// process immediately: deferred cleanup (audit flush, DB close) never ran.
+	// The channel has room for a second signal so a repeated Ctrl-C cannot block.
+	quit := make(chan os.Signal, 2)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(quit)
+	shutdownRequested := func() bool {
+		select {
+		case <-quit:
+			return true
+		default:
+			return false
+		}
+	}
+
 	defaultConfig := "configs/config.yaml"
 	if env := os.Getenv("GATEWAY_CONFIG"); env != "" {
 		defaultConfig = env
@@ -59,16 +77,22 @@ func runServer(args []string) {
 
 	// Initialize Logger
 	telemetry.InitLogger(cfg.Server.LogLevel)
-	telemetry.ScopedLogger("system").Info("starting airoute",
-		"version", Version,
-		"config", *configPath,
-		"db", *dbPath,
-	)
 
+	// The effective store is DATABASE_URL when set, otherwise the SQLite -db path.
+	// Log the redacted effective source: the old line always printed the SQLite
+	// flag (so a PostgreSQL deployment logged a SQLite path), and logging
+	// DATABASE_URL verbatim would leak the database password into the log stream.
 	dataSource := *dbPath
 	if dbEnv := os.Getenv("DATABASE_URL"); dbEnv != "" {
 		dataSource = dbEnv
 	}
+	storageKind, storageTarget := describeDataSource(dataSource)
+	telemetry.ScopedLogger("system").Info("starting airoute",
+		"version", Version,
+		"config", *configPath,
+		"storage", storageKind,
+		"data_source", storageTarget,
+	)
 
 	// Security and deployment warnings on startup.
 	//
@@ -116,6 +140,14 @@ func runServer(args []string) {
 
 	repo := storage.NewRepository(db)
 
+	// Readiness signal for orchestrators and scripts/docker-rebuild.sh:
+	// /health stays a cheap process-liveness probe, while /health/ready also
+	// verifies that storage answers (and, below, that Redis answers) so a replica
+	// with a dead database never reports itself ready for traffic.
+	api.RegisterReadinessCheck("database", func(ctx context.Context) error {
+		return db.PingContext(ctx)
+	})
+
 	// Ensure default admin user account exists
 	controlplane.InitDefaultAdmin(repo, cfg)
 
@@ -158,6 +190,11 @@ func runServer(args []string) {
 
 	// Initialize Enterprise Distributed Redis Layer FIRST (required by AsyncLogger for stream consumption)
 	redisClient := distributed.InitRedis(cfg.Server.RedisURL)
+	if redisClient != nil && redisClient.IsActive() {
+		api.RegisterReadinessCheck("redis", func(ctx context.Context) error {
+			return redisClient.GetRDB().Ping(ctx).Err()
+		})
+	}
 
 	// Publish this node's in-flight telemetry snapshot every second so the
 	// dashboard's live throughput endpoint can aggregate across replicas.
@@ -297,8 +334,17 @@ func runServer(args []string) {
 	defer close(stopSync)
 	synchronizer.StartPeriodicSync(10*time.Second, stopSync)
 
-	// Initialize Pluggable Artifact Storage (Local or Distributed RustFS / S3)
+	// Initialize Pluggable Artifact Storage (Local or Distributed RustFS / S3).
+	// An unusable configuration (unknown driver, or s3/rustfs without explicit
+	// endpoint/credentials) refuses to start instead of silently falling back to a
+	// local directory like it used to.
 	storageCfg := cfg.GetStorageConfig()
+	if err := storageCfg.Validate(); err != nil {
+		telemetry.ScopedLogger("system").Error("invalid storage configuration; refusing to start",
+			"error", err.Error(),
+			"hint", "local needs no credentials; s3/rustfs need STORAGE_S3_ENDPOINT and STORAGE_S3_ACCESS_KEY/STORAGE_S3_SECRET_KEY")
+		os.Exit(1)
+	}
 	artifactStorage, err := storage.NewArtifactStorage(storageCfg)
 	if err != nil {
 		telemetry.ScopedLogger("system").Warn("failed to initialize configured artifact storage, falling back to local storage", "error", err.Error())
@@ -323,6 +369,11 @@ func runServer(args []string) {
 	}
 	if !middleware.TrustedProxyConfigured() {
 		telemetry.ScopedLogger("system").Warn("GATEWAY_TRUSTED_PROXIES is unset: X-Forwarded-For/X-Real-IP are ignored and every request is attributed to its TCP peer. Behind a reverse proxy set GATEWAY_TRUSTED_PROXIES to the proxy CIDRs, otherwise client IPs, per-IP rate limits and access logs show the proxy address.")
+	}
+
+	if shutdownRequested() {
+		telemetry.ScopedLogger("system").Info("shutdown requested during startup; exiting before accepting connections")
+		return
 	}
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
@@ -351,14 +402,14 @@ func runServer(args []string) {
 		}
 	}()
 
-	// Graceful shutdown on SIGINT or SIGTERM
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	// Graceful shutdown on SIGINT or SIGTERM (handler installed at the top of
+	// this function so startup is covered too).
 	<-quit
 
-	telemetry.ScopedLogger("system").Info("shutting down airoute gracefully")
+	grace := shutdownTimeout()
+	telemetry.ScopedLogger("system").Info("shutting down airoute gracefully", "timeout", grace.String())
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), grace)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
@@ -366,6 +417,57 @@ func runServer(args []string) {
 	}
 
 	telemetry.ScopedLogger("system").Info("airoute exited smoothly")
+}
+
+// defaultDrainTimeoutSeconds mirrors the aborted-request drain budget default in
+// internal/api (GATEWAY_DRAIN_TIMEOUT_SEC). Keeping it here makes the shutdown
+// budget derivable from the drain it has to allow.
+const defaultDrainTimeoutSeconds = 120
+
+// drainBudget is the maximum time one aborted upstream request may keep draining
+// after the downstream client disconnected.
+func drainBudget() time.Duration {
+	if raw := strings.TrimSpace(os.Getenv("GATEWAY_DRAIN_TIMEOUT_SEC")); raw != "" {
+		if seconds, err := strconv.Atoi(raw); err == nil && seconds > 0 {
+			return time.Duration(seconds) * time.Second
+		}
+	}
+	return defaultDrainTimeoutSeconds * time.Second
+}
+
+// shutdownTimeout bounds http.Server.Shutdown after SIGTERM.
+//
+// The previous hardcoded 10s was shorter than the 120s aborted-drain budget and
+// raced Docker's default 10s SIGKILL, so every deploy cut long generations and
+// drain work mid-flight. GATEWAY_SHUTDOWN_TIMEOUT_SEC overrides the value; when
+// unset it is derived from the drain budget plus a 15s audit-flush margin.
+func shutdownTimeout() time.Duration {
+	if raw := strings.TrimSpace(os.Getenv("GATEWAY_SHUTDOWN_TIMEOUT_SEC")); raw != "" {
+		if seconds, err := strconv.Atoi(raw); err == nil && seconds > 0 {
+			return time.Duration(seconds) * time.Second
+		}
+		telemetry.ScopedLogger("system").Warn("invalid GATEWAY_SHUTDOWN_TIMEOUT_SEC; deriving the shutdown budget from the drain budget",
+			"value", raw)
+	}
+	return drainBudget() + 15*time.Second
+}
+
+// describeDataSource returns the storage kind ("postgres" or "sqlite") and a
+// redacted target for the effective data source. DATABASE_URL contains the
+// database password, so it must never be logged verbatim.
+func describeDataSource(dsn string) (string, string) {
+	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
+		parsed, err := url.Parse(dsn)
+		if err != nil {
+			return "postgres", "configured (unparsable DSN)"
+		}
+		target := parsed.Host
+		if dbName := strings.TrimPrefix(parsed.Path, "/"); dbName != "" {
+			target += "/" + dbName
+		}
+		return "postgres", target
+	}
+	return "sqlite", dsn
 }
 
 // printStartupBanner prints the human-facing readiness banner, but only when

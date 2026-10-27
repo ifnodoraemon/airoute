@@ -31,6 +31,13 @@ securityContext:
   runAsNonRoot: true
   runAsUser: 1000
 
+# How long the process may take to drain in-flight requests after SIGTERM. Must be
+# >= GATEWAY_DRAIN_TIMEOUT_SEC (default 120) + audit flush, and below
+# terminationGracePeriodSeconds so kubelet does not SIGKILL it mid-drain.
+shutdownTimeoutSeconds: 135
+# Must exceed shutdownTimeoutSeconds with margin.
+terminationGracePeriodSeconds: 180
+
 service:
   type: ClusterIP
   # Single source of truth for the container port: it drives the Service port,

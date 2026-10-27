@@ -11,7 +11,9 @@ x-gateway-env: &gateway-env
   # does nothing.
   GATEWAY_ADMIN_RESET: ${GATEWAY_ADMIN_RESET:-false}
   ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
-  INITIAL_USER_BALANCE: ${INITIAL_USER_BALANCE:-5.0}
+  # Trial credit is opt-in: 0 means a new account starts empty unless the operator
+  # explicitly configures a positive value.
+  INITIAL_USER_BALANCE: ${INITIAL_USER_BALANCE:-0.0}
   REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-true}
   # The startup credential check is fail-closed: a placeholder signing secret or
   # the shipped admin123 password refuses to boot. Local development can opt out
@@ -21,6 +23,10 @@ x-gateway-env: &gateway-env
   GIN_MODE: ${GIN_MODE:-release}
   # When set, GET /metrics requires "Authorization: Bearer <token>".
   GATEWAY_METRICS_TOKEN: ${GATEWAY_METRICS_TOKEN:-}
+  # How long in-flight requests may finish after SIGTERM. Must cover
+  # GATEWAY_DRAIN_TIMEOUT_SEC (default 120) + audit flush, and stay below the
+  # service's stop_grace_period so the process is never SIGKILLed mid-drain.
+  GATEWAY_SHUTDOWN_TIMEOUT_SEC: ${GATEWAY_SHUTDOWN_TIMEOUT_SEC:-135}
   # Comma-separated proxy CIDRs whose X-Forwarded-For is trusted. Empty = trust
   # none. Behind the bundled nginx set the Compose network (e.g. 172.22.0.0/16)
   # so real client IPs reach access logs and per-IP limits.
@@ -125,11 +131,18 @@ services:
       - ./configs/config.yaml:/app/configs/config.yaml:ro
     expose:
       - "8080"
+    # Readiness (not bare liveness): Docker only exposes one health status, and the
+    # rolling rebuild gate in scripts/docker-rebuild.sh polls it, so it must reflect
+    # whether this replica can actually reach its database/Redis.
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://127.0.0.1:$${GATEWAY_PORT:-8080}/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:$${GATEWAY_PORT:-8080}/health/ready || exit 1"]
       interval: 10s
       timeout: 3s
       retries: 3
+      start_period: 20s
+    # Docker defaults to 10s, which SIGKILLs the gateway before it can finish the
+    # drain window above.
+    stop_grace_period: 150s
     depends_on:
       postgres:
         condition: service_healthy
@@ -155,11 +168,18 @@ services:
       - ./configs/config.yaml:/app/configs/config.yaml:ro
     expose:
       - "8080"
+    # Readiness (not bare liveness): Docker only exposes one health status, and the
+    # rolling rebuild gate in scripts/docker-rebuild.sh polls it, so it must reflect
+    # whether this replica can actually reach its database/Redis.
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://127.0.0.1:$${GATEWAY_PORT:-8080}/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:$${GATEWAY_PORT:-8080}/health/ready || exit 1"]
       interval: 10s
       timeout: 3s
       retries: 3
+      start_period: 20s
+    # Docker defaults to 10s, which SIGKILLs the gateway before it can finish the
+    # drain window above.
+    stop_grace_period: 150s
     depends_on:
       postgres:
         condition: service_healthy

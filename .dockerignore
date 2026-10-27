@@ -5,3 +5,20 @@ web/dist
 bin/
 data/
 .git
+# Secrets must never enter the build context. `.env` holds the admin password,
+# the signing secret and the database/Redis/S3 credentials, and a BuildKit cache
+# export or a misconfigured COPY would otherwise ship them.
+.env
+.env.*
+!.env.example
+*.local
+# Not needed by any stage; keeping them out shrinks the context and avoids
+# accidentally copying docs/tests into the image.
+docs/
+tests/
+helm/
+deploy/
+scripts/
+.github/
+*.test
+coverage.out

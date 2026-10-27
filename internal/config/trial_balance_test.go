@@ -71,11 +71,13 @@ func TestValidTrialBalanceOverrideIsApplied(t *testing.T) {
 	}
 }
 
-// With no override at all the config value (or the built-in 5.0) still applies.
-func TestTrialBalanceFallsBackToConfigWhenUnset(t *testing.T) {
+// With no override at all, trial credit is opt-in: new accounts start with 0
+// unless the operator configures a positive value. The old built-in 5.0 handed
+// every registration free money nobody had configured.
+func TestTrialBalanceDefaultsToNoCredit(t *testing.T) {
 	t.Setenv("INITIAL_USER_BALANCE", "")
 	t.Setenv("DEFAULT_TRIAL_BALANCE", "")
-	if got := DefaultConfig().GetInitialUserBalance(); got != 5.0 {
-		t.Fatalf("default balance = %.2f, want 5.0", got)
+	if got := DefaultConfig().GetInitialUserBalance(); got != 0 {
+		t.Fatalf("default balance = %.2f, want 0 (trial credit must be opt-in)", got)
 	}
 }

@@ -92,14 +92,20 @@ services:
       - GATEWAY_METRICS_TOKEN=${GATEWAY_METRICS_TOKEN:-}
       # Proxies whose X-Forwarded-For is trusted (empty = trust none).
       - GATEWAY_TRUSTED_PROXIES=${GATEWAY_TRUSTED_PROXIES:-}
+      # In-flight drain window after SIGTERM (keep below stop_grace_period).
+      - GATEWAY_SHUTDOWN_TIMEOUT_SEC=${GATEWAY_SHUTDOWN_TIMEOUT_SEC:-135}
     networks:
       - airoute-swarm-net
+    # Readiness, not bare liveness: Swarm removes a task from the service VIP when
+    # its healthcheck fails, so it must reflect dependency reachability.
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
       interval: 10s
       timeout: 3s
       retries: 3
-      start_period: 10s
+      start_period: 20s
+    # Swarm's default is also 10s; the gateway needs the drain window above.
+    stop_grace_period: 150s
     deploy:
       mode: replicated
       replicas: 3

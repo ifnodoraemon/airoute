@@ -135,25 +135,17 @@ func DefaultConfig() *Config {
 		Auth: AuthConfig{
 			AllowRegistration:        boolPtr(true),
 			RequireEmailVerification: boolPtr(false),
-			InitialUserBalance:       5.0,
-			TokenExpiryHours:         168,
+			// Trial credit is opt-in: a gateway that silently grants free credit to
+			// every new account is a money leak operators did not configure.
+			InitialUserBalance: 0,
+			TokenExpiryHours:   168,
 		},
 		EnableFallback:        true,
 		MaxRetries:            3,
 		DefaultTimeoutSeconds: 60,
-		Storage: StorageConfig{
-			Driver:    "local",
-			LocalPath: "data/storage",
-			S3: S3Config{
-				Endpoint:  os.Getenv("STORAGE_S3_ENDPOINT"),
-				Bucket:    "airoute-skills",
-				AccessKey: "airoute",
-				SecretKey: "airoute_cluster_secret_pass_2026",
-				Region:    "us-east-1",
-				UseSSL:    false,
-				PathStyle: true,
-			},
-		},
+		// Safe baseline: local disk storage, no credentials. S3 deployments must
+		// supply STORAGE_S3_* explicitly; no repository-published secret is used.
+		Storage: defaultStorageConfig(),
 		ModelValidation: ModelValidationConfig{
 			DefaultLevel: "off",
 			Rules:        []ModelValidationRule{},

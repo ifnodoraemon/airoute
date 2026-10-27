@@ -34,7 +34,9 @@ for container in airoute-postgres airoute-redis airoute-storage; do
 done
 
 # Recreate replicas back to front: the remaining node keeps answering through
-# the load balancer while the other one starts and passes its health check.
+# the load balancer while the other one starts and passes its health check. The
+# container healthcheck now probes /health/ready, so "healthy" here means the new
+# replica can also reach its database/Redis - not merely that its HTTP port is up.
 for service in gateway-2 gateway-1; do
     container="airoute-${service#gateway-}"
     echo "==> Recreating $service..."
