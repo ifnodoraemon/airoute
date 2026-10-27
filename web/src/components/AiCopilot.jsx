@@ -294,6 +294,14 @@ export default function AiCopilot({
   const [selectedKeyId, setSelectedKeyId] = useState(
     () => (contextKeys[0] ? String(contextKeys[0].id) : UNAUTHENTICATED_KEY)
   );
+  // Distinguishes "open-gateway mode because no key existed yet" from "the
+  // operator deliberately chose to call without a credential": the former should
+  // adopt the first key once the list loads, the latter must be preserved.
+  const [keyChoiceExplicit, setKeyChoiceExplicit] = useState(false);
+  const selectKeyContext = (value) => {
+    setKeyChoiceExplicit(true);
+    setSelectedKeyId(value);
+  };
   // The pasted plaintext is kept per selected context: switching to another key
   // row must not silently keep signing requests with the previous key's
   // credential, and switching back should not force a second paste.
@@ -308,13 +316,20 @@ export default function AiCopilot({
   );
   const requiresCredential = selectedKeyId !== UNAUTHENTICATED_KEY;
 
-  // Keep the selection valid when the list reloads or the account changes.
+  // Keep the selection valid when the list reloads or the account changes. The
+  // key list loads asynchronously after the console mounts, so an implicit
+  // open-gateway default is upgraded to the first real key once one appears.
   useEffect(() => {
-    if (selectedKeyId === UNAUTHENTICATED_KEY || selectedKeyId === CUSTOM_KEY_ID) return;
-    if (!contextKeys.some(key => String(key.id) === selectedKeyId)) {
-      setSelectedKeyId(contextKeys[0] ? String(contextKeys[0].id) : UNAUTHENTICATED_KEY);
+    if (selectedKeyId === CUSTOM_KEY_ID) return;
+    if (contextKeys.some(key => String(key.id) === selectedKeyId)) return;
+    if (selectedKeyId === UNAUTHENTICATED_KEY) {
+      if (!keyChoiceExplicit && contextKeys.length > 0) {
+        setSelectedKeyId(String(contextKeys[0].id));
+      }
+      return;
     }
-  }, [contextKeys, selectedKeyId]);
+    setSelectedKeyId(contextKeys[0] ? String(contextKeys[0].id) : UNAUTHENTICATED_KEY);
+  }, [contextKeys, selectedKeyId, keyChoiceExplicit]);
 
   const candidateModels = useMemo(() => {
     let list = [];
@@ -1303,7 +1318,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
           <Key className={`w-3 h-3 shrink-0 ${!requiresCredential || isUsableAPIKey(sessionApiKey) ? 'text-emerald-500' : 'text-[#9AA0A6]'}`} />
           <select
             value={selectedKeyId}
-            onChange={(e) => setSelectedKeyId(e.target.value)}
+            onChange={(e) => selectKeyContext(e.target.value)}
             aria-label={isZh ? '密钥上下文（租户与模型范围）' : 'Key context (tenant and model scope)'}
             className="min-w-0 max-w-[185px] bg-[#F7F7F5] dark:bg-[#22252B] border border-[#E4E6E9] dark:border-[#2C3038] rounded-lg px-2 py-1 text-xs font-mono text-[#202124] dark:text-[#F1F2F4] focus:outline-none focus:ring-1 focus:ring-[#355CFF] cursor-pointer truncate"
             title={isZh ? '选择密钥记录以限定租户与可用模型；真正鉴权使用下方粘贴的明文' : 'Pick a key row to scope tenant and allowed models; the pasted plaintext signs the call'}

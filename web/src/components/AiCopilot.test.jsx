@@ -195,3 +195,119 @@ describe('AiCopilot masked-key boundary', () => {
     expect(showToast).toHaveBeenCalledWith(expect.any(String), 'warning');
   });
 });
+
+
+// The copilot now offers the same key selection as the Playground: a row scopes
+// the tenant and the allowed models, the pasted plaintext still signs the call,
+// and the explicit open-gateway entry calls with no credential at all.
+describe('AiCopilot key selection', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    // The scroll stub is left installed: an in-flight stream can still flush a
+    // passive effect during RTL's cleanup, which runs after this hook.
+  });
+
+  const twoKeys = () => ([
+    { id: 1, key: 'aaaaaaaa***1111', key_fingerprint: 'kfp_1', tenant_id: 'acme', allowed_models: ['chat-a'], status: 'active' },
+    { id: 2, key: 'bbbbbbbb***2222', key_fingerprint: 'kfp_2', tenant_id: 'beta', allowed_models: ['chat-b'], status: 'active' },
+  ]);
+
+  it('scopes the model list to the selected key and re-scopes it on switch', () => {
+    render(<AiCopilot {...baseProps({ keys: twoKeys(), models: ['chat-a', 'chat-b'], modelRoutes: [] })} />);
+
+    // Default selection is the first active row, so only its models are offered.
+    expect(screen.getByLabelText('Copilot model')).toHaveValue('chat-a');
+    expect(screen.queryByRole('option', { name: 'chat-b' })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Key context (tenant and model scope)'), { target: { value: '2' } });
+
+    expect(screen.getByLabelText('Copilot model')).toHaveValue('chat-b');
+    expect(screen.queryByRole('option', { name: 'chat-a' })).not.toBeInTheDocument();
+  });
+
+  it('sends the pasted plaintext for a listed key context', async () => {
+    const { response } = sseResponse(['data: {"choices":[{"delta":{"content":"ok"}}]}\n\n']);
+    globalThis.fetch.mockResolvedValue(response);
+    render(<AiCopilot {...baseProps({ keys: twoKeys(), models: ['chat-a', 'chat-b'], modelRoutes: [] })} />);
+
+    setSessionKey();
+    sendFirstBenchmark();
+
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+    const [, options] = globalThis.fetch.mock.calls[0];
+    expect(options.headers.Authorization).toBe(`Bearer ${SESSION_KEY}`);
+    // The selected row's scope is used, not the mask.
+    expect(JSON.stringify(options.headers)).not.toContain('***');
+  });
+
+  it('calls without a credential in the explicit open-gateway mode', async () => {
+    const { response } = sseResponse(['data: {"choices":[{"delta":{"content":"ok"}}]}\n\n']);
+    globalThis.fetch.mockResolvedValue(response);
+    const showToast = vi.fn();
+    render(<AiCopilot {...baseProps({ showToast })} />);
+
+    fireEvent.change(screen.getByLabelText('Key context (tenant and model scope)'), { target: { value: '__none__' } });
+
+    // No paste field is needed in this mode.
+    expect(screen.queryByLabelText('Session API key')).not.toBeInTheDocument();
+    expect(showToast).not.toHaveBeenCalledWith(expect.stringContaining('plaintext'), 'warning');
+
+    sendFirstBenchmark();
+
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+    const [, options] = globalThis.fetch.mock.calls[0];
+    expect(options.headers.Authorization).toBeUndefined();
+  });
+
+  it('defaults to open-gateway mode when the account has no keys', async () => {
+    const { response } = sseResponse(['data: {"choices":[{"delta":{"content":"ok"}}]}\n\n']);
+    globalThis.fetch.mockResolvedValue(response);
+    render(<AiCopilot {...baseProps({ keys: [] })} />);
+
+    expect(screen.queryByLabelText('Session API key')).not.toBeInTheDocument();
+    sendFirstBenchmark();
+
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+    expect(globalThis.fetch.mock.calls[0][1].headers.Authorization).toBeUndefined();
+  });
+
+  it('accepts a pasted credential that has no row in the list', async () => {
+    const { response } = sseResponse(['data: {"choices":[{"delta":{"content":"ok"}}]}\n\n']);
+    globalThis.fetch.mockResolvedValue(response);
+    render(<AiCopilot {...baseProps()} />);
+
+    fireEvent.change(screen.getByLabelText('Key context (tenant and model scope)'), { target: { value: '__custom__' } });
+    setSessionKey();
+    sendFirstBenchmark();
+
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+    expect(globalThis.fetch.mock.calls[0][1].headers.Authorization).toBe(`Bearer ${SESSION_KEY}`);
+  });
+
+  it('adopts the first key once an initially empty key list loads', () => {
+    const { rerender } = render(<AiCopilot {...baseProps({ keys: [] })} />);
+
+    // Mounted before the console data arrived: implicit open-gateway mode.
+    expect(screen.queryByLabelText('Session API key')).not.toBeInTheDocument();
+
+    rerender(<AiCopilot {...baseProps({ keys: twoKeys() })} />);
+
+    // The implicit default upgrades to a real key, so the paste field appears.
+    expect(screen.getByLabelText('Session API key')).toBeInTheDocument();
+    expect(screen.getByLabelText('Key context (tenant and model scope)')).toHaveValue('1');
+  });
+
+  it('preserves a deliberate open-gateway choice when the key list loads', () => {
+    const { rerender } = render(<AiCopilot {...baseProps({ keys: [] })} />);
+    fireEvent.change(screen.getByLabelText('Key context (tenant and model scope)'), { target: { value: '__none__' } });
+
+    rerender(<AiCopilot {...baseProps({ keys: twoKeys() })} />);
+
+    expect(screen.queryByLabelText('Session API key')).not.toBeInTheDocument();
+  });
+});
