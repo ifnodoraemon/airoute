@@ -143,19 +143,6 @@ func runServer(args []string) {
 
 	repo := storage.NewRepository(db)
 
-	// Budget governance: rules/counters/events and the optional alert fan-out.
-	// The memory counter is the single-replica implementation; a Redis-backed
-	// counter is wired once the shared KV adapter lands.
-	alertMulti, alertWarnings := notify.FromEnv(nil)
-	for _, warning := range alertWarnings {
-		telemetry.ScopedLogger("system").Warn("alert configuration warning", "warning", warning)
-	}
-	var alertSender notify.Sender
-	if alertMulti.Configured() {
-		alertSender = alertMulti
-	}
-	governance.SetGlobal(governance.NewService(repo, budget.NewMemoryCounter(), alertSender))
-
 	// Readiness signal for orchestrators and scripts/docker-rebuild.sh:
 	// /health stays a cheap process-liveness probe, while /health/ready also
 	// verifies that storage answers (and, below, that Redis answers) so a replica
@@ -218,6 +205,25 @@ func runServer(args []string) {
 	stopLiveStats := make(chan struct{})
 	defer close(stopLiveStats)
 	distributed.StartLiveStatsPublisher(redisClient, stopLiveStats)
+
+	// Budget governance: rules, counters, threshold events and the optional
+	// alert fan-out. Redis gives replicas one shared counter; the memory
+	// fallback keeps single-node deployments working with no extra middleware.
+	alertMulti, alertWarnings := notify.FromEnv(nil)
+	for _, warning := range alertWarnings {
+		telemetry.ScopedLogger("system").Warn("alert configuration warning", "warning", warning)
+	}
+	var alertSender notify.Sender
+	if alertMulti.Configured() {
+		alertSender = alertMulti
+	}
+	var budgetCounter budget.Counter = budget.NewMemoryCounter()
+	if kv := redisClient.BudgetCounterKV(); kv != nil {
+		budgetCounter = budget.NewKVCounter(kv)
+		telemetry.ScopedLogger("system").Info("budget counters use the shared Redis backend")
+	}
+	governance.SetGlobal(governance.NewService(repo, budgetCounter, alertSender))
+	governance.GlobalService().StartFlusher(30 * time.Second)
 
 	// Initialize Async Usage Logger for zero-latency audit logs
 	// NOTE: Must be after Redis init so redisStreamWorker can start consuming the stream

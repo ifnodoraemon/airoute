@@ -2,6 +2,7 @@ package governance
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -40,6 +41,9 @@ type Service struct {
 	rules    map[int64]*cachedRules
 	orgChain map[int64]*cachedOrgChain
 	warned   sync.Map // dedupe message key -> time.Time
+
+	pendingMu sync.Mutex
+	pending   map[int64]int64 // budget id -> units waiting for the next flush
 }
 
 type cachedRules struct {
@@ -74,6 +78,7 @@ func NewService(repo *storage.Repository, counter budget.Counter, notifier notif
 		ttl:      defaultRuleTTL,
 		rules:    make(map[int64]*cachedRules),
 		orgChain: make(map[int64]*cachedOrgChain),
+		pending:  make(map[int64]int64),
 	}
 }
 
@@ -134,6 +139,7 @@ func (s *Service) RecordSpend(ctx context.Context, subject Subject, costUnits in
 			s.warnOnce(fmt.Sprintf("counter:%d", rule.ID), "budget counter unavailable", "error", err.Error(), "budget_id", rule.ID)
 			continue
 		}
+		s.addPending(rule.ID, costUnits)
 		decision := budget.Evaluate(rule, used)
 		if decision.Threshold == 0 {
 			continue
@@ -203,6 +209,61 @@ func (s *Service) orgChainFor(ctx context.Context, orgID int64) ([]int64, error)
 	s.orgChain[orgID] = &cachedOrgChain{ids: ids, at: now}
 	s.mu.Unlock()
 	return ids, nil
+}
+
+// addPending records the amount that the next flush should persist. The counter
+// remains the live value; used_units is the durable, restart-safe mirror.
+func (s *Service) addPending(budgetID, units int64) {
+	if units <= 0 {
+		return
+	}
+	s.pendingMu.Lock()
+	s.pending[budgetID] += units
+	s.pendingMu.Unlock()
+}
+
+// Flush persists pending counter deltas into budgets.used_units. On a database
+// error the delta is put back so the next tick retries it; a crash loses at most
+// one interval, and the live counter still governs admission in the meantime.
+func (s *Service) Flush(ctx context.Context) error {
+	if s == nil || s.repo == nil {
+		return nil
+	}
+	s.pendingMu.Lock()
+	pending := s.pending
+	s.pending = make(map[int64]int64)
+	s.pendingMu.Unlock()
+	if len(pending) == 0 {
+		return nil
+	}
+	var errs []error
+	for budgetID, units := range pending {
+		if err := s.repo.IncrementBudgetUsage(budgetID, units); err != nil {
+			s.pendingMu.Lock()
+			s.pending[budgetID] += units
+			s.pendingMu.Unlock()
+			errs = append(errs, fmt.Errorf("budget %d: %w", budgetID, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// StartFlusher runs Flush on a fixed interval for the lifetime of the process.
+func (s *Service) StartFlusher(interval time.Duration) {
+	if s == nil || s.repo == nil || interval <= 0 {
+		return
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for range ticker.C {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			if err := s.Flush(ctx); err != nil {
+				s.warnOnce("flush", "failed to flush budget usage", "error", err.Error())
+			}
+			cancel()
+		}
+	}()
 }
 
 func (s *Service) warnOnce(key, message string, args ...any) {

@@ -165,3 +165,35 @@ func TestInvalidateRefreshesRules(t *testing.T) {
 		t.Fatalf("new rule should still allow an unused budget: %v %v", err, blocked)
 	}
 }
+
+func TestFlushPersistsPendingUsageIdempotently(t *testing.T) {
+	fixture := newBudgetFixture(t)
+	record := fixture.addBudget(t, 1000)
+	subject := Subject{KeyID: 9, UserID: 7, OrgID: fixture.org.ID}
+	ctx := context.Background()
+
+	fixture.service.RecordSpend(ctx, subject, storage.ToUnits(500))
+	fixture.service.RecordSpend(ctx, subject, storage.ToUnits(300))
+	if err := fixture.service.Flush(ctx); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	stored, err := fixture.repo.GetBudget(record.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.UsedUnits != storage.ToUnits(800) {
+		t.Fatalf("used_units = %d, want %d", stored.UsedUnits, storage.ToUnits(800))
+	}
+
+	// A second flush with nothing pending must not double-count.
+	if err := fixture.service.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	stored, err = fixture.repo.GetBudget(record.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.UsedUnits != storage.ToUnits(800) {
+		t.Fatalf("second flush changed used_units to %d", stored.UsedUnits)
+	}
+}
