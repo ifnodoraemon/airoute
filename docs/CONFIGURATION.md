@@ -117,7 +117,8 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `DEFAULT_TRIAL_BALANCE` | unset | Legacy alias of `INITIAL_USER_BALANCE`, used only when the latter is empty |
 | `REQUIRE_EMAIL_VERIFICATION` | `true` (`.env.example`) | Require the e-mail verification code during registration (needs SMTP) |
 | `TOKEN_EXPIRY_HOURS` | `168` | Session/token lifetime in hours |
-| `GATEWAY_METRICS_TOKEN` | unset | When set, `/metrics` requires `Authorization: Bearer <token>` |
+| `GATEWAY_METRICS_TOKEN` | unset | When set, `/metrics` requires `Authorization: Bearer <token>` from every client. When unset, `/metrics` is limited to loopback/private clients |
+| `GATEWAY_METRICS_ALLOW_PUBLIC` | `false` | Explicitly open `/metrics` to public clients when no token is configured (not recommended) |
 | `GATEWAY_TRUSTED_PROXIES` | unset | Comma-separated proxy CIDRs whose `X-Forwarded-For` is trusted for client-IP limits/logging. Empty trusts no forwarding headers (safe default). Behind the bundled nginx set the Compose network, e.g. `172.22.0.0/16`. An invalid list refuses startup |
 | `GATEWAY_ADMIN_ALLOWED_IPS` | unset (loopback + private) | Control-plane CIDR/IP allowlist (`/api/v1/admin`, `/app`). Overrides the default loopback/private rule; an invalid entry fails closed with 503 |
 | `GATEWAY_ADMIN_ALLOWED_HOSTS` | unset | Optional `Host` allowlist for the control plane; supports `*.example.com` |
@@ -133,6 +134,7 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `GATEWAY_BREAKER_COOLDOWN_SEC` | `30` | Open-state cooldown before half-open probing |
 | `GATEWAY_DRAIN_ABORTED_UPSTREAM` | `true` | Keep consuming the upstream after the client disconnects and bill the upstream-reported usage; `false` = cancel immediately and bill an estimate |
 | `GATEWAY_DRAIN_TIMEOUT_SEC` | `120` | Maximum time a single aborted request may be drained |
+| `GATEWAY_REQUEST_BUDGET_SEC` | `300` | Total budget for a non-streaming dispatch across channel attempts and cross-model fallback; `0` disables it. Streaming requests keep the first-token timeout instead |
 | `GATEWAY_SHUTDOWN_TIMEOUT_SEC` | derived: `GATEWAY_DRAIN_TIMEOUT_SEC + 15` (135) | How long in-flight requests may finish after SIGTERM. Must be below the container's `stop_grace_period` / `terminationGracePeriodSeconds` |
 | `GATEWAY_PUBLIC_STATUS` | `true` | Set `false` to hide the model catalog on the public status page |
 | `GATEWAY_BLOCK_PRIVATE_PROBE` | `false` | Reject probing RFC1918 private upstream addresses |

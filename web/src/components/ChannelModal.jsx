@@ -107,6 +107,9 @@ export default function ChannelModal({
                   { key: 'zhipu', label: '智谱 GLM', badge: isZh ? '主流' : 'GLM' },
                   { key: 'doubao', label: '火山豆包', badge: isZh ? '多模态' : 'Multimodal' },
                   { key: 'moonshot', label: '月之暗面 Kimi', badge: isZh ? '长文本' : 'Kimi' },
+                  { key: 'aliyun', label: '阿里百炼', badge: isZh ? '通义千问' : 'Qwen' },
+                  { key: 'baidu', label: '百度千帆', badge: isZh ? '文心' : 'ERNIE' },
+                  { key: 'tencent', label: '腾讯混元', badge: isZh ? '混元' : 'Hunyuan' },
                   { key: 'openai', label: 'OpenAI', badge: isZh ? '全协议' : 'Full Suite' },
                   { key: 'anthropic', label: 'Claude', badge: 'Anthropic' },
                   { key: 'gemini', label: 'Google Gemini', badge: isZh ? '多模态' : 'Multimodal' },
@@ -164,6 +167,9 @@ export default function ChannelModal({
                     else if (lower.includes('zhipu') || lower.includes('bigmodel')) updates.name = 'zhipu-glm';
                     else if (lower.includes('doubao') || lower.includes('volces')) updates.name = 'doubao-provider';
                     else if (lower.includes('moonshot') || lower.includes('kimi')) updates.name = 'kimi-provider';
+                    else if (lower.includes('dashscope') || lower.includes('aliyuncs')) updates.name = 'aliyun-dashscope';
+                    else if (lower.includes('qianfan') || lower.includes('baidubce')) updates.name = 'baidu-qianfan';
+                    else if (lower.includes('hunyuan') || lower.includes('tencentcloudapi')) updates.name = 'tencent-hunyuan';
                   }
                   if (lower.includes('anthropic')) updates.type = 'anthropic';
                   else if (lower.includes('deepseek')) updates.type = 'deepseek';

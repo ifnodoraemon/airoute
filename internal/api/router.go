@@ -1,10 +1,6 @@
 package api
 
 import (
-	"crypto/subtle"
-	"os"
-	"strings"
-
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/controlplane"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
@@ -329,19 +325,12 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 	return r
 }
 
-// metricsAuthGuard optionally protects /metrics. When GATEWAY_METRICS_TOKEN is
-// set, the scraper must present it as a bearer token; otherwise the endpoint
-// stays public for simple Prometheus setups.
+// metricsAuthGuard rejects scrapes the access policy does not allow. The
+// policy itself lives in metrics_access.go.
 func metricsAuthGuard() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		expected := os.Getenv("GATEWAY_METRICS_TOKEN")
-		if expected == "" {
-			c.Next()
-			return
-		}
-		got := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
-		if subtle.ConstantTimeCompare([]byte(got), []byte(expected)) != 1 {
-			c.AbortWithStatus(401)
+		if status := metricsDeniedStatus(c); status != 0 {
+			c.AbortWithStatus(status)
 			return
 		}
 		c.Next()

@@ -9,8 +9,8 @@ import { buildPresetChannel, emptyChannel, PROVIDER_PRESETS, ALL_PROTOCOLS } fro
 describe('providerPresets', () => {
   it('offers a preset for every provider the form lists', () => {
     const expected = [
-      'gpustack', 'deepseek', 'zhipu', 'doubao', 'moonshot', 'openai',
-      'anthropic', 'gemini', 'ollama', 'vllm', 'sub2api', 'custom',
+      'gpustack', 'deepseek', 'zhipu', 'doubao', 'moonshot', 'aliyun', 'baidu', 'tencent',
+      'openai', 'anthropic', 'gemini', 'ollama', 'vllm', 'sub2api', 'custom',
     ];
     expected.forEach((key) => expect(PROVIDER_PRESETS[key]).toBeTruthy());
   });

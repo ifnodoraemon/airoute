@@ -1,6 +1,6 @@
 export PATH := /usr/local/go/bin:$(PATH)
 
-.PHONY: all build build-web run test test-web test-integration test-e2e test-e2e-go tidy clean docker-build docker-rebuild
+.PHONY: all build build-web run test test-web test-integration test-e2e test-e2e-go tidy clean docker-build docker-rebuild check-deploy-drift
 
 APP_NAME = airoute
 BIN_DIR = bin
@@ -50,6 +50,12 @@ docker-build:
 
 docker-rebuild:
 	@sh scripts/docker-rebuild.sh
+
+# Read-only: detects postgres/redis/lb containers that predate the compose
+# ulimits/command. Run after an upgrade; it never mutates anything.
+check-deploy-drift:
+	@echo "==> Checking dependency container drift..."
+	@sh scripts/check-deploy-drift.sh
 
 test: web/dist/index.html
 	@echo "==> Running tests..."

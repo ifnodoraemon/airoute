@@ -5,7 +5,7 @@ import {
   Key,
   Terminal,
   ShieldAlert,
-  ExternalLink,
+
   AlertCircle,
   Cpu,
   Sparkles,
@@ -1170,21 +1170,14 @@ export default function App() {
 
               <div className="pt-2 border-t border-[#E4E6E9] dark:border-[#2C3038]">
                 <button
-                  onClick={() => {
-                    setViewMode('landing');
-                    setTimeout(() => {
-                      const el = document.getElementById('docs');
-                      if (el) el.scrollIntoView({ behavior: 'smooth' });
-                    }, 100);
-                  }}
-                  className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] transition-colors cursor-pointer group`}
+                  onClick={() => setCurrentTab('docs')}
+                  className={navBtnClass('docs')}
                   title={isZh ? '查阅开发文档' : 'Documentation'}
                 >
                   <div className="flex items-center space-x-2.5">
-                    <BookOpen className="w-4 h-4 text-[#656B75] dark:text-[#A1A7B0] group-hover:text-[#202124] dark:group-hover:text-[#F1F2F4]" />
-                    {!sidebarCollapsed && <span>{t.navViewDocs || (isZh ? '开发文档 ↗' : 'Docs ↗')}</span>}
+                    <BookOpen className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('docs')}`} />
+                    {!sidebarCollapsed && <span>{t.navViewDocs || (isZh ? '开发文档' : 'Docs')}</span>}
                   </div>
-                  {!sidebarCollapsed && <ExternalLink className="w-3 h-3 opacity-40 group-hover:opacity-80" />}
                 </button>
               </div>
             </nav>

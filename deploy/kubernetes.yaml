@@ -126,4 +126,3 @@ stringData:
   # pod fails with CreateContainerConfigError before the startup check can explain why.
   # Must be at least 16 characters and not admin123.
   admin-password: "REPLACE_WITH_STRONG_ADMIN_PASSWORD"
-  admin-password: "REPLACE_WITH_STRONG_ADMIN_PASSWORD"

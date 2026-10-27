@@ -48,6 +48,9 @@ func TestAPI_HealthMetricsAndWebUI(t *testing.T) {
 
 	// 2. Test GET /metrics (Prometheus scrape endpoint)
 	reqMetrics := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	// /metrics is loopback/private-only by default; httptest's default
+	// 192.0.2.1 (TEST-NET) is neither.
+	reqMetrics.RemoteAddr = "127.0.0.1:12345"
 	wMetrics := httptest.NewRecorder()
 	engine.ServeHTTP(wMetrics, reqMetrics)
 

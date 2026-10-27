@@ -61,3 +61,16 @@ docker compose build --build-arg VERSION="$(sh scripts/build-version.sh)" gatewa
 ```
 
 升级到独立路由存储只新增迁移 16 的 `model_routes` 表。旧版程序会忽略新路由策略，回滚前应评估已删除或修改的路由是否会恢复旧行为；不要为回滚应用而删除数据库或迁移记录。
+
+## 依赖容器漂移检查
+
+`docker compose` 的 `ulimits` 与 `command` 只在容器**创建**时生效。只重建网关镜像不会重建 PostgreSQL / Redis / nginx，旧容器可能仍停留在 `nofile=1024`、PostgreSQL `max_connections=100`，而 compose 文件已经声明 65536 与 200。表现为升级后偶发 "too many open files" 或 "remaining connection slots are reserved"。
+
+发布前后各执行一次只读检查：
+
+```bash
+make check-deploy-drift
+# 或：sh scripts/check-deploy-drift.sh
+```
+
+脚本只报告漂移并给出 `docker compose up -d --force-recreate <容器>` 的修复命令，不修改任何状态；容器未运行时自动跳过。

@@ -135,6 +135,27 @@ func suggestProviderName(detectedType model.ProviderType, baseURL, serverHeader 
 	if strings.Contains(lowerURL, "sub2api") {
 		return "sub2api-upstream"
 	}
+	// Domestic OpenAI-compatible clouds. They need no dedicated transport (the
+	// OpenAI adapter handles them); the recognisable name is what makes a probe
+	// result legible in the console and in the channel list.
+	if strings.Contains(lowerURL, "bigmodel.cn") {
+		return "zhipu-glm-direct"
+	}
+	if strings.Contains(lowerURL, "volces.com") {
+		return "volcengine-doubao-direct"
+	}
+	if strings.Contains(lowerURL, "moonshot.cn") {
+		return "moonshot-kimi-direct"
+	}
+	if strings.Contains(lowerURL, "dashscope.aliyuncs.com") {
+		return "aliyun-dashscope-direct"
+	}
+	if strings.Contains(lowerURL, "baidubce.com") {
+		return "baidu-qianfan-direct"
+	}
+	if strings.Contains(lowerURL, "tencentcloudapi.com") || strings.Contains(lowerURL, "hunyuan.tencent") {
+		return "tencent-hunyuan-direct"
+	}
 	if strings.Contains(lowerURL, ":11434") || strings.Contains(lowerServer, "ollama") {
 		return "ollama-local"
 	}
