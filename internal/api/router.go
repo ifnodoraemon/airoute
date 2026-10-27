@@ -206,6 +206,11 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 					adminOnly.POST("/users/:username/balance", adminHandler.UpdateUserBalance)
 					adminOnly.GET("/wallet/transactions", adminHandler.ListWalletTransactions)
 					adminOnly.GET("/wallet/transactions/export", adminHandler.ExportWalletTransactions)
+					adminOnly.GET("/supplier-costs", adminHandler.ListSupplierCosts)
+					adminOnly.POST("/supplier-costs", adminHandler.SaveSupplierCost)
+					adminOnly.DELETE("/supplier-costs/:id", adminHandler.DeleteSupplierCost)
+					adminOnly.GET("/cost/overview", adminHandler.GetCostOverview)
+					adminOnly.GET("/cost/breakdown", adminHandler.GetCostBreakdown)
 					adminOnly.POST("/users/:username/group", adminHandler.UpdateUserGroup)
 					adminOnly.POST("/users/:username/role", adminHandler.UpdateUserRole)
 

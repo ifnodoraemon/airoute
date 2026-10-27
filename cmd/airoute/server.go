@@ -18,6 +18,7 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/budget"
 	"github.com/ifnodoraemon/airoute/internal/config"
 	"github.com/ifnodoraemon/airoute/internal/controlplane"
+	"github.com/ifnodoraemon/airoute/internal/costing"
 	"github.com/ifnodoraemon/airoute/internal/distributed"
 	"github.com/ifnodoraemon/airoute/internal/governance"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
@@ -232,6 +233,7 @@ func runServer(args []string) {
 
 	// Initialize Real-Time Model Pricing & Prompt-Cache Billing Engine
 	billing.InitGlobalEngine(repo)
+	costing.InitGlobal(repo)
 
 	// Enable synchronous charge settlement: money moves at request completion and
 	// no longer waits for the audit log to be persisted.

@@ -499,6 +499,7 @@ func (db *DB) migrate() error {
 		{Version: 34, Name: "drop_legacy_nano_money_mirrors", Up: dropLegacyNanoMoneyColumns},
 		{Version: 35, Name: "budgets", Up: CreateBudgets},
 		{Version: 36, Name: "wallet_ledger", Up: CreateWalletLedger},
+		{Version: 37, Name: "supplier_costs", Up: CreateSupplierCosts},
 	}
 	return db.runMigrations(migrations)
 }

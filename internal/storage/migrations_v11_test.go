@@ -9,18 +9,21 @@ func TestV11MigrationsCreateBudgetAndWalletTables(t *testing.T) {
 	}
 	defer db.Close()
 
-	for _, table := range []string{"budgets", "budget_events", "wallet_transactions"} {
+	for _, table := range []string{"budgets", "budget_events", "wallet_transactions", "supplier_costs"} {
 		var name string
 		if err := db.QueryRow(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&name); err != nil {
 			t.Fatalf("table %s missing: %v", table, err)
 		}
 	}
 	var version int
+	if !sqliteColumnExists(db.DB, "usage_logs", "cost_basis_units") {
+		t.Fatal("usage_logs.cost_basis_units missing")
+	}
 	if err := db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
-	if version < 36 {
-		t.Fatalf("schema version = %d, want >= 36", version)
+	if version < 37 {
+		t.Fatalf("schema version = %d, want >= 37", version)
 	}
 
 	// Replaying the migration list must not error or duplicate the opening rows.

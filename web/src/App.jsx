@@ -4,6 +4,7 @@ import {
   Server,
   Building2,
   Gauge,
+  Calculator,
   ReceiptText,
   Key,
   Terminal,
@@ -63,6 +64,7 @@ const McpIntegrationView = lazy(() => import('./components/McpIntegrationView'))
 const UserManagementView = lazy(() => import('./components/UserManagementView'));
 const OrganizationsView = lazy(() => import('./components/OrganizationsView'));
 const BudgetsView = lazy(() => import('./components/BudgetsView'));
+const CostAnalyticsView = lazy(() => import('./components/CostAnalyticsView'));
 const WalletLedgerView = lazy(() => import('./components/WalletLedgerView'));
 const WalletManagementView = lazy(() => import('./components/WalletManagementView'));
 const ChannelsView = lazy(() => import('./components/ChannelsView'));
@@ -1059,6 +1061,17 @@ export default function App() {
                       </button>
 
                       <button
+                        onClick={() => setCurrentTab('costs')}
+                        title={isZh ? '成本与毛利' : 'Cost & Margin'}
+                        className={navBtnClass('costs')}
+                      >
+                        <div className="flex items-center space-x-2.5">
+                          <Calculator className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('costs')}`} />
+                          {!sidebarCollapsed && <span>{isZh ? '成本与毛利' : 'Cost & Margin'}</span>}
+                        </div>
+                      </button>
+
+                      <button
                         onClick={() => setCurrentTab('ledger')}
                         title={isZh ? '钱包资金流水' : 'Wallet Ledger'}
                         className={navBtnClass('ledger')}
@@ -1294,6 +1307,7 @@ export default function App() {
                 {currentTab === 'orgs' && (isZh ? '组织与成本中心' : 'Organizations')}
                 {currentTab === 'budgets' && (isZh ? '预算与告警' : 'Budgets & Alerts')}
                 {currentTab === 'ledger' && (isZh ? '钱包资金流水' : 'Wallet Ledger')}
+                {currentTab === 'costs' && (isZh ? '成本与毛利' : 'Cost & Margin')}
                 {currentTab === 'playground' && t.navPlayground}
                 {currentTab === 'docs' && t.navDocs}
               </span>
@@ -1671,6 +1685,11 @@ export default function App() {
             {/* 7. BUDGETS & ALERTS */}
             {currentTab === 'budgets' && (
               <BudgetsView adminFetch={apiFetch} showToast={showToast} lang={lang} />
+            )}
+
+            {/* 7. COST & MARGIN */}
+            {currentTab === 'costs' && (
+              <CostAnalyticsView adminFetch={apiFetch} showToast={showToast} lang={lang} />
             )}
 
             {/* 7. WALLET LEDGER */}

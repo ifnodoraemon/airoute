@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/billing"
+	"github.com/ifnodoraemon/airoute/internal/costing"
 	"github.com/ifnodoraemon/airoute/internal/governance"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/model"
@@ -324,6 +325,17 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 		// use the flush time, so a batch of slow requests aborted together all
 		// shared one timestamp and their real order was lost.
 		CreatedAt: time.Now(),
+	}
+
+	// Supplier cost is computed at write time and stored as nullable units. If no
+	// price is configured the column stays NULL so margin reports can separate
+	// "free" from "unknown" instead of treating both as zero cost.
+	if params.Channel != "" && params.Model != "" && (params.PromptTokens > 0 || params.CompletionTokens > 0) {
+		if engine := costing.Global(); engine != nil {
+			if units, found := engine.CostBasisUnits(params.Channel, params.Model, int64(params.PromptTokens), int64(params.CompletionTokens)); found {
+				record.CostBasisUnits = &units
+			}
+		}
 	}
 
 	// Settle the charge now, independently of the audit pipeline. A failure here
