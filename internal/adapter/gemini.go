@@ -41,6 +41,14 @@ func (a *GeminiAdapter) ToCanonical(ctx context.Context, input any) (*model.Chat
 		}
 	}
 
+	// Gemini function calls carry no id, but OpenAI and Anthropic tool messages
+	// require the assistant's tool_call/use id on the matching result. Issue a
+	// stable id per call and hand it to the functionResponse that answers it,
+	// otherwise the canonical tool message has an empty tool_call_id and upstreams
+	// reject the follow-up turn.
+	pendingToolIDs := make(map[string][]string)
+	issuedToolCalls := 0
+
 	for _, c := range req.Contents {
 		role := c.Role
 		if role == "model" {
@@ -50,6 +58,7 @@ func (a *GeminiAdapter) ToCanonical(ctx context.Context, input any) (*model.Chat
 		var toolCalls []model.ToolCall
 		var contentParts []model.ContentPart
 		var hasMultimodal bool
+		var toolResults []model.ChatMessage
 
 		for _, p := range c.Parts {
 			if p.Text != "" {
@@ -80,9 +89,14 @@ func (a *GeminiAdapter) ToCanonical(ctx context.Context, input any) (*model.Chat
 						argsStr = string(b)
 					}
 				}
+				issuedToolCalls++
+				id := fmt.Sprintf("call_%d_%s", issuedToolCalls, p.FunctionCall.Name)
+				if name := p.FunctionCall.Name; name != "" {
+					pendingToolIDs[name] = append(pendingToolIDs[name], id)
+				}
 				toolCalls = append(toolCalls, model.ToolCall{
 					Index: &idx,
-					ID:    p.FunctionCall.Name,
+					ID:    id,
 					Type:  "function",
 					Function: model.FunctionCall{
 						Name:      p.FunctionCall.Name,
@@ -91,9 +105,45 @@ func (a *GeminiAdapter) ToCanonical(ctx context.Context, input any) (*model.Chat
 				})
 			}
 			if p.FunctionResponse != nil {
-				role = "tool"
-				text = fmt.Sprintf("%v", p.FunctionResponse.Response)
+				// One canonical tool message per response: Gemini puts every parallel
+				// functionResponse of a turn in the same content, and collapsing them
+				// into one message silently dropped all but the last result.
+				toolName := p.FunctionResponse.Name
+				toolCallID := ""
+				// FIFO per function name: repeated calls to the same tool keep their
+				// own ids, in the order Gemini answers them.
+				if queue := pendingToolIDs[toolName]; len(queue) > 0 {
+					toolCallID = queue[0]
+					pendingToolIDs[toolName] = queue[1:]
+				} else if toolName != "" {
+					// Unpaired response (e.g. a conversation resumed elsewhere):
+					// still produce a deterministic, non-empty id.
+					toolCallID = "call_" + toolName
+				}
+				payload := fmt.Sprintf("%v", p.FunctionResponse.Response)
+				if encoded, err := json.Marshal(p.FunctionResponse.Response); err == nil {
+					payload = string(encoded)
+				}
+				toolResults = append(toolResults, model.ChatMessage{
+					Role:       "tool",
+					Content:    payload,
+					ToolCallID: toolCallID,
+					Name:       toolName,
+				})
 			}
+		}
+
+		if len(toolResults) > 0 {
+			msgs = append(msgs, toolResults...)
+			// Any non-tool content that shared the turn (rare) follows the results.
+			if text != "" || hasMultimodal {
+				var content any = text
+				if hasMultimodal {
+					content = contentParts
+				}
+				msgs = append(msgs, model.ChatMessage{Role: "user", Content: content})
+			}
+			continue
 		}
 
 		var content any = text

@@ -69,6 +69,23 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 		cacheReadTokens := 0
 		cacheCreationTokens := 0
 
+		// Anthropic numbers content blocks (text block 0, thinking block 1, tool_use
+		// block 2 ...), while OpenAI numbers tool calls only and they must start at
+		// 0. Emitting the block index as the tool-call index produced tool_calls[2]
+		// with no 0/1 entries whenever the model wrote text (or thought) before
+		// calling a tool, which clients that accumulate by index cannot merge.
+		toolIndexByBlock := make(map[int]int)
+		nextToolIndex := 0
+		toolIndexForBlock := func(block int) int {
+			if idx, ok := toolIndexByBlock[block]; ok {
+				return idx
+			}
+			idx := nextToolIndex
+			nextToolIndex++
+			toolIndexByBlock[block] = idx
+			return idx
+		}
+
 		sendEvent := func(ev *model.StreamEvent) bool {
 			select {
 			case eventChan <- ev:
@@ -177,6 +194,7 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 						if cb["type"] == "tool_use" {
 							toolID, _ := cb["id"].(string)
 							toolName, _ := cb["name"].(string)
+							toolIndex := toolIndexForBlock(blockIdx)
 							chunk := &model.ChatCompletionChunk{
 								ID:      messageID,
 								Object:  "chat.completion.chunk",
@@ -188,7 +206,7 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 										Delta: model.ChunkDelta{
 											ToolCalls: []model.ToolCall{
 												{
-													Index: &blockIdx,
+													Index: &toolIndex,
 													ID:    toolID,
 													Type:  "function",
 													Function: model.FunctionCall{
@@ -230,7 +248,29 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 							if !sendEvent(&model.StreamEvent{Chunk: chunk}) {
 								return
 							}
+						} else if thinking, ok := delta["thinking"].(string); ok && thinking != "" {
+							// Extended thinking (thinking_delta) used to fall through and
+							// vanish on the adapted path; keep it as reasoning_content so
+							// OpenAI-shaped clients see the trace the upstream billed for.
+							chunk := &model.ChatCompletionChunk{
+								ID:      messageID,
+								Object:  "chat.completion.chunk",
+								Created: created,
+								Model:   req.Model,
+								Choices: []model.ChunkChoice{
+									{
+										Index: 0,
+										Delta: model.ChunkDelta{
+											ReasoningContent: thinking,
+										},
+									},
+								},
+							}
+							if !sendEvent(&model.StreamEvent{Chunk: chunk}) {
+								return
+							}
 						} else if partial, ok := delta["partial_json"].(string); ok {
+							toolIndex := toolIndexForBlock(blockIdx)
 							chunk := &model.ChatCompletionChunk{
 								ID:      messageID,
 								Object:  "chat.completion.chunk",
@@ -242,7 +282,7 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 										Delta: model.ChunkDelta{
 											ToolCalls: []model.ToolCall{
 												{
-													Index: &blockIdx,
+													Index: &toolIndex,
 													Type:  "function",
 													Function: model.FunctionCall{
 														Arguments: partial,

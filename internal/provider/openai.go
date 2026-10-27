@@ -64,13 +64,11 @@ func (p *OpenAIProvider) Type() model.ProviderType {
 	return model.ProviderOpenAI
 }
 
-// buildURL joins base URL with /chat/completions cleanly.
+// buildURL joins the configured API root with /chat/completions using the shared
+// APIURL semantics (bare origin gets /v1, a /v1 root is not doubled, custom
+// prefixes and trailing slashes are preserved).
 func buildURL(baseURL string) string {
-	baseURL = strings.TrimRight(baseURL, "/")
-	if strings.HasSuffix(baseURL, "/chat/completions") {
-		return baseURL
-	}
-	return baseURL + "/chat/completions"
+	return APIURL(baseURL, "/v1/chat/completions")
 }
 
 // ChatComplete executes a standard non-streaming chat request.

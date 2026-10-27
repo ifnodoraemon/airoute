@@ -13,16 +13,13 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/model"
 )
 
-// buildCompletionURL joins base URL with /completions cleanly.
+// buildCompletionURL joins the configured API root with /completions using the
+// shared APIURL semantics. An operator who pasted the chat endpoint into the base
+// URL field gets the text-completion endpoint rather than a doubled path.
 func buildCompletionURL(baseURL string) string {
-	baseURL = strings.TrimRight(baseURL, "/")
-	if strings.HasSuffix(baseURL, "/completions") && !strings.HasSuffix(baseURL, "/chat/completions") {
-		return baseURL
-	}
-	if strings.HasSuffix(baseURL, "/chat/completions") {
-		return strings.TrimSuffix(baseURL, "/chat/completions") + "/completions"
-	}
-	return baseURL + "/completions"
+	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	base = strings.TrimSuffix(base, "/chat/completions")
+	return APIURL(base, "/v1/completions")
 }
 
 // ErrTextAdapterUnsupported is returned when a request needs capabilities the

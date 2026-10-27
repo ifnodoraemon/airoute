@@ -18,9 +18,10 @@ import (
 
 // TestV1Completions verifies legacy OpenAI POST /v1/completions non-stream and stream modes.
 func TestV1Completions(t *testing.T) {
-	// Mock upstream OpenAI server returning chat completions
+	// Mock upstream OpenAI server returning chat completions. The channel uses a
+	// bare origin, so the unified API-root semantics request /v1/chat/completions.
 	mockUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/chat/completions" {
+		if r.URL.Path == "/v1/chat/completions" {
 			var chatReq model.ChatCompletionRequest
 			if err := json.NewDecoder(r.Body).Decode(&chatReq); err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
@@ -175,7 +176,9 @@ func TestUpstreamPureTextCompletionAdapter(t *testing.T) {
 	var wasStream bool
 
 	mockTextUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/completions" {
+		// Bare origin + unified API-root semantics: the adapted text-completion
+		// request goes to /v1/completions.
+		if r.URL.Path != "/v1/completions" {
 			http.NotFound(w, r)
 			return
 		}

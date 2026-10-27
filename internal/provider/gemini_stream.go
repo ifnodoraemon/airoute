@@ -99,6 +99,15 @@ func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 			if err := json.Unmarshal([]byte(dataContent), &geminiChunk); err != nil {
 				continue
 			}
+			// Gemini reports some failures (overload, quota, model errors) as an
+			// error object inside a 200 SSE stream. Without this the frame became an
+			// empty normal chunk and the client saw a truncated but "successful"
+			// completion.
+			if geminiChunk.Error != nil {
+				sendEvent(&model.StreamEvent{Err: fmt.Errorf("upstream gemini stream error (code %d, status %s): %s",
+					geminiChunk.Error.Code, geminiChunk.Error.Status, geminiChunk.Error.Message)})
+				return
+			}
 
 			textDelta := ""
 			var toolCalls []model.ToolCall

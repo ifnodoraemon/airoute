@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -34,19 +35,18 @@ func (p *GeminiProvider) Type() model.ProviderType {
 	return model.ProviderGemini
 }
 
-// buildGeminiURL creates Google endpoint URL.
+// buildGeminiURL creates the Google endpoint URL using the shared API root
+// semantics: a bare origin becomes /v1beta, a root that already carries /v1beta
+// is not doubled, and custom prefixes are preserved.
 func buildGeminiURL(baseURL, modelName string, stream bool) string {
-	if baseURL == "" {
+	if strings.TrimSpace(baseURL) == "" {
 		baseURL = "https://generativelanguage.googleapis.com"
 	}
-	baseURL = strings.TrimRight(baseURL, "/")
-
-	action := "generateContent"
+	endpoint := "/v1beta/models/" + modelName + ":generateContent"
 	if stream {
-		action = "streamGenerateContent?alt=sse"
+		return joinAPIURLVersioned(baseURL, GeminiAPIVersion, "/v1beta/models/"+modelName+":streamGenerateContent", url.Values{"alt": {"sse"}})
 	}
-
-	return fmt.Sprintf("%s/v1beta/models/%s:%s", baseURL, modelName, action)
+	return joinAPIURLVersioned(baseURL, GeminiAPIVersion, endpoint, nil)
 }
 
 // ChatComplete executes a non-streaming Gemini call and converts to OpenAI format.
@@ -86,6 +86,12 @@ func (p *GeminiProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 	var geminiResp GeminiResponse
 	if err := json.Unmarshal(bodyBytes, &geminiResp); err != nil {
 		return nil, fmt.Errorf("unmarshal gemini response error: %w", err)
+	}
+	// A 200 body can still carry an error object (overload/quota/model failure);
+	// returning an empty completion for it hid the failure from the client, the
+	// audit row and the circuit breaker.
+	if geminiResp.Error != nil {
+		return nil, NewUpstreamError(channel.Name, http.StatusBadGateway, bodyBytes)
 	}
 
 	replyText := ""

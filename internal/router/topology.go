@@ -176,6 +176,10 @@ func InferModality(modelName string) string {
 }
 
 // RewriteJSONModel substitutes the "model" field in a JSON payload with newModel, preserving all other keys.
+//
+// The payload is decoded with json.Number so integers above 2^53 (video/image
+// seeds, timestamps, snowflake ids) survive the round-trip; decoding into any is
+// what silently turned 9007199254740993 into 9007199254740992.
 func RewriteJSONModel(body []byte, newModel string) []byte {
 	if len(body) == 0 || newModel == "" {
 		return body
@@ -183,8 +187,10 @@ func RewriteJSONModel(body []byte, newModel string) []byte {
 	if !bytes.Contains(body, []byte(`"model"`)) {
 		return body
 	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.UseNumber()
 	var m map[string]any
-	if err := json.Unmarshal(body, &m); err != nil {
+	if err := decoder.Decode(&m); err != nil {
 		return body
 	}
 	currModel, ok := m["model"].(string)

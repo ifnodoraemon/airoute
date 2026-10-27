@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
@@ -21,17 +22,16 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 	}
 
 	baseURL := channel.BaseURL
-	if baseURL == "" {
+	if strings.TrimSpace(baseURL) == "" {
 		baseURL = "https://generativelanguage.googleapis.com"
 	}
-	baseURL = strings.TrimRight(baseURL, "/")
 
 	var items []model.EmbeddingItem
 	totalTokens := 0
 
 	if len(texts) == 1 {
 		// Single embedContent call
-		targetURL := fmt.Sprintf("%s/v1beta/models/%s:embedContent?key=%s", baseURL, targetModel, channel.APIKey)
+		targetURL := joinAPIURLVersioned(baseURL, GeminiAPIVersion, "/v1beta/models/"+targetModel+":embedContent", url.Values{"key": {channel.APIKey}})
 		type singleReq struct {
 			Model   string `json:"model,omitempty"`
 			Content struct {
@@ -83,7 +83,7 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 		}
 	} else {
 		// batchEmbedContents call
-		targetURL := fmt.Sprintf("%s/v1beta/models/%s:batchEmbedContents?key=%s", baseURL, targetModel, channel.APIKey)
+		targetURL := joinAPIURLVersioned(baseURL, GeminiAPIVersion, "/v1beta/models/"+targetModel+":batchEmbedContents", url.Values{"key": {channel.APIKey}})
 		type itemReq struct {
 			Model   string `json:"model"`
 			Content struct {

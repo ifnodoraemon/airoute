@@ -139,6 +139,14 @@ func (d *Dispatcher) GetAllModelFallbacks() map[string]string {
 // Anthropic JSON at <base>/v1/messages.
 const AnthropicNativeProtocol = "anthropic_native"
 
+// IsAnthropicWireChannel reports whether the channel's upstream speaks the
+// Anthropic Messages protocol natively. Utility callers outside this package (for
+// example the count_tokens passthrough) must use this instead of sniffing the
+// inbound capability from channel.protocols.
+func IsAnthropicWireChannel(ch *model.ChannelConfig) bool {
+	return isAnthropicWireChannel(ch)
+}
+
 // isAnthropicWireChannel reports whether this channel's upstream speaks the
 // Anthropic Messages protocol natively. Only the channel type and the explicit
 // native marker decide that, never the inbound protocol capability.
@@ -291,7 +299,10 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		}
 		if !provider.IsChannelFailure(err) {
 			// Unknown but non-fatal classification: try the next channel without
-			// charging the breaker.
+			// charging the breaker. The half-open canary slot must still be handed
+			// back, otherwise a rate-limited canary locks the channel out of
+			// rotation until the 2x-cooldown stale-slot reset.
+			d.circuitBreaker.AbortCanary(ch.Name)
 			routerLog(ctx).Warn("channel returned a non-health error, trying next channel without tripping breaker",
 				"channel", ch.Name,
 				"error", err.Error(),

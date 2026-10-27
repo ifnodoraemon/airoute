@@ -80,6 +80,9 @@ func (c *ChannelConfig) SupportsProtocol(proto string) bool {
 		if (p == "rerank" || p == "reranker" || p == "cohere_rerank") && (proto == "rerank" || proto == "reranker" || proto == "cohere_rerank") {
 			return true
 		}
+		if (p == "moderation" || p == "moderations") && (proto == "moderation" || proto == "moderations") {
+			return true
+		}
 	}
 	return false
 }

@@ -39,16 +39,10 @@ func (p *AnthropicProvider) Type() model.ProviderType {
 // Exported so the count_tokens handler shares one implementation instead of
 // duplicating the suffix table.
 func BuildAnthropicURL(baseURL, endpoint string) string {
-	baseURL = strings.TrimRight(baseURL, "/")
-	var messagesURL string
-	switch {
-	case strings.HasSuffix(baseURL, "/v1/messages"), strings.HasSuffix(baseURL, "/messages"):
-		messagesURL = baseURL
-	case strings.HasSuffix(baseURL, "/v1"):
-		messagesURL = baseURL + "/messages"
-	default:
-		messagesURL = baseURL + "/v1/messages"
-	}
+	// Shared APIURL semantics: a bare origin becomes /v1/messages, a root that
+	// already carries /v1 (or is the full endpoint) is respected, custom prefixes
+	// are preserved.
+	messagesURL := APIURL(baseURL, "/v1/messages")
 	if endpoint == "" {
 		return messagesURL
 	}

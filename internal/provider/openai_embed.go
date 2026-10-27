@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
 )
@@ -23,7 +22,7 @@ func (p *OpenAIProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 		return nil, fmt.Errorf("marshal embedding request error: %w", err)
 	}
 
-	targetURL := strings.TrimRight(channel.BaseURL, "/") + "/embeddings"
+	targetURL := APIURL(channel.BaseURL, "/v1/embeddings")
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(payloadBytes))
 	if err != nil {
 		return nil, fmt.Errorf("create embedding http request error: %w", err)
@@ -71,13 +70,7 @@ func (p *OpenAIProvider) Rerank(ctx context.Context, req *model.RerankRequest, c
 		return nil, fmt.Errorf("marshal rerank request error: %w", err)
 	}
 
-	baseURL := strings.TrimRight(channel.BaseURL, "/")
-	var targetURL string
-	if strings.HasSuffix(baseURL, "/v1") {
-		targetURL = baseURL + "/rerank"
-	} else {
-		targetURL = baseURL + "/v1/rerank"
-	}
+	targetURL := APIURL(channel.BaseURL, "/v1/rerank")
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(payloadBytes))
 	if err != nil {

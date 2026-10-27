@@ -90,8 +90,19 @@ type GeminiCandidate struct {
 	Index        int    `json:"index"`
 }
 
+// GeminiError is an error payload Gemini (or a Gemini-compatible proxy) can put
+// inside an HTTP 200 response or an SSE data frame.
+type GeminiError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Status  string `json:"status"`
+}
+
 // GeminiResponse is the response from generateContent.
 type GeminiResponse struct {
 	Candidates    []GeminiCandidate    `json:"candidates"`
 	UsageMetadata *GeminiUsageMetadata `json:"usageMetadata,omitempty"`
+	// Error is populated when the upstream reports a failure inside a 200 body
+	// (mid-stream overload, quota, safety) instead of an HTTP error status.
+	Error *GeminiError `json:"error,omitempty"`
 }
