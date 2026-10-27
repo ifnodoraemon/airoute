@@ -500,6 +500,7 @@ func (db *DB) migrate() error {
 		{Version: 35, Name: "budgets", Up: CreateBudgets},
 		{Version: 36, Name: "wallet_ledger", Up: CreateWalletLedger},
 		{Version: 37, Name: "supplier_costs", Up: CreateSupplierCosts},
+		{Version: 38, Name: "usage_daily", Up: CreateUsageDaily},
 	}
 	return db.runMigrations(migrations)
 }

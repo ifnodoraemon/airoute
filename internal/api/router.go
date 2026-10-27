@@ -213,6 +213,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 					adminOnly.POST("/supplier-costs/import", adminHandler.ImportSupplierCosts)
 					adminOnly.GET("/cost/overview", adminHandler.GetCostOverview)
 					adminOnly.GET("/cost/breakdown", adminHandler.GetCostBreakdown)
+					adminOnly.GET("/cost/trend", adminHandler.GetCostTrend)
 					adminOnly.POST("/users/:username/group", adminHandler.UpdateUserGroup)
 					adminOnly.POST("/users/:username/role", adminHandler.UpdateUserRole)
 

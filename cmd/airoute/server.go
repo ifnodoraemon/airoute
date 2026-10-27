@@ -225,6 +225,7 @@ func runServer(args []string) {
 	}
 	governance.SetGlobal(governance.NewService(repo, budgetCounter, alertSender))
 	governance.GlobalService().StartFlusher(30 * time.Second)
+	governance.GlobalService().StartReconciler(6 * time.Hour)
 
 	// Initialize Async Usage Logger for zero-latency audit logs
 	// NOTE: Must be after Redis init so redisStreamWorker can start consuming the stream

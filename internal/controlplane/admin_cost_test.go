@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/storage"
@@ -128,5 +129,28 @@ func TestSupplierCostCSVImportExport(t *testing.T) {
 	exported := invokeCost(t, handler.ExportSupplierCosts, http.MethodGet, "/api/v1/admin/supplier-costs/export", "", nil)
 	if exported.Code != http.StatusOK || !strings.Contains(exported.Body.String(), "channel,model") || !strings.Contains(exported.Body.String(), "ch-a") {
 		t.Fatalf("export = %d %s", exported.Code, exported.Body.String())
+	}
+}
+
+func TestCostTrendUsesDailyRollup(t *testing.T) {
+	handler, db := newCostTestHandler(t)
+	if _, err := db.Exec(`INSERT INTO usage_logs
+		(api_key, tenant_id, org_id, model, channel, prompt_tokens, total_tokens, cost, cost_units, cost_basis_units, status_code, created_at)
+		VALUES ('k', 't', 1, 'm-1', 'ch-a', 100, 100, 2, 2000000000, 1500000000, 200, CURRENT_TIMESTAMP)`); err != nil {
+		t.Fatal(err)
+	}
+	day := time.Now().UTC().Format("2006-01-02")
+	trend := invokeCost(t, handler.GetCostTrend, http.MethodGet,
+		"/api/v1/admin/cost/trend?start="+day+"&end="+day, "", nil)
+	if trend.Code != http.StatusOK {
+		t.Fatalf("trend status=%d %s", trend.Code, trend.Body.String())
+	}
+	rows := decodeEnvelope(t, trend)["data"].([]interface{})
+	if len(rows) != 1 {
+		t.Fatalf("trend rows = %+v", rows)
+	}
+	row := rows[0].(map[string]interface{})
+	if row["key"] != day || row["revenue"] != float64(2) || row["cost"] != float64(1.5) {
+		t.Fatalf("trend row = %+v", row)
 	}
 }

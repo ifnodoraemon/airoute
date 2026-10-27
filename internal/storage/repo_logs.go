@@ -134,15 +134,18 @@ func encodePricingSnapshot(snapshot *UsagePricingSnapshot) string {
 
 // UsageLogRecord represents an audit log entry.
 type UsageLogRecord struct {
-	ID               int64   `json:"id"`
-	TraceID          string  `json:"trace_id"`
-	ChatID           string  `json:"chat_id,omitempty"`
-	SessionID        string  `json:"session_id,omitempty"`
-	APIKey           string  `json:"api_key"`
-	TenantID         string  `json:"tenant_id"`
-	OrgID            int64   `json:"org_id"`
-	Model            string  `json:"model"`
-	Channel          string  `json:"channel"`
+	ID        int64  `json:"id"`
+	TraceID   string `json:"trace_id"`
+	ChatID    string `json:"chat_id,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
+	APIKey    string `json:"api_key"`
+	TenantID  string `json:"tenant_id"`
+	OrgID     int64  `json:"org_id"`
+	Model     string `json:"model"`
+	Channel   string `json:"channel"`
+	// ChannelID is the stable channel identity; Channel remains the display name
+	// and can be renamed. nil means the name no longer resolves.
+	ChannelID        *int64  `json:"channel_id,omitempty"`
 	PromptTokens     int     `json:"prompt_tokens"`
 	CompletionTokens int     `json:"completion_tokens"`
 	CachedTokens     int     `json:"cached_tokens"`

@@ -19,6 +19,7 @@ function setup() {
   const adminFetch = vi.fn(async (url, options = {}) => {
     if (url === '/api/v1/admin/cost/overview') return envelope(overview);
     if (url.startsWith('/api/v1/admin/cost/breakdown')) return envelope(groups);
+    if (url === '/api/v1/admin/cost/trend') return envelope(groups);
     if (url === '/api/v1/admin/supplier-costs' && options.method === 'POST') {
       return envelope({ id: 1, channel: 'ch-a', model: 'm-1', input_cost: 2, output_cost: 4, status: 'active' });
     }
@@ -37,6 +38,15 @@ describe('CostAnalyticsView', () => {
     expect(screen.getByText('未定价请求')).toBeTruthy();
     expect(screen.getAllByText('¥4.0000').length).toBeGreaterThan(0);
     expect(screen.getAllByText('¥2.0000').length).toBeGreaterThan(0);
+  });
+
+  it('loads the daily rollup tab', async () => {
+    const { adminFetch } = setup();
+    await screen.findByText('单位A');
+    fireEvent.click(screen.getByRole('button', { name: '按日' }));
+    await waitFor(() => {
+      expect(adminFetch).toHaveBeenCalledWith('/api/v1/admin/cost/trend');
+    });
   });
 
   it('switches the breakdown group and creates a supplier price', async () => {

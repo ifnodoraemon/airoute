@@ -1,6 +1,7 @@
 package controlplane
 
 import (
+	"context"
 	"database/sql"
 	"encoding/csv"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/costing"
@@ -295,4 +297,44 @@ func (h *AdminHandler) ImportSupplierCosts(c *gin.Context) {
 		engine.Invalidate()
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": gin.H{"imported": len(records)}})
+}
+
+// GetCostTrend returns daily revenue/cost/margin. It refreshes usage_daily for
+// the requested (bounded) range first, so an admin never sees a stale rollup.
+func (h *AdminHandler) GetCostTrend(c *gin.Context) {
+	end := strings.TrimSpace(c.Query("end"))
+	if end == "" {
+		end = time.Now().UTC().Format("2006-01-02")
+	}
+	start := strings.TrimSpace(c.Query("start"))
+	if start == "" {
+		start = time.Now().UTC().AddDate(0, 0, -13).Format("2006-01-02")
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+	if err := h.repo.EnsureUsageDaily(ctx, start, end); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "刷新日汇总失败: " + err.Error()})
+		return
+	}
+	groups, err := h.repo.CostTrend(start, end)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "读取成本趋势失败: " + err.Error()})
+		return
+	}
+	views := make([]costGroupView, 0, len(groups))
+	for _, group := range groups {
+		revenue := storage.FromUnits(group.BilledUnits)
+		cost := storage.FromUnits(group.CostBasisUnits)
+		margin := revenue - cost
+		percent := 0.0
+		if revenue != 0 {
+			percent = margin / revenue * 100
+		}
+		views = append(views, costGroupView{
+			Key: group.Key, Label: group.Label, Requests: group.Requests,
+			Revenue: revenue, Cost: cost, Margin: margin, MarginPercent: percent,
+			KnownCostRequests: group.KnownCostRequests,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": views})
 }

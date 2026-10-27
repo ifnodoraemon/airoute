@@ -16,11 +16,18 @@ const defaultTTL = 30 * time.Second
 // less often than requests, so lookups are cached briefly; admin writes call
 // Invalidate so an edit is visible immediately.
 type Engine struct {
-	repo  *storage.Repository
-	mu    sync.RWMutex
-	cache map[string]cacheEntry
-	now   func() time.Time
-	ttl   time.Duration
+	repo         *storage.Repository
+	mu           sync.RWMutex
+	cache        map[string]cacheEntry
+	channelCache map[string]channelEntry
+	now          func() time.Time
+	ttl          time.Duration
+}
+
+type channelEntry struct {
+	id    int64
+	found bool
+	at    time.Time
 }
 
 type cacheEntry struct {
@@ -34,7 +41,10 @@ var global atomic.Pointer[Engine]
 
 // InitGlobal installs the process-wide engine.
 func InitGlobal(repo *storage.Repository) *Engine {
-	engine := &Engine{repo: repo, cache: make(map[string]cacheEntry), now: time.Now, ttl: defaultTTL}
+	engine := &Engine{
+		repo: repo, cache: make(map[string]cacheEntry), channelCache: make(map[string]channelEntry),
+		now: time.Now, ttl: defaultTTL,
+	}
 	global.Store(engine)
 	return engine
 }
@@ -49,6 +59,7 @@ func (e *Engine) Invalidate() {
 	}
 	e.mu.Lock()
 	e.cache = make(map[string]cacheEntry)
+	e.channelCache = make(map[string]channelEntry)
 	e.mu.Unlock()
 }
 
@@ -92,4 +103,31 @@ func (e *Engine) CostBasisUnits(channel, model string, promptTokens, completionT
 
 func unitCost(inputUnitsPerMillion, outputUnitsPerMillion, promptTokens, completionTokens int64) int64 {
 	return (promptTokens*inputUnitsPerMillion + completionTokens*outputUnitsPerMillion) / 1_000_000
+}
+
+// ChannelID resolves the stable id for a channel name. The cache makes the
+// per-request lookup free; channel renames are rare and admin writes can call
+// Invalidate to drop it.
+func (e *Engine) ChannelID(name string) (int64, bool) {
+	if e == nil || e.repo == nil || name == "" {
+		return 0, false
+	}
+	now := e.now()
+	e.mu.RLock()
+	entry, ok := e.channelCache[name]
+	e.mu.RUnlock()
+	if ok && now.Sub(entry.at) < 5*time.Minute {
+		return entry.id, entry.found
+	}
+	id, err := e.repo.ChannelIDByName(name)
+	if err != nil {
+		e.mu.Lock()
+		e.channelCache[name] = channelEntry{found: false, at: now}
+		e.mu.Unlock()
+		return 0, false
+	}
+	e.mu.Lock()
+	e.channelCache[name] = channelEntry{id: id, found: true, at: now}
+	e.mu.Unlock()
+	return id, true
 }

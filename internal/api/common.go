@@ -330,6 +330,11 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 	// Supplier cost is computed at write time and stored as nullable units. If no
 	// price is configured the column stays NULL so margin reports can separate
 	// "free" from "unknown" instead of treating both as zero cost.
+	if engine := costing.Global(); engine != nil && params.Channel != "" {
+		if channelID, found := engine.ChannelID(params.Channel); found {
+			record.ChannelID = &channelID
+		}
+	}
 	if params.Channel != "" && params.Model != "" && (params.PromptTokens > 0 || params.CompletionTokens > 0) {
 		if engine := costing.Global(); engine != nil {
 			if units, found := engine.CostBasisUnits(params.Channel, params.Model, int64(params.PromptTokens), int64(params.CompletionTokens)); found {

@@ -165,8 +165,8 @@ func (r *Repository) insertUsageLogsContext(ctx context.Context, logs []*UsageLo
 	}()
 
 	const (
-		insertColumns  = `trace_id, chat_id, session_id, api_key, tenant_id, org_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, cost_units, cost_basis_units, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, usage_source, error_message, pricing_snapshot, created_at, billing_id`
-		insertColumnsN = 25
+		insertColumns  = `trace_id, chat_id, session_id, api_key, tenant_id, org_id, model, channel, channel_id, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, cost_units, cost_basis_units, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, usage_source, error_message, pricing_snapshot, created_at, billing_id`
+		insertColumnsN = 26
 		insertChunk    = 25
 	)
 
@@ -203,6 +203,7 @@ func (r *Repository) insertUsageLogsContext(ctx context.Context, logs []*UsageLo
 		// created_at always carries microseconds.
 		return append(args,
 			log.TraceID, log.ChatID, log.SessionID, log.APIKey, log.TenantID, log.OrgID, log.Model, log.Channel,
+			nullableInt64(log.ChannelID),
 			log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, ToUnits(log.Cost),
 			nullableInt64(log.CostBasisUnits),
 			isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, normalizeUsageSource(log.UsageSource),

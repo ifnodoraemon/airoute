@@ -10,6 +10,7 @@ const GROUP_TABS = [
   { key: 'org', zh: '组织', en: 'Organization' },
   { key: 'channel', zh: '通道', en: 'Channel' },
   { key: 'model', zh: '模型', en: 'Model' },
+  { key: 'day', zh: '按日', en: 'Daily' },
 ];
 
 // CostAnalyticsView shows revenue vs supplier cost (margin) and the price list
@@ -29,9 +30,12 @@ export default function CostAnalyticsView({ adminFetch, showToast, lang = 'zh' }
   const load = useCallback(async () => {
     if (!adminFetch) return;
     setLoading(true);
+    const breakdownURL = groupBy === 'day'
+      ? '/api/v1/admin/cost/trend'
+      : `/api/v1/admin/cost/breakdown?group=${groupBy}`;
     const results = await Promise.allSettled([
       adminFetch('/api/v1/admin/cost/overview'),
-      adminFetch(`/api/v1/admin/cost/breakdown?group=${groupBy}`),
+      adminFetch(breakdownURL),
     ]);
     const [overviewResult, groupsResult] = results;
     if (overviewResult.status === 'fulfilled' && overviewResult.value.ok) {

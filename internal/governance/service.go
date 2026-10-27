@@ -308,3 +308,33 @@ func (s *Service) sendNotification(rule budget.Rule, decision budget.Decision, u
 		}
 	}()
 }
+
+// Reconcile recomputes active budgets from the audit ledger. It corrects drift
+// after restarts or missed flushes; live counters remain authoritative between
+// runs.
+func (s *Service) Reconcile(ctx context.Context) error {
+	if s == nil || s.repo == nil {
+		return nil
+	}
+	_, err := s.repo.ReconcileBudgets(s.now())
+	if err != nil {
+		s.warnOnce("reconcile", "failed to reconcile budgets", "error", err.Error())
+	}
+	return err
+}
+
+// StartReconciler runs the daily budget repair on a fixed interval.
+func (s *Service) StartReconciler(interval time.Duration) {
+	if s == nil || s.repo == nil || interval <= 0 {
+		return
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for range ticker.C {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			_ = s.Reconcile(ctx)
+			cancel()
+		}
+	}()
+}

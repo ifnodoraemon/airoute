@@ -47,3 +47,24 @@ func TestCostBasisUnitsAndCacheInvalidation(t *testing.T) {
 		t.Fatal("price still served after invalidation")
 	}
 }
+
+func TestChannelIDLookup(t *testing.T) {
+	db, err := storage.OpenDB(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	res, err := db.Exec(`INSERT INTO channels (name, type, base_url, api_key, models, status)
+		VALUES ('ch-lookup', 'openai', 'http://example.invalid', 'k', 'm', 'active')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, _ := res.LastInsertId()
+	engine := InitGlobal(storage.NewRepository(db))
+	if got, found := engine.ChannelID("ch-lookup"); !found || got != id {
+		t.Fatalf("channel id = %d found=%v, want %d", got, found, id)
+	}
+	if _, found := engine.ChannelID("ch-missing"); found {
+		t.Fatal("unknown channel must not resolve")
+	}
+}

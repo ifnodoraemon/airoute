@@ -15,8 +15,9 @@ func TestUsageLogPersistsNullableCostBasis(t *testing.T) {
 	repo := NewRepository(db)
 
 	units := ToUnits(2)
+	channelID := int64(7)
 	priced := &UsageLogRecord{
-		APIKey: "sk-test", TenantID: "t", Model: "m-1", Channel: "ch-a",
+		APIKey: "sk-test", TenantID: "t", Model: "m-1", Channel: "ch-a", ChannelID: &channelID,
 		PromptTokens: 100, TotalTokens: 100, CostBasisUnits: &units, StatusCode: 200,
 	}
 	unpriced := &UsageLogRecord{
@@ -33,6 +34,13 @@ func TestUsageLogPersistsNullableCostBasis(t *testing.T) {
 	}
 	if !pricedUnits.Valid || pricedUnits.Int64 != units {
 		t.Fatalf("priced cost basis = %+v", pricedUnits)
+	}
+	var storedChannel int64
+	if err := db.QueryRow(`SELECT channel_id FROM usage_logs WHERE billing_id = ?`, priced.BillingID).Scan(&storedChannel); err != nil {
+		t.Fatal(err)
+	}
+	if storedChannel != channelID {
+		t.Fatalf("channel_id = %d, want %d", storedChannel, channelID)
 	}
 	var unpricedUnits sql.NullInt64
 	if err := db.QueryRow(`SELECT cost_basis_units FROM usage_logs WHERE billing_id = ?`, unpriced.BillingID).Scan(&unpricedUnits); err != nil {
