@@ -21,6 +21,10 @@ x-gateway-env: &gateway-env
   GIN_MODE: ${GIN_MODE:-release}
   # When set, GET /metrics requires "Authorization: Bearer <token>".
   GATEWAY_METRICS_TOKEN: ${GATEWAY_METRICS_TOKEN:-}
+  # Comma-separated proxy CIDRs whose X-Forwarded-For is trusted. Empty = trust
+  # none. Behind the bundled nginx set the Compose network (e.g. 172.22.0.0/16)
+  # so real client IPs reach access logs and per-IP limits.
+  GATEWAY_TRUSTED_PROXIES: ${GATEWAY_TRUSTED_PROXIES:-}
   STORAGE_DRIVER: ${STORAGE_DRIVER:-s3}
   STORAGE_S3_ENDPOINT: ${STORAGE_S3_ENDPOINT:-http://storage:9000}
   STORAGE_S3_BUCKET: ${STORAGE_S3_BUCKET:-airoute-skills}

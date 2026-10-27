@@ -90,6 +90,9 @@ database:
 # Keep that Secret across upgrades. An existing Secret must contain both keys.
 auth:
   existingSecret: ""
+  # Comma-separated CIDRs of trusted reverse proxies whose X-Forwarded-For is
+  # honoured for client-IP based limits/logging. Empty = trust none.
+  trustedProxies: ""
 
 # Initial configuration file
 config:

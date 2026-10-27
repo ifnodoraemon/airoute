@@ -114,6 +114,7 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `REQUIRE_EMAIL_VERIFICATION` | `true` (`.env.example`) | Require the e-mail verification code during registration (needs SMTP) |
 | `TOKEN_EXPIRY_HOURS` | `168` | Session/token lifetime in hours |
 | `GATEWAY_METRICS_TOKEN` | unset | When set, `/metrics` requires `Authorization: Bearer <token>` |
+| `GATEWAY_TRUSTED_PROXIES` | unset | Comma-separated proxy CIDRs whose `X-Forwarded-For` is trusted for client-IP limits/logging. Empty trusts no forwarding headers (safe default). Behind the bundled nginx set the Compose network, e.g. `172.22.0.0/16`. An invalid list refuses startup |
 
 ### 2.3 Runtime tuning: timeouts, breaker, drain
 

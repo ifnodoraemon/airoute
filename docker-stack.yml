@@ -90,6 +90,8 @@ services:
       - GIN_MODE=release
       # When set, /metrics requires "Authorization: Bearer <token>".
       - GATEWAY_METRICS_TOKEN=${GATEWAY_METRICS_TOKEN:-}
+      # Proxies whose X-Forwarded-For is trusted (empty = trust none).
+      - GATEWAY_TRUSTED_PROXIES=${GATEWAY_TRUSTED_PROXIES:-}
     networks:
       - airoute-swarm-net
     healthcheck:

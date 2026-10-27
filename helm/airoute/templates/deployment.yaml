@@ -60,6 +60,10 @@ spec:
               value: "release"
             - name: GATEWAY_ALLOW_INSECURE_DEFAULTS
               value: "false"
+            {{- if .Values.auth.trustedProxies }}
+            - name: GATEWAY_TRUSTED_PROXIES
+              value: {{ .Values.auth.trustedProxies | quote }}
+            {{- end }}
             - name: GATEWAY_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
