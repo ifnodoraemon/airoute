@@ -206,6 +206,17 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 					adminOnly.POST("/users/:username/group", adminHandler.UpdateUserGroup)
 					adminOnly.POST("/users/:username/role", adminHandler.UpdateUserRole)
 
+					// Organization tree (v1.1). Org-level budgets/statements build on
+					// these endpoints; membership is admin-managed for now.
+					adminOnly.GET("/orgs", adminHandler.ListOrgs)
+					adminOnly.POST("/orgs", adminHandler.CreateOrg)
+					adminOnly.GET("/orgs/:id", adminHandler.GetOrg)
+					adminOnly.PUT("/orgs/:id", adminHandler.UpdateOrg)
+					adminOnly.POST("/orgs/:id/move", adminHandler.MoveOrg)
+					adminOnly.GET("/orgs/:id/members", adminHandler.ListOrgMembers)
+					adminOnly.POST("/orgs/:id/members", adminHandler.AddOrgMember)
+					adminOnly.DELETE("/orgs/:id/members/:user_id", adminHandler.RemoveOrgMember)
+
 					adminOnly.GET("/redemptions", adminHandler.ListRedemptions)
 					adminOnly.POST("/redemptions/generate", adminHandler.GenerateRedemptions)
 					adminOnly.DELETE("/redemptions/:id", adminHandler.DeleteRedemption)
