@@ -85,26 +85,11 @@ func (h *MCPHandler) HandleMCPSSE(c *gin.Context) {
 		return
 	}
 
-	c.Header("Content-Type", "text/event-stream")
-	c.Header("Cache-Control", "no-cache")
-	c.Header("Connection", "keep-alive")
-	c.Header("Access-Control-Allow-Origin", "*")
-	c.Header("X-Accel-Buffering", "no")
-
-	flusher, ok := c.Writer.(http.Flusher)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "SSE streaming unsupported"})
-		return
-	}
-
-	// An MCP SSE channel is a persistent connection: it lives until the client
-	// goes away, not until the current request is done. http.Server.WriteTimeout
-	// is an absolute deadline for the whole response (not an idle timeout), so
-	// without clearing it here the channel is cut mid-stream at 600s with the
-	// shipped Compose config and 180s with the Helm chart. This mirrors what
-	// InitSSEStream does for the data-plane inference streams.
-	_ = http.NewResponseController(c.Writer).SetWriteDeadline(time.Time{})
-
+	// Authenticate BEFORE the response is switched to text/event-stream. A11:
+	// gin's renderer only sets Content-Type when it is still empty, so rejecting
+	// the request after the SSE headers were installed served a JSON error body
+	// labelled text/event-stream — strict MCP clients then tried to parse the
+	// rejection as an event stream and reported an unreadable handshake failure.
 	callerKey := extractMCPKey(c)
 	reqCtx := c.Request.Context()
 	caller, accessErr := h.resolveCaller(callerKey)
@@ -121,6 +106,26 @@ func (h *MCPHandler) HandleMCPSSE(c *gin.Context) {
 	if !h.checkCallerRateLimits(reqCtx, c, caller) {
 		return
 	}
+
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SSE streaming unsupported"})
+		return
+	}
+
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("Access-Control-Allow-Origin", "*")
+	c.Header("X-Accel-Buffering", "no")
+
+	// An MCP SSE channel is a persistent connection: it lives until the client
+	// goes away, not until the current request is done. http.Server.WriteTimeout
+	// is an absolute deadline for the whole response (not an idle timeout), so
+	// without clearing it here the channel is cut mid-stream at 600s with the
+	// shipped Compose config and 180s with the Helm chart. This mirrors what
+	// InitSSEStream does for the data-plane inference streams.
+	_ = http.NewResponseController(c.Writer).SetWriteDeadline(time.Time{})
 
 	sessionID := genSessionID()
 	sess := &mcpSession{ch: make(chan []byte, 32), apiKey: caller.Key}

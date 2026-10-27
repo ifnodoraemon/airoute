@@ -216,7 +216,15 @@ func (h *MCPHandler) executeRoutingTools(ctx context.Context, name string, args 
 
 		reqCtx := ctx
 		if sessionID != "" {
-			reqCtx = context.WithValue(reqCtx, router.ContextKeySessionID, sessionID)
+			// A18 follow-up: MCP must namespace the affinity key exactly like the
+			// HTTP data plane. A bare client-supplied session id here let an MCP
+			// caller pin — or collide with — another tenant's channel affinity,
+			// bypassing the HTTP-side scoping.
+			identity := "anon"
+			if caller != nil && caller.Record != nil {
+				identity = sessionIdentityFor(caller.Record.TenantID, caller.Record.UserID, caller.Key)
+			}
+			reqCtx = context.WithValue(reqCtx, router.ContextKeySessionID, scopedSessionID(identity, sessionID))
 		}
 
 		if h.dispatcher != nil {

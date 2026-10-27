@@ -73,6 +73,72 @@ func (h *MCPHandler) callerIsAdmin(ctx context.Context) bool {
 	return strings.EqualFold(user.Role, "admin")
 }
 
+// adminOnlyMCPTools are the agent-facing tools whose payload is gateway
+// infrastructure rather than tenant data: channel inventory (names, types,
+// breaker state, priority, weights) and the model→provider topology. Exposing
+// them to every API key let any tenant enumerate the upstream fleet and probe it
+// (A16).
+var adminOnlyMCPTools = map[string]bool{
+	"airoute_cluster_status": true,
+	"airoute_model_topology": true,
+}
+
+// isAdminOnlyMCPTool reports whether a tool requires gateway-admin authority.
+func isAdminOnlyMCPTool(name string) bool {
+	return adminOnlyMCPTools[name]
+}
+
+// callerIsAdminForKey resolves admin authority for a raw API key, which is how
+// out-of-band callers (the stdio adapter, an explicit tool argument) present
+// their credential.
+func (h *MCPHandler) callerIsAdminForKey(key string) bool {
+	if h.repo == nil || strings.TrimSpace(key) == "" {
+		return false
+	}
+	rec, err := h.repo.GetAPIKeyByKey(key)
+	if err != nil || rec == nil || strings.TrimSpace(rec.UserRole) == "" {
+		return false
+	}
+	// The transport already joined the owner row; only re-read when the role is
+	// missing so the common path costs no extra query.
+	if strings.EqualFold(rec.UserRole, "admin") {
+		return true
+	}
+	user, err := h.repo.GetUserByID(rec.UserID)
+	if err != nil || user == nil {
+		return false
+	}
+	return strings.EqualFold(user.Role, "admin")
+}
+
+// mcpCallerIsAdmin decides admin authority for a tool call. It prefers the
+// caller the transport already resolved and authorised (contextKeyCallerRecord),
+// and falls back to the historical key sources so direct in-process invocations
+// (stdio adapter, tool arguments) cannot slip past the check.
+func (h *MCPHandler) mcpCallerIsAdmin(ctx context.Context, args map[string]interface{}) bool {
+	// Open development mode: no API key has ever been registered, so no tenant
+	// boundary exists to protect and the MCP transport admits anonymous callers.
+	// Once a key exists the transport requires one, and this gate then requires it
+	// to belong to an administrator.
+	if h.repo == nil || h.repo.CountAPIKeys() == 0 {
+		return true
+	}
+	if caller := callerFromContext(ctx); caller != nil {
+		if caller.Record != nil {
+			return strings.EqualFold(caller.Record.UserRole, "admin")
+		}
+		return false
+	}
+	key := ""
+	if ctx != nil {
+		key, _ = ctx.Value(contextKeyCallerKey).(string)
+	}
+	if strings.TrimSpace(key) == "" && args != nil {
+		key, _ = args["api_key"].(string)
+	}
+	return h.callerIsAdminForKey(key)
+}
+
 // validateMCPReadQuery enforces the read-only, allowlisted subset of SQL the
 // MCP tools may execute. It fails closed: anything it cannot prove is a single
 // read-only statement over an allowlisted table is rejected.

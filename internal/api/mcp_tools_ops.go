@@ -14,23 +14,13 @@ import (
 func (h *MCPHandler) executeOpsTools(ctx context.Context, name string, args map[string]interface{}) (string, bool, bool) {
 	switch name {
 	case "airoute_cluster_status":
+		// A16: channel inventory is gateway-internal. The transport already
+		// rejects non-admin calls; this second check keeps in-process/stdio
+		// invocations from bypassing that gate.
+		if !h.mcpCallerIsAdmin(ctx, args) {
+			return "Security violation: cluster status is restricted to gateway administrators", true, true
+		}
 		if h.repo != nil {
-			if h.repo.CountAPIKeys() > 0 {
-				apiKey, _ := ctx.Value(contextKeyCallerKey).(string)
-				if apiKey == "" {
-					if k, ok := args["api_key"].(string); ok && k != "" {
-						apiKey = k
-					}
-				}
-				if apiKey == "" {
-					return "Error: Authentication required to inspect cluster status.", true, true
-				}
-				rec, err := h.repo.GetAPIKeyByKey(apiKey)
-				if err != nil || rec == nil || rec.Status != "active" {
-					return "Error: Invalid or inactive API key.", true, true
-				}
-			}
-
 			channels, err := h.repo.ListChannels()
 			if err == nil {
 				type ChanStatus struct {
@@ -79,6 +69,10 @@ func (h *MCPHandler) executeOpsTools(ctx context.Context, name string, args map[
 		return "Status OK", false, true
 
 	case "airoute_model_topology":
+		// A16: the model→provider topology is gateway-internal too.
+		if !h.mcpCallerIsAdmin(ctx, args) {
+			return "Security violation: model topology is restricted to gateway administrators", true, true
+		}
 		if h.dispatcher != nil {
 			routes := h.dispatcher.GetModelRoutes()
 			if len(routes) > 0 {

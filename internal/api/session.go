@@ -136,36 +136,52 @@ func truncateRunes(s string, n int) string {
 // (airoute:session:<model>:<sessionID>) carried no tenant dimension, which let
 // one tenant pre-seed — or collide with — another tenant's channel pin (A18).
 func sessionIdentity(c *gin.Context) string {
-	key := getAPIKeyConfig(c)
-	if key != nil {
-		if key.TenantID != "" {
-			return "t:" + key.TenantID
-		}
-		if key.UserID > 0 {
-			return "u:" + strconv.FormatInt(key.UserID, 10)
-		}
-		if key.Key != "" {
-			digest := sha256.Sum256([]byte(key.Key))
-			return "k:" + hex.EncodeToString(digest[:8])
+	if key := getAPIKeyConfig(c); key != nil {
+		if key.TenantID != "" || key.UserID > 0 || key.Key != "" {
+			return sessionIdentityFor(key.TenantID, key.UserID, key.Key)
 		}
 	}
 	if tenant := c.GetString(middleware.ContextKeyTenant); tenant != "" {
 		return "t:" + tenant
 	}
-	if apiKey := getRequestAPIKey(c); apiKey != "" {
+	return sessionIdentityFor("", 0, getRequestAPIKey(c))
+}
+
+// sessionIdentityFor derives the affinity namespace from credential primitives.
+//
+// It exists so non-HTTP callers (MCP tool invocations, which carry a resolved
+// caller but no gin.Context) namespace the session key exactly like the HTTP
+// data plane instead of falling back to the bare client value (A18 follow-up).
+// The order — tenant, then owner, then key digest — mirrors sessionIdentity.
+func sessionIdentityFor(tenantID string, userID int64, apiKey string) string {
+	if tenantID != "" {
+		return "t:" + tenantID
+	}
+	if userID > 0 {
+		return "u:" + strconv.FormatInt(userID, 10)
+	}
+	if apiKey != "" {
 		digest := sha256.Sum256([]byte(apiKey))
 		return "k:" + hex.EncodeToString(digest[:8])
 	}
 	return "anon"
 }
 
-// sessionAffinityKey namespaces a client-visible session id by the authenticated
-// caller identity for the router's session-affinity selector.
-func sessionAffinityKey(c *gin.Context, sessionID string) string {
+// scopedSessionID namespaces a client-visible session id by the caller identity.
+func scopedSessionID(identity, sessionID string) string {
 	if sessionID == "" {
 		return ""
 	}
-	return sessionIdentity(c) + "|" + sessionID
+	if identity == "" {
+		identity = "anon"
+	}
+	return identity + "|" + sessionID
+}
+
+// sessionAffinityKey namespaces a client-visible session id by the authenticated
+// caller identity for the router's session-affinity selector.
+func sessionAffinityKey(c *gin.Context, sessionID string) string {
+	return scopedSessionID(sessionIdentity(c), sessionID)
 }
 
 // resolveSessionID resolves either an explicit session ID or derives a zero-touch context fingerprint.

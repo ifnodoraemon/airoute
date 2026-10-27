@@ -348,6 +348,14 @@ func (h *MCPHandler) ProcessRPC(ctx context.Context, req *mcpRequest) mcpRespons
 			return newMCPToolResponse(req.ID, fmt.Sprintf("工具 [%s] 所属的 Agent 技能在 Airoute 网关中已被按需停用，请在控制台启用该技能后再调用。", callParams.Name), true)
 		}
 
+		// A16: infrastructure-disclosure tools (channel inventory, routing
+		// topology) are administrator-only. The gate used to be "is there a valid
+		// API key", so any tenant could enumerate the upstream fleet.
+		if isAdminOnlyMCPTool(callParams.Name) && !h.mcpCallerIsAdmin(ctx, callParams.Arguments) {
+			return newMCPErrorResponse(req.ID, -32002,
+				fmt.Sprintf("Permission denied: tool '%s' is restricted to gateway administrators", callParams.Name))
+		}
+
 		resultText, isErr := h.executeTool(ctx, callParams.Name, callParams.Arguments)
 		return newMCPToolResponse(req.ID, resultText, isErr)
 
