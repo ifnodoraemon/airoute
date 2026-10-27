@@ -51,14 +51,15 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 	recordStreamEnd := func(statusCode int) {
 		// A client abort (499) still sent the prompt upstream; estimate it too.
 		if statusCode == http.StatusOK || statusCode == statusClientClosed {
+			canonicalEstimate := estimateCanonicalPromptTokens(canonicalReq)
 			if totalPromptTokens == 0 {
-				totalPromptTokens = calibratedPromptEstimate(canonicalReq.Model, estimateCanonicalPromptTokens(canonicalReq))
+				totalPromptTokens = streamFallbackPromptTokens(canonicalReq)
 				usageSource = "estimated"
 			} else {
-				observePromptEstimate(canonicalReq.Model, estimateCanonicalPromptTokens(canonicalReq), totalPromptTokens)
+				observePromptEstimate(canonicalReq.Model, canonicalEstimate, totalPromptTokens)
 			}
 			if totalCompTokens == 0 && accumulatedChars > 0 {
-				totalCompTokens = estimateTokens(accumulatedChars)
+				totalCompTokens = estimatedStreamCompletionTokens(accumulatedChars)
 				usageSource = "estimated"
 			}
 		}

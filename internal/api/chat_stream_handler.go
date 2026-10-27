@@ -48,10 +48,11 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 	upstreamChatID := ""  // real upstream response ID, captured from the first chunk (may stay empty)
 	upstreamChannel := "" // populated from the first stream event
 
-	approxPromptChars := 0
-	for _, m := range req.Messages {
-		approxPromptChars += len(m.GetContentString())
-	}
+	// Prompt fallback for a stream that never reports usage. The canonical
+	// estimator covers message text, multimodal parts and the tools block, so a
+	// tool-heavy stream is billed on the same basis as the same unary request.
+	// The old per-message character count dropped tools entirely.
+	canonicalPromptEstimate := estimateCanonicalPromptTokens(req)
 
 	var recordOnce sync.Once
 	var streamError error
@@ -65,24 +66,24 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 		// tokens the provider produced (a drained abort has a full usage report).
 		if ctxErr := c.Request.Context().Err(); ctxErr != nil {
 			statusCode = statusClientClosed
-			if totalPromptTokens == 0 && approxPromptChars > 0 {
+			if totalPromptTokens == 0 && canonicalPromptEstimate > 0 {
 				// Nothing was reported: bill the estimated prompt the provider
 				// consumed instead of recording a free request.
-				totalPromptTokens = calibratedPromptEstimate(req.Model, estimateTokens(approxPromptChars))
+				totalPromptTokens = streamFallbackPromptTokens(req)
 				usageSource = usageSourceEstimated
 			}
 		} else if streamError != nil {
 			statusCode = http.StatusBadGateway
 		} else {
 			// Fallback token estimation if upstream provider did not report usage on successful completion
-			if totalPromptTokens == 0 && approxPromptChars > 0 {
-				totalPromptTokens = calibratedPromptEstimate(req.Model, estimateTokens(approxPromptChars))
+			if totalPromptTokens == 0 && canonicalPromptEstimate > 0 {
+				totalPromptTokens = streamFallbackPromptTokens(req)
 				usageSource = "estimated"
-			} else if totalPromptTokens > 0 && approxPromptChars > 0 {
-				observePromptEstimate(req.Model, estimateTokens(approxPromptChars), totalPromptTokens)
+			} else if totalPromptTokens > 0 && canonicalPromptEstimate > 0 {
+				observePromptEstimate(req.Model, canonicalPromptEstimate, totalPromptTokens)
 			}
 			if totalCompTokens == 0 && accumulatedCompChars > 0 {
-				totalCompTokens = estimateTokens(accumulatedCompChars)
+				totalCompTokens = estimatedStreamCompletionTokens(accumulatedCompChars)
 				usageSource = "estimated"
 			}
 		}

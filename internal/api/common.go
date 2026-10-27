@@ -113,8 +113,13 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 	// "receive the answer, then drop the connection" a free-usage exploit, and
 	// the other three streaming implementations already charged in that case.
 	// The audit row keeps the truthful 499 status.
+	//
+	// Fixed-price units count too: an image or a moderation call that the provider
+	// already produced (and billed) must be charged even when the customer went
+	// away before the bytes arrived, and those requests report no tokens at all.
 	billable := success ||
-		(params.StatusCode == statusClientClosed && (params.PromptTokens > 0 || params.CompletionTokens > 0))
+		(params.StatusCode == statusClientClosed &&
+			(params.PromptTokens > 0 || params.CompletionTokens > 0 || params.BillableUnits > 0))
 
 	if billable && !params.SkipBilling && billing.GlobalEngine != nil {
 		cost, savedCost, _, isOffPeak, offPeakDiscount, pricingSnapshot = billing.GlobalEngine.CalculateCostForUnits(
@@ -190,7 +195,11 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 		TTFTMs:           ceilMillis(params.TTFT),
 		StatusCode:       params.StatusCode,
 		UsageSource:      params.UsageSource,
-		ErrorMessage:     params.ErrorMessage,
+		// Persist the same scrubbed text the client receives. Upstream failures
+		// routinely echo the offending credential back ("Incorrect API key
+		// provided: sk-..."), and usage_logs is read by operators and support
+		// staff, so the raw provider message must never land in the audit trail.
+		ErrorMessage: auditErrorMessage(params.ErrorMessage),
 		// Stamp the moment the request finished. Leaving it zero made the writer
 		// use the flush time, so a batch of slow requests aborted together all
 		// shared one timestamp and their real order was lost.
@@ -432,6 +441,34 @@ func calibratedPromptEstimate(modelName string, localEstimate int) int {
 	return billing.GlobalCalibrator.Adjust(modelName, localEstimate)
 }
 
+// streamFallbackPromptTokens is the prompt fallback every streaming handler uses
+// when the upstream never reported usage.
+//
+// It goes through the canonical estimator (message text, multimodal parts and
+// tool definitions) exactly like the unary path, so the same request is billed
+// identically whether it streamed or not. The chat stream handler used to count
+// message text only, which silently dropped the tools block from the bill.
+func streamFallbackPromptTokens(req *model.ChatCompletionRequest) int {
+	return calibratedPromptEstimate(modelNameOf(req), estimateCanonicalPromptTokens(req))
+}
+
+// estimatedStreamCompletionTokens converts accumulated streamed output characters
+// into completion tokens.
+//
+// This must stay on the shared estimator: the Anthropic adapter stream used a
+// local "/3" while every other endpoint used the shared "/4" heuristic, so the
+// same text was billed one third higher on that endpoint alone.
+func estimatedStreamCompletionTokens(chars int) int {
+	if chars <= 0 {
+		return 0
+	}
+	tokens := estimateTokens(chars)
+	if tokens < 1 {
+		return 1
+	}
+	return tokens
+}
+
 // Usage provenance markers recorded on the audit row.
 const (
 	usageSourceUpstream  = "upstream"
@@ -560,6 +597,18 @@ var (
 	bearerPattern    = regexp.MustCompile(`(?i)\b(bearer)\s+([A-Za-z0-9_\-\.\+=/]{8,})`)
 	providerKeyRegex = regexp.MustCompile(`\b(sk-[A-Za-z0-9_\-]{8,}|gsk_[A-Za-z0-9]{8,}|xai-[A-Za-z0-9]{8,}|hf_[A-Za-z0-9]{8,}|AIza[0-9A-Za-z_\-]{20,})`)
 )
+
+// auditErrorMessage is the audit-trail counterpart of sanitizeErrorMessage. The
+// error text persisted in usage_logs.error_message must be scrubbed exactly like
+// the text the client receives: it is read by operators, exported to CSV and
+// shown in the console, so upstream providers that echo the offending credential
+// must not leak it through the billing trail.
+func auditErrorMessage(message string) string {
+	if message == "" {
+		return ""
+	}
+	return sanitizeErrorMessage(fmt.Errorf("%s", message))
+}
 
 // sanitizeErrorMessage strips sensitive tokens/keys and credentials from error strings before returning to clients.
 func sanitizeErrorMessage(err error) string {

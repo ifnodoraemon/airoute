@@ -116,14 +116,15 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 	} else {
 		// Also reached on a client abort (statusCode 499): the prompt was already
 		// sent upstream, so estimate it rather than billing nothing.
+		canonicalEstimate := estimateCanonicalPromptTokens(&chatReq)
 		if totalPromptTokens == 0 {
-			totalPromptTokens = calibratedPromptEstimate(chatReq.Model, estimateCanonicalPromptTokens(&chatReq))
+			totalPromptTokens = streamFallbackPromptTokens(&chatReq)
 			usageSource = "estimated"
 		} else {
-			observePromptEstimate(chatReq.Model, estimateCanonicalPromptTokens(&chatReq), totalPromptTokens)
+			observePromptEstimate(chatReq.Model, canonicalEstimate, totalPromptTokens)
 		}
 		if totalCompTokens == 0 && accumulatedChars > 0 {
-			totalCompTokens = estimateTokens(accumulatedChars)
+			totalCompTokens = estimatedStreamCompletionTokens(accumulatedChars)
 			usageSource = "estimated"
 		}
 	}

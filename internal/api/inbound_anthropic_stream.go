@@ -67,15 +67,15 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 
 	// finalizeCompletion falls back to a character-based estimate when the
 	// upstream stream never reported usage, instead of counting SSE deltas.
+	// The estimate goes through the shared estimator: this endpoint used to
+	// divide by 3 while every other path divided by 4, so the same output was
+	// billed one third higher here.
 	finalizeCompletion := func() {
 		if upstreamUsageSeen {
 			return
 		}
 		if accumulatedCompChars > 0 {
-			totalCompTokens = accumulatedCompChars / 3
-			if totalCompTokens < 1 {
-				totalCompTokens = 1
-			}
+			totalCompTokens = estimatedStreamCompletionTokens(accumulatedCompChars)
 		}
 		usageSource = "estimated"
 	}
@@ -100,7 +100,7 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 			// the upstream stream omits usage, approximate the prompt from the
 			// request so the audit log does not show a misleading zero.
 			if totalPromptTokens == 0 {
-				if estimated := calibratedPromptEstimate(canonicalReq.Model, estimateCanonicalPromptTokens(canonicalReq)); estimated > 0 {
+				if estimated := streamFallbackPromptTokens(canonicalReq); estimated > 0 {
 					totalPromptTokens = estimated
 					usageSource = "estimated"
 				}
@@ -108,7 +108,7 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 				observePromptEstimate(canonicalReq.Model, estimateCanonicalPromptTokens(canonicalReq), totalPromptTokens)
 			}
 			if totalCompTokens == 0 && accumulatedCompChars > 0 {
-				totalCompTokens = estimateTokens(accumulatedCompChars)
+				totalCompTokens = estimatedStreamCompletionTokens(accumulatedCompChars)
 				usageSource = "estimated"
 			}
 		}

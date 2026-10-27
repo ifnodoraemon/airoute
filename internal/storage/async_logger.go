@@ -313,6 +313,12 @@ func (al *AsyncLogger) redisStreamWorker(client *distributed.Client) {
 			}
 			var rec UsageLogRecord
 			if err := json.Unmarshal([]byte(raw), &rec); err == nil {
+				if rec.BillingID == "" {
+					// Payload written by a binary that predates billing_id. The
+					// stream entry id is stable across PEL recovery and AutoClaim,
+					// so deriving the key from it makes the redelivery settle once.
+					rec.BillingID = BillingIDFromStreamEntry(msg.ID)
+				}
 				streamBatch = append(streamBatch, &rec)
 			}
 		}

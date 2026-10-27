@@ -44,6 +44,11 @@ type Metrics struct {
 	// BillingSettlementsDeferred counts charges that fell back to the async
 	// pipeline because the synchronous settlement could not run.
 	BillingSettlementsDeferred atomic.Uint64
+	// BillingChargesRejected counts charges that were deliberately closed out
+	// without moving money because their pricing snapshot is not settled in CNY
+	// (a legacy foreign-currency rate row). The audit row is still written; a
+	// non-zero value means a price row needs re-pricing.
+	BillingChargesRejected atomic.Uint64
 
 	// UsageLogRecordsSpilled counts billing records written to the local
 	// append-only spill file because no queue accepted them. Any non-zero value

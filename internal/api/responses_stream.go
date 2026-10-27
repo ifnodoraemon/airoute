@@ -106,13 +106,14 @@ func (h *Handler) handleResponsesStreaming(
 	recordStreamEnd := func(statusCode int) (float64, float64, int) {
 		// A client abort (499) still sent the prompt upstream; estimate it too.
 		if statusCode == http.StatusOK || statusCode == statusClientClosed {
+			canonicalEstimate := estimateCanonicalPromptTokens(chatReq)
 			if totalPromptTokens == 0 {
-				totalPromptTokens = calibratedPromptEstimate(chatReq.Model, estimateCanonicalPromptTokens(chatReq))
+				totalPromptTokens = streamFallbackPromptTokens(chatReq)
 			} else {
-				observePromptEstimate(chatReq.Model, estimateCanonicalPromptTokens(chatReq), totalPromptTokens)
+				observePromptEstimate(chatReq.Model, canonicalEstimate, totalPromptTokens)
 			}
 			if totalCompTokens == 0 && fullContent.Len() > 0 {
-				totalCompTokens = estimateTokens(fullContent.Len())
+				totalCompTokens = estimatedStreamCompletionTokens(fullContent.Len())
 			}
 		}
 		return recordUsage(c, AuditRecordParams{

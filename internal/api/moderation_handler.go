@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
+	"github.com/ifnodoraemon/airoute/internal/provider"
 	"github.com/ifnodoraemon/airoute/internal/router"
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
@@ -78,10 +79,20 @@ func (h *Handler) HandleModerations(c *gin.Context) {
 		inputs = append(inputs, "")
 	}
 
+	sessionID := resolveGenericSessionID(c, "mod")
 	channels := h.dispatcher.GetChannelsForModelAndProtocol(modModel, "moderation")
 	if len(channels) > 0 {
 		payloadBytes, _ := json.Marshal(req)
-		resp, err := h.dispatcher.DispatchHTTP(c.Request.Context(), &router.UpstreamRequest{
+		// Moderation is a provider call with a real cost. Keep it detached from the
+		// downstream request for the same reason as chat, and audit it: before
+		// this, the proxy path billed nothing and an upstream failure was reported
+		// as "501 not implemented" (a configuration problem) instead of the
+		// provider's status.
+		reqCtx, cancelUpstream := upstreamRequestContext(c)
+		defer cancelUpstream()
+
+		start := time.Now()
+		resp, err := h.dispatcher.DispatchHTTP(reqCtx, &router.UpstreamRequest{
 			Path:        "/v1/moderations",
 			Method:      http.MethodPost,
 			ContentType: "application/json",
@@ -89,15 +100,52 @@ func (h *Handler) HandleModerations(c *gin.Context) {
 			Model:       modModel,
 			Protocol:    "moderation",
 		})
-		if err == nil && resp.StatusCode == http.StatusOK {
-			defer resp.Stream.Close()
-			body, _ := io.ReadAll(resp.Stream)
+		if err != nil {
+			respondUpstreamDispatchError(c, sessionID, modModel, time.Since(start), err)
+			return
+		}
+		defer resp.Stream.Close()
+
+		dur := time.Since(start)
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			body, readErr := io.ReadAll(resp.Stream)
+			if readErr != nil {
+				recordFailedRequestWithError(c, sessionID, modModel, dur, http.StatusBadGateway, readErr)
+				RespondOpenAIError(c, http.StatusBadGateway, "Failed to read the moderation response", "upstream_error", "moderation_upstream_error")
+				return
+			}
+			// Bill one fixed-price unit. The moderation response carries no token
+			// usage, so the charge comes from the model's fixed_price; a model with
+			// no configured fixed price bills zero, which is the observable
+			// "unpriced" state on the audit row.
+			RecordUsage(c, AuditRecordParams{
+				SessionID:     sessionID,
+				ChatID:        "",
+				Channel:       resp.Channel,
+				Model:         modModel,
+				Duration:      dur,
+				StatusCode:    resp.StatusCode,
+				BillableUnits: 1,
+			})
 			c.Data(resp.StatusCode, "application/json", body)
 			return
 		}
-		if resp != nil && resp.Stream != nil {
-			resp.Stream.Close()
+
+		// Propagate the provider's own status (sanitized) instead of masking every
+		// failure as 501: a 5xx is an upstream problem, not a missing channel.
+		status := resp.StatusCode
+		if status < http.StatusBadRequest {
+			status = http.StatusBadGateway
 		}
+		body, _ := io.ReadAll(io.LimitReader(resp.Stream, 64<<10))
+		upstreamErr := provider.NewUpstreamError(resp.Channel, resp.StatusCode, body)
+		recordFailedRequestWithError(c, sessionID, modModel, dur, status, upstreamErr)
+		message := sanitizeErrorMessage(fmt.Errorf("%s", strings.TrimSpace(string(body))))
+		if message == "" {
+			message = http.StatusText(status)
+		}
+		RespondOpenAIError(c, status, message, "upstream_error", "moderation_upstream_error")
+		return
 	}
 
 	if !moderationStubEnabled() {

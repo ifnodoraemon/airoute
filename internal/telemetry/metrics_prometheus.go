@@ -116,6 +116,10 @@ func (m *Metrics) ToPrometheusFormat() string {
 	sb.WriteString("# TYPE airoute_billing_settlements_deferred_total counter\n")
 	sb.WriteString(fmt.Sprintf("airoute_billing_settlements_deferred_total %d\n", m.BillingSettlementsDeferred.Load()))
 
+	sb.WriteString("# HELP airoute_billing_charges_rejected_total Charges closed out without billing because the price is not in CNY\n")
+	sb.WriteString("# TYPE airoute_billing_charges_rejected_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_billing_charges_rejected_total %d\n", m.BillingChargesRejected.Load()))
+
 	sb.WriteString("# HELP airoute_usage_log_records_spilled_total Billing records written to the local spill file\n")
 	sb.WriteString("# TYPE airoute_usage_log_records_spilled_total counter\n")
 	sb.WriteString(fmt.Sprintf("airoute_usage_log_records_spilled_total %d\n", m.UsageLogRecordsSpilled.Load()))

@@ -43,18 +43,38 @@ func (h *MultimodalHandler) dispatchAndTransform(c *gin.Context, upReq *router.U
 		}
 	}
 	start := time.Now()
-	resp, err := h.dispatcher.DispatchHTTP(c.Request.Context(), upReq)
+	// The provider call is detached from the downstream request (and bounded by
+	// the drain timeout) exactly like the chat handlers: a customer that hangs up
+	// must not cancel a generation the provider has already started, or the
+	// gateway absorbs a cost it cannot bill.
+	reqCtx, cancelUpstream := upstreamRequestContext(c)
+	defer cancelUpstream()
+
+	resp, err := h.dispatcher.DispatchHTTP(reqCtx, upReq)
 	if err != nil {
-		// Keep the routing failure in the audit row: recording only the 502 left
-		// operators staring at an error with no message at all.
-		recordFailedRequestWithError(c, sessionID, upReq.Model, time.Since(start), http.StatusBadGateway, err)
-		c.JSON(http.StatusBadGateway, gin.H{"error": sanitizeErrorMessage(err)})
+		// Map the failure instead of hardcoding 502: a canceled dispatch is a
+		// client abort (499, not a gateway error), and the audit row keeps the
+		// sanitized reason and the failing channel.
+		respondUpstreamDispatchError(c, sessionID, upReq.Model, time.Since(start), err)
 		return
 	}
 	defer resp.Stream.Close()
 
 	dur := time.Since(start)
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+	succeeded := resp.StatusCode >= 200 && resp.StatusCode < 300
+
+	// Persist (and rewrite) the upstream response BEFORE charging. Charging first
+	// meant a task that could not be stored was still billed while the client got
+	// a 502 and no task id to poll, so a retry paid twice for one job.
+	if succeeded && transform != nil {
+		if err := transform(resp); err != nil {
+			recordFailedRequestWithError(c, sessionID, upReq.Model, dur, http.StatusBadGateway, err)
+			RespondOpenAIError(c, http.StatusBadGateway, "Unable to persist or read video task", "upstream_error", "video_task_error")
+			return
+		}
+	}
+
+	if succeeded {
 		RecordUsage(c, AuditRecordParams{
 			SessionID:     sessionID,
 			Channel:       resp.Channel,
@@ -72,12 +92,6 @@ func (h *MultimodalHandler) dispatchAndTransform(c *gin.Context, upReq *router.U
 			provider.NewUpstreamError(resp.Channel, resp.StatusCode, nil))
 	}
 
-	if transform != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		if err := transform(resp); err != nil {
-			RespondOpenAIError(c, http.StatusBadGateway, "Unable to persist or read video task", "upstream_error", "video_task_error")
-			return
-		}
-	}
 	for k, vals := range resp.Headers {
 		for _, v := range vals {
 			c.Header(k, v)

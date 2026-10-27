@@ -204,7 +204,9 @@ func (s *usageSpill) replayFile(repo *Repository, path string) (int, error) {
 
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	lineNumber := 0
 	for scanner.Scan() {
+		lineNumber++
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
 			continue
@@ -217,6 +219,13 @@ func (s *usageSpill) replayFile(repo *Repository, path string) (int, error) {
 			telemetry.ScopedLogger("system").Error("unreadable usage spill record",
 				"file", filepath.Base(path), "error", err.Error())
 			continue
+		}
+		if record.BillingID == "" {
+			// Line written by a binary that predates billing_id, or a file that is
+			// re-read after a partial replay. The position is stable across
+			// attempts (the file is only removed after a complete replay), so the
+			// already-persisted prefix is not charged twice.
+			record.BillingID = BillingIDFromSpillLine(filepath.Base(path), lineNumber)
 		}
 		batch = append(batch, &record)
 		if len(batch) >= usageSpillReplayBatchSize {

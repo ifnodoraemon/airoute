@@ -73,7 +73,13 @@ func (r *Repository) settleCharges(ctx context.Context, logs []*UsageLogRecord) 
 		}
 		if log.PricingSnapshot != nil && log.Cost > 0 {
 			if err := ValidatePriceCurrency(&ModelPriceRecord{Currency: log.PricingSnapshot.Currency}); err != nil {
-				return err
+				// One charge that cannot be expressed in the wallet's currency must
+				// not fail the whole delivery: the pipeline is at-least-once, so
+				// returning an error here left every other record in the batch
+				// unpersisted and uncharged while the consumer retried this one
+				// message forever. Close the record out deterministically instead.
+				rejectUnbillableCharge(log, err)
+				continue
 			}
 		}
 		if log.Cost <= 0 && log.TotalTokens <= 0 {
@@ -82,7 +88,11 @@ func (r *Repository) settleCharges(ctx context.Context, logs []*UsageLogRecord) 
 			continue
 		}
 		if log.BillingID == "" {
-			log.BillingID = NewBillingID()
+			// The transport normally stamps a stable key (stream entry id, spill
+			// line, or AsyncLogger.Record). Deriving it from the record keeps a
+			// redelivery of a keyless payload idempotent; minting a new random key
+			// per delivery charged the same request twice.
+			log.BillingID = DerivedBillingID(log)
 		}
 		pending = append(pending, log)
 	}
@@ -266,6 +276,39 @@ func (r *Repository) applyChargeAggregates(tx *Tx, keyCost map[string]float64, k
 		}
 	}
 	return nil
+}
+
+// rejectUnbillableCharge closes out a record whose charge cannot be applied in
+// the wallet's currency (a legacy foreign-currency price row).
+//
+// It is deliberately not an error. The record keeps its real token counts, its
+// pricing snapshot and the rejection reason, so the audit trail still explains
+// what happened; only the money columns are zeroed, which keeps the settlement
+// ledger, the key counters and the audit trail in agreement. The alternative —
+// charging a USD number as if it were CNY — overcharges the customer by the
+// exchange rate, and returning an error (the previous behaviour) discarded the
+// whole batch.
+func rejectUnbillableCharge(log *UsageLogRecord, reason error) {
+	rejectedCost := log.Cost
+	currency := ""
+	if log.PricingSnapshot != nil {
+		currency = log.PricingSnapshot.Currency
+	}
+	log.Cost = 0
+	log.Settled = true
+	if log.ErrorMessage == "" {
+		log.ErrorMessage = "billing rejected: " + reason.Error()
+	}
+
+	telemetry.GlobalMetrics.BillingChargesRejected.Add(1)
+	telemetry.WarnLogger(telemetry.ScopedLogger("billing"), "billing-charge-rejected", 30*time.Second,
+		"charge rejected: the pricing snapshot is not settled in CNY; the request is audited but not billed",
+		"reason", reason.Error(),
+		"currency", currency,
+		"model", log.Model,
+		"trace_id", log.TraceID,
+		"rejected_cost_cny", rejectedCost,
+		"total_tokens", log.TotalTokens)
 }
 
 // countDeferredSettlement is called when synchronous settlement could not run;
