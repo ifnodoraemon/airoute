@@ -9,6 +9,14 @@ import (
 )
 
 // OffPeakSlot represents a discrete discount time window.
+//
+// Days names the ISO weekday the window STARTS on (1=Mon … 7=Sun; empty = every
+// day). With start-day semantics a cross-midnight slot such as 22:00-06:00 with
+// Days=[1] covers Monday 22:00 → Tuesday 06:00: the after-midnight half belongs
+// to the window that began the previous evening, not to a second window on the
+// configured day. The write-path overlap validation uses the same rule (see
+// slotSegments in strategy_validation.go), so validation and pricing cannot
+// disagree about which day a slot's tail belongs to.
 type OffPeakSlot struct {
 	Start    string  `json:"start"`          // e.g. "00:00"
 	End      string  `json:"end"`            // e.g. "08:30"
@@ -36,19 +44,18 @@ type OffPeakStrategy interface {
 type NightOffPeakStrategy struct{}
 
 func (s *NightOffPeakStrategy) Evaluate(p *storage.ModelPriceRecord, ctx *OffPeakEvaluationContext) (bool, float64) {
-	startM := parseTimeToMinutes(p.OffPeakStart)
-	endM := parseTimeToMinutes(p.OffPeakEnd)
+	startM, endM, ok := parseRowWindow(p.OffPeakStart, p.OffPeakEnd)
+	if !ok {
+		// A malformed row-level window never invents a discount: charging the
+		// undiscounted price is the only safe reading of "00:0x".
+		return false, 1.0
+	}
 	if startM == 0 && endM == 0 {
+		// Unset (or "00:00"-"00:00") keeps the historical night default 00:00-08:30.
 		startM = 0
 		endM = 510 // 08:30
 	}
-	var isOff bool
-	if startM <= endM {
-		isOff = ctx.CurrentM >= startM && ctx.CurrentM < endM
-	} else {
-		isOff = ctx.CurrentM >= startM || ctx.CurrentM < endM
-	}
-	if isOff {
+	if clockInWindow(ctx.CurrentM, startM, endM) {
 		return true, ctx.Discount
 	}
 	return false, 1.0
@@ -75,21 +82,21 @@ func (s *CustomOffPeakStrategy) Evaluate(p *storage.ModelPriceRecord, ctx *OffPe
 
 	// 3. Evaluate each slot with conflict resolution: Best Discount Rule (lowest discount multiplier)
 	for _, slot := range slots {
-		if len(slot.Days) > 0 {
-			dayMatch := false
-			for _, d := range slot.Days {
-				if d == ctx.ISODay {
-					dayMatch = true
-					break
-				}
-			}
-			if !dayMatch {
-				continue
-			}
+		sM, startErr := parseClockMinutes(slot.Start)
+		eM, endErr := parseClockMinutes(slot.End)
+		if startErr != nil || endErr != nil {
+			// Rows can predate strict validation. A slot with an unparsable time can
+			// never be honoured as written, so it is skipped instead of being
+			// reinterpreted as some other window (the old lenient parser turned
+			// "8:30pm" into 08:00 and "abc" into midnight).
+			telemetry.WarnLogger(telemetry.ScopedLogger("billing"),
+				"offpeak-slot-invalid-time:"+p.Model+":"+slot.Name+":"+slot.Start+"-"+slot.End,
+				60*time.Second,
+				"off-peak slot has a malformed time; the slot is ignored and the undiscounted price applies",
+				"model", p.Model, "slot", slot.Name, "start", slot.Start, "end", slot.End)
+			continue
 		}
 
-		sM := parseTimeToMinutes(slot.Start)
-		eM := parseTimeToMinutes(slot.End)
 		d := slot.Discount
 		if d <= 0 || d >= 1.0 {
 			// Same rule as the row-level discount: an invalid coefficient means "no
@@ -108,39 +115,28 @@ func (s *CustomOffPeakStrategy) Evaluate(p *storage.ModelPriceRecord, ctx *OffPe
 				"discount", slot.Discount)
 		}
 
-		var inSlot bool
-		if sM <= eM {
-			inSlot = ctx.CurrentM >= sM && ctx.CurrentM < eM
-		} else {
-			inSlot = ctx.CurrentM >= sM || ctx.CurrentM < eM
+		if !slotCoversInstant(slot.Days, sM, eM, ctx.ISODay, ctx.CurrentM) {
+			continue
 		}
-
-		if inSlot {
-			matched = true
-			if d < bestDiscount {
-				bestDiscount = d
-			}
+		matched = true
+		if d < bestDiscount {
+			bestDiscount = d
 		}
 	}
 
 	// 4. If no custom multi-slots configured, evaluate default start/end window
 	if len(slots) == 0 && (p.OffPeakStart != "" || p.OffPeakEnd != "") {
-		startM := parseTimeToMinutes(p.OffPeakStart)
-		endM := parseTimeToMinutes(p.OffPeakEnd)
-		if startM == 0 && endM == 0 {
-			startM = 0
-			endM = 510 // 08:30
-		}
-		var inWindow bool
-		if startM <= endM {
-			inWindow = ctx.CurrentM >= startM && ctx.CurrentM < endM
-		} else {
-			inWindow = ctx.CurrentM >= startM || ctx.CurrentM < endM
-		}
-		if inWindow {
-			matched = true
-			if ctx.Discount < bestDiscount {
-				bestDiscount = ctx.Discount
+		startM, endM, ok := parseRowWindow(p.OffPeakStart, p.OffPeakEnd)
+		if ok {
+			if startM == 0 && endM == 0 {
+				startM = 0
+				endM = 510 // 08:30
+			}
+			if clockInWindow(ctx.CurrentM, startM, endM) {
+				matched = true
+				if ctx.Discount < bestDiscount {
+					bestDiscount = ctx.Discount
+				}
 			}
 		}
 	}
@@ -162,15 +158,11 @@ func (s *NoneOffPeakStrategy) Evaluate(p *storage.ModelPriceRecord, ctx *OffPeak
 type WindowOffPeakStrategy struct{}
 
 func (s *WindowOffPeakStrategy) Evaluate(p *storage.ModelPriceRecord, ctx *OffPeakEvaluationContext) (bool, float64) {
-	startM := parseTimeToMinutes(p.OffPeakStart)
-	endM := parseTimeToMinutes(p.OffPeakEnd)
-	var isOff bool
-	if startM <= endM {
-		isOff = ctx.CurrentM >= startM && ctx.CurrentM < endM
-	} else {
-		isOff = ctx.CurrentM >= startM || ctx.CurrentM < endM
+	startM, endM, ok := parseRowWindow(p.OffPeakStart, p.OffPeakEnd)
+	if !ok {
+		return false, 1.0
 	}
-	if isOff {
+	if clockInWindow(ctx.CurrentM, startM, endM) {
 		return true, ctx.Discount
 	}
 	return false, 1.0
@@ -180,4 +172,60 @@ var offPeakStrategies = map[string]OffPeakStrategy{
 	"night":  &NightOffPeakStrategy{},
 	"custom": &CustomOffPeakStrategy{},
 	"none":   &NoneOffPeakStrategy{},
+}
+
+// clockInWindow reports whether a minute-of-day lies inside [startM, endM). A
+// window whose start is at or after its end wraps around midnight.
+func clockInWindow(currentM, startM, endM int) bool {
+	if startM < endM {
+		return currentM >= startM && currentM < endM
+	}
+	return currentM >= startM || currentM < endM
+}
+
+// slotCoversInstant reports whether a slot covers the given instant, using
+// start-day semantics for the day filter.
+//
+//	slot 22:00-06:00 days=[1]  →  Monday 22:00-23:59 and Tuesday 00:00-05:59
+//
+// The after-midnight half is matched against the *previous* ISO weekday, because
+// that is the day the window started on; testing it against the current weekday
+// (the previous behaviour) discounted the wrong night: every configured night lost
+// its 6-hour tail and a second, unintended 6-hour window on the configured day was
+// discounted instead.
+func slotCoversInstant(days []int, startM, endM, isoDay, currentM int) bool {
+	if startM < endM {
+		return clockInWindow(currentM, startM, endM) && offPeakDayMatches(days, isoDay)
+	}
+	// Cross-midnight: the evening half belongs to today, the morning half to the
+	// window that started yesterday.
+	if currentM >= startM {
+		return offPeakDayMatches(days, isoDay)
+	}
+	if currentM < endM {
+		return offPeakDayMatches(days, previousISODay(isoDay))
+	}
+	return false
+}
+
+// offPeakDayMatches reports whether the ISO weekday (1=Mon … 7=Sun) is covered by
+// the slot's day list. An empty list means every day.
+func offPeakDayMatches(days []int, isoDay int) bool {
+	if len(days) == 0 {
+		return true
+	}
+	for _, day := range days {
+		if day == isoDay {
+			return true
+		}
+	}
+	return false
+}
+
+// previousISODay returns the ISO weekday before isoDay; Monday's previous is Sunday.
+func previousISODay(isoDay int) int {
+	if isoDay <= 1 {
+		return 7
+	}
+	return isoDay - 1
 }

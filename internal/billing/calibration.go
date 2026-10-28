@@ -105,17 +105,26 @@ func (c *EstimateCalibrator) Observe(modelName string, localEstimate, upstreamAc
 
 // Adjust applies the learned ratio to a local estimate. It returns the input
 // unchanged until enough upstream samples exist for that model.
+//
+// The ratio and the sample count are copied *inside* the read lock: ratioSample is
+// a shared pointer and Observe mutates its fields under the write lock, so reading
+// them after RUnlock raced with a concurrent Observe (the calibrator runs on the
+// request path, where both calls are normal).
 func (c *EstimateCalibrator) Adjust(modelName string, localEstimate int) int {
 	if c == nil || modelName == "" || localEstimate <= 0 {
 		return localEstimate
 	}
 	c.mu.RLock()
-	sample := c.samples[modelName]
+	var ratio float64
+	var count uint64
+	if sample := c.samples[modelName]; sample != nil {
+		ratio, count = sample.ratio, sample.count
+	}
 	c.mu.RUnlock()
-	if sample == nil || sample.count < calibrationMinSamples {
+	if count < calibrationMinSamples {
 		return localEstimate
 	}
-	adjusted := int(math.Round(float64(localEstimate) * sample.ratio))
+	adjusted := int(math.Round(float64(localEstimate) * ratio))
 	if adjusted < 1 {
 		adjusted = 1
 	}

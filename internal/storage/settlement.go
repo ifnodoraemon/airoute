@@ -161,6 +161,20 @@ func sleepSettlementRetry(ctx context.Context, d time.Duration) bool {
 // the transaction rolls back, so the retry wrapper always starts from a clean slate.
 func (r *Repository) settleChargesOnce(ctx context.Context, logs []*UsageLogRecord) error {
 	pending := make([]*UsageLogRecord, 0, len(logs))
+	// seenBillingIDs reduces the batch to one record per billing_id *before* the
+	// money is aggregated. That is the same granularity the ledger insert uses
+	// (insertSettlementRows dedupes on the unique billing_id), so a duplicate
+	// inside one delivery behaves exactly like a duplicate across deliveries:
+	// one ledger row and one debit. Without this, the aggregate loop below walked
+	// the raw input and a batch carrying the same record twice debited the wallet
+	// and the key counters a second time while the ledger recorded a single charge.
+	//
+	// The first occurrence owns the money movement. Later copies are only marked
+	// settled after that first one has committed: if the transaction rolls back
+	// (a retriable lock conflict, a database error) the batch is delivered again
+	// and the copies must not look settled.
+	seenBillingIDs := make(map[string]struct{}, len(logs))
+	duplicates := make([]*UsageLogRecord, 0)
 	for _, log := range logs {
 		if log == nil || log.Settled {
 			continue
@@ -188,6 +202,13 @@ func (r *Repository) settleChargesOnce(ctx context.Context, logs []*UsageLogReco
 			// per delivery charged the same request twice.
 			log.BillingID = DerivedBillingID(log)
 		}
+		if _, duplicate := seenBillingIDs[log.BillingID]; duplicate {
+			// Same idempotency key twice in one batch: the ledger must keep exactly
+			// one row, so only the first occurrence may contribute cost/tokens.
+			duplicates = append(duplicates, log)
+			continue
+		}
+		seenBillingIDs[log.BillingID] = struct{}{}
 		pending = append(pending, log)
 	}
 	if len(pending) == 0 {
@@ -217,6 +238,9 @@ func (r *Repository) settleChargesOnce(ctx context.Context, logs []*UsageLogReco
 			return err
 		}
 		for _, log := range pending {
+			log.Settled = true
+		}
+		for _, log := range duplicates {
 			log.Settled = true
 		}
 		return nil
@@ -255,6 +279,11 @@ func (r *Repository) settleChargesOnce(ctx context.Context, logs []*UsageLogReco
 	effects.flush()
 
 	for _, log := range pending {
+		log.Settled = true
+	}
+	// The in-batch duplicates share the committed id, so their charge is settled
+	// too even though they did not move the money themselves.
+	for _, log := range duplicates {
 		log.Settled = true
 	}
 	return nil

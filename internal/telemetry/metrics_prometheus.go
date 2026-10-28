@@ -148,6 +148,9 @@ func (m *Metrics) ToPrometheusFormat() string {
 	sb.WriteString("# TYPE airoute_aborted_drained_completion_tokens_total counter\n")
 	sb.WriteString(fmt.Sprintf("airoute_aborted_drained_completion_tokens_total %d\n", m.AbortedDrainedCompletionTokens.Load()))
 
+	// The per-model series are bounded by modelLabelCap in metrics.go: models past
+	// the cap fold into the "_unrecognized" bucket, so a client-influenced model
+	// string cannot grow the exported series set without bound.
 	sb.WriteString("# HELP airoute_billing_estimate_bias_ppm Local estimate vs upstream tokenizer, parts per million\n")
 	sb.WriteString("# TYPE airoute_billing_estimate_bias_ppm gauge\n")
 	sb.WriteString(fmt.Sprintf("airoute_billing_estimate_bias_ppm %d\n", m.EstimateBiasPPM.Load()))
