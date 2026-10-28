@@ -23,8 +23,7 @@ export default function ModelRoutesManager({
   showToast,
   setCurrentTab,
   lang = 'zh',
-  isAdmin = false,
-  t
+  isAdmin = false
 }) {
   const isZh = lang === 'zh';
   const [modelRoutes, setModelRoutes] = useState([]);

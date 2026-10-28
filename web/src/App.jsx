@@ -1217,7 +1217,6 @@ export default function App() {
                 adminFetch={apiFetch}
                 showToast={showToast}
                 lang={lang}
-                t={t}
                 setCurrentTab={setCurrentTab}
               />
             )}
@@ -1346,7 +1345,6 @@ export default function App() {
                 handleDeleteSingleLog={handleDeleteSingleLog}
                 isAdmin={adminUser?.role === 'admin'}
                 lang={lang}
-                t={t}
               />
             )}
 

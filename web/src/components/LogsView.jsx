@@ -89,8 +89,7 @@ export default function LogsView({
   showToast,
   handleDeleteSingleLog,
   isAdmin = false,
-  lang = 'zh',
-  t
+  lang = 'zh'
 }) {
   const isZh = lang === 'zh';
   const [copiedId, setCopiedId] = useState('');
