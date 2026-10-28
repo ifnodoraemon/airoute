@@ -83,7 +83,7 @@ func (p *OpenAIProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 	clonedReq := *req
 	clonedReq.Model = targetModel
 	clonedReq.Stream = false
-	stripReasoningContent(clonedReq.Messages)
+	clonedReq.Messages = stripReasoningContent(clonedReq.Messages)
 
 	for attempt := 0; ; attempt++ {
 		payloadBytes, err := json.Marshal(clonedReq)
@@ -144,14 +144,26 @@ func (p *OpenAIProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 	}
 }
 
-// stripReasoningContent removes historical reasoning traces from outbound
-// messages. reasoning_content is a DeepSeek-specific extension; strict
-// OpenAI-compatible endpoints (Azure OpenAI in particular) reject unknown
-// message fields with HTTP 400.
-func stripReasoningContent(messages []model.ChatMessage) {
-	for i := range messages {
-		messages[i].ReasoningContent = ""
+// stripReasoningContent returns a copy of messages with historical reasoning
+// traces removed. reasoning_content is a DeepSeek-specific extension; strict
+// OpenAI-compatible endpoints (Azure OpenAI in particular) reject unknown message
+// fields with HTTP 400.
+//
+// It must copy: the outbound body is a per-channel adaptation, while the request
+// object is shared by every later channel attempt, the cross-model fallback, the
+// prompt-size estimators and the audit/trace hooks. Clearing the caller's slice
+// in place let one channel's sanitising leak into all of them
+// (BUG-REQ-MUTATION).
+func stripReasoningContent(messages []model.ChatMessage) []model.ChatMessage {
+	if len(messages) == 0 {
+		return messages
 	}
+	out := make([]model.ChatMessage, len(messages))
+	copy(out, messages)
+	for i := range out {
+		out[i].ReasoningContent = ""
+	}
+	return out
 }
 
 // ChatCompleteStream executes a streaming chat request.
@@ -173,7 +185,7 @@ func (p *OpenAIProvider) chatCompleteStream(ctx context.Context, req *model.Chat
 	clonedReq.Model = targetModel
 	clonedReq.Stream = true
 	clonedReq.StreamOptions = &model.StreamOptions{IncludeUsage: true}
-	stripReasoningContent(clonedReq.Messages)
+	clonedReq.Messages = stripReasoningContent(clonedReq.Messages)
 
 	payloadBytes, err := json.Marshal(clonedReq)
 	if err != nil {

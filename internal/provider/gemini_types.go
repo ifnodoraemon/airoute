@@ -73,9 +73,16 @@ type GeminiRequest struct {
 }
 
 // GeminiUsageMetadata reports token counts.
+//
+// Thinking models (gemini-2.5-flash/pro and later) report the tokens spent on
+// reasoning separately in thoughtsTokenCount: candidatesTokenCount holds only the
+// visible answer, while totalTokenCount already includes the thoughts and Google
+// bills them as output tokens. Dropping the field under-counted completion by an
+// order of magnitude on long reasoning turns (BUG-GEMINI-THOUGHTS).
 type GeminiUsageMetadata struct {
 	PromptTokenCount        int `json:"promptTokenCount"`
 	CandidatesTokenCount    int `json:"candidatesTokenCount"`
+	ThoughtsTokenCount      int `json:"thoughtsTokenCount,omitempty"`
 	TotalTokenCount         int `json:"totalTokenCount"`
 	CachedContentTokenCount int `json:"cachedContentTokenCount,omitempty"`
 }

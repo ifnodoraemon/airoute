@@ -818,21 +818,15 @@ func localRerankPromptEstimate(req *model.RerankRequest) int {
 }
 
 // estimateCanonicalPromptTokens approximates prompt tokens from the canonical
-// request when the upstream did not report usage. Only used for audit display.
+// request when the upstream did not report usage.
+//
+// It delegates to the model package's estimator so the API layer and the router
+// (which bills canceled requests from the same request object) cannot drift
+// apart. Multimodal parts are priced by a fixed per-part budget there: an inline
+// base64 image is image data billed per tile, never text (BUG-MULTIMODAL-TOKEN-
+// ESTIMATE).
 func estimateCanonicalPromptTokens(req *model.ChatCompletionRequest) int {
-	if req == nil {
-		return 0
-	}
-	chars := 0
-	for _, m := range req.Messages {
-		chars += len(m.GetContentString())
-	}
-	for _, t := range req.Tools {
-		if b, err := json.Marshal(t); err == nil {
-			chars += len(b)
-		}
-	}
-	return estimateTokens(chars)
+	return req.EstimatedPromptTokens()
 }
 
 // Credential patterns scrubbed from upstream error bodies before they are

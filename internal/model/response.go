@@ -44,22 +44,72 @@ type ResponseOutputItem struct {
 	Arguments string `json:"arguments,omitempty"`
 }
 
+// ResponseInputTokensDetails is the documented input-token breakdown.
+type ResponseInputTokensDetails struct {
+	CachedTokens int `json:"cached_tokens"`
+}
+
+// ResponseOutputTokensDetails is the documented output-token breakdown.
+type ResponseOutputTokensDetails struct {
+	ReasoningTokens int `json:"reasoning_tokens"`
+}
+
 // ResponseUsage represents token consumption in a ResponseResult.
+//
+// The detail blocks keep the unary payload shaped like the streaming one (which
+// always emitted input_tokens_details): without them the same request reported a
+// cached-token breakdown when streamed and dropped it when not.
 type ResponseUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
-	TotalTokens  int `json:"total_tokens"`
+	InputTokens         int                          `json:"input_tokens"`
+	InputTokensDetails  *ResponseInputTokensDetails  `json:"input_tokens_details,omitempty"`
+	OutputTokens        int                          `json:"output_tokens"`
+	OutputTokensDetails *ResponseOutputTokensDetails `json:"output_tokens_details,omitempty"`
+	TotalTokens         int                          `json:"total_tokens"`
+}
+
+// ResponseIncompleteDetails explains why a response is not complete.
+type ResponseIncompleteDetails struct {
+	Reason string `json:"reason"` // "max_output_tokens" or "content_filter"
 }
 
 // ResponseResult represents the standard OpenAI Responses API response payload.
 type ResponseResult struct {
-	ID        string               `json:"id"`
-	Object    string               `json:"object"` // "response"
-	CreatedAt int64                `json:"created_at"`
-	Status    string               `json:"status"` // "completed"
-	Model     string               `json:"model"`
-	Output    []ResponseOutputItem `json:"output"`
-	Usage     ResponseUsage        `json:"usage"`
+	ID                string                     `json:"id"`
+	Object            string                     `json:"object"` // "response"
+	CreatedAt         int64                      `json:"created_at"`
+	Status            string                     `json:"status"` // "completed", "incomplete", ...
+	IncompleteDetails *ResponseIncompleteDetails `json:"incomplete_details,omitempty"`
+	Model             string                     `json:"model"`
+	Output            []ResponseOutputItem       `json:"output"`
+	Usage             ResponseUsage              `json:"usage"`
+}
+
+// Response status values.
+const (
+	ResponseStatusCompleted  = "completed"
+	ResponseStatusIncomplete = "incomplete"
+)
+
+// responseStatusFromFinishReason maps an upstream chat finish_reason onto the
+// Responses API status. The Responses protocol distinguishes a truncated answer
+// (status "incomplete" + incomplete_details.reason) from a normal end, which is
+// what lets an agent decide whether to continue or retry; a chat finish_reason is
+// the only signal the gateway receives.
+func responseStatusFromFinishReason(finishReason string) (string, *ResponseIncompleteDetails) {
+	switch finishReason {
+	case "length":
+		return ResponseStatusIncomplete, &ResponseIncompleteDetails{Reason: "max_output_tokens"}
+	case "content_filter":
+		return ResponseStatusIncomplete, &ResponseIncompleteDetails{Reason: "content_filter"}
+	default:
+		return ResponseStatusCompleted, nil
+	}
+}
+
+// IncompleteResponseStatus is the exported helper the streaming emitter uses so
+// the unary and streaming paths agree on the mapping.
+func IncompleteResponseStatus(finishReason string) (string, *ResponseIncompleteDetails) {
+	return responseStatusFromFinishReason(finishReason)
 }
 
 // ToChatCompletionRequest converts a ResponseRequest into a canonical ChatCompletionRequest.
@@ -661,15 +711,34 @@ func ConvertChatResponseToResponseResult(chatResp *ChatCompletionResponse) *Resp
 		usage.InputTokens = chatResp.Usage.PromptTokens
 		usage.OutputTokens = chatResp.Usage.CompletionTokens
 		usage.TotalTokens = chatResp.Usage.TotalTokens
+		usage.InputTokensDetails = &ResponseInputTokensDetails{CachedTokens: chatResp.Usage.GetCachedTokens()}
+		usage.OutputTokensDetails = &ResponseOutputTokensDetails{ReasoningTokens: 0}
+	}
+
+	// A truncated or filtered answer must not be reported as a normally completed
+	// response: clients key continuation/retry decisions off status +
+	// incomplete_details.
+	status := ResponseStatusCompleted
+	var incompleteDetails *ResponseIncompleteDetails
+	for _, choice := range chatResp.Choices {
+		if choice.FinishReason == nil {
+			continue
+		}
+		if mappedStatus, details := responseStatusFromFinishReason(*choice.FinishReason); mappedStatus != ResponseStatusCompleted {
+			status = mappedStatus
+			incompleteDetails = details
+			break
+		}
 	}
 
 	return &ResponseResult{
-		ID:        resID,
-		Object:    "response",
-		CreatedAt: created,
-		Status:    "completed",
-		Model:     chatResp.Model,
-		Output:    outputItems,
-		Usage:     usage,
+		ID:                resID,
+		Object:            "response",
+		CreatedAt:         created,
+		Status:            status,
+		IncompleteDetails: incompleteDetails,
+		Model:             chatResp.Model,
+		Output:            outputItems,
+		Usage:             usage,
 	}
 }

@@ -146,12 +146,17 @@ func (h *Handler) handleResponsesStreaming(
 			}
 
 			if event.Chunk.Usage != nil {
-				totalPromptTokens = event.Chunk.Usage.PromptTokens
-				totalCompTokens = event.Chunk.Usage.CompletionTokens
-				totalCachedTokens = event.Chunk.Usage.GetCachedTokens()
+				// Cumulative usage: an output-only trailer must not erase the input
+				// count reported by an earlier frame (same rule as chat/messages).
+				totalPromptTokens = max(totalPromptTokens, event.Chunk.Usage.PromptTokens)
+				totalCompTokens = max(totalCompTokens, event.Chunk.Usage.CompletionTokens)
+				totalCachedTokens = max(totalCachedTokens, event.Chunk.Usage.GetCachedTokens())
 			}
 
 			for _, choice := range event.Chunk.Choices {
+				if choice.FinishReason != nil {
+					emitter.noteFinishReason(*choice.FinishReason)
+				}
 				deltaText := choice.Delta.Content
 				if deltaText != "" {
 					emitter.fullText.WriteString(deltaText)
@@ -183,10 +188,10 @@ func (h *Handler) handleResponsesStreaming(
 	// 5-9. output_text.done / content_part.done / output_item.done / response.completed
 	emitter.completed(gin.H{
 		"input_tokens":          totalPromptTokens,
-		"output_tokens":         totalCompTokens,
-		"total_tokens":          totalPromptTokens + totalCompTokens,
 		"input_tokens_details":  gin.H{"cached_tokens": cachedTokens},
+		"output_tokens":         totalCompTokens,
 		"output_tokens_details": gin.H{"reasoning_tokens": 0},
+		"total_tokens":          totalPromptTokens + totalCompTokens,
 	})
 
 	// Billing metadata as an SSE comment, after the terminal event so no client

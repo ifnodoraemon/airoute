@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/model"
 )
 
 // writeSSEJSON sends a named SSE event with JSON-encoded data and flushes the writer.
@@ -49,6 +50,9 @@ type responsesStreamEmitter struct {
 	toolOrder       []int
 	nextOutputIndex int
 	toolChars       int
+	// finishReason is the upstream chat finish_reason, used to report a truncated
+	// or filtered answer as an "incomplete" response instead of "completed".
+	finishReason string
 }
 
 type responsesToolCallState struct {
@@ -100,6 +104,11 @@ func (e *responsesStreamEmitter) responseObject(status string, output []gin.H, u
 	}
 	if usage != nil {
 		obj["usage"] = usage
+	}
+	if status != model.ResponseStatusCompleted {
+		if _, details := model.IncompleteResponseStatus(e.finishReason); details != nil {
+			obj["incomplete_details"] = gin.H{"reason": details.Reason}
+		}
 	}
 	return obj
 }
@@ -213,6 +222,21 @@ func (e *responsesStreamEmitter) toolCallDelta(toolIndex int, callID, name, argu
 	})
 }
 
+// noteFinishReason records the upstream chat finish_reason so the terminal
+// response.completed event can report status "incomplete" (with
+// incomplete_details) instead of claiming a truncated answer completed normally.
+func (e *responsesStreamEmitter) noteFinishReason(finishReason string) {
+	if finishReason != "" {
+		e.finishReason = finishReason
+	}
+}
+
+// terminalStatus maps the recorded finish_reason onto the Responses API status.
+func (e *responsesStreamEmitter) terminalStatus() string {
+	status, _ := model.IncompleteResponseStatus(e.finishReason)
+	return status
+}
+
 // completed emits the terminal events (message done, every function_call done,
 // response.completed) that close the stream. Output items are ordered by their
 // output_index: the message item first, then function calls in first-seen order.
@@ -259,7 +283,7 @@ func (e *responsesStreamEmitter) completed(usage gin.H) {
 	}
 
 	e.emit("response.completed", gin.H{
-		"response": e.responseObject("completed", output, usage),
+		"response": e.responseObject(e.terminalStatus(), output, usage),
 	})
 }
 

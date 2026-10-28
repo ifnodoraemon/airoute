@@ -104,7 +104,11 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 			}
 
 			line, err := reader.ReadBytes('\n')
-			if err != nil {
+			// A complete data frame can arrive without its trailing newline when the
+			// upstream (or a proxy) cuts the connection. Process the buffered line
+			// instead of dropping it: it may be the message_delta carrying
+			// output_tokens or the message_stop terminal frame.
+			if err != nil && !(err == io.EOF && len(line) > 0) {
 				if err != io.EOF {
 					sendEvent(&model.StreamEvent{Err: err})
 					return

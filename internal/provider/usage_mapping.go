@@ -33,16 +33,25 @@ func anthropicUsageToModel(u *AnthropicUsage) *model.Usage {
 // Gemini's promptTokenCount already includes cached content, so it is used as-is.
 // The Gemini API reports no cache-write count, so CacheCreationTokens stays 0
 // rather than being invented.
+//
+// Completion tokens are candidatesTokenCount PLUS thoughtsTokenCount: on thinking
+// models the candidates count covers only the visible answer while the upstream
+// bills (and its total includes) the reasoning tokens as output. Folding them into
+// CompletionTokens is what makes `total == prompt + completion` hold again and
+// what the billing engine prices (it consumes PromptTokens/CompletionTokens only,
+// so no double counting with the upstream total is possible).
 func geminiUsageToModel(u *GeminiUsageMetadata) *model.Usage {
 	if u == nil {
 		return nil
 	}
 	usage := &model.Usage{
 		PromptTokens:     u.PromptTokenCount,
-		CompletionTokens: u.CandidatesTokenCount,
+		CompletionTokens: u.CandidatesTokenCount + u.ThoughtsTokenCount,
 		TotalTokens:      u.TotalTokenCount,
 	}
-	if usage.TotalTokens == 0 {
+	if usage.TotalTokens < usage.PromptTokens+usage.CompletionTokens {
+		// Some proxies omit or truncate totalTokenCount; never report a total that
+		// contradicts its own parts.
 		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 	}
 	if u.CachedContentTokenCount > 0 {

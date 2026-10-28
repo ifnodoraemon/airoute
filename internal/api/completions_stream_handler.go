@@ -88,8 +88,10 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 				})
 			}
 			if event.Chunk.Usage != nil {
-				totalPromptTokens = event.Chunk.Usage.PromptTokens
-				totalCompTokens = event.Chunk.Usage.CompletionTokens
+				// Cumulative usage: an output-only trailer must not erase the input
+				// count reported by an earlier frame (same rule as chat/messages).
+				totalPromptTokens = max(totalPromptTokens, event.Chunk.Usage.PromptTokens)
+				totalCompTokens = max(totalCompTokens, event.Chunk.Usage.CompletionTokens)
 				// Cache reads are part of prompt_tokens but are billed at the
 				// cache rate; dropping them charged every cached token as fresh
 				// input (same defect the non-streaming paths do not have).

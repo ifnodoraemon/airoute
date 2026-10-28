@@ -79,3 +79,63 @@ func TestUsageMappingNilSafe(t *testing.T) {
 		t.Fatal("geminiUsageToModel(nil) should be nil")
 	}
 }
+
+// TestGeminiUsageToModelFoldsThoughtsTokens is the BUG-GEMINI-THOUGHTS regression
+// test: a thinking model reports the visible answer in candidatesTokenCount and
+// the reasoning in thoughtsTokenCount, while totalTokenCount includes both.
+// Completion must be the sum, so the canonical usage is self-consistent and the
+// billing engine (which prices PromptTokens/CompletionTokens) charges for the
+// reasoning output Google billed us for.
+func TestGeminiUsageToModelFoldsThoughtsTokens(t *testing.T) {
+	got := geminiUsageToModel(&GeminiUsageMetadata{
+		PromptTokenCount:     100,
+		CandidatesTokenCount: 50,
+		ThoughtsTokenCount:   500,
+		TotalTokenCount:      650,
+	})
+	if got == nil {
+		t.Fatal("expected non-nil usage")
+	}
+	if got.CompletionTokens != 550 {
+		t.Fatalf("completion tokens = %d, want 550 (candidates 50 + thoughts 500)", got.CompletionTokens)
+	}
+	if got.PromptTokens != 100 {
+		t.Fatalf("prompt tokens = %d, want 100", got.PromptTokens)
+	}
+	// No double counting: the upstream total already contains the thoughts, and it
+	// must agree with the parts it is composed of.
+	if got.TotalTokens != 650 {
+		t.Fatalf("total tokens = %d, want the upstream total 650", got.TotalTokens)
+	}
+	if got.PromptTokens+got.CompletionTokens != got.TotalTokens {
+		t.Fatalf("prompt(%d)+completion(%d) = %d, want the total %d (usage must be self-consistent)",
+			got.PromptTokens, got.CompletionTokens, got.PromptTokens+got.CompletionTokens, got.TotalTokens)
+	}
+}
+
+// TestGeminiUsageToModelNormalizesInconsistentTotal guards upstream proxies that
+// report a total smaller than its own parts: the canonical total must never
+// contradict the billed counts.
+func TestGeminiUsageToModelNormalizesInconsistentTotal(t *testing.T) {
+	got := geminiUsageToModel(&GeminiUsageMetadata{
+		PromptTokenCount:     100,
+		CandidatesTokenCount: 50,
+		ThoughtsTokenCount:   500,
+		TotalTokenCount:      120, // truncated/incoherent upstream total
+	})
+	if got.TotalTokens != 650 {
+		t.Fatalf("total tokens = %d, want 650 (prompt+completion wins over a smaller upstream total)", got.TotalTokens)
+	}
+}
+
+// TestGeminiUsageToModelWithoutThoughtsUnchanged pins non-thinking traffic.
+func TestGeminiUsageToModelWithoutThoughtsUnchanged(t *testing.T) {
+	got := geminiUsageToModel(&GeminiUsageMetadata{
+		PromptTokenCount:     1200,
+		CandidatesTokenCount: 300,
+		TotalTokenCount:      1500,
+	})
+	if got.CompletionTokens != 300 || got.TotalTokens != 1500 {
+		t.Fatalf("unexpected usage without thoughts: %+v", got)
+	}
+}

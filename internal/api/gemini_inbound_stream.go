@@ -106,6 +106,58 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 		})
 	}()
 
+	// BUG-GEMINI-TOOLCALL: OpenAI streams a tool call as fragments (index-keyed,
+	// arguments split across frames), while a Gemini functionCall part must carry
+	// the complete name and a complete args object. Accumulate the fragments and
+	// emit one functionCall per call — on the terminal frame, or when the stream
+	// ends without one.
+	toolCalls := newGeminiStreamToolCalls()
+
+	// emitCandidate writes one Gemini streamGenerateContent candidate frame.
+	// A nil parts slice must be encoded as [] (the Gemini schema declares parts as
+	// an array), and finishReason is omitted unless this is a terminal frame.
+	emitCandidate := func(parts []gin.H, finishReason string, withUsage bool) {
+		if parts == nil {
+			parts = []gin.H{}
+		}
+		candidate := gin.H{
+			"index": 0,
+			"content": gin.H{
+				"role":  "model",
+				"parts": parts,
+			},
+		}
+		if finishReason != "" {
+			candidate["finishReason"] = finishReason
+		}
+		chunkObj := gin.H{"candidates": []gin.H{candidate}}
+		if withUsage {
+			chunkObj["usageMetadata"] = gin.H{
+				"promptTokenCount":     totalPromptTokens,
+				"candidatesTokenCount": totalCompTokens,
+				"totalTokenCount":      totalPromptTokens + totalCompTokens,
+			}
+		}
+		if b, err := json.Marshal(chunkObj); err == nil {
+			fmt.Fprintf(w, "data: %s\n\n", b)
+			flusher.Flush()
+		}
+	}
+
+	// functionCallParts renders the assembled calls as Gemini parts.
+	functionCallParts := func(calls []geminiFunctionCall) []gin.H {
+		parts := make([]gin.H, 0, len(calls))
+		for _, call := range calls {
+			parts = append(parts, gin.H{
+				"functionCall": gin.H{
+					"name": call.Name,
+					"args": call.Args,
+				},
+			})
+		}
+		return parts
+	}
+
 	clientGone := false
 	drainEnabled := upstreamDrainingEnabled()
 	doneCh := c.Request.Context().Done()
@@ -121,6 +173,11 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 			markAbortedDrain(0)
 		case event, open := <-streamChan:
 			if !open {
+				// A tool call that never got its terminal frame must still reach the
+				// client as one complete functionCall, not be silently dropped.
+				if toolCalls.pending() {
+					emitCandidate(functionCallParts(toolCalls.drainFunctionCalls()), "", false)
+				}
 				finalStatus := http.StatusOK
 				if clientGone {
 					finalStatus = statusClientClosed
@@ -154,6 +211,9 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 			}
 
 			if event.IsDone {
+				if toolCalls.pending() {
+					emitCandidate(functionCallParts(toolCalls.drainFunctionCalls()), "", false)
+				}
 				continue
 			}
 
@@ -167,8 +227,12 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 				// before the choice-specific handling so prompt tokens are not lost.
 				usageOnly := len(event.Chunk.Choices) == 0 && event.Chunk.Usage != nil
 				if event.Chunk.Usage != nil {
-					totalPromptTokens = event.Chunk.Usage.PromptTokens
-					totalCompTokens = event.Chunk.Usage.CompletionTokens
+					// Usage counters are cumulative; a frame that reports only the
+					// completion side (or only a delta) must not erase input/cache
+					// counts an earlier frame already reported. Same rule as the chat
+					// and messages streaming handlers.
+					totalPromptTokens = max(totalPromptTokens, event.Chunk.Usage.PromptTokens)
+					totalCompTokens = max(totalCompTokens, event.Chunk.Usage.CompletionTokens)
 					// Cache reads are part of prompt_tokens but bill at the cache
 					// rate; not forwarding them charged cached tokens as fresh input.
 					totalCachedTokens = max(totalCachedTokens, event.Chunk.Usage.GetCachedTokens())
@@ -203,15 +267,23 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 						geminiParts = append(geminiParts, gin.H{"text": chunkChoice.Delta.Content})
 					}
 
-					for _, tc := range chunkChoice.Delta.ToolCalls {
-						var args map[string]any
-						_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
-						geminiParts = append(geminiParts, gin.H{
-							"functionCall": gin.H{
-								"name": tc.Function.Name,
-								"args": args,
-							},
-						})
+					// Tool-call fragments are accumulated, not translated one by one:
+					// they are emitted as complete functionCall parts on the terminal
+					// frame (or at stream end). Argument bytes count toward the
+					// completion fallback estimate, exactly like text does.
+					if len(chunkChoice.Delta.ToolCalls) > 0 {
+						if !firstTokenRecorded {
+							ttftDuration = time.Since(start)
+							telemetry.GlobalMetrics.RecordTTFT(ttftDuration)
+							firstTokenRecorded = true
+						}
+						for _, tc := range chunkChoice.Delta.ToolCalls {
+							toolCalls.add(tc)
+							if tc.Function.Arguments != "" {
+								accumulatedChars += len(tc.Function.Arguments)
+								telemetry.GlobalLiveMetrics.AddChars(len(tc.Function.Arguments))
+							}
+						}
 					}
 
 					finishReason := ""
@@ -225,40 +297,14 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 						}
 					}
 
+					// The terminal frame carries the assembled tool calls, so a client
+					// sees each call exactly once with complete arguments.
+					if finishReason != "" && toolCalls.pending() {
+						geminiParts = append(geminiParts, functionCallParts(toolCalls.drainFunctionCalls())...)
+					}
+
 					if len(geminiParts) > 0 || finishReason != "" {
-						// The finish-only frame carries no delta, and a nil slice
-						// marshals to "parts": null. Gemini's schema declares parts as
-						// an array, so emit an empty one instead of null.
-						parts := geminiParts
-						if parts == nil {
-							parts = []gin.H{}
-						}
-						candidate := gin.H{
-							"index": 0,
-							"content": gin.H{
-								"role":  "model",
-								"parts": parts,
-							},
-						}
-						if finishReason != "" {
-							candidate["finishReason"] = finishReason
-						}
-
-						chunkObj := gin.H{
-							"candidates": []gin.H{candidate},
-						}
-
-						if event.Chunk.Usage != nil {
-							chunkObj["usageMetadata"] = gin.H{
-								"promptTokenCount":     totalPromptTokens,
-								"candidatesTokenCount": totalCompTokens,
-								"totalTokenCount":      totalPromptTokens + totalCompTokens,
-							}
-						}
-
-						chunkBytes, _ := json.Marshal(chunkObj)
-						fmt.Fprintf(w, "data: %s\n\n", chunkBytes)
-						flusher.Flush()
+						emitCandidate(geminiParts, finishReason, event.Chunk.Usage != nil)
 					}
 				}
 			}

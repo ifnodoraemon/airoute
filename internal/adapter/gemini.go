@@ -237,9 +237,20 @@ func (a *GeminiAdapter) FromCanonical(ctx context.Context, resp *model.ChatCompl
 
 	pTokens := 0
 	cTokens := 0
+	tTokens := 0
 	if resp.Usage != nil {
 		pTokens = resp.Usage.PromptTokens
+		// The canonical completion count already folds Gemini's thoughtsTokenCount
+		// in (provider.geminiUsageToModel), matching what the upstream billed.
 		cTokens = resp.Usage.CompletionTokens
+		tTokens = resp.Usage.TotalTokens
+	}
+	// Never overwrite the upstream's own total with prompt+candidates: on thinking
+	// models that would drop the reasoning tokens from the reported total and
+	// contradict the completion count (BUG-GEMINI-THOUGHTS). Only synthesize a
+	// total when the upstream did not report one.
+	if tTokens < pTokens+cTokens {
+		tTokens = pTokens + cTokens
 	}
 
 	return map[string]any{
@@ -247,7 +258,7 @@ func (a *GeminiAdapter) FromCanonical(ctx context.Context, resp *model.ChatCompl
 		"usageMetadata": provider.GeminiUsageMetadata{
 			PromptTokenCount:     pTokens,
 			CandidatesTokenCount: cTokens,
-			TotalTokenCount:      pTokens + cTokens,
+			TotalTokenCount:      tTokens,
 		},
 		"modelVersion": resp.Model,
 	}, nil
