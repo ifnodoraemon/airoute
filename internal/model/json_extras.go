@@ -190,6 +190,25 @@ func (r ChatCompletionResponse) MarshalJSON() ([]byte, error) {
 	return marshalWithExtra(alias(r), r.Extra)
 }
 
+// RerankResponse keeps unknown members (id/created/meta/...) so a same-protocol
+// upstream's rerank answer survives the canonical round trip.
+
+func (r *RerankResponse) UnmarshalJSON(data []byte) error {
+	type alias RerankResponse
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*r = RerankResponse(decoded)
+	r.Extra = captureExtraFields(data, reflect.TypeOf(decoded))
+	return nil
+}
+
+func (r RerankResponse) MarshalJSON() ([]byte, error) {
+	type alias RerankResponse
+	return marshalWithExtra(alias(r), r.Extra)
+}
+
 // ChunkDelta.
 
 func (d *ChunkDelta) UnmarshalJSON(data []byte) error {
