@@ -14,8 +14,8 @@ import {
 const ADMIN_TABS = [
   'dashboard', 'logs',
   'models', 'channels',
-  'pricing', 'reconciliation', 'costs', 'wallet', 'ledger',
-  'keys', 'users', 'orgs', 'budgets',
+  'pricing', 'reconciliation', 'wallet',
+  'keys', 'users',
   'playground', 'skills', 'mcp',
 ];
 const USER_TABS = ['dashboard', 'wallet', 'keys', 'playground', 'pricing', 'logs'];
@@ -55,8 +55,8 @@ describe('navGroups', () => {
     expect(ADMIN_NAV_GROUPS.map(({ id, tabs }) => ({ id, tabs }))).toEqual([
       { id: 'monitoring', tabs: ['dashboard', 'logs'] },
       { id: 'gateway', tabs: ['models', 'channels'] },
-      { id: 'billing', tabs: ['pricing', 'reconciliation', 'costs', 'wallet', 'ledger'] },
-      { id: 'identity', tabs: ['keys', 'users', 'orgs', 'budgets'] },
+      { id: 'billing', tabs: ['pricing', 'reconciliation', 'wallet'] },
+      { id: 'identity', tabs: ['keys', 'users'] },
       { id: 'ecosystem', tabs: ['playground', 'skills', 'mcp'] },
     ]);
     expect(USER_NAV_GROUPS.map(({ id, tabs }) => ({ id, tabs }))).toEqual([

@@ -35,15 +35,6 @@ type ModelPriceKey struct {
 	Group string `json:"group"`
 }
 
-// ModelFallbackRecord represents a cross-model fallback rule.
-type ModelFallbackRecord struct {
-	Model         string    `json:"model"`
-	FallbackModel string    `json:"fallback_model"`
-	Enabled       bool      `json:"enabled"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
-}
-
 // BatchDeleteModelPrices deletes pricing for multiple models.
 func (r *Repository) BatchDeleteModelPrices(models []string) (int64, error) {
 	if len(models) == 0 {
@@ -115,12 +106,6 @@ func (r *Repository) SetModelFallback(model, fallbackModel string, enabled bool)
 		VALUES (?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(model) DO UPDATE SET fallback_model = excluded.fallback_model, enabled = excluded.enabled, updated_at = CURRENT_TIMESTAMP
 	`, model, fallbackModel, en)
-	return err
-}
-
-// DeleteModelFallback removes a model fallback mapping.
-func (r *Repository) DeleteModelFallback(model string) error {
-	_, err := r.db.Exec(`DELETE FROM model_fallbacks WHERE model = ?`, model)
 	return err
 }
 

@@ -2,10 +2,10 @@ package storage
 
 import "fmt"
 
-// addSupplierCosts creates the supplier cost table and the nullable cost-basis
-// column on usage_logs. Cost basis NULL means "unknown" (no configured supplier
-// price at write time) and must never be treated as zero, otherwise every
-// unpriced channel would look infinitely profitable.
+// addSupplierCosts creates the supplier cost table. It is a price reference
+// only: the gateway keeps the contracted per-million-token rates so an operator
+// can compare them with our own list price, and no request cost is derived from
+// them (the margin analytics that used to consume them was cut on 2026-10-28).
 func addSupplierCosts(db *DB) error {
 	table := `CREATE TABLE IF NOT EXISTS supplier_costs (
 		id BIGSERIAL PRIMARY KEY,
@@ -36,24 +36,6 @@ func addSupplierCosts(db *DB) error {
 	}
 	if _, err := db.DB.Exec(`CREATE INDEX IF NOT EXISTS idx_supplier_costs_lookup ON supplier_costs(channel, model, status)`); err != nil {
 		return err
-	}
-	return addUsageLogsCostBasis(db)
-}
-
-// addUsageLogsCostBasis adds the nullable integer column. Existing rows stay
-// NULL (unknown), which is the truthful value for logs written before pricing
-// was configured.
-func addUsageLogsCostBasis(db *DB) error {
-	if db.Dialect() == "postgres" {
-		if _, err := db.DB.Exec(`ALTER TABLE usage_logs ADD COLUMN IF NOT EXISTS cost_basis_units BIGINT`); err != nil {
-			return fmt.Errorf("add cost_basis_units: %w", err)
-		}
-		return nil
-	}
-	if !sqliteColumnExists(db.DB, "usage_logs", "cost_basis_units") {
-		if _, err := db.DB.Exec(`ALTER TABLE usage_logs ADD COLUMN cost_basis_units INTEGER`); err != nil {
-			return fmt.Errorf("add cost_basis_units: %w", err)
-		}
 	}
 	return nil
 }

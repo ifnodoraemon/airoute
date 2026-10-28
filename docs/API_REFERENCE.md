@@ -321,13 +321,28 @@ All Admin APIs are under `/api/v1/admin`:
 | `POST` | `/api/v1/admin/channels/probe` | **Deep Auto-Probe**: Automatically normalize URL, probe live models, fingerprint upstream engine (GPUStack, vLLM, SGLang, Ollama, DeepSeek, Gemini, Anthropic, Sub2API), infer protocols (`chat`, `completion`, `messages`, `embeddings`, `rerank`, etc.) |
 | `POST` | `/api/v1/admin/channels/:id/test` | Ping downstream provider for latency & response verification |
 | `DELETE`| `/api/v1/admin/channels/:id` | Delete provider and remove from routing |
-| `GET` | `/api/v1/admin/keys` | List all client API keys with rate limits & budgets |
+| `GET` | `/api/v1/admin/keys` | List all client API keys with rate limits & spend caps |
 | `POST` | `/api/v1/admin/keys` | Create client API key |
 | `DELETE`| `/api/v1/admin/keys/:id` | Revoke client API key |
 | `GET` | `/api/v1/admin/logs?limit=50` | Query real-time audit logs with TTFT, tokens, latency, status code |
 | `GET` | `/api/v1/admin/logs?limit=50&count=0&facets=0` | Rows only: skips the filtered COUNT and facet DISTINCT (dashboard poll / CSV export) |
 | `GET` | `/api/v1/admin/stats/overview` | Query aggregated gateway statistics (QPS, TTFT, Tokens) |
 | `GET` | `/api/v1/admin/models` | List all active models across providers |
+| `GET` | `/api/v1/admin/supplier-costs` | List supplier unit prices keyed by channel name + model (reference only; not used for charging) |
+| `POST` | `/api/v1/admin/supplier-costs` | Create or overwrite the supplier price for a channel + model: `channel`, `model`, `input_cost`, `output_cost` (CNY per 1M tokens), `status` (`active`/`disabled`) |
+| `DELETE`| `/api/v1/admin/supplier-costs/:id` | Delete one supplier price row |
+| `GET` | `/api/v1/admin/supplier-costs/export` | Export supplier prices as CSV |
+| `POST` | `/api/v1/admin/supplier-costs/import` | Import supplier prices from CSV; `?dry_run=1` validates every row and reports errors without writing |
+
+### Supplier unit prices vs. our sell price
+
+Supplier unit prices are maintained **separately** from our sell price and never derived from each other:
+
+- **Sell price** — the price we charge, resolved by the existing pricing pipeline (group → default → wildcard → `*`, with cache/off-peak/group multipliers).
+- **Supplier price** — what a channel/model costs us, keyed by `channel` (name) + `model`: input/output price per 1M tokens plus an `active`/`disabled` status. On the pricing page the supplier list is paired per model with our sell price (default group tier), with the spread (ours − supplier) shown next to it.
+- A missing supplier price is reported as “not configured”, never as `0`. Supplier prices do **not** affect billing, are not written to usage records, and are **not** used to compute margin or cost analytics.
+
+> Organization/cost-center, budget/alert, wallet-ledger and cost/margin endpoints are out of product scope and are not provided.
 
 ### API key representations
 

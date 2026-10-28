@@ -13,8 +13,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/billing"
-	"github.com/ifnodoraemon/airoute/internal/costing"
-	"github.com/ifnodoraemon/airoute/internal/governance"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/provider"
@@ -56,7 +54,6 @@ type AuditRecordParams struct {
 	// callers stay unchanged.
 	APIKey    string
 	TenantID  string
-	OrgID     int64
 	KeyGroup  string
 	TraceID   string
 	KeyConfig *model.APIKeyConfig // carries the per-key TPM budget for consumption
@@ -266,20 +263,6 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 		telemetry.GlobalLiveMetrics.AddTokens(totTokens)
 	}
 
-	orgID := params.OrgID
-	if orgID == 0 && c != nil {
-		if raw, ok := c.Get(middleware.ContextKeyOrg); ok {
-			switch typed := raw.(type) {
-			case int64:
-				orgID = typed
-			case int:
-				orgID = int64(typed)
-			}
-		}
-	}
-	if orgID == 0 && params.KeyConfig != nil {
-		orgID = params.KeyConfig.OrgID
-	}
 	tenantID := params.TenantID
 	if tenantID == "" && c != nil {
 		tenantID = c.GetString("tenant_id")
@@ -302,7 +285,6 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 		SessionID:        params.SessionID,
 		APIKey:           apiKey,
 		TenantID:         tenantID,
-		OrgID:            orgID,
 		Model:            params.Model,
 		PromptTokens:     params.PromptTokens,
 		CompletionTokens: params.CompletionTokens,
@@ -327,22 +309,6 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 		CreatedAt: time.Now(),
 	}
 
-	// Supplier cost is computed at write time and stored as nullable units. If no
-	// price is configured the column stays NULL so margin reports can separate
-	// "free" from "unknown" instead of treating both as zero cost.
-	if engine := costing.Global(); engine != nil && params.Channel != "" {
-		if channelID, found := engine.ChannelID(params.Channel); found {
-			record.ChannelID = &channelID
-		}
-	}
-	if params.Channel != "" && params.Model != "" && (params.PromptTokens > 0 || params.CompletionTokens > 0) {
-		if engine := costing.Global(); engine != nil {
-			if units, found := engine.CostBasisUnits(params.Channel, params.Model, int64(params.PromptTokens), int64(params.CompletionTokens)); found {
-				record.CostBasisUnits = &units
-			}
-		}
-	}
-
 	// Settle the charge now, independently of the audit pipeline. A failure here
 	// (database unavailable, settlement runtime not installed) is not fatal: the
 	// record still travels through Redis/spill and is settled by the async
@@ -355,26 +321,6 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 
 	if storage.GlobalAsyncLogger != nil {
 		storage.GlobalAsyncLogger.Record(record)
-	}
-
-	// Budget accounting runs off the request path: the response is already
-	// decided, and a slow/absent budget table must not turn a successful call
-	// into a failure. The service evaluates the effective rules with its live
-	// counters; threshold events and notifications are deduped per period.
-	if cost > 0 {
-		keyCfg := params.KeyConfig
-		if keyCfg == nil {
-			keyCfg = getAPIKeyConfig(c)
-		}
-		if service := governance.GlobalService(); service != nil && keyCfg != nil && keyCfg.ID > 0 {
-			subject := governance.Subject{KeyID: keyCfg.ID, UserID: keyCfg.UserID, OrgID: keyCfg.OrgID}
-			units := storage.ToUnits(cost)
-			go func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				service.RecordSpend(ctx, subject, units)
-			}()
-		}
 	}
 
 	// A 499 can live only in the audit trail: on a streaming request the wire
@@ -928,7 +874,7 @@ func normalizeUnbillableCurrency(cost, savedCost float64, snapshot *storage.Usag
 	return 0, 0, true
 }
 
-// The wallet ledger settles only CNY. Reject a legacy foreign rate before work starts.
+// The wallet settles only CNY. Reject a legacy foreign rate before work starts.
 func validateModelCurrency(c *gin.Context, modelName string) bool {
 	if billing.GlobalEngine == nil {
 		return true

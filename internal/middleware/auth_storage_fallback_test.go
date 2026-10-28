@@ -72,7 +72,6 @@ func newAuthHarness(t *testing.T, snapshotCredential string) *authHarness {
 		c.JSON(http.StatusOK, gin.H{
 			"tenant": c.GetString(ContextKeyTenant),
 			"key":    c.GetString(ContextKeyAPIKey),
-			"org":    c.GetString(ContextKeyOrg),
 		})
 	})
 	return &authHarness{t: t, repo: repo, engine: engine}

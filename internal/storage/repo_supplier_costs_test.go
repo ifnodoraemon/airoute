@@ -1,12 +1,15 @@
 package storage
 
 import (
-	"context"
 	"database/sql"
+	"errors"
 	"testing"
 )
 
-func TestUsageLogPersistsNullableCostBasis(t *testing.T) {
+// TestSupplierCostCRUD covers the price list that replaced the old cost/margin
+// analytics: rows are keyed by (channel, model) and carry the contracted
+// per-million-token rate only. Nothing here derives a request cost.
+func TestSupplierCostCRUD(t *testing.T) {
 	db, err := OpenDB(":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -14,39 +17,61 @@ func TestUsageLogPersistsNullableCostBasis(t *testing.T) {
 	defer db.Close()
 	repo := NewRepository(db)
 
-	units := ToUnits(2)
-	channelID := int64(7)
-	priced := &UsageLogRecord{
-		APIKey: "sk-test", TenantID: "t", Model: "m-1", Channel: "ch-a", ChannelID: &channelID,
-		PromptTokens: 100, TotalTokens: 100, CostBasisUnits: &units, StatusCode: 200,
+	rec := &SupplierCostRecord{Channel: " ch-a ", Model: " m-1 ", InputCostUnitsPerMillion: ToUnits(2), OutputCostUnitsPerMillion: ToUnits(4)}
+	if err := repo.UpsertSupplierCost(rec); err != nil {
+		t.Fatalf("upsert: %v", err)
 	}
-	unpriced := &UsageLogRecord{
-		APIKey: "sk-test", TenantID: "t", Model: "m-2", Channel: "ch-b",
-		PromptTokens: 100, TotalTokens: 100, StatusCode: 200,
-	}
-	if err := repo.insertUsageLogsContext(context.Background(), []*UsageLogRecord{priced, unpriced}); err != nil {
-		t.Fatal(err)
+	if rec.Channel != "ch-a" || rec.Model != "m-1" || rec.Status != "active" {
+		t.Fatalf("normalized record = %+v", rec)
 	}
 
-	var pricedUnits sql.NullInt64
-	if err := db.QueryRow(`SELECT cost_basis_units FROM usage_logs WHERE billing_id = ?`, priced.BillingID).Scan(&pricedUnits); err != nil {
-		t.Fatal(err)
+	stored, err := repo.GetSupplierCost("ch-a", "m-1")
+	if err != nil {
+		t.Fatalf("get: %v", err)
 	}
-	if !pricedUnits.Valid || pricedUnits.Int64 != units {
-		t.Fatalf("priced cost basis = %+v", pricedUnits)
+	if stored.InputCostUnitsPerMillion != ToUnits(2) || stored.OutputCostUnitsPerMillion != ToUnits(4) {
+		t.Fatalf("stored rates = %+v", stored)
 	}
-	var storedChannel int64
-	if err := db.QueryRow(`SELECT channel_id FROM usage_logs WHERE billing_id = ?`, priced.BillingID).Scan(&storedChannel); err != nil {
-		t.Fatal(err)
+
+	// Upserting the same pair updates in place instead of duplicating it.
+	if err := repo.UpsertSupplierCost(&SupplierCostRecord{Channel: "ch-a", Model: "m-1", InputCostUnitsPerMillion: ToUnits(3), OutputCostUnitsPerMillion: ToUnits(6)}); err != nil {
+		t.Fatalf("second upsert: %v", err)
 	}
-	if storedChannel != channelID {
-		t.Fatalf("channel_id = %d, want %d", storedChannel, channelID)
+	rows, err := repo.ListSupplierCosts()
+	if err != nil {
+		t.Fatalf("list: %v", err)
 	}
-	var unpricedUnits sql.NullInt64
-	if err := db.QueryRow(`SELECT cost_basis_units FROM usage_logs WHERE billing_id = ?`, unpriced.BillingID).Scan(&unpricedUnits); err != nil {
-		t.Fatal(err)
+	if len(rows) != 1 || rows[0].InputCostUnitsPerMillion != ToUnits(3) {
+		t.Fatalf("list after upsert = %+v", rows)
 	}
-	if unpricedUnits.Valid {
-		t.Fatalf("unknown cost must stay NULL, got %d", unpricedUnits.Int64)
+
+	if err := repo.DeleteSupplierCost(rows[0].ID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, err := repo.GetSupplierCost("ch-a", "m-1"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("get after delete err = %v, want sql.ErrNoRows", err)
+	}
+	if err := repo.DeleteSupplierCost(rows[0].ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("delete missing err = %v, want sql.ErrNoRows", err)
+	}
+}
+
+func TestSupplierCostValidation(t *testing.T) {
+	cases := []struct {
+		name string
+		rec  *SupplierCostRecord
+	}{
+		{"missing channel", &SupplierCostRecord{Model: "m"}},
+		{"missing model", &SupplierCostRecord{Channel: "ch"}},
+		{"negative input", &SupplierCostRecord{Channel: "ch", Model: "m", InputCostUnitsPerMillion: -1}},
+		{"unknown status", &SupplierCostRecord{Channel: "ch", Model: "m", Status: "retired"}},
+	}
+	for _, tc := range cases {
+		if err := ValidateSupplierCost(tc.rec); err == nil {
+			t.Fatalf("%s: expected validation error", tc.name)
+		}
+	}
+	if err := ValidateSupplierCost(&SupplierCostRecord{Channel: "ch", Model: "m", Status: "disabled"}); err != nil {
+		t.Fatalf("disabled status must be valid: %v", err)
 	}
 }

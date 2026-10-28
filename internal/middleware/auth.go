@@ -9,10 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/config"
-	"github.com/ifnodoraemon/airoute/internal/governance"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/storage"
-	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
 // authStorageTimeout bounds the per-request authoritative key/user lookups.
@@ -26,10 +24,8 @@ const authStorageTimeout = 2 * time.Second
 
 const (
 	ContextKeyTenant       = "tenant_id"
-	ContextKeyOrg          = "org_id"
 	ContextKeyAPIKey       = "api_key"
 	ContextKeyAPIKeyConfig = "api_key_config"
-	ContextKeyUserRecord   = "user_record"
 	// ContextKeyAPIKeyID carries the key's public identifier (ak_…). Access logs
 	// and audit lines name a key with it; the digest is never displayed.
 	ContextKeyAPIKeyID = "api_key_id"
@@ -277,40 +273,6 @@ func AuthMiddleware() gin.HandlerFunc {
 					effectiveKey.UserRole = keyRec.UserRole
 					effectiveKey.UserBalance = keyRec.UserBalance
 				}
-				if keyRec.OrgID > 0 {
-					effectiveKey.OrgID = keyRec.OrgID
-				}
-			}
-		}
-
-		// 3b. Organization/user budget gate. The check is deliberately after the
-		// authoritative key refresh (so a stale snapshot cannot miss a newly
-		// lowered budget) and before the wallet reservation. A missing budget
-		// table is treated as fail-open and logged once: budgets are an optional
-		// governance layer, not a reason to take the data plane down.
-		if !freeRead && effectiveKey.ID > 0 {
-			if service := governance.GlobalService(); service != nil {
-				checkCtx, cancel := context.WithTimeout(c.Request.Context(), 500*time.Millisecond)
-				decision, blocked, checkErr := service.Check(checkCtx, governance.Subject{
-					KeyID:  effectiveKey.ID,
-					UserID: effectiveKey.UserID,
-					OrgID:  effectiveKey.OrgID,
-				})
-				cancel()
-				if checkErr != nil {
-					telemetry.WarnLogger(telemetry.ScopedLogger("budget"), "budget-check:"+effectiveKey.Key, 30*time.Second,
-						"budget check failed; allowing request", "error", checkErr.Error(), "key", effectiveKey.Key)
-				} else if blocked {
-					auditAuthFailure(c, rawKey, http.StatusPaymentRequired, "Budget exhausted")
-					AbortWithDenial(c, &AccessDenial{
-						StatusCode: http.StatusPaymentRequired,
-						Message:    "Organization or account budget exhausted. Please contact an administrator.",
-						Type:       "insufficient_quota",
-						Code:       "budget_exceeded",
-					})
-					_ = decision
-					return
-				}
 			}
 		}
 
@@ -362,9 +324,6 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		// Save context info
 		c.Set(ContextKeyTenant, effectiveKey.TenantID)
-		// Attribution for the audit row and future budget scoping. Migration 30
-		// backfills legacy keys; new keys inherit their owner's organization.
-		c.Set(ContextKeyOrg, effectiveKey.OrgID)
 		// The digest is what audit rows and ledger joins use; the public id is
 		// what logs and the console display.
 		c.Set(ContextKeyAPIKey, effectiveKey.Key)

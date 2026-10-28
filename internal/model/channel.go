@@ -108,22 +108,6 @@ func (c *ChannelConfig) OnlySupportsProtocol(proto string) bool {
 	return true
 }
 
-// HasExplicitProtocol checks if the channel explicitly lists the given protocol in its Protocols slice.
-func (c *ChannelConfig) HasExplicitProtocol(proto string) bool {
-	for _, p := range c.Protocols {
-		if p == "*" || p == proto {
-			return true
-		}
-		if (p == "messages" || p == "anthropic_messages") && (proto == "messages" || proto == "anthropic_messages") {
-			return true
-		}
-		if (p == "chat" || p == "openai_chat") && (proto == "chat" || proto == "openai_chat") {
-			return true
-		}
-	}
-	return false
-}
-
 // SupportsModel checks if this channel can service the requested model (supporting cascading models, wildcards, and prefix stripping).
 func (c *ChannelConfig) SupportsModel(requestedModel string) bool {
 	if _, allowed, overridden := c.routeProvider(requestedModel); overridden {
@@ -256,7 +240,6 @@ type APIKeyConfig struct {
 	Status           string   `yaml:"status" json:"status"`
 	GroupName        string   `yaml:"group_name" json:"group_name"`                                   // pricing group e.g. default, vip
 	UserID           int64    `yaml:"user_id" json:"user_id"`                                         // owner user id
-	OrgID            int64    `yaml:"org_id,omitempty" json:"org_id,omitempty"`                       // attribution organization
 	FormatValidation string   `yaml:"format_validation,omitempty" json:"format_validation,omitempty"` // "off" | "lenient" | "strict"
 	UserStatus       string   `yaml:"user_status,omitempty" json:"user_status,omitempty"`
 	UserRole         string   `yaml:"user_role,omitempty" json:"user_role,omitempty"`

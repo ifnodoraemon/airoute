@@ -1,16 +1,25 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Download, Plus, RefreshCw, Trash2, Upload } from 'lucide-react';
 
 function money(value) {
   return `¥${Number(value || 0).toFixed(4)}`;
 }
 
+// A spread is our selling price minus the supplier price. Negative means we sell
+// below what the channel charges us, so it is the one value that must stand out.
+function spreadClass(value) {
+  return value < 0 ? 'text-rose-600 dark:text-rose-400 font-semibold' : '';
+}
+
 const EMPTY = { channel: '', model: '', input_cost: '', output_cost: '' };
 
-// SupplierCostPanel manages the contracted per-million-token prices. These rows
-// are the only source of cost_basis_units on new usage rows; an unknown pair
-// stores NULL rather than zero.
-export default function SupplierCostPanel({ adminFetch, showToast, lang = 'zh' }) {
+// SupplierCostPanel manages the contracted per-million-token supplier prices and
+// shows them next to our own selling prices. This is a pure price-list
+// comparison: our price (loaded from /api/v1/admin/pricing) and the supplier
+// price are stored and edited separately, so the panel no longer writes any cost
+// field onto usage rows — it no longer derives cost_basis_units, it only pairs
+// the two price lists and shows the spread (ours - supplier) per model.
+export default function SupplierCostPanel({ adminFetch, showToast, lang = 'zh', prices = [] }) {
   const isZh = lang === 'zh';
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState(EMPTY);
@@ -21,6 +30,22 @@ export default function SupplierCostPanel({ adminFetch, showToast, lang = 'zh' }
   const notify = useCallback((message, type = 'success') => {
     if (showToast) showToast(message, type);
   }, [showToast]);
+
+  // Our selling prices indexed by model. A model may carry several group tiers;
+  // the default tier is the reference price, and only when it is absent does the
+  // first row for that model stand in for it.
+  const ourPrices = useMemo(() => {
+    const byModel = new Map();
+    for (const price of prices || []) {
+      if (!price || !price.model) continue;
+      const current = byModel.get(price.model);
+      const isDefault = (price.group_name || 'default') === 'default';
+      if (!current || (isDefault && (current.group_name || 'default') !== 'default')) {
+        byModel.set(price.model, price);
+      }
+    }
+    return byModel;
+  }, [prices]);
 
   const load = useCallback(async () => {
     if (!adminFetch) return;
@@ -55,7 +80,7 @@ export default function SupplierCostPanel({ adminFetch, showToast, lang = 'zh' }
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok || body.code !== 0) throw new Error(body.error || `HTTP ${res.status}`);
-      notify(isZh ? '价目已保存' : 'Price saved');
+      notify(isZh ? '供应商单价已保存' : 'Supplier price saved');
       setForm(EMPTY);
       await load();
     } catch (err) {
@@ -71,7 +96,7 @@ export default function SupplierCostPanel({ adminFetch, showToast, lang = 'zh' }
       const res = await adminFetch(`/api/v1/admin/supplier-costs/${row.id}`, { method: 'DELETE' });
       const body = await res.json().catch(() => ({}));
       if (!res.ok || body.code !== 0) throw new Error(body.error || `HTTP ${res.status}`);
-      notify(isZh ? '价目已删除' : 'Price deleted');
+      notify(isZh ? '供应商单价已删除' : 'Supplier price deleted');
       await load();
     } catch (err) {
       notify(err.message, 'error');
@@ -130,8 +155,12 @@ export default function SupplierCostPanel({ adminFetch, showToast, lang = 'zh' }
     <div className="rounded-xl border border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] p-3 space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-xs font-semibold text-[#202124] dark:text-[#F1F2F4]">{isZh ? '供应商价目（成本）' : 'Supplier prices (cost)'}</div>
-          <div className="text-[10px] text-[#656B75] dark:text-[#A1A7B0]">{isZh ? '单位：CNY / 百万 tokens；匹配通道名 + 模型。' : 'CNY per 1M tokens, keyed by channel name + model.'}</div>
+          <div className="text-xs font-semibold text-[#202124] dark:text-[#F1F2F4]">{isZh ? '供应商单价' : 'Supplier prices'}</div>
+          <div className="text-[10px] text-[#656B75] dark:text-[#A1A7B0]">
+            {isZh
+              ? '单位：CNY / 百万 tokens；按通道名 + 模型匹配，并与我们的售价分开存储，此处仅作并排对照。'
+              : 'CNY per 1M tokens, keyed by channel name + model. Stored separately from our selling prices; the table only compares the two.'}
+          </div>
         </div>
         <div className="flex items-center space-x-1.5">
           <label className="inline-flex items-center space-x-1 px-2 py-1.5 rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] text-[11px] text-[#656B75] dark:text-[#A1A7B0] cursor-pointer">
@@ -152,8 +181,8 @@ export default function SupplierCostPanel({ adminFetch, showToast, lang = 'zh' }
       <form onSubmit={save} className="grid grid-cols-2 md:grid-cols-5 gap-2">
         <input value={form.channel} onChange={(e) => setForm((prev) => ({ ...prev, channel: e.target.value }))} className={inputClass} placeholder={isZh ? '通道名' : 'Channel'} aria-label={isZh ? '通道名' : 'Channel'} />
         <input value={form.model} onChange={(e) => setForm((prev) => ({ ...prev, model: e.target.value }))} className={inputClass} placeholder={isZh ? '模型' : 'Model'} aria-label={isZh ? '模型' : 'Model'} />
-        <input type="number" min="0" step="0.01" value={form.input_cost} onChange={(e) => setForm((prev) => ({ ...prev, input_cost: e.target.value }))} className={inputClass} placeholder={isZh ? '输入成本' : 'Input cost'} aria-label={isZh ? '输入成本' : 'Input cost'} />
-        <input type="number" min="0" step="0.01" value={form.output_cost} onChange={(e) => setForm((prev) => ({ ...prev, output_cost: e.target.value }))} className={inputClass} placeholder={isZh ? '输出成本' : 'Output cost'} aria-label={isZh ? '输出成本' : 'Output cost'} />
+        <input type="number" min="0" step="0.01" value={form.input_cost} onChange={(e) => setForm((prev) => ({ ...prev, input_cost: e.target.value }))} className={inputClass} placeholder={isZh ? '供应商输入价' : 'Supplier input price'} aria-label={isZh ? '供应商输入价' : 'Supplier input price'} />
+        <input type="number" min="0" step="0.01" value={form.output_cost} onChange={(e) => setForm((prev) => ({ ...prev, output_cost: e.target.value }))} className={inputClass} placeholder={isZh ? '供应商输出价' : 'Supplier output price'} aria-label={isZh ? '供应商输出价' : 'Supplier output price'} />
         <button type="submit" disabled={busy || !form.channel.trim() || !form.model.trim() || form.input_cost === '' || form.output_cost === ''} className="inline-flex items-center justify-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-[#355CFF] hover:bg-[#2A4AE0] text-white text-xs font-medium disabled:opacity-50">
           <Plus className="w-3.5 h-3.5" />
           <span>{isZh ? '保存' : 'Save'}</span>
@@ -166,29 +195,62 @@ export default function SupplierCostPanel({ adminFetch, showToast, lang = 'zh' }
             <tr className="text-left text-[10px] uppercase tracking-wide text-[#656B75] dark:text-[#A1A7B0] border-b border-[#E4E6E9] dark:border-[#2C3038]">
               <th className="py-2 pr-3">{isZh ? '通道' : 'Channel'}</th>
               <th className="py-2 pr-3">{isZh ? '模型' : 'Model'}</th>
-              <th className="py-2 pr-3 text-right">{isZh ? '输入/百万' : 'Input/1M'}</th>
-              <th className="py-2 pr-3 text-right">{isZh ? '输出/百万' : 'Output/1M'}</th>
-              <th className="py-2 pr-3">{isZh ? '状态' : 'Status'}</th>
+              <th className="py-2 pr-3 text-right">{isZh ? '我们售价 (输入/输出)' : 'Our price (in/out)'}</th>
+              <th className="py-2 pr-3 text-right">{isZh ? '供应商单价 (输入/输出)' : 'Supplier price (in/out)'}</th>
+              <th className="py-2 pr-3 text-right">{isZh ? '价差 (我们-供应商)' : 'Spread (ours - supplier)'}</th>
               <th className="py-2 text-right">{isZh ? '操作' : ''}</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.id} className="border-b border-[#F0F1F2] dark:border-[#22252B]">
-                <td className="py-2 pr-3">{row.channel}</td>
-                <td className="py-2 pr-3 font-mono text-[11px]">{row.model}</td>
-                <td className="py-2 pr-3 text-right font-mono">{money(row.input_cost)}</td>
-                <td className="py-2 pr-3 text-right font-mono">{money(row.output_cost)}</td>
-                <td className="py-2 pr-3">{row.status}</td>
-                <td className="py-2 text-right">
-                  <button type="button" onClick={() => remove(row)} disabled={busy} className="p-1 text-[#656B75] hover:text-red-500" title={isZh ? '删除' : 'Delete'}>
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {rows.map((row) => {
+              const ours = ourPrices.get(row.model) || null;
+              const ourInput = ours ? Number(ours.prompt_price || 0) : null;
+              const ourOutput = ours ? Number(ours.completion_price || 0) : null;
+              const supplierInput = Number(row.input_cost || 0);
+              const supplierOutput = Number(row.output_cost || 0);
+              const inputSpread = ours ? ourInput - supplierInput : null;
+              const outputSpread = ours ? ourOutput - supplierOutput : null;
+
+              return (
+                <tr key={row.id} className="border-b border-[#F0F1F2] dark:border-[#22252B]">
+                  <td className="py-2 pr-3">{row.channel}</td>
+                  <td className="py-2 pr-3 font-mono text-[11px]">{row.model}</td>
+                  <td className="py-2 pr-3 text-right font-mono">
+                    {ours ? (
+                      <div className="space-y-0.5">
+                        <div>{money(ourInput)}</div>
+                        <div>{money(ourOutput)}</div>
+                      </div>
+                    ) : (
+                      <span className="text-[#656B75] dark:text-[#A1A7B0]">{isZh ? '未定价' : 'Unpriced'}</span>
+                    )}
+                  </td>
+                  <td className="py-2 pr-3 text-right font-mono">
+                    <div className="space-y-0.5">
+                      <div>{money(supplierInput)}</div>
+                      <div>{money(supplierOutput)}</div>
+                    </div>
+                  </td>
+                  <td className="py-2 pr-3 text-right font-mono">
+                    {ours ? (
+                      <div className="space-y-0.5">
+                        <div className={spreadClass(inputSpread)}>{money(inputSpread)}</div>
+                        <div className={spreadClass(outputSpread)}>{money(outputSpread)}</div>
+                      </div>
+                    ) : (
+                      <span className="text-[#656B75] dark:text-[#A1A7B0]">—</span>
+                    )}
+                  </td>
+                  <td className="py-2 text-right">
+                    <button type="button" onClick={() => remove(row)} disabled={busy} className="p-1 text-[#656B75] hover:text-red-500" title={isZh ? '删除' : 'Delete'}>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
             {rows.length === 0 && (
-              <tr><td colSpan={6} className="py-6 text-center text-[11px] text-[#656B75] dark:text-[#A1A7B0]">{isZh ? '尚未配置供应商成本' : 'No supplier prices yet'}</td></tr>
+              <tr><td colSpan={6} className="py-6 text-center text-[11px] text-[#656B75] dark:text-[#A1A7B0]">{isZh ? '尚未配置供应商单价' : 'No supplier prices yet'}</td></tr>
             )}
           </tbody>
         </table>

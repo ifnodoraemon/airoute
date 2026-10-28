@@ -302,3 +302,96 @@ describe('PricingManager add/edit modal unsaved-changes guard', () => {
     expect(JSON.parse(post[1].body).model).toBe('gpt-new');
   });
 });
+
+// The supplier price list used to live on the removed Cost & Margin page. It now
+// shares the pricing page as a third sub-tab, where our selling price and the
+// supplier price are shown side by side and the spread (ours - supplier) is the
+// only derived value: the two price lists stay separate, nothing is written back.
+describe('PricingManager supplier prices sub-tab', () => {
+  const supplierRows = [
+    { id: 1, channel: 'ch-a', model: 'gpt-x', input_cost: 12.5, output_cost: 25, status: 'active' },
+    { id: 2, channel: 'ch-b', model: 'gpt-unpriced', input_cost: 1, output_cost: 2, status: 'active' },
+    { id: 3, channel: 'ch-c', model: 'gpt-x', input_cost: 25, output_cost: 40, status: 'active' },
+  ];
+
+  function supplierPricingResponse() {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ code: 0, data: supplierRows }),
+    };
+  }
+
+  async function openSupplierTab() {
+    const showToast = vi.fn();
+    const adminFetch = vi.fn(async (url) => {
+      if (String(url).includes('/admin/models')) return modelsResponse();
+      if (String(url).includes('/admin/supplier-costs')) return supplierPricingResponse();
+      // gpt-x carries a default tier and a VIP tier; the default one is our
+      // reference price.
+      return pricingResponse([
+        { model: 'gpt-x', group_name: 'vip', prompt_price: 30, completion_price: 60, currency: 'CNY' },
+        { model: 'gpt-x', group_name: 'default', prompt_price: 20, completion_price: 40, currency: 'CNY' },
+      ]);
+    });
+    render(<PricingManager adminFetch={adminFetch} showToast={showToast} isAdmin lang="zh" />);
+    await screen.findAllByText('gpt-x');
+    fireEvent.click(screen.getByRole('button', { name: /供应商单价/ }));
+    await screen.findByText('ch-a');
+    return { adminFetch, showToast };
+  }
+
+  function supplierRowText(channel) {
+    const row = screen.getByText(channel).closest('tr');
+    if (!row) throw new Error(`no row for ${channel}`);
+    return row.textContent;
+  }
+
+  it('shows our selling price, the supplier price and the spread side by side', async () => {
+    await openSupplierTab();
+
+    const row = supplierRowText('ch-a');
+    // Our price: the default tier (20/40), not the VIP tier (30/60).
+    expect(row).toContain('¥20.0000');
+    expect(row).toContain('¥40.0000');
+    // Supplier price as contracted.
+    expect(row).toContain('¥12.5000');
+    expect(row).toContain('¥25.0000');
+    // Spread: 20 - 12.5 = 7.5 and 40 - 25 = 15.
+    expect(row).toContain('¥7.5000');
+    expect(row).toContain('¥15.0000');
+  });
+
+  it('marks a model without a selling price as unpriced instead of assuming zero', async () => {
+    await openSupplierTab();
+
+    expect(supplierRowText('ch-b')).toContain('未定价');
+  });
+
+  it('renders a negative spread in red', async () => {
+    await openSupplierTab();
+
+    // ch-c sells gpt-x at 25/40 against our 20/40: the prompt spread is -5.
+    expect(supplierRowText('ch-c')).toContain('¥-5.0000');
+    expect(screen.getByText('¥-5.0000').className).toContain('text-rose-600');
+  });
+
+  it('keeps the supplier price add form posting and reloading', async () => {
+    const { adminFetch, showToast } = await openSupplierTab();
+
+    fireEvent.change(screen.getByLabelText('通道名'), { target: { value: 'ch-new' } });
+    fireEvent.change(screen.getByLabelText('模型'), { target: { value: 'gpt-z' } });
+    fireEvent.change(screen.getByLabelText('供应商输入价'), { target: { value: '3' } });
+    fireEvent.change(screen.getByLabelText('供应商输出价'), { target: { value: '6' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('供应商单价已保存', 'success'));
+    const post = adminFetch.mock.calls.find(([, options]) => options?.method === 'POST');
+    expect(JSON.parse(post[1].body)).toEqual({
+      channel: 'ch-new',
+      model: 'gpt-z',
+      input_cost: 3,
+      output_cost: 6,
+    });
+  });
+});

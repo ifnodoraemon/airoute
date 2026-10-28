@@ -492,16 +492,13 @@ func (db *DB) migrate() error {
 		{Version: 27, Name: "users_email_unique", Up: createUsersEmailUniqueIndex},
 		{Version: 28, Name: "operational_indexes", Up: addOperationalIndexes},
 		{Version: 29, Name: "api_key_digests", Up: migrateAPIKeysToDigests},
-		{Version: 30, Name: "org_governance", Up: addOrgGovernance},
 		{Version: 31, Name: "response_contexts", Up: createResponseContexts},
 		{Version: 32, Name: "legacy_usage_log_reasons", Up: rewriteLegacyUsageLogReasons},
 		{Version: 33, Name: "billing_counter_artifact_repair", Up: repairDeletedAuditCounterDrift},
 		{Version: 34, Name: "drop_legacy_nano_money_mirrors", Up: dropLegacyNanoMoneyColumns},
-		{Version: 35, Name: "budgets", Up: CreateBudgets},
-		{Version: 36, Name: "wallet_ledger", Up: CreateWalletLedger},
 		{Version: 37, Name: "supplier_costs", Up: CreateSupplierCosts},
-		{Version: 38, Name: "usage_daily", Up: CreateUsageDaily},
 		{Version: 39, Name: "api_key_public_ids", Up: addAPIKeyPublicIDs},
+		{Version: 40, Name: "drop_legacy_governance_objects", Up: dropLegacyGovernanceObjects},
 	}
 	return db.runMigrations(migrations)
 }

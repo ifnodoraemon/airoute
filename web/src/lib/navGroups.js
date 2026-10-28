@@ -13,10 +13,10 @@
 //
 //   monitoring   what is happening right now (overview, call logs)
 //   gateway      what the gateway serves and how requests are routed
-//   billing      money in every form: prices, supplier reconciliation,
-//                cost & margin analysis, wallet credits and their ledger
-//   identity     who may call the gateway and within which limits
-//                (credentials, accounts, cost centres, budgets)
+//   billing      money in every form: our list prices (together with the
+//                supplier prices they are compared against), supplier
+//                reconciliation, and the wallet credits
+//   identity     who may call the gateway (credentials, accounts)
 //   ecosystem    interactive exercise and third-party integrations
 //
 // This module is the single source of truth for BOTH the sidebar and the
@@ -31,17 +31,17 @@ export const ADMIN_NAV_GROUPS = [
     id: 'billing',
     zh: '计费与财务',
     en: 'Billing & Finance',
-    // Money in every form: list prices, what suppliers charge, what the margin
-    // is, and the wallet credits plus the ledger that records their movement.
-    tabs: ['pricing', 'reconciliation', 'costs', 'wallet', 'ledger'],
+    // Money in every form: our selling prices (with the supplier prices they are
+    // compared against on the same page), what suppliers charge us in aggregate,
+    // and the wallet credits.
+    tabs: ['pricing', 'reconciliation', 'wallet'],
   },
   {
     id: 'identity',
     zh: '身份与治理',
     en: 'Identity & Access',
-    // Who may call the gateway (keys, users, organisations) and who may spend
-    // how much (budgets).
-    tabs: ['keys', 'users', 'orgs', 'budgets'],
+    // Who may call the gateway: API credentials and the accounts behind them.
+    tabs: ['keys', 'users'],
   },
   { id: 'ecosystem', zh: '演练与生态', en: 'Ecosystem', tabs: ['playground', 'skills', 'mcp'] },
 ];

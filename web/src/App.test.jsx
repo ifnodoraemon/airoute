@@ -194,7 +194,7 @@ describe('App integration', () => {
     // pins the split and that the moved items really render under their new
     // group header rather than merely being listed somewhere in the nav.
     signIn();
-    window.history.replaceState(null, '', '/#/costs');
+    window.history.replaceState(null, '', '/#/reconciliation');
     stubGateway({
       '/api/v1/auth/me': () => jsonResponse({ code: 0, data: { user: { username: 'root', role: 'admin' } } }),
     });
@@ -217,13 +217,12 @@ describe('App integration', () => {
     };
 
     const billing = groupOf('计费与财务');
-    expect(billing.getByText('成本与毛利')).toBeInTheDocument();
-    expect(billing.getByText('钱包资金流水')).toBeInTheDocument();
+    expect(billing.getByText('供应商对账')).toBeInTheDocument();
+    expect(billing.getByText('卡密与充值')).toBeInTheDocument();
 
     const identity = groupOf('身份与治理');
     expect(identity.getByText('用户管理')).toBeInTheDocument();
-    expect(identity.getByText('组织与成本中心')).toBeInTheDocument();
-    expect(identity.getByText('预算与告警')).toBeInTheDocument();
+    expect(identity.getByText('API 密钥')).toBeInTheDocument();
 
     for (const header of ['监控与分析', '模型网关与调度', '计费与财务', '身份与治理', '演练与生态']) {
       expect(sidebar.getByText(header)).toBeInTheDocument();
@@ -233,7 +232,7 @@ describe('App integration', () => {
     // includes() chain sent to 「演练与生态」 now agrees with the sidebar.
     const header = document.querySelector('header');
     expect(header.textContent).toContain('计费与财务');
-    expect(header.textContent).toContain('成本与毛利');
+    expect(header.textContent).toContain('供应商对账');
     expect(header.textContent).not.toContain('安全与资产');
     expect(header.textContent).not.toContain('演练与生态');
   });

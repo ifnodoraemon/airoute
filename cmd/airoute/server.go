@@ -15,14 +15,10 @@ import (
 
 	"github.com/ifnodoraemon/airoute/internal/api"
 	"github.com/ifnodoraemon/airoute/internal/billing"
-	"github.com/ifnodoraemon/airoute/internal/budget"
 	"github.com/ifnodoraemon/airoute/internal/config"
 	"github.com/ifnodoraemon/airoute/internal/controlplane"
-	"github.com/ifnodoraemon/airoute/internal/costing"
 	"github.com/ifnodoraemon/airoute/internal/distributed"
-	"github.com/ifnodoraemon/airoute/internal/governance"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
-	"github.com/ifnodoraemon/airoute/internal/notify"
 	"github.com/ifnodoraemon/airoute/internal/router"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
@@ -207,26 +203,6 @@ func runServer(args []string) {
 	defer close(stopLiveStats)
 	distributed.StartLiveStatsPublisher(redisClient, stopLiveStats)
 
-	// Budget governance: rules, counters, threshold events and the optional
-	// alert fan-out. Redis gives replicas one shared counter; the memory
-	// fallback keeps single-node deployments working with no extra middleware.
-	alertMulti, alertWarnings := notify.FromEnv(nil)
-	for _, warning := range alertWarnings {
-		telemetry.ScopedLogger("system").Warn("alert configuration warning", "warning", warning)
-	}
-	var alertSender notify.Sender
-	if alertMulti.Configured() {
-		alertSender = alertMulti
-	}
-	var budgetCounter budget.Counter = budget.NewMemoryCounter()
-	if kv := redisClient.BudgetCounterKV(); kv != nil {
-		budgetCounter = budget.NewKVCounter(kv)
-		telemetry.ScopedLogger("system").Info("budget counters use the shared Redis backend")
-	}
-	governance.SetGlobal(governance.NewService(repo, budgetCounter, alertSender))
-	governance.GlobalService().StartFlusher(30 * time.Second)
-	governance.GlobalService().StartReconciler(6 * time.Hour)
-
 	// Initialize Async Usage Logger for zero-latency audit logs
 	// NOTE: Must be after Redis init so redisStreamWorker can start consuming the stream
 	asyncLogger := storage.InitAsyncLogger(repo, 10000, 100, 500*time.Millisecond)
@@ -234,7 +210,6 @@ func runServer(args []string) {
 
 	// Initialize Real-Time Model Pricing & Prompt-Cache Billing Engine
 	billing.InitGlobalEngine(repo)
-	costing.InitGlobal(repo)
 
 	// Enable synchronous charge settlement: money moves at request completion and
 	// no longer waits for the audit log to be persisted.

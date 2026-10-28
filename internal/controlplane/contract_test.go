@@ -318,10 +318,6 @@ func TestCreateAPIKeyRequestAcceptsExactlyTheWritableColumns(t *testing.T) {
 		// The public identifier is minted by the repository when the row is
 		// created; it is never accepted from the creation body.
 		"key_id": true,
-		// Organization attribution is derived server-side (the owner's org) when
-		// CreateAPIKey stores the row; accepting it in the body would let a tenant
-		// label its traffic as another organization.
-		"org_id": true,
 	}
 
 	for _, name := range sortedNames(record) {
@@ -429,7 +425,7 @@ func TestAdminResponseShapesAreStable(t *testing.T) {
 			want: []string{
 				"id", "key_id", "tenant_id", "allowed_models", "rpm", "tpm", "budget",
 				"used_tokens", "used_cost", "budget_units", "used_cost_units",
-				"group_name", "user_id", "org_id", "status", "format_validation",
+				"group_name", "user_id", "status", "format_validation",
 				"created_at", "updated_at",
 			},
 		},

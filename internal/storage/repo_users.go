@@ -160,10 +160,7 @@ func insertUser(db userInserter, u *UserRecord) error {
 			return ErrEmailAlreadyRegistered
 		}
 	}
-	// New accounts start in the root unit; an administrator can move them later
-	// (the organization UI/API lands in M2). Reading the org in the same INSERT
-	// keeps account creation atomic.
-	id, err := db.InsertGetID(`INSERT INTO users (username, email, password_hash, role, status, balance, balance_units, group_name, org_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT id FROM orgs WHERE code = 'default' LIMIT 1), CURRENT_TIMESTAMP)`,
+	id, err := db.InsertGetID(`INSERT INTO users (username, email, password_hash, role, status, balance, balance_units, group_name, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 		u.Username, u.Email, u.PasswordHash, u.Role, u.Status, u.Balance, ToUnits(u.Balance), u.GroupName)
 	if err != nil {
 		if isEmailConflictError(err) {
@@ -277,9 +274,6 @@ func (r *Repository) UpdateUserBalance(username string, delta float64) error {
 	if err != nil {
 		return err
 	}
-	if err := r.appendWalletLedger(tx, userID, WalletTypeAdjustment, units, newUnits, "admin", "balance delta", ""); err != nil {
-		return err
-	}
 	return tx.Commit()
 }
 
@@ -306,14 +300,7 @@ func (r *Repository) SetUserBalance(username string, balance float64) error {
 	if err := r.lockWalletUserRows(tx, `id = ?`, []any{userID}); err != nil {
 		return err
 	}
-	var oldUnits int64
-	if err := tx.QueryRow(`SELECT COALESCE(balance_units, 0) FROM users WHERE id = ?`, userID).Scan(&oldUnits); err != nil {
-		return err
-	}
 	if err := requireUserUpdated(tx.Exec(`UPDATE users SET balance = ?, balance_units = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status <> 'deleted'`, balance, newUnits, userID)); err != nil {
-		return err
-	}
-	if err := r.appendWalletLedger(tx, userID, WalletTypeAdjustment, newUnits-oldUnits, newUnits, "admin", "balance set", ""); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -333,15 +320,6 @@ func (r *Repository) UpdateUserRole(username, role string) error {
 		role = "user"
 	}
 	return requireUserUpdated(r.db.Exec(`UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ? AND status <> 'deleted'`, role, username))
-}
-
-// DeductUserBalance deducts quota/cost from user wallet. Admins are exempt.
-func (r *Repository) DeductUserBalance(userID int64, cost float64) error {
-	if userID <= 0 || cost <= 0 {
-		return nil
-	}
-	_, err := r.db.Exec(`UPDATE users SET balance = balance - ?, balance_units = COALESCE(balance_units, 0) - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND role != 'admin'`, cost, ToUnits(cost), userID)
-	return err
 }
 
 // ListUsers returns all registered users without password hashes.

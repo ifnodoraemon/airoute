@@ -168,8 +168,6 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `STORAGE_S3_ENDPOINT` / `STORAGE_S3_BUCKET` / `STORAGE_S3_ACCESS_KEY` / `STORAGE_S3_SECRET_KEY` / `STORAGE_S3_REGION` / `STORAGE_S3_USE_SSL` / `STORAGE_S3_PATH_STYLE` / `STORAGE_S3_PUBLIC_URL_PREFIX` | endpoint/bucket/region have defaults; credentials are **empty** | S3-compatible artifact storage. `s3`/`rustfs` without explicit access key + secret key refuses to start (no default credential ships); partial `storage:` blocks are merged field-by-field over the defaults |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | unset | E-mail delivery for verification codes and password resets; disabled when `SMTP_HOST` is empty |
 | `STRIPE_API_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_SUCCESS_URL` / `STRIPE_API_BASE` | unset | Stripe payments; webhooks are rejected while `STRIPE_WEBHOOK_SECRET` is empty |
-| `GATEWAY_ALERT_WEBHOOK_URL` / `GATEWAY_ALERT_DINGTALK_URL` / `GATEWAY_ALERT_FEISHU_URL` / `GATEWAY_ALERT_WECOM_URL` | unset | Budget threshold alerts to a generic webhook or DingTalk/Feishu/WeCom bot. Each configured URL gets its own sender |
-| `GATEWAY_ALERT_EMAIL_TO` | unset | Comma-separated e-mail recipients for budget alerts; requires `SMTP_HOST` (the relay is shared with verification mail) |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` / `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | unset | OAuth login providers |
 | `ENABLE_SANDBOX_RECHARGE` / `ENABLE_SIMULATED_OAUTH` | `false` | Local development only: enable fake recharge / simulated OAuth |
 | `AIROUTE_DEV_VERIFICATION_CODE` | unset | Set `true` to return e-mail verification codes in API responses (development only) |

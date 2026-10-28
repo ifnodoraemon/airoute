@@ -141,14 +141,6 @@ func (r *Repository) RedeemCode(code, username string) (*RedemptionCodeRecord, e
 		return nil, fmt.Errorf("充值失败: 用户不存在或不可用 (%s): %w", username, err)
 	}
 
-	var userID, balanceAfter int64
-	if err := tx.QueryRow(`SELECT id, COALESCE(balance_units, 0) FROM users WHERE username = ?`, username).Scan(&userID, &balanceAfter); err != nil {
-		return nil, err
-	}
-	if err := r.appendWalletLedger(tx, userID, WalletTypeRedemption, ToUnits(rec.Amount), balanceAfter, "", "redeem code", fmt.Sprintf("redeem:%d", rec.ID)); err != nil {
-		return nil, fmt.Errorf("记录钱包流水失败: %w", err)
-	}
-
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -261,14 +253,6 @@ func (r *Repository) CompleteRechargeOrder(orderNo string) (*RechargeOrderRecord
 	}
 	if affected, _ := credit.RowsAffected(); affected == 0 {
 		return nil, fmt.Errorf("充值失败: 用户不存在 (%s)", rec.Username)
-	}
-
-	var userID, balanceAfter int64
-	if err := tx.QueryRow(`SELECT id, COALESCE(balance_units, 0) FROM users WHERE username = ?`, rec.Username).Scan(&userID, &balanceAfter); err != nil {
-		return nil, err
-	}
-	if err := r.appendWalletLedger(tx, userID, WalletTypeRecharge, ToUnits(rec.Amount), balanceAfter, "stripe", "recharge order", "order:"+rec.OrderNo); err != nil {
-		return nil, fmt.Errorf("记录钱包流水失败: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {

@@ -27,7 +27,7 @@ type AdminConfig struct {
 	Password string `yaml:"password"`
 }
 
-// AuthConfig defines user authentication and governance policies.
+// AuthConfig defines user authentication policies.
 type AuthConfig struct {
 	AllowRegistration        *bool   `yaml:"allow_registration"`
 	RequireEmailVerification *bool   `yaml:"require_email_verification"`
@@ -37,19 +37,16 @@ type AuthConfig struct {
 
 // Config represents the complete gateway configuration.
 type Config struct {
-	Server                ServerConfig          `yaml:"server"`
-	Admin                 AdminConfig           `yaml:"admin"`
-	Auth                  AuthConfig            `yaml:"auth"`
-	Storage               StorageConfig         `yaml:"storage"`
-	Channels              []model.ChannelConfig `yaml:"channels"`
-	APIKeys               []model.APIKeyConfig  `yaml:"api_keys"`
-	ModelValidation       ModelValidationConfig `yaml:"model_validation"`
-	EnableFallback        bool                  `yaml:"enable_fallback"`
-	MaxRetries            int                   `yaml:"max_retries"`
-	DefaultTimeoutSeconds int                   `yaml:"default_timeout_seconds"`
-	HasConfiguredKeys     bool                  `yaml:"-"`
-	keyMu                 sync.RWMutex          `yaml:"-"`
-	apiKeysMap            map[string]*model.APIKeyConfig
+	Server            ServerConfig          `yaml:"server"`
+	Admin             AdminConfig           `yaml:"admin"`
+	Auth              AuthConfig            `yaml:"auth"`
+	Storage           StorageConfig         `yaml:"storage"`
+	Channels          []model.ChannelConfig `yaml:"channels"`
+	APIKeys           []model.APIKeyConfig  `yaml:"api_keys"`
+	ModelValidation   ModelValidationConfig `yaml:"model_validation"`
+	HasConfiguredKeys bool                  `yaml:"-"`
+	keyMu             sync.RWMutex          `yaml:"-"`
+	apiKeysMap        map[string]*model.APIKeyConfig
 }
 
 // GetAPIKey returns the APIKeyConfig in O(1) constant time safely.
@@ -140,9 +137,6 @@ func DefaultConfig() *Config {
 			InitialUserBalance: 0,
 			TokenExpiryHours:   168,
 		},
-		EnableFallback:        true,
-		MaxRetries:            3,
-		DefaultTimeoutSeconds: 60,
 		// Safe baseline: local disk storage, no credentials. S3 deployments must
 		// supply STORAGE_S3_* explicitly; no repository-published secret is used.
 		Storage: defaultStorageConfig(),

@@ -1,7 +1,7 @@
 import { getStoredToken, getStoredUser } from '../api/session';
 
 const CONSOLE_TABS = ['dashboard', 'models', 'pricing', 'channels', 'reconciliation',
-  'orgs', 'budgets', 'costs', 'ledger', 'keys', 'wallet', 'logs', 'skills', 'mcp', 'users', 'playground', 'docs'];
+  'keys', 'wallet', 'logs', 'skills', 'mcp', 'users', 'playground', 'docs'];
 const USER_TABS = ['dashboard', 'wallet', 'keys', 'playground', 'pricing', 'logs', 'docs'];
 
 // A cookie cannot be inspected by JavaScript. Preserve console deep links until

@@ -30,7 +30,6 @@ type apiKeyView struct {
 	UsedCostUnits    int64     `json:"used_cost_units"`
 	GroupName        string    `json:"group_name"`
 	UserID           int64     `json:"user_id"`
-	OrgID            int64     `json:"org_id"`
 	Status           string    `json:"status"`
 	FormatValidation string    `json:"format_validation,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
@@ -57,7 +56,6 @@ func apiKeyViewFrom(rec *storage.APIKeyRecord) apiKeyView {
 		UsedCostUnits:    rec.UsedCostUnits,
 		GroupName:        rec.GroupName,
 		UserID:           rec.UserID,
-		OrgID:            rec.OrgID,
 		Status:           rec.Status,
 		FormatValidation: rec.FormatValidation,
 		CreatedAt:        rec.CreatedAt,

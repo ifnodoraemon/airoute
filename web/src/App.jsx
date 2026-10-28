@@ -2,10 +2,6 @@ import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import {
   Zap,
   Server,
-  Building2,
-  Gauge,
-  Calculator,
-  ReceiptText,
   Key,
   Terminal,
   ShieldAlert,
@@ -68,10 +64,6 @@ const PricingManager = lazy(() => import('./components/PricingManager'));
 const SkillHubView = lazy(() => import('./components/SkillHubView'));
 const McpIntegrationView = lazy(() => import('./components/McpIntegrationView'));
 const UserManagementView = lazy(() => import('./components/UserManagementView'));
-const OrganizationsView = lazy(() => import('./components/OrganizationsView'));
-const BudgetsView = lazy(() => import('./components/BudgetsView'));
-const CostAnalyticsView = lazy(() => import('./components/CostAnalyticsView'));
-const WalletLedgerView = lazy(() => import('./components/WalletLedgerView'));
 const WalletManagementView = lazy(() => import('./components/WalletManagementView'));
 const ChannelsView = lazy(() => import('./components/ChannelsView'));
 const SupplierReconciliationView = lazy(() => import('./components/SupplierReconciliationView'));
@@ -112,10 +104,10 @@ import { useConsoleSession } from './hooks/useConsoleSession';
 // read the same navigation description.
 //
 // `label`/`title` receive the translation table, the language flag and the role
-// because several tabs have no i18n key yet (orgs, budgets, costs, ledger, and
-// wallet in the admin console) or legitimately read differently per role
-// (wallet is "credits & top-up" for admins, "my wallet" for users). `title` only
-// exists where the tooltip differs from the visible label (users).
+// because several tabs have no i18n key yet (wallet in the admin console) or
+// legitimately read differently per role (wallet is "credits & top-up" for
+// admins, "my wallet" for users). `title` only exists where the tooltip differs
+// from the visible label (users).
 // `count` receives the console data slices (and the role, for the one badge that
 // differs) and returns the badge number, or 0/undefined for tabs without a badge.
 const SIDEBAR_ITEMS = {
@@ -127,21 +119,17 @@ const SIDEBAR_ITEMS = {
   channels: { icon: Server, label: (t) => t.navChannels, count: (d) => d.channels },
   reconciliation: { icon: Coins, label: (t) => t.navReconciliation },
   pricing: { icon: DollarSign, label: (t) => t.navPricing },
-  costs: { icon: Calculator, label: (t, isZh) => (isZh ? '成本与毛利' : 'Cost & Margin') },
   wallet: {
     icon: Wallet,
     label: (t, isZh, isAdmin) =>
       isAdmin ? (isZh ? '卡密与充值' : 'Wallet & Credits') : (t.navWallet || (isZh ? '我的钱包' : 'My Wallet')),
   },
-  ledger: { icon: ReceiptText, label: (t, isZh) => (isZh ? '钱包资金流水' : 'Wallet Ledger') },
   keys: { icon: Key, label: (t) => t.navKeys, count: (d) => d.keys },
   users: {
     icon: ShieldCheck,
     label: (t, isZh) => t.navUsers || (isZh ? '用户管理' : 'Users'),
     title: (t, isZh) => t.navUsers || (isZh ? '用户管理' : 'User Management'),
   },
-  orgs: { icon: Building2, label: (t, isZh) => (isZh ? '组织与成本中心' : 'Organizations') },
-  budgets: { icon: Gauge, label: (t, isZh) => (isZh ? '预算与告警' : 'Budgets & Alerts') },
   playground: { icon: Terminal, label: (t) => t.navPlayground },
   skills: { icon: Sparkles, label: (t) => t.navSkills || 'Skill Hub' },
   mcp: { icon: Cpu, label: (t, isZh) => t.navMcp || (isZh ? 'MCP 广场' : 'MCP Hub') },
@@ -678,11 +666,8 @@ export default function App() {
           <Suspense fallback={<ViewLoader />}>
             <LandingPage
               isLoggedIn={!!adminToken || !!adminUser}
-              adminUser={adminUser}
               lang={lang}
-              setLang={setLang}
               toggleLang={toggleLang}
-              t={t}
               onOpenLogin={() => {
                 setAuthTab('login');
                 setViewMode('auth');
@@ -708,15 +693,11 @@ export default function App() {
                 }
               }}
               onViewStatus={() => setViewMode('status')}
-              stats={stats}
-              channelsCount={channels.length}
-              modelsCount={models.length}
             />
             <LoginModal
               isOpen={showLoginModal}
               onClose={() => setShowLoginModal(false)}
               lang={lang}
-              t={t}
               onLoginSuccess={(token, user) => {
                 resetWorkspaceState();
                 signIn(user, { token, tab: user.role === 'admin' ? 'dashboard' : 'wallet' });
@@ -740,9 +721,7 @@ export default function App() {
             <AuthPage
               initialTab={authTab}
               lang={lang}
-              setLang={setLang}
               toggleLang={toggleLang}
-              t={t}
               onLoginSuccess={(token, user) => {
                 // Every login path must start from a clean workspace: without this
                 // a session begun here inherited the previous account's keys, logs,
@@ -790,7 +769,6 @@ export default function App() {
               channels={channels}
               onRefresh={fetchData}
               probeLatencies={channelLatencies}
-              adminFetch={apiFetch}
               showToast={showToast}
               onBatchProbe={handleBatchPing}
               batchTesting={batchTesting}
@@ -799,7 +777,6 @@ export default function App() {
               isOpen={showLoginModal}
               onClose={() => setShowLoginModal(false)}
               lang={lang}
-              t={t}
               onLoginSuccess={(token, user) => {
                 resetWorkspaceState();
                 signIn(user, { token, tab: user.role === 'admin' ? 'dashboard' : 'wallet' });
@@ -830,7 +807,6 @@ export default function App() {
             copyToClipboard(txt);
           }}
           lang={lang}
-          t={t}
         />
       )}
 
@@ -838,7 +814,6 @@ export default function App() {
       {activeLogDetail && (
         <LogDetailModal
           log={activeLogDetail}
-          prices={prices}
           onClose={() => setActiveLogDetail(null)}
           onCopy={(txt) => {
             copyToClipboard(txt);
@@ -859,7 +834,6 @@ export default function App() {
             setActiveLogDetail(null);
           }}
           lang={lang}
-          t={t}
         />
       )}
 
@@ -872,7 +846,6 @@ export default function App() {
             copyToClipboard(txt);
           }}
           lang={lang}
-          t={t}
         />
       )}
 
@@ -1066,10 +1039,6 @@ export default function App() {
                 {currentTab === 'skills' && (t.navSkills || 'Skill Hub')}
                 {currentTab === 'mcp' && (t.navMcp || (isZh ? 'MCP 广场' : 'MCP Hub'))}
                 {currentTab === 'users' && (t.navUsers || (isZh ? '用户管理' : 'User Management'))}
-                {currentTab === 'orgs' && (isZh ? '组织与成本中心' : 'Organizations')}
-                {currentTab === 'budgets' && (isZh ? '预算与告警' : 'Budgets & Alerts')}
-                {currentTab === 'ledger' && (isZh ? '钱包资金流水' : 'Wallet Ledger')}
-                {currentTab === 'costs' && (isZh ? '成本与毛利' : 'Cost & Margin')}
                 {currentTab === 'playground' && t.navPlayground}
                 {currentTab === 'docs' && t.navDocs}
               </span>
@@ -1250,15 +1219,6 @@ export default function App() {
                 lang={lang}
                 t={t}
                 setCurrentTab={setCurrentTab}
-                onNavigateToPlayground={(m, modality) => {
-                  setPlayModel(m);
-                  if (modality && modality !== 'chat') {
-                    setPlayModality(modality);
-                  } else {
-                    setPlayModality('chat');
-                  }
-                  setCurrentTab('playground');
-                }}
               />
             )}
 
@@ -1267,10 +1227,8 @@ export default function App() {
               <PricingManager
                 adminFetch={apiFetch}
                 showToast={showToast}
-                stats={stats}
                 isAdmin={adminUser?.role === 'admin'}
                 lang={lang}
-                t={t}
                 modelRoutes={modelRoutes}
                 setCurrentTab={setCurrentTab}
                 groupMultipliers={groupMultipliers}
@@ -1300,7 +1258,6 @@ export default function App() {
                 handleDeleteChannel={handleDeleteChannel}
                 onNavigateToReconciliation={() => setCurrentTab('reconciliation')}
                 lang={lang}
-                t={t}
               />
             )}
 
@@ -1314,7 +1271,6 @@ export default function App() {
                   setCurrentTab('logs');
                 }}
                 lang={lang}
-                t={t}
               />
             )}
 
@@ -1352,7 +1308,6 @@ export default function App() {
                   }
                 }}
                 lang={lang}
-                t={t}
               />
             )}
 
@@ -1412,7 +1367,6 @@ export default function App() {
             {currentTab === 'mcp' && (
               <McpIntegrationView
                 adminFetch={apiFetch}
-                adminToken={adminToken}
                 onCopy={(txt) => {
                   copyToClipboard(txt);
                 }}
@@ -1426,43 +1380,16 @@ export default function App() {
             {currentTab === 'users' && (
               <UserManagementView
                 adminUser={adminUser}
-                adminToken={adminToken}
-                adminFetch={apiFetch}
-                showToast={showToast}
-                lang={lang}
-                t={t}
-              />
-            )}
-
-            {/* 7. ORGANIZATION TREE */}
-            {currentTab === 'orgs' && (
-              <OrganizationsView
                 adminFetch={apiFetch}
                 showToast={showToast}
                 lang={lang}
               />
-            )}
-
-            {/* 7. BUDGETS & ALERTS */}
-            {currentTab === 'budgets' && (
-              <BudgetsView adminFetch={apiFetch} showToast={showToast} lang={lang} />
-            )}
-
-            {/* 7. COST & MARGIN */}
-            {currentTab === 'costs' && (
-              <CostAnalyticsView adminFetch={apiFetch} showToast={showToast} lang={lang} />
-            )}
-
-            {/* 7. WALLET LEDGER */}
-            {currentTab === 'ledger' && (
-              <WalletLedgerView adminFetch={apiFetch} showToast={showToast} lang={lang} />
             )}
 
             {/* 7. WALLET MANAGEMENT TAB */}
             {currentTab === 'wallet' && (
               <WalletManagementView
                 adminUser={adminUser}
-                adminToken={adminToken}
                 adminFetch={apiFetch}
                 showToast={showToast}
                 onUserUpdated={(updatedUser) => {
@@ -1472,7 +1399,6 @@ export default function App() {
                   if (newBal !== undefined) patchUser({ balance: newBal });
                 }}
                 lang={lang}
-                t={t}
               />
             )}
 
@@ -1483,7 +1409,6 @@ export default function App() {
                 models={models}
                 modelRoutes={modelRoutes}
                 prices={prices}
-                adminFetch={apiFetch}
                 showToast={showToast}
                 initialModel={playModel}
                 initialModality={playModality}
@@ -1494,7 +1419,7 @@ export default function App() {
 
             {/* 6. DOCS TAB */}
             {currentTab === 'docs' && (
-              <DocsView showToast={showToast} lang={lang} t={t} />
+              <DocsView showToast={showToast} lang={lang}  />
             )}
           </Suspense>
         </div>
@@ -1516,7 +1441,6 @@ export default function App() {
           onSubmit={handleCreateChannel}
           submitting={submittingChannel}
           lang={lang}
-          t={t}
         />
 
         {/* Modal: New API Key */}
@@ -1542,11 +1466,9 @@ export default function App() {
           initialTab={accountModalTab}
           onClose={() => setShowAccountModal(false)}
           adminUser={adminUser}
-          adminToken={adminToken}
           adminFetch={apiFetch}
           showToast={showToast}
           lang={lang}
-          t={t}
           onPasswordChanged={() => {
             showToast(isZh ? '密码修改成功，请牢记新密码' : 'Password changed successfully', 'success');
           }}
@@ -1570,7 +1492,6 @@ export default function App() {
           onCreateKey={() => { setShowOnboardingModal(false); setCurrentTab('keys'); handleOpenCreateKey(); }}
           showToast={showToast}
           lang={lang}
-          t={t}
         />
 
         {/* Visual Routing Topology & Failover Modal */}
@@ -1615,16 +1536,13 @@ export default function App() {
         <CommandPalette
           isOpen={showCommandPalette}
           onClose={() => setShowCommandPalette(false)}
-          currentTab={currentTab}
           setCurrentTab={setCurrentTab}
           setViewMode={setViewMode}
           models={models}
-          channels={channels}
           onSelectModel={(model) => {
             setPlayModel(model);
             setPlayModality(modelRoutes.find(route => route.model === model)?.modality || inferClientModality(model));
           }}
-          keys={keys}
           adminUser={adminUser}
           onOpenNewKey={handleOpenCreateKey}
           onOpenNewChannel={() => {
@@ -1671,7 +1589,6 @@ export default function App() {
           lang={lang}
           t={t}
           showToast={showToast}
-          adminUser={adminUser}
           adminFetch={apiFetch}
           initialQuery={copilotInitialQuery}
           onClearInitialQuery={() => setCopilotInitialQuery('')}
