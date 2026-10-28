@@ -65,6 +65,14 @@ func KeyStatusDenial(status string) *AccessDenial {
 }
 
 // KeyBudgetDenial reports a key whose assigned quota budget is exhausted.
+//
+// The check runs before dispatch and compares the usage settled so far, so it is
+// a soft ceiling rather than a reservation: concurrent requests that all pass
+// this check can push the key past its budget, bounded by the number of in-flight
+// requests times the per-request cost. Concurrency is resolved at settlement
+// (atomic increments), which keeps used_cost_units exactly equal to the sum of
+// the recorded usage rows — see the rate-limiting section of
+// docs/CONFIGURATION.md.
 func KeyBudgetDenial(budgetUnits, usedUnits int64, budget, used float64) *AccessDenial {
 	if !budgetExceeded(budgetUnits, usedUnits, budget, used) {
 		return nil

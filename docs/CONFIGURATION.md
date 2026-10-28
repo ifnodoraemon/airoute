@@ -315,6 +315,15 @@ api_keys:
 
 ### Rate limiting and sessions
 
+- **Key quota budget** (`budget`, CNY) is a *pre-dispatch* ceiling: the check compares the usage already
+  settled against the limit. Requests that are already in flight when the budget is crossed still complete
+  and are charged, so a burst can overshoot by up to (in-flight requests × per-request cost); afterwards the
+  key answers `402 key_budget_exceeded`. The ledger itself stays exact — `used_cost_units` always equals the
+  sum of `usage_logs.cost_units` for that key, verified under concurrent cross-replica load.
+- **Multi-replica config propagation**: with `REDIS_URL` set, channel/pricing/key changes are broadcast to
+  peers immediately. Without Redis each replica reloads its data-plane snapshot from the database every 10s,
+  so a freshly created channel can stay unroutable on a peer for up to ~10s (those requests fail with
+  `404 model_not_found`); requests already routed keep working.
 - **RPM** is enforced with a distributed Redis sliding window (or a local token bucket without Redis).
 - **TPM** is enforced with a per-key, one-minute sliding window and reports `X-RateLimit-Limit-Tokens` / `X-RateLimit-Remaining-Tokens`; over-budget requests get `429` with `Retry-After: 60`.
 - **Sessions** are cookie-based: login sets an HttpOnly `airoute_session` cookie plus a readable `airoute_csrf` cookie. State-changing requests authenticated by cookie must echo the CSRF value in `X-CSRF-Token`. API clients keep using `Authorization: Bearer`.
