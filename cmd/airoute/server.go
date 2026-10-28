@@ -66,14 +66,9 @@ func runServer(args []string) {
 		os.Exit(1)
 	}
 
-	if portEnv := os.Getenv("GATEWAY_PORT"); portEnv != "" {
-		if p, err := strconv.Atoi(portEnv); err == nil && p > 0 {
-			cfg.Server.Port = p
-		}
-	}
-	if hostEnv := os.Getenv("GATEWAY_HOST"); hostEnv != "" {
-		cfg.Server.Host = hostEnv
-	}
+	// Apply the env overrides for the values the config file also carries (see
+	// applyServerEnvOverrides for why the timeout/log-level knobs need one).
+	applyServerEnvOverrides(cfg)
 
 	// Initialize Logger
 	telemetry.InitLogger(cfg.Server.LogLevel)
@@ -211,23 +206,23 @@ func runServer(args []string) {
 	// Initialize Real-Time Model Pricing & Prompt-Cache Billing Engine
 	billing.InitGlobalEngine(repo)
 
-	// Enable synchronous charge settlement: money moves at request completion and
-	// no longer waits for the audit log to be persisted.
+	// Enable charge settlement: money moves at request completion and no longer
+	// waits for the audit log to be persisted.
 	storage.InitBillingSettlement(repo)
 
-	// Group-commit settlement: concurrent charges are merged into shared database
-	// transactions with a short request-side wait. Batching 100 charges per
-	// transaction measured ~6x the per-charge throughput and removes the old 1.5s
-	// settlement timeout from the response tail; a charge whose wait expires is
-	// still settled by the audit pipeline.
+	// Group-commit settlement (P0): concurrent charges are merged into shared
+	// database transactions with a short request-side wait. Measured on the real
+	// settlement path, batching 100 charges per transaction raises throughput
+	// ~6x and removes the 1.5s settlement timeout from the response tail; a
+	// charge whose wait expires is still settled by the audit pipeline.
 	settlementBatcher := storage.InitSettlementBatcher(repo)
 	defer settlementBatcher.Stop()
 	// Release the admission pre-authorisation at the amount actually charged.
 	api.SetSettledCostReporter(middleware.SetSettledCost)
 
-	// SQLite runs on a single writer connection, and a WAL checkpoint landing on
-	// the request path stalls every settlement for milliseconds. The automatic
-	// checkpoint is disabled in the DSN; run it from a background ticker instead.
+	// SQLite runs on a single writer connection; a WAL checkpoint landing on the
+	// request path stalls every settlement for milliseconds. Disable the
+	// automatic checkpoint and run it from a background ticker instead.
 	if stopCheckpointer := db.StartSQLiteCheckpointer(0); stopCheckpointer != nil {
 		defer stopCheckpointer()
 	}
@@ -236,8 +231,9 @@ func runServer(args []string) {
 	// not by the client-facing alias.
 	api.SetServedModelResolver(dispatcher.ResolveServedModel)
 
-	// Verify the timeout numbers agree with each other and with the edge proxy.
-	reportTimeoutChain(repo, dispatcher)
+	// Verify the timeout numbers agree with each other, with the Go server's write
+	// deadline and with the edge proxy.
+	reportTimeoutChain(repo, dispatcher, serverWriteTimeout(cfg))
 
 	// Token-estimate calibration describes the upstream tokenizers, so it must
 	// survive restarts and be shared by both replicas.
@@ -278,9 +274,10 @@ func runServer(args []string) {
 	billingReconciler := storage.InitBillingReconcile(repo)
 	defer billingReconciler.Stop()
 
-	// Retire settlement-ledger rows whose audit evidence is already gone. Off by
-	// default: a ledger is financial evidence. GATEWAY_BILLING_LEDGER_RETENTION_DAYS
-	// opts in, and the reconciler baseline is adjusted in the same pass.
+	// Retire settlement-ledger rows whose audit evidence is already gone, so the
+	// ledger does not grow forever. Off by default (a financial ledger is evidence);
+	// GATEWAY_BILLING_LEDGER_RETENTION_DAYS opts in, and the reconciler baseline is
+	// adjusted in the same pass so auditLag does not drift.
 	ledgerRetention := storage.InitBillingLedgerRetention(repo)
 	defer ledgerRetention.Stop()
 
@@ -303,41 +300,14 @@ func runServer(args []string) {
 	// price rule: they are billed at the hardcoded fallback rate, which is a guess
 	// in both directions. Runs in the background so a large audit table cannot
 	// delay readiness.
+	//
+	// The two checks are independent on purpose. They were one function whose
+	// `len(unpriced)==0` return also skipped the served-model check, so "the alias
+	// is priced but the upstream model is not" - the case by-served-model billing
+	// exists for - was never reported.
 	go func() {
-		unpriced, err := billing.UnpricedModelsInUse(repo, billing.GlobalEngine, 7*24*time.Hour)
-		if err != nil {
-			telemetry.ScopedLogger("billing").Warn("pricing coverage check failed", "error", err.Error())
-			return
-		}
-		if len(unpriced) == 0 {
-			return
-		}
-		shown := unpriced
-		if len(shown) > 20 {
-			shown = shown[:20]
-		}
-		telemetry.ScopedLogger("billing").Warn("models served without a configured price; the fallback rate card is in use",
-			"count", len(unpriced),
-			"models", strings.Join(shown, ","))
-
-		// Billing aligns with the provider invoice only if the model the provider
-		// actually served is priced. Channel model mappings can turn a priced alias
-		// into an unpriced upstream model.
-		servedUnpriced, servedErr := billing.UnpricedServedModelsInUse(repo, billing.GlobalEngine, 7*24*time.Hour, dispatcher.ResolveServedModel)
-		if servedErr != nil {
-			telemetry.ScopedLogger("billing").Warn("served-model pricing check failed", "error", servedErr.Error())
-			return
-		}
-		if len(servedUnpriced) == 0 {
-			return
-		}
-		servedShown := servedUnpriced
-		if len(servedShown) > 10 {
-			servedShown = servedShown[:10]
-		}
-		telemetry.ScopedLogger("billing").Warn("upstream models served without their own price; charges fall back to the alias rate",
-			"count", len(servedUnpriced),
-			"served_models", strings.Join(servedShown, "; "))
+		warnUnpricedModels(repo, pricingAuditWindow)
+		warnUnpricedServedModels(repo, dispatcher, pricingAuditWindow)
 	}()
 
 	// Subscribe to cluster-wide reload broadcasts via Redis Pub/Sub
@@ -405,7 +375,7 @@ func runServer(args []string) {
 		Handler:           engine,
 		ReadTimeout:       time.Duration(cfg.Server.ReadTimeoutSec) * time.Second,
 		ReadHeaderTimeout: 15 * time.Second,
-		WriteTimeout:      time.Duration(cfg.Server.WriteTimeoutSec) * time.Second,
+		WriteTimeout:      serverWriteTimeout(cfg),
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    1 << 20, // 1 MiB of headers is far beyond any legitimate request
 	}

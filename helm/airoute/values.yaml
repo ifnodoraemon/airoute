@@ -53,7 +53,9 @@ ingress:
     nginx.ingress.kubernetes.io/proxy-buffering: "off"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "86400"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "86400"
-    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    # Must not be smaller than the gateway's GATEWAY_MAX_BODY_BYTES default (64 MiB),
+    # otherwise the ingress rejects payloads the gateway would have accepted.
+    nginx.ingress.kubernetes.io/proxy-body-size: "64m"
   hosts:
     - host: gateway.local
       paths:
@@ -98,10 +100,20 @@ database:
 auth:
   existingSecret: ""
   # Comma-separated CIDRs of trusted reverse proxies whose X-Forwarded-For is
-  # honoured for client-IP based limits/logging. Empty = trust none.
+  # honoured for client-IP based limits/logging and for the D15 control-plane guard.
+  # Empty = trust none: behind an ingress every request is then attributed to the
+  # ingress pod and the control plane (/api/v1/admin, /app) fails closed with 403.
+  # Set this to the ingress-controller / pod CIDR (e.g. "10.0.0.0/8"); for direct
+  # in-cluster access without a proxy use GATEWAY_ADMIN_ALLOWED_IPS instead.
   trustedProxies: ""
+  # One-shot escape hatch: force the stored admin password back to the password in
+  # the chart Secret on the next start, then set it back to false. Without this
+  # pass-through the variable never reached the pod and the reset silently did
+  # nothing (it only worked in the Compose stack).
+  adminReset: false
 
-# Initial configuration file
+# Initial configuration file. This block is rendered verbatim into config.yaml by
+# configmap.yaml, so every key below can also be set with --set config.<path>=<value>.
 config:
   server:
     host: "0.0.0.0"
@@ -109,5 +121,24 @@ config:
     log_level: "info"
     read_timeout_sec: 180
     write_timeout_sec: 180
+    # Redis is optional here: set it when distributed rate limiting, cluster-wide
+    # reload broadcasts and the shared trace/log path are required. It is a config
+    # key (not a chart value) and is otherwise expected from REDIS_URL.
+    # redis_url: "redis://redis-svc.default.svc.cluster.local:6379/0"
+  # Artifact storage. Omitted keys keep the safe defaults: driver "local" writes
+  # into the persistence volume ("data/storage"), no credentials. For shared object
+  # storage across pods set driver=s3/rustfs plus endpoint/access_key/secret_key -
+  # the process refuses to start when the driver is remote and a credential is
+  # missing (no default credential ships):
+  # storage:
+  #   driver: "s3"
+  #   local_path: "data/storage"
+  #   s3:
+  #     endpoint: "http://rustfs.default.svc.cluster.local:9000"
+  #     bucket: "airoute-skills"
+  #     access_key: ""        # prefer a Secret + extraEnv instead of checking this in
+  #     secret_key: ""
+  #     region: "us-east-1"
+  #     path_style: true
   channels: []
   api_keys: []

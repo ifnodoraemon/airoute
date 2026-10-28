@@ -275,7 +275,9 @@ func CheckKeyRateLimits(ctx context.Context, key *model.APIKeyConfig) KeyRateLim
 		// On Redis error/timeout, gracefully fall through to the local bucket.
 	}
 
-	// 2. Fallback to the local in-memory token bucket
+	// 2. Fallback to the local in-memory sliding window. It enforces the same 60s
+	// semantics as the Redis path above, so a Redis outage does not loosen the
+	// limit (see rpmWindowSpan).
 	bucket := GlobalRateLimiter.GetBucket(key.Key, key.RPM)
 	if !bucket.Allow() {
 		outcome.Denial = &AccessDenial{

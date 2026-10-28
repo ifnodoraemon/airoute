@@ -46,6 +46,10 @@ func TestProductionSecurityIssuesRejectsWeakCredentials(t *testing.T) {
 		{"short password", "short", "9f2c5e8a1b4d7f0a3c6e9b2d5f8a1c4e7b0d3f6a9c2e5b8d1f4a7c0e3b6d9f2a"},
 		{"empty secret", "Zx9-some-long-random-admin-password-1234", ""},
 		{"placeholder secret", "Zx9-some-long-random-admin-password-1234", "airoute-secret-key-change-me"},
+		// Any short value is weak, not just the shipped placeholders: `abc` used to
+		// pass because the check only matched five exact strings.
+		{"short secret", "Zx9-some-long-random-admin-password-1234", "abc"},
+		{"31-character secret", "Zx9-some-long-random-admin-password-1234", "9f2c5e8a1b4d7f0a3c6e9b2d5f8a1c4"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

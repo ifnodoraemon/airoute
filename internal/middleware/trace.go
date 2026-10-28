@@ -101,12 +101,6 @@ func GetTraceIDFromContext(ctx context.Context) string {
 	return telemetry.TraceIDFromContext(ctx)
 }
 
-// WithTraceID attaches traceID to a standard context. Callers outside this package
-// (tests, background jobs) use it instead of hand-building a context key.
-func WithTraceID(ctx context.Context, traceID string) context.Context {
-	return telemetry.WithTraceID(ctx, traceID)
-}
-
 func sanitizeURLQuery(raw string) string {
 	if raw == "" {
 		return ""
@@ -139,8 +133,15 @@ func AccessLogMiddleware() gin.HandlerFunc {
 
 		c.Next()
 
-		// Skip high-frequency probes and metrics scrapers to keep logs clean
-		if path == "/health" || path == "/api/v1/public/status" || path == "/metrics" {
+		// Skip high-frequency probes and metrics scrapers to keep logs clean.
+		//
+		// The prefix match matters: every shipped deployment probes /health/ready
+		// (readiness) every 5-10s, while the bare /health the list used to name is
+		// only probed by liveness. Without this the readiness probes - the highest
+		// frequency lines in the log - were exactly the ones that were not filtered.
+		if path == "/health" || strings.HasPrefix(path, "/health/") ||
+			path == "/healthz" || strings.HasPrefix(path, "/healthz/") ||
+			path == "/readyz" || path == "/api/v1/public/status" || path == "/metrics" {
 			return
 		}
 

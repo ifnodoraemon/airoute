@@ -27,21 +27,27 @@ x-gateway-env: &gateway-env
   # GATEWAY_DRAIN_TIMEOUT_SEC (default 120) + audit flush, and stay below the
   # service's stop_grace_period so the process is never SIGKILLed mid-drain.
   GATEWAY_SHUTDOWN_TIMEOUT_SEC: ${GATEWAY_SHUTDOWN_TIMEOUT_SEC:-135}
-  # Comma-separated proxy CIDRs whose X-Forwarded-For is trusted. Empty = trust
-  # none. Behind the bundled nginx set the Compose network (e.g. 172.22.0.0/16)
-  # so real client IPs reach access logs and per-IP limits.
-  GATEWAY_TRUSTED_PROXIES: ${GATEWAY_TRUSTED_PROXIES:-}
-  # D15: control-plane access (/api/v1/admin, /app) defaults to loopback/private
-  # clients. Set an explicit CIDR list to override, or ALLOW_PUBLIC=true to opt
-  # out (not recommended). ALLOWED_HOSTS optionally pins the Host header.
+  # Comma-separated proxy CIDRs whose X-Forwarded-For is trusted. Defaults to the
+  # fixed `edge` network below, which is what makes the shipped nginx topology get
+  # the real client IP. Empty = trust no forwarding header (then every control-plane
+  # request fails closed with 403, because the peer is the nginx container).
+  GATEWAY_TRUSTED_PROXIES: ${GATEWAY_TRUSTED_PROXIES:-172.30.0.0/16}
+  # D15: control-plane access (/api/v1/admin, /app) defaults to loopback clients
+  # and private clients that arrived through a trusted proxy. Set an explicit CIDR
+  # list to override, or ALLOW_PUBLIC=true to opt out (not recommended).
+  # ALLOWED_HOSTS optionally pins the Host header.
   GATEWAY_ADMIN_ALLOWED_IPS: ${GATEWAY_ADMIN_ALLOWED_IPS:-}
   GATEWAY_ADMIN_ALLOWED_HOSTS: ${GATEWAY_ADMIN_ALLOWED_HOSTS:-}
   GATEWAY_ADMIN_ALLOW_PUBLIC: ${GATEWAY_ADMIN_ALLOW_PUBLIC:-false}
-  STORAGE_DRIVER: ${STORAGE_DRIVER:-s3}
+  # Artifact storage defaults to the local driver, which writes into the
+  # gateway-data volume and needs no credentials. s3/rustfs must be opted into
+  # explicitly; the server then refuses to start unless the credentials below are
+  # set (config.Validate), so an empty value here is not a silent downgrade.
+  STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
   STORAGE_S3_ENDPOINT: ${STORAGE_S3_ENDPOINT:-http://storage:9000}
   STORAGE_S3_BUCKET: ${STORAGE_S3_BUCKET:-airoute-skills}
-  STORAGE_S3_ACCESS_KEY: ${STORAGE_S3_ACCESS_KEY:?Set STORAGE_S3_ACCESS_KEY in .env}
-  STORAGE_S3_SECRET_KEY: ${STORAGE_S3_SECRET_KEY:?Set STORAGE_S3_SECRET_KEY in .env}
+  STORAGE_S3_ACCESS_KEY: ${STORAGE_S3_ACCESS_KEY:-}
+  STORAGE_S3_SECRET_KEY: ${STORAGE_S3_SECRET_KEY:-}
   STORAGE_S3_REGION: ${STORAGE_S3_REGION:-us-east-1}
   STORAGE_S3_PUBLIC_URL_PREFIX: ${STORAGE_S3_PUBLIC_URL_PREFIX:-}
 
@@ -137,6 +143,13 @@ services:
       - ./configs/config.yaml:/app/configs/config.yaml:ro
     expose:
       - "8080"
+    # Two networks on purpose: `default` reaches postgres/redis and, in s3 mode,
+    # the optional storage service; `edge` is the fixed-subnet network shared with
+    # nginx, which is what makes GATEWAY_TRUSTED_PROXIES above attribute the real
+    # client address instead of the load balancer.
+    networks:
+      - default
+      - edge
     # Readiness (not bare liveness): Docker only exposes one health status, and the
     # rolling rebuild gate in scripts/docker-rebuild.sh polls it, so it must reflect
     # whether this replica can actually reach its database/Redis.
@@ -154,8 +167,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      storage:
-        condition: service_healthy
+      # The storage service is optional (profile object-storage). Requiring its
+      # health here would make `docker compose up` fail in the default local-storage
+      # mode, which is exactly the "works out of the box" promise this file broke.
 
   # ============================================================================
   # High-Availability Gateway Node 2
@@ -174,6 +188,9 @@ services:
       - ./configs/config.yaml:/app/configs/config.yaml:ro
     expose:
       - "8080"
+    networks:
+      - default
+      - edge
     # Readiness (not bare liveness): Docker only exposes one health status, and the
     # rolling rebuild gate in scripts/docker-rebuild.sh polls it, so it must reflect
     # whether this replica can actually reach its database/Redis.
@@ -191,21 +208,29 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      storage:
-        condition: service_healthy
+      # storage is optional (profile object-storage), see gateway-1 above.
 
   # ============================================================================
-  # High-Performance Distributed S3-Compatible Object Storage (Airoute Storage)
-  # Provides Apache 2.0 licensed, memory-safe, zero-GC artifact storage for Skill Bundles
+  # Optional S3-Compatible Object Storage (Airoute Storage, profile: object-storage)
+  # Provides Apache 2.0 licensed, memory-safe, zero-GC artifact storage for Skill Bundles.
+  #
+  # Artifact storage defaults to the local driver (STORAGE_DRIVER=local), so this
+  # service is NOT started by a plain `docker compose up`. Enable it only for the
+  # s3/rustfs drivers, and provide the credentials then:
+  #   STORAGE_DRIVER=s3 STORAGE_S3_ACCESS_KEY=… STORAGE_S3_SECRET_KEY=… \
+  #     docker compose --profile object-storage up -d
+  # Keeping it optional is what lets the default local mode boot without S3
+  # credentials instead of failing interpolation.
   # ============================================================================
   storage:
     image: rustfs/rustfs:latest
     container_name: airoute-storage
     restart: always
+    profiles: ["object-storage"]
     env_file: [.env]
     environment:
-      RUSTFS_ROOT_USER: ${STORAGE_S3_ACCESS_KEY:?Set STORAGE_S3_ACCESS_KEY in .env}
-      RUSTFS_ROOT_PASSWORD: ${STORAGE_S3_SECRET_KEY:?Set STORAGE_S3_SECRET_KEY in .env}
+      RUSTFS_ROOT_USER: ${STORAGE_S3_ACCESS_KEY:-}
+      RUSTFS_ROOT_PASSWORD: ${STORAGE_S3_SECRET_KEY:-}
     expose:
       - "9000"
       - "9001"
@@ -229,9 +254,23 @@ services:
       - "${GATEWAY_INGRESS_PORT:-${GATEWAY_PORT:-8080}}:80"
     volumes:
       - ./deploy/nginx-compose.conf:/etc/nginx/conf.d/default.conf:ro
+    # Only the `edge` network: the shipped GATEWAY_TRUSTED_PROXIES default is this
+    # subnet, so the gateway can attribute the forwarded client address.
+    networks:
+      - edge
     depends_on:
       - gateway-1
       - gateway-2
+
+networks:
+  # nginx ↔ gateway hop. The subnet is fixed so `GATEWAY_TRUSTED_PROXIES` has a
+  # stable value to trust; without it the gateway only ever sees the LB address and
+  # the control-plane guard cannot tell a LAN client from the internet.
+  edge:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
 
 volumes:
   postgres-data:

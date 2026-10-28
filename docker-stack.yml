@@ -87,12 +87,33 @@ services:
       - GATEWAY_ADMIN_PASSWORD=${GATEWAY_ADMIN_PASSWORD:?GATEWAY_ADMIN_PASSWORD must be set to a strong random value}
       # Fail-closed credential gate (never enable the escape hatch in production).
       - GATEWAY_ALLOW_INSECURE_DEFAULTS=${GATEWAY_ALLOW_INSECURE_DEFAULTS:-false}
+      # One-shot escape hatch: force the stored admin password back to
+      # GATEWAY_ADMIN_PASSWORD on the next start. Swarm does not support env_file,
+      # so a variable that is not listed here never reaches the container and the
+      # reset silently does nothing (it only worked in the Compose stack).
+      - GATEWAY_ADMIN_RESET=${GATEWAY_ADMIN_RESET:-false}
+      # Artifact storage. `local` (default) writes into the airoute-data volume
+      # below, so bundles survive task rebuilds; s3/rustfs must set the four
+      # variables and a reachable endpoint, otherwise the server refuses to start.
+      - STORAGE_DRIVER=${STORAGE_DRIVER:-local}
+      - STORAGE_LOCAL_PATH=${STORAGE_LOCAL_PATH:-data/storage}
+      - STORAGE_S3_ENDPOINT=${STORAGE_S3_ENDPOINT:-}
+      - STORAGE_S3_BUCKET=${STORAGE_S3_BUCKET:-airoute-skills}
+      - STORAGE_S3_ACCESS_KEY=${STORAGE_S3_ACCESS_KEY:-}
+      - STORAGE_S3_SECRET_KEY=${STORAGE_S3_SECRET_KEY:-}
+      - STORAGE_S3_REGION=${STORAGE_S3_REGION:-us-east-1}
       - GIN_MODE=release
       # When set, /metrics requires "Authorization: Bearer <token>".
       - GATEWAY_METRICS_TOKEN=${GATEWAY_METRICS_TOKEN:-}
-      # Proxies whose X-Forwarded-For is trusted (empty = trust none).
+      # Proxies whose X-Forwarded-For is trusted. Swarm assigns the overlay subnet
+      # dynamically, so it cannot be defaulted here: set this to the overlay CIDR
+      # (e.g. 10.0.0.0/8) when the bundled nginx fronts the gateway. Without it every
+      # request is attributed to the nginx task and the D15 control plane fails
+      # closed with 403 - use GATEWAY_ADMIN_ALLOWED_IPS instead for direct access.
       - GATEWAY_TRUSTED_PROXIES=${GATEWAY_TRUSTED_PROXIES:-}
-      # D15: control-plane access defaults to loopback/private clients.
+      # D15: control-plane access (/api/v1/admin, /app) admits loopback clients and
+      # private clients attributed through a trusted proxy; an explicit CIDR list
+      # replaces that rule (and also admits a matching direct peer).
       - GATEWAY_ADMIN_ALLOWED_IPS=${GATEWAY_ADMIN_ALLOWED_IPS:-}
       - GATEWAY_ADMIN_ALLOWED_HOSTS=${GATEWAY_ADMIN_ALLOWED_HOSTS:-}
       - GATEWAY_ADMIN_ALLOW_PUBLIC=${GATEWAY_ADMIN_ALLOW_PUBLIC:-false}
@@ -100,6 +121,11 @@ services:
       - GATEWAY_SHUTDOWN_TIMEOUT_SEC=${GATEWAY_SHUTDOWN_TIMEOUT_SEC:-135}
     networks:
       - airoute-swarm-net
+    # Persistent data directory: local artifact storage, the usage-spill fallback
+    # and the SQLite mirror live under /app/data. Without this mount every task
+    # rebuild started from the image's writable layer and lost the Skills bundles.
+    volumes:
+      - airoute-data:/app/data
     # Readiness, not bare liveness: Swarm removes a task from the service VIP when
     # its healthcheck fails, so it must reflect dependency reachability.
     healthcheck:
@@ -180,4 +206,9 @@ volumes:
   airoute-pgdata:
     driver: local
   airoute-redisdata:
+    driver: local
+  # Per-task local artifact storage / spill directory. A local Docker volume is
+  # node-local: with a shared S3 bucket use STORAGE_DRIVER=s3 instead, since this
+  # volume is not replicated across Swarm nodes.
+  airoute-data:
     driver: local

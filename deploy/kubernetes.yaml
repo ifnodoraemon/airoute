@@ -50,6 +50,20 @@ spec:
               key: admin-password
         - name: GATEWAY_ALLOW_INSECURE_DEFAULTS
           value: "false"
+        # One-shot escape hatch: force the stored admin password back to the value in
+        # this Secret on the next start (then set it back to "false"). Without this
+        # pass-through the reset silently did nothing outside the Compose stack.
+        - name: GATEWAY_ADMIN_RESET
+          value: "false"
+        # D15 control plane (/api/v1/admin, /app): the guard fails closed for peers
+        # it cannot attribute to a client. Behind an ingress set the ingress/pod CIDR
+        # here; for direct in-cluster access without a proxy list the caller CIDR in
+        # GATEWAY_ADMIN_ALLOWED_IPS instead. Leaving both unset restricts the control
+        # plane to loopback (and denies it to every other pod/curl).
+        # - name: GATEWAY_TRUSTED_PROXIES
+        #   value: "10.0.0.0/8"
+        # - name: GATEWAY_ADMIN_ALLOWED_IPS
+        #   value: "10.0.0.0/8"
         # Drain window after SIGTERM; keep below terminationGracePeriodSeconds.
         - name: GATEWAY_SHUTDOWN_TIMEOUT_SEC
           value: "135"
@@ -124,5 +138,6 @@ stringData:
   admin-secret: "REPLACE_WITH_STRONG_RANDOM_SECRET"
   # Required by the GATEWAY_ADMIN_PASSWORD secretKeyRef above; without this key the
   # pod fails with CreateContainerConfigError before the startup check can explain why.
-  # Must be at least 16 characters and not admin123.
+  # Must be at least 8 characters and not admin123 (the signing secret above must be
+  # at least 32 characters).
   admin-password: "REPLACE_WITH_STRONG_ADMIN_PASSWORD"

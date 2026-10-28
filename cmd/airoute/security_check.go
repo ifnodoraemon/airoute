@@ -20,6 +20,13 @@ func allowInsecureDefaults() bool {
 	return false
 }
 
+// minAdminSecretLen is the shortest signing key the startup gate accepts. The
+// secret is the HMAC key for every admin token, so a short one is brute-forcible
+// offline; the documented contract (`.env.example`, docs/CONFIGURATION.md) has
+// always promised 32 characters, while the code only matched five exact
+// placeholders and let `GATEWAY_ADMIN_SECRET=abc` through.
+const minAdminSecretLen = 32
+
 // weakAdminSecrets are placeholder values that ship in documentation, sample
 // manifests or compose files. They must never be trusted in production.
 var weakAdminSecrets = map[string]struct{}{
@@ -38,6 +45,8 @@ func productionSecurityIssues(cfg *config.Config) []string {
 	secret := os.Getenv("GATEWAY_ADMIN_SECRET")
 	if _, weak := weakAdminSecrets[secret]; weak {
 		issues = append(issues, "GATEWAY_ADMIN_SECRET is empty or a well-known placeholder (admin tokens would be forgeable)")
+	} else if len(secret) < minAdminSecretLen {
+		issues = append(issues, "GATEWAY_ADMIN_SECRET is shorter than 32 characters (admin tokens would be brute-forcible)")
 	}
 
 	if cfg != nil {

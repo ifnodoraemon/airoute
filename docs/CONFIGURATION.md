@@ -100,6 +100,9 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `REDIS_URL` | unset | Redis connection for distributed rate limits, cache invalidation and the log queue |
 | `PUBLIC_URL` / `GATEWAY_PUBLIC_URL` | unset | Externally reachable base URL (used for OAuth redirects and printed endpoints) |
 | `GATEWAY_INGRESS_PORT` | falls back to `GATEWAY_PORT` | Host port the Compose load balancer publishes; also the default port the CLI probes |
+| `GATEWAY_READ_TIMEOUT_SEC` | `600` | `http.Server.ReadTimeout`. Overrides `server.read_timeout_sec` in the config file, which the Compose stack mounts read-only |
+| `GATEWAY_WRITE_TIMEOUT_SEC` | `600` | `http.Server.WriteTimeout`. Bounds non-streaming responses (streaming responses clear the deadline). Overrides `server.write_timeout_sec` |
+| `GATEWAY_LOG_LEVEL` | `info` | `debug`/`info`/`warn`/`error`. Overrides `server.log_level` |
 | `GIN_MODE` | `release` (Compose/Swarm) | Kept for compatibility: gin is forced into release mode in code and the credential gate no longer depends on this value. Only affects the Stripe-webhook startup warning |
 
 ### 2.2 Admin, auth & quotas
@@ -109,7 +112,7 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `GATEWAY_ADMIN_USER` | `admin` | Initial admin username |
 | `GATEWAY_ADMIN_USERNAME` | unset | Legacy alias, used only when `GATEWAY_ADMIN_USER` is empty |
 | `GATEWAY_ADMIN_PASSWORD` | — | Initial admin password. Startup is **fail-closed**: `admin123`, a password shorter than 8 characters, or an empty value aborts the process |
-| `GATEWAY_ADMIN_SECRET` | — | HMAC signing secret. Empty or well-known placeholder values abort startup; use one stable random value (≥ 32 chars) shared by every replica |
+| `GATEWAY_ADMIN_SECRET` | — | HMAC signing secret for admin tokens. Startup is **fail-closed**: an empty value, a value shorter than 32 characters, or one of the placeholder values shipped in sample manifests aborts the process. Use one stable random value (≥ 32 chars) shared by every replica |
 | `GATEWAY_ALLOW_INSECURE_DEFAULTS` | `false` | Escape hatch for throwaway local development: `true` downgrades the credential gate to a warning. Never enable in production |
 | `GATEWAY_ADMIN_RESET` | `false` | One-shot: force the stored admin password back to `GATEWAY_ADMIN_PASSWORD` on the next start, then set it back to `false` |
 | `ALLOW_REGISTRATION` | `false` (shipped config & `.env.example`) | Public self-registration. Off in the shipped `configs/config.yaml`; enable deliberately |
@@ -119,8 +122,8 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `TOKEN_EXPIRY_HOURS` | `168` | Session/token lifetime in hours |
 | `GATEWAY_METRICS_TOKEN` | unset | When set, `/metrics` requires `Authorization: Bearer <token>` from every client. When unset, `/metrics` is limited to loopback/private clients |
 | `GATEWAY_METRICS_ALLOW_PUBLIC` | `false` | Explicitly open `/metrics` to public clients when no token is configured (not recommended) |
-| `GATEWAY_TRUSTED_PROXIES` | unset | Comma-separated proxy CIDRs whose `X-Forwarded-For` is trusted for client-IP limits/logging. Empty trusts no forwarding headers (safe default). Behind the bundled nginx set the Compose network, e.g. `172.22.0.0/16`. An invalid list refuses startup |
-| `GATEWAY_ADMIN_ALLOWED_IPS` | unset (loopback + private) | Control-plane CIDR/IP allowlist (`/api/v1/admin`, `/app`). Overrides the default loopback/private rule; an invalid entry fails closed with 503 |
+| `GATEWAY_TRUSTED_PROXIES` | unset (trust no forwarding header) | Comma-separated proxy CIDRs whose `X-Forwarded-For`/`X-Real-IP` are trusted for client-IP limits, logging **and the control-plane guard**. Empty trusts nothing, so behind a reverse proxy every request is attributed to the proxy and the control plane fails closed with `403` — set this to the proxy CIDRs. The shipped Compose stack fixes the nginx↔gateway subnet to `172.30.0.0/16` and passes it as the default. An invalid list refuses startup |
+| `GATEWAY_ADMIN_ALLOWED_IPS` | unset (loopback + forwarded private clients) | Control-plane CIDR/IP allowlist (`/api/v1/admin`, `/app`). Replaces the default rule; an invalid entry fails closed with 503. A peer that cannot be attributed to a client (no trusted proxy hop) only passes when the peer address itself is on the list |
 | `GATEWAY_ADMIN_ALLOWED_HOSTS` | unset | Optional `Host` allowlist for the control plane; supports `*.example.com` |
 | `GATEWAY_ADMIN_ALLOW_PUBLIC` | `false` | Explicitly open the control plane to public clients (not recommended) |
 
@@ -128,7 +131,7 @@ The following environment variables are read by the server. YAML supports `${NAM
 
 | Environment Variable | Default Value | Description |
 | :--- | :--- | :--- |
-| `GATEWAY_FIRST_TOKEN_TIMEOUT` | derived from the channel timeout | Only applies to channels without `timeout_seconds`; otherwise 30s (60s for reasoning model names such as o1/o3/r1/thinking) |
+| `GATEWAY_FIRST_TOKEN_TIMEOUT` | derived from the channel timeout | **Global upper bound**: it applies to **every** channel and can only shorten the channel's own `timeout_seconds`, never extend it (the effective window is `min(channel timeout, this value)`). When unset it is derived: 30s, or 60s for reasoning model names such as o1/o3/r1/thinking. Setting it to 10 silently caps a `timeout_seconds: 3600` reasoning channel at 10s |
 | `GATEWAY_BREAKER_ENABLED` | `true` | Tri-state circuit breaker. `false` = advisory mode (records state, never rejects traffic) — recommended for single-channel deployments |
 | `GATEWAY_BREAKER_FAILURES` | `3` | Consecutive channel failures before the breaker opens. HTTP 429 never counts as a channel failure |
 | `GATEWAY_BREAKER_COOLDOWN_SEC` | `30` | Open-state cooldown before half-open probing |
@@ -183,7 +186,9 @@ Snapshot contents are redacted (API keys, tokens, passwords) before storage and 
 
 ### Startup credential gate
 
-The admin password and signing secret are validated before the database is opened. An empty signing secret, a password equal to `admin123` (or shorter than 8 characters), or one of the placeholder values that ship in sample manifests aborts startup with `refusing to start: insecure default credentials detected`. `GATEWAY_ALLOW_INSECURE_DEFAULTS=true` downgrades this to a warning for throwaway local environments only. The Helm chart generates a random password/secret, so it passes by construction.
+The admin password and signing secret are validated before the database is opened. Startup aborts with `refusing to start: insecure default credentials detected` when: the signing secret is empty, shorter than 32 characters, or one of the placeholder values that ship in sample manifests; or the password equals `admin123`, is shorter than 8 characters, or is empty. `GATEWAY_ALLOW_INSECURE_DEFAULTS=true` downgrades this to a warning for throwaway local environments only. The Helm chart generates a random password/secret, so it passes by construction.
+
+Note that the 32-character signing-secret floor is a breaking change for an existing deployment whose `GATEWAY_ADMIN_SECRET` was shorter: the process now refuses to start (fail-closed) instead of running with a brute-forcible token signing key. Rotating it invalidates existing admin sessions.
 
 ### Timeout chain
 
@@ -191,7 +196,7 @@ There is one operator-facing timeout: each channel's `timeout_seconds`, which al
 
 * channel timeout ≤ `model.MaxChannelTimeoutSeconds` (86340s, derived from the 86400s edge budget);
 * every shipped edge proxy must allow the same 86400s budget — `cmd/airoute/nginx_timeout_test.go` asserts this for `deploy/nginx-compose.conf`, `deploy/swarm/nginx-swarm.conf`, `deploy/nginx.conf` and the Helm ingress annotations, so a drifting edge turns the test red;
-* streaming (SSE) responses clear the Go `http.Server.WriteTimeout` deadline (`write_timeout_sec`, 600s in `configs/config.yaml`, 180s in the Helm chart) so long generations are not cut mid-stream; **non-streaming** responses remain bounded by that value;
+* streaming (SSE) responses clear the Go `http.Server.WriteTimeout` deadline (`write_timeout_sec`, overridable with `GATEWAY_WRITE_TIMEOUT_SEC`; 600s in `configs/config.yaml`, 180s in the Helm chart) so long generations are not cut mid-stream; **non-streaming** responses remain bounded by that value, and the startup self-check now reports `server_write_timeout` on every channel line and warns when `channel timeout > write timeout` — that is the layer that used to cut a request while the report claimed the budget was proven;
 * the SIGTERM drain budget (`GATEWAY_SHUTDOWN_TIMEOUT_SEC`, derived from `GATEWAY_DRAIN_TIMEOUT_SEC + 15s`) must fit inside the deployment's stop grace period — the Compose/Swarm services set `stop_grace_period: 150s` and the Helm chart sets `terminationGracePeriodSeconds: 180`.
 
 ### Health probes
@@ -211,11 +216,25 @@ On `SIGTERM`/`SIGINT` the process stops accepting connections and waits up to `G
 
 ### Control-plane exposure
 
-The control plane (`/api/v1/admin` and the embedded console under `/app`) is enforced **inside the gateway**, not by the nginx `Host` header. By default only loopback and private-network clients may reach it; public clients receive `403` even through the catch-all virtual host (`deploy/nginx-compose.conf` also applies the same allow/deny list at the edge as defence in depth). This keeps `http://127.0.0.1:8080` and LAN access working without exposing management endpoints to the internet.
+The control plane is exactly two path prefixes: **`/api/v1/admin`** (the management API) and **`/app`** (the console shell). It is enforced **inside the gateway**, not by the nginx `Host` header, and the edge configs apply the same allow/deny list as defence in depth (`deploy/nginx-compose.conf`, `deploy/swarm/nginx-swarm.conf`, `deploy/nginx.conf`; `cmd/airoute/nginx_admin_acl_test.go` keeps them aligned).
+
+What is deliberately *not* part of that predicate:
+
+* `GET /` renders the **public landing page and login screen** (`web/src/lib/consoleRoute.js` resolves a bare `/` to `viewMode: 'landing'`), so guarding it would make the public entrance unreachable;
+* `/assets` only serves the content-hashed JS/CSS bundles of that shell (no API data);
+* `/api/v1/auth/*` is the CLI's remote-login path;
+* `/api/v1/user/*` is the tenant self-service API (wallet, usage), reachable by ordinary customers.
+
+The guard decides on the **client identity**, not the raw TCP peer: a request is attributable only when it arrived through a proxy listed in `GATEWAY_TRUSTED_PROXIES`. Loopback clients are always attributable; private clients that came through a trusted proxy are admitted; public clients receive `403`; and a request from a non-loopback peer with no forwarding information (an unconfigured proxy) **fails closed with `403`** — the error names `GATEWAY_TRUSTED_PROXIES` as the fix. This is why the shipped Compose topology fixes the nginx↔gateway subnet (`172.30.0.0/16`) and passes it as the default: without it every request would be attributed to the load balancer, which is exactly how the old guard ended up admitting everyone.
+
+Note the console SPA is also the app served on `/`; the management *data* is only reachable through the guarded `/api/v1/admin` API, so a public visitor gets the landing page but no administrative capability.
+
+A deployment **without** a reverse proxy (bare binary on a LAN, direct in-cluster access, `deploy/kubernetes.yaml` without an ingress) has no forwarding header to attribute, so it must set `GATEWAY_ADMIN_ALLOWED_IPS` to the client CIDR — the explicit list also admits a matching direct TCP peer. Leaving both variables unset restricts the control plane to loopback, which is the intended fail-closed default.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `GATEWAY_ADMIN_ALLOWED_IPS` | unset | Comma-separated CIDR/IP allowlist that replaces the loopback/private default. An invalid entry fails closed (`503`) |
+| `GATEWAY_TRUSTED_PROXIES` | unset | Proxy CIDRs whose forwarding headers are trusted. Empty means no client attribution, so the control plane fails closed behind a proxy |
+| `GATEWAY_ADMIN_ALLOWED_IPS` | unset | Comma-separated CIDR/IP allowlist that replaces the loopback/forwarded-private default. An invalid entry fails closed (`503`); a non-attributable peer passes only if the peer itself is listed |
 | `GATEWAY_ADMIN_ALLOWED_HOSTS` | unset | Optional comma-separated `Host` allowlist (`*.example.com` wildcard supported) |
 | `GATEWAY_ADMIN_ALLOW_PUBLIC` | `false` | Explicitly allow public clients (not recommended; the guard logs a warning) |
 
@@ -324,7 +343,7 @@ api_keys:
   peers immediately. Without Redis each replica reloads its data-plane snapshot from the database every 10s,
   so a freshly created channel can stay unroutable on a peer for up to ~10s (those requests fail with
   `404 model_not_found`); requests already routed keep working.
-- **RPM** is enforced with a distributed Redis sliding window (or a local token bucket without Redis).
+- **RPM** is enforced with a 60s sliding window: the same rule is implemented in Redis (cross-replica, `internal/distributed`) and locally in the gateway (when Redis is not configured or a Redis call fails). Both admit at most `rpm` requests in any 60s interval, so falling back to the local limiter does **not** loosen the quota; during an outage the only difference is scope — each replica enforces `rpm` on its own share of the traffic instead of the cluster-wide count.
 - **TPM** is enforced with a per-key, one-minute sliding window and reports `X-RateLimit-Limit-Tokens` / `X-RateLimit-Remaining-Tokens`; over-budget requests get `429` with `Retry-After: 60`.
 - **Sessions** are cookie-based: login sets an HttpOnly `airoute_session` cookie plus a readable `airoute_csrf` cookie. State-changing requests authenticated by cookie must echo the CSRF value in `X-CSRF-Token`. API clients keep using `Authorization: Bearer`.
 - **Login throttling** locks an account/IP pair for 15 minutes after 5 consecutive failures (HTTP 429).

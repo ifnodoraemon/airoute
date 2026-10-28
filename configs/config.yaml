@@ -1,15 +1,20 @@
 # ==============================================================================
 # Airoute 核心配置文件 (YAML)
-# 所有参数均已与项目根目录下的 .env 统一环境变量打通，开箱即用
+# 标 ${VAR} 的参数均与项目根目录下的 .env 统一环境变量打通，开箱即用；
+# HTTP 超时与日志级别除本文件的默认值外，还可由 GATEWAY_READ_TIMEOUT_SEC /
+# GATEWAY_WRITE_TIMEOUT_SEC / GATEWAY_LOG_LEVEL 覆盖（server.go 启动时覆写，
+# 因为 Compose 把本文件只读挂进容器，运维无法改文件）。
 # ==============================================================================
 
 server:
   host: "${GATEWAY_HOST:-0.0.0.0}"
   port: ${GATEWAY_PORT:-8080}
   public_url: "${PUBLIC_URL}"
-  read_timeout_sec: 600
-  write_timeout_sec: 600
-  log_level: "info"
+  # 流式 (SSE) 响应会清除写 deadline，故 write_timeout_sec 只约束非流式响应写出；
+  # 见 docs/CONFIGURATION.md 的 Timeout chain 一节。
+  read_timeout_sec: ${GATEWAY_READ_TIMEOUT_SEC:-600}
+  write_timeout_sec: ${GATEWAY_WRITE_TIMEOUT_SEC:-600}
+  log_level: "${GATEWAY_LOG_LEVEL:-info}"
 
 # 数据库与分布式缓存连接 (由 .env DATABASE_URL / REDIS_URL 统管)
 # database_url: "${DATABASE_URL}"

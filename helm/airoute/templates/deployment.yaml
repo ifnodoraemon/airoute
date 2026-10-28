@@ -64,6 +64,11 @@ spec:
               value: "release"
             - name: GATEWAY_ALLOW_INSECURE_DEFAULTS
               value: "false"
+            # One-shot escape hatch: force the stored admin password back to the
+            # chart Secret's password on the next start. Without this pass-through
+            # the variable never reached the pod and the reset silently did nothing.
+            - name: GATEWAY_ADMIN_RESET
+              value: {{ .Values.auth.adminReset | default false | quote }}
             {{- if .Values.auth.trustedProxies }}
             - name: GATEWAY_TRUSTED_PROXIES
               value: {{ .Values.auth.trustedProxies | quote }}

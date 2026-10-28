@@ -37,7 +37,11 @@ func adminGuardRequest(r *gin.Engine, path, remoteAddr, host string, xff string)
 
 // The guard is the D15 fix: the catch-all nginx vhost exposes /api/v1/admin and
 // /app, so the gateway itself must refuse public clients by default.
-func TestAdminAccessGuardDefaultsToLoopbackAndPrivate(t *testing.T) {
+//
+// Without a trusted proxy the only attributable caller is loopback. A private
+// non-loopback peer is the nginx/LB container in the shipped topology, so treating
+// it as "a private client" was what let every public request through.
+func TestAdminAccessGuardDefaultsToLoopbackOnly(t *testing.T) {
 	t.Setenv(adminAllowedIPsEnv, "")
 	t.Setenv(adminAllowedHostsEnv, "")
 	t.Setenv(adminAllowPublicEnv, "")
@@ -52,8 +56,8 @@ func TestAdminAccessGuardDefaultsToLoopbackAndPrivate(t *testing.T) {
 	}{
 		{"loopback v4", "/api/v1/admin/keys", "127.0.0.1:5000", http.StatusOK},
 		{"loopback v6", "/api/v1/admin", "[::1]:5000", http.StatusOK},
-		{"private 10", "/api/v1/admin/keys", "10.1.2.3:5000", http.StatusOK},
-		{"private 192.168", "/app/", "192.168.1.9:5000", http.StatusOK},
+		{"unattributed private 10", "/api/v1/admin/keys", "10.1.2.3:5000", http.StatusForbidden},
+		{"unattributed private 192.168", "/app/", "192.168.1.9:5000", http.StatusForbidden},
 		{"public admin", "/api/v1/admin/keys", "8.8.8.8:5000", http.StatusForbidden},
 		{"public console", "/app/", "203.0.113.9:5000", http.StatusForbidden},
 		{"public data plane unaffected", "/v1/models", "8.8.8.8:5000", http.StatusOK},
@@ -65,6 +69,26 @@ func TestAdminAccessGuardDefaultsToLoopbackAndPrivate(t *testing.T) {
 				t.Fatalf("%s %s from %s = %d, want %d", tc.path, tc.addr, tc.name, got, tc.want)
 			}
 		})
+	}
+}
+
+// The public landing page/login screen and the tenant self-service API are not the
+// control plane: guarding them would lock customers out of logging in.
+func TestAdminAccessGuardLeavesPublicSurfaceReachable(t *testing.T) {
+	t.Setenv(adminAllowedIPsEnv, "")
+	t.Setenv(adminAllowedHostsEnv, "")
+	t.Setenv(adminAllowPublicEnv, "")
+	t.Setenv(trustedProxyEnv, "")
+	engine := gin.New()
+	gin.SetMode(gin.TestMode)
+	engine.Use(AdminAccessGuard())
+	for _, path := range []string{"/", "/assets/index-abc123.js", "/api/v1/auth/login", "/api/v1/user/wallet"} {
+		engine.GET(path, func(c *gin.Context) { c.Status(http.StatusOK) })
+	}
+	for _, path := range []string{"/", "/assets/index-abc123.js", "/api/v1/auth/login", "/api/v1/user/wallet"} {
+		if got := adminGuardRequest(engine, path, "8.8.8.8:5000", "airoute.example.com", ""); got != http.StatusOK {
+			t.Fatalf("%s from a public client = %d, want 200 (not the control plane)", path, got)
+		}
 	}
 }
 
@@ -86,8 +110,13 @@ func TestAdminAccessGuardUsesTrustedProxyClientIP(t *testing.T) {
 	if got := adminGuardRequest(engine, "/api/v1/admin/keys", "172.22.0.1:5000", "127.0.0.1:8080", "192.168.1.5"); got != http.StatusOK {
 		t.Fatalf("private client behind trusted proxy = %d, want 200", got)
 	}
-	if got := adminGuardRequest(engine, "/api/v1/admin/keys", "172.22.0.1:5000", "127.0.0.1:8080", ""); got != http.StatusOK {
-		t.Fatalf("trusted proxy peer itself = %d, want 200", got)
+	if got := adminGuardRequest(engine, "/api/v1/admin/keys", "172.22.0.1:5000", "127.0.0.1:8080", "127.0.0.1"); got != http.StatusOK {
+		t.Fatalf("loopback client behind trusted proxy = %d, want 200", got)
+	}
+	// The trusted proxy itself sends no forwarding header: nothing is attributable,
+	// so the guard must fail closed instead of trusting the proxy's own address.
+	if got := adminGuardRequest(engine, "/api/v1/admin/keys", "172.22.0.1:5000", "127.0.0.1:8080", ""); got != http.StatusForbidden {
+		t.Fatalf("trusted proxy peer without a forwarding header = %d, want 403", got)
 	}
 }
 
@@ -110,6 +139,24 @@ func TestAdminAccessGuardExplicitAllowlistOverridesDefault(t *testing.T) {
 	// An explicit list replaces the private-network default (fail closed).
 	if got := adminGuardRequest(engine, "/api/v1/admin/keys", "127.0.0.1:5000", "127.0.0.1:8080", ""); got != http.StatusForbidden {
 		t.Fatalf("loopback with explicit allowlist = %d, want 403", got)
+	}
+}
+
+// An explicit allowlist entry for the TCP peer itself still works without a proxy
+// (a console bound to a fixed LAN address): there is nothing to attribute, but the
+// peer is exactly the address the operator named.
+func TestAdminAccessGuardExplicitAllowlistMatchesDirectPeer(t *testing.T) {
+	t.Setenv(adminAllowedIPsEnv, "203.0.113.0/24")
+	t.Setenv(adminAllowedHostsEnv, "")
+	t.Setenv(adminAllowPublicEnv, "")
+	t.Setenv(trustedProxyEnv, "")
+	engine := adminGuardEngine()
+
+	if got := adminGuardRequest(engine, "/api/v1/admin/keys", "203.0.113.9:5000", "127.0.0.1:8080", ""); got != http.StatusOK {
+		t.Fatalf("direct peer on the allowlist = %d, want 200", got)
+	}
+	if got := adminGuardRequest(engine, "/api/v1/admin/keys", "198.51.100.9:5000", "127.0.0.1:8080", ""); got != http.StatusForbidden {
+		t.Fatalf("direct peer outside the allowlist = %d, want 403", got)
 	}
 }
 
