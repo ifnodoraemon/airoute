@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/storage"
@@ -71,7 +72,14 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 		}
 	}
 
-	if targetKey := c.Query("key"); targetKey != "" {
+	if targetKey := strings.TrimSpace(c.Query("key")); targetKey != "" {
+		// The console sends back the identifier it displays (ak_…). The audit
+		// column stores the digest, so resolve the identifier before filtering.
+		if storage.IsAPIKeyPublicID(targetKey) {
+			if digest, err := h.repo.APIKeyDigestByPublicID(targetKey); err == nil && digest != "" {
+				targetKey = digest
+			}
+		}
 		if claims, ok := GetClaimsFromContext(c); ok && claims.Role != "admin" {
 			allowed := false
 			for _, k := range filter.APIKeys {
@@ -105,9 +113,7 @@ func (h *AdminHandler) ListLogs(c *gin.Context) {
 	if logs == nil {
 		logs = make([]*storage.UsageLogRecord, 0)
 	}
-	if !shouldRevealKey(c) {
-		maskUsageLogKeys(logs)
-	}
+	h.presentLogKeys(logs, shouldRevealKey(c))
 	// `total` is the size of the whole filtered result set, so the console can
 	// paginate honestly instead of assuming the current page is everything.
 	payload := gin.H{"code": 0, "data": logs, "limit": limit, "offset": offset}
@@ -210,10 +216,33 @@ func maskAPIKey(key string) string {
 	return storage.MaskAPIKey(key)
 }
 
-// maskUsageLogKeys masks every API key in a log page in place.
-func maskUsageLogKeys(logs []*storage.UsageLogRecord) {
+// presentLogKeys names each row's key the way operators identify it.
+//
+// The audit column holds the key digest (the ledger joins depend on it), but the
+// console and the access log speak in public identifiers (ak_…). Resolving the
+// digest here keeps the join intact while making the call log comparable with
+// the key list. A digest that no longer resolves to a key row (legacy, hard
+// deleted) stays hidden behind the mask unless a super-admin asked to reveal it.
+func (h *AdminHandler) presentLogKeys(logs []*storage.UsageLogRecord, reveal bool) {
+	if len(logs) == 0 {
+		return
+	}
+	digests := make([]string, 0, len(logs))
 	for _, l := range logs {
-		if l != nil {
+		if l != nil && l.APIKey != "" && !storage.IsAPIKeyPublicID(l.APIKey) {
+			digests = append(digests, l.APIKey)
+		}
+	}
+	ids, _ := h.repo.APIKeyPublicIDsByDigest(digests)
+	for _, l := range logs {
+		if l == nil || l.APIKey == "" || storage.IsAPIKeyPublicID(l.APIKey) {
+			continue
+		}
+		if publicID, ok := ids[l.APIKey]; ok && publicID != "" {
+			l.APIKey = publicID
+			continue
+		}
+		if !reveal {
 			l.APIKey = maskAPIKey(l.APIKey)
 		}
 	}

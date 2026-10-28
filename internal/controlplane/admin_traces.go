@@ -54,5 +54,32 @@ func (h *AdminHandler) ListRequestTraces(c *gin.Context) {
 	if traces == nil {
 		traces = []*storage.RequestTraceRecord{}
 	}
+	h.presentTraceKeys(traces)
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": traces})
+}
+
+// presentTraceKeys names archived traces the way operators identify keys: the
+// stored digest becomes the public identifier, and an unresolved digest is masked
+// instead of being returned raw.
+func (h *AdminHandler) presentTraceKeys(traces []*storage.RequestTraceRecord) {
+	if len(traces) == 0 {
+		return
+	}
+	digests := make([]string, 0, len(traces))
+	for _, t := range traces {
+		if t != nil && t.APIKey != "" && !storage.IsAPIKeyPublicID(t.APIKey) {
+			digests = append(digests, t.APIKey)
+		}
+	}
+	ids, _ := h.repo.APIKeyPublicIDsByDigest(digests)
+	for _, t := range traces {
+		if t == nil || t.APIKey == "" || storage.IsAPIKeyPublicID(t.APIKey) {
+			continue
+		}
+		if publicID, ok := ids[t.APIKey]; ok && publicID != "" {
+			t.APIKey = publicID
+			continue
+		}
+		t.APIKey = maskAPIKey(t.APIKey)
+	}
 }
