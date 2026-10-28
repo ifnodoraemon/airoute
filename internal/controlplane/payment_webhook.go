@@ -58,7 +58,7 @@ func VerifyStripeWebhookSignature(payload []byte, sigHeader, secret string, tole
 			diff = -diff
 		}
 		if diff > int64(tolerance.Seconds()) {
-			return fmt.Errorf("Webhook 时间戳超出允许容忍时间窗口 (可能为重放攻击)")
+			return fmt.Errorf("webhook 时间戳超出允许容忍时间窗口 (可能为重放攻击)")
 		}
 	}
 
@@ -78,7 +78,7 @@ func VerifyStripeWebhookSignature(payload []byte, sigHeader, secret string, tole
 	}
 
 	if !matched {
-		return fmt.Errorf("Webhook 签名验证不通过")
+		return fmt.Errorf("webhook 签名验证不通过")
 	}
 
 	return nil

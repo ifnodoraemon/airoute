@@ -133,7 +133,7 @@ func TestRegisterIsRateLimitedPerUsername(t *testing.T) {
 	throttled := false
 	for i := 0; i < registerRatePerUsernamePerMinute+3; i++ {
 		w := registrationRequest(t, handler,
-			fmt.Sprintf("203.0.113.30:1000"), "repeated-user", fmt.Sprintf("repeated-%d@example.com", i), "")
+			"203.0.113.30:1000", "repeated-user", fmt.Sprintf("repeated-%d@example.com", i), "")
 		if w.Code == http.StatusTooManyRequests {
 			throttled = true
 			break
