@@ -41,6 +41,7 @@ import { getConsoleRoute } from './lib/consoleRoute';
 import {
   ADMIN_NAV_GROUPS,
   USER_NAV_GROUPS,
+  allowedTabsFor,
   navGroupForTab,
   navGroupLabel,
 } from './lib/navGroups';
@@ -78,11 +79,21 @@ const VisualTopologyModal = lazy(() => import('./components/VisualTopologyModal'
 const AnnouncementModal = lazy(() => import('./components/AnnouncementModal'));
 const AiCopilot = lazy(() => import('./components/AiCopilot'));
 
-function ViewLoader() {
+/**
+ * Suspense fallback for the lazily loaded views and modals.
+ *
+ * Takes the language explicitly instead of reading I18nContext: one of its call
+ * sites (the session-restore loader below) renders before the provider is mounted,
+ * so context would silently fall back to Chinese in an English console.
+ *
+ * Exported for the shell's regression tests.
+ */
+export function ViewLoader({ lang = 'zh' }) {
+  const t = translations[lang] || translations.zh;
   return (
     <div className="flex flex-col items-center justify-center p-16 text-[#656B75] dark:text-[#A1A7B0]">
       <div className="w-7 h-7 border-2 border-[#355CFF] border-t-transparent rounded-full animate-spin mb-3"></div>
-      <span className="text-xs font-medium tracking-wide">Loading module...</span>
+      <span className="text-xs font-medium tracking-wide">{t.loadingModule}</span>
     </div>
   );
 }
@@ -332,6 +343,16 @@ export default function App() {
     setEditingChannelId(null);
     setShowChannelModal(false);
     setShowKeyModal(false);
+    // Console-shell state that is scoped to the account rather than to a view.
+    // These were missed: the dashboard stayed drilled into the previous operator's
+    // key row (so the next session's KPI cards reported that key, or all zeros
+    // once it was deleted), and an announcement dialog left open survived into the
+    // next session. The audit-log key filter is account-scoped too: a stale
+    // `key_id` from another account silently filters the new account's log to
+    // empty, so the cursor and key drill-down are reset with it.
+    setDashboardSelectedKey('');
+    setShowAnnouncementModal(false);
+    setLogFilters({ key_id: '', page: '1' });
   };
 
   const handleLogout = async () => {
@@ -424,19 +445,21 @@ export default function App() {
     };
   }, [handleLocationChange]);
 
-  // Automatically ensure regular user stays within permitted tabs.
+  // Keep the active tab inside what the signed-in role may open.
   //
-  // 'models' is intentionally absent: the model-routes view is built entirely on
-  // admin-only endpoints (/admin/models/routes, /admin/channels), so a regular
-  // user landing there saw a page that could only fail with permission errors.
-  // 'pricing' stays (GET /admin/pricing is available to any authenticated key
-  // owner) but its write actions are hidden for non-admins.
+  // The allowed set comes from lib/navGroups.js — the same list the sidebar renders
+  // and lib/consoleRoute.js resolves deep links against — so a tab can no longer be
+  // advertised in the navigation while a hand-written guard forbids it. That drift
+  // is exactly what hid the self-service usage page from regular users: the guard's
+  // private list omitted `dashboard`, so "Overview" bounced them to the wallet.
+  //
+  // An unknown/forbidden tab falls back to the role's FIRST allowed tab (the same
+  // rule the route resolver uses) instead of a hard-coded page.
   useEffect(() => {
-    if (!restoringSession && adminUser && adminUser.role !== 'admin') {
-      const allowedTabs = ['wallet', 'keys', 'playground', 'pricing', 'logs', 'docs'];
-      if (!allowedTabs.includes(currentTab)) {
-        setCurrentTab('wallet');
-      }
+    if (restoringSession || !adminUser) return;
+    const allowedTabs = allowedTabsFor(adminUser.role === 'admin');
+    if (!allowedTabs.includes(currentTab)) {
+      setCurrentTab(allowedTabs[0]);
     }
   }, [adminUser, currentTab, setCurrentTab, restoringSession]);
 
@@ -656,14 +679,14 @@ export default function App() {
   // matched on fields the client does not check, e.g. error_message).
   const filteredLogs = logs;
 
-  if (restoringSession && viewMode === 'console') return <ViewLoader />;
+  if (restoringSession && viewMode === 'console') return <ViewLoader lang={lang} />;
 
   if (viewMode === 'landing') {
     return (
       <I18nContext.Provider value={{ lang, setLang, toggleLang, t }}>
         <div className="min-h-screen bg-[#F7F7F5] dark:bg-[#111214] text-[#202124] dark:text-[#F1F2F4] font-sans selection:bg-[#355CFF] selection:text-white">
           <Toast toast={toast} onClose={dismissToast} />
-          <Suspense fallback={<ViewLoader />}>
+          <Suspense fallback={<ViewLoader lang={lang} />}>
             <LandingPage
               isLoggedIn={!!adminToken || !!adminUser}
               lang={lang}
@@ -717,7 +740,7 @@ export default function App() {
       <I18nContext.Provider value={{ lang, setLang, toggleLang, t }}>
         <div className="min-h-screen bg-[#F7F7F5] dark:bg-[#111214] text-[#202124] dark:text-[#F1F2F4] font-sans selection:bg-[#355CFF] selection:text-white">
           <Toast toast={toast} onClose={dismissToast} />
-          <Suspense fallback={<ViewLoader />}>
+          <Suspense fallback={<ViewLoader lang={lang} />}>
             <AuthPage
               initialTab={authTab}
               lang={lang}
@@ -745,7 +768,7 @@ export default function App() {
       <I18nContext.Provider value={{ lang, setLang, toggleLang, t }}>
         <div className="min-h-screen bg-[#F7F7F5] dark:bg-[#111214] text-[#202124] dark:text-[#F1F2F4] font-sans selection:bg-[#355CFF] selection:text-white">
           <Toast toast={toast} onClose={dismissToast} />
-          <Suspense fallback={<ViewLoader />}>
+          <Suspense fallback={<ViewLoader lang={lang} />}>
             <ServiceStatus
               isStandalone={true}
               onBackHome={() => setViewMode('landing')}
@@ -1171,7 +1194,7 @@ export default function App() {
             </div>
           )}
 
-          <Suspense fallback={<ViewLoader />}>
+          <Suspense fallback={<ViewLoader lang={lang} />}>
             {/* 1a. SELF-SERVICE DASHBOARD (regular users) */}
             {currentTab === 'dashboard' && adminUser?.role !== 'admin' && (
               <MyUsageView adminFetch={apiFetch} showToast={showToast} lang={lang} />

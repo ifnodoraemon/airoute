@@ -1566,7 +1566,7 @@ Execute the following mission with precision, maintainability, and zero speculat
                         {msg.role === 'user' ? (
                           <div className="whitespace-pre-wrap">{msg.content}</div>
                         ) : (
-                          <MarkdownRenderer content={msg.content} />
+                          <MarkdownRenderer content={msg.content} lang={lang} />
                         )}
                       </div>
                     </div>
@@ -1592,7 +1592,7 @@ Execute the following mission with precision, maintainability, and zero speculat
                           </div>
                         )}
                         {playOutput ? (
-                          <MarkdownRenderer content={playOutput} />
+                          <MarkdownRenderer content={playOutput} lang={lang} />
                         ) : (
                           playLoading && !playReasoningOutput && (
                             <div className="flex items-center space-x-2 ui-meta py-1 font-mono">
@@ -1626,7 +1626,7 @@ Execute the following mission with precision, maintainability, and zero speculat
                     )}
                     <div className="text-xs text-[#202124] dark:text-[#F1F2F4] leading-relaxed">
                       {playOutput ? (
-                        <MarkdownRenderer content={playOutput} />
+                        <MarkdownRenderer content={playOutput} lang={lang} />
                       ) : (
                         <div className="text-center py-24 ui-meta">
                           {isZh ? '等待发送评测指令...' : 'Awaiting prompt evaluation...'}
@@ -1656,7 +1656,7 @@ Execute the following mission with precision, maintainability, and zero speculat
                     )}
                     <div className="text-xs text-slate-800 dark:text-slate-100 leading-relaxed">
                       {arenaOutputB ? (
-                        <MarkdownRenderer content={arenaOutputB} />
+                        <MarkdownRenderer content={arenaOutputB} lang={lang} />
                       ) : (
                         <div className="text-center py-24 ui-meta">
                           {isZh ? '等待发送评测指令...' : 'Awaiting prompt evaluation...'}

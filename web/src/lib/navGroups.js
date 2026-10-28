@@ -90,3 +90,32 @@ export function navGroupLabel(group, isZh) {
 export function navTabs(isAdmin) {
   return (isAdmin ? ADMIN_NAV_GROUPS : USER_NAV_GROUPS).flatMap((group) => group.tabs);
 }
+
+/**
+ * Tabs that belong to no group but are still openable by every role.
+ *
+ * `docs` renders as the standalone bottom item of the sidebar (App.jsx), so it is
+ * deliberately absent from both group configs above while remaining a valid
+ * destination.
+ */
+const UNGROUPED_TABS = ['docs'];
+
+/**
+ * The complete set of tabs a role may open, in sidebar order.
+ *
+ * This is the ONE answer to "which tabs may this role see?". The console's role
+ * guard (App.jsx), the deep-link resolver (lib/consoleRoute.js) and the tests all
+ * read it instead of keeping their own copies. Three hand-maintained lists existed
+ * before and they drifted: the role guard omitted `dashboard` while the sidebar,
+ * the route resolver and the view renderer all offered it, so a regular user's
+ * "Overview" item silently landed on the wallet page.
+ *
+ * The first element is also the fallback destination for an unknown or forbidden
+ * route, which keeps "where do we send them instead?" derived from the same list.
+ *
+ * @param {boolean} isAdmin
+ * @returns {string[]}
+ */
+export function allowedTabsFor(isAdmin) {
+  return [...navTabs(isAdmin), ...UNGROUPED_TABS];
+}

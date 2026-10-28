@@ -123,8 +123,10 @@ describe('MarkdownRenderer', () => {
       // The stream is cut mid-answer: a fence is open and prose follows it. Closing
       // the fence by appending "\n```" put an extra blank line inside the block, so
       // the block's own counter said 4 lines for the 3 the stream had produced.
+      // Language is pinned so the counter wording is the one asserted below; this
+      // test is about the fence logic, not about localisation.
       const { container } = render(
-        <MarkdownRenderer content={'intro\n\n```go\ncode\n\ntrailing prose\n'} />
+        <MarkdownRenderer content={'intro\n\n```go\ncode\n\ntrailing prose\n'} lang="en" />
       );
 
       expect(container.textContent).toContain('3 lines');

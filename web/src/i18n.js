@@ -76,6 +76,16 @@ export const translations = {
     keyIdHint: '密钥 ID 仅用于在日志、账单和工单中识别密钥，不能用于鉴权；明文仅在创建时显示一次。',
     keyDismissCreated: '我已保存，关闭',
     keySecretUnavailable: '密钥明文仅在创建时显示一次',
+
+    // Shell / markdown chrome
+    loadingModule: '正在加载模块…',
+    mdCopy: '复制',
+    mdCopied: '已复制',
+    mdCopyTitle: '复制代码',
+    mdWrapToggle: '切换自动换行',
+    mdWrapOn: '换行',
+    mdWrapOff: '不换行',
+    mdLines: '行',
   },
 
   en: {
@@ -150,6 +160,16 @@ export const translations = {
     keyIdHint: 'The key ID identifies the key in logs, billing and support tickets; it cannot authenticate a call. The plaintext is shown once, at creation.',
     keyDismissCreated: 'Saved — close',
     keySecretUnavailable: 'The plaintext key is shown once, at creation',
+
+    // Shell / markdown chrome
+    loadingModule: 'Loading module…',
+    mdCopy: 'Copy',
+    mdCopied: 'Copied',
+    mdCopyTitle: 'Copy code',
+    mdWrapToggle: 'Toggle line wrap',
+    mdWrapOn: 'Wrap',
+    mdWrapOff: 'Nowrap',
+    mdLines: 'lines',
   },
 };
 

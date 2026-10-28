@@ -1300,7 +1300,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                 {isUser ? (
                   <div className="whitespace-pre-wrap font-sans text-xs leading-relaxed">{m.content}</div>
                 ) : (
-                  <MarkdownRenderer content={m.content} />
+                  <MarkdownRenderer content={m.content} lang={lang} />
                 )}
 
                 {/* 交互式操作引导按钮 */}

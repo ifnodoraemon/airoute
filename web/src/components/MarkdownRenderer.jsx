@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, createContext, useContext } from 'react';
 import { marked } from 'marked';
 import {
   Copy,
@@ -15,6 +15,19 @@ import {
   Code
 } from 'lucide-react';
 import { copyToClipboard as crossOriginCopy } from '../config';
+import { translations } from '../i18n';
+
+// Language of the markdown chrome (copy / wrap controls). The token renderers are
+// plain module functions nested several levels deep, so the language is carried by
+// a context scoped to one renderer instead of being threaded through every
+// intermediate component. `MarkdownRenderer` takes an explicit `lang` prop from its
+// callers; the context only avoids prop drilling below it.
+const MarkdownLangContext = createContext('zh');
+
+function useMarkdownStrings() {
+  const lang = useContext(MarkdownLangContext);
+  return translations[lang] || translations.zh;
+}
 
 function safeMarkdownUrl(value, image = false) {
   const url = (value || '').trim();
@@ -206,6 +219,7 @@ export function RenderInline({ tokens = [] }) {
 function CodeBlock({ code = '', lang = '' }) {
   const [copied, setCopied] = useState(false);
   const [isWrapped, setIsWrapped] = useState(false);
+  const t = useMarkdownStrings();
 
   const cleanLang = (lang || 'code').toLowerCase().trim();
 
@@ -234,7 +248,7 @@ function CodeBlock({ code = '', lang = '' }) {
           </span>
           {lineCount > 1 && (
             <span className="text-xs text-slate-400">
-              ({lineCount} lines)
+              ({lineCount} {t.mdLines})
             </span>
           )}
         </div>
@@ -244,22 +258,22 @@ function CodeBlock({ code = '', lang = '' }) {
             type="button"
             onClick={() => setIsWrapped(!isWrapped)}
             className="text-xs text-slate-400 hover:text-slate-200 transition cursor-pointer px-1.5 py-0.5 rounded hover:bg-slate-800"
-            title={isWrapped ? '切换单行滚动' : '切换自动换行'}
+            title={t.mdWrapToggle}
           >
-            {isWrapped ? 'Nowrap' : 'Wrap'}
+            {isWrapped ? t.mdWrapOff : t.mdWrapOn}
           </button>
           <button
             type="button"
             onClick={handleCopy}
             className="inline-flex items-center gap-1 text-slate-300 hover:text-white transition cursor-pointer px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-xs shadow-xs"
-            title="复制代码"
+            title={t.mdCopyTitle}
           >
             {copied ? (
               <Check className="w-3 h-3 text-emerald-400" />
             ) : (
               <Copy className="w-3 h-3 text-slate-400" />
             )}
-            <span>{copied ? '已复制' : '复制'}</span>
+            <span>{copied ? t.mdCopied : t.mdCopy}</span>
           </button>
         </div>
       </div>
@@ -564,7 +578,10 @@ function RenderBlockToken({ token }) {
 }
 
 // 8. Main Markdown Renderer Component
-export default function MarkdownRenderer({ content = '' }) {
+//
+// `lang` is the console language ('zh' | 'en'); it localises the code-block chrome
+// (copy / wrap controls, line counter) and is provided to the token renderers.
+export default function MarkdownRenderer({ content = '', lang = 'zh' }) {
   // Auto-close unclosed markdown code fences if streaming cut off in the middle
   const normalizedContent = useMemo(() => {
     let text = content;
@@ -590,10 +607,12 @@ export default function MarkdownRenderer({ content = '' }) {
   }
 
   return (
-    <div className="space-y-2 text-xs leading-relaxed text-slate-800 dark:text-slate-200 select-text">
-      {tokens.map((token, idx) => (
-        <RenderBlockToken key={idx} token={token} />
-      ))}
-    </div>
+    <MarkdownLangContext.Provider value={lang}>
+      <div className="space-y-2 text-xs leading-relaxed text-slate-800 dark:text-slate-200 select-text">
+        {tokens.map((token, idx) => (
+          <RenderBlockToken key={idx} token={token} />
+        ))}
+      </div>
+    </MarkdownLangContext.Provider>
   );
 }

@@ -19,6 +19,26 @@ import { copyToClipboard as crossOriginCopy } from '../config';
 // Public status polling cadence.
 const AUTO_REFRESH_MS = 30000;
 
+/**
+ * Normalise a channel's circuit-breaker state.
+ *
+ * The gateway serialises two independent fields (controlplane/channel_view.go):
+ *   status          -> 'active' | 'disabled'   (operator enablement)
+ *   breaker_status  -> 'CLOSED' | 'OPEN' | 'HALF-OPEN' (routing health)
+ * Only the second one says whether traffic is being routed around the channel, so
+ * every health decision on this page derives from it — the same rule
+ * ChannelsView.jsx (`channelHealth`) and DashboardView.jsx apply.
+ *
+ * @param {{breaker_status?: string}} channel
+ * @returns {'open'|'half_open'|'closed'} 'closed' when no breaker has tripped.
+ */
+export function channelBreakerState(channel) {
+  const breaker = String(channel?.breaker_status || '').toUpperCase();
+  if (breaker === 'OPEN' || breaker === 'TRIPPED') return 'open';
+  if (breaker === 'HALF-OPEN' || breaker === 'HALF_OPEN') return 'half_open';
+  return 'closed';
+}
+
 export default function ServiceStatus({
   isStandalone = true,
   onBackHome,
@@ -163,8 +183,13 @@ export default function ServiceStatus({
     return acc;
   }, {});
 
-  // Check overall health
-  const anyTripped = channels.some((c) => c.status === 'tripped' || (probeLatencies[c.id] && probeLatencies[c.id].error))
+  // Check overall health.
+  //
+  // The circuit breaker lives in `breaker_status` (CLOSED / OPEN / HALF-OPEN), while
+  // `status` is the channel's enablement (active / disabled) — the same two fields
+  // ChannelsView and DashboardView read. Comparing `status` against 'tripped' could
+  // never be true, so a breaker-open channel used to be reported as healthy here.
+  const anyTripped = channels.some((c) => channelBreakerState(c) !== 'closed' || (probeLatencies[c.id] && probeLatencies[c.id].error))
     || (publicData && publicData.status === 'degraded');
 
   // Show only actual probe measurements; no synthetic SLA or latency values.
@@ -504,14 +529,22 @@ export default function ServiceStatus({
               <tbody className="divide-y divide-[#E4E6E9] dark:divide-[#2C3038] text-xs">
                 {channels.map((ch) => {
                   const isDisabled = ch.status === 'disabled';
-                  const isTripped = ch.status === 'tripped';
+                  const breaker = channelBreakerState(ch);
                   const lat = probeLatencies[ch.id];
 
                   return (
                     <tr key={ch.id} className="hover:bg-[#F0F1F2]/60 dark:hover:bg-[#22252B]/60 transition">
                       <td className="py-3 px-4 font-medium">
                         <div className="flex items-center space-x-2">
-                          <span className={`w-2 h-2 rounded-full ${isDisabled ? 'bg-[#A1A7B0] dark:bg-[#656B75]' : isTripped ? 'bg-rose-500' : 'bg-emerald-500'}`}></span>
+                          <span className={`w-2 h-2 rounded-full ${
+                            isDisabled
+                              ? 'bg-[#A1A7B0] dark:bg-[#656B75]'
+                              : breaker === 'open'
+                                ? 'bg-rose-500'
+                                : breaker === 'half_open'
+                                  ? 'bg-amber-500'
+                                  : 'bg-emerald-500'
+                          }`}></span>
                           <span className={`font-semibold ${isDisabled ? 'text-[#656B75] dark:text-[#A1A7B0]' : 'text-[#202124] dark:text-[#F1F2F4]'}`}>{ch.name}</span>
                           {isDisabled && (
                             <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0] border border-[#E4E6E9] dark:border-[#2C3038]">
@@ -529,10 +562,15 @@ export default function ServiceStatus({
                             <Pause className="w-3 h-3 text-[#656B75] dark:text-[#A1A7B0]" />
                             <span>{isZh ? '已停用 / 暂停服务' : 'Disabled / Inactive'}</span>
                           </span>
-                        ) : isTripped ? (
+                        ) : breaker === 'open' ? (
                           <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-500/10 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/30 inline-flex items-center space-x-1">
                             <XCircle className="w-3 h-3 text-rose-500" />
                             <span>{t ? t.statusStateOpen : (isZh ? '已熔断跳闸' : 'Tripped (Open)')}</span>
+                          </span>
+                        ) : breaker === 'half_open' ? (
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 inline-flex items-center space-x-1">
+                            <AlertTriangle className="w-3 h-3 text-amber-500" />
+                            <span>{isZh ? '半开探测中' : 'Half-open (probing)'}</span>
                           </span>
                         ) : (
                           <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 inline-flex items-center space-x-1">
@@ -551,7 +589,10 @@ export default function ServiceStatus({
                             <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{lat.latency_ms} ms</span>
                           )
                         ) : (
-                          <span className="text-[#656B75] dark:text-[#A1A7B0]">{isZh ? '~35 ms (探针正常)' : '~35 ms (Normal)'}</span>
+                          // No probe has run for this channel. Showing a made-up
+                          // latency here ("~35 ms (Normal)") reported a measurement
+                          // that was never taken.
+                          <span className="text-[#656B75] dark:text-[#A1A7B0]">{isZh ? '未探测' : 'Not probed'}</span>
                         )}
                       </td>
                     </tr>
