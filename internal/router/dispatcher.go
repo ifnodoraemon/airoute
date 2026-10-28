@@ -200,15 +200,6 @@ func channelCallContext(ctx context.Context, ch *model.ChannelConfig) (context.C
 	return context.WithTimeout(ctx, timeout)
 }
 
-// isFatalClientPayloadError checks if the error is a deterministic client request syntax/payload
-// error (400, 422, 413) that would fail identically on every channel, rather than a node-specific 404.
-func isFatalClientPayloadError(err error) bool {
-	if ue, ok := provider.AsUpstreamError(err); ok {
-		return ue.Status == 400 || ue.Status == 422 || ue.Status == 413
-	}
-	return false
-}
-
 // Dispatch executes non-streaming chat with automatic fallback.
 func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequest) (*model.ChatCompletionResponse, error) {
 	// Bound the total time this request may spend across channels. A caller
@@ -311,10 +302,21 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		}
 
 		lastErr = err
+		// A 404 from a single channel means this node does not host the model; the
+		// same request can succeed elsewhere, so fall through to the next channel.
+		// Every modality path uses this shared rule (B-03).
+		if provider.IsModelNotFound(err) {
+			d.circuitBreaker.AbortCanary(ch.Name)
+			routerLog(ctx).Warn("channel does not host the requested model, trying next channel",
+				"channel", ch.Name,
+				"error", err.Error(),
+			)
+			attempted = append(attempted, ch.Name)
+			continue
+		}
 		// A deterministic payload error means the caller's request is at fault (400, 422, 413):
 		// the same request would fail on every channel, so do not trip the breaker and do not fan out.
-		// Note: 404 from a single channel means this node does not host the model; we fall through to next channels.
-		if isFatalClientPayloadError(err) {
+		if provider.IsFatalPayloadError(err) {
 			routerLog(ctx).Warn("upstream rejected request with a deterministic client error, aborting fallback",
 				"channel", ch.Name,
 				"error", err.Error(),
@@ -361,7 +363,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		return d.Dispatch(withChannelTrail(nextCtx, attempted), &reqCopy)
 	}
 
-	telemetry.GlobalMetrics.RecordRequest(false, 0, 0, 0)
+	// Request-level metrics are written once by the API layer (RecordUsage); the
+	// router used to record the same request here as well, so every unary request
+	// was counted twice in airoute_requests_total (B-04/C-08).
 	return nil, newExhaustedError(ctx, req.Model, exhaustedTrail(attempted, skipped), fmt.Errorf("all %d candidate channels failed for model %s. Last error: %w", len(channels), req.Model, lastErr))
 }
 

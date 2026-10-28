@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/provider"
 )
 
 type preambleFailProvider struct{}
@@ -97,5 +98,135 @@ func TestAnthropicMessagesCapabilityDoesNotSelectNativeWire(t *testing.T) {
 	ch.Protocols = append(ch.Protocols, AnthropicNativeProtocol)
 	if prov, ok := d.getProviderForChannel(&ch); !ok || prov.Type() != model.ProviderAnthropic {
 		t.Fatalf("explicit %q marker must select the native Anthropic provider, got %v", AnthropicNativeProtocol, prov)
+	}
+}
+
+// midStreamFailProvider commits the stream (emits a content token) and then drops
+// the connection: the "connects, first token works, long output always breaks"
+// degradation that used to be invisible to the breaker.
+type midStreamFailProvider struct{}
+
+func (p *midStreamFailProvider) Name() string             { return "mid-stream-fail" }
+func (p *midStreamFailProvider) Type() model.ProviderType { return model.ProviderCustom }
+func (p *midStreamFailProvider) ChatComplete(context.Context, *model.ChatCompletionRequest, *model.ChannelConfig) (*model.ChatCompletionResponse, error) {
+	return nil, errors.New("not used")
+}
+func (p *midStreamFailProvider) ChatCompleteStream(context.Context, *model.ChatCompletionRequest, *model.ChannelConfig) (<-chan *model.StreamEvent, error) {
+	out := make(chan *model.StreamEvent, 2)
+	out <- &model.StreamEvent{Chunk: &model.ChatCompletionChunk{Choices: []model.ChunkChoice{{Delta: model.ChunkDelta{Content: "first token"}}}}}
+	out <- &model.StreamEvent{Err: errors.New("upstream reset the connection mid-stream")}
+	close(out)
+	return out, nil
+}
+
+// blockAfterFirstTokenProvider commits the stream and then waits for its context,
+// modelling an upstream whose client simply hangs up mid-generation.
+type blockAfterFirstTokenProvider struct{}
+
+func (p *blockAfterFirstTokenProvider) Name() string             { return "block-after-first-token" }
+func (p *blockAfterFirstTokenProvider) Type() model.ProviderType { return model.ProviderCustom }
+func (p *blockAfterFirstTokenProvider) ChatComplete(context.Context, *model.ChatCompletionRequest, *model.ChannelConfig) (*model.ChatCompletionResponse, error) {
+	return nil, errors.New("not used")
+}
+func (p *blockAfterFirstTokenProvider) ChatCompleteStream(ctx context.Context, _ *model.ChatCompletionRequest, _ *model.ChannelConfig) (<-chan *model.StreamEvent, error) {
+	out := make(chan *model.StreamEvent, 1)
+	out <- &model.StreamEvent{Chunk: &model.ChatCompletionChunk{Choices: []model.ChunkChoice{{Delta: model.ChunkDelta{Content: "first token"}}}}}
+	go func() {
+		<-ctx.Done()
+		close(out)
+	}()
+	return out, nil
+}
+
+// B-02: a stream that fails AFTER the first token must still be recorded as a
+// channel failure. The old pipe only forwarded event.Err to the audit row, so a
+// channel that always truncated long output stayed CLOSED forever.
+func TestStreamMidFailureRecordsBreakerFailure(t *testing.T) {
+	d := NewDispatcher([]model.ChannelConfig{{
+		Name: "flaky", Type: model.ProviderCustom, Status: "active", Models: []string{"example"},
+	}})
+	d.RegisterProvider(&midStreamFailProvider{})
+
+	stream, err := d.DispatchStream(context.Background(), &model.ChatCompletionRequest{Model: "example", Stream: true})
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	var sawContent, sawErr bool
+	for event := range stream {
+		if event.Err != nil {
+			sawErr = true
+		}
+		if streamEventHasContent(event) {
+			sawContent = true
+		}
+	}
+	if !sawContent || !sawErr {
+		t.Fatalf("expected the commit token and the error event to reach the client (content=%v err=%v)", sawContent, sawErr)
+	}
+	snapshot := d.circuitBreaker.Snapshot("flaky")
+	if snapshot.Failures != 1 {
+		t.Fatalf("post-first-token stream failure must be recorded exactly once, got %+v", snapshot)
+	}
+}
+
+// midStreamRateLimitProvider aborts the stream with a typed rate-limit error: that
+// is backpressure from a healthy upstream, not a breaker failure (B-10 semantics
+// must hold mid-stream too).
+type midStreamRateLimitProvider struct{}
+
+func (p *midStreamRateLimitProvider) Name() string             { return "mid-stream-429" }
+func (p *midStreamRateLimitProvider) Type() model.ProviderType { return model.ProviderCustom }
+func (p *midStreamRateLimitProvider) ChatComplete(context.Context, *model.ChatCompletionRequest, *model.ChannelConfig) (*model.ChatCompletionResponse, error) {
+	return nil, errors.New("not used")
+}
+func (p *midStreamRateLimitProvider) ChatCompleteStream(context.Context, *model.ChatCompletionRequest, *model.ChannelConfig) (<-chan *model.StreamEvent, error) {
+	out := make(chan *model.StreamEvent, 2)
+	out <- &model.StreamEvent{Chunk: &model.ChatCompletionChunk{Choices: []model.ChunkChoice{{Delta: model.ChunkDelta{Content: "first token"}}}}}
+	out <- &model.StreamEvent{Err: provider.NewUpstreamError("mid-stream-429", 429, []byte("slow down"))}
+	close(out)
+	return out, nil
+}
+
+// B-02/B-10: a mid-stream 429 swaps the channel but must not be charged to the
+// breaker, mirroring the unary rule.
+func TestStreamMidRateLimitDoesNotChargeBreaker(t *testing.T) {
+	d := NewDispatcher([]model.ChannelConfig{{
+		Name: "limited", Type: model.ProviderCustom, Status: "active", Models: []string{"example"},
+	}})
+	d.RegisterProvider(&midStreamRateLimitProvider{})
+
+	stream, err := d.DispatchStream(context.Background(), &model.ChatCompletionRequest{Model: "example", Stream: true})
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	for range stream {
+	}
+	if snapshot := d.circuitBreaker.Snapshot("limited"); snapshot.Failures != 0 {
+		t.Fatalf("mid-stream 429 charged the breaker: %+v", snapshot)
+	}
+}
+
+// B-02 (negative case): the client hanging up is not an upstream failure. The
+// breaker must stay clean when ctx is cancelled mid-stream.
+func TestStreamClientCancelDoesNotChargeBreaker(t *testing.T) {
+	d := NewDispatcher([]model.ChannelConfig{{
+		Name: "long-stream", Type: model.ProviderCustom, Status: "active", Models: []string{"example"},
+	}})
+	d.RegisterProvider(&blockAfterFirstTokenProvider{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream, err := d.DispatchStream(ctx, &model.ChatCompletionRequest{Model: "example", Stream: true})
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if event := <-stream; !streamEventHasContent(event) {
+		t.Fatalf("expected a content token before cancelling, got %+v", event)
+	}
+	cancel()
+	for range stream {
+		// drain until the cancellation closes the stream
+	}
+	if snapshot := d.circuitBreaker.Snapshot("long-stream"); snapshot.Failures != 0 {
+		t.Fatalf("client cancellation charged the breaker: %+v", snapshot)
 	}
 }

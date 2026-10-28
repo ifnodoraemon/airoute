@@ -75,7 +75,20 @@ func (d *Dispatcher) GetModelRoutes() []*ModelRouteDetail {
 			}
 		}
 
-		totalP1Weight := 0
+		// The primary tier is the LOWEST configured priority, exactly like the
+		// scheduler (dispatcher_routing.go sorts the priority groups and treats
+		// group 0 as primary). Hardcoding "priority == 1" showed zero primary
+		// channels — and zero weight share — as soon as an operator numbered every
+		// channel 2 or higher, even though routing used them as the primary tier
+		// (B-09).
+		minPriority := 0
+		for i, ch := range matched {
+			if i == 0 || ch.Priority < minPriority {
+				minPriority = ch.Priority
+			}
+		}
+
+		totalPrimaryWeight := 0
 		hasCrossProto := false
 		hasFallbackTier := false
 
@@ -98,10 +111,12 @@ func (d *Dispatcher) GetModelRoutes() []*ModelRouteDetail {
 				convType = "OpenAI Chat ⇄ Responses 双向转译支持"
 			}
 
-			if ch.Priority > 1 {
+			if ch.Priority > minPriority {
 				hasFallbackTier = true
 			} else if ch.Status == "active" {
-				totalP1Weight += ch.Weight
+				// Only active primary-tier channels carry traffic, so their weights
+				// are the ones the scheduler balances.
+				totalPrimaryWeight += ch.Weight
 			}
 
 			info := &ModelProviderInfo{
@@ -122,12 +137,14 @@ func (d *Dispatcher) GetModelRoutes() []*ModelRouteDetail {
 			detail.Providers = append(detail.Providers, info)
 		}
 
-		// Calculate weight percentage for primary tier
+		// Calculate weight percentage for the primary (lowest priority) tier
 		for _, info := range detail.Providers {
-			if info.Priority == 1 && totalP1Weight > 0 {
-				pct := (float64(info.Weight) / float64(totalP1Weight)) * 100
-				info.WeightPercent = math.Round(pct*10) / 10
+			if info.Priority == minPriority {
 				detail.PrimaryProvidersCount++
+				if totalPrimaryWeight > 0 {
+					pct := (float64(info.Weight) / float64(totalPrimaryWeight)) * 100
+					info.WeightPercent = math.Round(pct*10) / 10
+				}
 			} else {
 				detail.FallbackProvidersCount++
 			}
@@ -141,7 +158,7 @@ func (d *Dispatcher) GetModelRoutes() []*ModelRouteDetail {
 			return detail.Providers[i].Weight > detail.Providers[j].Weight
 		})
 
-		detail.TotalPrimaryWeight = totalP1Weight
+		detail.TotalPrimaryWeight = totalPrimaryWeight
 		detail.HasCrossProtocol = hasCrossProto
 		detail.HasFallbackTier = hasFallbackTier
 

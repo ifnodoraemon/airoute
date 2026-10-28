@@ -38,6 +38,15 @@ func Get(protocol string) (ProtocolAdapter, bool) {
 }
 
 func init() {
-	Register(NewAnthropicAdapter())
+	// Only Gemini implements both directions through this package. Anthropic is
+	// inbound-only here: its Messages response rendering lives in
+	// internal/api/inbound_anthropic.go, because the Messages API requires a
+	// provider signature on every thinking block and a canonical->Messages
+	// conversion would have to synthesise an unsigned one (the follow-up request
+	// is then rejected with "thinking.signature: Field required"). Cache
+	// accounting and the msg_ id prefix are owned there as well. Registering an
+	// outbound anthropic implementation here would be a regression trap, so only
+	// Gemini is registered; the inbound anthropic conversion is constructed by its
+	// caller (see AnthropicAdapter.FromCanonical, B-05).
 	Register(NewGeminiAdapter())
 }

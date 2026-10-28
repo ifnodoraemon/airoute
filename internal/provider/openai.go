@@ -220,7 +220,7 @@ func (p *OpenAIProvider) chatCompleteStream(ctx context.Context, req *model.Chat
 	}
 
 	eventChan := make(chan *model.StreamEvent, 64)
-	reasoningAdapter := NewReasoningStreamAdapter()
+	reasoning := newReasoningStreamPipeline()
 
 	go func() {
 		defer resp.Body.Close()
@@ -235,20 +235,13 @@ func (p *OpenAIProvider) chatCompleteStream(ctx context.Context, req *model.Chat
 				return false
 			}
 		}
-
-		var lastChunk *model.ChatCompletionChunk
+		sendChunk := func(chunk *model.ChatCompletionChunk) bool {
+			return sendEvent(&model.StreamEvent{Chunk: chunk})
+		}
 
 		// flushReasoning emits any text still held back by a partial tag.
 		flushReasoning := func() bool {
-			if lastChunk == nil {
-				return true
-			}
-			for _, flushedChunk := range reasoningAdapter.Flush(lastChunk) {
-				if !sendEvent(&model.StreamEvent{Chunk: flushedChunk}) {
-					return false
-				}
-			}
-			return true
+			return reasoning.Flush(sendChunk)
 		}
 
 		for {
@@ -308,8 +301,10 @@ func (p *OpenAIProvider) chatCompleteStream(ctx context.Context, req *model.Chat
 					} `json:"error"`
 				}
 				if json.Unmarshal([]byte(dataContent), &errResp) == nil && errResp.Error.Message != "" {
+					// Carry the status so the router can classify a mid-stream
+					// abort with the same rules as a unary failure (B-02).
 					sendEvent(&model.StreamEvent{
-						Err: fmt.Errorf("upstream stream error [%s]: %s", errResp.Error.Type, errResp.Error.Message),
+						Err: NewUpstreamError(channel.Name, streamErrorStatus(jsonStatusCode(errResp.Error.Code), errResp.Error.Type), []byte(errResp.Error.Message)),
 					})
 					return
 				}
@@ -317,14 +312,8 @@ func (p *OpenAIProvider) chatCompleteStream(ctx context.Context, req *model.Chat
 
 			chunk.Model = req.Model
 
-			processedChunks := reasoningAdapter.ProcessChunk(&chunk)
-			for _, pc := range processedChunks {
-				lastChunk = pc
-				if !sendEvent(&model.StreamEvent{
-					Chunk: pc,
-				}) {
-					return
-				}
+			if !reasoning.Emit(&chunk, sendChunk) {
+				return
 			}
 		}
 	}()

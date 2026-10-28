@@ -6,10 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"mime"
-	"mime/multipart"
 	"net/http"
-	"net/textproto"
 	"strconv"
 	"strings"
 	"sync"
@@ -71,8 +68,10 @@ func (c *cancelOnCloseReadCloser) Close() error {
 	return err
 }
 
-// DispatchHTTP routes an HTTP request across matching candidate channels with Circuit Breaking and Safe Fallback.
-func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*UpstreamResponse, error) {
+// dispatchHTTPOnce routes one modality HTTP request across matching candidate
+// channels. The exported DispatchHTTP wrapper adds the total request budget, the
+// cross-model fallback and the budget release tied to the response body lifetime.
+func (d *Dispatcher) dispatchHTTPOnce(ctx context.Context, req *UpstreamRequest) (*UpstreamResponse, error) {
 	var channels []*model.ChannelConfig
 	if req.PinnedChannel != "" {
 		for _, ch := range d.ListChannelsForModel(req.Model, req.Protocol) {
@@ -92,6 +91,15 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 	var attempted []string // channels actually called and failed
 	var skipped []string   // channels bypassed by the circuit breaker, never called
 	for i, ch := range channels {
+		// The budget may have expired while waiting on the previous attempt; stop
+		// before paying the next channel timeout too (B-01).
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			if requestBudgetExceeded(ctx, ctxErr) {
+				return nil, newRequestBudgetError(req.Model, attempted, lastErr)
+			}
+			return nil, newCanceledError(ctx, attempted, "", 0)
+		}
+
 		// Circuit Breaker: fail fast if upstream is down
 		if !d.circuitBreaker.CanExecute(ch.Name) {
 			telemetry.WarnLogger(routerLog(ctx), "breaker-open:"+ch.Name, 30*time.Second,
@@ -157,12 +165,27 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 		httpResp, err := provider.SharedDefaultHTTPClient.Do(httpReq)
 		if err != nil {
 			cancelCall()
-			if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
+			// A budget expiry surfaces as DeadlineExceeded on the attempt
+			// context; classify it as ours rather than charging the channel.
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				d.circuitBreaker.AbortCanary(ch.Name)
+				if requestBudgetExceeded(ctx, ctxErr) {
+					return nil, newRequestBudgetError(req.Model, append(attempted, ch.Name), err)
+				}
+				return nil, newCanceledError(ctx, attempted, ch.Name, model.EstimateTokensFromChars(len(req.Body)))
+			}
+			if errors.Is(err, context.Canceled) {
 				d.circuitBreaker.AbortCanary(ch.Name)
 				return nil, newCanceledError(ctx, attempted, ch.Name, model.EstimateTokensFromChars(len(req.Body)))
 			}
 			lastErr = err
-			if provider.IsClientError(err) {
+			// 404 is node-specific: another candidate may host the model (B-03).
+			if provider.IsModelNotFound(err) {
+				d.circuitBreaker.AbortCanary(ch.Name)
+				attempted = append(attempted, ch.Name)
+				continue
+			}
+			if provider.IsFatalPayloadError(err) {
 				d.circuitBreaker.AbortCanary(ch.Name)
 				return nil, err
 			}
@@ -199,14 +222,22 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 			continue
 		}
 
-		// Deterministic 4xx: the caller's request is at fault, replaying it on
-		// another channel is pointless and would only add load. Return the
-		// upstream error body so the caller keeps the diagnostic detail.
+		// A 404 means this node does not host the model, so the next candidate
+		// channel may still serve it; fanning out is exactly what the chat path
+		// does. A deterministic payload error (400/413/422) would fail identically
+		// everywhere: return the upstream error body so the caller keeps the
+		// diagnostic detail. Other 4xx statuses keep the historic pass-through.
 		if httpResp.StatusCode >= 400 && httpResp.StatusCode < 500 {
 			bodyBytes, _ := io.ReadAll(io.LimitReader(httpResp.Body, 1<<20))
 			httpResp.Body.Close()
 			cancelCall()
 			d.circuitBreaker.AbortCanary(ch.Name)
+
+			if httpResp.StatusCode == http.StatusNotFound {
+				lastErr = provider.NewUpstreamError(ch.Name, httpResp.StatusCode, bodyBytes)
+				attempted = append(attempted, ch.Name)
+				continue
+			}
 
 			// The buffered body must be replayed with a matching Content-Length;
 			// the original header would be stale once the body was truncated.
@@ -236,15 +267,16 @@ func (d *Dispatcher) DispatchHTTP(ctx context.Context, req *UpstreamRequest) (*U
 		}, nil
 	}
 
-	telemetry.GlobalMetrics.RecordRequest(false, 0, 0, 0)
 	if lastErr == nil {
 		lastErr = skippedOnlyError(req.Model, skipped)
 	}
 	return nil, newExhaustedError(ctx, req.Model, exhaustedTrail(attempted, skipped), fmt.Errorf("all %d providers failed for model '%s'. Last error: %w", len(channels), req.Model, lastErr))
 }
 
-// DispatchEmbedding routes an embedding request across matching candidate channels with Circuit Breaking and Safe Fallback.
-func (d *Dispatcher) DispatchEmbedding(ctx context.Context, req *model.EmbeddingRequest) (*model.EmbeddingResponse, error) {
+// dispatchEmbeddingOnce routes one embedding request across matching candidate
+// channels. The exported DispatchEmbedding wrapper adds the total request budget
+// and the cross-model fallback.
+func (d *Dispatcher) dispatchEmbeddingOnce(ctx context.Context, req *model.EmbeddingRequest) (*model.EmbeddingResponse, error) {
 	channels := d.ResolveCandidateChannels(ctx, req.Model, "embeddings")
 	if len(channels) == 0 {
 		return nil, newNoRouteError(ctx, req.Model, fmt.Errorf("no upstream provider available for embedding model '%s'", req.Model))
@@ -254,6 +286,14 @@ func (d *Dispatcher) DispatchEmbedding(ctx context.Context, req *model.Embedding
 	var attempted []string // channels actually called and failed
 	var skipped []string   // channels bypassed by the circuit breaker, never called
 	for i, ch := range channels {
+		// Stop at the gateway's total budget instead of paying the next channel
+		// timeout as well (B-01).
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			if requestBudgetExceeded(ctx, ctxErr) {
+				return nil, newRequestBudgetError(req.Model, attempted, lastErr)
+			}
+			return nil, newCanceledError(ctx, attempted, "", 0)
+		}
 		if !d.circuitBreaker.CanExecute(ch.Name) {
 			telemetry.WarnLogger(routerLog(ctx), "breaker-open:"+ch.Name, 30*time.Second,
 				"circuit breaker is OPEN, bypassing dead upstream",
@@ -291,8 +331,23 @@ func (d *Dispatcher) DispatchEmbedding(ctx context.Context, req *model.Embedding
 				d.circuitBreaker.AbortCanary(ch.Name)
 				return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
 			}
+			// A budget expiry arrives as DeadlineExceeded on the attempt context.
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				d.circuitBreaker.AbortCanary(ch.Name)
+				if requestBudgetExceeded(ctx, ctxErr) {
+					return nil, newRequestBudgetError(req.Model, append(attempted, ch.Name), err)
+				}
+				return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
+			}
 			lastErr = err
-			if provider.IsClientError(err) {
+			// 404 is node-specific: the next candidate channel may host the model
+			// (B-03). Only a deterministic payload error ends the fan-out.
+			if provider.IsModelNotFound(err) {
+				d.circuitBreaker.AbortCanary(ch.Name)
+				attempted = append(attempted, ch.Name)
+				continue
+			}
+			if provider.IsFatalPayloadError(err) {
 				d.circuitBreaker.AbortCanary(ch.Name)
 				return nil, err
 			}
@@ -313,15 +368,16 @@ func (d *Dispatcher) DispatchEmbedding(ctx context.Context, req *model.Embedding
 		return resp, nil
 	}
 
-	telemetry.GlobalMetrics.RecordRequest(false, 0, 0, 0)
 	if lastErr == nil {
 		lastErr = skippedOnlyError(req.Model, skipped)
 	}
 	return nil, newExhaustedError(ctx, req.Model, exhaustedTrail(attempted, skipped), fmt.Errorf("all %d providers failed for embedding model '%s'. Last error: %w", len(channels), req.Model, lastErr))
 }
 
-// DispatchRerank routes a cross-encoder rerank request across candidate channels with Circuit Breaking and Safe Fallback.
-func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankRequest) (*model.RerankResponse, error) {
+// dispatchRerankOnce routes one rerank request across candidate channels. The
+// exported DispatchRerank wrapper adds the total request budget and the
+// cross-model fallback.
+func (d *Dispatcher) dispatchRerankOnce(ctx context.Context, req *model.RerankRequest) (*model.RerankResponse, error) {
 	channels := d.ResolveCandidateChannels(ctx, req.Model, "rerank")
 	if len(channels) == 0 {
 		return nil, newNoRouteError(ctx, req.Model, fmt.Errorf("no upstream provider available for rerank model '%s'", req.Model))
@@ -331,6 +387,14 @@ func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankReques
 	var attempted []string // channels actually called and failed
 	var skipped []string   // channels bypassed by the circuit breaker, never called
 	for i, ch := range channels {
+		// Stop at the gateway's total budget instead of paying the next channel
+		// timeout as well (B-01).
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			if requestBudgetExceeded(ctx, ctxErr) {
+				return nil, newRequestBudgetError(req.Model, attempted, lastErr)
+			}
+			return nil, newCanceledError(ctx, attempted, "", 0)
+		}
 		if !d.circuitBreaker.CanExecute(ch.Name) {
 			telemetry.WarnLogger(routerLog(ctx), "breaker-open:"+ch.Name, 30*time.Second,
 				"circuit breaker is OPEN, bypassing dead upstream",
@@ -365,8 +429,23 @@ func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankReques
 				d.circuitBreaker.AbortCanary(ch.Name)
 				return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
 			}
+			// A budget expiry arrives as DeadlineExceeded on the attempt context.
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				d.circuitBreaker.AbortCanary(ch.Name)
+				if requestBudgetExceeded(ctx, ctxErr) {
+					return nil, newRequestBudgetError(req.Model, append(attempted, ch.Name), err)
+				}
+				return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
+			}
 			lastErr = err
-			if provider.IsClientError(err) {
+			// 404 is node-specific: the next candidate channel may host the model
+			// (B-03). Only a deterministic payload error ends the fan-out.
+			if provider.IsModelNotFound(err) {
+				d.circuitBreaker.AbortCanary(ch.Name)
+				attempted = append(attempted, ch.Name)
+				continue
+			}
+			if provider.IsFatalPayloadError(err) {
 				d.circuitBreaker.AbortCanary(ch.Name)
 				return nil, err
 			}
@@ -387,108 +466,8 @@ func (d *Dispatcher) DispatchRerank(ctx context.Context, req *model.RerankReques
 		return resp, nil
 	}
 
-	telemetry.GlobalMetrics.RecordRequest(false, 0, 0, 0)
 	if lastErr == nil {
 		lastErr = skippedOnlyError(req.Model, skipped)
 	}
 	return nil, newExhaustedError(ctx, req.Model, exhaustedTrail(attempted, skipped), fmt.Errorf("all %d providers failed for rerank model '%s'. Last error: %w", len(channels), req.Model, lastErr))
-}
-
-// RewriteMultipartModel replaces the value of the "model" form field in a
-// multipart/form-data body with newModel.
-//
-// It returns the rebuilt body together with the matching Content-Type (the
-// boundary is regenerated, so the header must be updated with it). All other
-// form fields and file parts are preserved byte-for-byte. When there is no
-// "model" field the original body/content type are returned unchanged; a body
-// that cannot be parsed is reported as an error so the caller can forward the
-// original bytes instead of corrupting the request.
-func RewriteMultipartModel(body []byte, contentType, newModel string) ([]byte, string, error) {
-	if len(body) == 0 || newModel == "" {
-		return body, contentType, nil
-	}
-	mediaType, params, err := mime.ParseMediaType(contentType)
-	if err != nil {
-		return body, contentType, fmt.Errorf("parse multipart content type: %w", err)
-	}
-	if !strings.EqualFold(mediaType, "multipart/form-data") {
-		return body, contentType, fmt.Errorf("content type %q is not multipart/form-data", mediaType)
-	}
-	boundary := params["boundary"]
-	if boundary == "" {
-		return body, contentType, fmt.Errorf("multipart/form-data content type has no boundary")
-	}
-
-	reader := multipart.NewReader(bytes.NewReader(body), boundary)
-	var rebuilt bytes.Buffer
-	writer := multipart.NewWriter(&rebuilt)
-	sawModelField := false
-	changed := false
-	sawPart := false
-	for {
-		part, err := reader.NextPart()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return body, contentType, fmt.Errorf("read multipart body: %w", err)
-		}
-		// Clone the part headers (Content-Disposition, Content-Type, ...) so the
-		// rebuilt part stays semantically identical for the upstream.
-		sawPart = true
-		headers := make(textproto.MIMEHeader, len(part.Header))
-		for key, values := range part.Header {
-			headers[key] = append([]string(nil), values...)
-		}
-		dst, err := writer.CreatePart(headers)
-		if err != nil {
-			_ = part.Close()
-			return body, contentType, fmt.Errorf("rebuild multipart part: %w", err)
-		}
-		if part.FormName() == "model" {
-			// Read the old value (bounded: a model name is tiny) and write the
-			// mapped one instead. When the mapping is an identity the original
-			// body is returned untouched, so unaliased traffic keeps its exact
-			// bytes and boundary.
-			current, err := io.ReadAll(io.LimitReader(part, 1<<20))
-			if err != nil {
-				_ = part.Close()
-				return body, contentType, fmt.Errorf("read multipart model field: %w", err)
-			}
-			value := newModel
-			if string(current) != newModel {
-				changed = true
-			} else {
-				value = string(current)
-			}
-			if _, err := dst.Write([]byte(value)); err != nil {
-				_ = part.Close()
-				return body, contentType, fmt.Errorf("write multipart model field: %w", err)
-			}
-			sawModelField = true
-			_ = part.Close()
-			continue
-		}
-		if _, err := io.Copy(dst, part); err != nil {
-			_ = part.Close()
-			return body, contentType, fmt.Errorf("copy multipart part: %w", err)
-		}
-		_ = part.Close()
-	}
-	if err := writer.Close(); err != nil {
-		return body, contentType, fmt.Errorf("finalize multipart body: %w", err)
-	}
-	if !sawPart {
-		// A body that ends before its first boundary (or a preamble with a
-		// truncated part) is not a valid multipart payload; forwarding it
-		// blindly would hide a broken client request.
-		if bytes.Contains(body, []byte("--"+boundary+"--")) {
-			return body, contentType, nil
-		}
-		return body, contentType, fmt.Errorf("multipart body contains no parts")
-	}
-	if !sawModelField || !changed {
-		return body, contentType, nil
-	}
-	return rebuilt.Bytes(), writer.FormDataContentType(), nil
 }

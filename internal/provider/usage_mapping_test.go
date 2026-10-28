@@ -25,6 +25,26 @@ func TestAnthropicUsageToModel(t *testing.T) {
 	if got.PromptTokensDetails == nil || got.PromptTokensDetails.CachedTokens != 900 {
 		t.Fatalf("cached tokens = %+v, want 900", got.PromptTokensDetails)
 	}
+	// C-02: the cache-write count must be readable downstream (billing applies the
+	// 1.25x write premium from it) while staying part of the prompt total.
+	if got.GetCacheCreationTokens() != 50 {
+		t.Fatalf("cache creation tokens = %d, want 50", got.GetCacheCreationTokens())
+	}
+}
+
+func TestAnthropicUsageCacheCreationOnly(t *testing.T) {
+	// A pure cache write (no cache read) must still produce the details breakdown;
+	// the old mapping only allocated it when cache reads were present.
+	got := anthropicUsageToModel(&AnthropicUsage{InputTokens: 10, OutputTokens: 2, CacheCreationInputTokens: 40})
+	if got.PromptTokens != 50 {
+		t.Fatalf("prompt tokens = %d, want 50 (10 input + 40 cache write)", got.PromptTokens)
+	}
+	if got.GetCacheCreationTokens() != 40 {
+		t.Fatalf("cache creation tokens = %d, want 40", got.GetCacheCreationTokens())
+	}
+	if got.GetCachedTokens() != 0 {
+		t.Fatalf("cached (read) tokens = %d, want 0", got.GetCachedTokens())
+	}
 }
 
 func TestGeminiUsageToModel(t *testing.T) {
@@ -43,6 +63,11 @@ func TestGeminiUsageToModel(t *testing.T) {
 	}
 	if got.PromptTokensDetails == nil || got.PromptTokensDetails.CachedTokens != 800 {
 		t.Fatalf("cached tokens = %+v, want 800", got.PromptTokensDetails)
+	}
+	// Gemini reports no cache-write count; the field must stay 0 instead of being
+	// invented from the cached-content count.
+	if got.GetCacheCreationTokens() != 0 {
+		t.Fatalf("cache creation tokens = %d, want 0", got.GetCacheCreationTokens())
 	}
 }
 

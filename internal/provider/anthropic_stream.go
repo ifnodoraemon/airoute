@@ -135,7 +135,23 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 				// dropped it, so the downstream client saw a truncated but
 				// "successful" 200 stream.
 				if currentEvent == "error" {
-					sendEvent(&model.StreamEvent{Err: fmt.Errorf("upstream anthropic stream error: %s", dataStr)})
+					// Carry the status so the router classifies a mid-stream abort
+					// with the same rules as a unary failure (B-02).
+					var errFrame struct {
+						Error struct {
+							Type    string `json:"type"`
+							Message string `json:"message"`
+						} `json:"error"`
+					}
+					status := 503
+					message := dataStr
+					if json.Unmarshal([]byte(dataStr), &errFrame) == nil {
+						status = streamErrorStatus(0, errFrame.Error.Type)
+						if errFrame.Error.Message != "" {
+							message = errFrame.Error.Message
+						}
+					}
+					sendEvent(&model.StreamEvent{Err: NewUpstreamError(channel.Name, status, []byte(message))})
 					return
 				}
 				if req.AnthropicOriginal != nil {

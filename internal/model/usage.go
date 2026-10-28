@@ -52,6 +52,18 @@ func (u *Usage) UnmarshalJSON(data []byte) error {
 			}
 		}
 	}
+	// Some OpenAI-compatible proxies report Anthropic's cache_creation_input_tokens
+	// at the top level; keep the write count readable instead of losing it inside
+	// the prompt total (the prompt total itself is unchanged on purpose: cache
+	// writes are a subset of it, see the comment above).
+	if raw.CacheCreation > 0 {
+		if u.PromptTokensDetails == nil {
+			u.PromptTokensDetails = &PromptTokensDetails{}
+		}
+		if u.PromptTokensDetails.CacheCreationTokens == 0 {
+			u.PromptTokensDetails.CacheCreationTokens = raw.CacheCreation
+		}
+	}
 	if u.TotalTokens == 0 {
 		u.TotalTokens = u.PromptTokens + u.CompletionTokens
 	}

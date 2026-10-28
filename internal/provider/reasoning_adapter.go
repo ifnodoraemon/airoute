@@ -233,6 +233,55 @@ func matchTagPrefix(s string, tag string) int {
 	return 0
 }
 
+// streamChunkSender delivers one adapted chunk downstream. Returning false means
+// the client went away and the stream must stop.
+type streamChunkSender func(*model.ChatCompletionChunk) bool
+
+// reasoningStreamPipeline is the streaming counterpart of
+// SeparateReasoningInResponse: it applies the same inline <think>...</think>
+// split to every chunk and flushes a trailing partial tag at EOF.
+//
+// Both OpenAI-compatible streaming paths use it (chat completions and the legacy
+// text-completion adapter). Keeping one implementation is what makes the unary
+// and streaming rules identical: the text path used to emit its raw text without
+// any reasoning split, so the same upstream reported thinking tokens inline when
+// streamed and as reasoning_content when not (B-12).
+type reasoningStreamPipeline struct {
+	adapter *ReasoningStreamAdapter
+	last    *model.ChatCompletionChunk
+}
+
+func newReasoningStreamPipeline() *reasoningStreamPipeline {
+	return &reasoningStreamPipeline{adapter: NewReasoningStreamAdapter()}
+}
+
+// Emit adapts one upstream chunk and forwards the resulting downstream chunks.
+func (p *reasoningStreamPipeline) Emit(chunk *model.ChatCompletionChunk, send streamChunkSender) bool {
+	for _, processed := range p.adapter.ProcessChunk(chunk) {
+		if processed == nil {
+			continue
+		}
+		p.last = processed
+		if !send(processed) {
+			return false
+		}
+	}
+	return true
+}
+
+// Flush forwards text still held back by a partial tag.
+func (p *reasoningStreamPipeline) Flush(send streamChunkSender) bool {
+	if p.last == nil {
+		return true
+	}
+	for _, flushed := range p.adapter.Flush(p.last) {
+		if !send(flushed) {
+			return false
+		}
+	}
+	return true
+}
+
 func deepCopyChunk(src *model.ChatCompletionChunk) *model.ChatCompletionChunk {
 	if src == nil {
 		return nil

@@ -5,14 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 )
 
 // UpstreamError describes a non-2xx response from an upstream provider while
 // preserving the HTTP status code. The router uses the status to tell genuine
-// channel failures apart from client mistakes: a 400/404/422 caused by the
+// channel failures apart from client mistakes: a 400/413/422 caused by the
 // caller's payload must not trip the circuit breaker, must not be retried on
-// every other channel, and must not trigger a cross-model fallback.
+// every other channel, and must not trigger a cross-model fallback. A 404 is
+// different: it only says this node does not host the model, so the next
+// candidate channel may still serve it.
 type UpstreamError struct {
 	Channel string
 	Status  int
@@ -69,9 +72,13 @@ func AsUpstreamError(err error) (*UpstreamError, bool) {
 // (and therefore belongs in the circuit-breaker / fallback accounting).
 //
 //   - network / DNS / TLS errors, timeouts and context deadline exceeded: yes
-//   - 5xx and 429: yes (upstream overloaded or broken)
-//   - 401/403: yes, the channel credential is broken
-//   - other 4xx (400/404/413/422...): no, the caller's request is at fault
+//   - 5xx, 401, 403, 408: yes (upstream broken or credential broken)
+//   - 429: NO. A rate limit is backpressure from a *healthy* upstream; it swaps
+//     to the next channel without tripping the breaker, otherwise three
+//     rate-limit replies would open the circuit and turn backpressure into a
+//     gateway 502 for the whole cooldown.
+//   - other 4xx (400/404/413/422...): no, the caller's request is at fault or the
+//     node simply does not host the model
 func IsChannelFailure(err error) bool {
 	if err == nil {
 		return false
@@ -109,13 +116,81 @@ func IsChannelFailure(err error) bool {
 	return false
 }
 
-// IsClientError reports whether err is a deterministic 4xx rejection that would
-// fail identically on every other channel. Callers can stop the fallback loop
-// early instead of replaying a bad request across the whole fleet.
-func IsClientError(err error) bool {
+// IsModelNotFound reports whether err is a 404 from a single upstream node.
+//
+// A 404 means "this node does not host the model", not "the request is wrong":
+// the same request can succeed on a different node, so dispatch keeps fanning
+// out to the next candidate channel instead of failing the request.
+func IsModelNotFound(err error) bool {
+	ue, ok := AsUpstreamError(err)
+	return ok && ue.Status == 404
+}
+
+// IsFatalPayloadError reports whether err is a deterministic client payload
+// error (400/413/422) that would fail identically on every channel, so the
+// dispatcher may stop and surface it verbatim. 404 is deliberately excluded; see
+// IsModelNotFound.
+//
+// This pair replaces the former IsClientError predicate, which lumped 400/413/422
+// together with 404. The two need opposite actions (abort the fan-out vs try the
+// next node), so a single "is 4xx" answer invited exactly the bug B-03 reported.
+func IsFatalPayloadError(err error) bool {
 	ue, ok := AsUpstreamError(err)
 	if !ok {
 		return false
 	}
-	return ue.Status >= 400 && ue.Status < 500 && ue.Status != 401 && ue.Status != 403 && ue.Status != 408 && ue.Status != 429
+	return ue.Status == 400 || ue.Status == 413 || ue.Status == 422
+}
+
+// streamErrorStatus maps an upstream stream-error frame onto the HTTP status its
+// unary equivalent would have returned.
+//
+// Providers report mid-stream failures (overload, quota, model errors) as an
+// error object inside a 200 SSE stream, which is why they used to be plain
+// fmt.Errorf values: the router's health accounting is status-driven, so those
+// frames could not be classified and a channel that aborted every long stream
+// stayed healthy forever (B-02). Carrying the status keeps the shared
+// IsChannelFailure semantics intact: a mid-stream rate limit is still
+// backpressure, a mid-stream overload is still a channel failure.
+//
+// An error frame that aborts an otherwise successful stream is upstream-side by
+// definition, so unknown kinds fall back to 503.
+func streamErrorStatus(code int, kinds ...string) int {
+	if code >= 400 && code < 600 {
+		return code
+	}
+	for _, kind := range kinds {
+		k := strings.ToLower(kind)
+		switch {
+		case strings.Contains(k, "rate_limit"), strings.Contains(k, "ratelimit"),
+			strings.Contains(k, "quota"), strings.Contains(k, "resource_exhausted"):
+			return 429
+		case strings.Contains(k, "overload"), strings.Contains(k, "unavailable"),
+			strings.Contains(k, "server_error"), strings.Contains(k, "api_error"),
+			strings.Contains(k, "internal"):
+			return 503
+		case strings.Contains(k, "invalid_request"), strings.Contains(k, "invalid_argument"):
+			return 400
+		case strings.Contains(k, "authentication"), strings.Contains(k, "permission"),
+			strings.Contains(k, "unauthenticated"):
+			return 401
+		}
+	}
+	return 503
+}
+
+// jsonStatusCode narrows a JSON-decoded status/code field (number or string) to
+// an int, returning 0 when it is absent or not a usable status.
+func jsonStatusCode(value any) int {
+	switch code := value.(type) {
+	case float64:
+		return int(code)
+	case int:
+		return code
+	case string:
+		if n, err := strconv.Atoi(code); err == nil {
+			return n
+		}
+	}
+	return 0
 }

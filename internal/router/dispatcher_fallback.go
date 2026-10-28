@@ -137,11 +137,17 @@ func (d *Dispatcher) recordChannelFailure(ctx context.Context, chName string, er
 	return chName
 }
 
-// recordChannelSuccess records circuit breaker status, telemetry request metrics, and returns the full audit trail.
+// recordChannelSuccess records circuit breaker status, returns the full audit trail.
+//
+// It deliberately does NOT record request metrics: the API layer's RecordUsage is
+// the single writer for TotalRequests/SuccessfulRequests/FailedRequests and the
+// latency histograms. Recording them here too made every unary request count twice
+// (with the router sample measuring only upstream time), while the streaming path
+// counted once — so QPS, error rate and P99 disagreed with the per-model counters
+// derived from the API layer (B-04/C-08).
 func (d *Dispatcher) recordChannelSuccess(ctx context.Context, attempted []string, chName string, dur time.Duration, promptTokens, compTokens int) string {
 	d.circuitBreaker.RecordSuccess(chName)
 	trail := formatChannelTrail(ctx, attempted, chName)
-	telemetry.GlobalMetrics.RecordRequest(true, dur, promptTokens, compTokens)
 	routerLog(ctx).Debug("channel execution succeeded",
 		"channel", chName,
 		"duration_ms", dur.Milliseconds(),

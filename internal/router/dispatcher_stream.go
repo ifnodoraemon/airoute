@@ -25,11 +25,13 @@ func (d *Dispatcher) failStreamAttempt(ctx context.Context, req *model.ChatCompl
 		d.circuitBreaker.AbortCanary(ch.Name)
 		return newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
 	}
-	if isFatalClientPayloadError(err) {
+	if provider.IsModelNotFound(err) {
+		// A node-specific 404 is not the caller's fault: keep fanning out.
+		d.circuitBreaker.AbortCanary(ch.Name)
+	} else if provider.IsFatalPayloadError(err) {
 		d.circuitBreaker.AbortCanary(ch.Name)
 		return err
-	}
-	if provider.IsChannelFailure(err) {
+	} else if provider.IsChannelFailure(err) {
 		d.circuitBreaker.RecordFailure(ch.Name)
 	} else {
 		d.circuitBreaker.AbortCanary(ch.Name)
@@ -170,7 +172,14 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		d.circuitBreaker.RecordSuccess(ch.Name)
 		trail := formatChannelTrail(ctx, attempted, ch.Name)
 		outChan := make(chan *model.StreamEvent, 64)
-		go pipeStreamEvents(ctx, outChan, preamble, streamChan, trail, attemptCancel)
+		// Committing the stream only proves the channel produced a first token.
+		// Anything that goes wrong after this point (mid-stream error frame,
+		// truncated SSE, upstream-side timeout) is still a channel health signal,
+		// so pipeStreamEvents reports it back here (B-02).
+		recordPostCommitFailure := func(err error) {
+			d.recordStreamFailure(ctx, ch.Name, err, i+1)
+		}
+		go pipeStreamEvents(ctx, outChan, preamble, streamChan, trail, attemptCancel, recordPostCommitFailure)
 		return outChan, nil
 	}
 
@@ -203,51 +212,6 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 // It is a memory bound, not a promise to drop the committing event: when it is
 // reached the oldest event is discarded.
 const maxPreambleEvents = 64
-
-// pipeStreamEvents pipes events from upstream stream channel to client channel with cancellation guard.
-func pipeStreamEvents(ctx context.Context, outChan chan<- *model.StreamEvent, preamble []*model.StreamEvent, in <-chan *model.StreamEvent, trail string, cancel context.CancelFunc) {
-	defer cancel()
-	defer close(outChan)
-	for _, event := range preamble {
-		event.Channel = trail
-		select {
-		case outChan <- event:
-		case <-ctx.Done():
-			return
-		}
-	}
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case event, ok := <-in:
-			if !ok {
-				return
-			}
-			if event == nil {
-				continue
-			}
-			event.Channel = trail
-			select {
-			case outChan <- event:
-			case <-ctx.Done():
-				return
-			}
-		}
-	}
-}
-
-func streamEventHasContent(event *model.StreamEvent) bool {
-	if event == nil || event.Chunk == nil {
-		return event != nil && (event.NativeAnthropicType == "content_block_delta" || event.NativeAnthropicType == "content_block_start")
-	}
-	for _, choice := range event.Chunk.Choices {
-		if choice.Delta.Content != "" || choice.Delta.ReasoningContent != "" || len(choice.Delta.ToolCalls) > 0 {
-			return true
-		}
-	}
-	return false
-}
 
 // GetFirstTokenTimeout is how long a single attempt may stay silent before the
 // gateway gives up on it. It is derived from the channel timeout, not configured

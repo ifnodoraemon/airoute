@@ -104,8 +104,12 @@ func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 			// empty normal chunk and the client saw a truncated but "successful"
 			// completion.
 			if geminiChunk.Error != nil {
-				sendEvent(&model.StreamEvent{Err: fmt.Errorf("upstream gemini stream error (code %d, status %s): %s",
-					geminiChunk.Error.Code, geminiChunk.Error.Status, geminiChunk.Error.Message)})
+				// Carry the status so the router classifies a mid-stream abort
+				// with the same rules as a unary failure (B-02). Gemini's embedded
+				// code is the unary HTTP equivalent; the status string is the
+				// fallback for proxies that omit it.
+				status := streamErrorStatus(geminiChunk.Error.Code, geminiChunk.Error.Status)
+				sendEvent(&model.StreamEvent{Err: NewUpstreamError(channel.Name, status, []byte(geminiChunk.Error.Message))})
 				return
 			}
 

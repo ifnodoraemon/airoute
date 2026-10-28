@@ -3,6 +3,7 @@ package adapter
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -224,79 +225,27 @@ func messagesAsAny(messages []model.AnthropicInboundMessage) []any {
 	return items
 }
 
+// ErrAnthropicOutboundUnsupported is returned by AnthropicAdapter.FromCanonical:
+// rendering a canonical response as an Anthropic Messages response is owned by
+// internal/api/inbound_anthropic.go, not by this package.
+var ErrAnthropicOutboundUnsupported = errors.New("anthropic outbound conversion is implemented in internal/api, not in package adapter")
+
+// FromCanonical exists only so AnthropicAdapter still satisfies ProtocolAdapter
+// for its inbound half (ToCanonical). It deliberately refuses to convert.
+//
+// The removed implementation synthesised a {"type":"thinking"} block from
+// ReasoningContent, but the Anthropic Messages API requires every thinking block
+// to carry a provider signature: an unsigned block makes the follow-up request
+// fail with "thinking.signature: Field required". It also did not deduct cache
+// reads from usage and did not add the msg_ id prefix, so wiring it up would have
+// re-introduced bugs the live implementation already fixed (see
+// internal/api/inbound_anthropic.go). Returning an error keeps it a guard rather
+// than a trap (B-05).
 func (a *AnthropicAdapter) FromCanonical(ctx context.Context, resp *model.ChatCompletionResponse) (any, error) {
 	if resp == nil {
 		return nil, fmt.Errorf("empty canonical response")
 	}
-
-	contentBlocks := make([]map[string]any, 0)
-	stopReason := "end_turn"
-
-	if len(resp.Choices) > 0 {
-		choice := resp.Choices[0]
-		if choice.Message.ReasoningContent != "" {
-			contentBlocks = append(contentBlocks, map[string]any{
-				"type":     "thinking",
-				"thinking": choice.Message.ReasoningContent,
-			})
-		}
-		if replyText := choice.Message.GetContentString(); replyText != "" {
-			contentBlocks = append(contentBlocks, map[string]any{
-				"type": "text",
-				"text": replyText,
-			})
-		}
-		for _, tc := range choice.Message.ToolCalls {
-			var parsedArgs any
-			if err := json.Unmarshal([]byte(tc.Function.Arguments), &parsedArgs); err != nil {
-				parsedArgs = map[string]any{}
-			}
-			contentBlocks = append(contentBlocks, map[string]any{
-				"type":  "tool_use",
-				"id":    tc.ID,
-				"name":  tc.Function.Name,
-				"input": parsedArgs,
-			})
-		}
-
-		if choice.FinishReason != nil {
-			switch *choice.FinishReason {
-			case "stop":
-				stopReason = "end_turn"
-			case "tool_calls", "function_call":
-				stopReason = "tool_use"
-			case "length":
-				stopReason = "max_tokens"
-			}
-		}
-	}
-
-	if len(contentBlocks) == 0 {
-		contentBlocks = append(contentBlocks, map[string]any{
-			"type": "text",
-			"text": "",
-		})
-	}
-
-	inputTokens := 0
-	outputTokens := 0
-	if resp.Usage != nil {
-		inputTokens = resp.Usage.PromptTokens
-		outputTokens = resp.Usage.CompletionTokens
-	}
-
-	return map[string]any{
-		"id":          resp.ID,
-		"type":        "message",
-		"role":        "assistant",
-		"model":       resp.Model,
-		"content":     contentBlocks,
-		"stop_reason": stopReason,
-		"usage": map[string]any{
-			"input_tokens":  inputTokens,
-			"output_tokens": outputTokens,
-		},
-	}, nil
+	return nil, ErrAnthropicOutboundUnsupported
 }
 
 func convertAnthropicToolChoice(tc any) any {

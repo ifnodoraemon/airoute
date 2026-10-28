@@ -30,6 +30,11 @@ type DispatchError struct {
 	// consumed (and will bill us for) the prompt even though we got nothing back.
 	// Zero when unknown.
 	PromptTokens int
+	// Canceled marks a request the caller abandoned (or whose own deadline
+	// expired) rather than a routing outcome. Cross-model fallback must not fire
+	// for it: replaying a canceled request on another model only adds upstream
+	// load for a client that already hung up.
+	Canceled bool
 
 	Err error
 }
@@ -97,6 +102,7 @@ func newCanceledError(ctx context.Context, attempted []string, channel string, p
 	return &DispatchError{
 		Trail:        formatChannelTrail(ctx, attempted, channel),
 		PromptTokens: promptTokens,
+		Canceled:     true,
 		Err:          cause,
 	}
 }

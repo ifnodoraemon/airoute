@@ -91,6 +91,13 @@ type ChatCompletionRequest struct {
 type PromptTokensDetails struct {
 	CachedTokens int `json:"cached_tokens,omitempty"`
 	AudioTokens  int `json:"audio_tokens,omitempty"`
+	// CacheCreationTokens is how many of PromptTokens were written into the
+	// provider's prompt cache this request (Anthropic's
+	// cache_creation_input_tokens). They stay part of PromptTokens, because that
+	// is how the provider invoices them; exposing the write count separately is
+	// what lets billing apply the cache-write premium instead of the plain input
+	// rate (C-02).
+	CacheCreationTokens int `json:"cache_creation_tokens,omitempty"`
 	// Extra preserves unmodeled token-detail fields.
 	Extra ExtraFields `json:"-"`
 }
@@ -111,6 +118,16 @@ func (u *Usage) GetCachedTokens() int {
 		return 0
 	}
 	return u.PromptTokensDetails.CachedTokens
+}
+
+// GetCacheCreationTokens returns how many prompt tokens were written to the
+// provider's prompt cache this request, if the upstream reported it. The count is
+// a subset of PromptTokens, not an addition to it.
+func (u *Usage) GetCacheCreationTokens() int {
+	if u == nil || u.PromptTokensDetails == nil {
+		return 0
+	}
+	return u.PromptTokensDetails.CacheCreationTokens
 }
 
 // ChatCompletionChoice is an individual completion choice.
