@@ -6,14 +6,6 @@ import (
 	"time"
 )
 
-// TraceCaptureConfig controls how much request/response detail is archived.
-type TraceCaptureConfig struct {
-	Mode          string  // "off" | "errors" | "all"
-	SamplePercent float64 // 0-100, applied to successful requests in "all" mode
-	TTL           time.Duration
-	MaxSnippet    int
-}
-
 // RequestTraceRecord is a redacted snapshot of a single gateway request, used
 // for troubleshooting by trace_id / chat_id / session_id.
 type RequestTraceRecord struct {

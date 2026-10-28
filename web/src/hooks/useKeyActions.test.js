@@ -118,27 +118,6 @@ describe('useKeyActions', () => {
     expect(refresh).toHaveBeenCalled();
   });
 
-  it('closing the dialog drops the one-time credential', async () => {
-    globalThis.fetch.mockResolvedValue(jsonResponse({
-      code: 0,
-      data: { key: 'sk-airoute-created', key_id: 'ak_abc123abc123abc12345' },
-    }));
-    const { result } = setup();
-    act(() => {
-      result.current.handleOpenCreateKey();
-    });
-    await act(async () => {
-      await result.current.handleCreateKey();
-    });
-
-    act(() => {
-      result.current.closeKeyModal();
-    });
-
-    expect(result.current.showKeyModal).toBe(false);
-    expect(result.current.createdKey).toBeNull();
-  });
-
   it('does not send a tenant for a self-service key', async () => {
     // The gateway derives the tenant from the session; sending one is ignored at
     // best, so the console must not pretend it can choose.
@@ -379,7 +358,7 @@ describe('useKeyActions', () => {
     expect(result.current.submittingKey).toBe(true);
 
     act(() => {
-      result.current.closeKeyModal();
+      result.current.setShowKeyModal(false);
     });
     expect(result.current.showKeyModal).toBe(false);
 

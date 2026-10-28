@@ -50,8 +50,11 @@ func (h *MultimodalHandler) HandleAudioSpeech(c *gin.Context) {
 	}, sessionID, "audio/mpeg")
 }
 
-// HandleAudioTranscriptions handles speech-to-text POST /v1/audio/transcriptions.
-func (h *MultimodalHandler) HandleAudioTranscriptions(c *gin.Context) {
+// handleAudioMultipart is the shared body of the transcription and translation
+// handlers: both read the multipart body, resolve the model, apply the same
+// currency/key gates and forward to the same upstream protocol. Only the path
+// differs.
+func (h *MultimodalHandler) handleAudioMultipart(c *gin.Context, path string) {
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		RespondOpenAIError(c, http.StatusBadRequest, "Failed to read multipart body", "invalid_request_error", "bad_request")
@@ -80,54 +83,22 @@ func (h *MultimodalHandler) HandleAudioTranscriptions(c *gin.Context) {
 		contentType = "multipart/form-data"
 	}
 
-	sessionID := resolveGenericSessionID(c, "stt")
 	h.dispatchAndForward(c, &router.UpstreamRequest{
-		Path:        "/v1/audio/transcriptions",
+		Path:        path,
 		Method:      http.MethodPost,
 		Body:        bodyBytes,
 		ContentType: contentType,
 		Model:       modelName,
 		Protocol:    "audio_transcription",
-	}, sessionID)
+	}, resolveGenericSessionID(c, "stt"))
+}
+
+// HandleAudioTranscriptions handles speech-to-text POST /v1/audio/transcriptions.
+func (h *MultimodalHandler) HandleAudioTranscriptions(c *gin.Context) {
+	h.handleAudioMultipart(c, "/v1/audio/transcriptions")
 }
 
 // HandleAudioTranslations handles audio translation POST /v1/audio/translations.
 func (h *MultimodalHandler) HandleAudioTranslations(c *gin.Context) {
-	bodyBytes, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		RespondOpenAIError(c, http.StatusBadRequest, "Failed to read multipart body", "invalid_request_error", "bad_request")
-		return
-	}
-	c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-
-	modelName := c.PostForm("model")
-	if modelName == "" {
-		modelName = "whisper-1"
-	}
-
-	if !validateModelCurrency(c, modelName) {
-		return
-	}
-	if !middleware.ValidateModelAllowed(c, modelName) {
-		RespondOpenAIError(c, http.StatusForbidden, fmt.Sprintf("Model '%s' is not allowed for your API key", modelName), "forbidden", "model_not_allowed")
-		return
-	}
-
-	contentType := c.GetHeader("Content-Type")
-	if contentType == "" {
-		contentType = c.ContentType()
-	}
-	if contentType == "" {
-		contentType = "multipart/form-data"
-	}
-
-	sessionID := resolveGenericSessionID(c, "stt")
-	h.dispatchAndForward(c, &router.UpstreamRequest{
-		Path:        "/v1/audio/translations",
-		Method:      http.MethodPost,
-		Body:        bodyBytes,
-		ContentType: contentType,
-		Model:       modelName,
-		Protocol:    "audio_transcription",
-	}, sessionID)
+	h.handleAudioMultipart(c, "/v1/audio/translations")
 }

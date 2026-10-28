@@ -119,24 +119,3 @@ func RecordTrace(c *gin.Context, modelName, channel string, statusCode int, errM
 		DurationMs:      duration.Milliseconds(),
 	})
 }
-
-// RecordTraceFromError is a convenience wrapper for dispatch failures.
-func RecordTraceFromError(c *gin.Context, modelName, sessionID string, statusCode int, err error, duration time.Duration) {
-	if c == nil {
-		return
-	}
-	if sessionID != "" {
-		c.Set(router.ContextKeySessionID, sessionID)
-	}
-	msg := ""
-	if err != nil {
-		msg = err.Error()
-	}
-	RecordTrace(c, modelName, "", statusCode, msg, "", duration)
-}
-
-// respondWithTraceError writes an OpenAI-shaped error and archives the snapshot.
-func respondWithTraceError(c *gin.Context, modelName string, statusCode int, message, errType, code string, duration time.Duration) {
-	RecordTrace(c, modelName, "", statusCode, message, "", duration)
-	RespondOpenAIError(c, statusCode, message, errType, code)
-}

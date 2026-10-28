@@ -105,11 +105,6 @@ func (l *LiveMetrics) EndStream() {
 	l.mu.Unlock()
 }
 
-// ActiveStreams returns the current number of in-flight streams on this node.
-func (l *LiveMetrics) ActiveStreams() int64 {
-	return l.activeStreams.Load()
-}
-
 // AddTokens records n freshly generated tokens arriving now.
 func (l *LiveMetrics) AddTokens(tokens int) {
 	if tokens <= 0 {

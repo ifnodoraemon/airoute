@@ -83,15 +83,6 @@ func (c *Client) AllowRPM(ctx context.Context, apiKey string, rpm int) (bool, er
 	return true, nil
 }
 
-// RecordTokens atomically increments the distributed usage counter for an API key.
-func (c *Client) RecordTokens(ctx context.Context, apiKey string, tokens int) error {
-	if !c.IsActive() || tokens <= 0 {
-		return nil
-	}
-	key := "airoute:keys:tokens"
-	return c.rdb.HIncrBy(ctx, key, apiKey, int64(tokens)).Err()
-}
-
 // TryAcquireInFlightQuota atomically checks and reserves in-flight user quota across the cluster.
 func (c *Client) TryAcquireInFlightQuota(ctx context.Context, userID int64, balance, minReserveCost float64) (bool, error) {
 	if !c.IsActive() || userID <= 0 {

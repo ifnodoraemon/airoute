@@ -20,7 +20,6 @@ const (
 	billingSettlementRepairGrace = 5 * time.Minute
 	// Do not compete with migrations and the boot-time hot reload.
 	billingReconcileStartupDelay = 3 * time.Minute
-	billingReconcileDriftLimit   = 500
 )
 
 // ResolveBillingReconcileInterval reads the reconciliation cadence.

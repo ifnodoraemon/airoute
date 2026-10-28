@@ -50,9 +50,7 @@ export default function KeysView({
   onNavigateToPricing,
   onNavigateToDashboard,
   showToast,
-  onNavigateToPlayground,
   lang = 'zh',
-  t
 }) {
   const isZh = lang === 'zh';
   // Filters live in the URL (keys.q / keys.status) so they survive module

@@ -126,81 +126,21 @@ func ValidateOpenAI(req *model.ChatCompletionRequest, rule *config.ModelValidati
 			req.Temperature = nil
 			res.AddWarning("omitted custom temperature for reasoning model")
 		}
-	} else if req.Temperature != nil {
-		if *req.Temperature < 0.0 || *req.Temperature > 2.0 {
-			if level == LevelStrict {
-				res.Valid = false
-				res.Error = &ValidationError{
-					Protocol:   ProtocolOpenAI,
-					Field:      "temperature",
-					Message:    fmt.Sprintf("temperature must be between 0.0 and 2.0, got %.2f", *req.Temperature),
-					Code:       "parameter_out_of_range",
-					StatusCode: http.StatusBadRequest,
-				}
-				return res
-			}
-			clamped := clampFloat(*req.Temperature, 0.0, 2.0)
-			req.Temperature = &clamped
-			res.AddWarning(fmt.Sprintf("clamped temperature to %.2f", clamped))
-		}
+	} else if !clampRange(res, level, ProtocolOpenAI, "temperature", &req.Temperature, 0.0, 2.0) {
+		return res
 	}
 
 	// 4. Parameter validation: TopP
-	if req.TopP != nil {
-		if *req.TopP < 0.0 || *req.TopP > 1.0 {
-			if level == LevelStrict {
-				res.Valid = false
-				res.Error = &ValidationError{
-					Protocol:   ProtocolOpenAI,
-					Field:      "top_p",
-					Message:    fmt.Sprintf("top_p must be between 0.0 and 1.0, got %.2f", *req.TopP),
-					Code:       "parameter_out_of_range",
-					StatusCode: http.StatusBadRequest,
-				}
-				return res
-			}
-			clamped := clampFloat(*req.TopP, 0.0, 1.0)
-			req.TopP = &clamped
-			res.AddWarning(fmt.Sprintf("clamped top_p to %.2f", clamped))
-		}
+	if !clampRange(res, level, ProtocolOpenAI, "top_p", &req.TopP, 0.0, 1.0) {
+		return res
 	}
 
 	// 5. Parameter validation: PresencePenalty & FrequencyPenalty
-	if req.PresencePenalty != nil {
-		if *req.PresencePenalty < -2.0 || *req.PresencePenalty > 2.0 {
-			if level == LevelStrict {
-				res.Valid = false
-				res.Error = &ValidationError{
-					Protocol:   ProtocolOpenAI,
-					Field:      "presence_penalty",
-					Message:    fmt.Sprintf("presence_penalty must be between -2.0 and 2.0, got %.2f", *req.PresencePenalty),
-					Code:       "parameter_out_of_range",
-					StatusCode: http.StatusBadRequest,
-				}
-				return res
-			}
-			clamped := clampFloat(*req.PresencePenalty, -2.0, 2.0)
-			req.PresencePenalty = &clamped
-			res.AddWarning(fmt.Sprintf("clamped presence_penalty to %.2f", clamped))
-		}
+	if !clampRange(res, level, ProtocolOpenAI, "presence_penalty", &req.PresencePenalty, -2.0, 2.0) {
+		return res
 	}
-	if req.FrequencyPenalty != nil {
-		if *req.FrequencyPenalty < -2.0 || *req.FrequencyPenalty > 2.0 {
-			if level == LevelStrict {
-				res.Valid = false
-				res.Error = &ValidationError{
-					Protocol:   ProtocolOpenAI,
-					Field:      "frequency_penalty",
-					Message:    fmt.Sprintf("frequency_penalty must be between -2.0 and 2.0, got %.2f", *req.FrequencyPenalty),
-					Code:       "parameter_out_of_range",
-					StatusCode: http.StatusBadRequest,
-				}
-				return res
-			}
-			clamped := clampFloat(*req.FrequencyPenalty, -2.0, 2.0)
-			req.FrequencyPenalty = &clamped
-			res.AddWarning(fmt.Sprintf("clamped frequency_penalty to %.2f", clamped))
-		}
+	if !clampRange(res, level, ProtocolOpenAI, "frequency_penalty", &req.FrequencyPenalty, -2.0, 2.0) {
+		return res
 	}
 
 	// 6. Parameter validation: MaxTokens
@@ -231,4 +171,32 @@ func clampFloat(val, min, max float64) float64 {
 		return max
 	}
 	return val
+}
+
+// clampRange validates a bounded float parameter. In strict mode an out-of-range
+// value is a hard error; in lenient mode it is clamped and reported as a warning.
+// Returns false when the caller must return the (invalid) result.
+func clampRange(res *ValidationResult, level, protocol, field string, v **float64, lo, hi float64) bool {
+	if v == nil || *v == nil {
+		return true
+	}
+	value := **v
+	if value >= lo && value <= hi {
+		return true
+	}
+	if level == LevelStrict {
+		res.Valid = false
+		res.Error = &ValidationError{
+			Protocol:   protocol,
+			Field:      field,
+			Message:    fmt.Sprintf("%s must be between %.1f and %.1f, got %.2f", field, lo, hi, value),
+			Code:       "parameter_out_of_range",
+			StatusCode: http.StatusBadRequest,
+		}
+		return false
+	}
+	clamped := clampFloat(value, lo, hi)
+	*v = &clamped
+	res.AddWarning(fmt.Sprintf("clamped %s to %.2f", field, clamped))
+	return true
 }

@@ -19,9 +19,7 @@ export default function AuthPage({
   onLoginSuccess,
   onBackHome,
   lang = 'zh',
-  setLang,
   toggleLang,
-  t
 }) {
   const isZh = lang === 'zh';
   const [activeTab, setActiveTab] = useState(initialTab); // 'login' | 'register'

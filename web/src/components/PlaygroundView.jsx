@@ -39,7 +39,6 @@ export default function PlaygroundView({
   models = [],
   modelRoutes = [],
   prices = [],
-  adminFetch,
   showToast,
   initialModel = '',
   initialModality = 'chat',

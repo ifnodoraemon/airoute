@@ -22,7 +22,6 @@ export default function ChannelModal({
   onSubmit,
   submitting = false,
   lang = 'zh',
-  t
 }) {
   const [showApiKeyPlain, setShowApiKeyPlain] = useState(false);
 

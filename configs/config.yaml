@@ -15,10 +15,6 @@ server:
 # database_url: "${DATABASE_URL}"
 # redis_url: "${REDIS_URL}"
 
-enable_fallback: true
-max_retries: 3
-default_timeout_seconds: 60
-
 # 管理员凭证配置 (由 .env GATEWAY_ADMIN_USER / GATEWAY_ADMIN_PASSWORD 统管)
 # 生产环境务必设置强口令；启动时检测到 admin123/空口令/占位密钥会直接拒绝启动。
 admin:

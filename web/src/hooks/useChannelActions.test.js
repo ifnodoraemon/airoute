@@ -43,19 +43,6 @@ describe('useChannelActions', () => {
     expect(refresh).toHaveBeenCalledOnce();
   });
 
-  it('opens the create form empty', () => {
-    const { result } = setup();
-
-    act(() => {
-      result.current.openCreateChannel();
-    });
-
-    expect(result.current.showChannelModal).toBe(true);
-    expect(result.current.editingChannelId).toBeNull();
-    expect(result.current.newChannel.name).toBe('');
-    expect(result.current.newChannel.models_str).toBe('');
-  });
-
   it('loads an existing channel into the form for editing', () => {
     const { result } = setup();
 
@@ -246,7 +233,7 @@ describe('useChannelActions', () => {
     globalThis.fetch.mockRejectedValue(new Error('boom'));
     const { result, refresh } = setup();
     act(() => {
-      result.current.openCreateChannel();
+      result.current.setShowChannelModal(true);
       result.current.setNewChannel(prev => ({ ...prev, name: 'x', base_url: 'https://a.example' }));
     });
 
@@ -516,7 +503,7 @@ describe('useChannelActions', () => {
     const { result } = setup();
     act(() => {
       result.current.setSelectedChannelIds([1]);
-      result.current.openCreateChannel();
+      result.current.setShowChannelModal(true);
     });
 
     act(() => {

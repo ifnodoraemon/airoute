@@ -11,21 +11,20 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/model"
 )
 
-// Embed executes an embedding generation request against standard OpenAI-compatible endpoints.
-func (p *OpenAIProvider) Embed(ctx context.Context, req *model.EmbeddingRequest, channel *model.ChannelConfig) (*model.EmbeddingResponse, error) {
-	targetModel := channel.GetUpstreamModel(req.Model)
-	cloned := *req
-	cloned.Model = targetModel
-
-	payloadBytes, err := json.Marshal(cloned)
+// postJSON sends a JSON POST to path and decodes a successful response into out.
+//
+// Embedding and rerank share the whole request plumbing (upstream model rewrite,
+// auth headers, upstream error mapping, response decode), so it lives here once.
+// label only shapes the error text ("embedding"/"rerank").
+func (p *OpenAIProvider) postJSON(ctx context.Context, channel *model.ChannelConfig, path, label string, payload, out any) error {
+	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		return nil, fmt.Errorf("marshal embedding request error: %w", err)
+		return fmt.Errorf("marshal %s request error: %w", label, err)
 	}
 
-	targetURL := APIURL(channel.BaseURL, "/v1/embeddings")
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(payloadBytes))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, APIURL(channel.BaseURL, path), bytes.NewReader(payloadBytes))
 	if err != nil {
-		return nil, fmt.Errorf("create embedding http request error: %w", err)
+		return fmt.Errorf("create %s http request error: %w", label, err)
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
@@ -36,22 +35,33 @@ func (p *OpenAIProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("do embedding request error: %w", err)
+		return fmt.Errorf("do %s request error: %w", label, err)
 	}
 	defer resp.Body.Close()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read embedding response error: %w", err)
+		return fmt.Errorf("read %s response error: %w", label, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
+		return NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
 	}
 
+	if err := json.Unmarshal(bodyBytes, out); err != nil {
+		return fmt.Errorf("unmarshal %s response error: %w", label, err)
+	}
+	return nil
+}
+
+// Embed executes an embedding generation request against standard OpenAI-compatible endpoints.
+func (p *OpenAIProvider) Embed(ctx context.Context, req *model.EmbeddingRequest, channel *model.ChannelConfig) (*model.EmbeddingResponse, error) {
+	cloned := *req
+	cloned.Model = channel.GetUpstreamModel(req.Model)
+
 	var embResp model.EmbeddingResponse
-	if err := json.Unmarshal(bodyBytes, &embResp); err != nil {
-		return nil, fmt.Errorf("unmarshal embedding response error: %w", err)
+	if err := p.postJSON(ctx, channel, "/v1/embeddings", "embedding", &cloned, &embResp); err != nil {
+		return nil, err
 	}
 
 	// Restore user's requested model in the response
@@ -61,46 +71,12 @@ func (p *OpenAIProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 
 // Rerank executes a cross-encoder rerank request against standard rerank endpoints.
 func (p *OpenAIProvider) Rerank(ctx context.Context, req *model.RerankRequest, channel *model.ChannelConfig) (*model.RerankResponse, error) {
-	targetModel := channel.GetUpstreamModel(req.Model)
 	cloned := *req
-	cloned.Model = targetModel
-
-	payloadBytes, err := json.Marshal(cloned)
-	if err != nil {
-		return nil, fmt.Errorf("marshal rerank request error: %w", err)
-	}
-
-	targetURL := APIURL(channel.BaseURL, "/v1/rerank")
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(payloadBytes))
-	if err != nil {
-		return nil, fmt.Errorf("create rerank http request error: %w", err)
-	}
-
-	httpReq.Header.Set("Content-Type", "application/json")
-	if channel.APIKey != "" && channel.APIKey != "none" {
-		httpReq.Header.Set("Authorization", "Bearer "+channel.APIKey)
-		httpReq.Header.Set("x-api-key", channel.APIKey)
-	}
-
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("do rerank request error: %w", err)
-	}
-	defer resp.Body.Close()
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read rerank response error: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
-	}
+	cloned.Model = channel.GetUpstreamModel(req.Model)
 
 	var rerankResp model.RerankResponse
-	if err := json.Unmarshal(bodyBytes, &rerankResp); err != nil {
-		return nil, fmt.Errorf("unmarshal rerank response error: %w", err)
+	if err := p.postJSON(ctx, channel, "/v1/rerank", "rerank", &cloned, &rerankResp); err != nil {
+		return nil, err
 	}
 
 	// Restore user's requested model in the response

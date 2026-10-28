@@ -404,7 +404,6 @@ export default function LogsView({
       {logViewMode === 'system' ? (
         <SystemLogConsole
           lang={lang}
-          t={t}
           showToast={showToast}
           initialTraceId={sessionFilter || ''}
         />

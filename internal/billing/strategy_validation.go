@@ -141,20 +141,6 @@ func ValidateSlotsOverlap(slotsJSON string) error {
 	return nil
 }
 
-// IsOffPeakDefault evaluates whether current server time matches DeepSeek official off-peak hours.
-func IsOffPeakDefault(t time.Time) bool {
-	localT := t.In(shanghaiLoc)
-	weekday := localT.Weekday()
-	if weekday == time.Saturday || weekday == time.Sunday {
-		return true
-	}
-	m := localT.Hour()*60 + localT.Minute()
-	if (m >= 540 && m < 720) || (m >= 840 && m < 1080) {
-		return false
-	}
-	return true
-}
-
 func parseTimeToMinutes(s string) int {
 	parts := strings.Split(strings.TrimSpace(s), ":")
 	if len(parts) != 2 {

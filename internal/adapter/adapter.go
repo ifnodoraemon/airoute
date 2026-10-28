@@ -2,7 +2,6 @@ package adapter
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
@@ -36,14 +35,6 @@ func Get(protocol string) (ProtocolAdapter, bool) {
 	defer registryMu.RUnlock()
 	a, ok := registry[protocol]
 	return a, ok
-}
-
-// MustGet retrieves a registered protocol adapter or returns an error if not found.
-func MustGet(protocol string) (ProtocolAdapter, error) {
-	if a, ok := Get(protocol); ok {
-		return a, nil
-	}
-	return nil, fmt.Errorf("protocol adapter for '%s' is not registered", protocol)
 }
 
 func init() {

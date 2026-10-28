@@ -56,7 +56,6 @@ export default function ModelRouteModal({
   adminFetch,
   showToast,
   lang = 'zh',
-  t
 }) {
 
   const isZh = lang === 'zh';

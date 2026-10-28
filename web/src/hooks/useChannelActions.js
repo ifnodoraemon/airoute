@@ -371,18 +371,6 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
     }
   }, [selectedChannelIds, isZh, showToast, refresh]);
 
-  const openCreateChannel = useCallback(() => {
-    setEditingChannelId(null);
-    setProbeAlert(null);
-    setNewChannel(emptyChannel());
-    setShowChannelModal(true);
-  }, [setNewChannel]);
-
-  const closeChannelModal = useCallback(() => {
-    cancelProbe();
-    setShowChannelModal(false);
-  }, [cancelProbe]);
-
   // Clear the tenant-scoped parts on logout: the selection and the measured
   // latencies belong to the session that measured them.
   const reset = useCallback(() => {
@@ -426,8 +414,6 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
     handleTestChannel,
     handleBatchDeleteChannels,
     handleBatchStatusChannels,
-    openCreateChannel,
-    closeChannelModal,
     reset,
   };
 }

@@ -21,7 +21,7 @@ import useFormDirty from '../hooks/useFormDirty';
 import useUnsavedGuard from '../hooks/useUnsavedGuard';
 import DiscardChangesDialog from './DiscardChangesDialog';
 
-export default function UserManagementView({ adminUser, adminFetch, showToast, lang = 'zh', t }) {
+export default function UserManagementView({ adminUser, adminFetch, showToast, lang = 'zh' }) {
   const isZh = lang === 'zh';
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);

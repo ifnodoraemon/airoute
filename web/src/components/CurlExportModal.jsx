@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { X, Copy, Check, Terminal } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
 
-export default function CurlExportModal({ curlCmd, onClose, onCopy, lang = 'zh', t }) {
+export default function CurlExportModal({ curlCmd, onClose, onCopy, lang = 'zh' }) {
   useModalA11y(!!curlCmd, onClose);
 
   const isZh = lang === 'zh';

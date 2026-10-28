@@ -90,9 +90,7 @@ export default function ChannelsView({
   handleEditChannel,
   handleDeleteChannel,
   onNavigateToReconciliation,
-  showToast,
   lang = 'zh',
-  t
 }) {
   const isZh = lang === 'zh';
   // Filters live in the URL (`channels.<key>`), so switching modules no longer

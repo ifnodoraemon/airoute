@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
 
-export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession, onDeleteLog, onNavigate, onOpenTrace, lang = 'zh', t }) {
+export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession, onDeleteLog, onNavigate, onOpenTrace, lang = 'zh' }) {
   useModalA11y(!!log, onClose);
 
   const isZh = lang === 'zh';

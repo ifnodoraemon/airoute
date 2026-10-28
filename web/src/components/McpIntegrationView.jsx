@@ -211,7 +211,7 @@ const getDefaultArgsForTool = (toolName) => {
   return getToolInfo(toolName).defaultArgs;
 };
 
-export default function McpIntegrationView({ adminFetch, adminToken, onCopy, showToast, lang = 'zh', t }) {
+export default function McpIntegrationView({ adminFetch, onCopy, showToast, lang = 'zh', t }) {
   const isZh = lang === 'zh';
   const [servers, setServers] = useState([]);
   const [loading, setLoading] = useState(false);

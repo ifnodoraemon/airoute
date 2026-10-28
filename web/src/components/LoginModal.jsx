@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
 
-export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh', t }) {
+export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh' }) {
   useModalA11y(isOpen, onClose);
 
   const isZh = lang === 'zh';

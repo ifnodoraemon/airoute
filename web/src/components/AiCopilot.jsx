@@ -62,7 +62,6 @@ export default function AiCopilot({
   lang = 'zh',
   t,
   showToast,
-  adminUser,
   adminFetch,
   initialQuery = '',
   onClearInitialQuery

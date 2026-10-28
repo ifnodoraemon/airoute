@@ -5,7 +5,7 @@ import useModalA11y from '../hooks/useModalA11y';
 import { availableKeyModels } from '../lib/keyModels';
 import { inferClientModality } from '../lib/modelModality';
 
-export default function QuickStartModal({ apiKey, models = [], onClose, onCopy, lang = 'zh', t }) {
+export default function QuickStartModal({ apiKey, models = [], onClose, onCopy, lang = 'zh' }) {
   useModalA11y(!!apiKey, onClose);
 
   const isZh = lang === 'zh';

@@ -229,11 +229,6 @@ func (e *BillingEngine) SetGroupMultipliers(multipliers map[string]float64) erro
 	return nil
 }
 
-// GetPrice finds the applicable pricing rate for a requested model in default group.
-func (e *BillingEngine) GetPrice(modelName string) *storage.ModelPriceRecord {
-	return e.GetPriceWithGroup(modelName, "default")
-}
-
 // Price resolution sources reported by ResolvePriceSource. "default" means no
 // rule matched and the hardcoded fallback rate was applied — the case the startup
 // self-check warns about, because that rate is a guess rather than a decision.

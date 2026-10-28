@@ -10,11 +10,6 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
-// ChannelSelectorStrategy defines the strategy interface for ordering candidate channels within a priority tier.
-type ChannelSelectorStrategy interface {
-	Select(ctx context.Context, group []*model.ChannelConfig, modelName, sessionID string) []*model.ChannelConfig
-}
-
 // SessionAffinitySelector routes requests using sticky session affinity (Redis cache pin or Consistent Hashing).
 type SessionAffinitySelector struct {
 	cb *CircuitBreaker

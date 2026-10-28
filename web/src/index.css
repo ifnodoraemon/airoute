@@ -10,15 +10,6 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-page: var(--bg-page);
-  --color-surface: var(--bg-surface);
-  --color-subtle: var(--bg-subtle);
-  --color-border-subtle: var(--border-light);
-  --color-text-main: var(--text-primary);
-  --color-text-muted: var(--text-secondary);
-  --color-brand: var(--brand-primary);
-  --color-brand-active: var(--brand-active-text);
-  --color-brand-selected: var(--brand-selected-bg);
 }
 
 :root {
@@ -29,7 +20,6 @@
   --text-primary: #202124;
   --text-secondary: #656B75;
   --brand-primary: #355CFF;
-  --brand-hover: #2B4CE0;
   --brand-active-text: #355CFF;
   --brand-selected-bg: #EEF2FF;
 }
@@ -42,7 +32,6 @@
   --text-primary: #F1F2F4;
   --text-secondary: #A1A7B0;
   --brand-primary: #355CFF;
-  --brand-hover: #4E70FF;
   --brand-active-text: #91A7FF;
   --brand-selected-bg: #242D48;
 }
@@ -176,11 +165,6 @@
     @apply inline-flex items-center gap-1 rounded-md border border-[#E4E6E9] dark:border-[#2C3038]
            bg-[#F0F1F2]/80 dark:bg-[#22252B]/80 px-2 py-0.5 text-xs font-medium
            text-[#202124] dark:text-[#F1F2F4];
-  }
-  .ui-chip-active {
-    @apply inline-flex items-center gap-1 rounded-md border border-[#355CFF]/30 dark:border-[#91A7FF]/30
-           bg-[#EEF2FF] dark:bg-[#242D48] px-2 py-0.5 text-xs font-medium
-           text-[#355CFF] dark:text-[#91A7FF];
   }
 
   /* ---- Dropdown menus & Overflows ---- */

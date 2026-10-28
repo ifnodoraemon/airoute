@@ -4,6 +4,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// prop is the one-field JSON-schema property shape the declarative tool
+// schemas below use. Keeping it in a helper stops the 38-property table from
+// repeating the same two keys and drifting apart.
+func prop(typ, description string) gin.H {
+	return gin.H{"type": typ, "description": description}
+}
+
 // getBuiltinMCPTools returns the declarative tool schemas supported natively by Airoute gateway.
 func getBuiltinMCPTools() []gin.H {
 	return []gin.H{
@@ -13,14 +20,8 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"query": gin.H{
-						"type":        "string",
-						"description": "Keyword to search across skill names, descriptions, or tool names (e.g. '治理', '脱敏', 'SQL', 'search')",
-					},
-					"category": gin.H{
-						"type":        "string",
-						"description": "Optional category filter: ops, search, security, dev, prompt, agent",
-					},
+					"query":    prop("string", "Keyword to search across skill names, descriptions, or tool names (e.g. '治理', '脱敏', 'SQL', 'search')"),
+					"category": prop("string", "Optional category filter: ops, search, security, dev, prompt, agent"),
 				},
 			},
 		},
@@ -30,10 +31,7 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"skill_id": gin.H{
-						"type":        "string",
-						"description": "Skill identifier, e.g. gateway_ops, deep_research, security_compliance, sql_code_guard, prompt_optimizer, model_arbiter",
-					},
+					"skill_id": prop("string", "Skill identifier, e.g. gateway_ops, deep_research, security_compliance, sql_code_guard, prompt_optimizer, model_arbiter"),
 				},
 				"required": []string{"skill_id"},
 			},
@@ -44,10 +42,7 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"skill_id": gin.H{
-						"type":        "string",
-						"description": "Skill identifier, e.g. gateway_ops, deep_research, security_compliance, sql_code_guard, prompt_optimizer, model_arbiter",
-					},
+					"skill_id": prop("string", "Skill identifier, e.g. gateway_ops, deep_research, security_compliance, sql_code_guard, prompt_optimizer, model_arbiter"),
 				},
 				"required": []string{"skill_id"},
 			},
@@ -66,10 +61,7 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"modality": gin.H{
-						"type":        "string",
-						"description": "Optional modality filter: chat, images, audio_speech, audio_transcription, videos, embeddings, rerank",
-					},
+					"modality": prop("string", "Optional modality filter: chat, images, audio_speech, audio_transcription, videos, embeddings, rerank"),
 				},
 			},
 		},
@@ -79,14 +71,8 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"query": gin.H{
-						"type":        "string",
-						"description": "Search query or research question to search across the web",
-					},
-					"max_results": gin.H{
-						"type":        "integer",
-						"description": "Max number of citations to retrieve (default 5)",
-					},
+					"query":       prop("string", "Search query or research question to search across the web"),
+					"max_results": prop("integer", "Max number of citations to retrieve (default 5)"),
 				},
 				"required": []string{"query"},
 			},
@@ -97,14 +83,8 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"text": gin.H{
-						"type":        "string",
-						"description": "Input text to scan and redact",
-					},
-					"mask_char": gin.H{
-						"type":        "string",
-						"description": "Masking character, default '*'",
-					},
+					"text":      prop("string", "Input text to scan and redact"),
+					"mask_char": prop("string", "Masking character, default '*'"),
 				},
 				"required": []string{"text"},
 			},
@@ -115,10 +95,7 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"sql": gin.H{
-						"type":        "string",
-						"description": "SQL statement to audit and analyze",
-					},
+					"sql": prop("string", "SQL statement to audit and analyze"),
 				},
 				"required": []string{"sql"},
 			},
@@ -129,14 +106,8 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"prompt": gin.H{
-						"type":        "string",
-						"description": "Original raw or conversational prompt to optimize",
-					},
-					"task_type": gin.H{
-						"type":        "string",
-						"description": "Optional task category: coding, analysis, creative, roleplay, extractor",
-					},
+					"prompt":    prop("string", "Original raw or conversational prompt to optimize"),
+					"task_type": prop("string", "Optional task category: coding, analysis, creative, roleplay, extractor"),
 				},
 				"required": []string{"prompt"},
 			},
@@ -147,14 +118,8 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"task_description": gin.H{
-						"type":        "string",
-						"description": "Detailed description of the AI task to be performed",
-					},
-					"priority": gin.H{
-						"type":        "string",
-						"description": "Optimization priority: quality (deep reasoning), speed (low latency), cost (budget friendly)",
-					},
+					"task_description": prop("string", "Detailed description of the AI task to be performed"),
+					"priority":         prop("string", "Optimization priority: quality (deep reasoning), speed (low latency), cost (budget friendly)"),
 				},
 				"required": []string{"task_description"},
 			},
@@ -165,14 +130,8 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"session_id": gin.H{
-						"type":        "string",
-						"description": "Filter by conversation session ID",
-					},
-					"limit": gin.H{
-						"type":        "integer",
-						"description": "Max number of logs to return (default 10, max 50)",
-					},
+					"session_id": prop("string", "Filter by conversation session ID"),
+					"limit":      prop("integer", "Max number of logs to return (default 10, max 50)"),
 				},
 			},
 		},
@@ -182,18 +141,9 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"model": gin.H{
-						"type":        "string",
-						"description": "Model identifier, e.g. deepseek-chat, gpt-4o, claude-3-5-sonnet",
-					},
-					"message": gin.H{
-						"type":        "string",
-						"description": "User message / prompt",
-					},
-					"session_id": gin.H{
-						"type":        "string",
-						"description": "Optional session ID for multi-turn conversational memory and prefix cache affinity",
-					},
+					"model":      prop("string", "Model identifier, e.g. deepseek-chat, gpt-4o, claude-3-5-sonnet"),
+					"message":    prop("string", "User message / prompt"),
+					"session_id": prop("string", "Optional session ID for multi-turn conversational memory and prefix cache affinity"),
 				},
 				"required": []string{"model", "message"},
 			},
@@ -204,10 +154,7 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"url": gin.H{
-						"type":        "string",
-						"description": "Target web page URL to load",
-					},
+					"url": prop("string", "Target web page URL to load"),
 				},
 				"required": []string{"url"},
 			},
@@ -218,10 +165,7 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"name": gin.H{
-						"type":        "string",
-						"description": "Screenshot name or image identifier",
-					},
+					"name": prop("string", "Screenshot name or image identifier"),
 				},
 			},
 		},
@@ -231,10 +175,7 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"selector": gin.H{
-						"type":        "string",
-						"description": "CSS selector to click",
-					},
+					"selector": prop("string", "CSS selector to click"),
 				},
 				"required": []string{"selector"},
 			},
@@ -245,10 +186,7 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"script": gin.H{
-						"type":        "string",
-						"description": "JavaScript code snippet or expression to evaluate",
-					},
+					"script": prop("string", "JavaScript code snippet or expression to evaluate"),
 				},
 				"required": []string{"script"},
 			},
@@ -259,10 +197,7 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"query": gin.H{
-						"type":        "string",
-						"description": "Single read-only SELECT/WITH/EXPLAIN statement over an allowlisted table",
-					},
+					"query": prop("string", "Single read-only SELECT/WITH/EXPLAIN statement over an allowlisted table"),
 				},
 				"required": []string{"query"},
 			},
@@ -281,10 +216,7 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"table_name": gin.H{
-						"type":        "string",
-						"description": "Allowlisted table name (usage_logs, model_prices, model_fallbacks)",
-					},
+					"table_name": prop("string", "Allowlisted table name (usage_logs, model_prices, model_fallbacks)"),
 				},
 				"required": []string{"table_name"},
 			},
@@ -295,18 +227,9 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"thought": gin.H{
-						"type":        "string",
-						"description": "Current thinking step or analysis",
-					},
-					"thoughtNumber": gin.H{
-						"type":        "integer",
-						"description": "Current thought index (1-based)",
-					},
-					"totalThoughts": gin.H{
-						"type":        "integer",
-						"description": "Estimated total thoughts",
-					},
+					"thought":       prop("string", "Current thinking step or analysis"),
+					"thoughtNumber": prop("integer", "Current thought index (1-based)"),
+					"totalThoughts": prop("integer", "Estimated total thoughts"),
 				},
 				"required": []string{"thought"},
 			},
@@ -317,10 +240,7 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"query": gin.H{
-						"type":        "string",
-						"description": "Search query keywords",
-					},
+					"query": prop("string", "Search query keywords"),
 				},
 				"required": []string{"query"},
 			},
@@ -331,18 +251,9 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"repo": gin.H{
-						"type":        "string",
-						"description": "Repository identifier (owner/repo)",
-					},
-					"title": gin.H{
-						"type":        "string",
-						"description": "Issue title",
-					},
-					"body": gin.H{
-						"type":        "string",
-						"description": "Issue markdown body",
-					},
+					"repo":  prop("string", "Repository identifier (owner/repo)"),
+					"title": prop("string", "Issue title"),
+					"body":  prop("string", "Issue markdown body"),
 				},
 				"required": []string{"repo", "title"},
 			},
@@ -353,14 +264,8 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"repo": gin.H{
-						"type":        "string",
-						"description": "Repository identifier (owner/repo)",
-					},
-					"path": gin.H{
-						"type":        "string",
-						"description": "File path in repo",
-					},
+					"repo": prop("string", "Repository identifier (owner/repo)"),
+					"path": prop("string", "File path in repo"),
 				},
 				"required": []string{"repo", "path"},
 			},
@@ -371,22 +276,10 @@ func getBuiltinMCPTools() []gin.H {
 			"inputSchema": gin.H{
 				"type": "object",
 				"properties": gin.H{
-					"repo": gin.H{
-						"type":        "string",
-						"description": "Repository identifier (owner/repo)",
-					},
-					"title": gin.H{
-						"type":        "string",
-						"description": "Pull request title",
-					},
-					"head": gin.H{
-						"type":        "string",
-						"description": "Head branch",
-					},
-					"base": gin.H{
-						"type":        "string",
-						"description": "Base branch",
-					},
+					"repo":  prop("string", "Repository identifier (owner/repo)"),
+					"title": prop("string", "Pull request title"),
+					"head":  prop("string", "Head branch"),
+					"base":  prop("string", "Base branch"),
 				},
 				"required": []string{"repo", "title", "head", "base"},
 			},

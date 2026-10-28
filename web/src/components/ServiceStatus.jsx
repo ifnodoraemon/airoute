@@ -32,7 +32,6 @@ export default function ServiceStatus({
   t,
   onRefresh,
   probeLatencies = {},
-  adminFetch,
   showToast,
   onBatchProbe,
   batchTesting = false,

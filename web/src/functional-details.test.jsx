@@ -29,7 +29,7 @@ describe('Functional details regressions', () => {
     act(() => result.current.handleEditChannel({ id: 1, name: 'first', base_url: 'https://first.invalid', models: ['first-model'] }));
     act(() => result.current.handleProbeChannel());
     act(() => {
-      result.current.closeChannelModal();
+      result.current.setShowChannelModal(false);
       result.current.handleEditChannel({ id: 2, name: 'second', base_url: 'https://second.invalid', models: ['second-model'] });
     });
     await act(async () => { finishProbe(response({ code: 0, data: { type: 'anthropic', models: ['from-first-probe'], protocols: ['anthropic_messages'] } })); });

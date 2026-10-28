@@ -185,34 +185,3 @@ func updateChannelTx(tx *Tx, rec *ChannelRecord) error {
 		rec.Name, rec.Type, rec.BaseURL, rec.APIKey, string(modelsBytes), string(mappingBytes), string(protocolsBytes), rec.Priority, rec.Weight, rec.TimeoutSeconds, rec.Status, rec.ID)
 	return err
 }
-
-// CountChannelsServingModel returns how many active channels serve the model.
-func (r *Repository) CountChannelsServingModel(modelName string) (int, error) {
-	rows, err := r.db.Query(`SELECT models FROM channels WHERE status = 'active' OR status IS NULL OR status = ''`)
-	if err != nil {
-		return 0, err
-	}
-	defer rows.Close()
-
-	count := 0
-	for rows.Next() {
-		var raw sql.NullString
-		if err := rows.Scan(&raw); err != nil {
-			return count, err
-		}
-		if !raw.Valid || raw.String == "" {
-			continue
-		}
-		var models []string
-		if err := json.Unmarshal([]byte(raw.String), &models); err != nil {
-			continue
-		}
-		for _, m := range models {
-			if m == modelName {
-				count++
-				break
-			}
-		}
-	}
-	return count, rows.Err()
-}

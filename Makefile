@@ -1,6 +1,6 @@
 export PATH := /usr/local/go/bin:$(PATH)
 
-.PHONY: all build build-web run test test-web test-integration test-e2e test-e2e-go tidy clean docker-build docker-rebuild check-deploy-drift
+.PHONY: all build build-web run test test-web test-integration test-e2e-go tidy clean docker-build docker-rebuild check-deploy-drift
 
 APP_NAME = airoute
 BIN_DIR = bin
@@ -76,10 +76,6 @@ test-integration:
 	@test -n "$(AIROUTE_TEST_REDIS_URL)" || { echo "AIROUTE_TEST_REDIS_URL is required"; exit 1; }
 	@echo "==> Running integration tests (PostgreSQL + Redis)..."
 	go test -race -tags=integration ./internal/storage/ ./internal/distributed/
-
-test-e2e:
-	@echo "==> Running End-to-End (E2E) integration tests..."
-	@bash scripts/test-e2e.sh
 
 test-e2e-go:
 	@echo "==> Running Go E2E test suite..."

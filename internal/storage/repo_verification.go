@@ -5,17 +5,6 @@ import (
 	"time"
 )
 
-// VerificationCodeRecord stores temporary email verification codes.
-type VerificationCodeRecord struct {
-	ID        int64     `json:"id"`
-	Email     string    `json:"email"`
-	Code      string    `json:"code"`
-	Purpose   string    `json:"purpose"`
-	ExpiresAt time.Time `json:"expires_at"`
-	Used      bool      `json:"used"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
 // SaveVerificationCode stores a verification code with an expiration window.
 //
 // Expired codes used to accumulate forever: nothing in the gateway ever deleted a

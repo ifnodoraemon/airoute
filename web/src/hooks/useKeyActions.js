@@ -65,12 +65,6 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
     setShowKeyModal(true);
   }, [adminUser, isZh, keys]);
 
-  // Closing the dialog is also what drops the one-time plaintext credential.
-  const closeKeyModal = useCallback(() => {
-    setShowKeyModal(false);
-    setCreatedKey(null);
-  }, []);
-
   // Handle Key Creation
   const handleCreateKey = useCallback(async (e) => {
     if (e && e.preventDefault) e.preventDefault();
@@ -268,7 +262,6 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
     createdKey,
     setNewKey,
     setShowKeyModal,
-    closeKeyModal,
     setSelectedKeyIds,
     setCopiedKey,
     handleOpenCreateKey,

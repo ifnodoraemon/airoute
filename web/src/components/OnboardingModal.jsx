@@ -34,7 +34,6 @@ export default function OnboardingModal({
   onCreateKey,
   showToast,
   lang = 'zh',
-  t
 }) {
   const isZh = lang === 'zh';
   const [step, setStep] = useState(1);

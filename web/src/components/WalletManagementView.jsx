@@ -15,7 +15,7 @@ import {
 import { copyToClipboard } from '../config';
 import useModalA11y from '../hooks/useModalA11y';
 
-export default function WalletManagementView({ adminUser, adminFetch, showToast, onUserUpdated, onBalanceUpdate, lang = 'zh', t }) {
+export default function WalletManagementView({ adminUser, adminFetch, showToast, onUserUpdated, onBalanceUpdate, lang = 'zh' }) {
   const isZh = lang === 'zh';
   const isAdmin = adminUser?.role === 'admin';
   const [walletData, setWalletData] = useState({
