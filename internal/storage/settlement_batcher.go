@@ -106,8 +106,8 @@ func InitSettlementBatcher(repo *Repository) *SettlementBatcher {
 	}
 	b := &SettlementBatcher{
 		repo:     repo,
-		jobs:     make(chan settleJob, envPositiveIntDflt("GATEWAY_SETTLEMENT_QUEUE", defaultSettlementQueueSize)),
-		maxBatch: envPositiveIntDflt("GATEWAY_SETTLEMENT_BATCH_SIZE", defaultSettlementBatchSize),
+		jobs:     make(chan settleJob, envPositiveInt("GATEWAY_SETTLEMENT_QUEUE", defaultSettlementQueueSize)),
+		maxBatch: envPositiveInt("GATEWAY_SETTLEMENT_BATCH_SIZE", defaultSettlementBatchSize),
 		linger:   envMilliseconds("GATEWAY_SETTLEMENT_LINGER_MS", defaultSettlementLinger),
 		stopCh:   make(chan struct{}),
 	}
@@ -115,19 +115,6 @@ func InitSettlementBatcher(repo *Repository) *SettlementBatcher {
 	b.wg.Add(1)
 	go b.run()
 	return b
-}
-
-// envPositiveIntDflt reads a positive integer environment override.
-func envPositiveIntDflt(name string, dflt int) int {
-	raw := strings.TrimSpace(os.Getenv(name))
-	if raw == "" {
-		return dflt
-	}
-	value, err := strconv.Atoi(raw)
-	if err != nil || value <= 0 {
-		return dflt
-	}
-	return value
 }
 
 // envMilliseconds reads a positive millisecond override as a duration.

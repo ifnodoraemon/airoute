@@ -108,45 +108,39 @@ func (r *Repository) maybePruneVideoTasks() {
 // cutoff, in bounded batches. Expiry (not creation) is the cutoff so a code's
 // whole lifetime plus the retention window is always kept.
 func (r *Repository) PurgeVerificationCodesBefore(cutoff time.Time) (int64, error) {
-	if r == nil || r.db == nil {
-		return 0, nil
-	}
 	// verification_codes.expires_at is TIMESTAMPTZ on PostgreSQL and a UTC text
-	// column on SQLite; dialectTime binds the right shape for each.
-	cutoffValue := r.dialectTime(cutoff)
-	var total int64
-	for {
-		res, err := r.db.Exec(
-			`DELETE FROM verification_codes WHERE id IN (SELECT id FROM verification_codes WHERE expires_at < ? ORDER BY id LIMIT ?)`,
-			cutoffValue, retentionPruneBatchSize,
-		)
-		if err != nil {
-			return total, err
-		}
-		deleted, err := res.RowsAffected()
-		if err != nil {
-			return total, err
-		}
-		total += deleted
-		if deleted < retentionPruneBatchSize {
-			return total, nil
-		}
-	}
+	// column on SQLite; purgeBeforeCutoff binds the right shape for each.
+	return r.purgeBeforeCutoff(
+		`DELETE FROM verification_codes WHERE id IN (SELECT id FROM verification_codes WHERE expires_at < ? ORDER BY id LIMIT ?)`,
+		cutoff, retentionPruneBatchSize)
 }
 
 // PurgeVideoTasksBefore deletes video task records created before cutoff, in
 // bounded batches.
 func (r *Repository) PurgeVideoTasksBefore(cutoff time.Time) (int64, error) {
+	return r.purgeBeforeCutoff(
+		`DELETE FROM video_tasks WHERE id IN (SELECT id FROM video_tasks WHERE created_at < ? ORDER BY created_at LIMIT ?)`,
+		cutoff, retentionPruneBatchSize)
+}
+
+// purgeBeforeCutoff runs one bounded-batch retention DELETE: the statement
+// deletes at most batchSize rows per iteration, and the loop stops as soon as a
+// short batch comes back (the table is drained) or a statement fails.
+//
+// It is the single implementation behind every retention purge: callers only
+// supply their own DELETE (tables differ in the name and in which timestamp
+// column the cutoff applies to) and their batch bound, so the loop mechanics
+// cannot drift between tables. total holds what was deleted before a failure, so
+// a partial prune is still reported. The cutoff is bound through dialectTime:
+// the timestamp columns are TIMESTAMPTZ on PostgreSQL and UTC text on SQLite.
+func (r *Repository) purgeBeforeCutoff(deleteStmt string, cutoff time.Time, batchSize int) (int64, error) {
 	if r == nil || r.db == nil {
 		return 0, nil
 	}
 	cutoffValue := r.dialectTime(cutoff)
 	var total int64
 	for {
-		res, err := r.db.Exec(
-			`DELETE FROM video_tasks WHERE id IN (SELECT id FROM video_tasks WHERE created_at < ? ORDER BY created_at LIMIT ?)`,
-			cutoffValue, retentionPruneBatchSize,
-		)
+		res, err := r.db.Exec(deleteStmt, cutoffValue, batchSize)
 		if err != nil {
 			return total, err
 		}
@@ -155,7 +149,7 @@ func (r *Repository) PurgeVideoTasksBefore(cutoff time.Time) (int64, error) {
 			return total, err
 		}
 		total += deleted
-		if deleted < retentionPruneBatchSize {
+		if deleted < int64(batchSize) {
 			return total, nil
 		}
 	}

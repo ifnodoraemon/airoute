@@ -95,29 +95,10 @@ func (r *Repository) LoadResponseContext(ctx context.Context, id, owner string) 
 // PruneResponseContexts deletes contexts that expired before cutoff, in bounded
 // batches.
 func (r *Repository) PruneResponseContexts(cutoff time.Time) (int64, error) {
-	if r == nil || r.db == nil {
-		return 0, nil
-	}
-	cutoffValue := r.dialectTime(cutoff)
-	var total int64
-	for {
-		res, err := r.db.Exec(
-			`DELETE FROM response_contexts WHERE id IN (
-				SELECT id FROM response_contexts WHERE expires_at < ? ORDER BY expires_at LIMIT ?)`,
-			cutoffValue, responseContextPruneBatchSize,
-		)
-		if err != nil {
-			return total, err
-		}
-		deleted, err := res.RowsAffected()
-		if err != nil {
-			return total, err
-		}
-		total += deleted
-		if deleted < responseContextPruneBatchSize {
-			return total, nil
-		}
-	}
+	return r.purgeBeforeCutoff(
+		`DELETE FROM response_contexts WHERE id IN (
+			SELECT id FROM response_contexts WHERE expires_at < ? ORDER BY expires_at LIMIT ?)`,
+		cutoff, responseContextPruneBatchSize)
 }
 
 // maybePruneResponseContexts prunes expired response contexts from the write

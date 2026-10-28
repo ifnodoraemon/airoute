@@ -95,7 +95,7 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `GATEWAY_HOST` | `0.0.0.0` | HTTP listen address |
 | `GATEWAY_PORT` | `8080` | HTTP listen port. In the Helm chart this is derived from `service.port` |
 | `GATEWAY_CONFIG` | `configs/config.yaml` | Path to the YAML config file. **Required**: a missing file aborts startup |
-| `GATEWAY_DB_DSN` / `GATEWAY_DB` | `data/gateway.db` | SQLite path used when `DATABASE_URL` is unset (equivalent to `-db`) |
+| `GATEWAY_DB_DSN` / `GATEWAY_DB` | `data/gateway.db` | SQLite path used when `DATABASE_URL` is unset. `GATEWAY_DB` is the **legacy alias**: it is read only when `GATEWAY_DB_DSN` is empty, and the `-db` flag overrides both. Risk: changing the path on an existing deployment silently starts on an *empty* database (fresh admin, no seeded keys), so move the file and change the value together |
 | `DATABASE_URL` | unset | PostgreSQL URL; when set, SQLite is not used |
 | `REDIS_URL` | unset | Redis connection for distributed rate limits, cache invalidation and the log queue |
 | `PUBLIC_URL` / `GATEWAY_PUBLIC_URL` | unset | Externally reachable base URL (used for OAuth redirects and printed endpoints) |
@@ -155,6 +155,7 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `GATEWAY_TRACE_MAX_SNIPPET` | `4096` | Maximum bytes retained per request/response snippet |
 | `GATEWAY_USAGE_LOG_RETENTION_DAYS` | `365` | Retention window for audit (`usage_logs`) rows; `0` keeps every row |
 | `GATEWAY_USAGE_LOG_PRUNE_INTERVAL_HOURS` | `6` | How often expired audit rows are pruned |
+| `GATEWAY_ENABLE_TABLE_PARTITIONING` | unset (**off**) | PostgreSQL-only opt-in: `1`/`true`/`yes`/`on` registers migration 43, which rewrites `usage_logs` into monthly range partitions (exclusive lock + full table copy). Any other value — including unset — registers no v43 migration, so startup is unchanged. Read *Usage-log table partitioning* below before enabling |
 | `GATEWAY_VERIFICATION_RETENTION_DAYS` | `7` | Retention for e-mail verification codes; `0` keeps every row |
 | `GATEWAY_VIDEO_TASK_RETENTION_DAYS` | `30` | Retention for video task records; `0` keeps every row |
 | `GATEWAY_TIMESERIES_TTFT_SAMPLE` | `5000` | Row cap for TTFT percentile sampling in the dashboard time series |
@@ -171,7 +172,7 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `STORAGE_S3_ENDPOINT` / `STORAGE_S3_BUCKET` / `STORAGE_S3_ACCESS_KEY` / `STORAGE_S3_SECRET_KEY` / `STORAGE_S3_REGION` / `STORAGE_S3_USE_SSL` / `STORAGE_S3_PATH_STYLE` / `STORAGE_S3_PUBLIC_URL_PREFIX` | endpoint/bucket/region have defaults; credentials are **empty** | S3-compatible artifact storage. `s3`/`rustfs` without explicit access key + secret key refuses to start (no default credential ships); partial `storage:` blocks are merged field-by-field over the defaults |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | unset | E-mail delivery for verification codes and password resets; disabled when `SMTP_HOST` is empty |
 | `STRIPE_API_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_SUCCESS_URL` / `STRIPE_API_BASE` | unset | Stripe payments; webhooks are rejected while `STRIPE_WEBHOOK_SECRET` is empty |
-| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` / `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | unset | OAuth login providers |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` / `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | unset | OAuth login providers. Both the client id **and** the client secret are read from the environment: the real authorization-code exchange runs only when both are non-empty, and with an empty secret the provider answers `403` (“系统未配置 … 生产应用密钥”) unless `ENABLE_SIMULATED_OAUTH=true` (development only). `GITHUB_REDIRECT_URI` / `GOOGLE_REDIRECT_URI` optionally override the callback derived from `PUBLIC_URL`; the real exchange also requires a valid `state` cookie |
 | `ENABLE_SANDBOX_RECHARGE` / `ENABLE_SIMULATED_OAUTH` | `false` | Local development only: enable fake recharge / simulated OAuth |
 | `AIROUTE_DEV_VERIFICATION_CODE` | unset | Set `true` to return e-mail verification codes in API responses (development only) |
 
@@ -183,6 +184,16 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `AIROUTE_TOKEN` | unset | Credential for CLI calls. `chat` requires a virtual API key and refuses to run without one |
 
 Snapshot contents are redacted (API keys, tokens, passwords) before storage and are queryable at `GET /api/v1/admin/traces?trace_id=…` (admin only; regular users see only their own keys).
+
+### Usage-log table partitioning (opt-in, PostgreSQL only)
+
+`GATEWAY_ENABLE_TABLE_PARTITIONING` is the only switch that changes the physical schema of `usage_logs`; with it unset (the default) no v43 migration is registered and the table is written exactly as before. What enabling it does:
+
+* **PostgreSQL only.** SQLite has no declarative partitioning and never registers the migration; the single-table + `UNIQUE(billing_id)` path stays unchanged there.
+* **It rewrites a live table.** Migration 43 takes `ACCESS EXCLUSIVE` on `usage_logs`, copies every row into `usage_logs_partitioned` (≈2× table size in heap + WAL) and rebuilds about a dozen indexes. The DDL runs under `lock_timeout=5s`: when the lock cannot be taken the migration is *deferred* (`errMigrationDeferred`) instead of blocking startup, and the next restart retries it. Budget a quiet window — writes to the audit path block for the duration of the copy.
+* **The dedupe unique key moves.** PostgreSQL requires every `UNIQUE`/`PRIMARY KEY` on a partitioned table to include the partition key, so `UNIQUE(billing_id)` cannot survive. It is replaced by the short-lived `usage_audit_ids(billing_id PRIMARY KEY, created_at)` registry: the writer reserves the billing id there first and only inserts the audit row when the reservation was new (same transaction). Money-side idempotency in `billing_settlements` is deliberately **not** partitioned and keeps its unique key.
+* **Upgrade every replica first.** A binary that predates the registry writer inserts with `ON CONFLICT (billing_id) DO NOTHING`, which PostgreSQL rejects with `42P10` against a partitioned table. Roll out a build containing the registry path to all replicas, keep the flag off during the rolling deploy, then enable it in a separate restart. Charges are never at risk (the wallet settles before the audit row and delivery is retried), but old replicas' audit writes would fail.
+* **Rollback needs no dump.** The switch keeps the pre-partition table as `usage_logs_legacy_<unix>` and never drops it. Stop the gateway, unset the flag, rename `usage_logs` to `usage_logs_partitioned_rollback`, rename the legacy table back, restore the `legacy_`-prefixed index names and clean the v43 row from `schema_migrations`; the exact SQL is in the header comment of `internal/storage/migrations_partition.go`.
 
 ### Startup credential gate
 
