@@ -48,8 +48,7 @@ func TraceMiddleware() gin.HandlerFunc {
 
 		// Inject into Gin context and standard context.Context
 		c.Set(ContextKeyTraceID, traceID)
-		ctx := context.WithValue(c.Request.Context(), ContextKeyTraceID, traceID)
-		c.Request = c.Request.WithContext(ctx)
+		c.Request = c.Request.WithContext(telemetry.WithTraceID(c.Request.Context(), traceID))
 
 		// Set response headers for client tracking
 		c.Writer.Header().Set(HeaderAirouteTraceID, traceID)
@@ -99,15 +98,13 @@ func GetTraceID(c *gin.Context) string {
 
 // GetTraceIDFromContext retrieves the TraceID from a Go standard context.Context.
 func GetTraceIDFromContext(ctx context.Context) string {
-	if ctx == nil {
-		return ""
-	}
-	if val := ctx.Value(ContextKeyTraceID); val != nil {
-		if s, ok := val.(string); ok && s != "" {
-			return s
-		}
-	}
-	return ""
+	return telemetry.TraceIDFromContext(ctx)
+}
+
+// WithTraceID attaches traceID to a standard context. Callers outside this package
+// (tests, background jobs) use it instead of hand-building a context key.
+func WithTraceID(ctx context.Context, traceID string) context.Context {
+	return telemetry.WithTraceID(ctx, traceID)
 }
 
 func sanitizeURLQuery(raw string) string {

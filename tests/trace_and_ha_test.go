@@ -151,7 +151,7 @@ func TestDB_DialectRebind(t *testing.T) {
 	assert.Equal(t, qSqlite, sqliteDB.Rebind(qSqlite))
 
 	// Test context trace extraction
-	ctx := context.WithValue(context.Background(), middleware.ContextKeyTraceID, "tr-ctx-12345")
+	ctx := middleware.WithTraceID(context.Background(), "tr-ctx-12345")
 	assert.Equal(t, "tr-ctx-12345", middleware.GetTraceIDFromContext(ctx))
 	assert.Empty(t, middleware.GetTraceIDFromContext(context.Background()))
 }

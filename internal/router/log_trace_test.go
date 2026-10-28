@@ -13,7 +13,7 @@ import (
 // clients failing once.
 func TestRouterLogCarriesTraceID(t *testing.T) {
 	const traceID = "tr-router-corr-001"
-	ctx := context.WithValue(context.Background(), telemetry.ContextKeyTraceID, traceID)
+	ctx := telemetry.WithTraceID(context.Background(), traceID)
 
 	routerLog(ctx).Warn("channel execution failed, triggering fallback",
 		"channel", "ch-x", "attempt", 2, "error", "upstream 429")
