@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
@@ -236,13 +235,8 @@ func (r *Repository) BatchDeleteChannels(ids []int64) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	placeholders := make([]string, len(ids))
-	args := make([]interface{}, len(ids))
-	for i, id := range ids {
-		placeholders[i] = "?"
-		args[i] = id
-	}
-	q := fmt.Sprintf(`DELETE FROM channels WHERE id IN (%s)`, strings.Join(placeholders, ","))
+	placeholders, args := inClause[int64](nil, ids)
+	q := fmt.Sprintf(`DELETE FROM channels WHERE id IN (%s)`, placeholders)
 	res, err := r.db.Exec(q, args...)
 	if err != nil {
 		return 0, err
@@ -310,14 +304,8 @@ func (r *Repository) BatchUpdateChannelStatus(ids []int64, status string) (int64
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	placeholders := make([]string, len(ids))
-	args := make([]interface{}, len(ids)+1)
-	args[0] = status
-	for i, id := range ids {
-		placeholders[i] = "?"
-		args[i+1] = id
-	}
-	q := fmt.Sprintf(`UPDATE channels SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id IN (%s)`, strings.Join(placeholders, ","))
+	placeholders, args := inClause[int64]([]any{status}, ids)
+	q := fmt.Sprintf(`UPDATE channels SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id IN (%s)`, placeholders)
 	res, err := r.db.Exec(q, args...)
 	if err != nil {
 		return 0, err

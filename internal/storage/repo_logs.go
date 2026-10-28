@@ -439,13 +439,7 @@ func (r *Repository) BatchDeleteUsageLogs(ids []int64) (deleted int64, skipped i
 	if len(ids) == 0 {
 		return 0, 0, nil
 	}
-	placeholders := make([]string, len(ids))
-	args := make([]interface{}, len(ids))
-	for i, id := range ids {
-		placeholders[i] = "?"
-		args[i] = id
-	}
-	inList := strings.Join(placeholders, ",")
+	inList, args := inClause[int64](nil, ids)
 
 	tx, err := r.db.Begin()
 	if err != nil {

@@ -40,13 +40,8 @@ func (r *Repository) BatchDeleteModelPrices(models []string) (int64, error) {
 	if len(models) == 0 {
 		return 0, nil
 	}
-	placeholders := make([]string, len(models))
-	args := make([]interface{}, len(models))
-	for i, m := range models {
-		placeholders[i] = "?"
-		args[i] = m
-	}
-	q := fmt.Sprintf(`DELETE FROM model_prices WHERE model IN (%s)`, strings.Join(placeholders, ","))
+	placeholders, args := inClause[string](nil, models)
+	q := fmt.Sprintf(`DELETE FROM model_prices WHERE model IN (%s)`, placeholders)
 	res, err := r.db.Exec(q, args...)
 	if err != nil {
 		return 0, err
