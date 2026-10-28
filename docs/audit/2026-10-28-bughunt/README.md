@@ -10,7 +10,7 @@
 
 ## 0. 一句话结论
 
-主链路没有 P0。找到 **6 条 P1 + 17 条 P2**（共 23 条 P 级发现），另有 **4 条跨域加固**与 **1 条顺手修**，全部修复并翻转为常规回归测试；死代码面**归零**，死代码/重复实现**净删 −161 行**（死符号 −119、重复管线 −42），文档口径修正 5 处。
+主链路没有 P0。找到 **7 条 P1 + 17 条 P2**（共 24 条 P 级发现，其中第 7 条 P1 是在线上滚动发布后的实测验证里发现的部署缺陷），另有 **4 条跨域加固**与 **1 条顺手修**，全部修复并翻转为常规回归测试；死代码面**归零**，死代码/重复实现**净删 −161 行**（死符号 −119、重复管线 −42），文档口径修正 6 处。
 
 > 行数口径：本轮**不是**整仓净减——修复本身新增了防御性代码与注释（生产代码 +1228），测试与文档 +5531（20 个新回归测试文件 + 5 份审计报告）。「净删 −161」只统计被删除的死代码/重复实现。
 
@@ -40,6 +40,7 @@ P 级按「会不会错账 / 能不能绕过 / 功能是否坏掉」判定，不
 | BUG-GEMINI-TOOLCALL | api/协议 | Gemini 流式工具调用把每个 delta 翻成一个 `functionCall` part，参数永不拼装 | `internal/api/gemini_inbound_stream.go:206-214` | [01-request.md](01-request.md) |
 | BUG-MULTIMODAL-TOKEN-ESTIMATE | model/计费 | 内联 base64 图片按字符估 token（930k 字符 ⇒ 232,529 tokens），在无 usage / 499 路径真扣费 | `internal/model/tokens.go:35-49`、`internal/api/common.go:822-836` | [01-request.md](01-request.md) |
 | BUG-WEB-01 | 前端 | 普通用户永远打不开「概览/我的用量」：角色白名单漏 `dashboard`，点击/深链一律改写为钱包页 | `web/src/App.jsx:434-441` | [04-web.md](04-web.md) |
+| DEPLOY-01 | 部署拓扑 | 出厂 Compose 信任整片 edge 子网 ⇒ 宿主机经发布端口访问时源地址 `172.30.0.1`（桥网关）被当成代理跳，客户端无法归因，`/app` 与控制台 API 对宿主机浏览器一律 403 | `docker-compose.yml:34`、`.env.example:41`、edge 网段 | [§8](#8-部署验证中发现的第-24-条缺陷deploy-01) |
 
 ### 1.2 P2（17）
 
@@ -97,6 +98,7 @@ P 级按「会不会错账 / 能不能绕过 / 功能是否坏掉」判定，不
 | `3d8728b` | `fix(protocol): assemble Gemini stream tool calls and price non-text prompts by budget`（6 条协议/计费缺陷 + 顺手修） |
 | `6e1c333` | `fix(web): restore the non-admin dashboard and correct breaker, trace and i18n defects`（WEB-01…07） |
 | `dfd2d0e` | `refactor: one retention purge loop, one env helper, and honest env docs`（瘦身 + 文档口径） |
+| （部署验证） | `fix(deploy): trust the load balancer's own address, not the whole edge subnet`（DEPLOY-01） |
 | 本文件所在提交 | `docs(audit): …`（本轮报告索引与升级说明） |
 
 ---
@@ -137,6 +139,10 @@ P 级按「会不会错账 / 能不能绕过 / 功能是否坏掉」判定，不
 19. **普通用户可进入「概览/我的用量」**（BUG-WEB-01，功能恢复）；未知 tab 回退到该角色首个允许 tab，不再硬编码钱包页。
 20. **状态页**：熔断状态读 `breaker_status`（open/half_open/closed）；未探测渠道显示「未探测」而非伪造延迟。
 21. **登出清理更彻底**、链路快照搜索无竞态、弹窗滚动锁引用计数、代码块按钮/加载态跟随语言。
+
+### 4.5 部署拓扑（DEPLOY-01，滚动发布后实测发现）
+
+22. **`GATEWAY_TRUSTED_PROXIES` 现在默认是 `172.30.0.10/32`（LB 自身地址），不再是整片 `172.30.0.0/16`**。存量部署升级**必须**把该变量改成代理容器/进程自己的地址（本仓库 Compose 已把 nginx 固定在 `172.30.0.10`）。若仍写整片网段，宿主机经发布端口访问控制面会持续 403（详见 §8）。Swarm 同理：应固定并信任 nginx task 地址，而不是整个 overlay 网段。
 
 ---
 
@@ -195,3 +201,29 @@ POST /v1/chat/completions（无渠道）                        → 404 {"error"
    - 多模态缓冲替换 `resp.Stream` 「不 Close ⇒ cancel 泄漏」——`defer` 注册时求值接收者，捕获的是替换前原流，照常 Close。
 4. **`format_validation` 不是死字段**：`repo_keys.go:540 ToConfig()` → `config.ResolveValidationLevel` → `validator/pipeline.go` 三入口，运行时生效；上一轮 §5 已修正过一次，本轮又差点被误报。
 5. **写测试钉住 bug 时注意方向**：本轮所有探针先断言「当前错误行为」保证套件不红，修复后**翻转**为断言正确行为并改名去掉 `bugprobe`，避免留下「庆祝 bug 存在」的测试。
+
+---
+
+## 8. 部署验证中发现的第 24 条缺陷（DEPLOY-01）
+
+前 23 条都在代码里，这一条只有在新镜像**真正上线后**才暴露——记录在此，因为它是本轮唯一一条「代码没错、清单接错」的 P1。
+
+**现象**：两个副本与 LB 全部 healthy，数据面（`/v1/messages`）正常 200，但 `http://<host>:8080/app` 与 `/api/v1/admin/*` 全部 403；网关日志只有一行 `control-plane access denied: cannot attribute the request to a client address because it did not arrive through a trusted proxy`。
+
+**根因**：出厂 Compose 把 nginx↔gateway 网段固定为 `172.30.0.0/16`，并把**整片子网**写进 `GATEWAY_TRUSTED_PROXIES`。宿主机经发布端口（`127.0.0.1:8080 → lb:80`）访问时，nginx 看到的源地址是 Docker 网桥网关 `172.30.0.1`（就在该子网内），于是 `ResolveClientIdentity` 把它当成「又一个可信代理跳」，走完 XFF 后没有可归因客户端 → 返回 peer 地址且 `Forwarded=false` → 守卫 fail-closed 403。LAN 客户端（源地址是 192.168.x.x）不受影响，所以看起来「有时能进、有时不能」。
+
+**修复**（不是放宽守卫，而是让信任范围精确）：
+- `docker-compose.yml`：lb 在 `edge` 网络固定 `ipv4_address: 172.30.0.10`；`GATEWAY_TRUSTED_PROXIES` 默认改为 `172.30.0.10/32`；
+- `.env.example` / `docs/CONFIGURATION.md` / `docker-stack.yml`：写明「必须写代理自身地址，不要写整片网段」，并解释宿主机发布端口那一跳会落在网段内；
+- 新增 `cmd/airoute/compose_trusted_proxies_test.go`：解析 compose，断言 ①edge 子网固定 ②lb 有静态地址 ③默认值等于该地址的 `/32` ④该 `/32` 不覆盖子网首个地址（即发布端口的源地址）。漂移会直接红。
+
+**验证**（滚动发布后实测）：
+
+```
+BEFORE  /app=403  /api/v1/admin/channels=403  access-log ip=172.30.0.4(LB)  + denial 日志
+AFTER   /app=301(→/app/=200)  /api/v1/admin/{channels,logs,stats,keys,mcp/servers}=200
+        /health/ready=200  /v1/models=401(需鉴权)  /metrics(token)=200
+        access-log ip=172.30.0.1(真实客户端)  control-plane denial=0  /v1/messages 仍 200
+```
+
+**升级注意**：这是**破坏性配置变更**。任何反代部署都必须把 `GATEWAY_TRUSTED_PROXIES` 从网段改为代理自身地址（或使用 `GATEWAY_ADMIN_ALLOWED_IPS` 显式放行控制面客户端）；否则升级后控制台会 403。数据面不受影响。

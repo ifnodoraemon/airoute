@@ -27,11 +27,17 @@ x-gateway-env: &gateway-env
   # GATEWAY_DRAIN_TIMEOUT_SEC (default 120) + audit flush, and stay below the
   # service's stop_grace_period so the process is never SIGKILLed mid-drain.
   GATEWAY_SHUTDOWN_TIMEOUT_SEC: ${GATEWAY_SHUTDOWN_TIMEOUT_SEC:-135}
-  # Comma-separated proxy CIDRs whose X-Forwarded-For is trusted. Defaults to the
-  # fixed `edge` network below, which is what makes the shipped nginx topology get
-  # the real client IP. Empty = trust no forwarding header (then every control-plane
-  # request fails closed with 403, because the peer is the nginx container).
-  GATEWAY_TRUSTED_PROXIES: ${GATEWAY_TRUSTED_PROXIES:-172.30.0.0/16}
+  # Comma-separated proxy addresses whose X-Forwarded-For is trusted. Defaults to
+  # the nginx container's fixed address on the `edge` network below.
+  #
+  # It must name the proxy itself, not the edge subnet. Traffic published on the
+  # host port reaches nginx with the bridge gateway's address (172.30.0.1) as its
+  # source, which lies inside that subnet: the gateway would then read the client
+  # as another trusted proxy hop, find no attributable client, and fail the
+  # control plane closed with 403 - including for the host's own browser.
+  # Empty = trust no forwarding header (every control-plane request then 403s,
+  # because the peer is the nginx container).
+  GATEWAY_TRUSTED_PROXIES: ${GATEWAY_TRUSTED_PROXIES:-172.30.0.10/32}
   # D15: control-plane access (/api/v1/admin, /app) defaults to loopback clients
   # and private clients that arrived through a trusted proxy. Set an explicit CIDR
   # list to override, or ALLOW_PUBLIC=true to opt out (not recommended).
@@ -254,18 +260,23 @@ services:
       - "${GATEWAY_INGRESS_PORT:-${GATEWAY_PORT:-8080}}:80"
     volumes:
       - ./deploy/nginx-compose.conf:/etc/nginx/conf.d/default.conf:ro
-    # Only the `edge` network: the shipped GATEWAY_TRUSTED_PROXIES default is this
-    # subnet, so the gateway can attribute the forwarded client address.
+    # Only the `edge` network, with a fixed address: it is the single proxy the
+    # gateway trusts (GATEWAY_TRUSTED_PROXIES defaults to this /32). Trusting the
+    # whole subnet instead would also trust 172.30.0.1, the address Docker uses as
+    # the source of traffic published on the host port, and every host-local
+    # control-plane request would lose its client attribution (403).
     networks:
-      - edge
+      edge:
+        ipv4_address: 172.30.0.10
     depends_on:
       - gateway-1
       - gateway-2
 
 networks:
-  # nginx ↔ gateway hop. The subnet is fixed so `GATEWAY_TRUSTED_PROXIES` has a
-  # stable value to trust; without it the gateway only ever sees the LB address and
-  # the control-plane guard cannot tell a LAN client from the internet.
+  # nginx ↔ gateway hop. The subnet is fixed and the load balancer holds a fixed
+  # address inside it (172.30.0.10), so GATEWAY_TRUSTED_PROXIES can name the proxy
+  # exactly instead of trusting a range that also contains the address Docker uses
+  # for traffic published on the host port.
   edge:
     driver: bridge
     ipam:

@@ -105,11 +105,14 @@ services:
       - GIN_MODE=release
       # When set, /metrics requires "Authorization: Bearer <token>".
       - GATEWAY_METRICS_TOKEN=${GATEWAY_METRICS_TOKEN:-}
-      # Proxies whose X-Forwarded-For is trusted. Swarm assigns the overlay subnet
-      # dynamically, so it cannot be defaulted here: set this to the overlay CIDR
-      # (e.g. 10.0.0.0/8) when the bundled nginx fronts the gateway. Without it every
-      # request is attributed to the nginx task and the D15 control plane fails
-      # closed with 403 - use GATEWAY_ADMIN_ALLOWED_IPS instead for direct access.
+      # Proxies whose X-Forwarded-For is trusted. Swarm assigns task addresses
+      # dynamically, so it cannot be defaulted here. Prefer the bundled nginx task's
+      # own address (pin it with a static network attachment) rather than the whole
+      # overlay CIDR: routing-mesh traffic arrives from a gateway address inside that
+      # CIDR, which would then be read as another proxy hop and leave the real client
+      # unattributable - the D15 control plane would 403 instead of attributing.
+      # Without any value every request is attributed to the nginx task and fails
+      # closed with 403; use GATEWAY_ADMIN_ALLOWED_IPS for direct access instead.
       - GATEWAY_TRUSTED_PROXIES=${GATEWAY_TRUSTED_PROXIES:-}
       # D15: control-plane access (/api/v1/admin, /app) admits loopback clients and
       # private clients attributed through a trusted proxy; an explicit CIDR list
