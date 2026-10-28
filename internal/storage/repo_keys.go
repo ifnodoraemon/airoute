@@ -143,19 +143,6 @@ func (rec *APIKeyRecord) resolveMoney() {
 	}
 }
 
-// APIKeyExists reports whether an active/deleted flag allows this id to own a
-// budget. It avoids loading the full record just to validate a scope.
-func (r *Repository) APIKeyExists(id int64) (bool, error) {
-	if id <= 0 {
-		return false, nil
-	}
-	var count int
-	if err := r.db.QueryRow(`SELECT COUNT(*) FROM api_keys WHERE id = ? AND status <> 'deleted'`, id).Scan(&count); err != nil {
-		return false, err
-	}
-	return count > 0, nil
-}
-
 // ListAPIKeys returns all non-deleted API keys for management.
 func (r *Repository) ListAPIKeys() ([]*APIKeyRecord, error) {
 	rows, err := r.db.Query(`SELECT id, public_id, key, tenant_id, COALESCE(allowed_models, ''), rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), created_at, updated_at FROM api_keys WHERE status <> 'deleted' ORDER BY id ASC`)
