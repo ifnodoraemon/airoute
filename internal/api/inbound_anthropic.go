@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -69,7 +70,7 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 	// Validate Anthropic protocol and schema rules with optional key config
 	valRes := validator.ValidateAnthropicRequest(&req, getAPIKeyConfig(c))
 	if !valRes.Valid && valRes.Error != nil {
-		valRes.Error.WriteGinResponse(c)
+		rejectInvalidRequest(c, valRes.Error)
 		return
 	}
 	if len(valRes.Warnings) > 0 {
@@ -114,10 +115,20 @@ func (h *Handler) handleAnthropicUnary(c *gin.Context, reqCtx context.Context, r
 		if err := json.Unmarshal(resp.NativeAnthropicResponse, &native); err == nil {
 			native["model"] = req.Model
 			inputTokens, outputTokens, cachedTokens, usageSource := resolveChatUsage(canonicalReq, resp)
-			// PromptTokens includes cache reads; passing CachedTokens lets the
-			// engine bill them at the cache_read rate instead of the full prompt
+			// C-02: cache writes are priced above the plain input rate. The
+			// streaming path already carried them separately, but this unary path
+			// read only cache_read_input_tokens, so prompt-cache writes were billed
+			// as ordinary prompt tokens (or not at all). The native payload is
+			// authoritative, so take the count from the same field the stream
+			// parser uses.
+			cacheCreationTokens := 0
+			if usage, ok := native["usage"].(map[string]any); ok {
+				cacheCreationTokens = nativeCacheCreationTokens(usage)
+			}
+			// PromptTokens includes cache reads and writes; passing them separately
+			// lets the engine bill each at its own rate instead of the full prompt
 			// rate (this path used to charge ~90% too much for cached prompts).
-			RecordUsage(c, AuditRecordParams{SessionID: sessionID, ChatID: resp.ID, Channel: resp.Channel, Model: req.Model, PromptTokens: inputTokens, CompletionTokens: outputTokens, CachedTokens: cachedTokens, Duration: time.Since(start), StatusCode: http.StatusOK, UsageSource: usageSource})
+			RecordUsage(c, AuditRecordParams{SessionID: sessionID, ChatID: resp.ID, Channel: resp.Channel, Model: req.Model, PromptTokens: inputTokens + cacheCreationTokens, CompletionTokens: outputTokens, CachedTokens: cachedTokens, CacheCreationTokens: cacheCreationTokens, Duration: time.Since(start), StatusCode: http.StatusOK, UsageSource: usageSource})
 			c.JSON(http.StatusOK, native)
 			return
 		}
@@ -200,17 +211,26 @@ func (h *Handler) handleAnthropicUnary(c *gin.Context, reqCtx context.Context, r
 		"usage":       usagePayload,
 	}
 
+	// C-02: when the canonical response carries the prompt-cache write count (an
+	// Anthropic-shaped upstream translated into the canonical struct), pass it
+	// through so the cache-write premium is billed instead of the plain input
+	// rate. Upstreams that do not report it contribute zero.
+	cacheCreationTokens := 0
+	if resp.Usage != nil {
+		cacheCreationTokens = resp.Usage.GetCacheCreationTokens()
+	}
 	RecordUsage(c, AuditRecordParams{
-		SessionID:        sessionID,
-		ChatID:           resp.ID,
-		Channel:          resp.Channel,
-		Model:            req.Model,
-		PromptTokens:     inputTokens + cachedTokens,
-		CompletionTokens: outputTokens,
-		CachedTokens:     cachedTokens,
-		Duration:         time.Since(start),
-		StatusCode:       http.StatusOK,
-		UsageSource:      usageSource,
+		SessionID:           sessionID,
+		ChatID:              resp.ID,
+		Channel:             resp.Channel,
+		Model:               req.Model,
+		PromptTokens:        inputTokens + cachedTokens + cacheCreationTokens,
+		CompletionTokens:    outputTokens,
+		CachedTokens:        cachedTokens,
+		CacheCreationTokens: cacheCreationTokens,
+		Duration:            time.Since(start),
+		StatusCode:          http.StatusOK,
+		UsageSource:         usageSource,
 	})
 
 	c.JSON(http.StatusOK, anthropicResp)
@@ -253,12 +273,36 @@ func (h *Handler) HandleAnthropicCountTokens(c *gin.Context) {
 	}
 	channels := h.dispatcher.ResolveCandidateChannels(c.Request.Context(), req.Model, "anthropic_messages")
 	var lastErr error
+	// B-07: count_tokens dials the channel directly instead of going through
+	// Dispatch*, so its circuit-breaker bookkeeping is bridged explicitly. The
+	// classification matches the dispatch paths: transport/5xx/401/403/408 errors
+	// are channel failures, while a client cancellation or a non-health outcome
+	// only hands the half-open canary slot back. err == nil heals the channel.
+	recordOutcome := func(channelName string, err error) {
+		switch {
+		case err == nil:
+			h.dispatcher.NoteChannelSuccess(channelName)
+		case c.Request.Context().Err() != nil || errors.Is(err, context.Canceled):
+			h.dispatcher.ReleaseHalfOpenProbe(channelName)
+		case provider.IsChannelFailure(err):
+			h.dispatcher.NoteChannelFailure(channelName)
+		default:
+			h.dispatcher.ReleaseHalfOpenProbe(channelName)
+		}
+	}
 	for _, channel := range channels {
 		// count_tokens is an Anthropic-wire endpoint: only send it to channels
 		// whose upstream actually speaks that protocol (type=anthropic or an
 		// explicit anthropic_native marker). OpenAI/Gemini channels fall through
 		// to the local estimate below instead of receiving Anthropic JSON.
 		if !router.IsAnthropicWireChannel(channel) {
+			continue
+		}
+		// B-07: this loop dials the channel directly, outside Dispatch*, so it used
+		// to send traffic to a tripped circuit breaker and then report nothing
+		// back. Admission now honours the breaker (including a half-open canary
+		// slot) and the outcome is recorded through the accessors below.
+		if !h.dispatcher.ChannelCanExecute(channel.Name) {
 			continue
 		}
 		payload := map[string]any{"model": channel.GetUpstreamModel(req.Model), "messages": req.Messages}
@@ -277,6 +321,8 @@ func (h *Handler) HandleAnthropicCountTokens(c *gin.Context) {
 		body, err := json.Marshal(payload)
 		if err != nil {
 			lastErr = err
+			// Local failure, not a channel-health signal: hand the canary back.
+			recordOutcome(channel.Name, err)
 			continue
 		}
 		// Shared URL builder: keeps /v1, /v1/messages and bare-base channels in
@@ -285,6 +331,7 @@ func (h *Handler) HandleAnthropicCountTokens(c *gin.Context) {
 		httpReq, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, url, bytes.NewReader(body))
 		if err != nil {
 			lastErr = err
+			recordOutcome(channel.Name, err)
 			continue
 		}
 		httpReq.Header.Set("Content-Type", "application/json")
@@ -299,16 +346,21 @@ func (h *Handler) HandleAnthropicCountTokens(c *gin.Context) {
 		resp, err := provider.SharedDefaultHTTPClient.Do(httpReq)
 		if err != nil {
 			lastErr = err
+			recordOutcome(channel.Name, err)
 			continue
 		}
 		responseBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		resp.Body.Close()
 		if readErr != nil {
 			lastErr = readErr
+			recordOutcome(channel.Name, readErr)
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {
 			lastErr = fmt.Errorf("channel %s returned HTTP %d: %s", channel.Name, resp.StatusCode, responseBody)
+			// Classify with the status-carrying error so 429 stays backpressure and
+			// 5xx trips the breaker, exactly like the dispatch paths (B-03/B-10).
+			recordOutcome(channel.Name, provider.NewUpstreamError(channel.Name, resp.StatusCode, responseBody))
 			continue
 		}
 		var result struct {
@@ -316,8 +368,11 @@ func (h *Handler) HandleAnthropicCountTokens(c *gin.Context) {
 		}
 		if err := json.Unmarshal(responseBody, &result); err != nil {
 			lastErr = err
+			recordOutcome(channel.Name, err)
 			continue
 		}
+		// The upstream answered a usable count: this channel is healthy.
+		recordOutcome(channel.Name, nil)
 		c.JSON(http.StatusOK, result)
 		return
 	}

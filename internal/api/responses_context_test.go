@@ -312,7 +312,7 @@ func TestResponsesStreamPersistsContextAndCachedTokens(t *testing.T) {
 	}
 
 	logger.Stop()
-	logs, err := repo.ListUsageLogs(10, 0)
+	logs, _, err := repo.ListUsageLogsWithFilterAndCount(storage.LogFilter{Limit: 10, Offset: 0})
 	if err != nil || len(logs) != 1 {
 		t.Fatalf("usage logs = %v, err = %v", logs, err)
 	}

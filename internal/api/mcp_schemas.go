@@ -103,6 +103,21 @@ func getBuiltinMCPTools() []gin.H {
 				"session_id": prop("string", "Optional session ID for multi-turn conversational memory and prefix cache affinity"),
 			},
 			[]string{"model", "message"}),
+		// D-06: these two built-in utilities were implemented and dispatched but
+		// never declared here, so tools/list never advertised them and a client
+		// could only call them by guessing the name. They are declared next to the
+		// other airoute_* tools so a consistency test can compare this list with
+		// the dispatch switch.
+		tool("airoute_get_current_time",
+			"Return the gateway's current time in CST, plus whether the off-peak pricing window is active",
+			gin.H{},
+			nil),
+		tool("airoute_calc_eval",
+			"Evaluate a small arithmetic expression locally without calling an upstream model",
+			gin.H{
+				"expression": prop("string", "Arithmetic expression to evaluate, e.g. (128*4+16)/2"),
+			},
+			[]string{"expression"}),
 		tool("puppeteer_navigate",
 			"Navigate and render web page using headless Puppeteer sandbox browser",
 			gin.H{

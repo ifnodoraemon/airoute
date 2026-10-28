@@ -51,7 +51,7 @@ func TestGPUStackPartialUsageSurvivesIntoAuditLog(t *testing.T) {
 				handler.handleAnthropicStream(c, c.Request.Context(), &AnthropicInboundRequest{Model: "m", Stream: true}, req, "test", time.Now())
 			}
 			logger.Stop()
-			logs, err := repo.ListUsageLogs(50, 0)
+			logs, _, err := repo.ListUsageLogsWithFilterAndCount(storage.LogFilter{Limit: 50, Offset: 0})
 			if err != nil || len(logs) != 1 {
 				t.Fatalf("logs=%v err=%v", logs, err)
 			}

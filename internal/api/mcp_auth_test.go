@@ -81,14 +81,24 @@ func TestMCPCallerIsAdminGatesSQLTools(t *testing.T) {
 	}
 
 	// Context values carry the stored digest (the MCP handler stores caller.Key).
-	if !h.callerIsAdmin(withKey(adminKey.Key)) {
+	if !h.callerIsAdmin(withKey(adminKey.Key), nil) {
 		t.Fatal("expected the admin-owned key to be treated as administrator")
 	}
-	if h.callerIsAdmin(withKey(userKey.Key)) {
+	if h.callerIsAdmin(withKey(userKey.Key), nil) {
 		t.Fatal("expected a regular user's key to be denied SQL tools")
 	}
-	if h.callerIsAdmin(context.Background()) {
+	if h.callerIsAdmin(context.Background(), nil) {
 		t.Fatal("expected an anonymous context to be denied SQL tools")
+	}
+	// The stdio adapter has no HTTP request to carry a credential, so it passes
+	// api_key as a tool argument. One shared predicate now means every admin-gated
+	// tool accepts that path — before this the infrastructure tools did and the
+	// SQL tools did not.
+	if !h.callerIsAdmin(context.Background(), map[string]interface{}{"api_key": adminKey.Key}) {
+		t.Fatal("expected the api_key argument to grant administrator authority")
+	}
+	if h.callerIsAdmin(context.Background(), map[string]interface{}{"api_key": userKey.Key}) {
+		t.Fatal("expected a regular user's api_key argument to be denied")
 	}
 
 	// The tool itself must refuse for a non-admin even with a valid key.

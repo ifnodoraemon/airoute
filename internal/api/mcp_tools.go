@@ -48,26 +48,42 @@ var mcpSQLDeniedKeywordRes = func() []*regexp.Regexp {
 	return res
 }()
 
-// callerIsAdmin reports whether the MCP session was authenticated with an API
-// key owned by a gateway administrator. SQL reflection tools are useless (and
-// dangerous) to ordinary tenants, so they are gated on this.
-func (h *MCPHandler) callerIsAdmin(ctx context.Context) bool {
-	if h.repo == nil || ctx == nil {
+// callerIsAdmin reports whether the MCP caller is a gateway administrator.
+//
+// Every admin-gated tool uses this one function. Two separate predicates used to
+// answer the same question differently: the infrastructure tools accepted the
+// stdio adapter's api_key argument as a fallback credential while the SQL
+// reflection tools only read the transport-bound context key, so an
+// administrator driving the stdio adapter could call cluster_status but never
+// read_query. The order below is deliberate: the caller the transport already
+// resolved and authorised wins (it cannot be spoofed by tool arguments), and the
+// historical key sources are consulted only for in-process invocations that have
+// no HTTP request to carry a credential.
+func (h *MCPHandler) callerIsAdmin(ctx context.Context, args map[string]interface{}) bool {
+	if h.repo == nil {
 		return false
 	}
-	key, _ := ctx.Value(contextKeyCallerKey).(string)
-	if strings.TrimSpace(key) == "" {
+	// Open development mode: no API key has ever been registered, so no tenant
+	// boundary exists to protect and the MCP transport admits anonymous callers.
+	// Once a key exists the transport requires one, and this gate then requires it
+	// to belong to an administrator.
+	if h.repo.CountAPIKeys() == 0 {
+		return true
+	}
+	if caller := callerFromContext(ctx); caller != nil {
+		if caller.Record != nil {
+			return strings.EqualFold(caller.Record.UserRole, "admin")
+		}
 		return false
 	}
-	rec, err := h.repo.GetAPIKeyByKey(key)
-	if err != nil || rec == nil || rec.UserID <= 0 {
-		return false
+	key := ""
+	if ctx != nil {
+		key, _ = ctx.Value(contextKeyCallerKey).(string)
 	}
-	user, err := h.repo.GetUserByID(rec.UserID)
-	if err != nil || user == nil {
-		return false
+	if strings.TrimSpace(key) == "" && args != nil {
+		key, _ = args["api_key"].(string)
 	}
-	return strings.EqualFold(user.Role, "admin")
+	return h.callerIsAdminForKey(key)
 }
 
 // adminOnlyMCPTools are the agent-facing tools whose payload is gateway
@@ -106,34 +122,6 @@ func (h *MCPHandler) callerIsAdminForKey(key string) bool {
 		return false
 	}
 	return strings.EqualFold(user.Role, "admin")
-}
-
-// mcpCallerIsAdmin decides admin authority for a tool call. It prefers the
-// caller the transport already resolved and authorised (contextKeyCallerRecord),
-// and falls back to the historical key sources so direct in-process invocations
-// (stdio adapter, tool arguments) cannot slip past the check.
-func (h *MCPHandler) mcpCallerIsAdmin(ctx context.Context, args map[string]interface{}) bool {
-	// Open development mode: no API key has ever been registered, so no tenant
-	// boundary exists to protect and the MCP transport admits anonymous callers.
-	// Once a key exists the transport requires one, and this gate then requires it
-	// to belong to an administrator.
-	if h.repo == nil || h.repo.CountAPIKeys() == 0 {
-		return true
-	}
-	if caller := callerFromContext(ctx); caller != nil {
-		if caller.Record != nil {
-			return strings.EqualFold(caller.Record.UserRole, "admin")
-		}
-		return false
-	}
-	key := ""
-	if ctx != nil {
-		key, _ = ctx.Value(contextKeyCallerKey).(string)
-	}
-	if strings.TrimSpace(key) == "" && args != nil {
-		key, _ = args["api_key"].(string)
-	}
-	return h.callerIsAdminForKey(key)
 }
 
 // validateMCPReadQuery enforces the read-only, allowlisted subset of SQL the
@@ -252,7 +240,7 @@ func (h *MCPHandler) executeBuiltinUtilityTools(ctx context.Context, name string
 		if h.repo == nil || h.repo.GetDB() == nil {
 			return "Database repository not initialized", true, true
 		}
-		if !h.callerIsAdmin(ctx) {
+		if !h.callerIsAdmin(ctx, args) {
 			return "Security violation: SQL reflection tools are restricted to gateway administrators", true, true
 		}
 		rawQuery, _ := args["query"].(string)
@@ -311,7 +299,7 @@ func (h *MCPHandler) executeBuiltinUtilityTools(ctx context.Context, name string
 		if h.repo == nil || h.repo.GetDB() == nil {
 			return "Database repository not initialized", true, true
 		}
-		if !h.callerIsAdmin(ctx) {
+		if !h.callerIsAdmin(ctx, args) {
 			return "Security violation: SQL reflection tools are restricted to gateway administrators", true, true
 		}
 		db := h.repo.GetDB()
@@ -352,7 +340,7 @@ func (h *MCPHandler) executeBuiltinUtilityTools(ctx context.Context, name string
 		if h.repo == nil || h.repo.GetDB() == nil {
 			return "Database repository not initialized", true, true
 		}
-		if !h.callerIsAdmin(ctx) {
+		if !h.callerIsAdmin(ctx, args) {
 			return "Security violation: SQL reflection tools are restricted to gateway administrators", true, true
 		}
 		tableName, _ := args["table_name"].(string)

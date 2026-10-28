@@ -210,7 +210,7 @@ func TestMCPChatRecordsPricedUsageAndSettles(t *testing.T) {
 
 	logger.Stop()
 
-	logs, err := repo.ListUsageLogs(10, 0)
+	logs, _, err := repo.ListUsageLogsWithFilterAndCount(storage.LogFilter{Limit: 10, Offset: 0})
 	if err != nil || len(logs) == 0 {
 		t.Fatalf("no usage row persisted: logs=%v err=%v", logs, err)
 	}

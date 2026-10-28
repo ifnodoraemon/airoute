@@ -80,8 +80,20 @@ func (h *Handler) HandleModerations(c *gin.Context) {
 	}
 
 	sessionID := resolveGenericSessionID(c, "mod")
-	channels := h.dispatcher.GetChannelsForModelAndProtocol(modModel, "moderation")
+	// B-13: this is an existence check, not a routing decision. Asking the
+	// selector here advanced the smooth-weighted-round-robin state (and could take
+	// a half-open canary slot) for a request that may never be dispatched, so it
+	// must use the read-only variant.
+	channels := h.dispatcher.ListChannelsForModel(modModel, "moderation")
 	if len(channels) > 0 {
+		// C-13: moderation is a billable provider call and was the only charged
+		// ingress without the pricing-currency pre-flight gate. A legacy
+		// non-CNY rate card made every other endpoint answer 422 before doing
+		// upstream work; here it dispatched, paid the provider, and then zeroed the
+		// charge at settlement.
+		if !validateModelCurrency(c, modModel) {
+			return
+		}
 		payloadBytes, _ := json.Marshal(req)
 		// Moderation is a provider call with a real cost. Keep it detached from the
 		// downstream request for the same reason as chat, and audit it: before

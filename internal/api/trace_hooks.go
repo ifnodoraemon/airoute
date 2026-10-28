@@ -86,14 +86,18 @@ func CaptureRequestSnapshot(c *gin.Context) {
 	}
 }
 
-// RecordSuccessTrace archives a successful unary exchange when the capture policy
-// samples successful requests (mode "all"). The response is marshalled here rather
-// than at the call site, and only after Enabled(200) said yes, so the default
-// "errors" mode adds nothing to the request path. Snippets are redacted and
-// clamped by the storage layer before they are persisted.
+// RecordSuccessTrace archives a successful unary exchange. The response is
+// marshalled here rather than at the call site, because the snippet has to exist
+// before the single sampling decision is drawn.
+//
+// E-01: the capture policy is evaluated once, in TraceCapture.Record. This
+// function used to pre-check Enabled here, and RecordTrace pre-checked it again
+// before Record checked it a third time; when Enabled also applied the success
+// sampling rate, a configured 10% became roughly 0.1% because each check drew an
+// independent random number. Record now returns whether the snapshot was queued,
+// and that answer drives the per-request dedupe marker.
 func RecordSuccessTrace(c *gin.Context, modelName, channel string, dur time.Duration, resp any) {
-	tc := storage.GlobalTraceCapture
-	if tc == nil || c == nil || !tc.Enabled(http.StatusOK) {
+	if storage.GlobalTraceCapture == nil || c == nil {
 		return
 	}
 	snippet := ""
@@ -108,24 +112,27 @@ func RecordSuccessTrace(c *gin.Context, modelName, channel string, dur time.Dura
 // RecordTrace archives a redacted snapshot for the given response status. The
 // request snippet comes from CaptureRequestSnapshot; the response snippet is
 // supplied by the caller when it is cheap to do so.
+//
+// The capture policy (mode and success sampling) is decided inside
+// TraceCapture.Record, which returns whether the snapshot was actually queued.
 func RecordTrace(c *gin.Context, modelName, channel string, statusCode int, errMsg, responseSnippet string, duration time.Duration) {
 	tc := storage.GlobalTraceCapture
-	if tc == nil || c == nil || !tc.Enabled(statusCode) {
+	if tc == nil || c == nil {
 		return
 	}
-	// Dedupe per request. The flag is set only once a snapshot is actually
-	// eligible, so a caller that arrives before capture is enabled does not burn
-	// the slot. Callers keep their richer message: a dispatch error recorded
-	// first wins over the synthesized 499 explanation from the usage recorder.
+	// Dedupe per request: one request produces at most one trace row. The marker
+	// is set only when Record accepted the snapshot, so a request sampled out (or
+	// dropped by a full queue) does not consume the slot. Callers keep their
+	// richer message: a dispatch error recorded first wins over the synthesized
+	// 499 explanation from the usage recorder.
 	if _, recorded := c.Get(ContextKeyTraceRecorded); recorded {
 		return
 	}
-	c.Set(ContextKeyTraceRecorded, true)
 
 	reqSnap, _ := c.Get(ContextKeyRequestSnapshot)
 	reqStr, _ := reqSnap.(string)
 
-	tc.Record(&storage.RequestTraceRecord{
+	if tc.Record(&storage.RequestTraceRecord{
 		TraceID:         middleware.GetTraceID(c),
 		ChatID:          c.GetString(ContextKeyChatID),
 		SessionID:       traceSessionID(c),
@@ -138,5 +145,7 @@ func RecordTrace(c *gin.Context, modelName, channel string, statusCode int, errM
 		RequestSnippet:  reqStr,
 		ResponseSnippet: responseSnippet,
 		DurationMs:      duration.Milliseconds(),
-	})
+	}) {
+		c.Set(ContextKeyTraceRecorded, true)
+	}
 }

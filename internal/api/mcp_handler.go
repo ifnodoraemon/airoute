@@ -15,7 +15,11 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
-// MCPHandler implements the Model Context Protocol (MCP 2024-11-05) over HTTP & SSE.
+// MCPHandler implements the Model Context Protocol over HTTP & SSE.
+//
+// It speaks every revision in mcpSupportedVersions (newest first), negotiates
+// down to the revision a client asks for, and defaults to
+// mcpDefaultProtocolVersion.
 type MCPHandler struct {
 	dispatcher *router.Dispatcher
 	repo       *storage.Repository
@@ -367,7 +371,7 @@ func (h *MCPHandler) ProcessRPC(ctx context.Context, req *mcpRequest) mcpRespons
 		// A16: infrastructure-disclosure tools (channel inventory, routing
 		// topology) are administrator-only. The gate used to be "is there a valid
 		// API key", so any tenant could enumerate the upstream fleet.
-		if isAdminOnlyMCPTool(callParams.Name) && !h.mcpCallerIsAdmin(ctx, callParams.Arguments) {
+		if isAdminOnlyMCPTool(callParams.Name) && !h.callerIsAdmin(ctx, callParams.Arguments) {
 			return newMCPErrorResponse(req.ID, -32002,
 				fmt.Sprintf("Permission denied: tool '%s' is restricted to gateway administrators", callParams.Name))
 		}

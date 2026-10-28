@@ -130,6 +130,48 @@ curl -X POST http://localhost:8080/v1beta/models/gemini-4-argon:countTokens \
 - **Transparent Field**: `reasoning_content` in Chat Completions chunk and message objects.
 - **Stream handling**: OpenAI-compatible reasoning deltas are normalized in memory. Native Anthropic streams preserve signed thinking blocks; cross-protocol reasoning behavior depends on the target API and is not byte-for-byte passthrough.
 
+### 2.7 OpenAI Responses API
+- **Endpoint**: `POST /v1/responses`
+- **Supported Clients**: OpenAI Responses SDK and agents that keep a conversation server-side via `previous_response_id`.
+- **Conversion**: the request is translated into the canonical chat request (input items → messages, `instructions` → system message, `max_output_tokens`, tools/tool_choice) and candidates are resolved with the `responses` routing protocol, so channels that speak the response protocol are preferred.
+- **Conversation replay**: a request carrying `previous_response_id` replays the stored conversation of that response. Context is kept for a bounded retention window and is scoped to the calling API key/user; an id that is unknown, expired or owned by another caller returns `400 previous_response_not_found` instead of silently answering without history.
+- **Non-streaming response**: an object with `id` (`resp_…`), `object: "response"`, `created_at`, `status: "completed"`, `model`, `output` (message items with `output_text` parts, or `function_call` items) and `usage`.
+
+#### Request Example:
+```bash
+curl -X POST http://localhost:8080/v1/responses \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "input": "Explain prompt caching in one paragraph.",
+    "instructions": "You are a concise assistant."
+  }'
+```
+
+#### Streaming (`"stream": true`)
+The response is `text/event-stream` and emits the Responses event sequence: `response.created`, `response.in_progress`, `response.output_item.added`, `response.content_part.added`, `response.output_text.delta`, `response.content_part.done`, `response.output_item.done`, and finally `response.completed`. Each event carries the response id so a client can resume the conversation with `previous_response_id`.
+
+> The `model` field in the answer always echoes the model the client requested. A provider that reports its own upstream name (or omits the field) is normalized by the gateway.
+
+### 2.8 OpenAI Moderations
+- **Endpoint**: `POST /v1/moderations`
+- **Body**: `{"input": "text" | ["text", ...], "model": "text-moderation-latest"}`. The model defaults to `text-moderation-latest`.
+- **Behaviour**: proxied to a channel that serves the `moderation` protocol. The channel's own verdict is returned unchanged and the call is audited as one fixed-price unit. When no moderation channel is configured the endpoint answers `501 moderation_not_configured` — it never fabricates an "everything is safe" verdict unless the explicit development switch `GATEWAY_MODERATION_STUB` is enabled.
+- **Pricing**: the model must have a positive `fixed_price` and a CNY rate row, like every other billable ingress.
+
+#### Request Example:
+```bash
+curl -X POST http://localhost:8080/v1/moderations \
+  -H "Authorization: Bearer sk-airoute-xxxx" \
+  -H "Content-Type: application/json" \
+  -d '{"input": "Some user-generated text"}'
+```
+
+### 2.9 Models Registry
+- **Endpoints**: `GET /v1/models` (list) and `GET /v1/models/{model}` (detail)
+- **Response**: OpenAI-shaped model objects (`id`, `object: "model"`, `created`, `owned_by`) for every model the gateway can route, so SDKs that discover models work unchanged.
+
 ---
 
 ## 3. Multimodal & Information Retrieval Endpoints
@@ -360,5 +402,38 @@ Note the two different uses of the name: the `key_id` **field** in a key object 
 ## 5. Observability Endpoints
 
 - **Health Check**: `GET /health` (`{"status": "healthy"}`)
-- **Prometheus Metrics**: `GET /metrics` (Standard Prometheus exposition format)
+- **Readiness**: `GET /health/ready` — `200` only when the data-plane snapshot is loaded and every registered dependency probe (storage, Redis, ...) succeeds; otherwise `503` with a per-dependency breakdown. Rolling restarts gate on this endpoint, not on `/health`.
+- **Public Status**: `GET /api/v1/public/status` — the unauthenticated status-page payload (service state, model/modality availability and latency). It carries no credentials and no tenant data.
+- **Prometheus Metrics**: `GET /metrics` (Standard Prometheus exposition format). Reachable from loopback/private clients by default; set `GATEWAY_METRICS_TOKEN` to require `Authorization: Bearer <token>` or `GATEWAY_METRICS_ALLOW_PUBLIC=true` to open it.
 - **Web App**: `GET /app/` or `GET /` (Embedded React dashboard)
+
+---
+
+## 6. Model Context Protocol (MCP)
+
+The gateway is a full MCP server, so an agent (Cursor, Claude Desktop, Cline, the bundled `airoute mcp stdio` adapter) can use the gateway's skills and remote MCP servers as tools.
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/mcp` | Discovery document: server identity, protocol versions, SSE/messages endpoints and copyable client configs (no credentials) |
+| `GET` | `/mcp/sse` | Opens the SSE channel; authentication is required before the stream is switched to `text/event-stream` |
+| `POST` | `/mcp/messages` | JSON-RPC 2.0 over HTTP (streamable). A request without an `id` is a notification and is answered `202` with an empty body |
+| `GET`/`POST` | `/v1/mcp`, `/v1/mcp/sse`, `/v1/mcp/messages` | The same endpoints under the `/v1` prefix, for clients configured with a `/v1` base URL |
+
+- **Protocol versions**: `2026-07-28` (default), `2025-11-25` and `2024-11-05` are supported; the server negotiates the client's `protocolVersion` and answers with the newest revision it implements when the requested one is unknown. The negotiated value is returned in the `MCP-Protocol-Version` header (and exposed via CORS) on every response.
+- **Authentication**: the caller presents an API key as `Authorization: Bearer …`, `X-API-Key`, `?apiKey=`, or (legacy) `?token=` / `?key=`. The same data-plane admission rules apply as `/v1/*`: key status, owner account state, key budget and wallet balance. Anonymous access is allowed only before the first key is ever created.
+- **Authorization**: `airoute_cluster_status`, `airoute_model_topology` and the SQL reflection tools (`read_query`, `list_tables`, `describe_table`) require a key owned by an administrator. Out-of-band callers (stdio adapter, tool arguments) may present `api_key` as a tool argument.
+- **Tool discovery**: `tools/list` is the authoritative catalog. Tools belonging to a disabled skill are hidden; remote MCP plaza servers contribute their own tools once enabled.
+
+---
+
+## 7. Deprecated / Removed Endpoints
+
+These were registered historically but had no consumer and are intentionally gone. Point clients at the replacement:
+
+| Removed | Replacement |
+| :--- | :--- |
+| `GET /api/v1/user/me` | `GET /api/v1/auth/me` |
+| `DELETE /api/v1/user/keys/{id}` | `DELETE /api/v1/admin/keys/{id}` (same owner check for regular callers) |
+| `GET /api/v1/user/wallet/orders` (list) | `GET /api/v1/user/wallet/orders/{order_no}` (single order) |
+| `GET /api/v1/admin/skills/{id}/download` | `GET /api/v1/skills/{id}/download` (public bundle download) |

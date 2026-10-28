@@ -730,42 +730,79 @@ func resolveChatUsage(req *model.ChatCompletionRequest, resp *model.ChatCompleti
 // resolveEmbeddingTokens approximates prompt tokens for an embedding request when
 // the upstream returned no usage. String inputs are measured by length; token-id
 // arrays are already token counts.
+//
+// C-04: the estimate goes through the per-model calibrator like every chat
+// estimate does, and a real upstream count feeds the calibrator instead of only
+// being billed. Before this the two modality estimators were the only prompt
+// estimates in the gateway that ignored the learned tokenizer ratio, so the same
+// text was billed differently depending on whether the upstream reported usage.
 func resolveEmbeddingTokens(req *model.EmbeddingRequest, usage model.EmbeddingUsage) (int, string) {
+	if req == nil {
+		if usage.PromptTokens > 0 {
+			return usage.PromptTokens, usageSourceUpstream
+		}
+		return 0, usageSourceUpstream
+	}
+	local, exact := localEmbeddingPromptEstimate(req)
 	if usage.PromptTokens > 0 {
+		if !exact {
+			observePromptEstimate(req.Model, local, usage.PromptTokens)
+		}
 		return usage.PromptTokens, usageSourceUpstream
 	}
-	if req == nil {
+	if local <= 0 {
 		return 0, usageSourceUpstream
+	}
+	if exact {
+		// Token-id input is already an exact count; calibrating it would
+		// double-apply the tokenizer ratio.
+		return local, usageSourceEstimated
+	}
+	return calibratedPromptEstimate(req.Model, local), usageSourceEstimated
+}
+
+// localEmbeddingPromptEstimate counts the local estimate for an embedding input
+// without applying the tokenizer calibration. exact reports that the input was
+// already a token-id array, so no ratio applies.
+func localEmbeddingPromptEstimate(req *model.EmbeddingRequest) (tokens int, exact bool) {
+	if req == nil {
+		return 0, false
 	}
 	if inputs := req.GetInputStrings(); len(inputs) > 0 {
 		chars := 0
 		for _, input := range inputs {
 			chars += len(input)
 		}
-		return estimateTokens(chars), usageSourceEstimated
+		return estimateTokens(chars), false
 	}
 	// Token-id form: one array element is one token.
 	if ids, ok := req.Input.([]any); ok && len(ids) > 0 {
-		return len(ids), usageSourceEstimated
+		return len(ids), true
 	}
-	return 0, usageSourceUpstream
+	return 0, false
 }
-
 
 // resolveRerankTokens approximates prompt tokens for a rerank request (query plus
 // every candidate document) when the upstream returned no usage.
+//
+// C-04: same calibration contract as embedding and chat — estimate, learn from a
+// real upstream count, otherwise apply the learned ratio.
 func resolveRerankTokens(req *model.RerankRequest, usage model.RerankUsage) (int, string) {
-	if usage.TotalTokens > 0 {
-		return usage.TotalTokens, usageSourceUpstream
-	}
 	if req == nil {
+		if usage.TotalTokens > 0 {
+			return usage.TotalTokens, usageSourceUpstream
+		}
 		return 0, usageSourceUpstream
 	}
-	chars := len(req.Query)
-	for _, doc := range req.GetDocumentTexts() {
-		chars += len(doc)
+	local := localRerankPromptEstimate(req)
+	if usage.TotalTokens > 0 {
+		observePromptEstimate(req.Model, local, usage.TotalTokens)
+		return usage.TotalTokens, usageSourceUpstream
 	}
-	return estimateTokens(chars), usageSourceEstimated
+	if local <= 0 {
+		return 0, usageSourceUpstream
+	}
+	return calibratedPromptEstimate(req.Model, local), usageSourceEstimated
 }
 
 // localRerankPromptEstimate counts the local estimate for a rerank request.
@@ -968,13 +1005,22 @@ func normalizeUnbillableCurrency(cost, savedCost float64, snapshot *storage.Usag
 }
 
 // The wallet settles only CNY. Reject a legacy foreign rate before work starts.
+//
+// C-14: the gate covers every model settlement may price, not only the requested
+// one. When a channel maps the alias to a served model that has its own rate card,
+// billing charges that rate card (see billingModelFor), so a non-CNY legacy row
+// there would sail past a requested-model-only check and only surface as a zeroed
+// charge after the upstream work was already paid for.
 func validateModelCurrency(c *gin.Context, modelName string) bool {
 	if billing.GlobalEngine == nil {
 		return true
 	}
-	if err := storage.ValidatePriceCurrency(billing.GlobalEngine.GetPriceWithGroup(modelName, getKeyGroup(c))); err != nil {
-		RespondOpenAIError(c, http.StatusUnprocessableEntity, err.Error(), "invalid_request_error", "unsupported_pricing_currency")
-		return false
+	keyGroup := getKeyGroup(c)
+	for _, candidate := range currencyModelsForBilling(modelName, keyGroup) {
+		if err := storage.ValidatePriceCurrency(billing.GlobalEngine.GetPriceWithGroup(candidate, keyGroup)); err != nil {
+			RespondOpenAIError(c, http.StatusUnprocessableEntity, err.Error(), "invalid_request_error", "unsupported_pricing_currency")
+			return false
+		}
 	}
 	return true
 }

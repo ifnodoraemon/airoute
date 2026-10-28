@@ -52,7 +52,7 @@ func edgeUsageRows(t *testing.T, repo *storage.Repository, want int) []*storage.
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		logs, err := repo.ListUsageLogs(50, 0)
+		logs, _, err := repo.ListUsageLogsWithFilterAndCount(storage.LogFilter{Limit: 50, Offset: 0})
 		if err == nil && len(logs) >= want {
 			return logs
 		}

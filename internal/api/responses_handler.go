@@ -75,7 +75,10 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 		return
 	}
 
-	chatReq, err := req.ToChatCompletionRequest()
+	// B-06: the canonical request is tagged with the response protocol so channel
+	// selection prefers response-native upstreams instead of routing this as a
+	// plain chat turn.
+	chatReq, err := responsesChatRequest(req)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": gin.H{

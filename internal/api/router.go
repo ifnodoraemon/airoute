@@ -96,6 +96,12 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 
 	handler := NewHandler(dispatcher)
 
+	// The pricing-currency pre-flight gate has to know which upstream models a
+	// channel mapping would make billing price (C-14). Install the read-only
+	// lookup once here: the dispatcher belongs to the server, so this package
+	// cannot reach it from the free function that every ingress handler calls.
+	installServedModelEnumerator(dispatcher)
+
 	// Public health and observability endpoints.
 	//
 	// /health answers "is the process alive" and stays dependency-free so the edge
@@ -168,17 +174,22 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 		userGroup := r.Group("/api/v1/user")
 		userGroup.Use(adminHandler.AdminAuthMiddleware())
 		{
-			userGroup.GET("/me", adminHandler.GetMe)
+			// D-07: the session endpoint is /api/v1/auth/me, the only one the
+			// console and CLI call; a duplicate /user/me was never reached. Key
+			// deletion goes through DELETE /api/v1/admin/keys/:id, which applies
+			// the same owner check for regular callers. Both duplicates were
+			// removed instead of documented twice.
 			userGroup.GET("/wallet", adminHandler.GetUserWallet)
 			userGroup.POST("/wallet/redeem", adminHandler.RedeemWalletCode)
 			userGroup.POST("/wallet/recharge/stripe/session", adminHandler.CreateStripeRechargeSession)
 			userGroup.POST("/wallet/recharge/sandbox", adminHandler.SandboxRecharge)
 			userGroup.GET("/wallet/recharge/sandbox", adminHandler.SandboxRecharge)
-			userGroup.GET("/wallet/orders", adminHandler.ListUserRechargeOrders)
+			// D-07: only the single-order lookup is used (the checkout return
+			// page). A listing endpoint with no caller is surface without a
+			// consumer, so it was removed rather than left to drift.
 			userGroup.GET("/wallet/orders/:order_no", adminHandler.GetUserRechargeOrder)
 			userGroup.GET("/keys", adminHandler.ListUserKeys)
 			userGroup.POST("/keys", adminHandler.CreateUserKey)
-			userGroup.DELETE("/keys/:id", adminHandler.DeleteUserKey)
 			userGroup.POST("/password", adminHandler.ChangePassword)
 		}
 
@@ -204,7 +215,9 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 				protected.GET("/pricing", adminHandler.GetPricingRates)
 				protected.GET("/pricing/groups", adminHandler.GetPricingGroups)
 				protected.GET("/skills", adminHandler.ListSkills)
-				protected.GET("/skills/:id/download", adminHandler.DownloadSkillZip)
+				// D-07: the console and CLI download skill bundles through the
+				// public /api/v1/skills/:id/download route; this authenticated
+				// duplicate served no caller and is removed.
 				protected.GET("/mcp/settings", adminHandler.GetMCPSettings)
 				protected.GET("/logs", adminHandler.ListLogs)
 				protected.GET("/announcement", adminHandler.GetAnnouncement)
@@ -214,6 +227,11 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 				adminOnly.Use(adminHandler.RequireAdminRole())
 				{
 					// Admin-only infrastructure inspection (topology/storage/MCP secrets)
+					//
+					// D-08: /system/middlewares has no console consumer today. It
+					// is kept because ROADMAP B-07 (the console self-check page)
+					// is specified to reuse it together with /health/ready; see
+					// the handler comment before deleting it.
 					adminOnly.GET("/system/middlewares", adminHandler.GetSystemMiddlewares)
 					adminOnly.GET("/system/logs", adminHandler.GetSystemLogs)
 					adminOnly.GET("/system/logs/stream", adminHandler.StreamSystemLogs)

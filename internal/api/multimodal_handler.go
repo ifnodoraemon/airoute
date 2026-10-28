@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -101,20 +100,19 @@ func (h *MultimodalHandler) dispatchAndTransform(c *gin.Context, upReq *router.U
 		}
 	}
 
-	// Read (and buffer) the upstream body BEFORE charging or writing the
-	// response head. The old flow billed and flushed HTTP 200 first, then copied
-	// the stream and ignored the copy error: a truncated upstream response was
-	// charged as a success while the client received a broken 200. The body is
-	// also what the video transform may already have replaced with its rewritten
-	// JSON, so reading here keeps the persisted task id path intact.
+	// Read (and buffer, and repair the model name of) the upstream body BEFORE
+	// charging or writing the response head. The old flow billed and flushed HTTP
+	// 200 first, then copied the stream and ignored the copy error: a truncated
+	// upstream response was charged as a success while the client received a
+	// broken 200. The body is also what the video transform may already have
+	// replaced with its rewritten JSON, so reading here keeps the persisted task
+	// id path intact.
 	if succeeded {
-		body, readErr := readMultimodalBody(resp.Stream, maxMultimodalResponseBytes)
-		if readErr != nil {
+		if readErr := h.bufferAndRepairResponseBody(resp, upReq.Model); readErr != nil {
 			recordFailedRequestWithError(c, sessionID, upReq.Model, dur, http.StatusBadGateway, readErr)
 			RespondOpenAIError(c, http.StatusBadGateway, "Unable to read upstream response", "upstream_error", "upstream_read_error")
 			return
 		}
-		resp.Stream = io.NopCloser(bytes.NewReader(body))
 	}
 
 	if succeeded {

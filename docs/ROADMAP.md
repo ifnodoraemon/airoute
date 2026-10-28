@@ -116,7 +116,7 @@
 | **B-04** | **敏感配置信封加密** | `GATEWAY_MASTER_KEY` 或外部 KMS 抽象；信封加密（主密钥加密 DEK，DEK 加密字段）；首批覆盖渠道 `api_key`、SMTP 口令、Stripe/OIDC secret；渠道列表服务端掩码 + 轮换/重加密命令；密码套件可选 AES-256-GCM / SM4-GCM + SM3 | M |
 | **B-05** | **备份恢复与迁移防降级** | `airoute db backup/restore/verify`（PG `pg_dump`、SQLite `VACUUM INTO`，带 sha256 清单与 dry-run）；启动比对 `maxSchemaVersion`，旧二进制打开新 schema 直接拒绝启动 | M |
 | **B-06** | **计费长期归档 + 日终摘要** | 归档表保留 model/channel 维度；保留期独立可配；每日生成笔数/金额/首尾 `billing_id` 摘要并以哈希链串接；`/admin/billing/integrity` 校验接口 | M |
-| **B-07** | **接入验收工具链** | OpenAPI 3.1 规范（路由 + model 结构）、生成的 SDK 冒烟脚本、控制台「自检报告」页（复用 `/admin/system/middlewares` 与 `/health/ready`）、一键 e2e 验收；交付即带验收证据 | M |
+| **B-07** | **接入验收工具链** | OpenAPI 3.1 规范（路由 + model 结构）、生成的 SDK 冒烟脚本、控制台「自检报告」页（复用 `/admin/system/middlewares` 与 `/health/ready`）、一键 e2e 验收；交付即带验收证据。**状态（2026-10-28）**：`GET /admin/system/middlewares` 与 `/health/ready` 已实现且目前无其它消费者，控制台自检页与 OpenAPI/SDK 尚未开始；该端点在页面落地前不得删除 | M |
 
 ### 4.3 v1.3 企业集成与运维（8–10 周）
 

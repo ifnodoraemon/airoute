@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -135,7 +136,12 @@ func (h *Handler) HandleV1Info(c *gin.Context) {
 			"Anthropic Claude Messages (/v1/messages)",
 			"Google Gemini Models (/v1beta/models)",
 			"Multimodal Ingress (/v1/images/generations, /v1/audio/speech, /v1/audio/transcriptions, /v1/videos/generations)",
-			"Model Context Protocol (MCP 2024-11-05) (/v1/mcp, /v1/mcp/sse, /v1/mcp/messages)",
+			// D-10: rendered from the MCP handler's own negotiation table so the
+			// discovery answer cannot advertise a different revision than
+			// /mcp's server block (it said 2024-11-05 while the server spoke
+			// 2026-07-28 and negotiated down to 2024-11-05).
+			fmt.Sprintf("Model Context Protocol (MCP %s, down to %s) (/v1/mcp, /v1/mcp/sse, /v1/mcp/messages)",
+				mcpDefaultProtocolVersion, mcpSupportedVersions[len(mcpSupportedVersions)-1]),
 		},
 		"endpoints": gin.H{
 			"chat_completions":     "/v1/chat/completions",

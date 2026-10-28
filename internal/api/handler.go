@@ -95,7 +95,7 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	// Protocol format and content validation per-model rules and optional per-key overrides
 	valRes := validator.ValidateOpenAIRequest(&req, getAPIKeyConfig(c))
 	if !valRes.Valid && valRes.Error != nil {
-		valRes.Error.WriteGinResponse(c)
+		rejectInvalidRequest(c, valRes.Error)
 		return
 	}
 	if len(valRes.Warnings) > 0 {

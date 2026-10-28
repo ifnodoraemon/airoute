@@ -164,7 +164,7 @@ func (h *Handler) HandleGeminiAction(c *gin.Context) {
 	// Validate Gemini protocol and schema rules with optional key config
 	valRes := validator.ValidateGeminiRequest(modelName, &geminiReq, getAPIKeyConfig(c))
 	if !valRes.Valid && valRes.Error != nil {
-		valRes.Error.WriteGinResponse(c)
+		rejectInvalidRequest(c, valRes.Error)
 		return
 	}
 	if len(valRes.Warnings) > 0 {

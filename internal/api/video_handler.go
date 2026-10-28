@@ -85,7 +85,7 @@ func (h *MultimodalHandler) HandleVideoGenerations(c *gin.Context) {
 			}
 			replaceVideoResponseID(payload, task.ID)
 		}
-		return writeVideoResponse(resp, payload)
+		return writeVideoResponse(resp, payload, req.Model)
 	})
 }
 
@@ -121,7 +121,7 @@ func (h *MultimodalHandler) HandleVideoTask(c *gin.Context) {
 			return err
 		}
 		replaceVideoResponseID(payload, task.ID)
-		return writeVideoResponse(resp, payload)
+		return writeVideoResponse(resp, payload, task.Model)
 	})
 }
 
@@ -169,11 +169,16 @@ func replaceVideoResponseID(payload map[string]any, id string) {
 		}
 	}
 }
-func writeVideoResponse(resp *router.UpstreamResponse, payload map[string]any) error {
+func writeVideoResponse(resp *router.UpstreamResponse, payload map[string]any, requestedModel string) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
+	// B-08: video providers answer with their own task envelope, which may carry
+	// the upstream model name instead of the one the client requested. Repairing
+	// it here keeps the CLI/SDK-visible model stable; the shared multimodal path
+	// re-checks the same field (a no-op once it matches).
+	body = restoreResponseModelJSON(body, requestedModel)
 	resp.Stream = io.NopCloser(bytes.NewReader(body))
 	resp.Headers = resp.Headers.Clone()
 	resp.Headers.Del("Content-Encoding")
