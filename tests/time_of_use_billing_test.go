@@ -64,7 +64,7 @@ func TestTimeOfUseBilling(t *testing.T) {
 
 	// --- Case 1: DeepSeek Official Workday Peak (Wednesday 2026-09-23 14:30) ---
 	workdayPeak := time.Date(2026, 9, 23, 14, 30, 0, 0, loc)
-	p := engine.GetPrice("deepseek-chat")
+	p := engine.GetPriceWithGroup("deepseek-chat", "default")
 	isOff, discount := engine.IsOffPeak(p, workdayPeak)
 	if isOff {
 		t.Errorf("Expected peak at Wednesday 14:30, got off-peak")
@@ -99,7 +99,7 @@ func TestTimeOfUseBilling(t *testing.T) {
 	}
 
 	// --- Case 5: Custom Multi-Slot Evaluation ---
-	pCust := engine.GetPrice("custom-model")
+	pCust := engine.GetPriceWithGroup("custom-model", "default")
 	// Slot 1: 03:00 (inside 00:00-08:30) -> 50% discount (0.5)
 	isOffC1, discC1 := engine.IsOffPeak(pCust, time.Date(2026, 9, 23, 3, 0, 0, 0, loc))
 	if !isOffC1 || discC1 != 0.5 {
