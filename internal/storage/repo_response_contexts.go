@@ -44,19 +44,6 @@ type ResponseContext struct {
 	Messages []byte
 }
 
-// responseContextTimestamp binds a timestamp for the active dialect.
-//
-// SQLite stores DATETIME as its legacy second-precision text layout (the format
-// every other table in this schema uses), while PostgreSQL expects a real
-// TIMESTAMPTZ value; binding the wrong one would make the expiry comparison
-// either a string/date mismatch or dependent on the session time zone.
-func (r *Repository) responseContextTimestamp(at time.Time) any {
-	if r != nil && r.db != nil && r.db.Dialect() == "postgres" {
-		return at.UTC()
-	}
-	return at.UTC().Format(legacySecondTimestampLayout)
-}
-
 // SaveResponseContext stores the conversation of a completed response under its
 // client-facing response id.
 func (r *Repository) SaveResponseContext(ctx context.Context, id, owner string, messages []byte) error {
@@ -70,8 +57,8 @@ func (r *Repository) SaveResponseContext(ctx context.Context, id, owner string, 
 	_, err := r.db.ExecContext(ctx, `INSERT INTO response_contexts
 		(id, owner, messages, created_at, expires_at) VALUES (?, ?, ?, ?, ?)`,
 		id, owner, string(messages),
-		r.responseContextTimestamp(now),
-		r.responseContextTimestamp(now.Add(ResponseContextTTL)),
+		r.dialectTime(now),
+		r.dialectTime(now.Add(ResponseContextTTL)),
 	)
 	if err != nil {
 		return err
@@ -93,7 +80,7 @@ func (r *Repository) LoadResponseContext(ctx context.Context, id, owner string) 
 	var messages string
 	err := r.db.QueryRowContext(ctx, `SELECT id, owner, messages FROM response_contexts
 		WHERE id = ? AND owner = ? AND expires_at > ?`,
-		id, owner, r.responseContextTimestamp(time.Now()),
+		id, owner, r.dialectTime(time.Now()),
 	).Scan(&stored.ID, &stored.Owner, &messages)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrResponseContextNotFound
@@ -111,7 +98,7 @@ func (r *Repository) PruneResponseContexts(cutoff time.Time) (int64, error) {
 	if r == nil || r.db == nil {
 		return 0, nil
 	}
-	cutoffValue := r.responseContextTimestamp(cutoff)
+	cutoffValue := r.dialectTime(cutoff)
 	var total int64
 	for {
 		res, err := r.db.Exec(

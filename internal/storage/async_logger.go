@@ -97,14 +97,10 @@ func (al *AsyncLogger) Record(rec *UsageLogRecord) {
 		return
 	}
 
-	// Ensure trace_id is always set
-	if rec.TraceID == "" {
-		if rec.SessionID != "" {
-			rec.TraceID = rec.SessionID
-		} else {
-			rec.TraceID = fmt.Sprintf("tr-%x", time.Now().UnixMicro())
-		}
-	}
+	// Ensure trace_id is always set. It must never borrow the session id: a
+	// session spans many requests, so the audit row would lose its per-request
+	// correlation key (see ensureTraceID).
+	ensureTraceID(rec)
 
 	// Assign the billing idempotency key here, once, before the record can be
 	// duplicated by any transport: the key then survives Redis redelivery, so a

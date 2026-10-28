@@ -80,7 +80,7 @@ func TestPostgresMigrationsAndRepositoryRoundTrip(t *testing.T) {
 	if ch.ID == 0 {
 		t.Fatal("CreateChannel did not populate the id on postgres")
 	}
-	gotCh, err := repo.GetChannel(ch.ID)
+	gotCh, err := findChannel(t, repo, ch.ID)
 	if err != nil {
 		t.Fatalf("GetChannel on postgres: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestPostgresApplyModelRouteBundleIsAtomic(t *testing.T) {
 	}
 
 	// Step 3a: the update that succeeded before the failure must be undone.
-	gotFirst, err := repo.GetChannel(first.ID)
+	gotFirst, err := findChannel(t, repo, first.ID)
 	if err != nil {
 		t.Fatalf("reload first channel: %v", err)
 	}
@@ -233,7 +233,7 @@ func TestPostgresPatchChannel(t *testing.T) {
 	}
 
 	// A concurrent writer changes the credential through the full-row path.
-	stale, err := repo.GetChannel(rec.ID)
+	stale, err := findChannel(t, repo, rec.ID)
 	if err != nil {
 		t.Fatalf("GetChannel: %v", err)
 	}
@@ -259,7 +259,7 @@ func TestPostgresPatchChannel(t *testing.T) {
 	}
 
 	// And it is durable.
-	stored, err := repo.GetChannel(rec.ID)
+	stored, err := findChannel(t, repo, rec.ID)
 	if err != nil {
 		t.Fatalf("reload channel: %v", err)
 	}
@@ -353,7 +353,7 @@ func TestPostgresPatchChannelSerializesConcurrentWriters(t *testing.T) {
 
 	// Both changes must survive. This fails without FOR UPDATE: the second writer
 	// would rewrite the name from its pre-commit read.
-	stored, err := repo.GetChannel(rec.ID)
+	stored, err := findChannel(t, repo, rec.ID)
 	if err != nil {
 		t.Fatalf("reload channel: %v", err)
 	}

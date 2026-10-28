@@ -128,11 +128,6 @@ func (r *Repository) CreateChannel(rec *ChannelRecord) error {
 	return nil
 }
 
-// GetChannel retrieves a single channel by ID.
-func (r *Repository) GetChannel(id int64) (*ChannelRecord, error) {
-	return scanChannel(r.db.QueryRow(`SELECT `+channelColumns+` FROM channels WHERE id = ?`, id))
-}
-
 // getChannelTx reads one channel inside a transaction. On PostgreSQL the row is
 // locked for the remainder of the transaction, which is what makes PatchChannel
 // safe against a concurrent writer. SQLite has no row locks and rejects FOR
@@ -198,27 +193,26 @@ func (r *Repository) PatchChannel(id int64, fn func(*ChannelRecord) error) (*Cha
 }
 
 // UpdateChannel updates an existing channel.
+//
+// Unlike CreateChannel, it stores the routing fields exactly as given: priority 0,
+// weight 0 and timeout_seconds 0 are valid values on an update (the create path
+// still maps them to 1/10/60 because there an omitted field means "use the
+// default"). Both update entry points share updateChannelTx so they cannot drift.
 func (r *Repository) UpdateChannel(rec *ChannelRecord) error {
-	modelsBytes, _ := json.Marshal(rec.Models)
-	mappingBytes, _ := json.Marshal(rec.ModelMapping)
-	protocolsBytes, _ := json.Marshal(rec.Protocols)
-
-	if rec.Status == "" {
-		rec.Status = "active"
+	if rec == nil {
+		return fmt.Errorf("UpdateChannel requires a channel record")
 	}
-	if rec.Priority == 0 {
-		rec.Priority = 1
+	tx, err := r.db.BeginTx(context.Background())
+	if err != nil {
+		return err
 	}
-	if rec.Weight == 0 {
-		rec.Weight = 10
+	defer func() {
+		_ = tx.Rollback()
+	}()
+	if err := updateChannelTx(tx, rec); err != nil {
+		return err
 	}
-	if rec.TimeoutSeconds == 0 {
-		rec.TimeoutSeconds = 60
-	}
-
-	_, err := r.db.Exec(`UPDATE channels SET name=?, type=?, base_url=?, api_key=?, models=?, model_mapping=?, protocols=?, priority=?, weight=?, timeout_seconds=?, status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-		rec.Name, rec.Type, rec.BaseURL, rec.APIKey, string(modelsBytes), string(mappingBytes), string(protocolsBytes), rec.Priority, rec.Weight, rec.TimeoutSeconds, rec.Status, rec.ID)
-	return err
+	return tx.Commit()
 }
 
 // DeleteChannel deletes a channel by ID.

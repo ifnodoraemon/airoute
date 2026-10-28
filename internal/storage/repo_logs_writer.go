@@ -210,11 +210,6 @@ func normalizeUsageSource(src string) string {
 	}
 }
 
-// RecordUsageLog records an audit row and settles its charge.
-func (r *Repository) RecordUsageLog(log *UsageLogRecord) error {
-	return r.RecordUsageLogContext(context.Background(), log)
-}
-
 // RecordUsageLogContext is RecordUsageLog bound to a context/deadline.
 //
 // The charge is settled first, in its own transaction, and the audit row is
@@ -226,11 +221,6 @@ func (r *Repository) RecordUsageLogContext(ctx context.Context, log *UsageLogRec
 		return err
 	}
 	return r.insertUsageLogsContext(ctx, []*UsageLogRecord{log})
-}
-
-// BatchRecordUsageLogs writes multiple usage logs, settling their charges first.
-func (r *Repository) BatchRecordUsageLogs(logs []*UsageLogRecord) error {
-	return r.BatchRecordUsageLogsContext(context.Background(), logs)
 }
 
 // BatchRecordUsageLogsContext is BatchRecordUsageLogs bound to a context.

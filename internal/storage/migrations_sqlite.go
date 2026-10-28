@@ -500,6 +500,7 @@ func (db *DB) migrate() error {
 		{Version: 39, Name: "api_key_public_ids", Up: addAPIKeyPublicIDs},
 		{Version: 40, Name: "drop_legacy_governance_objects", Up: dropLegacyGovernanceObjects},
 		{Version: 41, Name: "billing_scale_indexes", Up: addBillingScaleIndexes},
+		{Version: 42, Name: "storage_index_and_trace_search_repairs", Up: repairStorageIndexesAndTraceSearch},
 	}
 	return db.runMigrations(migrations)
 }

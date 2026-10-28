@@ -117,8 +117,12 @@ func (r *Repository) ListRequestTraces(f TraceFilter) ([]*RequestTraceRecord, er
 }
 
 // PurgeRequestTraces deletes snapshots older than the retention window.
+//
+// The cutoff is bound through dialectTime: created_at is TIMESTAMPTZ on
+// PostgreSQL, where a zone-less literal would be read in the session time zone
+// and delete the wrong window.
 func (r *Repository) PurgeRequestTraces(cutoff time.Time) (int64, error) {
-	res, err := r.db.Exec(`DELETE FROM request_traces WHERE created_at < ?`, cutoff.UTC().Format("2006-01-02 15:04:05"))
+	res, err := r.db.Exec(`DELETE FROM request_traces WHERE created_at < ?`, r.dialectTime(cutoff))
 	if err != nil {
 		return 0, err
 	}

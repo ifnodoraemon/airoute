@@ -112,12 +112,8 @@ func (r *Repository) PurgeVerificationCodesBefore(cutoff time.Time) (int64, erro
 		return 0, nil
 	}
 	// verification_codes.expires_at is TIMESTAMPTZ on PostgreSQL and a UTC text
-	// column on SQLite; bind a real time.Time for the former so the comparison
-	// does not depend on the session time zone.
-	var cutoffValue any = cutoff.UTC().Format(legacySecondTimestampLayout)
-	if r.db.Dialect() == "postgres" {
-		cutoffValue = cutoff.UTC()
-	}
+	// column on SQLite; dialectTime binds the right shape for each.
+	cutoffValue := r.dialectTime(cutoff)
 	var total int64
 	for {
 		res, err := r.db.Exec(
@@ -144,7 +140,7 @@ func (r *Repository) PurgeVideoTasksBefore(cutoff time.Time) (int64, error) {
 	if r == nil || r.db == nil {
 		return 0, nil
 	}
-	cutoffValue := cutoff.UTC().Format(legacySecondTimestampLayout)
+	cutoffValue := r.dialectTime(cutoff)
 	var total int64
 	for {
 		res, err := r.db.Exec(

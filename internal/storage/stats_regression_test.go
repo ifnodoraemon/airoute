@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"math"
 	"testing"
 	"time"
@@ -26,7 +27,7 @@ func TestTimeSeriesAggregatesInSQLWithBoundedPercentileSample(t *testing.T) {
 
 	// Ten successful chat requests with known TTFT and tokens, plus one error.
 	for i := 1; i <= 10; i++ {
-		if err := repo.RecordUsageLog(&UsageLogRecord{
+		if err := repo.RecordUsageLogContext(context.Background(), &UsageLogRecord{
 			APIKey: "k1", Model: "gpt-4o", StatusCode: 200,
 			TotalTokens: 100, TTFTMs: int64(i * 10), Cost: 0.01,
 			CreatedAt: now.Add(-time.Duration(i) * time.Minute),
@@ -34,7 +35,7 @@ func TestTimeSeriesAggregatesInSQLWithBoundedPercentileSample(t *testing.T) {
 			t.Fatalf("record log %d: %v", i, err)
 		}
 	}
-	if err := repo.RecordUsageLog(&UsageLogRecord{
+	if err := repo.RecordUsageLogContext(context.Background(), &UsageLogRecord{
 		APIKey: "k1", Model: "dall-e-3", StatusCode: 500, TotalTokens: 100, Cost: 0.01,
 		CreatedAt: now.Add(-30 * time.Minute),
 	}); err != nil {
@@ -95,7 +96,7 @@ func TestSavedCostIsDerivedFromCacheReadPrice(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("save price: %v", err)
 	}
-	if err := repo.RecordUsageLog(&UsageLogRecord{
+	if err := repo.RecordUsageLogContext(context.Background(), &UsageLogRecord{
 		APIKey: "k1", Model: "cache-model", StatusCode: 200,
 		CachedTokens: 1000000, TotalTokens: 1000000, Cost: 3, CreatedAt: time.Now(),
 	}); err != nil {
@@ -116,7 +117,7 @@ func TestSavedCostIsDerivedFromCacheReadPrice(t *testing.T) {
 func TestSavedCostSkipsUnpricedModels(t *testing.T) {
 	repo := newRetentionRepo(t)
 
-	if err := repo.RecordUsageLog(&UsageLogRecord{
+	if err := repo.RecordUsageLogContext(context.Background(), &UsageLogRecord{
 		APIKey: "k1", Model: "unpriced-model", StatusCode: 200,
 		CachedTokens: 1000000, TotalTokens: 1000000, Cost: 0, CreatedAt: time.Now(),
 	}); err != nil {
@@ -141,7 +142,7 @@ func TestSavedCostNeverNegative(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("save price: %v", err)
 	}
-	if err := repo.RecordUsageLog(&UsageLogRecord{
+	if err := repo.RecordUsageLogContext(context.Background(), &UsageLogRecord{
 		APIKey: "k1", Model: "no-cache-discount", StatusCode: 200,
 		CachedTokens: 1000000, TotalTokens: 1000000, Cost: 2, CreatedAt: time.Now(),
 	}); err != nil {

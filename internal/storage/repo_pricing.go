@@ -1,9 +1,11 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -90,18 +92,40 @@ func (r *Repository) GetModelFallbacks() (map[string]string, error) {
 	return m, nil
 }
 
-// SetModelFallback creates or updates a model fallback mapping.
-func (r *Repository) SetModelFallback(model, fallbackModel string, enabled bool) error {
-	en := 1
-	if !enabled {
-		en = 0
+// SetModelFallbacks creates or updates a set of model fallback mappings in one
+// transaction, so a caller that rewrites the fallback table cannot leave half of
+// it applied when a statement fails.
+//
+// Every entry is written enabled: the fallback rows the gateway serves are the
+// enabled ones (GetModelFallbacks filters on enabled = 1), and disabling a
+// mapping is expressed by removing it.
+func (r *Repository) SetModelFallbacks(fallbacks map[string]string) error {
+	if len(fallbacks) == 0 {
+		return nil
 	}
-	_, err := r.db.Exec(`
-		INSERT INTO model_fallbacks (model, fallback_model, enabled, updated_at)
-		VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-		ON CONFLICT(model) DO UPDATE SET fallback_model = excluded.fallback_model, enabled = excluded.enabled, updated_at = CURRENT_TIMESTAMP
-	`, model, fallbackModel, en)
-	return err
+	models := make([]string, 0, len(fallbacks))
+	for model := range fallbacks {
+		models = append(models, model)
+	}
+	sort.Strings(models)
+
+	tx, err := r.db.BeginTx(context.Background())
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+	for _, model := range models {
+		if _, err := tx.Exec(`
+			INSERT INTO model_fallbacks (model, fallback_model, enabled, updated_at)
+			VALUES (?, ?, 1, CURRENT_TIMESTAMP)
+			ON CONFLICT(model) DO UPDATE SET fallback_model = excluded.fallback_model, enabled = 1, updated_at = CURRENT_TIMESTAMP
+		`, model, fallbacks[model]); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // ListModelPrices returns all configured model pricing rates.
@@ -128,11 +152,6 @@ func (r *Repository) ListModelPrices() ([]*ModelPriceRecord, error) {
 		list = append(list, &rec)
 	}
 	return list, nil
-}
-
-// GetModelPrice returns pricing rates for a specific model (defaulting to default group).
-func (r *Repository) GetModelPrice(modelName string) (*ModelPriceRecord, error) {
-	return r.GetModelPriceWithGroup(modelName, "default")
 }
 
 // GetModelPriceExact returns pricing rates for an exact model and group without fallback.

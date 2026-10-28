@@ -110,7 +110,7 @@ func TestUsageLogIngestionNeverPersistsCleartextKey(t *testing.T) {
 
 	// Simulate a record produced by a pre-migration binary (cleartext api_key) that
 	// is still in flight during the rollout.
-	if err := repo.RecordUsageLog(&UsageLogRecord{
+	if err := repo.RecordUsageLogContext(context.Background(), &UsageLogRecord{
 		APIKey:     credential,
 		TenantID:   "tenant",
 		Model:      "m",
@@ -141,7 +141,7 @@ func TestUsageLogFilterByKeyIDStillMatchesAfterHashing(t *testing.T) {
 		t.Fatalf("create key: %v", err)
 	}
 	for i := 0; i < 3; i++ {
-		if err := repo.RecordUsageLog(&UsageLogRecord{APIKey: key.Key, TenantID: "t", Model: "m", StatusCode: 200}); err != nil {
+		if err := repo.RecordUsageLogContext(context.Background(), &UsageLogRecord{APIKey: key.Key, TenantID: "t", Model: "m", StatusCode: 200}); err != nil {
 			t.Fatalf("record usage: %v", err)
 		}
 	}

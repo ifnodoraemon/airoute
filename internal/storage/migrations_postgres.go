@@ -503,7 +503,9 @@ func (db *DB) migratePostgres() error {
 		{Version: 39, Name: "api_key_public_ids", Up: addAPIKeyPublicIDs},
 		{Version: 40, Name: "drop_legacy_governance_objects", Up: dropLegacyGovernanceObjects},
 		{Version: 41, Name: "billing_scale_indexes", Up: addBillingScaleIndexes},
+		{Version: 42, Name: "storage_index_and_trace_search_repairs", Up: repairStorageIndexesAndTraceSearch},
 	}
+
 	// Migration 43 rewrites the live usage_logs table (copy-switch into monthly
 	// partitions) and is parked behind an explicit opt-in. It is registered only
 	// when GATEWAY_ENABLE_TABLE_PARTITIONING=true; with the default configuration

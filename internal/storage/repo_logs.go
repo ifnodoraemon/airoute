@@ -199,11 +199,6 @@ type LogFilter struct {
 	SkipCount bool
 }
 
-// ListUsageLogs returns recent usage logs for audit and monitoring.
-func (r *Repository) ListUsageLogs(limit int, offset int) ([]*UsageLogRecord, error) {
-	return r.ListUsageLogsWithFilter(LogFilter{Limit: limit, Offset: offset})
-}
-
 // ListUsageLogsWithFilter queries logs with flexible filters (time range, trace ID, session ID, model, tenant).
 // buildUsageLogWhere assembles the WHERE clause and args shared by the page
 // query and the total-count query, so pagination always reflects the complete
@@ -220,6 +215,14 @@ func (r *Repository) buildUsageLogWhere(f LogFilter) (string, []interface{}) {
 		where += clause
 		args = append(args, value)
 	}
+	// These three filters are deliberately left unindexed.
+	//
+	// Each one is an equality OR a leading-wildcard LIKE on the same column. A
+	// B-tree cannot serve `LIKE '%q%'`, and the OR means both sides must be
+	// evaluated, so an index on the column is never chosen — it only costs a write
+	// on every audit insert (the hottest write path). Migration 42 dropped the
+	// single-column indexes v1/v7/v10 created for them. The tenant/key/model
+	// filters, which are equality plus a created_at range, keep their composites.
 	if f.TraceID != "" {
 		where += ` AND (trace_id = ? OR trace_id LIKE ? ESCAPE '\')`
 		args = append(args, f.TraceID, "%"+escapeLikePattern(f.TraceID)+"%")

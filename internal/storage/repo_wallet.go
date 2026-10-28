@@ -21,11 +21,6 @@ type RedemptionCodeRecord struct {
 	CreatedAt time.Time  `json:"created_at"`
 }
 
-// CreateRedemptionCode creates a new redemption card.
-func (r *Repository) CreateRedemptionCode(rec *RedemptionCodeRecord) error {
-	return r.CreateRedemptionCodes([]*RedemptionCodeRecord{rec})
-}
-
 // CreateRedemptionCodes commits the entire batch or none of it, so an operator
 // can safely retry a failed generation without leaving undistributed cards.
 func (r *Repository) CreateRedemptionCodes(records []*RedemptionCodeRecord) error {

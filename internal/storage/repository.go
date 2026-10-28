@@ -77,10 +77,16 @@ func GetGlobalRepository() *Repository {
 	return globalRepo
 }
 
-// NewRepository creates a new Repository.
+// NewRepository creates a new Repository and registers it as the process-wide
+// instance.
+//
+// The registration goes through SetGlobalRepository so there is a single write
+// path to globalRepo. Writing the variable directly here made the setter
+// unreachable from main (deadcode flagged it) and left two ways to install a
+// repository — the one line nobody used and the one nobody documented.
 func NewRepository(db *DB) *Repository {
 	r := &Repository{db: db}
-	globalRepo = r
+	SetGlobalRepository(r)
 	return r
 }
 
@@ -99,6 +105,11 @@ func (r *Repository) Dialect() string {
 	}
 	return r.db.Dialect()
 }
+
+// overviewPeakWindow bounds the "peak" figures on the overview dashboard. An hour
+// is long enough that the number means something and short enough that the
+// GROUP BY stays cheap behind the 5-second cache.
+const overviewPeakWindow = time.Hour
 
 // GetStatsOverview queries summary metrics with a 5-second in-memory cache to prevent full-table scan bottlenecks.
 func (r *Repository) GetStatsOverview() (*StatsOverview, error) {
@@ -132,8 +143,16 @@ func (r *Repository) GetStatsOverview() (*StatsOverview, error) {
 	_ = r.db.QueryRow(`SELECT COUNT(*) FROM api_keys WHERE status='active'`).Scan(&stats.ActiveKeys)
 
 	// Real-time RPM & TPM over the trailing 60 seconds
-	oneMinAgo := time.Now().Add(-60 * time.Second).UTC().Format("2006-01-02 15:04:05")
+	oneMinAgo := r.dialectTimePrecise(time.Now().Add(-60 * time.Second))
 	_ = r.db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(total_tokens), 0) FROM usage_logs WHERE created_at >= ?`, oneMinAgo).Scan(&stats.CurrentRPM, &stats.CurrentTPM)
+
+	// Peak rates over the trailing hour. These two fields used to be declared,
+	// serialized and read by the console's fallback path but never assigned, so a
+	// dashboard without time-series data displayed a fabricated 0.
+	peakSince := time.Now().Add(-overviewPeakWindow)
+	if peakRPM, peakTPM, err := r.peakRates(r.dialectTimePrecise(peakSince), "", nil); err == nil {
+		stats.PeakRPM, stats.PeakTPM = peakRPM, peakTPM
+	}
 
 	r.statsMu.Lock()
 	r.statsCache = stats
@@ -207,10 +226,18 @@ func (r *Repository) GetStatsOverviewForKeys(keys []string) (*StatsOverview, err
 	_ = r.db.QueryRow(activeQuery, args...).Scan(&stats.ActiveKeys)
 
 	// Real-time RPM & TPM over trailing 60s for scoped keys
-	oneMinAgo := time.Now().Add(-60 * time.Second).UTC().Format("2006-01-02 15:04:05")
+	oneMinAgo := r.dialectTimePrecise(time.Now().Add(-60 * time.Second))
 	rtQuery := fmt.Sprintf(`SELECT COUNT(*), COALESCE(SUM(total_tokens), 0) FROM usage_logs WHERE created_at >= ? AND api_key IN (%s)`, clause)
 	rtArgs := append([]any{oneMinAgo}, args...)
 	_ = r.db.QueryRow(rtQuery, rtArgs...).Scan(&stats.CurrentRPM, &stats.CurrentTPM)
+
+	// Peak rates over the trailing hour for the same key scope, matching the
+	// cluster-wide overview and the time-series peak.
+	peakSince := r.dialectTimePrecise(time.Now().Add(-overviewPeakWindow))
+	peakCond := fmt.Sprintf(` AND api_key IN (%s)`, clause)
+	if peakRPM, peakTPM, err := r.peakRates(peakSince, peakCond, args); err == nil {
+		stats.PeakRPM, stats.PeakTPM = peakRPM, peakTPM
+	}
 
 	return stats, nil
 }
