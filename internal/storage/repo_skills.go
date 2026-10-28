@@ -113,7 +113,15 @@ func (r *Repository) SaveSkill(s *SkillRecord) error {
 			enabled = excluded.enabled,
 			updated_at = CURRENT_TIMESTAMP
 	`, s.ID, s.Name, s.Description, s.Category, string(toolsJSON), s.LoadingMode, s.Manifest, s.Author, s.Version, enabledInt)
-	return err
+	if err != nil {
+		return err
+	}
+	// The statement stamps updated_at; echo it back so the save response does not
+	// report an empty timestamp.
+	if s.UpdatedAt == "" {
+		s.UpdatedAt = time.Now().UTC().Format("2006-01-02 15:04:05")
+	}
+	return nil
 }
 
 // DeleteSkill deletes an Agent Skill.

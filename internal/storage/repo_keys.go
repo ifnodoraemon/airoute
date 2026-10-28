@@ -267,6 +267,17 @@ func insertAPIKey(db recordInserter, rec *APIKeyRecord) error {
 		return err
 	}
 	rec.ID = id
+	// The INSERT lets the database stamp created_at/updated_at. Echo those values
+	// back on the in-memory record: the creation endpoints return it as-is, and a
+	// zero time reached the console as "0001-01-01T00:00:00Z" until the list
+	// refreshed.
+	now := time.Now().UTC()
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = now
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = now
+	}
 	return nil
 }
 

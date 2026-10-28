@@ -117,6 +117,15 @@ func (r *Repository) CreateChannel(rec *ChannelRecord) error {
 		return err
 	}
 	rec.ID = id
+	// The database stamped the timestamps; echo them so the creation response does
+	// not report a zero time to the console.
+	now := time.Now().UTC()
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = now
+	}
+	if rec.UpdatedAt.IsZero() {
+		rec.UpdatedAt = now
+	}
 	return nil
 }
 
