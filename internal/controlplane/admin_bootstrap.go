@@ -1,6 +1,8 @@
 package controlplane
 
 import (
+	"database/sql"
+	"errors"
 	"os"
 
 	"github.com/ifnodoraemon/airoute/internal/config"
@@ -23,6 +25,13 @@ func InitDefaultAdmin(repo *storage.Repository, cfgs ...*config.Config) {
 	forceReset := os.Getenv("GATEWAY_ADMIN_RESET") == "true" || os.Getenv("GATEWAY_ADMIN_RESET") == "1"
 
 	existing, err := repo.GetUserByUsername(adminUser)
+	if errors.Is(err, sql.ErrNoRows) {
+		// A brand-new database has no accounts yet: "not found" is the normal
+		// first-boot state, not a lookup failure. Treating it as an error used to
+		// skip the bootstrap entirely and leave a fresh install without any
+		// administrator to log in as.
+		existing, err = nil, nil
+	}
 	if err != nil {
 		// A failed lookup (schema drift, NULL column, DB hiccup) used to be
 		// indistinguishable from "no admin yet", which is how a drifted schema
