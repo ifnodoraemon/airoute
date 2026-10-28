@@ -58,22 +58,83 @@ func TraceMiddleware() gin.HandlerFunc {
 	}
 }
 
+// maxTraceIDLen bounds a client-supplied trace id. The value is echoed in a
+// response header, written to every access-log line and persisted as
+// usage_logs.trace_id, so it must stay short enough for those sinks.
+const maxTraceIDLen = 64
+
+// validCustomTraceID reports whether a client-supplied trace id may be adopted.
+//
+// The value is attacker-controlled and ends up in headers, log lines and the audit
+// table, so only a conservative alphabet is accepted: control characters could
+// forge extra log fields, and an unbounded length turns one header into an
+// arbitrarily large database row. An invalid value is replaced by a freshly
+// generated id rather than truncated - a truncated id could collide with a
+// legitimate trace.
+func validCustomTraceID(id string) bool {
+	if id == "" || len(id) > maxTraceIDLen {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		c := id[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		case c == '-', c == '_', c == '.':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func isLowerHex(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// traceIDFromTraceparent validates a W3C traceparent header
+// (version-trace_id-parent_id-trace_flags) and returns the trace id to adopt.
+//
+// The previous implementation only checked that the trace-id field was 32
+// characters long, so "00-" + 32 arbitrary characters + "-..." was accepted as a
+// distributed trace id.
+func traceIDFromTraceparent(tp string) (string, bool) {
+	parts := strings.Split(tp, "-")
+	if len(parts) != 4 {
+		return "", false
+	}
+	version, traceID, parentID, flags := parts[0], parts[1], parts[2], parts[3]
+	if len(version) != 2 || len(traceID) != 32 || len(parentID) != 16 || len(flags) != 2 {
+		return "", false
+	}
+	if !isLowerHex(version) || !isLowerHex(traceID) || !isLowerHex(parentID) || !isLowerHex(flags) {
+		return "", false
+	}
+	// W3C forbids the all-zero trace-id and parent-id (they mean "unknown").
+	if strings.Trim(traceID, "0") == "" || strings.Trim(parentID, "0") == "" {
+		return "", false
+	}
+	return "tr-" + traceID, true
+}
+
 // extractTraceID inspects incoming headers (X-Airoute-Trace-ID, X-Request-ID, X-Trace-ID, W3C traceparent).
+//
+// Only values that pass validation are adopted; anything else is ignored, so the
+// caller generates a fresh id instead of trusting attacker-controlled input.
 func extractTraceID(c *gin.Context) string {
-	if tid := strings.TrimSpace(c.GetHeader(HeaderAirouteTraceID)); tid != "" {
-		return tid
-	}
-	if tid := strings.TrimSpace(c.GetHeader(HeaderRequestID)); tid != "" {
-		return tid
-	}
-	if tid := strings.TrimSpace(c.GetHeader(HeaderTraceID)); tid != "" {
-		return tid
+	for _, header := range []string{HeaderAirouteTraceID, HeaderRequestID, HeaderTraceID} {
+		if tid := strings.TrimSpace(c.GetHeader(header)); validCustomTraceID(tid) {
+			return tid
+		}
 	}
 	if tp := strings.TrimSpace(c.GetHeader(HeaderTraceParent)); tp != "" {
-		// W3C format: version-trace_id-parent_id-trace_flags (e.g., 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01)
-		parts := strings.Split(tp, "-")
-		if len(parts) >= 4 && len(parts[1]) == 32 {
-			return "tr-" + parts[1]
+		if tid, ok := traceIDFromTraceparent(tp); ok {
+			return tid
 		}
 	}
 	return ""

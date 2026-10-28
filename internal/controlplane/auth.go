@@ -47,11 +47,17 @@ func RequireAdminClaims(c *gin.Context, forbiddenMsg string) (*AdminClaims, bool
 	return claims, true
 }
 
+// loginPath is the sole unauthenticated route in the control-plane group.
+const loginPath = "/api/v1/auth/login"
+
 // AdminAuthMiddleware validates the admin bearer token.
 func (h *AdminHandler) AdminAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Allow login endpoint
-		if strings.HasSuffix(c.Request.URL.Path, "/auth/login") {
+		// The login endpoint is the only route this middleware must let through
+		// unauthenticated. The check is an exact path comparison on purpose: a
+		// suffix match ("anything ending in /auth/login") would silently exempt any
+		// future route such as /api/v1/admin/users/:id/auth/login.
+		if c.Request.URL.Path == loginPath {
 			c.Next()
 			return
 		}

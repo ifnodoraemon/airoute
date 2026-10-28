@@ -216,9 +216,14 @@ func (h *MCPHandler) executeRoutingTools(ctx context.Context, name string, args 
 					return "Error: Concurrent requests exceed available wallet balance reserve. Please wait for pending requests to finish or recharge.", true, true
 				}
 				quotaUserID, quotaBackend, reservedCNY = caller.Record.UserID, backend, coarse
+				// Same reservation lifetime rule as the HTTP data plane: keep the
+				// Redis TTL refreshed while the call runs, and stop the heartbeat
+				// before the release so a refresh cannot race it.
+				stopQuotaHeartbeat := middleware.StartQuotaHeartbeat(quotaUserID, quotaBackend)
 				// Closure (not a direct call) so the deferred release sees the
 				// topped-up total rather than the coarse amount.
 				defer func() {
+					stopQuotaHeartbeat()
 					middleware.ReleaseUserQuotaAmount(quotaUserID, quotaBackend, reservedCNY)
 				}()
 			}

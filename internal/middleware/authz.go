@@ -373,6 +373,46 @@ func TrustedProxiesFromEnv() ([]*net.IPNet, error) {
 	return nets, err
 }
 
+// PeerIsTrustedProxy reports whether the request's direct TCP peer is one of the
+// configured trusted reverse proxies. Forwarding headers may only be believed when
+// this is true: an untrusted peer can write any value it likes into them.
+//
+// It mirrors the peer check inside ResolveClientIdentity; callers that need the
+// *scheme* rather than the address (cookie Secure flags, redirect building) use it
+// directly.
+func PeerIsTrustedProxy(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	peer := peerIP(r.RemoteAddr)
+	if peer == "" {
+		return false
+	}
+	trusted, err := TrustedProxiesFromEnv()
+	if err != nil {
+		return false
+	}
+	return ipInNetworks(net.ParseIP(peer), trusted)
+}
+
+// TrustedForwardedProto returns the X-Forwarded-Proto value only when the request
+// arrived from a configured trusted proxy. Any other request reports ("", false),
+// because the header is then the caller's own claim rather than the proxy's
+// observation of the scheme it terminated.
+func TrustedForwardedProto(c *gin.Context) (string, bool) {
+	if c == nil || c.Request == nil {
+		return "", false
+	}
+	if !PeerIsTrustedProxy(c.Request) {
+		return "", false
+	}
+	proto := strings.ToLower(strings.TrimSpace(c.GetHeader("X-Forwarded-Proto")))
+	if proto == "" {
+		return "", false
+	}
+	return proto, true
+}
+
 // TrustedProxyConfigured reports whether any reverse proxy is trusted. Without
 // one, forwarding headers are ignored (there is no way to tell a real client
 // address from a forged one).

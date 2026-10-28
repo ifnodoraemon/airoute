@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
@@ -39,10 +40,45 @@ import (
 // repeated float additions would, and so the values line up with the ledger.
 const quotaUnitsPerCNY = 1_000_000_000.0
 
-// inflightQuotaTTLSeconds is the safety net for a node that dies between
-// reserve and release: a leaked reservation expires instead of blocking the
-// wallet forever.
-const inflightQuotaTTLSeconds = 120
+// inflightQuotaTTL is the safety net for a node that dies between reserve and
+// release: a leaked reservation expires instead of blocking the wallet forever.
+//
+// It is deliberately short (two minutes) and is NOT the budget for a request's
+// lifetime. A request can legitimately outlive it - the shipped write deadline is
+// 600s and streaming responses clear that deadline entirely - so a live request
+// keeps its reservation alive with KeepInflightQuotaAlive, which refreshes both
+// keys every inflightQuotaHeartbeatInterval. Only a crashed or abandoned request
+// relies on the TTL, and lengthening the TTL instead would lengthen the leak
+// window of exactly those requests.
+//
+// It is a var (not a const) so tests can drive the expiry at millisecond scale.
+var inflightQuotaTTL = 120 * time.Second
+
+// quotaHeartbeatTimeout bounds one reservation refresh. A stalled Redis must never
+// pile heartbeat goroutines up behind a hung socket.
+const quotaHeartbeatTimeout = 300 * time.Millisecond
+
+// inflightQuotaTTLMillis converts the TTL into the millisecond argument the Lua
+// scripts expect. A sub-millisecond TTL clamps to 1ms so a key is never created
+// already expired.
+func inflightQuotaTTLMillis() int64 {
+	ms := inflightQuotaTTL.Milliseconds()
+	if ms < 1 {
+		return 1
+	}
+	return ms
+}
+
+// inflightQuotaHeartbeatInterval is how often a live request refreshes its
+// reservation. A third of the TTL tolerates two lost refreshes (Redis hiccup,
+// scheduler delay) before the key could expire under a running request.
+func inflightQuotaHeartbeatInterval() time.Duration {
+	interval := inflightQuotaTTL / 3
+	if interval < time.Millisecond {
+		return time.Millisecond
+	}
+	return interval
+}
 
 // rpmWindowMs is the width of the RPM sliding window. It is passed to the Lua
 // script rather than hardcoded there so the window this process enforces and the
@@ -90,7 +126,7 @@ var slidingWindowLua = redis.NewScript(slidingWindowLuaSrc)
 //	KEYS[2] count key   (in-flight request count)
 //	ARGV[1] balance     (1e-9 units the caller observed for the wallet)
 //	ARGV[2] need        (1e-9 units to pre-authorise for this request)
-//	ARGV[3] ttl         (seconds, refreshed on every reserve)
+//	ARGV[3] ttl         (milliseconds; refreshed by the request's heartbeat)
 //	ARGV[4] maxInflight (>=1 caps concurrent requests; <=0 disables the cap)
 //
 // Returns 1 when the request is admitted, 0 when either limit rejects it.
@@ -115,12 +151,35 @@ end
 
 redis.call('INCRBY', amountKey, need)
 redis.call('INCR', countKey)
-redis.call('EXPIRE', amountKey, ttl)
-redis.call('EXPIRE', countKey, ttl)
+redis.call('PEXPIRE', amountKey, ttl)
+redis.call('PEXPIRE', countKey, ttl)
 return 1
 `
 
 var quotaAmountReserveLua = redis.NewScript(quotaAmountReserveLuaSrc)
+
+// quotaAmountKeepAliveLua refreshes the TTL of an existing reservation without
+// changing its amount or its in-flight count.
+//
+// Both keys are only re-armed when they exist: PEXPIRE never creates a key, and
+// the explicit EXISTS guard makes that intent obvious. A reservation that already
+// expired (crashed node, or a heartbeat that lost Redis for longer than the TTL)
+// therefore stays gone instead of being revived at an amount no release matches.
+const quotaAmountKeepAliveLuaSrc = `
+local amountKey = KEYS[1]
+local countKey = KEYS[2]
+local ttl = tonumber(ARGV[1])
+
+if redis.call('EXISTS', amountKey) == 1 then
+    redis.call('PEXPIRE', amountKey, ttl)
+end
+if redis.call('EXISTS', countKey) == 1 then
+    redis.call('PEXPIRE', countKey, ttl)
+end
+return 1
+`
+
+var quotaAmountKeepAliveLua = redis.NewScript(quotaAmountKeepAliveLuaSrc)
 
 // quotaAmountReleaseLua returns a reservation. The amount decrement is clamped
 // to what is actually booked, so a release can never drive the aggregate
@@ -180,7 +239,7 @@ if add <= 0 then
     return 0
 end
 redis.call('INCRBY', key, add)
-redis.call('EXPIRE', key, ttl)
+redis.call('PEXPIRE', key, ttl)
 return add
 `)
 
@@ -194,9 +253,9 @@ func (c *Client) TopUpQuotaAmount(ctx context.Context, userID int64, balanceUnit
 	if !c.IsActive() || userID <= 0 || upToUnits <= 0 {
 		return 0, nil
 	}
-	key := fmt.Sprintf("airoute:inflight:amt:%d", userID)
-	ttl := 120
-	res, err := inFlightQuotaTopUpLua.Run(ctx, c.rdb, []string{key}, balanceUnits, upToUnits, ttl).Result()
+	amountKey, _ := inflightQuotaAmountKeys(userID)
+	res, err := inFlightQuotaTopUpLua.Run(ctx, c.rdb, []string{amountKey},
+		balanceUnits, upToUnits, inflightQuotaTTLMillis()).Result()
 	if err != nil {
 		return 0, err
 	}
@@ -287,7 +346,7 @@ func (c *Client) TryReserveQuotaAmount(ctx context.Context, userID int64, balanc
 	}
 	amountKey, countKey := inflightQuotaAmountKeys(userID)
 	res, err := quotaAmountReserveLua.Run(ctx, c.rdb, []string{amountKey, countKey},
-		quotaBalanceUnits(balanceCNY), quotaReserveUnits(reserveCNY), inflightQuotaTTLSeconds, maxInflight).Result()
+		quotaBalanceUnits(balanceCNY), quotaReserveUnits(reserveCNY), inflightQuotaTTLMillis(), maxInflight).Result()
 	if err != nil {
 		return false, err
 	}
@@ -304,4 +363,83 @@ func (c *Client) ReleaseQuotaAmount(ctx context.Context, userID int64, units int
 	}
 	amountKey, countKey := inflightQuotaAmountKeys(userID)
 	return quotaAmountReleaseLua.Run(ctx, c.rdb, []string{amountKey, countKey}, units).Err()
+}
+
+// KeepInflightQuotaAlive refreshes the TTL of the reservation ReserveQuotaAmount /
+// TryReserveQuotaAmount booked for userID, until the returned stop function is
+// called.
+//
+// Admission books the reservation once and then the request may run for minutes
+// (600s write deadline for unary calls, no deadline at all for streaming), while
+// the TTL that protects against crashed nodes is deliberately short. Without this
+// heartbeat the reservation silently disappears mid-request: a second request is
+// admitted against balance the first one still owes, and the first request's
+// release then decrements the second request's ledger - the wrong direction to
+// fail for money.
+//
+// The stop function is synchronous: it returns only after the heartbeat goroutine
+// has exited, so callers can order it strictly before the release. Releasing first
+// would let a late heartbeat re-arm the two keys after they were deleted, and a
+// later reservation by the same user would then expire under that request.
+//
+// A missing key (already expired, or a previous release) is left missing: the
+// script only refreshes keys that exist, so a reservation that is gone stays gone
+// instead of being revived at an amount no release matches.
+func (c *Client) KeepInflightQuotaAlive(userID int64) (stop func()) {
+	if c == nil || !c.IsActive() || userID <= 0 {
+		return func() {}
+	}
+	rdb := c.rdb
+	amountKey, countKey := inflightQuotaAmountKeys(userID)
+	ttlMs := inflightQuotaTTLMillis()
+
+	stopCh := make(chan struct{})
+	done := make(chan struct{})
+	var warned bool
+	go func() {
+		defer close(done)
+		keepAliveLoop(inflightQuotaHeartbeatInterval(), func(ctx context.Context) error {
+			err := quotaAmountKeepAliveLua.Run(ctx, rdb, []string{amountKey, countKey}, ttlMs).Err()
+			if err != nil && !warned {
+				// Log once, not every tick: a Redis outage would otherwise emit a
+				// warning per in-flight request per heartbeat interval. The
+				// reservation just expires on its TTL in that case, which is the
+				// same safety net a crashed node relies on.
+				warned = true
+				telemetry.ScopedLogger("sync").Warn(
+					"redis in-flight reservation heartbeat failed; the reservation will expire on its TTL",
+					"error", err.Error(), "user_id", userID)
+			}
+			return err
+		}, stopCh)
+	}()
+
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			close(stopCh)
+			<-done
+		})
+	}
+}
+
+// keepAliveLoop calls refresh every interval until stop is closed. It is split out
+// of KeepInflightQuotaAlive so the tick/stop behaviour (including "stop returns
+// only after the last tick has finished") can be tested without a Redis server.
+func keepAliveLoop(interval time.Duration, refresh func(context.Context) error, stop <-chan struct{}) {
+	if interval <= 0 {
+		interval = time.Millisecond
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+			ctx, cancel := context.WithTimeout(context.Background(), quotaHeartbeatTimeout)
+			_ = refresh(ctx)
+			cancel()
+		}
+	}
 }

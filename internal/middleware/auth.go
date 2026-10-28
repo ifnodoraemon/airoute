@@ -563,11 +563,20 @@ func AuthMiddleware() gin.HandlerFunc {
 			c.Set(ContextKeyQuotaBackend, backend)
 			c.Set(ContextKeyQuotaBalance, userBalance)
 			c.Set(ContextKeyQuotaReserved, reserve)
+			// A Redis reservation expires on a short TTL, so a request that runs
+			// longer than that TTL has to keep refreshing it (see
+			// StartQuotaHeartbeat); the local tracker does not need it.
+			stopHeartbeat := StartQuotaHeartbeat(userID, backend)
 			// Release after the request is settled: the billing layer reports the
 			// real cost through SetSettledCost, and a dispatch-time top-up may have
 			// raised the reservation. Releasing less than was booked would leak the
 			// difference against the wallet permanently.
+			//
+			// Stop the heartbeat first and synchronously: a refresh racing with the
+			// release would re-create the TTL on keys that are about to be deleted,
+			// or extend a later request's reservation.
 			defer func() {
+				stopHeartbeat()
 				ReleaseUserQuotaAmount(userID, backend, settleReleaseAmount(c, reservedQuotaCNY(c)))
 			}()
 		}

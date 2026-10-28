@@ -126,6 +126,10 @@ const (
 // the wallet cannot cover the outstanding reservations plus this one, or the
 // user already has the maximum number of requests in flight.
 //
+// A Redis-backed reservation additionally has to be kept alive for as long as the
+// request runs (see StartQuotaHeartbeat): the TTL is a crashed-node safety net, not
+// the request budget.
+//
 // Redis is authoritative when active; a Redis error logs a warning and falls
 // back to the local tracker, preserving the gateway's fail-open availability
 // posture while still enforcing the limits within this process.
@@ -158,6 +162,31 @@ func ReserveUserQuotaAmount(userID int64, balance, reserve float64) (bool, Quota
 	}
 	addReservedUnits(units)
 	return true, QuotaBackendLocal
+}
+
+// StartQuotaHeartbeat keeps a reservation taken by ReserveUserQuotaAmount alive for
+// the lifetime of the request; call the returned stop function before releasing.
+//
+// Only the Redis backend needs it. The local tracker holds reservations in a map
+// that does not expire, while the Redis keys expire after a short TTL so that a
+// crashed node cannot block a wallet forever. A live request therefore has to
+// refresh them, because a request may run far longer than that TTL (unary calls are
+// bounded by server.write_timeout_sec, 600s in the shipped config; streaming
+// responses clear the write deadline entirely).
+//
+// The stop function is synchronous and idempotent and MUST run before
+// ReleaseUserQuotaAmount: a heartbeat that fires after the release would re-arm the
+// keys that were just deleted, and the next reservation by the same user could then
+// expire under its own request.
+func StartQuotaHeartbeat(userID int64, backend QuotaBackend) func() {
+	if userID <= 0 || backend != QuotaBackendRedis {
+		return func() {}
+	}
+	client := distributed.GetClient()
+	if client == nil || !client.IsActive() {
+		return func() {}
+	}
+	return client.KeepInflightQuotaAlive(userID)
 }
 
 // ReleaseUserQuotaAmount returns the pre-authorisation taken by
