@@ -99,6 +99,35 @@ type Metrics struct {
 	// row.
 	BillingLedgerUnlinkedUnits atomic.Int64
 
+	// Settlement batching (group commit). Charges are merged into one database
+	// transaction; these counters make the batching observable and let an
+	// operator tell "the writer is saturated" from "requests are waiting".
+	SettlementBatches      atomic.Uint64 // flush transactions executed
+	SettlementBatchRecords atomic.Uint64 // charges applied inside those flushes
+	SettlementQueueDepth   atomic.Int64  // charges waiting for a flush slot
+	// SettlementWaitTimeouts counts charges whose request-side wait expired
+	// before the flush committed. They are not lost: the record still travels
+	// through the audit pipeline and is settled there, but a sustained rate
+	// means the writer cannot keep up with the offered load.
+	SettlementWaitTimeouts atomic.Uint64
+	// SettlementLockTimeouts counts settlement attempts that gave up on a row
+	// lock deadline. Non-zero means a hot account is serialising charges.
+	SettlementLockTimeouts atomic.Uint64
+	// BillingReservedUnits is the amount currently pre-authorised against
+	// wallets (1e-9 units). It is the exposure the admission gate refuses to
+	// exceed; a value that tracks close to the sum of balances means the
+	// reservation is doing the work the balance check alone used to skip.
+	BillingReservedUnits atomic.Int64
+	// BillingWalletTotalUnits is the sum of every wallet's authoritative balance
+	// (1e-9 units), refreshed by the reconciliation worker. It gives the
+	// reserved-units gauge a denominator: pre-authorisation is only meaningful
+	// relative to the money actually held.
+	BillingWalletTotalUnits atomic.Int64
+	// BillingWaivedUnits accumulates money delivered but not collected because a
+	// charge hit the overdraft floor (1e-9 units). The wallet is clamped, so this
+	// is the only place the shortfall is visible at all.
+	BillingWaivedUnits atomic.Int64
+
 	// Latency & TTFT tracking
 	mu             sync.RWMutex
 	ttftSumMs      float64
@@ -317,6 +346,20 @@ func (m *Metrics) EstimateBiasByModel() map[string]int64 {
 	out := make(map[string]int64, len(m.estimateBiasByModel))
 	for model, sample := range m.estimateBiasByModel {
 		out[model] = sample.ppm
+	}
+	return out
+}
+
+// EstimateSamplesByModel returns how many upstream usage reports back each
+// model's learned ratio. The learned ratio is only applied after a minimum number
+// of samples, so the count is what separates "calibration is in effect" from "not
+// enough data yet" - the bias gauge alone cannot express that difference.
+func (m *Metrics) EstimateSamplesByModel() map[string]uint64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make(map[string]uint64, len(m.estimateBiasByModel))
+	for model, sample := range m.estimateBiasByModel {
+		out[model] = sample.samples
 	}
 	return out
 }

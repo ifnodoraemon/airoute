@@ -105,8 +105,12 @@ func (r *Repository) SetModelFallback(model, fallbackModel string, enabled bool)
 }
 
 // ListModelPrices returns all configured model pricing rates.
+//
+// It reads through Reader(): the billing engine reloads this list on cache misses,
+// and on SQLite it used to queue behind the single settlement writer (one slow
+// flush delayed every price lookup on the request path).
 func (r *Repository) ListModelPrices() ([]*ModelPriceRecord, error) {
-	rows, err := r.db.Query(`SELECT id, model, COALESCE(group_name, 'default'), prompt_price, completion_price, cache_read_price, fixed_price, currency, COALESCE(off_peak_enabled, 1), COALESCE(off_peak_start, '00:00'), COALESCE(off_peak_end, '08:30'), COALESCE(off_peak_discount, 0.5), COALESCE(off_peak_mode, 'custom'), COALESCE(off_peak_slots, ''), COALESCE(weekend_all_day, 1), created_at, updated_at FROM model_prices ORDER BY id ASC`)
+	rows, err := r.db.Reader().Query(r.db.Rebind(`SELECT id, model, COALESCE(group_name, 'default'), prompt_price, completion_price, cache_read_price, fixed_price, currency, COALESCE(off_peak_enabled, 1), COALESCE(off_peak_start, '00:00'), COALESCE(off_peak_end, '08:30'), COALESCE(off_peak_discount, 0.5), COALESCE(off_peak_mode, 'custom'), COALESCE(off_peak_slots, ''), COALESCE(weekend_all_day, 1), created_at, updated_at FROM model_prices ORDER BY id ASC`))
 	if err != nil {
 		return nil, err
 	}

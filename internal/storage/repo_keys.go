@@ -378,8 +378,13 @@ func (r *Repository) GetAPIKey(id int64) (*APIKeyRecord, error) {
 // GetAPIKeyBySecret resolves a presented bearer credential.
 //
 // The credential is hashed and matched against the stored digest, so the database
-// never sees - and never stores - the cleartext value. This is the lookup the
-// request-path authentication must use; GetAPIKeyByKey expects an already hashed
+// never sees - and never stores - the cleartext value. It is a convenience for
+// callers that hold the credential and want the revoked-key policy applied.
+//
+// The request-path authentication does not use it today: the middleware hashes the
+// presented credential itself and calls GetAPIKeyByKeyContext, because it must see
+// a deleted row in order to reject it explicitly (GetAPIKeyBySecret maps a revoked
+// key to sql.ErrNoRows). GetAPIKeyByKey likewise expects an already hashed
 // identifier and is for internal/administrative use.
 func (r *Repository) GetAPIKeyBySecret(ctx context.Context, secret string) (*APIKeyRecord, error) {
 	if secret == "" {
@@ -419,7 +424,10 @@ func (r *Repository) GetAPIKeyByKeyContext(ctx context.Context, key string) (*AP
 	if r == nil || r.db == nil {
 		return nil, sql.ErrNoRows
 	}
-	row := r.db.QueryRowContext(ctx, `SELECT k.id, k.public_id, k.key, k.tenant_id, COALESCE(k.allowed_models, ''), k.rpm, k.tpm, k.budget, k.used_tokens, COALESCE(k.used_cost, 0.0), COALESCE(k.budget_units, 0), COALESCE(k.used_cost_units, 0), COALESCE(k.group_name, 'default'), COALESCE(k.user_id, 0), k.status, COALESCE(k.format_validation, ''), k.created_at, k.updated_at, COALESCE(u.status, ''), COALESCE(u.role, ''), COALESCE(u.balance, 0.0) FROM api_keys k LEFT JOIN users u ON (k.user_id > 0 AND u.id = k.user_id) OR (COALESCE(k.user_id, 0) = 0 AND k.tenant_id != '' AND u.username = k.tenant_id) WHERE k.key = ?`, key)
+	// Reader() keeps this per-request auth lookup off the single SQLite write
+	// connection, where it used to queue behind settlement flushes. Rebind is still
+	// required: the read pool is a raw *sql.DB, so PostgreSQL needs $1.
+	row := r.db.Reader().QueryRowContext(ctx, r.db.Rebind(`SELECT k.id, k.public_id, k.key, k.tenant_id, COALESCE(k.allowed_models, ''), k.rpm, k.tpm, k.budget, k.used_tokens, COALESCE(k.used_cost, 0.0), COALESCE(k.budget_units, 0), COALESCE(k.used_cost_units, 0), COALESCE(k.group_name, 'default'), COALESCE(k.user_id, 0), k.status, COALESCE(k.format_validation, ''), k.created_at, k.updated_at, COALESCE(u.status, ''), COALESCE(u.role, ''), COALESCE(u.balance, 0.0) FROM api_keys k LEFT JOIN users u ON (k.user_id > 0 AND u.id = k.user_id) OR (COALESCE(k.user_id, 0) = 0 AND k.tenant_id != '' AND u.username = k.tenant_id) WHERE k.key = ?`), key)
 	var rec APIKeyRecord
 	var allowedJSON string
 	if err := row.Scan(&rec.ID, &rec.PublicID, &rec.Key, &rec.TenantID, &allowedJSON, &rec.RPM, &rec.TPM, &rec.Budget, &rec.UsedTokens, &rec.UsedCost, &rec.BudgetUnits, &rec.UsedCostUnits, &rec.GroupName, &rec.UserID, &rec.Status, &rec.FormatValidation, &rec.CreatedAt, &rec.UpdatedAt, &rec.UserStatus, &rec.UserRole, &rec.UserBalance); err != nil {

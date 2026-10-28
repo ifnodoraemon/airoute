@@ -50,7 +50,7 @@ const walletUnitsExpr = `CASE WHEN COALESCE(balance_units, 0) - ? < ? THEN ? ELS
 // too. An overdraft that reaches the floor is counted and logged (rate limited)
 // instead of passing silently — the operator needs to see accounts that are
 // being served on credit.
-func (r *Repository) deductWallet(tx *Tx, where string, whereArgs []any, cost float64) (bool, int64, error) {
+func (r *Repository) deductWallet(tx *Tx, where string, whereArgs []any, cost float64, effects *settlementEffects) (bool, int64, error) {
 	if tx == nil || cost <= 0 {
 		return false, 0, nil
 	}
@@ -71,10 +71,6 @@ func (r *Repository) deductWallet(tx *Tx, where string, whereArgs []any, cost fl
 	}
 	args = append(args, whereArgs...)
 
-	if err := r.lockWalletUserRows(tx, where, whereArgs); err != nil {
-		return false, 0, err
-	}
-
 	rows, err := tx.Query(query, args...)
 	if err != nil {
 		return false, 0, err
@@ -93,13 +89,74 @@ func (r *Repository) deductWallet(tx *Tx, where string, whereArgs []any, cost fl
 		return false, 0, err
 	}
 
-	if applied && balanceUnits < 0 {
-		telemetry.GlobalMetrics.BillingOverdrafts.Add(1)
+	if applied {
+		recordWalletDeductionEffect(cost, units, floor, balanceUnits, effects)
+	}
+	return applied, balanceUnits, nil
+}
+
+// settlementEffects accumulates the wallet-side counters produced by one
+// settlement attempt. flush is called only after the transaction commits: a
+// retried attempt (PostgreSQL deadlock / lock timeout) rolls back, and counting
+// its metrics directly would double-report the same overdraft.
+type settlementEffects struct {
+	waivedUnits int64
+	overdrafts  int64
+}
+
+// flush publishes the counters once the money movement is durable.
+func (e *settlementEffects) flush() {
+	if e == nil {
+		return
+	}
+	if e.waivedUnits > 0 {
+		telemetry.GlobalMetrics.BillingWaivedUnits.Add(e.waivedUnits)
+	}
+	if e.overdrafts > 0 {
+		telemetry.GlobalMetrics.BillingOverdrafts.Add(uint64(e.overdrafts))
+	}
+}
+
+// recordWalletDeductionEffect accounts for one applied, clamped deduction: the
+// overdraft counter, the waived-units counter and the rate-limited warnings.
+//
+// It is shared by the portable per-wallet UPDATE (SQLite, tenant fallback) and the
+// PostgreSQL merged key+wallet statement, so the two paths report the same numbers
+// for the same state.
+//
+// Waived units: the clamped update landed exactly on the overdraft floor, so the
+// wallet could not absorb this charge. Counting `units` costs no extra round trip
+// (the new balance is already in the RETURNING clause) and covers both cases the
+// floor exists for: a wallet already at the bottom (the whole charge is forgiven)
+// and a charge clamped down to the floor.
+//
+// The one approximation is the boundary case where a deduction from above the
+// floor happens to land exactly on it: the portion between the old balance and the
+// floor was actually collected, yet the whole charge is counted as waived. That
+// over-counts by at most one overdraft allowance (default 1 CNY) per such charge
+// and is rare; the metric is an operator signal, not a ledger entry, so the
+// authoritative balances are unaffected.
+func recordWalletDeductionEffect(cost float64, units, floor, balanceUnits int64, effects *settlementEffects) {
+	waivedUnits := int64(0)
+	if units > 0 && balanceUnits == floor {
+		waivedUnits = units
+	}
+	if effects != nil {
+		// Accumulate instead of incrementing directly: the caller flushes only
+		// after COMMIT, so a transaction that loses a lock race and is retried
+		// does not count the same overdraft/waiver twice.
+		effects.waivedUnits += waivedUnits
+		if balanceUnits < 0 {
+			effects.overdrafts++
+		}
+	}
+	if balanceUnits < 0 {
 		logger := telemetry.ScopedLogger("billing")
 		if balanceUnits <= floor {
 			telemetry.WarnLogger(logger, "wallet-overdraft-clamped", time.Minute,
 				"wallet charge clamped at the overdraft floor",
 				"cost_cny", cost,
+				"waived_units", waivedUnits,
 				"balance_cny", FromUnits(balanceUnits),
 				"floor_cny", FromUnits(floor),
 			)
@@ -107,36 +164,20 @@ func (r *Repository) deductWallet(tx *Tx, where string, whereArgs []any, cost fl
 			telemetry.WarnLogger(logger, "wallet-overdraft", time.Minute,
 				"wallet balance went negative after a charge",
 				"cost_cny", cost,
+				"waived_units", waivedUnits,
 				"balance_cny", FromUnits(balanceUnits),
 			)
 		}
+	} else if waivedUnits > 0 {
+		// floor == 0 (overdraft disabled) and the wallet emptied exactly: the balance
+		// never goes negative, so the overdraft warning above cannot fire, but the
+		// whole charge was still delivered for free.
+		telemetry.WarnLogger(telemetry.ScopedLogger("billing"), "wallet-charge-fully-waived", time.Minute,
+			"wallet emptied at the floor: the entire charge was delivered without payment",
+			"cost_cny", cost,
+			"waived_units", waivedUnits,
+			"balance_cny", FromUnits(balanceUnits),
+			"floor_cny", FromUnits(floor),
+		)
 	}
-	return applied, balanceUnits, nil
-}
-
-// lockWalletUserRows serializes balance changes for the matched users before the
-// caller reads the old balance. PostgreSQL uses FOR UPDATE; SQLite has no row
-// locks, so a no-op update acquires the database write lock instead. This keeps
-// the ledger delta equal to the balance movement even when a settlement and an
-// admin adjustment race on the same account.
-func (r *Repository) lockWalletUserRows(tx *Tx, where string, whereArgs []any) error {
-	if tx == nil {
-		return nil
-	}
-	if r.db.Dialect() == "postgres" {
-		rows, err := tx.Query(`SELECT id FROM users WHERE `+where+` FOR UPDATE`, whereArgs...)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var id int64
-			if err := rows.Scan(&id); err != nil {
-				return err
-			}
-		}
-		return rows.Err()
-	}
-	_, err := tx.Exec(`UPDATE users SET updated_at = updated_at WHERE `+where, whereArgs...)
-	return err
 }

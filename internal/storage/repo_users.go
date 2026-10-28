@@ -71,11 +71,16 @@ func (r *Repository) GetUserByID(id int64) (*UserRecord, error) {
 }
 
 // GetUserByIDContext is GetUserByID bound to a caller context/deadline.
+//
+// It reads through Reader(): this is the per-request balance/auth source on the
+// data plane, and on SQLite it must not queue behind the single settlement writer.
+// The read pool only ever sees committed transactions, so it cannot observe a
+// half-applied wallet movement.
 func (r *Repository) GetUserByIDContext(ctx context.Context, id int64) (*UserRecord, error) {
 	if r == nil || r.db == nil {
 		return nil, sql.ErrNoRows
 	}
-	row := r.db.QueryRowContext(ctx, `SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE id = ?`, id)
+	row := r.db.Reader().QueryRowContext(ctx, r.db.Rebind(`SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE id = ?`), id)
 	var u UserRecord
 	if err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.Balance, &u.BalanceUnits, &u.GroupName, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		return nil, err
@@ -291,14 +296,21 @@ func (r *Repository) SetUserBalance(username string, balance float64) error {
 
 	var userID int64
 	var status string
-	if err := tx.QueryRow(`SELECT id, COALESCE(status, 'active') FROM users WHERE username = ?`, username).Scan(&userID, &status); err != nil {
+	// The old code ran a separate SELECT ... FOR UPDATE (lockWalletUserRows) before
+	// this absolute set. Folding the row lock into the lookup that was already being
+	// issued keeps the same ordering guarantee in one round trip instead of two: a
+	// settlement that already holds the wallet row must commit before this absolute
+	// value overwrites it, and a concurrent settle waits until the admin write
+	// commits. SQLite has no FOR UPDATE; its single writer serialises the UPDATE.
+	lookup := `SELECT id, COALESCE(status, 'active') FROM users WHERE username = ?`
+	if r.db.Dialect() == "postgres" {
+		lookup += ` FOR UPDATE`
+	}
+	if err := tx.QueryRow(lookup, username).Scan(&userID, &status); err != nil {
 		return err
 	}
 	if status == "deleted" {
 		return sql.ErrNoRows
-	}
-	if err := r.lockWalletUserRows(tx, `id = ?`, []any{userID}); err != nil {
-		return err
 	}
 	if err := requireUserUpdated(tx.Exec(`UPDATE users SET balance = ?, balance_units = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status <> 'deleted'`, balance, newUnits, userID)); err != nil {
 		return err
