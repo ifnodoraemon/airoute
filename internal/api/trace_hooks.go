@@ -2,7 +2,9 @@ package api
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -82,6 +84,25 @@ func CaptureRequestSnapshot(c *gin.Context) {
 	if err != nil && len(head) == 0 {
 		return
 	}
+}
+
+// RecordSuccessTrace archives a successful unary exchange when the capture policy
+// samples successful requests (mode "all"). The response is marshalled here rather
+// than at the call site, and only after Enabled(200) said yes, so the default
+// "errors" mode adds nothing to the request path. Snippets are redacted and
+// clamped by the storage layer before they are persisted.
+func RecordSuccessTrace(c *gin.Context, modelName, channel string, dur time.Duration, resp any) {
+	tc := storage.GlobalTraceCapture
+	if tc == nil || c == nil || !tc.Enabled(http.StatusOK) {
+		return
+	}
+	snippet := ""
+	if resp != nil {
+		if b, err := json.Marshal(resp); err == nil {
+			snippet = string(b)
+		}
+	}
+	RecordTrace(c, modelName, channel, http.StatusOK, "", snippet, dur)
 }
 
 // RecordTrace archives a redacted snapshot for the given response status. The

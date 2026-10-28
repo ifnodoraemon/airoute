@@ -108,6 +108,14 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 				return ""
 			}(),
 		})
+		if statusCode == http.StatusOK {
+			// Successful streams were never archived: only the 499/error paths
+			// called RecordTrace, so GATEWAY_TRACE_CAPTURE=all captured nothing.
+			// The response body is not retained for a stream; the redacted request
+			// snapshot plus status and channel are what an operator needs to
+			// correlate a trace id with the provider call.
+			RecordSuccessTrace(c, req.Model, upstreamChannel, dur, nil)
+		}
 	}
 	defer recordOnce.Do(recordStreamEnd)
 

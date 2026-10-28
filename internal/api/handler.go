@@ -163,5 +163,6 @@ func (h *Handler) handleChatUnary(c *gin.Context, reqCtx context.Context, req *m
 		StatusCode:       http.StatusOK,
 		UsageSource:      usageSource,
 	})
+	RecordSuccessTrace(c, req.Model, resp.Channel, dur, resp)
 	c.JSON(http.StatusOK, resp)
 }
