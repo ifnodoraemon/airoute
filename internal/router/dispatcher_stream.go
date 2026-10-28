@@ -15,6 +15,30 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
+// failStreamAttempt classifies one failed stream attempt. It updates the circuit
+// breaker and the fallback counter, and returns a non-nil error when the dispatch
+// must stop instead of fanning out to the next channel: a client cancellation, or
+// a client payload error that would fail identically everywhere. A node-specific
+// 404 falls through to the next candidate channel, like any other channel failure.
+func (d *Dispatcher) failStreamAttempt(ctx context.Context, req *model.ChatCompletionRequest, ch *model.ChannelConfig, attempted []string, err error, logMsg string) error {
+	if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
+		d.circuitBreaker.AbortCanary(ch.Name)
+		return newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
+	}
+	if isFatalClientPayloadError(err) {
+		d.circuitBreaker.AbortCanary(ch.Name)
+		return err
+	}
+	if provider.IsChannelFailure(err) {
+		d.circuitBreaker.RecordFailure(ch.Name)
+	} else {
+		d.circuitBreaker.AbortCanary(ch.Name)
+	}
+	telemetry.GlobalMetrics.RecordFallback()
+	routerLog(ctx).Warn(logMsg, "channel", ch.Name, "error", err.Error())
+	return nil
+}
+
 // DispatchStream executes streaming chat with Safe Fallback Window before the first token.
 func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompletionRequest) (<-chan *model.StreamEvent, error) {
 	proto := "chat"
@@ -76,29 +100,11 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		streamChan, err := prov.ChatCompleteStream(attemptCtx, req, ch)
 		if err != nil {
 			attemptCancel()
-			if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
-				d.circuitBreaker.AbortCanary(ch.Name)
-				return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
-			}
-			// Client syntax/schema errors (400, 422, 413) fail identically on every channel:
-			// do not trip the breaker and do not fan out.
-			// Node-specific 404 (model missing on this instance) falls through to next candidate channel.
-			if isFatalClientPayloadError(err) {
-				d.circuitBreaker.AbortCanary(ch.Name)
-				return nil, err
-			}
-			if provider.IsChannelFailure(err) {
-				d.circuitBreaker.RecordFailure(ch.Name)
-			} else {
-				d.circuitBreaker.AbortCanary(ch.Name)
+			if stopErr := d.failStreamAttempt(ctx, req, ch, attempted, err, "stream connection failed, trying next channel"); stopErr != nil {
+				return nil, stopErr
 			}
 			lastErr = err
 			attempted = append(attempted, ch.Name)
-			telemetry.GlobalMetrics.RecordFallback()
-			routerLog(ctx).Warn("stream connection failed, trying next channel",
-				"channel", ch.Name,
-				"error", err.Error(),
-			)
 			continue
 		}
 
@@ -153,23 +159,11 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		timer.Stop()
 		if firstErr != nil {
 			attemptCancel()
-			if ctx.Err() == context.Canceled || errors.Is(firstErr, context.Canceled) {
-				d.circuitBreaker.AbortCanary(ch.Name)
-				return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
-			}
-			if isFatalClientPayloadError(firstErr) {
-				d.circuitBreaker.AbortCanary(ch.Name)
-				return nil, firstErr
-			}
-			if provider.IsChannelFailure(firstErr) {
-				d.circuitBreaker.RecordFailure(ch.Name)
-			} else {
-				d.circuitBreaker.AbortCanary(ch.Name)
+			if stopErr := d.failStreamAttempt(ctx, req, ch, attempted, firstErr, "channel failed before first valid token, falling back"); stopErr != nil {
+				return nil, stopErr
 			}
 			lastErr = firstErr
 			attempted = append(attempted, ch.Name)
-			telemetry.GlobalMetrics.RecordFallback()
-			routerLog(ctx).Warn("channel failed before first valid token, falling back", "channel", ch.Name, "error", firstErr.Error())
 			continue
 		}
 
