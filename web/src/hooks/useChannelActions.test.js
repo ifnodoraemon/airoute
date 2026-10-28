@@ -162,17 +162,47 @@ describe('useChannelActions', () => {
   });
 
   it('never loads the upstream credential into the edit form', () => {
-    // The list endpoint returns the stored key in cleartext. Putting it back into the
-    // form meant the secret was rendered into the DOM and re-submitted on every save.
+    // The list endpoint no longer returns the upstream credential at all: it sends
+    // `api_key_configured` plus a mask. The form therefore reads the flag and keeps
+    // its api_key field empty, so the secret never reaches the DOM.
     const { result } = setup();
     act(() => {
       result.current.handleEditChannel({
-        id: 7, name: 'x', base_url: 'https://a.example', api_key: 'sk-upstream-secret', models: [],
+        id: 7, name: 'x', base_url: 'https://a.example',
+        api_key_configured: true, api_key_masked: 'sk-upst***cret', models: [],
       });
     });
 
     expect(result.current.newChannel.api_key).toBe('');
     expect(result.current.newChannel.api_key_configured).toBe(true);
+  });
+
+  it('treats a channel with no configured credential as blank', () => {
+    const { result } = setup();
+    act(() => {
+      result.current.handleEditChannel({
+        id: 8, name: 'local', base_url: 'https://local.example', api_key_configured: false, models: [],
+      });
+    });
+
+    expect(result.current.newChannel.api_key).toBe('');
+    expect(result.current.newChannel.api_key_configured).toBe(false);
+  });
+
+  it('keeps stored routing numbers instead of substituting defaults', () => {
+    // `|| 1` / `|| 10` used to turn a stored 0 into a default, so the edit form
+    // disagreed with what the gateway had persisted.
+    const { result } = setup();
+    act(() => {
+      result.current.handleEditChannel({
+        id: 9, name: 'x', base_url: 'https://a.example',
+        priority: 0, weight: 0, timeout_seconds: 0, models: [],
+      });
+    });
+
+    expect(result.current.newChannel.priority).toBe(0);
+    expect(result.current.newChannel.weight).toBe(0);
+    expect(result.current.newChannel.timeout_seconds).toBe(0);
   });
 
   it('omits the key when an edit leaves the credential untouched', async () => {

@@ -264,16 +264,17 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
       name: ch.name || '',
       type: ch.type || 'openai',
       base_url: ch.base_url || '',
-      // The list endpoint returns the upstream credential in cleartext. Keep it out
-      // of the form (and therefore out of the DOM and the console devtools tree):
-      // an unchanged field must not round-trip the secret. `api_key_configured`
-      // tells the form to say "already set — leave blank to keep it"; the update
-      // handler preserves the stored key when the request omits it.
+      // The list endpoint no longer returns the upstream credential at all: the
+      // response carries only `api_key_configured` and a display mask. Keep
+      // `api_key` empty so an unchanged field cannot round-trip a secret; the
+      // update handler preserves the stored key when the request omits it.
       api_key: '',
-      api_key_configured: Boolean(ch.api_key),
-      priority: ch.priority || 1,
-      weight: ch.weight || 10,
-      timeout_seconds: ch.timeout_seconds || 60,
+      api_key_configured: Boolean(ch.api_key_configured),
+      // `??` rather than `||`: a stored 0 is a value, and turning it into 1/10
+      // here would silently disagree with what the gateway persisted.
+      priority: ch.priority ?? 1,
+      weight: ch.weight ?? 10,
+      timeout_seconds: ch.timeout_seconds ?? 60,
       models_str: (ch.models || []).join(', '),
       mapping_rules: Object.entries(ch.model_mapping || {}).map(([from, to]) => ({ from, to })),
       protocols: ch.protocols || emptyChannel().protocols,

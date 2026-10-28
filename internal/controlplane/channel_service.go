@@ -50,6 +50,36 @@ type ValidationError struct{ Message string }
 
 func (e *ValidationError) Error() string { return e.Message }
 
+// channelPatch is a partial channel update.
+//
+// The numeric fields are pointers so the merge can tell "the client omitted it"
+// from "the client sent 0". The distinction is load-bearing for priority and
+// weight: they are ordered/weighted router inputs where 0 is a value an operator
+// may want, and the old merge (`if patch.Priority != 0`) silently treated it as
+// "leave unchanged", so a request to set 0 returned 200 while changing nothing.
+//
+// Text fields stay plain strings where empty means "not provided". That is not an
+// oversight: name, type and base_url are required, so an empty value can never be
+// a meaningful update, and api_key empty is the documented "keep the stored
+// credential". The zero-value ambiguity only exists for the numbers.
+//
+// It is a controlplane type rather than a storage one because
+// storage.ChannelRecord is the full row: its zero values are indistinguishable
+// from an omitted field.
+type channelPatch struct {
+	Name           string
+	Type           model.ProviderType
+	BaseURL        string
+	APIKey         string
+	Models         []string
+	ModelMapping   map[string]string
+	Protocols      []string
+	Priority       *int
+	Weight         *int
+	TimeoutSeconds *int
+	Status         string
+}
+
 // ChannelService owns the channel business rules: which fields a channel cannot
 // be created without, how a partial update merges onto the stored record, which
 // status values are legal, and when the data plane has to be reloaded.
@@ -104,7 +134,7 @@ func (s *ChannelService) Create(ctx context.Context, rec *storage.ChannelRecord)
 //
 // Fields the caller omitted keep their stored values, so a partial update cannot
 // wipe a credential or a routing weight.
-func (s *ChannelService) Update(ctx context.Context, id int64, patch *storage.ChannelRecord) (*storage.ChannelRecord, error) {
+func (s *ChannelService) Update(ctx context.Context, id int64, patch *channelPatch) (*storage.ChannelRecord, error) {
 	updated, err := s.store.PatchChannel(id, func(current *storage.ChannelRecord) error {
 		mergeChannelUpdate(current, patch)
 		timeout, err := normalizeChannelTimeout(current.TimeoutSeconds)
@@ -218,12 +248,17 @@ func normalizeChannelStatus(status string) string {
 // mergeChannelUpdate copies only the fields the client actually provided onto the
 // existing channel record.
 //
-// The zero-value tests are load-bearing: an omitted priority, weight or timeout
-// keeps its stored value, so a partial update cannot silently reset routing
-// weights to 0. The same convention means those three fields cannot be set to 0
-// through this endpoint — 0 is read as "not provided" — which is consistent with
-// the storage layer, where 0 also means "use the default".
-func mergeChannelUpdate(existing, patch *storage.ChannelRecord) {
+// For the numeric fields "provided" is decided by the pointer being non-nil,
+// never by the value being non-zero: an explicit priority=0 or weight=0 therefore
+// reaches storage instead of being silently discarded. An omitted field keeps its
+// stored value, so a partial update cannot reset routing weights.
+//
+// A provided zero is still subject to the same "0 means default" rule that
+// creation uses (see storage.CreateChannel / updateChannelTx): priority 0 becomes
+// 1 and weight 0 becomes 10 there. The point of this function is that the API no
+// longer pretends a field was applied when it was dropped, not that storage's
+// default policy changes.
+func mergeChannelUpdate(existing *storage.ChannelRecord, patch *channelPatch) {
 	if patch == nil {
 		return
 	}
@@ -248,14 +283,14 @@ func mergeChannelUpdate(existing, patch *storage.ChannelRecord) {
 	if patch.Protocols != nil {
 		existing.Protocols = patch.Protocols
 	}
-	if patch.Priority != 0 {
-		existing.Priority = patch.Priority
+	if patch.Priority != nil {
+		existing.Priority = *patch.Priority
 	}
-	if patch.Weight != 0 {
-		existing.Weight = patch.Weight
+	if patch.Weight != nil {
+		existing.Weight = *patch.Weight
 	}
-	if patch.TimeoutSeconds != 0 {
-		existing.TimeoutSeconds = patch.TimeoutSeconds
+	if patch.TimeoutSeconds != nil {
+		existing.TimeoutSeconds = *patch.TimeoutSeconds
 	}
 	if patch.Status != "" {
 		existing.Status = patch.Status

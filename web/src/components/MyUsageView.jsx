@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, Coins, Key, RefreshCw, Wallet, Zap } from 'lucide-react';
+import { keyDisplayRef } from '../lib/apiKey';
 
 function formatNumber(value) {
   const number = Number(value || 0);
@@ -134,7 +135,7 @@ export default function MyUsageView({ adminFetch, showToast, lang = 'zh' }) {
                 const percent = budget > 0 ? Math.min(100, (used / budget) * 100) : 0;
                 return (
                   <tr key={key.id} className="border-b border-[#F0F1F2] dark:border-[#22252B]">
-                    <td className="py-2 pr-3 font-mono text-[11px] text-[#202124] dark:text-[#F1F2F4]">{key.key_id || `#${key.id}`}</td>
+                    <td className="py-2 pr-3 font-mono text-[11px] text-[#202124] dark:text-[#F1F2F4]">{keyDisplayRef(key)}</td>
                     <td className="py-2 pr-3">
                       <span className={`px-1.5 py-0.5 rounded text-[10px] ${key.status === 'active' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'}`}>{key.status}</span>
                     </td>

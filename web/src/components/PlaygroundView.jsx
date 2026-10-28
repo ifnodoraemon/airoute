@@ -31,7 +31,8 @@ import {
   UNAUTHENTICATED_KEY,
   credentialProblem,
   credentialProblemHint,
-  isUsableAPIKey
+  isUsableAPIKey,
+  keyDisplayRef
 } from '../lib/apiKey';
 
 export default function PlaygroundView({
@@ -1014,7 +1015,7 @@ Execute the following mission with precision, maintainability, and zero speculat
             >
               {contextKeys.map((k) => (
                 <option key={String(k.id)} value={String(k.id)}>
-                  {k.tenant_id ? `${k.tenant_id} - ` : ''}{k.key_id || `#${k.id}`}
+                  {k.tenant_id ? `${k.tenant_id} - ` : ''}{keyDisplayRef(k)}
                 </option>
               ))}
               <option value={UNAUTHENTICATED_KEY}>{isZh ? '免密直通 (不带 API Key)' : 'Public / Unauthenticated'}</option>

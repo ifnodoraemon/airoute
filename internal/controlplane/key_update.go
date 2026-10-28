@@ -32,6 +32,9 @@ const (
 	KeyUpdateDenied KeyUpdateDenial = iota
 	// KeyUpdateGroupForbidden means the caller asked for a group they do not have.
 	KeyUpdateGroupForbidden
+	// KeyUpdateInvalidValue means a provided value is not one the field accepts.
+	// Handlers map it to 400 rather than the generic 403.
+	KeyUpdateInvalidValue
 )
 
 // KeyUpdateOutcome is the result of applying an update to a key row. The zero
@@ -100,7 +103,13 @@ func ApplyKeyUpdate(access KeyAccess, existing *storage.APIKeyRecord, req Update
 		existing.Status = *req.Status
 	}
 	if req.FormatValidation != nil {
-		existing.FormatValidation = *req.FormatValidation
+		// The field is read at request time (internal/config.ResolveValidationLevel),
+		// so an unknown level is a client error, not a value to store and forget.
+		level, err := normalizeFormatValidation(*req.FormatValidation)
+		if err != nil {
+			return KeyUpdateOutcome{Denial: KeyUpdateInvalidValue, Message: err.Error()}
+		}
+		existing.FormatValidation = level
 	}
 	if req.GroupName != nil {
 		targetGroup := normalizeKeyGroup(*req.GroupName)

@@ -128,3 +128,120 @@ func TestRouteServiceAcceptsPositivePrices(t *testing.T) {
 		t.Errorf("price = %+v", store.lastBundle.Price)
 	}
 }
+
+// --- off-peak slot validation follows the mode ---------------------------
+
+// invalidOffPeakSlots is rejected by the slot validator itself: the discount is
+// outside (0,1) and day 9 is out of range, so both "Discount" and "Days" checks
+// are exercised.
+const invalidOffPeakSlots = `[{"start":"00:00","end":"08:00","discount":2,"days":[9]}]`
+
+// overlappingOffPeakSlots is structurally valid but its two windows collide on the
+// same day, which is the overlap rule the console must not be able to save.
+const overlappingOffPeakSlots = `[{"start":"00:00","end":"08:00","discount":0.5,"days":[1]},{"start":"06:00","end":"10:00","discount":0.5,"days":[1]}]`
+
+func boolPtr(v bool) *bool { return &v }
+
+// TestPricingServiceValidatesOffPeakSlotsOnlyInCustomMode pins C-10 on the pricing
+// screen: the engine evaluates OffPeakSlots only when OffPeakMode is "custom", so
+// validation must follow the same rule instead of rejecting configuration that can
+// never influence a price.
+func TestPricingServiceValidatesOffPeakSlotsOnlyInCustomMode(t *testing.T) {
+	cases := []struct {
+		name    string
+		mode    string
+		slots   string
+		wantErr bool
+	}{
+		{"night mode ignores its slots", "night", invalidOffPeakSlots, false},
+		{"fixed mode ignores its slots", "fixed", invalidOffPeakSlots, false},
+		{"custom mode validates discount and days", "custom", invalidOffPeakSlots, true},
+		{"custom mode rejects overlapping windows", "custom", overlappingOffPeakSlots, true},
+		{"custom mode accepts valid slots", "custom", `[{"start":"00:00","end":"08:00","discount":0.5,"days":[1,2,3]}]`, false},
+		{"the mode check is case-insensitive", "CUSTOM", invalidOffPeakSlots, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &fakePricingStore{}
+			svc := NewPricingService(store, nil, nil, nil)
+
+			err := svc.SaveRate(context.Background(), &storage.ModelPriceRecord{
+				Model:          "gpt-x",
+				PromptPrice:    1,
+				OffPeakEnabled: true,
+				OffPeakMode:    tc.mode,
+				OffPeakSlots:   tc.slots,
+			})
+
+			if tc.wantErr {
+				var verr *ValidationError
+				if !errors.As(err, &verr) {
+					t.Fatalf("err = %v, want *ValidationError", err)
+				}
+				if store.saveCalls != 0 {
+					t.Errorf("invalid slots reached the store (%d saves)", store.saveCalls)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("SaveRate: %v", err)
+			}
+			if store.saveCalls != 1 {
+				t.Errorf("saveCalls = %d, want 1", store.saveCalls)
+			}
+		})
+	}
+}
+
+// TestRouteServiceValidatesOffPeakSlotsOnlyInCustomMode is the same contract on the
+// route editor, which builds its own price row instead of going through SaveRate.
+func TestRouteServiceValidatesOffPeakSlotsOnlyInCustomMode(t *testing.T) {
+	cases := []struct {
+		name    string
+		mode    string
+		slots   string
+		wantErr bool
+	}{
+		{"night mode ignores its slots", "night", invalidOffPeakSlots, false},
+		{"custom mode validates discount and days", "custom", invalidOffPeakSlots, true},
+		{"custom mode rejects overlapping windows", "custom", overlappingOffPeakSlots, true},
+		{"custom mode accepts valid slots", "custom", `[{"start":"00:00","end":"08:00","discount":0.5,"days":[1]}]`, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newFakeRouteStore()
+			sync := &fakeRouteSync{}
+			svc := NewRouteService(store, sync, nil)
+
+			err := svc.UpdateModelRoute(context.Background(), &UpdateModelRouteRequest{
+				Model:          "gpt-x",
+				PromptPrice:    priceFloat(1),
+				OffPeakEnabled: boolPtr(true),
+				OffPeakMode:    tc.mode,
+				OffPeakSlots:   tc.slots,
+			})
+
+			if tc.wantErr {
+				var verr *ValidationError
+				if !errors.As(err, &verr) {
+					t.Fatalf("err = %v, want *ValidationError", err)
+				}
+				if store.applyCalls != 0 {
+					t.Errorf("invalid slots reached the store (%d applies)", store.applyCalls)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("UpdateModelRoute: %v", err)
+			}
+			if store.lastBundle == nil || store.lastBundle.Price == nil {
+				t.Fatal("no price row was built")
+			}
+			if store.lastBundle.Price.OffPeakSlots != tc.slots {
+				t.Errorf("stored slots = %q, want %q", store.lastBundle.Price.OffPeakSlots, tc.slots)
+			}
+		})
+	}
+}

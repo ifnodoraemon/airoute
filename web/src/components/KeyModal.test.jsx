@@ -210,3 +210,33 @@ describe('KeyModal dismissals during an in-flight create', () => {
   });
 });
 
+
+describe('KeyModal format validation', () => {
+  // format_validation is a real key-level setting (internal/config resolves it at
+  // request time). The field used to be accepted but never surfaced, so it is now
+  // an explicit choice for administrators; empty means "follow the gateway".
+  it('offers the level to an administrator with an explicit follow-the-default option', () => {
+    setup({ adminUser: { username: 'root', role: 'admin' }, newKey: draft({ format_validation: '' }) });
+
+    const select = screen.getAllByRole('combobox').find((el) => el.querySelector('option[value="lenient"]'));
+    expect(select).toBeTruthy();
+    expect(select.value).toBe('');
+    expect(screen.getByRole('option', { name: /跟随全局/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /严格拦截/ })).toBeInTheDocument();
+  });
+
+  it('reports the chosen level through setNewKey', () => {
+    const { setNewKey } = setup({ adminUser: { username: 'root', role: 'admin' }, newKey: draft({ format_validation: '' }) });
+    const select = screen.getAllByRole('combobox').find((el) => el.querySelector('option[value="strict"]'));
+
+    fireEvent.change(select, { target: { value: 'strict' } });
+
+    expect(setNewKey.mock.calls.at(-1)[0].format_validation).toBe('strict');
+  });
+
+  it('does not offer a level the self-service endpoint cannot store', () => {
+    setup({ adminUser: { username: 'alice', role: 'user' } });
+
+    expect(screen.queryByRole('option', { name: /严格拦截/ })).not.toBeInTheDocument();
+  });
+});

@@ -1,6 +1,7 @@
 package controlplane
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/json"
@@ -56,7 +57,7 @@ func regressionUsage(t *testing.T, repo *storage.Repository) *storage.APIKeyReco
 	if err := repo.CreateAPIKey(k); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.RecordUsageLog(&storage.UsageLogRecord{APIKey: k.Key, TenantID: u.Username, Model: "regression-chat", Channel: "regression-provider", Cost: 1, TotalTokens: 10, StatusCode: 200}); err != nil {
+	if err := repo.RecordUsageLogContext(context.Background(), &storage.UsageLogRecord{APIKey: k.Key, TenantID: u.Username, Model: "regression-chat", Channel: "regression-provider", Cost: 1, TotalTokens: 10, StatusCode: 200}); err != nil {
 		t.Fatal(err)
 	}
 	return k
@@ -76,7 +77,7 @@ func TestCustomerKeyIDDrilldown(t *testing.T) {
 func TestTraceAndSessionAreDistinctFilters(t *testing.T) {
 	h, r := regressionHandler(t)
 	regressionUsage(t, r)
-	logs, err := r.ListUsageLogs(10, 0)
+	logs, _, err := r.ListUsageLogsWithFilterAndCount(storage.LogFilter{Limit: 10, Offset: 0})
 	if err != nil || len(logs) != 1 {
 		t.Fatal("fixture")
 	}
@@ -245,7 +246,7 @@ func TestCustomerCannotReadAnotherKeyHistory(t *testing.T) {
 	if err := r.CreateAPIKey(key); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.RecordUsageLog(&storage.UsageLogRecord{APIKey: key.Key, Model: "private", StatusCode: 200}); err != nil {
+	if err := r.RecordUsageLogContext(context.Background(), &storage.UsageLogRecord{APIKey: key.Key, Model: "private", StatusCode: 200}); err != nil {
 		t.Fatal(err)
 	}
 	w := regressionCall(h.ListLogs, "GET", fmt.Sprintf("/logs?key_id=%d", key.ID), "")

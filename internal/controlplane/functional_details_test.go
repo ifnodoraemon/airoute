@@ -169,7 +169,7 @@ func TestAuditReviewForeignCurrencyDoesNotDebitCNYAtFaceValue(t *testing.T) {
 		return
 	} // A single-currency wallet may correctly reject USD.
 	engine := billing.NewEngine(repo)
-	cost, _, _, _, _, snapshot := engine.CalculateCostForUnits("currency-model", "default", 1_000_000, 0, 0, 1, time.Now())
+	cost, _, _, _, _, snapshot := engine.CalculateCostForUnitsWithCacheCreation("currency-model", "default", 1_000_000, 0, 0, 0, 1, time.Now())
 	rec := &storage.UsageLogRecord{APIKey: key.Key, TenantID: u.Username, Model: "currency-model", PromptTokens: 1_000_000, TotalTokens: 1_000_000, Cost: cost, PricingSnapshot: snapshot, StatusCode: 200}
 	if err := repo.BatchRecordUsageLogsContext(context.Background(), []*storage.UsageLogRecord{rec}); err != nil {
 		t.Fatal(err)

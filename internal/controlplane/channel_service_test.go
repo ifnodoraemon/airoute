@@ -329,7 +329,7 @@ func TestChannelServiceUpdateMergesOnlyProvidedFields(t *testing.T) {
 	svc := NewChannelService(store, reloader, nil)
 
 	// A partial update that only changes the display name.
-	got, err := svc.Update(context.Background(), existing.ID, &storage.ChannelRecord{Name: "renamed"})
+	got, err := svc.Update(context.Background(), existing.ID, &channelPatch{Name: "renamed"})
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
@@ -356,10 +356,11 @@ func TestChannelServiceUpdateMergesOnlyProvidedFields(t *testing.T) {
 	}
 }
 
-func TestChannelServiceUpdateCannotZeroRoutingFields(t *testing.T) {
-	// Pins the documented convention: 0 means "not provided", so a partial update
-	// can never reset a routing weight to 0 (which would silently remove the
-	// channel from weighted routing).
+func TestChannelServiceUpdateAppliesExplicitZeroRoutingFields(t *testing.T) {
+	// Pins the provided-vs-omitted contract: an explicit 0 is a value the caller
+	// asked for, so it must reach storage instead of being read as "not provided".
+	// The old merge tested `!= 0`, so a request that set priority/weight to 0
+	// returned 200 while changing nothing.
 	store := newFakeChannelStore()
 	existing := store.seed(&storage.ChannelRecord{
 		Name: "chan-a", Type: "openai", BaseURL: "http://a.invalid",
@@ -367,15 +368,39 @@ func TestChannelServiceUpdateCannotZeroRoutingFields(t *testing.T) {
 	})
 	svc := NewChannelService(store, nil, nil)
 
-	got, err := svc.Update(context.Background(), existing.ID, &storage.ChannelRecord{
-		Priority: 0, Weight: 0, TimeoutSeconds: 0,
+	zero, zeroTimeout := 0, 0
+	got, err := svc.Update(context.Background(), existing.ID, &channelPatch{
+		Priority: &zero, Weight: &zero, TimeoutSeconds: &zeroTimeout,
 	})
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 
+	// TimeoutSeconds is normalized by the service (0 = use the default budget), so
+	// only the two routing fields keep the explicit zero here.
+	if got.Priority != 0 || got.Weight != 0 {
+		t.Errorf("explicit zeros were dropped: priority=%d weight=%d, want 0/0",
+			got.Priority, got.Weight)
+	}
+	if got.TimeoutSeconds == 0 {
+		t.Errorf("timeout_seconds = 0 after normalization, want the default budget")
+	}
+}
+
+func TestChannelServiceUpdateKeepsOmittedRoutingFields(t *testing.T) {
+	store := newFakeChannelStore()
+	existing := store.seed(&storage.ChannelRecord{
+		Name: "chan-a", Type: "openai", BaseURL: "http://a.invalid",
+		Priority: 3, Weight: 7, TimeoutSeconds: 60, Status: "active",
+	})
+	svc := NewChannelService(store, nil, nil)
+
+	got, err := svc.Update(context.Background(), existing.ID, &channelPatch{Name: "renamed"})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
 	if got.Priority != 3 || got.Weight != 7 || got.TimeoutSeconds != 60 {
-		t.Errorf("zero values were treated as explicit: priority=%d weight=%d timeout=%d",
+		t.Errorf("omitted routing fields were reset: priority=%d weight=%d timeout=%d",
 			got.Priority, got.Weight, got.TimeoutSeconds)
 	}
 }
@@ -384,7 +409,7 @@ func TestChannelServiceUpdateRejectsUnknownChannel(t *testing.T) {
 	store := newFakeChannelStore()
 	svc := NewChannelService(store, nil, nil)
 
-	_, err := svc.Update(context.Background(), 4242, &storage.ChannelRecord{Name: "x"})
+	_, err := svc.Update(context.Background(), 4242, &channelPatch{Name: "x"})
 
 	if !errors.Is(err, ErrChannelNotFound) {
 		t.Fatalf("err = %v, want ErrChannelNotFound", err)
@@ -401,7 +426,7 @@ func TestChannelServiceUpdatePropagatesReadFailure(t *testing.T) {
 	store.getErr = errors.New("connection reset")
 	svc := NewChannelService(store, nil, nil)
 
-	_, err := svc.Update(context.Background(), 1, &storage.ChannelRecord{Name: "x"})
+	_, err := svc.Update(context.Background(), 1, &channelPatch{Name: "x"})
 
 	if errors.Is(err, ErrChannelNotFound) {
 		t.Fatal("a read failure was reported as a missing channel")
@@ -418,7 +443,7 @@ func TestChannelServiceUpdatePropagatesStoreErrorWithoutReloading(t *testing.T) 
 	reloader := &fakeReloader{}
 	svc := NewChannelService(store, reloader, nil)
 
-	_, err := svc.Update(context.Background(), existing.ID, &storage.ChannelRecord{Name: "renamed"})
+	_, err := svc.Update(context.Background(), existing.ID, &channelPatch{Name: "renamed"})
 
 	if err == nil || err.Error() != "write failed" {
 		t.Fatalf("err = %v, want the store error", err)
@@ -449,7 +474,7 @@ func TestChannelServiceUpdateDoesNotLoseAConcurrentEdit(t *testing.T) {
 	}
 
 	svc := NewChannelService(store, nil, nil)
-	if _, err := svc.Update(context.Background(), existing.ID, &storage.ChannelRecord{Name: "renamed"}); err != nil {
+	if _, err := svc.Update(context.Background(), existing.ID, &channelPatch{Name: "renamed"}); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 

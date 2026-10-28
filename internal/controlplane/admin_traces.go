@@ -29,7 +29,11 @@ func (h *AdminHandler) ListRequestTraces(c *gin.Context) {
 			c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "账户不存在或暂时无法验证，请重新登录"})
 			return
 		}
-		keys, err := h.repo.ListAPIKeysByUser(user.ID)
+		// Historical keys: a revoked key's traces still belong to its owner. Using
+		// the live list here hid a user's own trace history as soon as the key that
+		// produced it was deleted (admin_logs.go uses the historical list for the
+		// same reason).
+		keys, err := h.repo.ListHistoricalAPIKeysByUser(user.ID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

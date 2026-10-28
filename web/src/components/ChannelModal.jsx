@@ -8,6 +8,17 @@ import useFormDirty from '../hooks/useFormDirty';
 import useUnsavedGuard from '../hooks/useUnsavedGuard';
 import DiscardChangesDialog from './DiscardChangesDialog';
 
+// Reads a numeric input without rewriting the value the operator typed.
+//
+// The routing fields used to be `parseInt(...) || 1` / `|| 10`, which turned an
+// explicit 0 into 1/10 in the form before the request was even built: the console
+// silently disagreed with what the operator saw. An empty field maps to 0, which
+// the gateway documents as "use the default".
+function parseIntOrZero(raw) {
+  const parsed = parseInt(raw, 10);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 export default function ChannelModal({
   isOpen,
   onClose,
@@ -293,7 +304,7 @@ export default function ChannelModal({
                   <input
                     type="number"
                     value={newChannel.priority}
-                    onChange={(e) => setNewChannel({ ...newChannel, priority: parseInt(e.target.value) || 1 })}
+                    onChange={(e) => setNewChannel({ ...newChannel, priority: parseIntOrZero(e.target.value) })}
                     className="ui-field ui-field-sm font-mono"
                   />
                 </div>
@@ -302,7 +313,7 @@ export default function ChannelModal({
                   <input
                     type="number"
                     value={newChannel.weight}
-                    onChange={(e) => setNewChannel({ ...newChannel, weight: parseInt(e.target.value) || 10 })}
+                    onChange={(e) => setNewChannel({ ...newChannel, weight: parseIntOrZero(e.target.value) })}
                     className="ui-field ui-field-sm font-mono"
                   />
                 </div>

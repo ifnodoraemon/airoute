@@ -114,6 +114,15 @@ func (h *AdminHandler) CreateAPIKey(c *gin.Context) {
 		return
 	}
 
+	// Reject an unknown level instead of storing a value the data plane will never
+	// match: an accepted-but-ignored field is what made this setting a no-op.
+	formatValidation, err := normalizeFormatValidation(req.FormatValidation)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	req.FormatValidation = formatValidation
+
 	claims, ok := GetClaimsFromContext(c)
 	if !ok {
 		claims = nil
@@ -185,6 +194,8 @@ func writeKeyUpdateDenial(c *gin.Context, outcome KeyUpdateOutcome) {
 	switch outcome.Denial {
 	case KeyUpdateGroupForbidden:
 		c.JSON(http.StatusForbidden, gin.H{"error": outcome.Message})
+	case KeyUpdateInvalidValue:
+		c.JSON(http.StatusBadRequest, gin.H{"error": outcome.Message})
 	default:
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权修改该密钥"})
 	}
@@ -248,7 +259,11 @@ func (h *AdminHandler) UpdateAPIKey(c *gin.Context) {
 
 	h.syncDataPlane("api_key_updated")
 
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": outcome.Record, "message": "API 密钥已成功更新"})
+	// Return the same projection create/list use. Handing out the storage row made
+	// this endpoint's payload a function of storage's JSON tags rather than of the
+	// API contract (see apiKeyView).
+	view := apiKeyViewFrom(outcome.Record)
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": &view, "message": "API 密钥已成功更新"})
 }
 
 // DeleteAPIKey removes an API key.

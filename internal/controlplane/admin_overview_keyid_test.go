@@ -1,6 +1,7 @@
 package controlplane
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -56,7 +57,7 @@ func newStatsKeyIDFixture(t *testing.T) *statsKeyIDFixture {
 
 func recordStatsUsage(t *testing.T, repo *storage.Repository, key *storage.APIKeyRecord, tenant, model string, tokens int) {
 	t.Helper()
-	if err := repo.RecordUsageLog(&storage.UsageLogRecord{
+	if err := repo.RecordUsageLogContext(context.Background(), &storage.UsageLogRecord{
 		APIKey: key.Key, TenantID: tenant, Model: model, Channel: "stats-synthetic",
 		Cost: 0.5, TotalTokens: tokens, StatusCode: 200,
 	}); err != nil {

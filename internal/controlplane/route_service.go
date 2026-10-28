@@ -221,7 +221,10 @@ func (s *RouteService) buildRoutePricing(req *UpdateModelRouteRequest) (*storage
 	}
 
 	if offEnabled && offSlots != "" {
-		if err := billing.ValidateSlotsOverlap(offSlots); err != nil {
+		// Same rule as the pricing screen: the slot list is only read by the
+		// engine in OffPeakMode=="custom", so that is the only mode whose slots
+		// are validated here (billing.ValidateOffPeakSlots).
+		if err := billing.ValidateOffPeakSlots(offMode, offSlots); err != nil {
 			return nil, err
 		}
 	}

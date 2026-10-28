@@ -82,10 +82,11 @@ func (h *AdminHandler) CreateStripeRechargeSession(c *gin.Context) {
 	}
 
 	if stripeKey != "" {
-		stripeBase := os.Getenv("STRIPE_API_BASE")
-		if stripeBase == "" {
-			stripeBase = os.Getenv("STRIPE_BASE_URL")
-		}
+		// One documented name for the API base. STRIPE_BASE_URL used to be an
+		// undocumented second spelling that appeared in no manifest or manual, so a
+		// stale value in the container environment could silently redirect the
+		// checkout call to a different endpoint.
+		stripeBase := strings.TrimSpace(os.Getenv("STRIPE_API_BASE"))
 		if stripeBase == "" {
 			stripeBase = "https://api.stripe.com"
 		}
@@ -284,19 +285,4 @@ func (h *AdminHandler) SandboxRecharge(c *gin.Context) {
 		"new_balance": newBal,
 		"order_no":    req.OrderNo,
 	})
-}
-
-// ListUserRechargeOrders returns order history for current user.
-func (h *AdminHandler) ListUserRechargeOrders(c *gin.Context) {
-	claims, ok := RequireAuthClaims(c)
-	if !ok {
-		return
-	}
-
-	orders, err := h.repo.ListRechargeOrders(claims.Username)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "查询充值记录失败: " + err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": orders})
 }

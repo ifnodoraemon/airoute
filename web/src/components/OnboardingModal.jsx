@@ -22,7 +22,8 @@ import {
   API_KEY_PLACEHOLDER,
   credentialProblem,
   credentialProblemHint,
-  isUsableAPIKey
+  isUsableAPIKey,
+  keyDisplayRef
 } from '../lib/apiKey';
 
 export default function OnboardingModal({
@@ -361,7 +362,7 @@ print(message.content[0].text)
                     {contextKeys.map((k) => (
                       <option key={String(k.id)} value={String(k.id)}>
                         {k.tenant_id ? `[${k.tenant_id}] ` : ''}
-                        {k.key_id || `#${k.id}`} (RPM: {k.rpm || 60})
+                        {keyDisplayRef(k)} (RPM: {k.rpm || 60})
                       </option>
                     ))}
                   </select>

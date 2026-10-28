@@ -18,6 +18,7 @@ import useUrlFilters from '../hooks/useUrlFilters';
 import { SortableTh, ColumnToggle } from './TableControls';
 import { availableKeyModels } from '../lib/keyModels';
 import { inferClientModality } from '../lib/modelModality';
+import { keyDisplayRef } from '../lib/apiKey';
 
 // Low-priority columns are dropped at narrow widths so that name, status and
 // actions stay reachable on a phone-width viewport without horizontal hunting.
@@ -156,7 +157,8 @@ export default function KeysView({
   // A stored credential is never rendered. The server exposes a public key ID
   // (`ak_…`) for exactly this purpose; rows without one fall back to their row
   // number, which still identifies the key without exposing anything secret.
-  const keyIdentifier = (k) => k.key_id || `#${k.id}`;
+  // The naming rule lives in lib/apiKey.js so every surface renders it alike.
+  const keyIdentifier = (k) => keyDisplayRef(k);
 
   // Filter keys
   const filteredKeys = keys.filter(k => {
@@ -222,7 +224,7 @@ export default function KeysView({
     // once, at creation), so the snippet carries a placeholder plus the key ID
     // that identifies which key to paste in.
     const keyStr = '<YOUR_API_KEY>';
-    const keyId = key.key_id || `#${key.id}`;
+    const keyId = keyDisplayRef(key);
     const origin = getGatewayOrigin();
     const curl = `# key id: ${keyId}\ncurl ${origin}/v1/chat/completions \\
   -H "Content-Type: application/json" \\
@@ -473,6 +475,16 @@ export default function KeysView({
                               <span className="select-all" title={keyIdTooltip}>
                                 {keyIdentifier(k)}
                               </span>
+                              {/* Key-level protocol format validation. Empty follows the
+                                  gateway default, so only a pinned level is shown. */}
+                              {k.format_validation && (
+                                <span
+                                  className="px-1.5 py-0.5 rounded text-[10px] font-sans bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0] border border-[#E4E6E9] dark:border-[#2C3038]"
+                                  title={isZh ? '该密钥的请求格式校验级别' : 'Format validation level for this key'}
+                                >
+                                  {k.format_validation}
+                                </span>
+                              )}
                               <button
                                 onClick={async () => {
                                   const value = keyIdentifier(k);

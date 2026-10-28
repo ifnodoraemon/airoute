@@ -7,6 +7,7 @@
 import { useCallback, useState } from 'react';
 import { apiFetch, apiJSON } from '../api/client';
 import { copyToClipboard as crossOriginCopy } from '../config';
+import { keyDisplayRef } from '../lib/apiKey';
 
 // Self-service key quotas. The gateway applies these to keys created through the
 // personal-key endpoint, and clamps rather than rejects: the form states the same
@@ -43,6 +44,9 @@ function emptyKey(adminUser, isZh, keyCount) {
     budget: 0,
     allowed_models: [],
     group_name: isAdmin ? 'default' : (adminUser?.group_name || 'default'),
+    // Empty follows the gateway-wide model_validation.default_level; the admin
+    // create form may pin it per key. Only the admin endpoint accepts it.
+    format_validation: '',
   };
 }
 
@@ -89,6 +93,11 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
     if (isAdmin) {
       payload.tenant_id = newKey.tenant_id.trim();
       payload.key = newKey.key || '';
+      // The self-service endpoint has no such field; sending it there would be a
+      // silently ignored key, so the console only offers it to administrators.
+      if (newKey.format_validation) {
+        payload.format_validation = newKey.format_validation;
+      }
     }
 
     setSubmittingKey(true);
@@ -165,7 +174,7 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
     const nextStatus = k.status === 'disabled' ? 'active' : 'disabled';
     const actionText = nextStatus === 'active' ? (isZh ? '启用' : 'enable') : (isZh ? '禁用/停用' : 'disable');
     // Name the key by its public identifier: the list no longer carries a credential.
-    const keyRef = k.key_id || `#${k.id}`;
+    const keyRef = keyDisplayRef(k);
     try {
       await apiJSON(`/api/v1/admin/keys/${k.id}`, {
         method: 'PUT',

@@ -1,6 +1,7 @@
 package controlplane
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -128,7 +129,7 @@ func TestSupplierReconciliation(t *testing.T) {
 	}
 
 	for _, l := range testLogs {
-		if err := repo.RecordUsageLog(l); err != nil {
+		if err := repo.RecordUsageLogContext(context.Background(), l); err != nil {
 			t.Fatalf("record log error: %v", err)
 		}
 	}

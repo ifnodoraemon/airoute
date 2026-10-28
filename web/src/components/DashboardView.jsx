@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { copyToClipboard } from '../config';
 import { apiFetch } from '../api/client';
+import { keyDisplayRef } from '../lib/apiKey';
 
 // The live endpoint is in-memory and cheap; 2s keeps the badge honest during a
 // stream without hammering the gateway.
@@ -986,7 +987,7 @@ export default function DashboardView({
                 </option>
                 {(keys || []).map(k => (
                   <option key={String(k.id)} value={String(k.id)}>
-                    🔑 {k.tenant_id || k.name || '—'} · {k.key_id || `#${k.id}`} {k.rpm ? `(${k.rpm} RPM)` : ''}
+                    🔑 {k.tenant_id || k.name || '—'} · {keyDisplayRef(k)} {k.rpm ? `(${k.rpm} RPM)` : ''}
                   </option>
                 ))}
               </select>

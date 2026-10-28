@@ -298,6 +298,30 @@ export default function KeyModal({
             </p>
           )}
 
+          {/* Protocol format validation level. Empty means "follow the gateway
+              default", which is what the resolver does with no key-level value.
+              Only the admin create endpoint accepts this field. */}
+          {isAdmin && (
+            <div>
+              <label className="ui-label">{isZh ? '格式校验级别' : 'Format validation'}</label>
+              <select
+                value={newKey.format_validation || ''}
+                onChange={(e) => setNewKey({ ...newKey, format_validation: e.target.value })}
+                className="ui-field cursor-pointer"
+              >
+                <option value="">{isZh ? '跟随全局（默认）' : 'Follow gateway default'}</option>
+                <option value="off">{isZh ? '关闭 (off)' : 'Off'}</option>
+                <option value="lenient">{isZh ? '宽松纠错 (lenient)' : 'Lenient'}</option>
+                <option value="strict">{isZh ? '严格拦截 (strict)' : 'Strict'}</option>
+              </select>
+              <p className="ui-meta-sm mt-1">
+                {isZh
+                  ? '按协议校验该密钥的请求体格式；留空时沿用网关全局设置。'
+                  : 'Validates request bodies sent with this key; empty follows the gateway-wide setting.'}
+              </p>
+            </div>
+          )}
+
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="font-semibold text-[#202124] dark:text-[#F1F2F4]">

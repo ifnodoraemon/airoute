@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -14,40 +13,14 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
-// statsKeyIDFilter resolves the dashboard's key drill-down filter.
-//
-// The console drills into a key by its numeric id (`key_id`), because the key
-// list exposes the public identifier and never the stored digest. Resolving the
-// id here, against the authoritative row, is what lets the
-// repository be queried with the digest that usage_logs actually stores; the old
-// `key=` filter was fed the masked value, which hashed to a digest that matched
-// no row, so a drill-down showed zero traffic for a busy key.
-//
-// It returns (record, present, ok). present reports whether the parameter was
-// supplied; ok is false when a response has already been written.
-func (h *AdminHandler) statsKeyIDFilter(c *gin.Context) (*storage.APIKeyRecord, bool, bool) {
-	raw := strings.TrimSpace(c.Query("key_id"))
-	if raw == "" {
-		return nil, false, true
-	}
-	id, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || id <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "无效的密钥 ID"})
-		return nil, true, false
-	}
-	record, err := h.repo.GetAPIKey(id)
-	if err != nil || record == nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": 404, "error": "未找到指定 API 密钥"})
-		return nil, true, false
-	}
-	return record, true, true
-}
-
 // GetStatsOverview returns dashboard overview metrics. Super-admins see the
 // whole cluster; regular users only see aggregates for their own API keys.
 // When query param "key_id" is supplied, metrics are scoped to that specific key.
 func (h *AdminHandler) GetStatsOverview(c *gin.Context) {
-	keyParam := strings.TrimSpace(c.Query("key"))
+	keyParam, _, paramOK := h.statsKeyFilter(c)
+	if !paramOK {
+		return
+	}
 	keyRecord, hasKeyID, ok := h.statsKeyIDFilter(c)
 	if !ok {
 		return
@@ -136,7 +109,10 @@ func (h *AdminHandler) GetStatsTimeSeries(c *gin.Context) {
 	if timeframe != "1h" && timeframe != "24h" && timeframe != "7d" {
 		timeframe = "24h"
 	}
-	keyParam := strings.TrimSpace(c.Query("key"))
+	keyParam, _, paramOK := h.statsKeyFilter(c)
+	if !paramOK {
+		return
+	}
 	keyRecord, hasKeyID, ok := h.statsKeyIDFilter(c)
 	if !ok {
 		return
@@ -207,6 +183,12 @@ type MiddlewareComponentStatus struct {
 }
 
 // GetSystemMiddlewares returns real-time health and topology for all underlying infrastructure and middlewares.
+//
+// It is reserved for ROADMAP B-07's console self-check page (which would also use
+// /health/ready). The console has no view for it yet, so the endpoint currently
+// has no front-end consumer: it is served for the planned page and for scripted
+// diagnostics, not because a shipped screen needs it. If B-07 is dropped, this
+// handler and its route should go with it.
 func (h *AdminHandler) GetSystemMiddlewares(c *gin.Context) {
 	var list []MiddlewareComponentStatus
 

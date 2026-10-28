@@ -167,3 +167,29 @@ describe('ChannelModal', () => {
     expect(screen.getByRole('button', { name: /Connect Provider/ })).toBeInTheDocument();
   });
 });
+
+describe('ChannelModal routing numbers', () => {
+  // The form used to rewrite an explicit 0 into 1 (priority) / 10 (weight) before
+  // the request was built, so the console silently disagreed with what the
+  // operator typed and the gateway could never receive 0 from this screen.
+  it('keeps an explicit 0 in the priority and weight fields', () => {
+    const { setNewChannel } = setup();
+    // The three numeric fields are priority, weight and timeout, in that order.
+    const [priorityInput, weightInput] = screen.getAllByRole('spinbutton');
+
+    fireEvent.change(priorityInput, { target: { value: '0' } });
+    expect(setNewChannel.mock.calls.at(-1)[0].priority).toBe(0);
+
+    fireEvent.change(weightInput, { target: { value: '0' } });
+    expect(setNewChannel.mock.calls.at(-1)[0].weight).toBe(0);
+  });
+
+  it('maps an emptied field to 0 (the gateway default) instead of inventing a value', () => {
+    const { setNewChannel } = setup();
+    const [priorityInput] = screen.getAllByRole('spinbutton');
+
+    fireEvent.change(priorityInput, { target: { value: '' } });
+
+    expect(setNewChannel.mock.calls.at(-1)[0].priority).toBe(0);
+  });
+});

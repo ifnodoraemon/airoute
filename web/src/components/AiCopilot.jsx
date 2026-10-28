@@ -34,6 +34,7 @@ import {
   credentialProblem,
   credentialProblemHint,
   credentialProblemLabel,
+  keyDisplayRef,
   UNAUTHENTICATED_KEY
 } from '../lib/apiKey';
 import { availableKeyModels } from '../lib/keyModels';
@@ -1376,7 +1377,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
           >
             {contextKeys.map((k) => (
               <option key={String(k.id)} value={String(k.id)}>
-                {k.tenant_id ? `${k.tenant_id} - ` : ''}{k.key_id || `#${k.id}`}
+                {k.tenant_id ? `${k.tenant_id} - ` : ''}{keyDisplayRef(k)}
               </option>
             ))}
             <option value={CUSTOM_KEY_ID}>{isZh ? '手动输入密钥（不在列表）' : 'Paste a key not in the list'}</option>
