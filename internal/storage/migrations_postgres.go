@@ -504,5 +504,21 @@ func (db *DB) migratePostgres() error {
 		{Version: 40, Name: "drop_legacy_governance_objects", Up: dropLegacyGovernanceObjects},
 		{Version: 41, Name: "billing_scale_indexes", Up: addBillingScaleIndexes},
 	}
+	// Migration 43 rewrites the live usage_logs table (copy-switch into monthly
+	// partitions) and is parked behind an explicit opt-in. It is registered only
+	// when GATEWAY_ENABLE_TABLE_PARTITIONING=true; with the default configuration
+	// the version list is the pre-partitioning one, so a restart can never surprise
+	// an operator by rewriting a 250 MB table and holding an ACCESS EXCLUSIVE lock
+	// on the audit write path.
+	//
+	// SQLite never registers it: SQLite has no declarative partitioning and keeps
+	// the single-table + UNIQUE(billing_id) dedupe path unchanged.
+	if tablePartitioningEnabled() {
+		migrations = append(migrations, Migration{
+			Version: 43,
+			Name:    "usage_logs_monthly_partitions",
+			Up:      addUsageLogsMonthlyPartitions,
+		})
+	}
 	return db.runMigrations(migrations)
 }
