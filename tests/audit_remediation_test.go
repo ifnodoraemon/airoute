@@ -2,6 +2,7 @@ package tests
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -167,14 +168,14 @@ func TestAudit_MCPAuthAndTenantLogIsolation(t *testing.T) {
 	require.NoError(t, repo.CreateAPIKey(apiKey))
 
 	// Record logs for two different tenants
-	_ = repo.RecordUsageLog(&storage.UsageLogRecord{
+	_ = repo.RecordUsageLogContext(context.Background(), &storage.UsageLogRecord{
 		APIKey:     "sk-alice-secret-key",
 		TenantID:   "tenant-alice",
 		Model:      "deepseek-chat",
 		SessionID:  "sess-alice",
 		StatusCode: 200,
 	})
-	_ = repo.RecordUsageLog(&storage.UsageLogRecord{
+	_ = repo.RecordUsageLogContext(context.Background(), &storage.UsageLogRecord{
 		APIKey:     "sk-bob-secret-key",
 		TenantID:   "tenant-bob",
 		Model:      "gpt-4o",
@@ -305,16 +306,17 @@ func TestAudit_WeekdayCustomOffPeakDiscount(t *testing.T) {
 	require.NoError(t, repo.SaveModelPrice(price))
 	require.NoError(t, engine.ReloadPrices())
 
-	// Wednesday 03:00 (Weekday night off-peak)
+	// Wednesday 03:00 (Weekday night off-peak). The 5-variant CalculateCost* API was
+	// retired (C-01); the single funnel callers use is the units+cache-creation one.
 	wednesdayNight := time.Date(2026, 10, 7, 3, 0, 0, 0, time.FixedZone("CST", 8*3600))
-	costNight, savedNight, _, isOffNight, _ := engine.CalculateCostDetailed("test-offpeak-model", 1000000, 1000000, 0, wednesdayNight)
+	costNight, savedNight, _, isOffNight, _, _ := engine.CalculateCostForUnitsWithCacheCreation("test-offpeak-model", "default", 1000000, 1000000, 0, 0, 1, wednesdayNight)
 	assert.True(t, isOffNight, "Wednesday 03:00 should be detected as off-peak")
 	assert.Equal(t, 15.0, costNight, "Cost should be 50% discount (10 + 20) * 0.5 = 15.0")
 	assert.Equal(t, 15.0, savedNight)
 
 	// Wednesday 14:00 (Weekday daytime peak)
 	wednesdayDay := time.Date(2026, 10, 7, 14, 0, 0, 0, time.FixedZone("CST", 8*3600))
-	costDay, _, _, isOffDay, _ := engine.CalculateCostDetailed("test-offpeak-model", 1000000, 1000000, 0, wednesdayDay)
+	costDay, _, _, isOffDay, _, _ := engine.CalculateCostForUnitsWithCacheCreation("test-offpeak-model", "default", 1000000, 1000000, 0, 0, 1, wednesdayDay)
 	assert.False(t, isOffDay, "Wednesday 14:00 should NOT be off-peak")
 	assert.Equal(t, 30.0, costDay, "Cost should be normal (10 + 20) = 30.0")
 }
@@ -328,10 +330,12 @@ func TestAudit_RateLimiterDynamicRPMUpdate(t *testing.T) {
 	assert.True(t, bucket1.Allow())
 	assert.False(t, bucket1.Allow(), "Second request within minute should be blocked with 1 RPM")
 
-	// Admin updates RPM to 6000 RPM (100 tokens per sec)
+	// Admin updates RPM to 6000 RPM (100 tokens per sec). Assert the hot update
+	// behaviourally: the retired Capacity()/Rate() accessors exposed internal state
+	// that nothing read, so the test now proves the refill rate changed instead.
 	bucket2 := limiter.GetBucket("test-key-dynamic", 6000)
-	assert.Equal(t, float64(6000), bucket2.Capacity())
-	assert.Equal(t, 100.0, bucket2.Rate())
+	time.Sleep(20 * time.Millisecond) // at 100 tokens/s that is ~2 tokens; at 1 RPM it is ~0
+	assert.True(t, bucket2.Allow(), "a bucket raised to 6000 RPM must refill at the new rate immediately")
 }
 
 // 6. Test CORS headers and Sandbox Recharge GET route

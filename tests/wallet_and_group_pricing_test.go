@@ -250,8 +250,8 @@ func TestModelGroupPricing(t *testing.T) {
 	_ = engine.ReloadPrices()
 
 	// Calculate cost for 1,000,000 prompt tokens and 0 completion
-	costDefault, _ := engine.CalculateCostWithGroup("gpt-4o", "default", 1000000, 0, 0)
-	costVIP, _ := engine.CalculateCostWithGroup("gpt-4o", "vip", 1000000, 0, 0)
+	costDefault, _, _, _, _, _ := engine.CalculateCostForUnitsWithCacheCreation("gpt-4o", "default", 1000000, 0, 0, 0, 1, time.Now())
+	costVIP, _, _, _, _, _ := engine.CalculateCostForUnitsWithCacheCreation("gpt-4o", "vip", 1000000, 0, 0, 0, 1, time.Now())
 
 	if costDefault != 18.0 {
 		t.Errorf("expected default cost 18.0, got %f", costDefault)

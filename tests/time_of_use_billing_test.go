@@ -72,7 +72,7 @@ func TestTimeOfUseBilling(t *testing.T) {
 	if discount != 1.0 {
 		t.Errorf("Expected discount 1.0 at peak, got %v", discount)
 	}
-	cost, totalSaved, _, offPeak, disc := engine.CalculateCostDetailed("deepseek-chat", 1_000_000, 1_000_000, 0, workdayPeak)
+	cost, totalSaved, _, offPeak, disc, _ := engine.CalculateCostForUnitsWithCacheCreation("deepseek-chat", "default", 1_000_000, 1_000_000, 0, 0, 1, workdayPeak)
 	if offPeak || disc != 1.0 || cost != 10.0 || totalSaved != 0.0 {
 		t.Errorf("DeepSeek peak calculation mismatch: cost=%v, disc=%v", cost, disc)
 	}
@@ -123,7 +123,7 @@ func TestTimeOfUseBilling(t *testing.T) {
 	// Completion: 200k tokens = 0.2 * ¥8.00 = ¥1.60
 	// Subtotal before off-peak discount = ¥0.40 + ¥0.16 + ¥1.60 = ¥2.16
 	// Subtotal with 50% off-peak discount = ¥2.16 * 0.5 = ¥1.08!
-	cost3, totalSaved3, cacheSaved3, _, _ := engine.CalculateCostDetailed("deepseek-chat", 1_000_000, 200_000, 800_000, workdayNight)
+	cost3, totalSaved3, cacheSaved3, _, _, _ := engine.CalculateCostForUnitsWithCacheCreation("deepseek-chat", "default", 1_000_000, 200_000, 800_000, 0, 1, workdayNight)
 	expectedBase := (0.2 * 2.0) + (0.8 * 0.2) + (0.2 * 8.0)
 	expectedDiscounted := expectedBase * 0.5
 	if cost3 < expectedDiscounted-0.0001 || cost3 > expectedDiscounted+0.0001 {

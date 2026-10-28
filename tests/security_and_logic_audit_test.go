@@ -266,7 +266,7 @@ func TestLogic_RecordUsageLog_FallbackDeduction(t *testing.T) {
 		Cost:             2.5,
 		StatusCode:       200,
 	}
-	if err := repo.RecordUsageLog(log); err != nil {
+	if err := repo.RecordUsageLogContext(context.Background(), log); err != nil {
 		t.Fatalf("failed to record usage log: %v", err)
 	}
 

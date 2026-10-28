@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -65,8 +66,8 @@ func TestAPI_DeleteModelRouteIdentifiers(t *testing.T) {
 					Priority:     1, Weight: 10, Status: "active",
 				}))
 			}
-			require.NoError(t, repo.SetModelFallback(tc.model, "keep-model", true))
-			require.NoError(t, repo.SetModelFallback("keep-model", "keep-backup", true))
+			require.NoError(t, repo.SetModelFallbacks(map[string]string{tc.model: "keep-model"}))
+			require.NoError(t, repo.SetModelFallbacks(map[string]string{"keep-model": "keep-backup"}))
 			require.NoError(t, sync.ReloadAndBroadcast(context.Background(), "test_seed"))
 			require.Len(t, dispatcher.GetChannelsForModel(tc.model), 2)
 
@@ -147,7 +148,7 @@ func TestAPI_IndependentRouteLifecycle(t *testing.T) {
 	ch := &storage.ChannelRecord{Name: "capabilities", Type: "openai", BaseURL: "http://upstream.invalid",
 		Models: []string{"upstream-a", "upstream-b"}, Priority: 1, Weight: 10, Status: "active"}
 	require.NoError(t, repo.CreateChannel(ch))
-	before, err := repo.GetChannel(ch.ID)
+	before, err := channelByID(t, repo, ch.ID)
 	require.NoError(t, err)
 	require.NoError(t, sync.ReloadAndBroadcast(context.Background(), "test_seed"))
 	require.Len(t, dispatcher.GetChannelsForModel("upstream-a"), 1, "capabilities initially generate automatic routes")
@@ -182,7 +183,7 @@ func TestAPI_IndependentRouteLifecycle(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.Empty(t, dispatcher.GetChannelsForModel("public/alias"))
 	require.Empty(t, dispatcher.GetChannelsForModel("upstream-a"))
-	after, err := repo.GetChannel(ch.ID)
+	after, err := channelByID(t, repo, ch.ID)
 	require.NoError(t, err)
 	require.Equal(t, before, after, "single and batch route operations must not touch the channel")
 
@@ -196,7 +197,23 @@ func TestAPI_IndependentRouteLifecycle(t *testing.T) {
 	}
 	save("public/alias")
 	require.Len(t, dispatcher.GetChannelsForModel("public/alias"), 1, "explicit creation restores a route")
-	after, err = repo.GetChannel(ch.ID)
+	after, err = channelByID(t, repo, ch.ID)
 	require.NoError(t, err)
 	require.Equal(t, before, after)
+}
+
+// channelByID reads one channel through the production read path (ListChannels);
+// the single-row repository lookup was removed once nothing in production used it.
+func channelByID(t *testing.T, repo *storage.Repository, id int64) (*storage.ChannelRecord, error) {
+	t.Helper()
+	channels, err := repo.ListChannels()
+	if err != nil {
+		return nil, err
+	}
+	for _, ch := range channels {
+		if ch.ID == id {
+			return ch, nil
+		}
+	}
+	return nil, fmt.Errorf("channel %d not found", id)
 }

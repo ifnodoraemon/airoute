@@ -2,6 +2,7 @@ package tests
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -174,7 +175,7 @@ func TestAPI_AdminCRUDAndHotReload(t *testing.T) {
 	}
 
 	// 6. Test GET /api/v1/admin/logs
-	_ = repo.RecordUsageLog(&storage.UsageLogRecord{
+	_ = repo.RecordUsageLogContext(context.Background(), &storage.UsageLogRecord{
 		APIKey:     "sk-gw-admin-test",
 		TenantID:   "dev-team",
 		Model:      "deepseek-chat",

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/billing"
@@ -46,7 +47,7 @@ func TestBillingEngine_CostCalculationAndCacheSavings(t *testing.T) {
 	// Expected Completion Cost: (1,000 * 8.0) / 1M = 0.008
 	// Total Expected Cost: 0.004 + 0.0016 + 0.008 = 0.0136
 	// Expected Saved Cost: (8,000 * (2.0 - 0.2)) / 1M = 0.0144
-	cost, savedCost := engine.CalculateCost("deepseek-chat", 10000, 1000, 8000)
+	cost, savedCost, _, _, _, _ := engine.CalculateCostForUnitsWithCacheCreation("deepseek-chat", "default", 10000, 1000, 8000, 0, 1, time.Now())
 
 	expectedCost := 0.0136
 	if diff := cost - expectedCost; diff > 0.00001 || diff < -0.00001 {
@@ -69,7 +70,7 @@ func TestBillingEngine_CostCalculationAndCacheSavings(t *testing.T) {
 	}
 	_ = engine.ReloadPrices()
 
-	imageCost, _ := engine.CalculateCost("dall-e-3", 0, 0, 0)
+	imageCost, _, _, _, _, _ := engine.CalculateCostForUnitsWithCacheCreation("dall-e-3", "default", 0, 0, 0, 0, 1, time.Now())
 	if imageCost != 0.28 {
 		t.Errorf("expected fixed cost 0.28, got %.4f", imageCost)
 	}
@@ -171,7 +172,7 @@ func TestModelRoute_MultiUpstreamConfiguration(t *testing.T) {
 	}
 
 	// Verify Pricing was persisted
-	priceRec, err := repo.GetModelPrice("deepseek-r1")
+	priceRec, err := repo.GetModelPriceWithGroup("deepseek-r1", "default")
 	if err != nil {
 		t.Fatalf("failed to get model price: %v", err)
 	}

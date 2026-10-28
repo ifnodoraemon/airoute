@@ -60,8 +60,8 @@ func TestP0_BatchRecordUsageLogs_NoDuplicateDeduction(t *testing.T) {
 		},
 	}
 
-	if err := repo.BatchRecordUsageLogs(logs); err != nil {
-		t.Fatalf("BatchRecordUsageLogs failed: %v", err)
+	if err := repo.BatchRecordUsageLogsContext(context.Background(), logs); err != nil {
+		t.Fatalf("BatchRecordUsageLogsContext failed: %v", err)
 	}
 
 	// Balance should be exactly 100.0 - 5.0 - 5.0 = 90.0
@@ -111,7 +111,7 @@ func TestP1_UserRedeemGiftCode(t *testing.T) {
 		Amount: 66.0,
 		Status: "active",
 	}
-	if err := repo.CreateRedemptionCode(code); err != nil {
+	if err := repo.CreateRedemptionCodes([]*storage.RedemptionCodeRecord{code}); err != nil {
 		t.Fatalf("failed to create redemption code: %v", err)
 	}
 
@@ -276,7 +276,7 @@ func Test_CleanLegacyTechDebt_OrphanKeysAndAdminExemption(t *testing.T) {
 		PromptTokens: 100,
 		Cost:         10.0,
 	}
-	if err := repo.RecordUsageLog(log); err != nil {
+	if err := repo.RecordUsageLogContext(context.Background(), log); err != nil {
 		t.Fatalf("failed to record log: %v", err)
 	}
 

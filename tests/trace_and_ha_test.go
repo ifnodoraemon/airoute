@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -72,7 +73,7 @@ func TestRepository_TraceIDPersistenceAndFilter(t *testing.T) {
 	traceID2 := "tr-cluster-node2-2002"
 
 	// Insert log 1
-	err = repo.RecordUsageLog(&storage.UsageLogRecord{
+	err = repo.RecordUsageLogContext(context.Background(), &storage.UsageLogRecord{
 		TraceID:          traceID1,
 		SessionID:        "sess-1",
 		APIKey:           "sk-test-1",
@@ -90,7 +91,7 @@ func TestRepository_TraceIDPersistenceAndFilter(t *testing.T) {
 	require.NoError(t, err)
 
 	// Insert log 2
-	err = repo.RecordUsageLog(&storage.UsageLogRecord{
+	err = repo.RecordUsageLogContext(context.Background(), &storage.UsageLogRecord{
 		TraceID:          traceID2,
 		SessionID:        "sess-2",
 		APIKey:           "sk-test-2",
@@ -108,7 +109,7 @@ func TestRepository_TraceIDPersistenceAndFilter(t *testing.T) {
 	require.NoError(t, err)
 
 	// 1. List all
-	logs, err := repo.ListUsageLogs(10, 0)
+	logs, _, err := repo.ListUsageLogsWithFilterAndCount(storage.LogFilter{Limit: 10, Offset: 0})
 	require.NoError(t, err)
 	assert.Len(t, logs, 2)
 
@@ -123,14 +124,14 @@ func TestRepository_TraceIDPersistenceAndFilter(t *testing.T) {
 	assert.Equal(t, "gpt-4o", filteredLogs[0].Model)
 
 	// 3. Fallback auto trace_id if empty
-	err = repo.RecordUsageLog(&storage.UsageLogRecord{
+	err = repo.RecordUsageLogContext(context.Background(), &storage.UsageLogRecord{
 		Model:      "deepseek-v3",
 		DurationMs: 120,
 		StatusCode: 200,
 	})
 	require.NoError(t, err)
 
-	allLogs, err := repo.ListUsageLogs(10, 0)
+	allLogs, _, err := repo.ListUsageLogsWithFilterAndCount(storage.LogFilter{Limit: 10, Offset: 0})
 	require.NoError(t, err)
 	assert.Len(t, allLogs, 3)
 	for _, l := range allLogs {
@@ -150,8 +151,9 @@ func TestDB_DialectRebind(t *testing.T) {
 	qSqlite := "SELECT id FROM usage_logs WHERE trace_id = ? AND status_code = ?"
 	assert.Equal(t, qSqlite, sqliteDB.Rebind(qSqlite))
 
-	// Test context trace extraction
-	ctx := middleware.WithTraceID(context.Background(), "tr-ctx-12345")
+	// Test context trace extraction. The context key is owned by telemetry; the
+	// middleware package's WithTraceID wrapper was a dead second entry point.
+	ctx := telemetry.WithTraceID(context.Background(), "tr-ctx-12345")
 	assert.Equal(t, "tr-ctx-12345", middleware.GetTraceIDFromContext(ctx))
 	assert.Empty(t, middleware.GetTraceIDFromContext(context.Background()))
 }

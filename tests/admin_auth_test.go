@@ -78,8 +78,9 @@ func TestAdminAuth_LoginAndProtectedRoutes(t *testing.T) {
 		t.Fatalf("expected username 'admin', got '%s'", resp.Data.User.Username)
 	}
 
-	// 3. Verify /api/v1/user/me using token
-	reqMe := httptest.NewRequest(http.MethodGet, "/api/v1/user/me", nil)
+	// 3. Verify /api/v1/auth/me using token (the duplicate /api/v1/user/me route
+	// was removed; auth/me is the single session endpoint).
+	reqMe := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
 	reqMe.Header.Set("Authorization", "Bearer "+resp.Data.Token)
 	wMe := httptest.NewRecorder()
 	engine.ServeHTTP(wMe, reqMe)
