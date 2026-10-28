@@ -182,6 +182,7 @@ func isTokenIDPrompt(items []any) bool {
 }
 
 func (h *Handler) handleCompletionsUnary(c *gin.Context, reqCtx context.Context, req LegacyCompletionRequest, chatReq model.ChatCompletionRequest, sessionID string, start time.Time) {
+	topUpQuotaForRequest(c, &chatReq)
 	resp, err := h.dispatcher.Dispatch(reqCtx, &chatReq)
 	if err != nil {
 		respondUpstreamDispatchError(c, sessionID, req.Model, time.Since(start), err)

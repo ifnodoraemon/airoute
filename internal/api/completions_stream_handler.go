@@ -17,6 +17,7 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 	telemetry.GlobalLiveMetrics.BeginStream()
 	defer telemetry.GlobalLiveMetrics.EndStream()
 
+	topUpQuotaForRequest(c, &chatReq)
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, &chatReq)
 	if err != nil {
 		respondUpstreamDispatchError(c, sessionID, req.Model, time.Since(start), err)
@@ -132,7 +133,7 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 		}
 	}
 
-	cost, savedCost, cachedTokens := recordUsage(c, AuditRecordParams{
+	cost, savedCost, cachedTokens, settle := RecordUsageDeferred(c, AuditRecordParams{
 		ChatID:           respID,
 		Channel:          upstreamChannel,
 		SessionID:        sessionID,
@@ -156,4 +157,5 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 	}
 	fmt.Fprintf(w, "data: [DONE]\n\n")
 	flusher.Flush()
+	settle()
 }

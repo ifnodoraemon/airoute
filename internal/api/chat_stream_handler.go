@@ -27,6 +27,7 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 		req.StreamOptions.IncludeUsage = true
 	}
 
+	topUpQuotaForRequest(c, req)
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, req)
 	if err != nil {
 		respondUpstreamDispatchError(c, sessionID, req.Model, time.Since(start), err)
@@ -59,6 +60,20 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 	usageSource := "upstream"
 	var finalCost, finalSaved float64
 	var finalCached int
+	// Settlement is deferred until the terminal frame has been flushed, so a
+	// saturated settlement writer cannot delay [DONE]. Preparation (cost
+	// calculation, headers, audit enqueue) already happened in recordStreamEnd.
+	var finalSettle func()
+	settled := false
+	runFinalSettle := func() {
+		if settled {
+			return
+		}
+		settled = true
+		if finalSettle != nil {
+			finalSettle()
+		}
+	}
 	recordStreamEnd := func() {
 		dur := time.Since(start)
 		statusCode := http.StatusOK
@@ -88,7 +103,7 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 			}
 		}
 
-		finalCost, finalSaved, finalCached = recordUsage(c, AuditRecordParams{
+		finalCost, finalSaved, finalCached, finalSettle = RecordUsageDeferred(c, AuditRecordParams{
 			ChatID:           upstreamChatID,
 			Channel:          upstreamChannel,
 			SessionID:        sessionID,
@@ -117,6 +132,7 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 			RecordSuccessTrace(c, req.Model, upstreamChannel, dur, nil)
 		}
 	}
+	defer runFinalSettle()
 	defer recordOnce.Do(recordStreamEnd)
 
 	w := c.Writer

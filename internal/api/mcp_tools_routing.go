@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/billing"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/router"
@@ -191,6 +192,12 @@ func (h *MCPHandler) executeRoutingTools(ctx context.Context, name string, args 
 		if caller != nil && caller.Config != nil && caller.Config.GroupName != "" {
 			keyGroup = caller.Config.GroupName
 		}
+		// Reservation bookkeeping for this tool call; declared here (not inside the
+		// caller block) because the deferred release and the dispatch-time top-up
+		// both need it after that block ends.
+		var quotaUserID int64
+		var quotaBackend middleware.QuotaBackend
+		var reservedCNY float64
 		if caller != nil && caller.Record != nil {
 			if denial := middleware.AuthorizeKey(caller.Config); denial != nil {
 				return "Error: " + denial.Message, true, true
@@ -198,14 +205,22 @@ func (h *MCPHandler) executeRoutingTools(ctx context.Context, name string, args 
 			if !middleware.ModelAllowed(caller.Record.AllowedModels, modelName) {
 				return fmt.Sprintf("Error: Model %q is not permitted for this API key", modelName), true, true
 			}
-			// Pre-flight in-flight reservation, as the HTTP middleware does, so a
-			// burst of concurrent tool calls cannot overdraft the wallet.
+			// Pre-flight amount pre-authorisation, as the HTTP middleware does, so a
+			// burst of concurrent tool calls cannot overdraft the wallet. The model is
+			// not known yet, so reserve the coarse admission amount and top it up to
+			// the prompt/completion estimate once the request is assembled below.
 			if !strings.EqualFold(caller.Record.UserRole, "admin") && caller.Record.UserID > 0 {
-				acquired, backend := middleware.ReserveUserQuota(caller.Record.UserID, caller.Record.UserBalance)
+				coarse := middleware.InflightReserveCNY()
+				acquired, backend := middleware.ReserveUserQuotaAmount(caller.Record.UserID, caller.Record.UserBalance, coarse)
 				if !acquired {
 					return "Error: Concurrent requests exceed available wallet balance reserve. Please wait for pending requests to finish or recharge.", true, true
 				}
-				defer middleware.ReleaseUserQuota(caller.Record.UserID, backend)
+				quotaUserID, quotaBackend, reservedCNY = caller.Record.UserID, backend, coarse
+				// Closure (not a direct call) so the deferred release sees the
+				// topped-up total rather than the coarse amount.
+				defer func() {
+					middleware.ReleaseUserQuotaAmount(quotaUserID, quotaBackend, reservedCNY)
+				}()
 			}
 		}
 		// Reject a legacy foreign-currency rate before any upstream work starts,
@@ -221,6 +236,13 @@ func (h *MCPHandler) executeRoutingTools(ctx context.Context, name string, args 
 				{Role: "user", Content: msgText},
 			},
 			Stream: false,
+		}
+
+		// Refine the coarse admission reserve with the conservative cost estimate now
+		// that the model and prompt are known, mirroring the HTTP data plane.
+		if quotaBackend != middleware.QuotaBackendNone {
+			estimate := billing.EstimateCostCNY(chatReq.Model, keyGroup, chatReq.EstimatedPromptTokens(), 0)
+			reservedCNY = middleware.TopUpUserQuotaForUser(quotaUserID, quotaBackend, caller.Record.UserBalance, estimate, reservedCNY)
 		}
 
 		reqCtx := ctx

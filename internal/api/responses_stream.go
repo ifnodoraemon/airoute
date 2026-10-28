@@ -29,6 +29,7 @@ func (h *Handler) handleResponsesStreaming(
 	} else {
 		chatReq.StreamOptions.IncludeUsage = true
 	}
+	topUpQuotaForRequest(c, chatReq)
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, chatReq)
 	if err != nil {
 		respondUpstreamDispatchError(c, sessionID, req.Model, time.Since(start), err)
@@ -60,6 +61,22 @@ func (h *Handler) handleResponsesStreaming(
 	respUpstreamChannel := ""
 	var streamError error
 
+	// Settlement is deferred until the terminal frame has been flushed, so a
+	// saturated settlement writer cannot delay [DONE]. Preparation (cost
+	// calculation, headers, audit enqueue) already happened in recordStreamEnd.
+	var finalSettle func()
+	settled := false
+	runFinalSettle := func() {
+		if settled {
+			return
+		}
+		settled = true
+		if finalSettle != nil {
+			finalSettle()
+		}
+	}
+	// Safety net: every return path settles, including one introduced later.
+	defer runFinalSettle()
 	recordStreamEnd := func(statusCode int) (float64, float64, int) {
 		// A client abort (499) still sent the prompt upstream; estimate it too.
 		if statusCode == http.StatusOK || statusCode == statusClientClosed {
@@ -75,7 +92,7 @@ func (h *Handler) handleResponsesStreaming(
 				totalCompTokens = estimatedStreamCompletionTokens(emitter.fullText.Len() + emitter.toolChars)
 			}
 		}
-		return recordUsage(c, AuditRecordParams{
+		cost, saved, cached, settle := RecordUsageDeferred(c, AuditRecordParams{
 			ChatID:           respUpstreamChatID,
 			Channel:          respUpstreamChannel,
 			SessionID:        sessionID,
@@ -92,6 +109,8 @@ func (h *Handler) handleResponsesStreaming(
 			ErrorMessage: sanitizeErrorMessage(streamError),
 			LiveTracked:  true, // stream deltas already fed the live token meter
 		})
+		finalSettle = settle
+		return cost, saved, cached
 	}
 
 	for event := range streamChan {
@@ -108,6 +127,7 @@ func (h *Handler) handleResponsesStreaming(
 			// successful completion. Record it as a failure and stop here.
 			recordStreamEnd(http.StatusBadGateway)
 			flusher.Flush()
+			runFinalSettle()
 			return
 		}
 
@@ -175,6 +195,7 @@ func (h *Handler) handleResponsesStreaming(
 
 	fmt.Fprintf(w, "data: [DONE]\n\n")
 	flusher.Flush()
+	runFinalSettle()
 }
 
 // persistedAssistantMessage renders the assistant turn of the completed stream

@@ -125,6 +125,26 @@ func AccountDenial(userStatus, userRole string, userBalance float64) *AccessDeni
 	return nil
 }
 
+// BalanceUnknownDenial is the fail-closed response served when the gateway knows
+// a key belongs to a user but cannot establish that user's status or balance:
+// the in-memory snapshot was built without user fields and the authoritative
+// lookup timed out.
+//
+// Failing open here (the old behaviour) meant a database stall silently disabled
+// the wallet gate *and* the pre-authorisation for those requests: exactly the
+// burst the amount reservation exists to stop. A short 503 with Retry-After is
+// the safe direction: the client retries when storage answers again.
+func BalanceUnknownDenial() *AccessDenial {
+	return &AccessDenial{
+		StatusCode: http.StatusServiceUnavailable,
+		Message:    "Account state is temporarily unavailable; the request was not admitted because the wallet balance could not be verified. Please retry shortly.",
+		Type:       "service_unavailable",
+		Code:       "account_state_unavailable",
+		Headers:    map[string]string{"Retry-After": "2"},
+		LogMessage: "account status/balance could not be resolved; failing closed",
+	}
+}
+
 // IsFreeReadVideoTaskQuery reports whether the request is exactly a GET for a
 // video task status (/v1/videos/tasks/:id, and the root-mounted
 // /videos/tasks/:id). Those reads are never billed — the task was already
@@ -273,14 +293,21 @@ func CheckKeyRateLimits(ctx context.Context, key *model.APIKeyConfig) KeyRateLim
 	return outcome
 }
 
-// ReserveUserQuota reserves one in-flight request slot for a non-admin user.
+// ReserveUserQuota pre-authorises the default in-flight amount for a non-admin
+// user.
+//
+// It is the compatibility entry point for callers that do not estimate a request
+// (the MCP JSON-RPC transport): it now delegates to the money-aware reservation
+// instead of the old fixed 0.0005 CNY counter, so those callers get the amount
+// and concurrency ceilings without changing their call site. New code that can
+// estimate the request should call ReserveUserQuotaAmount directly.
 func ReserveUserQuota(userID int64, balance float64) (bool, QuotaBackend) {
-	return globalQuotaTracker.TryAcquire(userID, balance)
+	return ReserveUserQuotaAmount(userID, balance, InflightReserveCNY())
 }
 
 // ReleaseUserQuota frees a reservation acquired with ReserveUserQuota.
 func ReleaseUserQuota(userID int64, backend QuotaBackend) {
-	globalQuotaTracker.Release(userID, backend)
+	ReleaseUserQuotaAmount(userID, backend, InflightReserveCNY())
 }
 
 // ---------------------------------------------------------------------------

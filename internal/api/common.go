@@ -75,6 +75,17 @@ func SetServedModelResolver(resolver func(channel, model string) string) {
 	servedModelResolver = resolver
 }
 
+// settleCostReporter reports the cost actually settled for a request back to the
+// admission layer, so the in-flight wallet pre-authorisation is released at the
+// real amount instead of the conservative estimate. Installed by the server at
+// startup (the api package does not own the reservation bookkeeping).
+var settleCostReporter func(c *gin.Context, cost float64)
+
+// SetSettledCostReporter installs the callback used by settleUsage.
+func SetSettledCostReporter(reporter func(c *gin.Context, cost float64)) {
+	settleCostReporter = reporter
+}
+
 // billingModelFor decides which model's rate card to charge.
 //
 // The upstream invoices us for the model it served, so billing must follow the
@@ -95,11 +106,6 @@ func billingModelFor(params AuditRecordParams, keyGroup string) string {
 	}
 	return params.Model
 }
-
-// settlementTimeout bounds the synchronous wallet settlement on the request
-// path. The database is local, so this only fires when something is wrong; the
-// record is then deferred to the async pipeline instead of stalling the response.
-const settlementTimeout = 1500 * time.Millisecond
 
 // statusClientClosed is the de-facto "client closed request" status recorded in
 // the audit trail when the downstream disconnects mid-stream. It is not part of
@@ -161,6 +167,28 @@ func clientClosedAuditReason(params AuditRecordParams) string {
 // recordUsage is the full-fidelity variant, also returning the saved cost and
 // cached token count so streaming handlers can emit them as a trailer.
 func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, int) {
+	record, cost, savedCost, cached := prepareUsage(c, params)
+	settleUsage(c, record)
+	return cost, savedCost, cached
+}
+
+// RecordUsageDeferred is RecordUsage for streaming responses.
+//
+// It performs every part of the accounting that the client can observe (cost
+// calculation, X-Airoute-* headers, audit enqueue) and returns a settle
+// closure. Handlers write the usage trailer and the protocol's terminal frame,
+// flush them, and only then call settle. The money movement still happens on
+// the request goroutine, but after the last byte reached the client, so a
+// saturated settlement writer can no longer delay [DONE]. That tail latency is
+// what the audit measured (up to 1.5 s when the old synchronous settlement
+// timed out).
+func RecordUsageDeferred(c *gin.Context, params AuditRecordParams) (cost float64, savedCost float64, cachedTokens int, settle func()) {
+	record, cost, savedCost, cachedTokens := prepareUsage(c, params)
+	return cost, savedCost, cachedTokens, func() { settleUsage(c, record) }
+}
+
+// prepareUsage does everything except moving money.
+func prepareUsage(c *gin.Context, params AuditRecordParams) (*storage.UsageLogRecord, float64, float64, int) {
 	var cost, savedCost float64
 	var pricingSnapshot *storage.UsagePricingSnapshot
 	var isOffPeak bool
@@ -309,20 +337,6 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 		CreatedAt: time.Now(),
 	}
 
-	// Settle the charge now, independently of the audit pipeline. A failure here
-	// (database unavailable, settlement runtime not installed) is not fatal: the
-	// record still travels through Redis/spill and is settled by the async
-	// writer, which is exactly the previous behaviour.
-	if record.Cost > 0 || record.TotalTokens > 0 {
-		settleCtx, cancelSettle := context.WithTimeout(context.Background(), settlementTimeout)
-		_ = storage.SettleChargeNow(settleCtx, record)
-		cancelSettle()
-	}
-
-	if storage.GlobalAsyncLogger != nil {
-		storage.GlobalAsyncLogger.Record(record)
-	}
-
 	// A 499 can live only in the audit trail: on a streaming request the wire
 	// already said 200 before the customer hung up, and a unary 2xx is flipped
 	// above. Publish the audit status so the access line can show both numbers,
@@ -359,7 +373,73 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 		}
 	}
 
-	return cost, savedCost, params.CachedTokens
+	return record, cost, savedCost, params.CachedTokens
+}
+
+// settleUsage moves the prepared record's money and reports the actual cost to
+// the admission layer so its in-flight pre-authorisation can be released at the
+// real amount instead of the conservative estimate.
+func settleUsage(c *gin.Context, record *storage.UsageLogRecord) {
+	if record == nil {
+		return
+	}
+	if settleCostReporter != nil {
+		settleCostReporter(c, record.Cost)
+	}
+	// Pin the idempotency key before anything can duplicate the record: the audit
+	// copy below and the ledger row must carry the same key, otherwise a redelivery
+	// would settle under a different one and charge twice.
+	if record.BillingID == "" {
+		record.BillingID = storage.NewBillingID()
+	}
+
+	// Audit evidence first. The pipeline is the at-least-once durability path; if
+	// the process dies between here and the settlement below, the replayed record
+	// settles the charge and the audit row is never lost. The copy matters: both
+	// the pipeline and the batcher mutate the record they receive, and the request
+	// goroutine must keep ownership of its own.
+	if storage.GlobalAsyncLogger != nil {
+		storage.GlobalAsyncLogger.Record(record.CloneForPipeline())
+	}
+
+	// Zero-cost records (failed dispatches, 4xx denials, free reads) have no money
+	// to move; the audit row above is the evidence.
+	if record.Cost <= 0 && record.TotalTokens <= 0 {
+		return
+	}
+
+	// Group-commit settlement: the wait is short on purpose. When it expires the
+	// charge is already on the audit pipeline and is settled there; only the timing
+	// changes, never the amount or the idempotency guarantee. The ledger's unique
+	// billing_id makes this settlement and the pipeline's retry apply exactly once,
+	// whichever runs first.
+	settleCtx, cancelSettle := context.WithTimeout(context.Background(), storage.SettlementWaitTimeout())
+	_ = storage.SettleChargeBatched(settleCtx, record)
+	cancelSettle()
+}
+
+// topUpQuotaForRequest refines the admission-time wallet pre-authorisation with a
+// conservative cost estimate, now that the request body has been parsed.
+//
+// Authentication runs before the body is read, so it can only reserve a coarse
+// constant. At dispatch the model, prompt size and max_tokens are known, and the
+// database advertises the prompt's true cost; topping the reservation up closes
+// the gap between "the wallet is positive" and "the wallet covers this request".
+// It is best-effort: a failed top-up leaves the admission-time amount in place
+// and never fails the request.
+func topUpQuotaForRequest(c *gin.Context, req *model.ChatCompletionRequest) {
+	if c == nil || req == nil {
+		return
+	}
+	maxTokens := 0
+	if req.MaxTokens != nil {
+		maxTokens = *req.MaxTokens
+	}
+	estimate := billing.EstimateCostCNY(req.Model, getKeyGroup(c), req.EstimatedPromptTokens(), maxTokens)
+	if estimate <= 0 {
+		return
+	}
+	middleware.TopUpUserQuota(c, estimate)
 }
 
 // writeStreamUsageTrailer appends the billing metadata as an SSE comment so
@@ -650,41 +730,79 @@ func resolveChatUsage(req *model.ChatCompletionRequest, resp *model.ChatCompleti
 // resolveEmbeddingTokens approximates prompt tokens for an embedding request when
 // the upstream returned no usage. String inputs are measured by length; token-id
 // arrays are already token counts.
+//
+// C-04: the estimate goes through the per-model calibrator like every chat
+// estimate does, and a real upstream count feeds the calibrator instead of only
+// being billed. Before this the two modality estimators were the only prompt
+// estimates in the gateway that ignored the learned tokenizer ratio, so the same
+// text was billed differently depending on whether the upstream reported usage.
 func resolveEmbeddingTokens(req *model.EmbeddingRequest, usage model.EmbeddingUsage) (int, string) {
+	local, exact := localEmbeddingPromptEstimate(req)
 	if usage.PromptTokens > 0 {
+		if !exact {
+			observePromptEstimate(req.Model, local, usage.PromptTokens)
+		}
 		return usage.PromptTokens, usageSourceUpstream
 	}
-	if req == nil {
+	if local <= 0 {
 		return 0, usageSourceUpstream
+	}
+	if exact {
+		// Token-id input is already an exact count; calibrating it would
+		// double-apply the tokenizer ratio.
+		return local, usageSourceEstimated
+	}
+	return calibratedPromptEstimate(req.Model, local), usageSourceEstimated
+}
+
+// localEmbeddingPromptEstimate counts the local estimate for an embedding input
+// without applying the tokenizer calibration. exact reports that the input was
+// already a token-id array, so no ratio applies.
+func localEmbeddingPromptEstimate(req *model.EmbeddingRequest) (tokens int, exact bool) {
+	if req == nil {
+		return 0, false
 	}
 	if inputs := req.GetInputStrings(); len(inputs) > 0 {
 		chars := 0
 		for _, input := range inputs {
 			chars += len(input)
 		}
-		return estimateTokens(chars), usageSourceEstimated
+		return estimateTokens(chars), false
 	}
 	// Token-id form: one array element is one token.
 	if ids, ok := req.Input.([]any); ok && len(ids) > 0 {
-		return len(ids), usageSourceEstimated
+		return len(ids), true
 	}
-	return 0, usageSourceUpstream
+	return 0, false
 }
 
 // resolveRerankTokens approximates prompt tokens for a rerank request (query plus
 // every candidate document) when the upstream returned no usage.
+//
+// C-04: same calibration contract as embedding and chat — estimate, learn from a
+// real upstream count, otherwise apply the learned ratio.
 func resolveRerankTokens(req *model.RerankRequest, usage model.RerankUsage) (int, string) {
+	local := localRerankPromptEstimate(req)
 	if usage.TotalTokens > 0 {
+		observePromptEstimate(req.Model, local, usage.TotalTokens)
 		return usage.TotalTokens, usageSourceUpstream
 	}
-	if req == nil {
+	if local <= 0 {
 		return 0, usageSourceUpstream
+	}
+	return calibratedPromptEstimate(req.Model, local), usageSourceEstimated
+}
+
+// localRerankPromptEstimate counts the local estimate for a rerank request.
+func localRerankPromptEstimate(req *model.RerankRequest) int {
+	if req == nil {
+		return 0
 	}
 	chars := len(req.Query)
 	for _, doc := range req.GetDocumentTexts() {
 		chars += len(doc)
 	}
-	return estimateTokens(chars), usageSourceEstimated
+	return estimateTokens(chars)
 }
 
 // estimateCanonicalPromptTokens approximates prompt tokens from the canonical
@@ -875,13 +993,22 @@ func normalizeUnbillableCurrency(cost, savedCost float64, snapshot *storage.Usag
 }
 
 // The wallet settles only CNY. Reject a legacy foreign rate before work starts.
+//
+// C-14: the gate covers every model settlement may price, not only the requested
+// one. When a channel maps the alias to a served model that has its own rate card,
+// billing charges that rate card (see billingModelFor), so a non-CNY legacy row
+// there would sail past a requested-model-only check and only surface as a zeroed
+// charge after the upstream work was already paid for.
 func validateModelCurrency(c *gin.Context, modelName string) bool {
 	if billing.GlobalEngine == nil {
 		return true
 	}
-	if err := storage.ValidatePriceCurrency(billing.GlobalEngine.GetPriceWithGroup(modelName, getKeyGroup(c))); err != nil {
-		RespondOpenAIError(c, http.StatusUnprocessableEntity, err.Error(), "invalid_request_error", "unsupported_pricing_currency")
-		return false
+	keyGroup := getKeyGroup(c)
+	for _, candidate := range currencyModelsForBilling(modelName, keyGroup) {
+		if err := storage.ValidatePriceCurrency(billing.GlobalEngine.GetPriceWithGroup(candidate, keyGroup)); err != nil {
+			RespondOpenAIError(c, http.StatusUnprocessableEntity, err.Error(), "invalid_request_error", "unsupported_pricing_currency")
+			return false
+		}
 	}
 	return true
 }

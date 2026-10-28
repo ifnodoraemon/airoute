@@ -19,6 +19,7 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 	telemetry.GlobalLiveMetrics.BeginStream()
 	defer telemetry.GlobalLiveMetrics.EndStream()
 
+	topUpQuotaForRequest(c, canonicalReq)
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, canonicalReq)
 	if err != nil {
 		statusCode, _, _, _ := resolveUpstreamFailureStatus(err)
@@ -48,6 +49,20 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 	var finalCost, finalSaved float64
 	var finalCached int
 
+	// Settlement is deferred until the terminal frame has been flushed, so a
+	// saturated settlement writer cannot delay [DONE]. Preparation (cost
+	// calculation, headers, audit enqueue) already happened in recordStreamEnd.
+	var finalSettle func()
+	settled := false
+	runFinalSettle := func() {
+		if settled {
+			return
+		}
+		settled = true
+		if finalSettle != nil {
+			finalSettle()
+		}
+	}
 	var recordOnce sync.Once
 	recordStreamEnd := func(statusCode int) {
 		// A client abort (499) still sent the prompt upstream; estimate it too.
@@ -64,7 +79,7 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 				usageSource = "estimated"
 			}
 		}
-		finalCost, finalSaved, finalCached = recordUsage(c, AuditRecordParams{
+		finalCost, finalSaved, finalCached, finalSettle = RecordUsageDeferred(c, AuditRecordParams{
 			SessionID:        sessionID,
 			ChatID:           geminiUpstreamChatID,
 			Channel:          upstreamChannel,
@@ -80,6 +95,7 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 			ErrorMessage:     sanitizeErrorMessage(streamError),
 		})
 	}
+	defer runFinalSettle()
 	defer func() {
 		recordOnce.Do(func() {
 			statusCode := http.StatusOK
