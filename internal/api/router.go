@@ -9,6 +9,34 @@ import (
 	"github.com/ifnodoraemon/airoute/web"
 )
 
+// registerDataPlaneRoutes wires the protocol ingress once and applies it to every
+// prefix a client may use: /v1 (the OpenAI/Anthropic convention) and the bare root
+// for SDKs configured with a BaseURL that has no /v1 suffix. One list keeps the
+// two surfaces from drifting apart.
+func registerDataPlaneRoutes(g *gin.RouterGroup, handler *Handler, mmHandler *MultimodalHandler) {
+	// OpenAI ingress (Chat completions + Text completions + Responses + Models + Embeddings + Rerank + Moderations)
+	g.POST("/chat/completions", handler.HandleChatCompletions)
+	g.POST("/completions", handler.HandleCompletions)
+	g.POST("/responses", handler.HandleResponses)
+	g.GET("/models", handler.HandleModels)
+	g.GET("/models/*model", handler.HandleModelDetail)
+	g.POST("/moderations", handler.HandleModerations)
+	g.POST("/embeddings", handler.HandleEmbeddings)
+	g.POST("/rerank", handler.HandleRerank)
+
+	// Anthropic Claude Messages API ingress + Token Counting
+	g.POST("/messages", handler.HandleAnthropicMessages)
+	g.POST("/messages/count_tokens", handler.HandleAnthropicCountTokens)
+
+	// Multimodal ingress (Image, Audio TTS/STT/Translation, Video)
+	g.POST("/images/generations", mmHandler.HandleImageGenerations)
+	g.POST("/audio/speech", mmHandler.HandleAudioSpeech)
+	g.POST("/audio/transcriptions", mmHandler.HandleAudioTranscriptions)
+	g.POST("/audio/translations", mmHandler.HandleAudioTranslations)
+	g.POST("/videos/generations", mmHandler.HandleVideoGenerations)
+	g.GET("/videos/tasks/:id", mmHandler.HandleVideoTask)
+}
+
 // SetupRouter initializes and configures the Gin engine.
 func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.AdminHandler) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
@@ -267,29 +295,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 	v1 := r.Group("/v1")
 	v1.Use(middleware.AuthMiddleware())
 	v1.Use(middleware.RateLimitMiddleware())
-	{
-		// OpenAI ingress (Chat completions + Text completions + Responses + Models + Embeddings + Rerank + Moderations)
-		v1.POST("/chat/completions", handler.HandleChatCompletions)
-		v1.POST("/completions", handler.HandleCompletions)
-		v1.POST("/responses", handler.HandleResponses)
-		v1.GET("/models", handler.HandleModels)
-		v1.GET("/models/*model", handler.HandleModelDetail)
-		v1.POST("/moderations", handler.HandleModerations)
-		v1.POST("/embeddings", handler.HandleEmbeddings)
-		v1.POST("/rerank", handler.HandleRerank)
-
-		// Anthropic Claude Messages API ingress + Token Counting
-		v1.POST("/messages", handler.HandleAnthropicMessages)
-		v1.POST("/messages/count_tokens", handler.HandleAnthropicCountTokens)
-
-		// Multimodal Ingress (Image, Audio TTS/STT/Translation, Video)
-		v1.POST("/images/generations", mmHandler.HandleImageGenerations)
-		v1.POST("/audio/speech", mmHandler.HandleAudioSpeech)
-		v1.POST("/audio/transcriptions", mmHandler.HandleAudioTranscriptions)
-		v1.POST("/audio/translations", mmHandler.HandleAudioTranslations)
-		v1.POST("/videos/generations", mmHandler.HandleVideoGenerations)
-		v1.GET("/videos/tasks/:id", mmHandler.HandleVideoTask)
-	}
+	registerDataPlaneRoutes(v1, handler, mmHandler)
 
 	// Google Gemini v1beta Ingress group (protected by unified Auth & RateLimit middlewares)
 	v1beta := r.Group("/v1beta")
@@ -306,26 +312,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 	rootDataPlane := r.Group("")
 	rootDataPlane.Use(middleware.AuthMiddleware())
 	rootDataPlane.Use(middleware.RateLimitMiddleware())
-	{
-		rootDataPlane.POST("/chat/completions", handler.HandleChatCompletions)
-		rootDataPlane.POST("/completions", handler.HandleCompletions)
-		rootDataPlane.POST("/responses", handler.HandleResponses)
-		rootDataPlane.GET("/models", handler.HandleModels)
-		rootDataPlane.GET("/models/*model", handler.HandleModelDetail)
-		rootDataPlane.POST("/moderations", handler.HandleModerations)
-		rootDataPlane.POST("/embeddings", handler.HandleEmbeddings)
-		rootDataPlane.POST("/rerank", handler.HandleRerank)
-		rootDataPlane.POST("/messages", handler.HandleAnthropicMessages)
-		rootDataPlane.POST("/messages/count_tokens", handler.HandleAnthropicCountTokens)
-
-		// Multimodal Root Ingress parity
-		rootDataPlane.POST("/images/generations", mmHandler.HandleImageGenerations)
-		rootDataPlane.POST("/audio/speech", mmHandler.HandleAudioSpeech)
-		rootDataPlane.POST("/audio/transcriptions", mmHandler.HandleAudioTranscriptions)
-		rootDataPlane.POST("/audio/translations", mmHandler.HandleAudioTranslations)
-		rootDataPlane.POST("/videos/generations", mmHandler.HandleVideoGenerations)
-		rootDataPlane.GET("/videos/tasks/:id", mmHandler.HandleVideoTask)
-	}
+	registerDataPlaneRoutes(rootDataPlane, handler, mmHandler)
 
 	return r
 }

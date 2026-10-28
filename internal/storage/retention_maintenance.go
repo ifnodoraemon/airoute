@@ -71,47 +71,37 @@ func shouldRunRetention(slot *atomic.Int64, interval time.Duration) bool {
 	return slot.CompareAndSwap(previous, now)
 }
 
-// maybePruneVerificationCodes prunes expired verification codes from the write
-// path, at most once per retentionPruneInterval.
-func (r *Repository) maybePruneVerificationCodes() {
+// maybePrune runs one opportunistic retention pass: it honours the configured
+// retention window and the once-per-interval slot, then reports the bounded
+// delete. Both opportunistic tables share this shape, so the mechanics live here.
+func (r *Repository) maybePrune(slot *atomic.Int64, retention func() time.Duration, purge func(time.Time) (int64, error), warnKey, warnMsg, infoMsg string) {
 	if r == nil || r.db == nil {
 		return
 	}
-	if retention := verificationRetention(); retention <= 0 {
+	window := retention()
+	if window <= 0 || !shouldRunRetention(slot, retentionPruneInterval) {
 		return
 	}
-	if !shouldRunRetention(&r.verificationPruneAt, retentionPruneInterval) {
-		return
-	}
-	// Keep the code for verificationRetention after it expired.
-	cutoff := time.Now().Add(-verificationRetention())
-	if n, err := r.PurgeVerificationCodesBefore(cutoff); err != nil {
-		telemetry.WarnLogger(telemetry.ScopedLogger("system"), "verification-prune-failed", 10*time.Minute,
-			"failed to prune expired verification codes", "error", err.Error())
+	n, err := purge(time.Now().Add(-window))
+	if err != nil {
+		telemetry.WarnLogger(telemetry.ScopedLogger("system"), warnKey, 10*time.Minute, warnMsg, "error", err.Error())
 	} else if n > 0 {
-		telemetry.ScopedLogger("system").Info("pruned expired verification codes", "deleted", n)
+		telemetry.ScopedLogger("system").Info(infoMsg, "deleted", n)
 	}
+}
+
+// maybePruneVerificationCodes prunes expired verification codes from the write
+// path, at most once per retentionPruneInterval.
+func (r *Repository) maybePruneVerificationCodes() {
+	r.maybePrune(&r.verificationPruneAt, verificationRetention, r.PurgeVerificationCodesBefore,
+		"verification-prune-failed", "failed to prune expired verification codes", "pruned expired verification codes")
 }
 
 // maybePruneVideoTasks prunes old video task records from the write path, at most
 // once per retentionPruneInterval.
 func (r *Repository) maybePruneVideoTasks() {
-	if r == nil || r.db == nil {
-		return
-	}
-	if retention := videoTaskRetention(); retention <= 0 {
-		return
-	}
-	if !shouldRunRetention(&r.videoTaskPruneAt, retentionPruneInterval) {
-		return
-	}
-	cutoff := time.Now().Add(-videoTaskRetention())
-	if n, err := r.PurgeVideoTasksBefore(cutoff); err != nil {
-		telemetry.WarnLogger(telemetry.ScopedLogger("system"), "video-task-prune-failed", 10*time.Minute,
-			"failed to prune expired video tasks", "error", err.Error())
-	} else if n > 0 {
-		telemetry.ScopedLogger("system").Info("pruned expired video tasks", "deleted", n)
-	}
+	r.maybePrune(&r.videoTaskPruneAt, videoTaskRetention, r.PurgeVideoTasksBefore,
+		"video-task-prune-failed", "failed to prune expired video tasks", "pruned expired video tasks")
 }
 
 // PurgeVerificationCodesBefore deletes verification codes that expired before
