@@ -295,23 +295,6 @@ func CheckKeyRateLimits(ctx context.Context, key *model.APIKeyConfig) KeyRateLim
 	return outcome
 }
 
-// ReserveUserQuota pre-authorises the default in-flight amount for a non-admin
-// user.
-//
-// It is the compatibility entry point for callers that do not estimate a request
-// (the MCP JSON-RPC transport): it now delegates to the money-aware reservation
-// instead of the old fixed 0.0005 CNY counter, so those callers get the amount
-// and concurrency ceilings without changing their call site. New code that can
-// estimate the request should call ReserveUserQuotaAmount directly.
-func ReserveUserQuota(userID int64, balance float64) (bool, QuotaBackend) {
-	return ReserveUserQuotaAmount(userID, balance, InflightReserveCNY())
-}
-
-// ReleaseUserQuota frees a reservation acquired with ReserveUserQuota.
-func ReleaseUserQuota(userID int64, backend QuotaBackend) {
-	ReleaseUserQuotaAmount(userID, backend, InflightReserveCNY())
-}
-
 // ---------------------------------------------------------------------------
 // Client identity resolution
 //

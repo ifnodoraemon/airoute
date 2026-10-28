@@ -60,9 +60,6 @@ var (
 // InflightReserveCNY is the per-request amount pre-authorised at admission.
 func InflightReserveCNY() float64 { return inflightReserveCNY }
 
-// MaxInflightPerUser is the per-user concurrency cap (0 means uncapped).
-func MaxInflightPerUser() int { return maxInflightPerUser }
-
 func parseInflightReserveCNY(raw string) float64 {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {

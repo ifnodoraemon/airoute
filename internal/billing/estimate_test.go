@@ -1,7 +1,6 @@
 package billing
 
 import (
-	"math"
 	"testing"
 
 	"github.com/ifnodoraemon/airoute/internal/storage"
@@ -135,44 +134,5 @@ func TestEstimateCostCNY_ZeroWhenEngineMissingOrNoTokens(t *testing.T) {
 	}
 	if got := EstimateCostCNY("estimate-base", "default", -10, -10); got != 0 {
 		t.Fatalf("negative tokens: EstimateCostCNY = %v, want 0", got)
-	}
-}
-
-func TestEstimateCostUnits_MatchesEstimateCostCNY(t *testing.T) {
-	useGlobalEngine(t, newEstimateTestEngine(t))
-
-	cases := []struct {
-		name         string
-		model, group string
-		prompt, maxC int
-		wantUnits    int64
-	}{
-		{"base group", "estimate-base", "default", 100_000, 1_000, 208_000_000},
-		{"group multiplier", "estimate-base", "vip", 100_000, 1_000, 166_400_000},
-		{"prompt only", "estimate-base", "default", 1_000_000, 0, 2_000_000_000},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			cny := EstimateCostCNY(tc.model, tc.group, tc.prompt, tc.maxC)
-			units := EstimateCostUnits(tc.model, tc.group, tc.prompt, tc.maxC)
-			if units != tc.wantUnits {
-				t.Fatalf("EstimateCostUnits = %d, want %d", units, tc.wantUnits)
-			}
-			// The integer form must agree with the CNY form to the sub-unit.
-			wantFromCNY := int64(math.Round(cny * 1e9))
-			if units != wantFromCNY {
-				t.Fatalf("EstimateCostUnits = %d, CNY-derived = %d", units, wantFromCNY)
-			}
-		})
-	}
-}
-
-func TestEstimateCostUnits_ZeroCostIsZeroUnits(t *testing.T) {
-	previous := GlobalEngine
-	GlobalEngine = nil
-	t.Cleanup(func() { GlobalEngine = previous })
-
-	if got := EstimateCostUnits("estimate-base", "default", 100_000, 1_000); got != 0 {
-		t.Fatalf("nil engine: EstimateCostUnits = %d, want 0", got)
 	}
 }

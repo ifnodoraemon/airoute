@@ -1,10 +1,7 @@
 package billing
 
 import (
-	"math"
 	"strings"
-
-	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
 // tokensPerPriceUnit is the token count the rate card is quoted against:
@@ -70,24 +67,4 @@ func EstimateCostCNY(model, group string, promptTokens, maxCompletionTokens int)
 	// Same 1e-8 rounding the settlement path applies, so an estimate and the
 	// charge it was compared against are expressed in the same precision.
 	return roundPrecision(cost)
-}
-
-// EstimateCostUnits is EstimateCostCNY expressed in the ledger's integer
-// sub-units (1e-9 CNY), which is the representation the distributed in-flight
-// reservation and the telemetry gauges use.
-//
-// The conversion rounds to the nearest sub-unit so that a cost that is a whole
-// number of sub-units survives the float round trip exactly; any positive cost
-// still yields at least one unit, because a zero-unit reservation would admit an
-// unbounded request for free.
-func EstimateCostUnits(model, group string, promptTokens, maxCompletionTokens int) int64 {
-	cost := EstimateCostCNY(model, group, promptTokens, maxCompletionTokens)
-	if cost <= 0 {
-		return 0
-	}
-	units := int64(math.Round(cost * float64(storage.UnitsPerCurrency)))
-	if units < 1 {
-		units = 1
-	}
-	return units
 }

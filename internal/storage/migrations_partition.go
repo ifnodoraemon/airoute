@@ -530,17 +530,6 @@ func ensureUsageAuditIDsTable(execer usageLogPartitionExecer) error {
 	return nil
 }
 
-// usageAuditIDsTableExists reports whether the dedupe registry is present. A
-// partitioned database always has it, but a database that was partitioned by a
-// previous deploy and then restored from an older dump may not.
-func usageAuditIDsTableExists(db *DB) (bool, error) {
-	var exists bool
-	err := db.DB.QueryRow(`SELECT EXISTS (
-		SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-		 WHERE c.relname = $1 AND n.nspname = current_schema())`, usageAuditIDsTable).Scan(&exists)
-	return exists, err
-}
-
 // usageLogIndex is one row of pg_indexes for the pre-partition table.
 type usageLogIndex struct {
 	name       string

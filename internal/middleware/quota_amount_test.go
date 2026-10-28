@@ -165,31 +165,6 @@ func TestReserveUserQuotaAmountSkipsOwnerlessRequests(t *testing.T) {
 	}
 }
 
-func TestReserveUserQuotaCompatibilityWrapperUsesAmountPath(t *testing.T) {
-	resetQuotaTrackerForTest(t, 0.05, 0)
-	gaugeBefore := reservedUnitsGauge()
-	userID := int64(9_100_005)
-
-	// The MCP transport still calls ReserveUserQuota; it must now get the same
-	// amount-based ceiling instead of the old 0.0005 counter.
-	first, backend := ReserveUserQuota(userID, 0.10)
-	if !first || backend != QuotaBackendLocal {
-		t.Fatalf("first reserve = (%v, %q)", first, backend)
-	}
-	if second, _ := ReserveUserQuota(userID, 0.10); !second {
-		t.Fatalf("second reservation within balance was rejected")
-	}
-	if third, _ := ReserveUserQuota(userID, 0.10); third {
-		t.Fatalf("third reservation was admitted against a 0.10 wallet holding 0.10 of reservations")
-	}
-	ReleaseUserQuota(userID, backend)
-	ReleaseUserQuota(userID, backend)
-
-	if got := reservedUnitsGauge() - gaugeBefore; got != 0 {
-		t.Fatalf("gauge delta = %d, want 0", got)
-	}
-}
-
 func TestReserveUserQuotaAmountConcurrentBurstRespectsAmountCeiling(t *testing.T) {
 	resetQuotaTrackerForTest(t, 0.05, 0)
 	gaugeBefore := reservedUnitsGauge()
