@@ -15,7 +15,7 @@ func newDeadlockTestEngine() *BillingEngine {
 			"default:exact": {Model: "exact"},
 		},
 		wildcard: []wildcardRule{
-			{group: "default", prefix: "gpt", price: &storage.ModelPriceRecord{Model: "gpt*"}},
+			{group: "default", pattern: "gpt*", price: &storage.ModelPriceRecord{Model: "gpt*"}},
 		},
 		deflt: &storage.ModelPriceRecord{Model: "*"},
 	}

@@ -44,6 +44,35 @@ func TestMetrics_PercentilesAndModelBreakdown(t *testing.T) {
 	}
 }
 
+// The learned token ratio is only applied after a minimum number of samples, so
+// the sample count must be observable: without it a bias value cannot be told
+// apart from one that is deliberately not in effect yet.
+func TestMetrics_EstimateCalibrationSamplesAreExposed(t *testing.T) {
+	m := &Metrics{
+		latencyBuckets: make(map[float64]uint64),
+		ttftBuckets:    make(map[float64]uint64),
+		modelRequests:  make(map[string]map[string]uint64),
+	}
+	m.SetEstimateBias("gpt-4o", 200000, 7)
+	m.SetEstimateBias("claude-3-5-sonnet", -100000, 3)
+
+	samples := m.EstimateSamplesByModel()
+	if samples["gpt-4o"] != 7 || samples["claude-3-5-sonnet"] != 3 {
+		t.Fatalf("per-model samples = %v, want 7 and 3", samples)
+	}
+
+	promText := m.ToPrometheusFormat()
+	for _, want := range []string{
+		`airoute_billing_estimate_samples{model="gpt-4o"} 7`,
+		`airoute_billing_estimate_samples{model="claude-3-5-sonnet"} 3`,
+		"airoute_billing_estimate_samples 10",
+	} {
+		if !strings.Contains(promText, want) {
+			t.Fatalf("expected %q in Prometheus text, got:\n%s", want, promText)
+		}
+	}
+}
+
 // Usage-log rows are billing evidence. They used to be dropped with only a slog
 // line, so a silent loss was invisible to monitoring.
 func TestMetrics_UsageLogPipelineIsExposed(t *testing.T) {

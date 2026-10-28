@@ -216,6 +216,75 @@ func TestGeminiValidation_Lenient(t *testing.T) {
 	}
 }
 
+// The reasoning-model rule is shared across protocols, so it must be enforced on
+// the Anthropic entry point too: a rule with disallow_temperature used to be
+// loaded and matched here but never checked, leaving custom temperature accepted.
+func TestAnthropicValidation_DisallowsTemperature(t *testing.T) {
+	rule := &config.ModelValidationRule{
+		Model:               "claude-*",
+		Protocol:            "anthropic",
+		Level:               LevelStrict,
+		DisallowTemperature: true,
+	}
+	custom := 0.3
+	req := &model.AnthropicInboundRequest{
+		Model:       "claude-3-5-sonnet",
+		MaxTokens:   1024,
+		Temperature: &custom,
+		Messages:    []model.AnthropicInboundMessage{{Role: "user", Content: "Hi"}},
+	}
+	res := ValidateAnthropic(req, rule, LevelStrict)
+	if res.Valid || res.Error == nil || res.Error.Field != "temperature" {
+		t.Fatalf("expected a temperature rejection, got %+v", res)
+	}
+
+	lenient := &model.AnthropicInboundRequest{
+		Model:       "claude-3-5-sonnet",
+		MaxTokens:   1024,
+		Temperature: &custom,
+		Messages:    []model.AnthropicInboundMessage{{Role: "user", Content: "Hi"}},
+	}
+	resLenient := ValidateAnthropic(lenient, rule, LevelLenient)
+	if !resLenient.Valid {
+		t.Fatalf("expected lenient mode to pass, got %v", resLenient.Error)
+	}
+	if lenient.Temperature != nil {
+		t.Fatalf("expected the custom temperature to be dropped, got %v", *lenient.Temperature)
+	}
+}
+
+// Same rule on the Gemini entry point, where temperature lives in
+// generationConfig instead of a top-level field.
+func TestGeminiValidation_DisallowsTemperature(t *testing.T) {
+	rule := &config.ModelValidationRule{
+		Model:               "gemini-2.5-*",
+		Protocol:            "gemini",
+		Level:               LevelStrict,
+		DisallowTemperature: true,
+	}
+	custom := 0.7
+	req := &provider.GeminiRequest{
+		Contents:         []provider.GeminiContent{{Role: "user", Parts: []provider.GeminiPart{{Text: "Hi"}}}},
+		GenerationConfig: &provider.GeminiGenerationConfig{Temperature: &custom},
+	}
+	res := ValidateGemini(req, rule, LevelStrict)
+	if res.Valid || res.Error == nil || res.Error.Field != "generationConfig.temperature" {
+		t.Fatalf("expected a generationConfig.temperature rejection, got %+v", res)
+	}
+
+	lenient := &provider.GeminiRequest{
+		Contents:         []provider.GeminiContent{{Role: "user", Parts: []provider.GeminiPart{{Text: "Hi"}}}},
+		GenerationConfig: &provider.GeminiGenerationConfig{Temperature: &custom},
+	}
+	resLenient := ValidateGemini(lenient, rule, LevelLenient)
+	if !resLenient.Valid {
+		t.Fatalf("expected lenient mode to pass, got %v", resLenient.Error)
+	}
+	if lenient.GenerationConfig.Temperature != nil {
+		t.Fatalf("expected the custom temperature to be dropped, got %v", *lenient.GenerationConfig.Temperature)
+	}
+}
+
 func TestModelRulePatternMatching(t *testing.T) {
 	cfg := &config.Config{
 		ModelValidation: config.ModelValidationConfig{

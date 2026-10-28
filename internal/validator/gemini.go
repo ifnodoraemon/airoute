@@ -153,7 +153,11 @@ func ValidateGemini(req *provider.GeminiRequest, rule *config.ModelValidationRul
 
 	// 4. GenerationConfig validation
 	if req.GenerationConfig != nil {
-		if req.GenerationConfig.Temperature != nil {
+		if rule != nil && rule.DisallowTemperature {
+			if !checkDisallowedTemperature(res, level, ProtocolGemini, "generationConfig.temperature", "", &req.GenerationConfig.Temperature) {
+				return res
+			}
+		} else if req.GenerationConfig.Temperature != nil {
 			tVal := *req.GenerationConfig.Temperature
 			if tVal < 0.0 || tVal > 2.0 {
 				if level == LevelStrict {

@@ -104,42 +104,114 @@ func TestBillingEngine_IsOffPeak_CrossMidnight(t *testing.T) {
 	}
 }
 
-func TestValidateSlotsOverlap(t *testing.T) {
+// Slots are validated through ValidateOffPeakSlots in "custom" mode: that is the
+// only mode whose strategy reads them, so it is the mode a write path must pass
+// for the overlap rules to run at all.
+func TestValidateOffPeakSlotsOverlap(t *testing.T) {
 	// 1. Same day overlap -> error
 	overlapJSON := `[
-		{"name":"时段1","start":"00:00","end":"08:30","days":[1,2,3]},
-		{"name":"时段2","start":"08:00","end":"12:00","days":[3,4,5]}
+		{"name":"时段1","start":"00:00","end":"08:30","discount":0.5,"days":[1,2,3]},
+		{"name":"时段2","start":"08:00","end":"12:00","discount":0.6,"days":[3,4,5]}
 	]`
-	err := ValidateSlotsOverlap(overlapJSON)
+	err := ValidateOffPeakSlots("custom", overlapJSON)
 	if err == nil {
 		t.Fatal("expected error for overlapping slots on Wednesday (day 3), got nil")
 	}
 
 	// 2. Different days with same time -> allowed (nil)
 	diffDaysJSON := `[
-		{"name":"时段1","start":"08:00","end":"12:00","days":[1,2,3,4,5]},
-		{"name":"时段2","start":"08:00","end":"12:00","days":[6,7]}
+		{"name":"时段1","start":"08:00","end":"12:00","discount":0.5,"days":[1,2,3,4,5]},
+		{"name":"时段2","start":"08:00","end":"12:00","discount":0.5,"days":[6,7]}
 	]`
-	if err := ValidateSlotsOverlap(diffDaysJSON); err != nil {
+	if err := ValidateOffPeakSlots("custom", diffDaysJSON); err != nil {
 		t.Fatalf("expected nil for different days, got %v", err)
 	}
 
 	// 3. Contiguous seamless boundary (08:30 end, 08:30 start) -> allowed (nil)
 	contiguousJSON := `[
-		{"name":"时段1","start":"00:00","end":"08:30","days":[]},
-		{"name":"时段2","start":"08:30","end":"12:00","days":[]}
+		{"name":"时段1","start":"00:00","end":"08:30","discount":0.5,"days":[]},
+		{"name":"时段2","start":"08:30","end":"12:00","discount":0.5,"days":[]}
 	]`
-	if err := ValidateSlotsOverlap(contiguousJSON); err != nil {
+	if err := ValidateOffPeakSlots("custom", contiguousJSON); err != nil {
 		t.Fatalf("expected nil for contiguous boundary, got %v", err)
 	}
 
 	// 4. Cross-midnight overlap with early morning
 	crossMidnightOverlap := `[
-		{"name":"夜间","start":"22:00","end":"06:00","days":[]},
-		{"name":"早间","start":"05:00","end":"09:00","days":[]}
+		{"name":"夜间","start":"22:00","end":"06:00","discount":0.5,"days":[]},
+		{"name":"早间","start":"05:00","end":"09:00","discount":0.5,"days":[]}
 	]`
-	if err := ValidateSlotsOverlap(crossMidnightOverlap); err == nil {
+	if err := ValidateOffPeakSlots("custom", crossMidnightOverlap); err == nil {
 		t.Fatal("expected error for cross-midnight overlapping morning, got nil")
+	}
+}
+
+// The write path used to accept slot values the engine cannot honour: a day
+// outside 1-7 made the slot never match, and an out-of-range discount silently
+// fell back to the row discount. Both are rejected now.
+func TestValidateSlotsRejectsValuesTheEngineCannotHonour(t *testing.T) {
+	cases := map[string]string{
+		"day zero":            `[{"start":"00:00","end":"08:00","discount":0.5,"days":[0]}]`,
+		"day past sunday":     `[{"start":"00:00","end":"08:00","discount":0.5,"days":[8]}]`,
+		"zero discount":       `[{"start":"00:00","end":"08:00","discount":0,"days":[1]}]`,
+		"negative discount":   `[{"start":"00:00","end":"08:00","discount":-0.5,"days":[1]}]`,
+		"surcharge discount":  `[{"start":"00:00","end":"08:00","discount":1.5,"days":[1]}]`,
+		"full-price slot":     `[{"start":"00:00","end":"08:00","discount":1,"days":[1]}]`,
+		"equal start and end": `[{"start":"08:00","end":"08:00","discount":0.5}]`,
+		"hour out of range":   `[{"start":"00:00","end":"25:00","discount":0.5}]`,
+	}
+	for name, slots := range cases {
+		if err := ValidateOffPeakSlots("custom", slots); err == nil {
+			t.Errorf("%s: expected a validation error, got nil", name)
+		}
+	}
+
+	// A single valid slot is accepted even though there is nothing to overlap.
+	if err := ValidateOffPeakSlots("custom", `[{"start":"00:00","end":"08:00","discount":0.5,"days":[1,2,3]}]`); err != nil {
+		t.Fatalf("valid single slot rejected: %v", err)
+	}
+}
+
+// Slots are only read by the "custom" strategy, so validation has to follow the
+// mode the engine will evaluate them under.
+func TestValidateOffPeakSlotsFollowsMode(t *testing.T) {
+	overlapping := `[
+		{"start":"00:00","end":"10:00","discount":0.5,"days":[1]},
+		{"start":"05:00","end":"12:00","discount":0.6,"days":[1]}
+	]`
+	if err := ValidateOffPeakSlots("custom", overlapping); err == nil {
+		t.Fatal("expected overlap to be rejected in custom mode")
+	}
+	// The engine ignores slots for these modes, so the same configuration is not an
+	// error there (and the fields it does read are validated elsewhere).
+	for _, mode := range []string{"night", "none", ""} {
+		if err := ValidateOffPeakSlots(mode, overlapping); err != nil {
+			t.Errorf("mode %q: slots are not read by the engine, got %v", mode, err)
+		}
+	}
+	if err := ValidateOffPeakSlots("custom", ""); err != nil {
+		t.Fatalf("empty slot list in custom mode should be valid, got %v", err)
+	}
+}
+
+// An invalid slot discount must mean "no discount", exactly like the row-level
+// clamp - not "fall back to the row discount", which turned a typo into half
+// price (1.5 meaning "surcharge" and 0 meaning "no discount" both billed 0.5).
+func TestBillingEngine_InvalidSlotDiscountIsNotFallenBack(t *testing.T) {
+	engine := &BillingEngine{}
+	at := time.Date(2026, 10, 27, 12, 0, 0, 0, time.FixedZone("CST", 8*3600))
+	for _, discount := range []string{"1.5", "0"} {
+		rec := &storage.ModelPriceRecord{
+			Model:           "slot-discount",
+			OffPeakEnabled:  true,
+			OffPeakMode:     "custom",
+			OffPeakDiscount: 0.5, // the row discount an invalid slot used to inherit
+			OffPeakSlots:    `[{"start":"11:00","end":"13:00","discount":` + discount + `}]`,
+		}
+		isOff, got := engine.IsOffPeak(rec, at)
+		if !isOff || got != 1.0 {
+			t.Fatalf("slot discount %s: isOff=%v discount=%.2f, want true/1.0 (no discount)", discount, isOff, got)
+		}
 	}
 }
 
@@ -179,25 +251,25 @@ func TestCalculateCostWithGroupMultipliers(t *testing.T) {
 	// Base cost = 10 + 20 = 30 CNY
 
 	// Case 1: default group -> 30 CNY, saved 0
-	cost, saved, _, isOff, _ := engine.CalculateCostDetailedWithGroup("gpt-base", "default", 1_000_000, 1_000_000, 0, peakTime)
+	cost, saved, _, isOff, _, _ := engine.CalculateCostForUnitsWithCacheCreation("gpt-base", "default", 1_000_000, 1_000_000, 0, 0, 1, peakTime)
 	if isOff || cost != 30.0 || saved != 0.0 {
 		t.Fatalf("expected cost=30.0, saved=0.0 for default, got cost=%f, saved=%f", cost, saved)
 	}
 
 	// Case 2: vip group on base model (no explicit vip rule) -> inherits base * 0.8 -> 24 CNY, saved 6 CNY
-	costVip, savedVip, _, _, _ := engine.CalculateCostDetailedWithGroup("gpt-base", "vip", 1_000_000, 1_000_000, 0, peakTime)
+	costVip, savedVip, _, _, _, _ := engine.CalculateCostForUnitsWithCacheCreation("gpt-base", "vip", 1_000_000, 1_000_000, 0, 0, 1, peakTime)
 	if costVip != 24.0 || savedVip != 6.0 {
 		t.Fatalf("expected cost=24.0, saved=6.0 for vip multiplier, got cost=%f, saved=%f", costVip, savedVip)
 	}
 
 	// Case 3: enterprise group on base model -> inherits base * 1.5 -> 45 CNY, saved 0
-	costEnt, savedEnt, _, _, _ := engine.CalculateCostDetailedWithGroup("gpt-base", "enterprise", 1_000_000, 1_000_000, 0, peakTime)
+	costEnt, savedEnt, _, _, _, _ := engine.CalculateCostForUnitsWithCacheCreation("gpt-base", "enterprise", 1_000_000, 1_000_000, 0, 0, 1, peakTime)
 	if costEnt != 45.0 || savedEnt != 0.0 {
 		t.Fatalf("expected cost=45.0, saved=0.0 for enterprise, got cost=%f, saved=%f", costEnt, savedEnt)
 	}
 
 	// Case 4: explicit vip override exists -> uses explicit override rate without multiplying again
-	costOverride, _, _, _, _ := engine.CalculateCostDetailedWithGroup("gpt-override", "vip", 1_000_000, 1_000_000, 0, peakTime)
+	costOverride, _, _, _, _, _ := engine.CalculateCostForUnitsWithCacheCreation("gpt-override", "vip", 1_000_000, 1_000_000, 0, 0, 1, peakTime)
 	if costOverride != 15.0 {
 		t.Fatalf("expected cost=15.0 for explicit vip override (5 + 10), got %f", costOverride)
 	}

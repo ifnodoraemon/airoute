@@ -23,8 +23,8 @@ type BillingEngine struct {
 	mu               sync.RWMutex
 	prices           map[string]*storage.ModelPriceRecord
 	groupMultipliers map[string]float64
-	// wildcard lists every "*"-suffixed pattern as "group:prefix", sorted by
-	// prefix length descending so the most specific rule always wins instead of
+	// wildcard lists every pattern containing "*", sorted most specific first (see
+	// patternSpecificity) so the most specific rule always wins instead of
 	// depending on Go's randomized map iteration order.
 	wildcard []wildcardRule
 	deflt    *storage.ModelPriceRecord
@@ -37,9 +37,9 @@ type BillingEngine struct {
 
 // wildcardRule is a pre-sorted wildcard pricing pattern.
 type wildcardRule struct {
-	group  string
-	prefix string
-	price  *storage.ModelPriceRecord
+	group   string
+	pattern string
+	price   *storage.ModelPriceRecord
 }
 
 // NewEngine creates and initializes a BillingEngine with persisted pricing rates.
@@ -102,27 +102,35 @@ func (e *BillingEngine) ReloadPrices() error {
 		}
 	}
 
-	// Build a deterministic wildcard index: longest prefix first.
+	// Build a deterministic wildcard index: most specific pattern first. Any
+	// pattern containing "*" is a wildcard rule - trailing only ("gpt-4o-*") used
+	// to be the sole supported form, which made "*o1" and "gpt-4o*mini" savable but
+	// permanently unmatched.
 	wildcards := make([]wildcardRule, 0)
 	for _, rec := range list {
 		grp := strings.ToLower(strings.TrimSpace(rec.GroupName))
 		if grp == "" {
 			grp = "default"
 		}
-		modelLower := strings.ToLower(strings.TrimSpace(rec.Model))
-		if strings.HasSuffix(modelLower, "*") {
+		pattern := strings.ToLower(strings.TrimSpace(rec.Model))
+		if strings.Contains(pattern, "*") {
 			wildcards = append(wildcards, wildcardRule{
-				group:  grp,
-				prefix: strings.TrimSuffix(modelLower, "*"),
-				price:  rec,
+				group:   grp,
+				pattern: pattern,
+				price:   rec,
 			})
 		}
 	}
 	sort.SliceStable(wildcards, func(i, j int) bool {
-		if len(wildcards[i].prefix) != len(wildcards[j].prefix) {
-			return len(wildcards[i].prefix) > len(wildcards[j].prefix)
+		literalI, starsI := patternSpecificity(wildcards[i].pattern)
+		literalJ, starsJ := patternSpecificity(wildcards[j].pattern)
+		if literalI != literalJ {
+			return literalI > literalJ
 		}
-		return wildcards[i].prefix < wildcards[j].prefix
+		if starsI != starsJ {
+			return starsI < starsJ
+		}
+		return wildcards[i].pattern < wildcards[j].pattern
 	})
 
 	multipliers := map[string]float64{"default": 1.0, "vip": 0.8, "enterprise": 1.5}
@@ -286,44 +294,36 @@ func (e *BillingEngine) resolvePriceWithSource(modelName, groupName string) (*st
 		}
 	}
 
-	// 3. Wildcard prefix match in group (e.g. "vip:gpt-4o-*" matching "gpt-4o-mini").
-	// The rule list is pre-sorted longest-prefix-first, so the result is stable
-	// across requests and processes.
+	// 3. Wildcard pattern match in group (e.g. "vip:gpt-4o-*" matching "gpt-4o-mini",
+	// or "*o1" matching "openai/o1"). The rule list is pre-sorted most-specific
+	// first, so the result is stable across requests and processes.
 	//
 	// NOTE: this closure must NOT re-acquire e.mu. The caller already holds the
 	// read lock, and sync.RWMutex is not reentrant: if a writer (price reload)
 	// queues between the outer RLock and this one, the inner RLock blocks
 	// forever while the writer waits for the outer lock to be released.
-	prefixMatch := func(g string) *storage.ModelPriceRecord {
+	patternMatch := func(g string) *storage.ModelPriceRecord {
 		for _, rule := range e.wildcard {
 			if rule.group != g {
 				continue
 			}
-			if strings.HasPrefix(modelLower, rule.prefix) {
+			if MatchModelPattern(rule.pattern, modelLower) {
 				return rule.price
 			}
 		}
 		return nil
 	}
 
-	if p := prefixMatch(grp); p != nil {
+	if p := patternMatch(grp); p != nil {
 		return p, PriceSourceWildcard
 	}
 	if grp != "default" {
-		if p := prefixMatch("default"); p != nil {
+		if p := patternMatch("default"); p != nil {
 			return p, PriceSourceWildcard
 		}
 	}
 
-	// 4. Group wildcard or global wildcard "*"
-	if p, ok := e.prices[grp+":*"]; ok {
-		return p, PriceSourceWildcard
-	}
-	if p, ok := e.prices["*"]; ok {
-		return p, PriceSourceWildcard
-	}
-
-	// 5. Default standard fallback
+	// 4. Default standard fallback
 	return e.deflt, PriceSourceDefault
 }
 
@@ -371,12 +371,6 @@ func (e *BillingEngine) IsOffPeak(p *storage.ModelPriceRecord, t time.Time) (boo
 	return strategy.Evaluate(p, evalCtx)
 }
 
-// CalculateCostDetailedWithGroup computes total request cost, total saved amount, cache savings, and off-peak discount metrics for a specified pricing group.
-func (e *BillingEngine) CalculateCostDetailedWithGroup(modelName, groupName string, promptTokens, completionTokens, cachedTokens int, t time.Time) (cost float64, totalSaved float64, cacheSaved float64, isOffPeak bool, discount float64) {
-	cost, totalSaved, cacheSaved, isOffPeak, discount, _ = e.CalculateCostForUnits(modelName, groupName, promptTokens, completionTokens, cachedTokens, 1, t)
-	return
-}
-
 // cacheWritePriceMultiplier is the premium a provider charges for writing a
 // prompt to its cache, relative to the plain input rate (Anthropic: 1.25x).
 //
@@ -386,14 +380,15 @@ func (e *BillingEngine) CalculateCostDetailedWithGroup(modelName, groupName stri
 // price, so no new price column (and no migration) is needed.
 const cacheWritePriceMultiplier = 1.25
 
-// CalculateCostForUnits applies a single resolved price and discounts to every
-// fixed-price unit, while charging the request's token usage only once.
-func (e *BillingEngine) CalculateCostForUnits(modelName, groupName string, promptTokens, completionTokens, cachedTokens, units int, t time.Time) (cost float64, totalSaved float64, cacheSaved float64, isOffPeak bool, discount float64, snapshot *storage.UsagePricingSnapshot) {
-	return e.CalculateCostForUnitsWithCacheCreation(modelName, groupName, promptTokens, completionTokens, cachedTokens, 0, units, t)
-}
-
-// CalculateCostForUnitsWithCacheCreation is CalculateCostForUnits for a request
-// that also wrote tokens into the provider's prompt cache.
+// CalculateCostForUnitsWithCacheCreation is the single cost-calculation entry
+// point: every billable request goes through it.
+//
+// It applies one resolved price and its discounts to every fixed-price unit,
+// charges the request's token usage once, and bills cache writes at their
+// premium. The narrower CalculateCost* variants that used to wrap it (group/no
+// group, with/without a timestamp, with/without cache creation) are gone: they
+// were reachable only from tests, and picking the wrong one silently dropped
+// fixed-price units or the cache-write premium.
 //
 // promptTokens must include the cache-read and cache-write tokens (that is how
 // Anthropic's input_tokens, cache_read_input_tokens and
@@ -504,20 +499,4 @@ func (e *BillingEngine) CalculateCostForUnitsWithCacheCreation(modelName, groupN
 // to eliminate IEEE-754 binary floating point precision drift.
 func roundPrecision(val float64) float64 {
 	return math.Round(val*1e8) / 1e8
-}
-
-// CalculateCostDetailed computes total request cost, total saved amount, cache savings, and off-peak discount metrics using the default group.
-func (e *BillingEngine) CalculateCostDetailed(modelName string, promptTokens, completionTokens, cachedTokens int, t time.Time) (cost float64, totalSaved float64, cacheSaved float64, isOffPeak bool, discount float64) {
-	return e.CalculateCostDetailedWithGroup(modelName, "default", promptTokens, completionTokens, cachedTokens, t)
-}
-
-// CalculateCostWithGroup computes total request cost and savings using current server time and the specified pricing group.
-func (e *BillingEngine) CalculateCostWithGroup(modelName, groupName string, promptTokens, completionTokens, cachedTokens int) (cost float64, savedCost float64) {
-	cost, totalSaved, _, _, _ := e.CalculateCostDetailedWithGroup(modelName, groupName, promptTokens, completionTokens, cachedTokens, time.Now())
-	return cost, totalSaved
-}
-
-// CalculateCost computes total request cost and savings using current server time and default group.
-func (e *BillingEngine) CalculateCost(modelName string, promptTokens, completionTokens, cachedTokens int) (cost float64, savedCost float64) {
-	return e.CalculateCostWithGroup(modelName, "default", promptTokens, completionTokens, cachedTokens)
 }

@@ -45,7 +45,7 @@ func TestCacheWritesArePricedAtTheCacheWritePremium(t *testing.T) {
 	}
 
 	// Callers without cache writes are unaffected: prompt = 1900 with 500 cached.
-	base, _, _, _, _, baseSnapshot := engine.CalculateCostForUnits("cache-model", "default", 1900, 100, 500, 1, time.Now())
+	base, _, _, _, _, baseSnapshot := engine.CalculateCostForUnitsWithCacheCreation("cache-model", "default", 1900, 100, 500, 0, 1, time.Now())
 	const wantBase = 0.0033 // 1400*2.0 + 500*0.2 + 100*4.0
 	if diff := base - wantBase; diff > 1e-9 || diff < -1e-9 {
 		t.Fatalf("cost without cache writes = %v, want %v", base, wantBase)

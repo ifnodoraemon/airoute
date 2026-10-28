@@ -17,14 +17,43 @@ var shanghaiLoc = func() *time.Location {
 	return loc
 }()
 
-// ValidateSlotsOverlap ensures discrete time windows do not overlap on the same day of the week.
-func ValidateSlotsOverlap(slotsJSON string) error {
+// offPeakCustomMode is the only mode whose strategy reads OffPeakSlots.
+const offPeakCustomMode = "custom"
+
+// ValidateOffPeakSlots validates the off-peak slot configuration on a write path.
+//
+// Slots are evaluated only by CustomOffPeakStrategy, i.e. when OffPeakMode is
+// "custom" (see offPeakStrategies); for every other mode the engine ignores them.
+// Validation follows execution: in a non-custom mode the slots are skipped
+// entirely, because rejecting configuration that can never influence a price
+// would refuse a save for no reason. The fields the engine does read in those
+// modes (start/end/discount) are validated by ValidatePriceRecord.
+//
+// This is the only exported slot-validation entry point. There is deliberately no
+// mode-less wrapper (a former ValidateSlotsOverlap helper): it let a caller
+// validate slots the engine would never read.
+func ValidateOffPeakSlots(mode, slotsJSON string) error {
+	if strings.ToLower(strings.TrimSpace(mode)) != offPeakCustomMode {
+		return nil
+	}
+	return validateSlots(slotsJSON)
+}
+
+// validateSlots performs the mode-independent slot validation: the fields the
+// engine actually reads (discount, days, time window) and the same-day overlap
+// check.
+func validateSlots(slotsJSON string) error {
 	if strings.TrimSpace(slotsJSON) == "" {
 		return nil
 	}
 	var slots []OffPeakSlot
 	if err := json.Unmarshal([]byte(slotsJSON), &slots); err != nil {
 		return fmt.Errorf("优惠时段格式无效: %w", err)
+	}
+	for i := range slots {
+		if err := validateOffPeakSlot(slots[i], i); err != nil {
+			return err
+		}
 	}
 	if len(slots) <= 1 {
 		return nil
@@ -35,34 +64,23 @@ func ValidateSlotsOverlap(slotsJSON string) error {
 		end   int
 	}
 
-	getIntervals := func(sStr, eStr string) ([]interval, error) {
-		sM := parseTimeToMinutes(sStr)
-		eM := parseTimeToMinutes(eStr)
-		if sM < 0 || sM >= 1440 || eM < 0 || eM >= 1440 {
-			return nil, fmt.Errorf("时间格式不正确 (需为 HH:MM)")
-		}
-		if sM == eM {
-			return nil, fmt.Errorf("开始时间与结束时间不能相同 (%s)", sStr)
-		}
+	// Times are already known to be valid and non-equal, so this only has to turn
+	// a slot into one or two half-open minute ranges.
+	getIntervals := func(slot OffPeakSlot) []interval {
+		sM := parseTimeToMinutes(slot.Start)
+		eM := parseTimeToMinutes(slot.End)
 		if sM < eM {
-			return []interval{{start: sM, end: eM}}, nil
+			return []interval{{start: sM, end: eM}}
 		}
 		// Cross midnight
-		return []interval{{start: sM, end: 1440}, {start: 0, end: eM}}, nil
+		return []interval{{start: sM, end: 1440}, {start: 0, end: eM}}
 	}
 
 	dayNames := map[int]string{1: "周一", 2: "周二", 3: "周三", 4: "周四", 5: "周五", 6: "周六", 7: "周日"}
 
 	for i := 0; i < len(slots); i++ {
 		s1 := slots[i]
-		int1, err := getIntervals(s1.Start, s1.End)
-		if err != nil {
-			name := s1.Name
-			if name == "" {
-				name = fmt.Sprintf("时段 %d", i+1)
-			}
-			return fmt.Errorf("[%s] %w", name, err)
-		}
+		int1 := getIntervals(s1)
 		days1 := s1.Days
 		if len(days1) == 0 {
 			days1 = []int{1, 2, 3, 4, 5, 6, 7}
@@ -70,14 +88,7 @@ func ValidateSlotsOverlap(slotsJSON string) error {
 
 		for j := i + 1; j < len(slots); j++ {
 			s2 := slots[j]
-			int2, err := getIntervals(s2.Start, s2.End)
-			if err != nil {
-				name := s2.Name
-				if name == "" {
-					name = fmt.Sprintf("时段 %d", j+1)
-				}
-				return fmt.Errorf("[%s] %w", name, err)
-			}
+			int2 := getIntervals(s2)
 			days2 := s2.Days
 			if len(days2) == 0 {
 				days2 = []int{1, 2, 3, 4, 5, 6, 7}
@@ -124,21 +135,48 @@ func ValidateSlotsOverlap(slotsJSON string) error {
 				for _, d := range commonDays {
 					dayStrs = append(dayStrs, dayNames[d])
 				}
-				name1 := s1.Name
-				if name1 == "" {
-					name1 = fmt.Sprintf("时段 %d", i+1)
-				}
-				name2 := s2.Name
-				if name2 == "" {
-					name2 = fmt.Sprintf("时段 %d", j+1)
-				}
 				return fmt.Errorf("[%s] (%s-%s) 与 [%s] (%s-%s) 在 %s 存在时间重叠，请调整时段",
-					name1, s1.Start, s1.End, name2, s2.Start, s2.End, strings.Join(dayStrs, "、"))
+					offPeakSlotName(s1, i), s1.Start, s1.End,
+					offPeakSlotName(s2, j), s2.Start, s2.End, strings.Join(dayStrs, "、"))
 			}
 		}
 	}
 
 	return nil
+}
+
+// validateOffPeakSlot rejects slot values the engine cannot honour. An
+// out-of-range day made the slot never match (silently no discount) and an
+// out-of-range discount used to fall back to the row discount, so both were
+// accepted on write and then priced differently than configured.
+func validateOffPeakSlot(slot OffPeakSlot, index int) error {
+	name := offPeakSlotName(slot, index)
+	if slot.Discount <= 0 || slot.Discount >= 1.0 {
+		return fmt.Errorf("[%s] 折扣必须大于 0 且小于 1（当前 %g）", name, slot.Discount)
+	}
+	for _, day := range slot.Days {
+		if day < 1 || day > 7 {
+			return fmt.Errorf("[%s] 生效日必须是 1-7（1=周一 … 7=周日），当前包含 %d", name, day)
+		}
+	}
+	startM := parseTimeToMinutes(slot.Start)
+	endM := parseTimeToMinutes(slot.End)
+	if startM < 0 || startM >= 1440 || endM < 0 || endM >= 1440 {
+		return fmt.Errorf("[%s] 时间格式不正确 (需为 HH:MM)", name)
+	}
+	if startM == endM {
+		return fmt.Errorf("[%s] 开始时间与结束时间不能相同 (%s)", name, slot.Start)
+	}
+	return nil
+}
+
+// offPeakSlotName renders a slot for error messages: its label when it has one,
+// otherwise its position in the list.
+func offPeakSlotName(slot OffPeakSlot, index int) string {
+	if slot.Name != "" {
+		return slot.Name
+	}
+	return fmt.Sprintf("时段 %d", index+1)
 }
 
 func parseTimeToMinutes(s string) int {

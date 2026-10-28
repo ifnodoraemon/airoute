@@ -10,26 +10,25 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Rate limiting exists in two implementations, and they are not equivalent:
+// Rate limiting is a strict 60s sliding window, in two implementations that now
+// share the same semantics:
 //
-//   - This package (used whenever Redis is reachable): a strict 60s sliding
-//     window. Any 60s interval holds at most `rpm` admitted requests, because
-//     every admission is timestamped and counted (slidingWindowLua).
-//   - internal/middleware (used when Redis is not configured, and as the
-//     fail-open path when a Redis call errors): a token bucket that starts full
-//     and refills at rpm/60 per second. An idle key can therefore admit a full
-//     `rpm` burst immediately and keep spending refill afterwards, so a 60s
-//     interval can hold noticeably more than rpm.
+//   - This package (used whenever Redis is reachable): the window is kept in Redis
+//     as a sorted set of admission timestamps, shared by every replica
+//     (slidingWindowLua). Any 60s interval holds at most `rpm` admitted requests.
+//   - internal/middleware (used when Redis is not configured, and as the fail-open
+//     path when a Redis call errors or exceeds redisRateLimitTimeout): the same
+//     window kept locally per key, with the same (now-window, now] boundary -
+//     evict, then count, then admit (see rpmWindowSpan there, which mirrors
+//     rpmWindowMs below).
 //
-// The consequence for operators: a Redis outage does not just downgrade the
-// limiter to a local one, it loosens it - keys that already spent their quota in
-// the Redis window may be granted a fresh full bucket once the fallback takes
-// over, and the excess is only reconciled when Redis returns. That is a
-// deliberate availability trade-off (fail open rather than reject traffic when
-// the counter is unreachable), not a bug, but it means RPM is a soft limit during
-// an outage. Making the two agree would require the local bucket to start empty
-// (capacity 1) or to keep a sliding window too; that code lives in the middleware
-// package.
+// So a Redis outage only costs the cross-replica view: each node falls back to its
+// own window, which is exactly as strict for the traffic that node sees. Quota is
+// not loosened during the outage; the only difference is that a key spread across
+// several replicas can temporarily be admitted up to `rpm` per replica instead of
+// `rpm` cluster-wide, and the count converges again once Redis returns. That is the
+// deliberate availability trade-off (fail open rather than reject traffic when the
+// shared counter is unreachable).
 //
 // AllowRPM itself has no local fallback: on a Redis error it returns
 // (true, err), i.e. it fails open and leaves the enforcement to the caller's
@@ -47,23 +46,19 @@ const inflightQuotaTTLSeconds = 120
 
 // rpmWindowMs is the width of the RPM sliding window. It is passed to the Lua
 // script rather than hardcoded there so the window this process enforces and the
-// window the script evicts on cannot drift apart.
+// window the script evicts on cannot drift apart. The script evicts everything at
+// or before now-rpmWindowMs, and ZREMRANGEBYSCORE is inclusive, so a request
+// admitted exactly one window ago no longer counts: the window is
+// (now-window, now].
 const rpmWindowMs int64 = 60_000
-
-// rpmClearBefore returns the newest timestamp that is already outside the window
-// ending at nowMs. ZREMRANGEBYSCORE is inclusive, so a request admitted exactly
-// rpmWindowMs ago no longer counts: the window is (now-window, now].
-func rpmClearBefore(nowMs int64) int64 {
-	return nowMs - rpmWindowMs
-}
 
 // slidingWindowLuaSrc is an atomic Lua script implementing distributed
 // sliding-window rate limiting.
 //
-// It is stricter than the local token bucket it falls back to (see the package
-// note at the top of this file): the ZCARD check happens before the ZADD, and the
-// eviction drops everything at or before now-window, so the count is exactly the
-// number of admissions inside the last 60s.
+// It matches the local window in internal/middleware (see the package note at the
+// top of this file): the ZCARD check happens before the ZADD, and the eviction
+// drops everything at or before now-window, so the count is exactly the number of
+// admissions inside the last 60s either way.
 const slidingWindowLuaSrc = `
 local key = KEYS[1]
 local limit = tonumber(ARGV[1])
@@ -216,7 +211,8 @@ func (c *Client) TopUpQuotaAmount(ctx context.Context, userID int64, balanceUnit
 //
 // The window is strict: `rpm` admissions per rolling 60s, counted from the
 // timestamps of the admissions themselves. Callers that fall back to the local
-// token bucket on error get a looser limit (see the package note above).
+// limiter on error get the same sliding window per node (see the package note
+// above); the limit is not loosened, only the cross-replica view is lost.
 func (c *Client) AllowRPM(ctx context.Context, apiKey string, rpm int) (bool, error) {
 	if !c.IsActive() || rpm <= 0 {
 		return true, nil // unmetered or not active

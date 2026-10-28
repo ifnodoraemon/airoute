@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
 // OffPeakSlot represents a discrete discount time window.
@@ -91,7 +92,20 @@ func (s *CustomOffPeakStrategy) Evaluate(p *storage.ModelPriceRecord, ctx *OffPe
 		eM := parseTimeToMinutes(slot.End)
 		d := slot.Discount
 		if d <= 0 || d >= 1.0 {
-			d = ctx.Discount
+			// Same rule as the row-level discount: an invalid coefficient means "no
+			// discount", never "use the row's coefficient". Falling back to
+			// ctx.Discount turned a typo into a 50% discount - an operator writing
+			// 1.5 (intending a surcharge) or 0 (intending no discount) silently billed
+			// half price. Clamping to 1.0 keeps "never invent a discount" true at both
+			// levels; ValidateOffPeakSlots rejects such slots on write, so this is the
+			// defence for rows that predate that validation.
+			d = 1.0
+			telemetry.WarnLogger(telemetry.ScopedLogger("billing"),
+				"offpeak-slot-invalid-discount:"+p.Model+":"+slot.Name+":"+slot.Start+"-"+slot.End,
+				60*time.Second,
+				"off-peak slot has an invalid discount; charging the undiscounted price",
+				"model", p.Model, "slot", slot.Name, "start", slot.Start, "end", slot.End,
+				"discount", slot.Discount)
 		}
 
 		var inSlot bool

@@ -109,22 +109,9 @@ func ValidateOpenAI(req *model.ChatCompletionRequest, rule *config.ModelValidati
 	}
 
 	// 3. Parameter validation: Temperature
-	disallowTemp := (rule != nil && rule.DisallowTemperature)
-	if disallowTemp {
-		if req.Temperature != nil && *req.Temperature != 1.0 {
-			if level == LevelStrict {
-				res.Valid = false
-				res.Error = &ValidationError{
-					Protocol:   ProtocolOpenAI,
-					Field:      "temperature",
-					Message:    fmt.Sprintf("Model '%s' is a reasoning model and does not support custom temperature. Omit temperature or set to 1.0", req.Model),
-					Code:       "unsupported_parameter",
-					StatusCode: http.StatusBadRequest,
-				}
-				return res
-			}
-			req.Temperature = nil
-			res.AddWarning("omitted custom temperature for reasoning model")
+	if rule != nil && rule.DisallowTemperature {
+		if !checkDisallowedTemperature(res, level, ProtocolOpenAI, "temperature", req.Model, &req.Temperature) {
+			return res
 		}
 	} else if !clampRange(res, level, ProtocolOpenAI, "temperature", &req.Temperature, 0.0, 2.0) {
 		return res
@@ -199,4 +186,43 @@ func clampRange(res *ValidationResult, level, protocol, field string, v **float6
 	*v = &clamped
 	res.AddWarning(fmt.Sprintf("clamped %s to %.2f", field, clamped))
 	return true
+}
+
+// checkDisallowedTemperature enforces a "reasoning model" rule that forbids any
+// custom temperature. The rule is protocol-independent and every validator
+// receives it, so the check lives here instead of being copied per protocol (it
+// used to exist only for OpenAI, which made the same rule silently inert on the
+// Anthropic and Gemini entry points).
+//
+// Strict mode rejects the request; lenient mode drops the parameter and records a
+// warning. Returns false when the caller must return the (invalid) result.
+func checkDisallowedTemperature(res *ValidationResult, level, protocol, field, modelName string, v **float64) bool {
+	if v == nil || *v == nil || **v == 1.0 {
+		return true
+	}
+	if level == LevelStrict {
+		res.Valid = false
+		res.Error = &ValidationError{
+			Protocol:   protocol,
+			Field:      field,
+			Message:    disallowedTemperatureMessage(modelName),
+			Code:       "unsupported_parameter",
+			StatusCode: http.StatusBadRequest,
+		}
+		return false
+	}
+	*v = nil
+	res.AddWarning(fmt.Sprintf("omitted custom %s for reasoning model", field))
+	return true
+}
+
+// disallowedTemperatureMessage renders the rejection reason. The Gemini inbound
+// body carries no model name (it lives in the URL path), so the message has to
+// read correctly without one.
+func disallowedTemperatureMessage(modelName string) string {
+	const reason = "does not support custom temperature. Omit temperature or set to 1.0"
+	if strings.TrimSpace(modelName) == "" {
+		return "This model is a reasoning model and " + reason
+	}
+	return fmt.Sprintf("Model '%s' is a reasoning model and %s", modelName, reason)
 }

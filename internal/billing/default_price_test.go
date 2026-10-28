@@ -28,7 +28,7 @@ func TestUnpricedModelIsNotDiscounted(t *testing.T) {
 		{"weekday-noon", weekdayNoon},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			cost, _, _, isOffPeak, discount, _ := engine.CalculateCostForUnits("never-configured", "default", 1_000_000, 0, 0, 1, tc.at)
+			cost, _, _, isOffPeak, discount, _ := engine.CalculateCostForUnitsWithCacheCreation("never-configured", "default", 1_000_000, 0, 0, 0, 1, tc.at)
 			if isOffPeak {
 				t.Errorf("unpriced model was treated as off-peak (discount %.2f)", discount)
 			}
@@ -54,7 +54,7 @@ func TestConfiguredOffPeakRuleStillDiscounts(t *testing.T) {
 		deflt:            &storage.ModelPriceRecord{Model: "*", PromptPrice: 2, CompletionPrice: 8, CacheReadPrice: 0.2, Currency: "CNY"},
 	}
 	at := time.Date(2026, 10, 23, 3, 0, 0, 0, shanghaiLoc) // Friday 03:00, inside the window
-	cost, _, _, isOffPeak, discount, _ := engine.CalculateCostForUnits("discounted", "default", 1_000_000, 0, 0, 1, at)
+	cost, _, _, isOffPeak, discount, _ := engine.CalculateCostForUnitsWithCacheCreation("discounted", "default", 1_000_000, 0, 0, 0, 1, at)
 	if !isOffPeak {
 		t.Fatal("a rule that opts into off-peak was not discounted")
 	}

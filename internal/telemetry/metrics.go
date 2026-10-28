@@ -229,11 +229,6 @@ func (m *Metrics) recordRequestStats(modelName, outcome string, dur time.Duratio
 	m.mu.Unlock()
 }
 
-// RecordRequest records a completed request with its duration and token count.
-func (m *Metrics) RecordRequest(success bool, dur time.Duration, promptTokens, completionTokens int) {
-	m.RecordRequestWithModel("", success, dur, promptTokens, completionTokens)
-}
-
 // GetLatencyPercentiles estimates P50, P90, and P99 latency percentiles in milliseconds.
 func (m *Metrics) GetLatencyPercentiles() (p50, p90, p99 float64) {
 	m.mu.RLock()
