@@ -499,6 +499,7 @@ func (db *DB) migrate() error {
 		{Version: 37, Name: "supplier_costs", Up: CreateSupplierCosts},
 		{Version: 39, Name: "api_key_public_ids", Up: addAPIKeyPublicIDs},
 		{Version: 40, Name: "drop_legacy_governance_objects", Up: dropLegacyGovernanceObjects},
+		{Version: 41, Name: "billing_scale_indexes", Up: addBillingScaleIndexes},
 	}
 	return db.runMigrations(migrations)
 }

@@ -101,6 +101,7 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 }
 
 func (h *Handler) handleAnthropicUnary(c *gin.Context, reqCtx context.Context, req *AnthropicInboundRequest, canonicalReq *model.ChatCompletionRequest, sessionID string, start time.Time) {
+	topUpQuotaForRequest(c, canonicalReq)
 	resp, err := h.dispatcher.Dispatch(reqCtx, canonicalReq)
 	if err != nil {
 		statusCode, errType, _, _ := resolveUpstreamFailureStatus(err)

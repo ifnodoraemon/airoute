@@ -136,6 +136,7 @@ func (h *Handler) handleResponsesNonStreaming(
 	sessionID string,
 	start time.Time,
 ) {
+	topUpQuotaForRequest(c, chatReq)
 	resp, err := h.dispatcher.Dispatch(reqCtx, chatReq)
 	if err != nil {
 		respondUpstreamDispatchError(c, sessionID, req.Model, time.Since(start), err)

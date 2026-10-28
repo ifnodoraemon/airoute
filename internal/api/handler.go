@@ -129,6 +129,7 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 }
 
 func (h *Handler) handleChatUnary(c *gin.Context, reqCtx context.Context, req *model.ChatCompletionRequest, sessionID string, start time.Time) {
+	topUpQuotaForRequest(c, req)
 	resp, err := h.dispatcher.Dispatch(reqCtx, req)
 	if err != nil {
 		respondUpstreamDispatchError(c, sessionID, req.Model, time.Since(start), err)

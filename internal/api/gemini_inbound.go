@@ -218,6 +218,7 @@ func (h *Handler) HandleGeminiAction(c *gin.Context) {
 }
 
 func (h *Handler) handleGeminiUnary(c *gin.Context, reqCtx context.Context, canonicalReq *model.ChatCompletionRequest, modelName, sessionID string, start time.Time) {
+	topUpQuotaForRequest(c, canonicalReq)
 	resp, err := h.dispatcher.Dispatch(reqCtx, canonicalReq)
 	if err != nil {
 		statusCode, _, _, _ := resolveUpstreamFailureStatus(err)
