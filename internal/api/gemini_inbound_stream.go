@@ -210,11 +210,18 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 					}
 
 					if len(geminiParts) > 0 || finishReason != "" {
+						// The finish-only frame carries no delta, and a nil slice
+						// marshals to "parts": null. Gemini's schema declares parts as
+						// an array, so emit an empty one instead of null.
+						parts := geminiParts
+						if parts == nil {
+							parts = []gin.H{}
+						}
 						candidate := gin.H{
 							"index": 0,
 							"content": gin.H{
 								"role":  "model",
-								"parts": geminiParts,
+								"parts": parts,
 							},
 						}
 						if finishReason != "" {
