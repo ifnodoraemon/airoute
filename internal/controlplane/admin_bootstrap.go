@@ -42,24 +42,45 @@ func InitDefaultAdmin(repo *storage.Repository, cfgs ...*config.Config) {
 	}
 	switch {
 	case existing == nil:
-		_ = repo.EnsureDefaultAdmin(adminUser, adminPass)
+		if err := repo.EnsureDefaultAdmin(adminUser, adminPass); err != nil {
+			// Announce the failure instead of logging success: a fresh install with
+			// no administrator is unusable, and silently claiming otherwise sends the
+			// operator hunting for a login problem in the wrong place.
+			telemetry.ScopedLogger("sync").Error("could not create the administrator account",
+				"username", adminUser, "error", err.Error())
+			return
+		}
 		telemetry.ScopedLogger("sync").Info("initialized administrator account", "username", adminUser)
 	case forceReset:
 		hash, hashErr := bcrypt.GenerateFromPassword([]byte(adminPass), bcrypt.DefaultCost)
-		if hashErr == nil {
-			_ = repo.UpdateUserPassword(adminUser, string(hash))
-			telemetry.ScopedLogger("sync").Info("force-reset administrator password from configuration", "username", adminUser)
+		if hashErr != nil {
+			telemetry.ScopedLogger("sync").Error("could not hash the configured administrator password",
+				"username", adminUser, "error", hashErr.Error())
+			return
 		}
+		if err := repo.UpdateUserPassword(adminUser, string(hash)); err != nil {
+			telemetry.ScopedLogger("sync").Error("could not force-reset the administrator password",
+				"username", adminUser, "error", err.Error())
+			return
+		}
+		telemetry.ScopedLogger("sync").Info("force-reset administrator password from configuration", "username", adminUser)
 	case bcrypt.CompareHashAndPassword([]byte(existing.PasswordHash), []byte(adminPass)) == nil:
 		// Configured credential already matches: nothing to do.
 	case bcrypt.CompareHashAndPassword([]byte(existing.PasswordHash), []byte("admin123")) == nil:
 		// The account still uses the shipped default, so the configured password
 		// can safely be applied.
 		hash, hashErr := bcrypt.GenerateFromPassword([]byte(adminPass), bcrypt.DefaultCost)
-		if hashErr == nil {
-			_ = repo.UpdateUserPassword(adminUser, string(hash))
-			telemetry.ScopedLogger("sync").Info("synchronized administrator password with configured credentials", "username", adminUser)
+		if hashErr != nil {
+			telemetry.ScopedLogger("sync").Error("could not hash the configured administrator password",
+				"username", adminUser, "error", hashErr.Error())
+			return
 		}
+		if err := repo.UpdateUserPassword(adminUser, string(hash)); err != nil {
+			telemetry.ScopedLogger("sync").Error("could not synchronize the administrator password",
+				"username", adminUser, "error", err.Error())
+			return
+		}
+		telemetry.ScopedLogger("sync").Info("synchronized administrator password with configured credentials", "username", adminUser)
 	default:
 		// The stored password was changed (via the console) and deliberately
 		// differs from configuration. Never overwrite it, but say so loudly:
