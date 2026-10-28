@@ -579,8 +579,8 @@ docker exec airoute-1 sh -c 'curl -s -H "Authorization: Bearer $GATEWAY_METRICS_
 | 余额/状态未知时的准入姿态 | **fail-closed 503** | `middleware/authz.go:BalanceUnknownDenial` + `auth.go` 在"有 owner 但状态未知"时拒绝（自由读豁免）；不再出现"余额检查与预授权同时被跳过" |
 | 审计入队与结算顺序 | **先入队后结算** | `api/common.go:settleUsage` 先把 `CloneForPipeline()` 交给至少一次管道、再结算；billing_id 在克隆前钉死，两条路径同键；崩溃窗口关闭 |
 | 结算专用连接池 | **暂不做** | 维持共享主池：`lock_timeout=500ms` + 重试已把"等锁占池"从 30s 压到 0.5s，再开池会让每副本连接预算翻倍 |
-| 大表月分区 | **现在做** | `usage_logs` 按月分区（PG-only、`GATEWAY_ENABLE_TABLE_PARTITIONING` 显式开启）；分区表无法保留 `UNIQUE(billing_id)`，去重改由短保留登记表 `usage_audit_ids` 承担；`billing_settlements` **不分区**（29MB，且唯一键是资金幂等闸门） |
-| 提交方式 | **拆 3 个逻辑提交** | storage 结算核心 / 准入与接线 / schema·对账·告警·文档 |
+| 大表月分区 | **现在做** | 迁移 v43 `usage_logs_monthly_partitions`（PG-only、`GATEWAY_ENABLE_TABLE_PARTITIONING=true` 才注册）：单事务 copy-switch、整月 DROP、DEFAULT 兜底、`usage_audit_ids` 去重登记表；`billing_settlements` **不分区**（29MB，且唯一键是资金幂等闸门） |
+| 提交方式 | **拆成 4 个提交** | ① 结算核心 ② 准入与接线 ③ schema·对账·保留·告警·文档 ④ 月分区（后补的决定，独立成提交） |
 
 ### 9.5 真机验证（PostgreSQL 16，临时容器，未触碰线上库）
 
@@ -588,6 +588,7 @@ docker exec airoute-1 sh -c 'curl -s -H "Authorization: Bearer $GATEWAY_METRICS_
 |---|---|
 | `AIROUTE_TEST_DATABASE_URL=... go test -tags=integration ./internal/storage/ -run Postgres` | **11/11 PASS**（含 CTE 合并结算路径、透支钳制、审计重投幂等） |
 | 迁移 v41 记录 | `schema_migrations.version=41` 存在 |
+| 迁移 v43（分区，临时容器 + flag） | `TestUsageLogsPartition*` **4/4 PASS**：copy-switch 后行数/金额一致、整月 DROP、锁竞争 deferred 不阻塞启动、空表可迁移；1M 行实测启动 30.6s、磁盘 2.07×、单月查询只扫 1 个分区 |
 | `idx_billing_settlements_api_key` | 存在且 `indisvalid=t`；`SET enable_seqscan=off` 后 `ledgerDrift` 的 `GROUP BY api_key` 走 **Index Only Scan** |
 | `billing_ledger_archives` | 表已创建 |
 | 无用 trigram 清理 | `usage_logs` 索引 20 → 15，仅保留 `idx_usage_trgm_error_message` |
@@ -597,9 +598,21 @@ docker exec airoute-1 sh -c 'curl -s -H "Authorization: Bearer $GATEWAY_METRICS_
 
 `deploy/prometheus/airoute-alerts.yml` 新增 `airoute-billing-settlement` 组 10 条：结算推迟率 >1%、请求侧等待超时、行锁超时、结算 p99 >100ms、批大小长期退化为单笔、在途预留 > 钱包总额 80%、waived 金额增长、账本/余额漂移、审计滞后。为此新增 `airoute_billing_wallet_total_units` 指标（对账 worker 顺带统计，作为预留量的分母）。
 
-### 9.7 残余风险
+### 9.7 提交记录
 
-- **分区迁移默认关闭**：需要维护窗口显式开启（复制 250MB 表要锁写 + 2× 磁盘）。SQLite 无分区能力，保持原表 + 归档策略。
+| # | commit | 内容 |
+|---|---|---|
+| 1 | `feat(billing): group-commit settlement, slimmer transactions, read pool` | 攒批、事务瘦身、稳定锁序、lock_timeout、SQLite 读池 + checkpoint、指标 |
+| 2 | `feat(admission): amount-based pre-authorisation and fail-closed balance` | 金额预授权、dispatch 补差、fail-closed、先入队后结算、流式尾延迟 |
+| 3 | `feat(billing-ops): ledger index, incremental reconcile, retention, alerts` | v41、增量对账、账本保留、告警、启动装配、配置与文档 |
+| 4 | `feat(billing): optional monthly partitioning for the audit log` | v43 月分区、去重登记表、分区保留、PG 42702 修复 |
+
+> 提交快照已在独立 worktree 复验：`go build` + 除"前端产物占位"导致的 UI 断言外全量测试通过。
+
+### 9.8 残余风险
+
+- **分区迁移默认关闭且必须按顺序上线**：先把所有副本升级到含 `usage_audit_ids` 写路径的版本，再开 `GATEWAY_ENABLE_TABLE_PARTITIONING=true`（旧二进制在新分区表上 `ON CONFLICT (billing_id)` 会报 42P10，审计写失败但不影响已结算的钱）。维护窗口内会持 ACCESS EXCLUSIVE 锁做 copy-switch（1M 行约 20s 量级），需要 2× 表空间；回滚 SQL 写在 `migrations_partition.go` 文件头（rename 回 legacy 表 + 删 v43 版本记录），全程不 DROP 线上数据。SQLite 无分区能力，保持原表 + 归档策略。
+- **去重登记表保留 30 天**：超过 30 天的极端重投可能产生重复审计行（资金侧仍由 `billing_settlements` 唯一键保证）。
 - **waived 口径仍是上限近似**（SQLite/PG 的 `UPDATE ... RETURNING` 拿不到旧余额）；"从 floor 上方恰好钳到 floor"的单会整笔计入，高估 ≤ 一个透支额度/单，仅影响指标。
 - **预授权估算依赖 call-site**：HTTP 的 10 个 dispatch 点与 MCP 已覆盖；其它模态（embedding/rerank/multimodal）仍按粗预留 + 并发上限。
 - **`billing_settlements` 未分区**：增长慢（29MB/62k 行），但长期仍需要归档或分区；若将来分区，幂等闸门要先迁到独立登记表。
