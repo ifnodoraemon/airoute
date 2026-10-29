@@ -17,20 +17,24 @@ import (
 // Key is filled only by the one-time creation response; every other handler
 // leaves it empty and `omitempty` keeps it out of the payload.
 type apiKeyView struct {
-	ID               int64     `json:"id"`
-	KeyID            string    `json:"key_id"`
-	TenantID         string    `json:"tenant_id"`
-	AllowedModels    []string  `json:"allowed_models"`
-	RPM              int       `json:"rpm"`
-	TPM              int       `json:"tpm"`
-	Budget           float64   `json:"budget"`
-	UsedTokens       int64     `json:"used_tokens"`
-	UsedCost         float64   `json:"used_cost"`
-	BudgetUnits      int64     `json:"budget_units"`
-	UsedCostUnits    int64     `json:"used_cost_units"`
-	GroupName        string    `json:"group_name"`
-	UserID           int64     `json:"user_id"`
-	Status           string    `json:"status"`
+	ID            int64    `json:"id"`
+	KeyID         string   `json:"key_id"`
+	TenantID      string   `json:"tenant_id"`
+	AllowedModels []string `json:"allowed_models"`
+	RPM           int      `json:"rpm"`
+	TPM           int      `json:"tpm"`
+	Budget        float64  `json:"budget"`
+	UsedTokens    int64    `json:"used_tokens"`
+	UsedCost      float64  `json:"used_cost"`
+	BudgetUnits   int64    `json:"budget_units"`
+	UsedCostUnits int64    `json:"used_cost_units"`
+	GroupName     string   `json:"group_name"`
+	UserID        int64    `json:"user_id"`
+	Status        string   `json:"status"`
+	// AdminDisabled tells the console (and API clients) that an administrator
+	// revoked this key, so the owner cannot re-enable it. The UI does not consume
+	// it yet; it is exposed so the distinction is visible and testable.
+	AdminDisabled    bool      `json:"admin_disabled"`
 	FormatValidation string    `json:"format_validation,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
@@ -57,6 +61,7 @@ func apiKeyViewFrom(rec *storage.APIKeyRecord) apiKeyView {
 		GroupName:        rec.GroupName,
 		UserID:           rec.UserID,
 		Status:           rec.Status,
+		AdminDisabled:    rec.AdminDisabled,
 		FormatValidation: rec.FormatValidation,
 		CreatedAt:        rec.CreatedAt,
 		UpdatedAt:        rec.UpdatedAt,

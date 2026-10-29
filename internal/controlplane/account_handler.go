@@ -43,6 +43,12 @@ func verifyLoginPassword(passwordHash, password string) bool {
 
 // Login handles user authentication.
 func (h *AdminHandler) Login(c *gin.Context) {
+	// Unauthenticated and state-changing: it issues a session cookie, so it needs
+	// the cross-site gates the session middleware cannot apply here (CP-05).
+	if !requireJSONBody(c) || !requireSameOrigin(c) {
+		return
+	}
+
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "用户名和密码不能为空"})
@@ -230,6 +236,11 @@ func (h *AdminHandler) ChangePassword(c *gin.Context) {
 // Logout clears the browser session cookies. The stateless token itself remains
 // valid until expiry, so browsers should rely on the cookie being removed.
 func (h *AdminHandler) Logout(c *gin.Context) {
+	// Logout clears the session cookie, so a cross-site POST could sign a user out
+	// at will. There is no body to gate on; the origin check is enough (CP-05).
+	if !requireSameOrigin(c) {
+		return
+	}
 	ClearSessionCookies(c)
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "已安全退出"})
 }

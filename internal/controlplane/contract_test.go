@@ -318,6 +318,11 @@ func TestCreateAPIKeyRequestAcceptsExactlyTheWritableColumns(t *testing.T) {
 		// The public identifier is minted by the repository when the row is
 		// created; it is never accepted from the creation body.
 		"key_id": true,
+		// The administrator-revocation flag is decided by the rules
+		// (KeyCreationRules.PlanCreate) from the caller's role and the requested
+		// status, never from the body: a tenant must not be able to create a key
+		// that claims to be operator-revoked, nor clear that flag.
+		"admin_disabled": true,
 	}
 
 	for _, name := range sortedNames(record) {
@@ -425,7 +430,7 @@ func TestAdminResponseShapesAreStable(t *testing.T) {
 			want: []string{
 				"id", "key_id", "tenant_id", "allowed_models", "rpm", "tpm", "budget",
 				"used_tokens", "used_cost", "budget_units", "used_cost_units",
-				"group_name", "user_id", "status", "format_validation",
+				"group_name", "user_id", "status", "admin_disabled", "format_validation",
 				"created_at", "updated_at",
 			},
 		},

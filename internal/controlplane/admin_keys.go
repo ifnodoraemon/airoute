@@ -159,6 +159,8 @@ func writeKeyCreationDenial(c *gin.Context, outcome KeyCreationOutcome) {
 		c.JSON(http.StatusForbidden, gin.H{"error": outcome.Message})
 	case KeyCreationEntropyUnavailable:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "安全随机源不可用，无法生成密钥"})
+	case KeyCreationInvalidValue:
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": outcome.Message})
 	default:
 		c.JSON(http.StatusForbidden, gin.H{"error": "无法创建密钥"})
 	}
@@ -196,6 +198,8 @@ func writeKeyUpdateDenial(c *gin.Context, outcome KeyUpdateOutcome) {
 		c.JSON(http.StatusForbidden, gin.H{"error": outcome.Message})
 	case KeyUpdateInvalidValue:
 		c.JSON(http.StatusBadRequest, gin.H{"error": outcome.Message})
+	case KeyUpdateAdminRevoked:
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": outcome.Message})
 	default:
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权修改该密钥"})
 	}

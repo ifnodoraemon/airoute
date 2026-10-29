@@ -273,15 +273,17 @@ func TestBatchChannelHTTPContract(t *testing.T) {
 		}
 	})
 
-	t.Run("coerces an unknown status to active", func(t *testing.T) {
+	t.Run("rejects an unknown status instead of enabling the channel", func(t *testing.T) {
+		// Regression for BUG-CP-03: this used to answer 200 and coerce "nonsense" to
+		// "active", so a misspelled bulk disable ENABLED the selected channels.
 		body := `{"ids":[` + int64String(a.ID) + `],"status":"nonsense"}`
 		w := invokeChannel(t, handler.BatchStatusChannels, http.MethodPost, body, "")
-		if w.Code != http.StatusOK {
-			t.Fatalf("status = %d, want 200", w.Code)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400 (body: %s)", w.Code, w.Body.String())
 		}
 		stored := storedChannel(t, repo, a.ID)
-		if stored.Status != "active" {
-			t.Errorf("status = %q, want active", stored.Status)
+		if stored.Status != "disabled" {
+			t.Errorf("status = %q, want the previous disabled state to be untouched", stored.Status)
 		}
 	})
 }

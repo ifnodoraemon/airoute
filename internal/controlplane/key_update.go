@@ -2,9 +2,19 @@ package controlplane
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
+
+// validToggleStatus reports whether status is one of the two states the data
+// plane understands. Anything else is not stored: the admission check in
+// internal/middleware only admits "" and "active", so an unrecognised value would
+// silently revoke a key (and a typo in a disable command would silently enable
+// one). See BUG-CP-03.
+func validToggleStatus(status string) bool {
+	return status == "active" || status == "disabled"
+}
 
 // UpdateAPIKeyRequest is the wire shape of an API key update.
 //
@@ -35,6 +45,10 @@ const (
 	// KeyUpdateInvalidValue means a provided value is not one the field accepts.
 	// Handlers map it to 400 rather than the generic 403.
 	KeyUpdateInvalidValue
+	// KeyUpdateAdminRevoked means a tenant tried to re-activate a key an
+	// administrator disabled. Handlers map it to 403: the caller owns the key, but
+	// the decision is not theirs to reverse.
+	KeyUpdateAdminRevoked
 )
 
 // KeyUpdateOutcome is the result of applying an update to a key row. The zero
@@ -100,7 +114,28 @@ func ApplyKeyUpdate(access KeyAccess, existing *storage.APIKeyRecord, req Update
 		existing.Budget = *req.Budget
 	}
 	if req.Status != nil {
-		existing.Status = *req.Status
+		status := strings.ToLower(strings.TrimSpace(*req.Status))
+		if !validToggleStatus(status) {
+			return KeyUpdateOutcome{Denial: KeyUpdateInvalidValue, Message: "状态仅支持 active 或 disabled"}
+		}
+		switch {
+		case access.IsAdmin:
+			// An administrator's decision owns the durable flag: disabling records
+			// that this was an operator revocation, re-enabling clears it.
+			existing.Status = status
+			existing.AdminDisabled = status == "disabled"
+		case status == "active" && existing.AdminDisabled:
+			// The tenant owns the key but not the revocation. Without this branch a
+			// single PATCH undid an operator's decision (BUG-CP-01).
+			return KeyUpdateOutcome{
+				Denial:  KeyUpdateAdminRevoked,
+				Message: "该密钥已被管理员停用，无法自行启用，请联系管理员",
+			}
+		default:
+			// Self-service active <-> disabled stays available; the administrator's
+			// revocation flag is never touched by a tenant.
+			existing.Status = status
+		}
 	}
 	if req.FormatValidation != nil {
 		// The field is read at request time (internal/config.ResolveValidationLevel),
