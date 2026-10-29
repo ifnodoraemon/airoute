@@ -404,6 +404,25 @@ export default function AiCopilot({
     }
   }, [isOpen]);
 
+  // Closing the panel (or leaving the console) cancels the generation that is in
+  // flight. Hiding the panel is not "keep working invisibly": the ReAct loop would
+  // otherwise keep issuing upstream requests and executing tools (up to the
+  // iteration cap) for an answer nobody is waiting for — and that costs quota.
+  const wasOpenRef = useRef(isOpen);
+  useEffect(() => {
+    if (wasOpenRef.current && !isOpen) {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+      setIsLoading(false);
+    }
+    wasOpenRef.current = isOpen;
+  }, [isOpen]);
+  // Unmounting without a prior close (logout, session expiry) has to abort too.
+  useEffect(() => () => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+  }, []);
+
   // Scroll to bottom on new messages
   useEffect(() => {
     if (isOpen) {
@@ -553,10 +572,15 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
       trace.push(step1);
       const res = step1.result;
       const trippedCount = res.cluster_summary.tripped_channels;
+      const metrics = res.performance_metrics;
+      // "No samples" must read as such instead of a made-up latency figure.
+      const ttftText = metrics.avg_ttft_ms == null
+        ? (isZh ? '无样本' : 'n/a')
+        : `${metrics.avg_ttft_ms} ms`;
 
       return {
         trace,
-        text: `### 🩺 Airoute 网关集群深度健康巡检报告\n\n**集群健康评分**：\`${res.cluster_summary.health_score} / 100\`\n\n- **上游服务商渠道**：共接入 **${res.cluster_summary.total_channels}** 个（活跃 **${res.cluster_summary.active_channels}** 个，熔断隔离 **${trippedCount}** 个）\n- **模型挂载总数**：当前已上线 **${res.cluster_summary.mounted_models_count}** 个异构模型\n- **性能基线指标**：平均首字延迟 (TTFT) 为 **${res.performance_metrics.avg_ttft_ms} ms**，缓存命中率 **${res.performance_metrics.cache_hit_rate}**\n- **高可用保障**：${res.cluster_summary.ha_status}\n\n${trippedCount > 0 ? `> [!WARNING]\n> 检测到有 ${trippedCount} 个上游通道处于熔断保护状态。建议前往【通道管理】执行网络探针核验并检查上游配额。` : `> [!TIP]\n> 当前所有上游通道均处于健康活跃状态，首字延迟与吞吐基线平稳。`}`
+        text: `### 🩺 Airoute 网关集群深度健康巡检报告\n\n**集群健康评分**：\`${res.cluster_summary.health_score} / 100\`\n\n- **上游服务商渠道**：共接入 **${res.cluster_summary.total_channels}** 个（活跃 **${res.cluster_summary.active_channels}** 个，熔断隔离 **${trippedCount}** 个）\n- **模型挂载总数**：当前已上线 **${res.cluster_summary.mounted_models_count}** 个异构模型\n- **性能基线指标**：平均首字延迟 (TTFT) 为 **${ttftText}**，缓存命中率 **${metrics.cache_hit_rate}**\n- **累计消费**：**${metrics.currency} ${Number(metrics.total_cost || 0).toFixed(4)}**\n- **高可用保障**：${res.cluster_summary.ha_status}\n\n${trippedCount > 0 ? `> [!WARNING]\n> 检测到有 ${trippedCount} 个上游通道处于熔断保护状态。建议前往【通道管理】执行网络探针核验并检查上游配额。` : `> [!TIP]\n> 当前所有上游通道均处于健康活跃状态，首字延迟与吞吐基线平稳。`}`
       };
     }
 

@@ -61,6 +61,19 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
       .catch(() => {});
   }, []);
 
+  // The resend countdown owns its interval so the timer stops with the dialog. This
+  // component stays mounted while closed (`if (!isOpen) return null`), so the guard
+  // is `isOpen` as well as the remaining time — otherwise a closed dialog would keep
+  // ticking for the rest of the minute.
+  const isCountingDown = isOpen && codeCountdown > 0;
+  React.useEffect(() => {
+    if (!isCountingDown) return undefined;
+    const timer = setInterval(() => {
+      setCodeCountdown((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isCountingDown]);
+
   // Handle Login Submit
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
@@ -110,15 +123,6 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
       if (res.ok && data.code === 0) {
         setSuccessMsg(data.message || (isZh ? '验证码已发送至邮箱，请查收' : 'Verification code sent to your email'));
         setCodeCountdown(60);
-        const timer = setInterval(() => {
-          setCodeCountdown((prev) => {
-            if (prev <= 1) {
-              clearInterval(timer);
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
       } else {
         setError(data.error || (isZh ? '发送验证码失败' : 'Failed to send code'));
       }

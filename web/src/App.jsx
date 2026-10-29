@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import AnnouncementBanner from './components/AnnouncementBanner';
 import Toast from './components/Toast';
+import ErrorBoundary from './components/ErrorBoundary';
 import { apiFetch } from './api/client';
 import { useApiSession } from './hooks/useApiSession';
 import { useSessionRestore } from './hooks/useSessionRestore';
@@ -1194,7 +1195,12 @@ export default function App() {
             </div>
           )}
 
-          <Suspense fallback={<ViewLoader lang={lang} />}>
+          {/* A crashed view must not take the shell with it: the sidebar, header and
+              the module switcher stay usable and the retry button re-renders just
+              this region. Keyed by tab, so moving to another module always starts
+              from a clean boundary. */}
+          <ErrorBoundary key={currentTab} lang={lang}>
+            <Suspense fallback={<ViewLoader lang={lang} />}>
             {/* 1a. SELF-SERVICE DASHBOARD (regular users) */}
             {currentTab === 'dashboard' && adminUser?.role !== 'admin' && (
               <MyUsageView adminFetch={apiFetch} showToast={showToast} lang={lang} />
@@ -1442,7 +1448,8 @@ export default function App() {
             {currentTab === 'docs' && (
               <DocsView showToast={showToast} lang={lang}  />
             )}
-          </Suspense>
+            </Suspense>
+          </ErrorBoundary>
         </div>
       </main>
 

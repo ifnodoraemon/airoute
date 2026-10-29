@@ -71,6 +71,19 @@ export default function AuthPage({
     setSuccessMsg('');
   }, [activeTab]);
 
+  // The resend countdown owns its interval. Driving it from an effect ties the timer
+  // to this component's lifetime: leaving the auth page (or the whole view being
+  // replaced) clears it instead of leaving a 60-second tick running against an
+  // unmounted instance.
+  const isCountingDown = codeCountdown > 0;
+  useEffect(() => {
+    if (!isCountingDown) return undefined;
+    const timer = setInterval(() => {
+      setCodeCountdown((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isCountingDown]);
+
   useEffect(() => {
     if (!sysConfig.allow_registration && activeTab === 'register') {
       setActiveTab('login');
@@ -129,15 +142,6 @@ export default function AuthPage({
           setSuccessMsg(isZh ? `验证码已发送！已自动为您填入: ${data.dev_code}` : `Code sent! Auto-filled: ${data.dev_code}`);
         }
         setCodeCountdown(60);
-        const timer = setInterval(() => {
-          setCodeCountdown((prev) => {
-            if (prev <= 1) {
-              clearInterval(timer);
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
       } else {
         setError(data.error || (isZh ? '发送验证码失败' : 'Failed to send verification code'));
       }
