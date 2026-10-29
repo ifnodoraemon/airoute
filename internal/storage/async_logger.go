@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -463,11 +462,10 @@ func (al *AsyncLogger) deadLetterStreamEntry(ctx context.Context, client *distri
 func (al *AsyncLogger) redisStreamWorker(client *distributed.Client) {
 	defer al.wg.Done()
 
-	hostname, err := os.Hostname()
-	if err != nil || hostname == "" {
-		hostname = "worker"
-	}
-	consumerID := fmt.Sprintf("%s-%d", hostname, os.Getpid())
+	// A stable identity (NODE_ID) keeps one consumer entry per replica across
+	// restarts instead of one per process start; the read loop below also sweeps
+	// entries that have been idle for a day.
+	consumerID := streamConsumerID()
 	ctx := context.Background()
 
 	// Group creation is retried and never silently ignored: if the group does not
@@ -605,12 +603,30 @@ func (al *AsyncLogger) redisStreamWorker(client *distributed.Client) {
 	trimCounter := 0
 	claimTicker := time.NewTicker(30 * time.Second)
 	defer claimTicker.Stop()
+	// Consumer entries are never garbage-collected by Redis; the claim loop only
+	// reclaims their pending messages. Sweep entries that have been idle for a day
+	// and own no pending messages, so XINFO keeps describing the replicas that are
+	// actually alive rather than every process start in the last weeks.
+	pruneTicker := time.NewTicker(10 * time.Minute)
+	defer pruneTicker.Stop()
 	claimStart := "0-0"
 
 	for {
 		select {
 		case <-al.stopCh:
 			return
+
+		case <-pruneTicker.C:
+			pruned, pruneErr := client.PruneIdleConsumers(ctx, RedisLogStreamKey, RedisLogGroup, consumerID, 24*time.Hour)
+			if pruned > 0 {
+				telemetry.ScopedLogger("system").Info("pruned idle audit-log stream consumers",
+					"stream", RedisLogStreamKey, "group", RedisLogGroup, "count", pruned)
+			}
+			if pruneErr != nil && !distributed.IsConsumerGroupMissing(pruneErr) {
+				telemetry.WarnLogger(telemetry.ScopedLogger("system"), "usage-log-consumer-prune", 10*time.Minute,
+					"failed to prune idle audit-log stream consumers",
+					"stream", RedisLogStreamKey, "group", RedisLogGroup, "error", pruneErr.Error())
+			}
 
 		case <-claimTicker.C:
 			// Reclaim messages from dead or unresponsive consumers in group. This is

@@ -51,8 +51,10 @@ type StreamGroupStats struct {
 	// Pending is the number of entries delivered but not yet acknowledged across
 	// every consumer of the group.
 	Pending int64
-	// Consumers is the number of consumer entries registered in the group. It
-	// grows with every process restart because nothing removes stale consumers.
+	// Consumers is the number of consumer entries registered in the group. With a
+	// stable consumer identity (NODE_ID) it approximates the live replica count;
+	// entries left by processes that no longer run are swept by
+	// PruneIdleConsumers (see redis_stream_consumers.go).
 	Consumers int64
 	// Lag is the number of entries added to the stream that the group has not
 	// delivered yet (Redis >= 7), or -1 when the server does not report it.
