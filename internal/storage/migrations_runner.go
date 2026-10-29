@@ -86,6 +86,17 @@ func (db *DB) runMigrations(migrations []Migration) error {
 				telemetry.ScopedLogger("system").Warn(
 					"migration deferred; it will be retried on the next start",
 					"version", m.Version, "name", m.Name, "error", err.Error())
+				// Deliberately continue: an upgrade must not leave the gateway down,
+				// and later migrations carry their own fixes (for example the
+				// case-insensitive username index and the admin-revoked key state,
+				// which must not wait behind an opt-in DDL migration that could not
+				// take its lock).
+				//
+				// The invariant this relies on is therefore: a migration must never
+				// assume an earlier version was applied. Today v43 (opt-in table
+				// partitioning) is the only migration that can defer, and v44/v45 do
+				// not depend on it - keep it that way, or make the dependency explicit
+				// by deferring the dependent migration as well.
 				continue
 			}
 			return fmt.Errorf("migration %d (%s) failed: %w", m.Version, m.Name, err)

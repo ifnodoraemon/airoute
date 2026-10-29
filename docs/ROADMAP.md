@@ -35,7 +35,7 @@
 | **安全** | API key SHA-256 摘要落库、HMAC 会话、CSRF、登录锁定与抗枚举、可信代理、控制面私网隔离（D15） | [auth.go](../internal/middleware/auth.go#L118)、[admin_access.go](../internal/middleware/admin_access.go#L55) |
 | **存储 / HA** | SQLite（纯 Go/WAL）或 PostgreSQL；Redis 跨副本限流、日志流、配置版本同步、实时快照；异步审计 + 本地 spill 重放 | [storage/](../internal/storage)、[distributed/](../internal/distributed) |
 | **部署** | 单二进制嵌入前端；amd64/arm64；Compose 双副本 + nginx、Swarm、Helm/K8s；`/health` 与 `/health/ready` 分离 | [Dockerfile](../Dockerfile)、[deploy/](../deploy)、[helm/](../helm) |
-| **质量** | 729 个 Go 测试函数 / 222 个测试文件；597 个前端用例；CI 跑 `-race`、lint、构建 | [ci.yml](../.github/workflows/ci.yml) |
+| **质量** | 1159 个 Go 测试函数 / 346 个测试文件；666 个前端用例；CI 跑 `-race`、lint、构建 | [ci.yml](../.github/workflows/ci.yml) |
 
 **一句话判断**：**数据面过剩，治理面不足。** 当前形态非常适合「一个团队、一个管理员、一套钱包」的试点；控制面缺的是合规可证（审计、密钥、SSO）与可运维能力，而不是更多的接入协议或组织层级。
 

@@ -296,7 +296,7 @@ go run deadcode@v0.52.0 ./...       → 见 8.3（仅剩已声明测试钩子与
 
 ### 8.2 升级注意：本批修复改变了以下线上行为
 
-1. **控制面默认 fail-closed**（A-01）：反代部署必须正确配置 `GATEWAY_TRUSTED_PROXIES`，否则 `/api/v1/admin`、`/app` 对所有人 403。本机 `.env` 已同步到新网段 `172.30.0.0/16`；Compose 出厂已默认该 subnet。
+1. **控制面默认 fail-closed**（A-01）：反代部署必须正确配置 `GATEWAY_TRUSTED_PROXIES`，否则 `/api/v1/admin`、`/app` 对所有人 403。⚠️ **本条的取值已被后续提交 `2f43d28` 修正**：必须写**代理自身地址**（Compose 出厂是 `172.30.0.10/32`），**不能写整个 edge 网段**——宿主机经发布端口访问时源地址是网桥网关 `172.30.0.1`，信任整个网段会把它当成又一层代理跳，导致客户端无法归因、宿主机自己打开控制台 403。以 `.env.example` / `docs/CONFIGURATION.md` 的当前值为准（见 [第 3 轮 DEPLOY-01](../2026-10-29-bughunt/README.md)）。
 2. **边缘 ACL 全 vhost 生效**（A-02）：从公网经 nginx 访问 `/app`、`/api/v1/admin` 现在会被 403（这是原本的设计意图）。
 3. **渠道响应不再回传上游 `api_key`**（D-01）：外部脚本若读 `channel.api_key` 判断"是否已配置"，改读 `api_key_configured`。
 4. **`/stats?key=` 语义收紧**（D-04）：`ak_…`→digest 自动解析；无法解析的值现在返回 **400**（原先静默返回 0 统计）。
@@ -318,7 +318,7 @@ go run deadcode@v0.52.0 ./...       → 见 8.3（仅剩已声明测试钩子与
 
 **本轮修复自身引入的 4 个新死符号已在本轮末尾清掉**（删路由后遗留的 `ListUserRechargeOrders`/`DeleteUserKey`、被替换的 `IsClientError`、被委托取代的 `ValidateSlotsOverlap`），对应测试也同步迁移。
 
-- **并行会话遗留的 5 个死符号**（其 5 个 commit 引入，非本轮修复造成，`deadcode` 仍报）：`billing.EstimateCostUnits`、`middleware.ReserveUserQuota`/`ReleaseUserQuota`/`MaxInflightPerUser`（配额预授权改造后的旧封装）、`storage.usageAuditIDsTableExists`。建议由其归属方清理。
+- ~~**并行会话遗留的 5 个死符号**~~（已在后续提交 `d15e6b4`「drop five dead symbols the quota/estimate refactor left behind」清除，`deadcode` 现只剩 4 个已声明测试钩子）：`billing.EstimateCostUnits`、`middleware.ReserveUserQuota`/`ReleaseUserQuota`/`MaxInflightPerUser`、`storage.usageAuditIDsTableExists`。
 - **SQLite 迁移注册表缺 v43**（对方的分区迁移只注册 PG 分支）：建议补 no-op，保持两方言版本号一致。
 - **B-11 增强项**：模态兜底递归未并入上一模型的 channel trail（失败行 channel 只留最后一跳）。
 - **`dispatcher_modality.go` 仍 473 行**（> 300 行指引）：拆分属行为无关大重构，留待后续。
