@@ -154,6 +154,22 @@ deadcode ./cmd/airoute                 → 仅 4 个既定测试钩子
 - **真 Redis**（临时 `redis:7-alpine`）：删组后 6s 内自愈入库、毒丸进 DLQ 且有界、PEL 已 ACK、spill 回放。
 - **前端**：7 个旧探针全部翻转为正式回归并删除；新增 9 个回归文件。
 
+### 5.1 发布后实测（2026-10-29 09:24，版本 `1.1.0-dev+g11042ae`）
+
+滚动发布（gateway-2 → gateway-1 → LB reload）后逐项验证：
+
+```
+迁移：schema_migrations 出现 44 users_username_lower_unique / 45 api_keys_admin_disabled
+      索引 uq_users_username_lower 存在；api_keys.admin_disabled boolean default false
+端点：/health/ready 200 · /app/ 200 · /v1/models 401
+登录：JSON 无 Origin（CLI）200 · 同源 Origin 200 · 表单编码 415 · 跨站 Origin 403
+身份：用户名 ADMIN 登录 200（大小写不敏感生效）
+管理端：channels/keys/stats/logs/mcp/pricing 全 200（Bearer）
+日志：两副本 ERROR=0；新增启动日志 `audit-log consumer group health`
+      pending=0 consumers=136/137 lag=0（JOBS-01 可观测性生效，同时暴露 JOBS-05 的 136 个陈旧 consumer）
+数据面：/v1/messages 持续 200
+```
+
 > 一处测试健壮性修正：`TestUsageSpillReplayPicksUpAnotherProcessFile` 的等待窗口从 5s 放宽到 20s（并行负载 + `-race` 下会抖），不影响断言语义。
 
 ---
