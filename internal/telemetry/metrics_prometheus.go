@@ -132,6 +132,26 @@ func (m *Metrics) ToPrometheusFormat() string {
 	sb.WriteString("# TYPE airoute_usage_log_spill_replay_failures_total counter\n")
 	sb.WriteString(fmt.Sprintf("airoute_usage_log_spill_replay_failures_total %d\n", m.UsageLogSpillReplayFailures.Load()))
 
+	sb.WriteString("# HELP airoute_usage_log_spill_replays_total Spill records replayed into the database\n")
+	sb.WriteString("# TYPE airoute_usage_log_spill_replays_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_usage_log_spill_replays_total %d\n", m.UsageLogSpillReplays.Load()))
+
+	sb.WriteString("# HELP airoute_usage_log_stream_read_failures_total Failed audit-stream consumer reads\n")
+	sb.WriteString("# TYPE airoute_usage_log_stream_read_failures_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_usage_log_stream_read_failures_total %d\n", m.UsageLogStreamReadFailures.Load()))
+
+	sb.WriteString("# HELP airoute_usage_log_group_recreated_total Consumer groups re-created after going missing\n")
+	sb.WriteString("# TYPE airoute_usage_log_group_recreated_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_usage_log_group_recreated_total %d\n", m.UsageLogGroupRecreated.Load()))
+
+	sb.WriteString("# HELP airoute_usage_log_stream_poisoned_total Undecodable audit-stream entries dead-lettered\n")
+	sb.WriteString("# TYPE airoute_usage_log_stream_poisoned_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_usage_log_stream_poisoned_total %d\n", m.UsageLogStreamPoisoned.Load()))
+
+	sb.WriteString("# HELP airoute_billing_ledger_prune_contended_total Ledger retention batches retried after a replica collision\n")
+	sb.WriteString("# TYPE airoute_billing_ledger_prune_contended_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_billing_ledger_prune_contended_total %d\n", m.BillingLedgerPruneContended.Load()))
+
 	sb.WriteString("# HELP airoute_billing_ledger_drift_units Absolute key-vs-audit cost drift in 1e-9 units\n")
 	sb.WriteString("# TYPE airoute_billing_ledger_drift_units gauge\n")
 	sb.WriteString(fmt.Sprintf("airoute_billing_ledger_drift_units %d\n", m.BillingLedgerDriftUnits.Load()))

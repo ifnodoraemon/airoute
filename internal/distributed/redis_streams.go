@@ -9,15 +9,25 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// XAddLog pushes a message to a distributed Redis stream for asynchronous ingestion.
-func (c *Client) XAddLog(ctx context.Context, stream string, data string) error {
-	if !c.IsActive() {
-		return fmt.Errorf("redis client not active")
+// ErrConsumerGroupMissing reports that a stream read failed because the consumer
+// group does not exist on the server (Redis error prefix "NOGROUP"). Callers must
+// treat it as a rebuild signal, not as "no messages": a surviving consumer that
+// keeps retrying without recreating the group never makes progress again, and the
+// pipeline stalls silently while writers keep appending to the stream.
+var ErrConsumerGroupMissing = fmt.Errorf("redis consumer group missing")
+
+// IsConsumerGroupMissing reports whether err means the consumer group vanished.
+//
+// Redis returns "NOGROUP No such key ... or consumer group ..." for XREADGROUP /
+// XACK when the group (or the whole stream key) is gone. The message text is the
+// only portable signal (go-redis does not expose a typed error for it), so the
+// check is on the wire prefix rather than on an error type.
+func IsConsumerGroupMissing(err error) bool {
+	if err == nil {
+		return false
 	}
-	return c.rdb.XAdd(ctx, &redis.XAddArgs{
-		Stream: stream,
-		Values: map[string]interface{}{"data": data},
-	}).Err()
+	msg := err.Error()
+	return strings.Contains(msg, "NOGROUP") || strings.Contains(msg, "no such key")
 }
 
 // EnsureConsumerGroup ensures a Redis Stream consumer group exists.
@@ -30,7 +40,90 @@ func (c *Client) EnsureConsumerGroup(ctx context.Context, stream, group string) 
 	if err != nil && (strings.Contains(err.Error(), "BUSYGROUP") || strings.Contains(err.Error(), "already exists")) {
 		return nil
 	}
+	if err != nil && IsConsumerGroupMissing(err) {
+		return fmt.Errorf("%w: %v", ErrConsumerGroupMissing, err)
+	}
 	return err
+}
+
+// StreamGroupStats is a point-in-time view of one consumer group.
+type StreamGroupStats struct {
+	// Pending is the number of entries delivered but not yet acknowledged across
+	// every consumer of the group.
+	Pending int64
+	// Consumers is the number of consumer entries registered in the group. It
+	// grows with every process restart because nothing removes stale consumers.
+	Consumers int64
+	// Lag is the number of entries added to the stream that the group has not
+	// delivered yet (Redis >= 7), or -1 when the server does not report it.
+	Lag int64
+}
+
+// ConsumerGroupStats returns the group's pending/consumer/lag numbers, which is
+// what makes "the ingestion pipeline is stuck" visible at startup and on demand.
+func (c *Client) ConsumerGroupStats(ctx context.Context, stream, group string) (StreamGroupStats, error) {
+	if !c.IsActive() {
+		return StreamGroupStats{}, fmt.Errorf("redis client not active")
+	}
+	groups, err := c.rdb.XInfoGroups(ctx, stream).Result()
+	if err != nil {
+		if IsConsumerGroupMissing(err) {
+			return StreamGroupStats{}, fmt.Errorf("%w: %v", ErrConsumerGroupMissing, err)
+		}
+		return StreamGroupStats{}, err
+	}
+	for _, info := range groups {
+		if info.Name != group {
+			continue
+		}
+		return StreamGroupStats{Pending: info.Pending, Consumers: info.Consumers, Lag: info.Lag}, nil
+	}
+	return StreamGroupStats{}, fmt.Errorf("%w: group %q not present on stream %q", ErrConsumerGroupMissing, group, stream)
+}
+
+// DeadLetterLog appends one undecodable stream entry to the dead-letter stream and
+// keeps that stream bounded.
+//
+// A poison entry cannot be repaired by replaying it, so it must not stay in the
+// billing PEL — but dropping it without a trace loses audit evidence. The DLQ
+// keeps the raw payload (truncated) plus the reason, and the MAXLEN trim is safe
+// here because the DLQ is diagnostic, not billing-bearing: the audit row it
+// describes was never written.
+func (c *Client) DeadLetterLog(ctx context.Context, stream, originalID, reason, payload string, maxLen int64) error {
+	if !c.IsActive() {
+		return fmt.Errorf("redis client not active")
+	}
+	if maxLen <= 0 {
+		maxLen = 1000
+	}
+	// Exact MAXLEN: the DLQ is small and diagnostic, and an approximate trim would
+	// not enforce the bound at all on a stream that never grows past a few hundred
+	// entries (Redis can only trim whole macro nodes approximately).
+	if err := c.rdb.XAdd(ctx, &redis.XAddArgs{
+		Stream: stream,
+		MaxLen: maxLen,
+		Approx: false,
+		Values: map[string]interface{}{
+			"original_id": originalID,
+			"reason":      reason,
+			"payload":     payload,
+			"source":      "airoute-usage-log-consumer",
+		},
+	}).Err(); err != nil {
+		return fmt.Errorf("append dead letter: %w", err)
+	}
+	return nil
+}
+
+// XAddLog pushes a message to a distributed Redis stream for asynchronous ingestion.
+func (c *Client) XAddLog(ctx context.Context, stream string, data string) error {
+	if !c.IsActive() {
+		return fmt.Errorf("redis client not active")
+	}
+	return c.rdb.XAdd(ctx, &redis.XAddArgs{
+		Stream: stream,
+		Values: map[string]interface{}{"data": data},
+	}).Err()
 }
 
 // ReadGroupLogs reads new pending messages from a Redis Stream consumer group.

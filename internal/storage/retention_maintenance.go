@@ -27,6 +27,11 @@ const (
 
 	// At most one prune attempt per interval, per repository.
 	retentionPruneInterval = time.Hour
+
+	// When a prune attempt fails the throttle slot is wound back to "retry in a
+	// minute" instead of leaving it at "ran now": otherwise one transient database
+	// error silently froze that table's cleanup for a full interval.
+	retentionPruneRetryInterval = time.Minute
 )
 
 // verificationRetention is how long expired verification codes are kept after
@@ -84,10 +89,30 @@ func (r *Repository) maybePrune(slot *atomic.Int64, retention func() time.Durati
 	}
 	n, err := purge(time.Now().Add(-window))
 	if err != nil {
-		telemetry.WarnLogger(telemetry.ScopedLogger("system"), warnKey, 10*time.Minute, warnMsg, "error", err.Error())
+		// Retry soon rather than a full interval later: the slot was consumed before
+		// the attempt, so without this a single failure means an hour of no cleanup
+		// (and no log after the first one).
+		rescheduleRetentionRetry(slot, retentionPruneInterval, retentionPruneRetryInterval)
+		telemetry.WarnLogger(telemetry.ScopedLogger("system"), warnKey, 10*time.Minute, warnMsg, "error", err.Error(),
+			"retry_in", retentionPruneRetryInterval.String())
 	} else if n > 0 {
 		telemetry.ScopedLogger("system").Info(infoMsg, "deleted", n)
 	}
+}
+
+// rescheduleRetentionRetry rewinds the throttle slot so the attempt becomes due
+// again after retryInterval, without allowing a tight retry loop on a database
+// that is still failing.
+func rescheduleRetentionRetry(slot *atomic.Int64, interval, retryInterval time.Duration) {
+	if slot == nil {
+		return
+	}
+	if retryInterval <= 0 || retryInterval >= interval {
+		slot.Store(0)
+		return
+	}
+	now := time.Now().UnixNano()
+	slot.Store(now - int64(interval) + int64(retryInterval))
 }
 
 // maybePruneVerificationCodes prunes expired verification codes from the write
