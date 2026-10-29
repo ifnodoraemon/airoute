@@ -57,6 +57,8 @@ func (h *Handler) handleResponsesStreaming(
 	totalPromptTokens := 0
 	totalCompTokens := 0
 	totalCachedTokens := 0
+	totalCacheCreationTokens := 0
+	totalReasoningTokens := 0
 	respUpstreamChatID := ""
 	respUpstreamChannel := ""
 	var streamError error
@@ -102,12 +104,13 @@ func (h *Handler) handleResponsesStreaming(
 			// Prompt-cache reads are billed at the cache rate; without this the
 			// stream reported every prompt token at the full rate (and the
 			// response.completed usage/detail and trailer all said 0 cached).
-			CachedTokens: totalCachedTokens,
-			Duration:     time.Since(start),
-			TTFT:         ttftDuration,
-			StatusCode:   statusCode,
-			ErrorMessage: sanitizeErrorMessage(streamError),
-			LiveTracked:  true, // stream deltas already fed the live token meter
+			CachedTokens:        totalCachedTokens,
+			CacheCreationTokens: totalCacheCreationTokens,
+			Duration:            time.Since(start),
+			TTFT:                ttftDuration,
+			StatusCode:          statusCode,
+			ErrorMessage:        sanitizeErrorMessage(streamError),
+			LiveTracked:         true, // stream deltas already fed the live token meter
 		})
 		finalSettle = settle
 		return cost, saved, cached
@@ -151,6 +154,10 @@ func (h *Handler) handleResponsesStreaming(
 				totalPromptTokens = max(totalPromptTokens, event.Chunk.Usage.PromptTokens)
 				totalCompTokens = max(totalCompTokens, event.Chunk.Usage.CompletionTokens)
 				totalCachedTokens = max(totalCachedTokens, event.Chunk.Usage.GetCachedTokens())
+				totalCacheCreationTokens = max(totalCacheCreationTokens, event.Chunk.Usage.GetCacheCreationTokens())
+				// Reasoning tokens are part of completion_tokens; expose the
+				// upstream-reported share instead of a hardcoded 0 (F-02).
+				totalReasoningTokens = max(totalReasoningTokens, event.Chunk.Usage.GetReasoningTokens())
 			}
 
 			for _, choice := range event.Chunk.Choices {
@@ -190,7 +197,7 @@ func (h *Handler) handleResponsesStreaming(
 		"input_tokens":          totalPromptTokens,
 		"input_tokens_details":  gin.H{"cached_tokens": cachedTokens},
 		"output_tokens":         totalCompTokens,
-		"output_tokens_details": gin.H{"reasoning_tokens": 0},
+		"output_tokens_details": gin.H{"reasoning_tokens": totalReasoningTokens},
 		"total_tokens":          totalPromptTokens + totalCompTokens,
 	})
 

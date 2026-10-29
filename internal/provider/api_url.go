@@ -119,3 +119,13 @@ func mergeQuery(rawURL string, query url.Values) string {
 	parsed.RawQuery += "&" + query.Encode()
 	return parsed.String()
 }
+
+// geminiModelPath normalises a Gemini model id for URL and body use.
+//
+// Gemini documents and returns model ids in the "models/<id>" form, but the REST
+// path already carries the "models/" segment: pasting the documented id into a
+// channel mapping produced "/v1beta/models/models/<id>" and a 404. Normalising in
+// one place keeps chat, streaming and embedding on the same rule (F-03).
+func geminiModelPath(modelName string) string {
+	return strings.TrimPrefix(strings.TrimSpace(modelName), "models/")
+}

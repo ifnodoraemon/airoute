@@ -47,7 +47,7 @@ func (d *Dispatcher) GetChannelsForModelAndProtocol(modelName, proto string) []*
 }
 
 // GetChannelsForModelAndProtocolWithContext returns matching channels for a given model and protocol.
-// If a session ID is present in ctx, it enables LLM Session Affinity (consistent hashing and Redis pin)
+// If a session ID is present in ctx, it enables LLM Session Affinity (rendezvous hashing and Redis pin)
 // to reuse upstream KV Cache (Prefix Caching) across multi-turn conversations.
 func (d *Dispatcher) GetChannelsForModelAndProtocolWithContext(ctx context.Context, modelName, proto string) []*model.ChannelConfig {
 	d.mu.RLock()

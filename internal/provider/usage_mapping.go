@@ -15,18 +15,27 @@ func anthropicUsageToModel(u *AnthropicUsage) *model.Usage {
 		return nil
 	}
 	prompt := u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens
-	usage := &model.Usage{
-		PromptTokens:     prompt,
-		CompletionTokens: u.OutputTokens,
-		TotalTokens:      prompt + u.OutputTokens,
+	return &model.Usage{
+		PromptTokens:        prompt,
+		CompletionTokens:    u.OutputTokens,
+		TotalTokens:         prompt + u.OutputTokens,
+		PromptTokensDetails: cacheTokenDetails(u.CacheReadInputTokens, u.CacheCreationInputTokens),
 	}
-	if u.CacheReadInputTokens > 0 || u.CacheCreationInputTokens > 0 {
-		usage.PromptTokensDetails = &model.PromptTokensDetails{
-			CachedTokens:        u.CacheReadInputTokens,
-			CacheCreationTokens: u.CacheCreationInputTokens,
-		}
+}
+
+// cacheTokenDetails builds the prompt-cache breakdown shared by the unary and
+// streaming Anthropic adapters. Both buckets live inside PromptTokens; billing
+// prices the read bucket at the cache-read rate and the write bucket at the
+// cache-write premium, so dropping either one silently misprices the request
+// (F-05: the streaming path used to report only the read count).
+func cacheTokenDetails(cacheReadTokens, cacheCreationTokens int) *model.PromptTokensDetails {
+	if cacheReadTokens <= 0 && cacheCreationTokens <= 0 {
+		return nil
 	}
-	return usage
+	return &model.PromptTokensDetails{
+		CachedTokens:        cacheReadTokens,
+		CacheCreationTokens: cacheCreationTokens,
+	}
 }
 
 // geminiUsageToModel converts Gemini usageMetadata into canonical usage.

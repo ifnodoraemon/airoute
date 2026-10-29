@@ -28,6 +28,7 @@ type GeminiFunctionResponse struct {
 type GeminiPart struct {
 	Text             string                  `json:"text,omitempty"`
 	InlineData       *GeminiInlineData       `json:"inlineData,omitempty"`
+	FileData         *GeminiFileData         `json:"fileData,omitempty"`
 	FunctionCall     *GeminiFunctionCall     `json:"functionCall,omitempty"`
 	FunctionResponse *GeminiFunctionResponse `json:"functionResponse,omitempty"`
 }
@@ -36,6 +37,14 @@ type GeminiPart struct {
 type GeminiInlineData struct {
 	MimeType string `json:"mimeType"`
 	Data     string `json:"data"` // base64 encoded
+}
+
+// GeminiFileData references a remote resource instead of inlining it. It is the
+// only Gemini representation that accepts a URI, so an OpenAI image_url carrying
+// an https URL must be forwarded here rather than in inlineData.data (F-07).
+type GeminiFileData struct {
+	MimeType string `json:"mimeType,omitempty"`
+	FileURI  string `json:"fileUri"`
 }
 
 // GeminiContent represents a role-grouped turn.
@@ -70,6 +79,19 @@ type GeminiRequest struct {
 	GenerationConfig  *GeminiGenerationConfig          `json:"generationConfig,omitempty"`
 	SafetySettings    []GeminiSafetySetting            `json:"safetySettings,omitempty"`
 	Tools             []GeminiToolDeclarationContainer `json:"tools,omitempty"`
+	ToolConfig        *GeminiToolConfig                `json:"toolConfig,omitempty"`
+}
+
+// GeminiToolConfig constrains how the model may call the declared functions.
+type GeminiToolConfig struct {
+	FunctionCallingConfig *GeminiFunctionCallingConfig `json:"functionCallingConfig,omitempty"`
+}
+
+// GeminiFunctionCallingConfig is Gemini's tool_choice equivalent; Mode is one of
+// AUTO / ANY / NONE, and AllowedFunctionNames narrows ANY to specific tools.
+type GeminiFunctionCallingConfig struct {
+	Mode                 string   `json:"mode,omitempty"`
+	AllowedFunctionNames []string `json:"allowedFunctionNames,omitempty"`
 }
 
 // GeminiUsageMetadata reports token counts.

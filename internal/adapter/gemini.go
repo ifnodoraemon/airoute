@@ -81,6 +81,16 @@ func (a *GeminiAdapter) ToCanonical(ctx context.Context, input any) (*model.Chat
 					},
 				})
 			}
+			// A fileData part is Gemini's remote-resource form; keep the URI so
+			// the outbound converter can forward it as a URL instead of
+			// mislabelling it as inline base64 (F-07).
+			if p.FileData != nil && p.FileData.FileURI != "" {
+				hasMultimodal = true
+				contentParts = append(contentParts, model.ContentPart{
+					Type:     model.ContentPartImageURL,
+					ImageURL: &model.ImageURLPart{URL: p.FileData.FileURI},
+				})
+			}
 			if p.FunctionCall != nil {
 				idx := len(toolCalls)
 				argsStr := "{}"

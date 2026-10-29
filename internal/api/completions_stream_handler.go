@@ -39,6 +39,7 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 	totalPromptTokens := 0
 	totalCompTokens := 0
 	totalCachedTokens := 0
+	totalCacheCreationTokens := 0
 	upstreamChannel := ""
 	accumulatedChars := 0
 	var streamError error
@@ -96,6 +97,7 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 				// cache rate; dropping them charged every cached token as fresh
 				// input (same defect the non-streaming paths do not have).
 				totalCachedTokens = max(totalCachedTokens, event.Chunk.Usage.GetCachedTokens())
+				totalCacheCreationTokens = max(totalCacheCreationTokens, event.Chunk.Usage.GetCacheCreationTokens())
 			}
 
 			chunkPayload := gin.H{
@@ -136,19 +138,20 @@ func (h *Handler) handleCompletionsStream(c *gin.Context, reqCtx context.Context
 	}
 
 	cost, savedCost, cachedTokens, settle := RecordUsageDeferred(c, AuditRecordParams{
-		ChatID:           respID,
-		Channel:          upstreamChannel,
-		SessionID:        sessionID,
-		Model:            req.Model,
-		PromptTokens:     totalPromptTokens,
-		CompletionTokens: totalCompTokens,
-		CachedTokens:     totalCachedTokens,
-		Duration:         time.Since(start),
-		TTFT:             ttftDuration,
-		StatusCode:       statusCode,
-		UsageSource:      usageSource,
-		LiveTracked:      true, // stream deltas already fed the live token meter
-		ErrorMessage:     sanitizeErrorMessage(streamError),
+		ChatID:              respID,
+		Channel:             upstreamChannel,
+		SessionID:           sessionID,
+		Model:               req.Model,
+		PromptTokens:        totalPromptTokens,
+		CompletionTokens:    totalCompTokens,
+		CachedTokens:        totalCachedTokens,
+		CacheCreationTokens: totalCacheCreationTokens,
+		Duration:            time.Since(start),
+		TTFT:                ttftDuration,
+		StatusCode:          statusCode,
+		UsageSource:         usageSource,
+		LiveTracked:         true, // stream deltas already fed the live token meter
+		ErrorMessage:        sanitizeErrorMessage(streamError),
 	})
 
 	// A20: every OpenAI SSE stream must be terminated by the [DONE] sentinel, on

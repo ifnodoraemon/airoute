@@ -361,12 +361,12 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 							PromptTokens:     inputTokens + cacheReadTokens + cacheCreationTokens,
 							CompletionTokens: outputTokens,
 							TotalTokens:      inputTokens + cacheReadTokens + cacheCreationTokens + outputTokens,
-							PromptTokensDetails: func() *model.PromptTokensDetails {
-								if cacheReadTokens > 0 {
-									return &model.PromptTokensDetails{CachedTokens: cacheReadTokens}
-								}
-								return nil
-							}(),
+							// Both cache buckets must survive the streaming path:
+							// billing prices cache writes at a premium and needs the
+							// count to split promptTokens into its three buckets.
+							// Reporting only the read count billed the write bucket
+							// at the plain input rate (F-05).
+							PromptTokensDetails: cacheTokenDetails(cacheReadTokens, cacheCreationTokens),
 						},
 					}
 					if !sendEvent(&model.StreamEvent{Chunk: chunk}) {

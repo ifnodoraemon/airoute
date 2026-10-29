@@ -2,6 +2,7 @@ package provider
 
 import (
 	"encoding/json"
+	"log/slog"
 	"strings"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
@@ -100,6 +101,19 @@ func convertOpenAIToGemini(req *model.ChatCompletionRequest) *GeminiRequest {
 				}
 			case model.ContentPartImageURL:
 				if part.ImageURL != nil && part.ImageURL.URL != "" {
+					if model.IsRemoteContentURL(part.ImageURL.URL) {
+						// Gemini's inlineData.data is base64 only. A remote
+						// resource belongs in fileData.fileUri; putting the URL
+						// in the base64 field made the upstream reject the
+						// request (F-07).
+						geminiParts = append(geminiParts, GeminiPart{
+							FileData: &GeminiFileData{
+								MimeType: "image/jpeg",
+								FileURI:  part.ImageURL.URL,
+							},
+						})
+						continue
+					}
 					mime, b64 := model.ParseDataURI(part.ImageURL.URL)
 					geminiParts = append(geminiParts, GeminiPart{
 						InlineData: &GeminiInlineData{
@@ -163,8 +177,9 @@ func convertOpenAIToGemini(req *model.ChatCompletionRequest) *GeminiRequest {
 	}
 
 	geminiReq := &GeminiRequest{
-		Contents: mergedContents,
-		Tools:    toolContainers,
+		Contents:   mergedContents,
+		Tools:      toolContainers,
+		ToolConfig: geminiToolConfig(req.ToolChoice),
 		GenerationConfig: &GeminiGenerationConfig{
 			Temperature:     req.Temperature,
 			TopP:            req.TopP,
@@ -184,4 +199,59 @@ func convertOpenAIToGemini(req *model.ChatCompletionRequest) *GeminiRequest {
 	}
 
 	return geminiReq
+}
+
+// geminiToolConfig maps an OpenAI tool_choice value onto Gemini's
+// generationConfig-equivalent toolConfig.functionCallingConfig.
+//
+// Gemini spells the modes AUTO / ANY / NONE. A pinned function is expressed as
+// mode ANY plus allowedFunctionNames, which is the only way to force one specific
+// tool. Unsupported values are dropped with a warning rather than silently
+// coerced to AUTO: a client that pinned a tool must not get a free choice back
+// without noticing (F-04).
+func geminiToolConfig(raw any) *GeminiToolConfig {
+	switch choice := raw.(type) {
+	case nil:
+		return nil
+	case string:
+		switch strings.ToLower(strings.TrimSpace(choice)) {
+		case "":
+			return nil
+		case "auto":
+			return geminiToolConfigMode("AUTO")
+		case "required", "any":
+			return geminiToolConfigMode("ANY")
+		case "none":
+			return geminiToolConfigMode("NONE")
+		}
+		slog.Warn("unsupported openai tool_choice string for Gemini; omitting toolConfig", "value", choice)
+		return nil
+	case map[string]any:
+		choiceType, _ := choice["type"].(string)
+		switch strings.ToLower(choiceType) {
+		case "function":
+			if fn, ok := choice["function"].(map[string]any); ok {
+				if name, _ := fn["name"].(string); name != "" {
+					return &GeminiToolConfig{FunctionCallingConfig: &GeminiFunctionCallingConfig{
+						Mode:                 "ANY",
+						AllowedFunctionNames: []string{name},
+					}}
+				}
+			}
+			slog.Warn("openai tool_choice function without a name; omitting toolConfig", "value", choice)
+			return nil
+		case "auto":
+			return geminiToolConfigMode("AUTO")
+		case "any", "required":
+			return geminiToolConfigMode("ANY")
+		case "none":
+			return geminiToolConfigMode("NONE")
+		}
+	}
+	slog.Warn("unsupported openai tool_choice value for Gemini; omitting toolConfig", "value", raw)
+	return nil
+}
+
+func geminiToolConfigMode(mode string) *GeminiToolConfig {
+	return &GeminiToolConfig{FunctionCallingConfig: &GeminiFunctionCallingConfig{Mode: mode}}
 }

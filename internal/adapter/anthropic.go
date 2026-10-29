@@ -66,6 +66,20 @@ func (a *AnthropicAdapter) ToCanonical(ctx context.Context, input any) (*model.C
 				case "image":
 					hasImage = true
 					if src, ok := m["source"].(map[string]any); ok {
+						// The Messages API accepts two source forms. Only the
+						// base64 one used to be understood, so a remote image
+						// (source.type="url") was dropped silently and the model
+						// answered as if no picture had been sent (F-07).
+						sourceType, _ := src["type"].(string)
+						if sourceType == "url" {
+							if remoteURL, _ := src["url"].(string); remoteURL != "" {
+								contentParts = append(contentParts, model.ContentPart{
+									Type:     model.ContentPartImageURL,
+									ImageURL: &model.ImageURLPart{URL: remoteURL},
+								})
+							}
+							continue
+						}
 						mediaType, _ := src["media_type"].(string)
 						data, _ := src["data"].(string)
 						if mediaType != "" && data != "" {

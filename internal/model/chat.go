@@ -130,6 +130,31 @@ func (u *Usage) GetCacheCreationTokens() int {
 	return u.PromptTokensDetails.CacheCreationTokens
 }
 
+// GetReasoningTokens returns the reasoning/thinking tokens the upstream reported
+// inside completion_tokens_details, if any.
+//
+// CompletionTokens already includes them (that is how the provider bills), so this
+// is a breakdown for clients — the Responses API echoes it as
+// output_tokens_details.reasoning_tokens. The value survives as an unmodeled
+// usage member (Usage.Extra), which is why reading it here is enough to stop
+// /v1/responses from always reporting zero (F-02).
+func (u *Usage) GetReasoningTokens() int {
+	if u == nil || len(u.Extra) == 0 {
+		return 0
+	}
+	raw, ok := u.Extra["completion_tokens_details"]
+	if !ok {
+		return 0
+	}
+	var details struct {
+		ReasoningTokens int `json:"reasoning_tokens"`
+	}
+	if err := json.Unmarshal(raw, &details); err != nil {
+		return 0
+	}
+	return details.ReasoningTokens
+}
+
 // ChatCompletionChoice is an individual completion choice.
 type ChatCompletionChoice struct {
 	Index        int         `json:"index"`

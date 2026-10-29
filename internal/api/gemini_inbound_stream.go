@@ -38,6 +38,7 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 	totalPromptTokens := 0
 	totalCompTokens := 0
 	totalCachedTokens := 0
+	totalCacheCreationTokens := 0
 	firstTokenRecorded := false
 	var ttftDuration time.Duration
 	upstreamChannel := ""      // populated from the first stream event
@@ -80,19 +81,20 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 			}
 		}
 		finalCost, finalSaved, finalCached, finalSettle = RecordUsageDeferred(c, AuditRecordParams{
-			SessionID:        sessionID,
-			ChatID:           geminiUpstreamChatID,
-			Channel:          upstreamChannel,
-			Model:            modelName,
-			PromptTokens:     totalPromptTokens,
-			CompletionTokens: totalCompTokens,
-			CachedTokens:     totalCachedTokens,
-			Duration:         time.Since(start),
-			TTFT:             ttftDuration,
-			StatusCode:       statusCode,
-			UsageSource:      usageSource,
-			LiveTracked:      true, // stream deltas already fed the live token meter
-			ErrorMessage:     sanitizeErrorMessage(streamError),
+			SessionID:           sessionID,
+			ChatID:              geminiUpstreamChatID,
+			Channel:             upstreamChannel,
+			Model:               modelName,
+			PromptTokens:        totalPromptTokens,
+			CompletionTokens:    totalCompTokens,
+			CachedTokens:        totalCachedTokens,
+			CacheCreationTokens: totalCacheCreationTokens,
+			Duration:            time.Since(start),
+			TTFT:                ttftDuration,
+			StatusCode:          statusCode,
+			UsageSource:         usageSource,
+			LiveTracked:         true, // stream deltas already fed the live token meter
+			ErrorMessage:        sanitizeErrorMessage(streamError),
 		})
 	}
 	defer runFinalSettle()
@@ -236,6 +238,7 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 					// Cache reads are part of prompt_tokens but bill at the cache
 					// rate; not forwarding them charged cached tokens as fresh input.
 					totalCachedTokens = max(totalCachedTokens, event.Chunk.Usage.GetCachedTokens())
+					totalCacheCreationTokens = max(totalCacheCreationTokens, event.Chunk.Usage.GetCacheCreationTokens())
 				}
 				if usageOnly {
 					usageChunk := gin.H{

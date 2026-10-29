@@ -31,7 +31,7 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 
 	if len(texts) == 1 {
 		// Single embedContent call
-		targetURL := joinAPIURLVersioned(baseURL, GeminiAPIVersion, "/v1beta/models/"+targetModel+":embedContent", url.Values{"key": {channel.APIKey}})
+		targetURL := joinAPIURLVersioned(baseURL, GeminiAPIVersion, "/v1beta/models/"+geminiModelPath(targetModel)+":embedContent", url.Values{"key": {channel.APIKey}})
 		type singleReq struct {
 			Model   string `json:"model,omitempty"`
 			Content struct {
@@ -41,7 +41,7 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 			} `json:"content"`
 		}
 		var sReq singleReq
-		sReq.Model = "models/" + strings.TrimPrefix(targetModel, "models/")
+		sReq.Model = "models/" + geminiModelPath(targetModel)
 		sReq.Content.Parts = []struct {
 			Text string `json:"text"`
 		}{{Text: texts[0]}}
@@ -83,7 +83,7 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 		}
 	} else {
 		// batchEmbedContents call
-		targetURL := joinAPIURLVersioned(baseURL, GeminiAPIVersion, "/v1beta/models/"+targetModel+":batchEmbedContents", url.Values{"key": {channel.APIKey}})
+		targetURL := joinAPIURLVersioned(baseURL, GeminiAPIVersion, "/v1beta/models/"+geminiModelPath(targetModel)+":batchEmbedContents", url.Values{"key": {channel.APIKey}})
 		type itemReq struct {
 			Model   string `json:"model"`
 			Content struct {
@@ -96,7 +96,7 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 			Requests []itemReq `json:"requests"`
 		}
 		var bReq batchReq
-		modelPath := "models/" + strings.TrimPrefix(targetModel, "models/")
+		modelPath := "models/" + geminiModelPath(targetModel)
 		for _, t := range texts {
 			toks := model.EstimateTokensFromChars(len(t))
 			if toks == 0 {
