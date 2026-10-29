@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Download, Plus, RefreshCw, Trash2, Upload } from 'lucide-react';
+import { Download, Plus, RefreshCw, Trash2, Pencil } from 'lucide-react';
+import SupplierCSVImport from './SupplierCSVImport';
 
 function money(value) {
-  return `¥${Number(value || 0).toFixed(4)}`;
+  return `¥${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 9, useGrouping: false })}`;
 }
 
 // A spread is our selling price minus the supplier price. Negative means we sell
@@ -11,7 +12,7 @@ function spreadClass(value) {
   return value < 0 ? 'text-rose-600 dark:text-rose-400 font-semibold' : '';
 }
 
-const EMPTY = { channel: '', model: '', input_cost: '', output_cost: '' };
+const EMPTY = { channel: '', model: '', input_cost: '', output_cost: '', status: 'active' };
 
 // SupplierCostPanel manages the contracted per-million-token supplier prices and
 // shows them next to our own selling prices. This is a pure price-list
@@ -25,7 +26,6 @@ export default function SupplierCostPanel({ adminFetch, showToast, lang = 'zh', 
   const [form, setForm] = useState(EMPTY);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [importing, setImporting] = useState(false);
 
   const notify = useCallback((message, type = 'success') => {
     if (showToast) showToast(message, type);
@@ -76,6 +76,7 @@ export default function SupplierCostPanel({ adminFetch, showToast, lang = 'zh', 
           model: form.model.trim(),
           input_cost: Number(form.input_cost),
           output_cost: Number(form.output_cost),
+          status: form.status,
         }),
       });
       const body = await res.json().catch(() => ({}));
@@ -126,28 +127,11 @@ export default function SupplierCostPanel({ adminFetch, showToast, lang = 'zh', 
     }
   };
 
-  const importCSV = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    setImporting(true);
-    try {
-      const text = await file.text();
-      const res = await adminFetch('/api/v1/admin/supplier-costs/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/csv' },
-        body: text,
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok || body.code !== 0) throw new Error(body.error || `HTTP ${res.status}`);
-      notify(isZh ? `已导入 ${body.data?.imported ?? 0} 行` : `Imported ${body.data?.imported ?? 0} rows`);
-      await load();
-    } catch (err) {
-      notify(err.message, 'error');
-    } finally {
-      setImporting(false);
-    }
-  };
+  const comparisonRows = useMemo(() => {
+    const configured = new Set(rows.map(row => row.model));
+    const missing = [...ourPrices.keys()].filter(model => !configured.has(model) && !model.includes('*'));
+    return [...rows, ...missing.map(model => ({ id: `missing:${model}`, channel: '—', model, unconfigured: true }))];
+  }, [rows, ourPrices]);
 
   const inputClass = 'w-full px-2.5 py-1.5 rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] text-xs text-[#202124] dark:text-[#F1F2F4]';
 
@@ -163,11 +147,7 @@ export default function SupplierCostPanel({ adminFetch, showToast, lang = 'zh', 
           </div>
         </div>
         <div className="flex items-center space-x-1.5">
-          <label className="inline-flex items-center space-x-1 px-2 py-1.5 rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] text-[11px] text-[#656B75] dark:text-[#A1A7B0] cursor-pointer">
-            <Upload className="w-3.5 h-3.5" />
-            <span>{isZh ? '导入 CSV' : 'Import CSV'}</span>
-            <input type="file" accept=".csv,text/csv" onChange={importCSV} disabled={importing} className="hidden" aria-label={isZh ? '导入 CSV' : 'Import CSV'} />
-          </label>
+          <SupplierCSVImport adminFetch={adminFetch} onImported={load} showToast={showToast} lang={lang} />
           <button type="button" onClick={exportCSV} className="inline-flex items-center space-x-1 px-2 py-1.5 rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] text-[11px] text-[#656B75] dark:text-[#A1A7B0]">
             <Download className="w-3.5 h-3.5" />
             <span>{isZh ? '导出 CSV' : 'Export CSV'}</span>
@@ -178,11 +158,14 @@ export default function SupplierCostPanel({ adminFetch, showToast, lang = 'zh', 
         </div>
       </div>
 
-      <form onSubmit={save} className="grid grid-cols-2 md:grid-cols-5 gap-2">
+      <form onSubmit={save} className="grid grid-cols-2 md:grid-cols-6 gap-2">
         <input value={form.channel} onChange={(e) => setForm((prev) => ({ ...prev, channel: e.target.value }))} className={inputClass} placeholder={isZh ? '通道名' : 'Channel'} aria-label={isZh ? '通道名' : 'Channel'} />
         <input value={form.model} onChange={(e) => setForm((prev) => ({ ...prev, model: e.target.value }))} className={inputClass} placeholder={isZh ? '模型' : 'Model'} aria-label={isZh ? '模型' : 'Model'} />
-        <input type="number" min="0" step="0.01" value={form.input_cost} onChange={(e) => setForm((prev) => ({ ...prev, input_cost: e.target.value }))} className={inputClass} placeholder={isZh ? '供应商输入价' : 'Supplier input price'} aria-label={isZh ? '供应商输入价' : 'Supplier input price'} />
-        <input type="number" min="0" step="0.01" value={form.output_cost} onChange={(e) => setForm((prev) => ({ ...prev, output_cost: e.target.value }))} className={inputClass} placeholder={isZh ? '供应商输出价' : 'Supplier output price'} aria-label={isZh ? '供应商输出价' : 'Supplier output price'} />
+        <input type="number" min="0" step="any" value={form.input_cost} onChange={(e) => setForm((prev) => ({ ...prev, input_cost: e.target.value }))} className={inputClass} placeholder={isZh ? '供应商输入价' : 'Supplier input price'} aria-label={isZh ? '供应商输入价' : 'Supplier input price'} />
+        <input type="number" min="0" step="any" value={form.output_cost} onChange={(e) => setForm((prev) => ({ ...prev, output_cost: e.target.value }))} className={inputClass} placeholder={isZh ? '供应商输出价' : 'Supplier output price'} aria-label={isZh ? '供应商输出价' : 'Supplier output price'} />
+        <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} className={inputClass} aria-label={isZh ? '单价状态' : 'Price status'}>
+          <option value="active">{isZh ? '启用' : 'Active'}</option><option value="disabled">{isZh ? '停用' : 'Disabled'}</option>
+        </select>
         <button type="submit" disabled={busy || !form.channel.trim() || !form.model.trim() || form.input_cost === '' || form.output_cost === ''} className="inline-flex items-center justify-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-[#355CFF] hover:bg-[#2A4AE0] text-white text-xs font-medium disabled:opacity-50">
           <Plus className="w-3.5 h-3.5" />
           <span>{isZh ? '保存' : 'Save'}</span>
@@ -202,14 +185,14 @@ export default function SupplierCostPanel({ adminFetch, showToast, lang = 'zh', 
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => {
+            {comparisonRows.map((row) => {
               const ours = ourPrices.get(row.model) || null;
               const ourInput = ours ? Number(ours.prompt_price || 0) : null;
               const ourOutput = ours ? Number(ours.completion_price || 0) : null;
               const supplierInput = Number(row.input_cost || 0);
               const supplierOutput = Number(row.output_cost || 0);
-              const inputSpread = ours ? ourInput - supplierInput : null;
-              const outputSpread = ours ? ourOutput - supplierOutput : null;
+              const inputSpread = ours && !row.unconfigured ? ourInput - supplierInput : null;
+              const outputSpread = ours && !row.unconfigured ? ourOutput - supplierOutput : null;
 
               return (
                 <tr key={row.id} className="border-b border-[#F0F1F2] dark:border-[#22252B]">
@@ -226,13 +209,13 @@ export default function SupplierCostPanel({ adminFetch, showToast, lang = 'zh', 
                     )}
                   </td>
                   <td className="py-2 pr-3 text-right font-mono">
-                    <div className="space-y-0.5">
-                      <div>{money(supplierInput)}</div>
-                      <div>{money(supplierOutput)}</div>
-                    </div>
+                    {row.unconfigured ? <span>{isZh ? '未配置' : 'Not configured'}</span> : <div className="space-y-0.5">
+                      <div>{money(supplierInput)}</div><div>{money(supplierOutput)}</div>
+                      {row.status === 'disabled' && <span>{isZh ? '已停用' : 'Disabled'}</span>}
+                    </div>}
                   </td>
                   <td className="py-2 pr-3 text-right font-mono">
-                    {ours ? (
+                    {ours && !row.unconfigured ? (
                       <div className="space-y-0.5">
                         <div className={spreadClass(inputSpread)}>{money(inputSpread)}</div>
                         <div className={spreadClass(outputSpread)}>{money(outputSpread)}</div>
@@ -242,14 +225,15 @@ export default function SupplierCostPanel({ adminFetch, showToast, lang = 'zh', 
                     )}
                   </td>
                   <td className="py-2 text-right">
+                    {!row.unconfigured && <><button type="button" onClick={() => setForm({ channel: row.channel, model: row.model, input_cost: String(row.input_cost), output_cost: String(row.output_cost), status: row.status || 'active' })} title={isZh ? '编辑' : 'Edit'} className="p-1"><Pencil className="w-3.5 h-3.5" /></button>
                     <button type="button" onClick={() => remove(row)} disabled={busy} className="p-1 text-[#656B75] hover:text-red-500" title={isZh ? '删除' : 'Delete'}>
                       <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    </button></>}
                   </td>
                 </tr>
               );
             })}
-            {rows.length === 0 && (
+            {comparisonRows.length === 0 && (
               <tr><td colSpan={6} className="py-6 text-center text-[11px] text-[#656B75] dark:text-[#A1A7B0]">{isZh ? '尚未配置供应商单价' : 'No supplier prices yet'}</td></tr>
             )}
           </tbody>

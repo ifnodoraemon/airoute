@@ -14,12 +14,14 @@ export function useConsoleSelections() {
   const [activeLogDetail, setActiveLogDetail] = useState(null);
   const [traceSnapshotId, setTraceSnapshotId] = useState('');
   const [curlExportCmd, setCurlExportCmd] = useState('');
+  const [playgroundScenario, setPlaygroundScenario] = useState(null);
 
   const reset = useCallback(() => {
     setActiveQuickKey(null);
     setActiveLogDetail(null);
     setTraceSnapshotId('');
     setCurlExportCmd('');
+    setPlaygroundScenario(null);
   }, []);
 
   return {
@@ -31,6 +33,8 @@ export function useConsoleSelections() {
     setTraceSnapshotId,
     curlExportCmd,
     setCurlExportCmd,
+    playgroundScenario,
+    setPlaygroundScenario,
     reset,
   };
 }

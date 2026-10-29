@@ -78,6 +78,9 @@ func (h *MCPHandler) executeSkillTools(_ context.Context, name string, args map[
 		if err != nil {
 			return fmt.Sprintf("Skill [%s] not found: %v", skillID, err), true, true
 		}
+		if !skill.Enabled {
+			return fmt.Sprintf("Skill [%s] is disabled", skillID), true, true
+		}
 		type SkillInspect struct {
 			ID          string   `json:"id"`
 			Name        string   `json:"name"`
@@ -116,6 +119,9 @@ func (h *MCPHandler) executeSkillTools(_ context.Context, name string, args map[
 		skill, err := h.repo.GetSkill(skillID)
 		if err != nil {
 			return fmt.Sprintf("Skill [%s] not found: %v", skillID, err), true, true
+		}
+		if !skill.Enabled {
+			return fmt.Sprintf("Skill [%s] is disabled", skillID), true, true
 		}
 		if skill.Manifest != "" {
 			return skill.Manifest, false, true

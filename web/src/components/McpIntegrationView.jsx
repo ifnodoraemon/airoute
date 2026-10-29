@@ -8,6 +8,7 @@ import {
   Copy,
   Plus,
   Trash2,
+  Pencil,
   Search,
   X,
   RefreshCw,
@@ -26,6 +27,7 @@ import {
 } from 'lucide-react';
 import { resolveGatewayUrl, copyToClipboard } from '../config';
 import useModalA11y from '../hooks/useModalA11y';
+import { buildMCPClientConfig } from '../lib/mcpClientConfig';
 
 const TOOL_TEMPLATES = {
   // 网关原生安全与审计
@@ -256,6 +258,8 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast, lang
   const [selectedServerForConfig, setSelectedServerForConfig] = useState(null);
 
   const [addServerModalOpen, setAddServerModalOpen] = useState(false);
+  const [editingServerId, setEditingServerId] = useState('');
+  const [savingServer, setSavingServer] = useState(false);
   const [newServer, setNewServer] = useState({
     id: '',
     name: '',
@@ -281,6 +285,8 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast, lang
   const [probeRunning, setProbeRunning] = useState(false);
   const [probeResult, setProbeResult] = useState(null);
   const [probeLatency, setProbeLatency] = useState(null);
+  const [probeHttpStatus, setProbeHttpStatus] = useState(null);
+  const probeFailed = !!probeResult?.error || !!probeResult?.result?.isError || probeHttpStatus >= 400;
   const [lastSentPayload, setLastSentPayload] = useState(null);
 
   useModalA11y(configModalOpen, () => setConfigModalOpen(false));
@@ -392,7 +398,7 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast, lang
 
   const handleCreateServer = async (e) => {
     e.preventDefault();
-    if (!adminFetch) return;
+    if (!adminFetch || savingServer) return;
     if (!newServer.name || !newServer.endpoint) {
       if (showToast) showToast(isZh ? '请填写服务名称与 Endpoint' : 'Please fill in service name and Endpoint', 'error');
       return;
@@ -405,6 +411,7 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast, lang
       resources: newServer.resources ? newServer.resources.split(/[,，\n]/).map(r => r.trim()).filter(Boolean) : []
     };
 
+    setSavingServer(true);
     try {
       const res = await adminFetch('/api/v1/admin/mcp/servers', {
         method: 'POST',
@@ -413,7 +420,7 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast, lang
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        if (showToast) showToast(isZh ? '新 MCP 服务已成功注册到广场' : 'New MCP service registered successfully', 'success');
+        if (showToast) showToast(isZh ? 'MCP 服务配置已保存' : 'MCP server configuration saved', 'success');
         setAddServerModalOpen(false);
         setNewServer({
           id: '',
@@ -436,6 +443,8 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast, lang
       }
     } catch (err) {
       if (showToast) showToast((isZh ? '请求异常: ' : 'Request error: ') + err.message, 'error');
+    } finally {
+      setSavingServer(false);
     }
   };
 
@@ -480,8 +489,10 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast, lang
 
   const handleOpenProbe = (server) => {
     setProbeServer(server);
+    setProbeMethod(server ? 'tools/call' : 'server/discover');
     setProbeResult(null);
     setProbeLatency(null);
+    setProbeHttpStatus(null);
     setLastSentPayload(null);
     const initialTool = (server && server.tools && server.tools.length > 0)
       ? server.tools[0]
@@ -497,6 +508,7 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast, lang
   const handleRunProbe = async () => {
     setProbeRunning(true);
     setProbeResult(null);
+    setProbeHttpStatus(null);
     const start = performance.now();
 
     try {
@@ -547,6 +559,7 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast, lang
         headers,
         body: JSON.stringify(rpcReq)
       });
+      setProbeHttpStatus(res.status);
       const data = await res.json();
       const duration = Math.round(performance.now() - start);
       setProbeLatency(duration);
@@ -620,73 +633,13 @@ export default function McpIntegrationView({ adminFetch, onCopy, showToast, lang
   const onlineServersCount = servers.filter(s => s.enabled).length;
 
   // Code Generation for Clients with Token Support
-  const getCursorConfig = () => {
-    const token = configToken?.trim() || 'YOUR_AIROUTE_KEY';
-    return JSON.stringify({
-      mcpServers: {
-        "airoute-gateway": {
-          url: sseUrl,
-          headers: {
-            "Authorization": `Bearer ${token}`
-          }
-        },
-        ...(selectedServerForConfig && selectedServerForConfig.id !== 'airoute-gateway' ? {
-          [selectedServerForConfig.id]: {
-            command: selectedServerForConfig.transport === 'stdio' ? "npx" : undefined,
-            args: selectedServerForConfig.transport === 'stdio' ? selectedServerForConfig.endpoint.replace('npx -y ', '').split(' ') : undefined,
-            url: selectedServerForConfig.transport === 'sse' ? selectedServerForConfig.endpoint : undefined,
-            headers: selectedServerForConfig.transport === 'sse' ? { "Authorization": `Bearer ${token}` } : undefined
-          }
-        } : {})
-      }
-    }, null, 2);
+  const clientConfig = (client) => {
+    try { return buildMCPClientConfig({ client, gatewayUrl: sseUrl, token: configToken, server: selectedServerForConfig }); }
+    catch (err) { return JSON.stringify({ error: err.message }, null, 2); }
   };
-
-  const getClaudeConfig = () => {
-    const token = configToken?.trim() || 'YOUR_AIROUTE_KEY';
-    return JSON.stringify({
-      mcpServers: {
-        "airoute-gateway": {
-          command: "npx",
-          args: ["-y", "mcp-remote", sseUrl, "--header", `Authorization: Bearer ${token}`],
-          env: {
-            "AIRoute_API_KEY": token
-          }
-        },
-        ...(selectedServerForConfig && selectedServerForConfig.id !== 'airoute-gateway' ? {
-          [selectedServerForConfig.id]: {
-            command: "npx",
-            args: selectedServerForConfig.transport === 'stdio' 
-              ? ["-y", ...selectedServerForConfig.endpoint.replace('npx -y ', '').split(' ')] 
-              : ["-y", "mcp-remote", selectedServerForConfig.endpoint, "--header", `Authorization: Bearer ${token}`],
-            env: {
-              "AIRoute_API_KEY": token
-            }
-          }
-        } : {})
-      }
-    }, null, 2);
-  };
-
-  const getClineConfig = () => {
-    const token = configToken?.trim() || 'YOUR_AIROUTE_KEY';
-    return JSON.stringify({
-      mcpServers: {
-        "airoute-gateway": {
-          type: "sse",
-          url: sseUrl,
-          headers: {
-            "Authorization": `Bearer ${token}`
-          },
-          autoApprove: [
-            "airoute_cluster_status",
-            "airoute_data_redact",
-            "airoute_sql_security_check"
-          ]
-        }
-      }
-    }, null, 2);
-  };
+  const getCursorConfig = () => clientConfig('cursor');
+  const getClaudeConfig = () => clientConfig('claude');
+  const getClineConfig = () => clientConfig('cline');
 
   const getPythonSnippet = () => {
     const token = configToken?.trim() || 'YOUR_AIROUTE_KEY';
@@ -777,7 +730,7 @@ curl -X POST "${messagesUrl}" \\
             {isZh ? '客户端配置' : 'Client Config'}
           </button>
           <button
-            onClick={() => setAddServerModalOpen(true)}
+            onClick={() => { setEditingServerId(''); setNewServer({ id: '', name: '', description: '', category: 'dev', transport: 'stdio', endpoint: '', author: 'Community', version: '1.0.0', tools: '', prompts: '', resources: '', env_vars: '', enabled: true }); setAddServerModalOpen(true); }}
             className="ui-btn ui-btn-primary ui-btn-sm"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -827,7 +780,7 @@ curl -X POST "${messagesUrl}" \\
             <Server className="w-6 h-6" />
           </div>
           <div>
-            <div className="ui-meta font-medium">{isZh ? '在线 MCP 服务' : 'Active Servers'}</div>
+            <div className="ui-meta font-medium">{isZh ? '已启用 MCP 服务' : 'Enabled Servers'}</div>
             <div className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">
               {onlineServersCount} <span className="ui-meta font-normal">/ {servers.length} {isZh ? '已配置' : 'configured'}</span>
             </div>
@@ -916,7 +869,7 @@ curl -X POST "${messagesUrl}" \\
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredServers.map(server => {
             const isToggling = !!togglingServer[server.id];
-            const isCustom = server.id.startsWith('custom-');
+            const isCustom = server.id !== 'airoute-gateway';
 
             return (
               <div
@@ -996,6 +949,11 @@ curl -X POST "${messagesUrl}" \\
                       <Radio className="w-3.5 h-3.5" />
                       {isZh ? '调试探针' : 'Probe'}
                     </button>
+                    {server.id !== 'airoute-gateway' && <button className="ui-btn-secondary" title={isZh ? '编辑服务' : 'Edit server'} onClick={() => {
+                      setEditingServerId(server.id);
+                      setNewServer({ ...server, tools: (server.tools || []).join(', '), prompts: (server.prompts || []).join(', '), resources: (server.resources || []).join(', '), env_vars: server.env_vars || '' });
+                      setAddServerModalOpen(true);
+                    }}><Pencil className="w-3.5 h-3.5" />{isZh ? '编辑' : 'Edit'}</button>}
                     <button
                       onClick={() => { setSelectedServerForConfig(server); setConfigModalOpen(true); }}
                       className="px-2.5 py-1.5 text-xs font-medium text-[#656B75] dark:text-[#A1A7B0] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] rounded-xl transition-colors inline-flex items-center gap-1.5 border border-[#E4E6E9] dark:border-[#2C3038] shadow-2xs"
@@ -1199,6 +1157,7 @@ curl -X POST "${messagesUrl}" \\
                     type="text"
                     required
                     placeholder={isZh ? "如: docker-mcp" : "e.g. docker-mcp"}
+                    readOnly={!!editingServerId}
                     value={newServer.id}
                     onChange={(e) => setNewServer({ ...newServer, id: e.target.value })}
                     className="ui-field bg-gray-50 dark:bg-gray-900"
@@ -1248,6 +1207,7 @@ curl -X POST "${messagesUrl}" \\
                   >
                     <option value="stdio">{isZh ? 'stdio (本地命令/子进程)' : 'stdio (Local Process)'}</option>
                     <option value="sse">{isZh ? 'sse (远程 HTTP Server-Sent Events)' : 'sse (Remote HTTP SSE)'}</option>
+                    <option value="http">http (Streamable HTTP)</option>
                   </select>
                 </div>
               </div>
@@ -1292,6 +1252,10 @@ curl -X POST "${messagesUrl}" \\
                 />
               </div>
 
+              <label className="block space-y-1 text-xs">
+                <span>{isZh ? '进程环境变量 (JSON)' : 'Process environment (JSON)'}</span>
+                <textarea rows={3} value={newServer.env_vars} onChange={e => setNewServer({ ...newServer, env_vars: e.target.value })} className="ui-field font-mono" placeholder='{"SERVICE_TOKEN":"..."}' />
+              </label>
               <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-200 dark:border-gray-800">
                 <button
                   type="button"
@@ -1302,9 +1266,10 @@ curl -X POST "${messagesUrl}" \\
                 </button>
                 <button
                   type="submit"
+                  disabled={savingServer}
                   className="px-4 py-2 text-xs font-medium text-white bg-[#355CFF] rounded-lg hover:bg-blue-600 shadow-sm"
                 >
-                  {isZh ? '确认接入' : 'Confirm Registration'}
+                  {savingServer ? (isZh ? '保存中...' : 'Saving...') : (isZh ? '保存服务' : 'Save server')}
                 </button>
               </div>
             </form>
@@ -1376,7 +1341,7 @@ curl -X POST "${messagesUrl}" \\
                 type="text"
                 value={probeToken}
                 onChange={(e) => setProbeToken(e.target.value)}
-                placeholder={isZh ? '输入虚拟 API Key 或管理员 Token (如 sk-airoute-...)' : 'Enter API Key or Admin Token (e.g., sk-airoute-...)'}
+                placeholder={isZh ? '输入 API Key 明文 (如 sk-airoute-...)' : 'Enter plaintext API Key (e.g., sk-airoute-...)'}
                 className="w-full px-3 py-1.5 font-mono text-xs rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] text-[#202124] dark:text-[#F1F2F4] placeholder-[#656B75] dark:placeholder-[#A1A7B0] focus:outline-none focus:ring-1 focus:ring-[#355CFF]"
               />
               <p className="text-xs text-[#656B75] dark:text-[#A1A7B0]">
@@ -1391,7 +1356,7 @@ curl -X POST "${messagesUrl}" \\
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
                   <label className="ui-label">
-                    {isZh ? '目标 MCP 服务 (Target Server)' : 'Target MCP Server'}
+                    {isZh ? '工具来源（能力发现与列表始终查询聚合网关）' : 'Tool source (discovery and listing query the gateway)'}
                   </label>
                   <select
                     value={probeServer ? probeServer.id : 'all'}
@@ -1542,8 +1507,8 @@ curl -X POST "${messagesUrl}" \\
               <div className="flex items-center justify-between pt-1">
                 <span className="text-xs text-[#656B75] dark:text-[#A1A7B0]">
                   {probeLatency !== null && (
-                    <span className="text-emerald-500 font-mono">
-                      ✓ {isZh ? `往返耗时: ${probeLatency} ms` : `Roundtrip: ${probeLatency} ms`}
+                    <span className={probeFailed ? 'text-rose-500 font-mono' : 'text-emerald-500 font-mono'}>
+                      {probeFailed ? '✗' : '✓'} {isZh ? `往返耗时: ${probeLatency} ms` : `Roundtrip: ${probeLatency} ms`}
                     </span>
                   )}
                 </span>
@@ -1623,7 +1588,7 @@ curl -X POST "${messagesUrl}" \\
                   <div className="flex items-center justify-between text-xs font-semibold text-[#202124] dark:text-[#F1F2F4]">
                     <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      {isZh ? '接收响应 (Response Payload: HTTP 200 OK)' : 'Response Payload (HTTP 200 OK)'}
+                      {isZh ? `接收响应 (${probeHttpStatus ? `HTTP ${probeHttpStatus}` : '等待请求'})` : `Response Payload (${probeHttpStatus ? `HTTP ${probeHttpStatus}` : 'Pending'})`}
                     </span>
                     {probeResult && (
                       <button
@@ -1649,7 +1614,7 @@ curl -X POST "${messagesUrl}" \\
                   </div>
                   <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between">
                     <span>{isZh ? `网关延迟: ${probeLatency !== null ? `${probeLatency} ms` : '--'}` : `Latency: ${probeLatency !== null ? `${probeLatency} ms` : '--'}`}</span>
-                    <span>{isZh ? `状态: ${probeResult ? (probeResult.error ? 'RPC 异常' : '成功返回') : '待调用'}` : `Status: ${probeResult ? (probeResult.error ? 'RPC Error' : 'Success') : 'Pending'}`}</span>
+                    <span>{isZh ? `状态: ${probeResult ? (probeFailed ? '调用失败' : '成功返回') : '待调用'}` : `Status: ${probeResult ? (probeFailed ? 'Failed' : 'Success') : 'Pending'}`}</span>
                   </div>
                 </div>
               </div>

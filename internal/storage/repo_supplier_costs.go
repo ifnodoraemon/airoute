@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -61,15 +62,7 @@ func (r *Repository) UpsertSupplierCost(rec *SupplierCostRecord) error {
 	if err := normalizeSupplierCost(rec); err != nil {
 		return err
 	}
-	_, err := r.db.Exec(`INSERT INTO supplier_costs
-		(channel, model, input_cost_units_per_million, output_cost_units_per_million, status, updated_at)
-		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-		ON CONFLICT (channel, model) DO UPDATE SET
-			input_cost_units_per_million = excluded.input_cost_units_per_million,
-			output_cost_units_per_million = excluded.output_cost_units_per_million,
-			status = excluded.status,
-			updated_at = CURRENT_TIMESTAMP`,
-		rec.Channel, rec.Model, rec.InputCostUnitsPerMillion, rec.OutputCostUnitsPerMillion, rec.Status)
+	err := upsertSupplierCost(r.db, rec)
 	if err != nil {
 		return err
 	}
@@ -79,6 +72,43 @@ func (r *Repository) UpsertSupplierCost(rec *SupplierCostRecord) error {
 	}
 	*rec = *stored
 	return nil
+}
+
+// BatchUpsertSupplierCosts leaves no partial import behind on a write failure.
+func (r *Repository) BatchUpsertSupplierCosts(ctx context.Context, records []*SupplierCostRecord) error {
+	for _, rec := range records {
+		if err := normalizeSupplierCost(rec); err != nil {
+			return err
+		}
+	}
+	tx, err := r.db.BeginTx(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, rec := range records {
+		if err := upsertSupplierCost(tx, rec); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+type supplierCostWriter interface {
+	Exec(string, ...any) (sql.Result, error)
+}
+
+func upsertSupplierCost(db supplierCostWriter, rec *SupplierCostRecord) error {
+	_, err := db.Exec(`INSERT INTO supplier_costs
+		(channel, model, input_cost_units_per_million, output_cost_units_per_million, status, updated_at)
+		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT (channel, model) DO UPDATE SET
+			input_cost_units_per_million = excluded.input_cost_units_per_million,
+			output_cost_units_per_million = excluded.output_cost_units_per_million,
+			status = excluded.status,
+			updated_at = CURRENT_TIMESTAMP`,
+		rec.Channel, rec.Model, rec.InputCostUnitsPerMillion, rec.OutputCostUnitsPerMillion, rec.Status)
+	return err
 }
 
 // GetSupplierCost loads the price for one channel+model.

@@ -23,22 +23,17 @@ type Migration struct {
 }
 
 // runMigrations executes a sequence of schema migrations within a dialect-specific tracking table.
-// On PostgreSQL it first takes an advisory lock so that concurrent replicas cannot
-// race through the same DDL, and each migration plus its version record is
-// committed atomically.
+// PostgreSQL serializes replicas through an advisory lock. Each migration and
+// its version record are separate replay-safe writes (see applyMigration).
 func (db *DB) runMigrations(migrations []Migration) error {
 	if db.Dialect() == "postgres" {
-		conn, err := db.DB.Conn(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), migrationLockWait)
+		defer cancel()
+		conn, err := db.acquirePostgresMigrationLock(ctx)
 		if err != nil {
-			return fmt.Errorf("acquire migration connection: %w", err)
+			return err
 		}
-		defer conn.Close()
-		if _, err := conn.ExecContext(context.Background(), `SELECT pg_advisory_lock(hashtext('airoute_migrations'))`); err != nil {
-			return fmt.Errorf("acquire migration advisory lock: %w", err)
-		}
-		defer func() {
-			_, _ = conn.ExecContext(context.Background(), `SELECT pg_advisory_unlock(hashtext('airoute_migrations'))`)
-		}()
+		defer releasePostgresMigrationLock(conn)
 	}
 
 	var createMigrationsTableSQL string

@@ -1,0 +1,141 @@
+{
+  "baseline": "6c9c0dc",
+  "scope": "current working tree; isolated verification only",
+  "checks": {
+    "go_race_all": "passed",
+    "go_vet": "passed",
+    "frontend_lint": "passed",
+    "frontend_tests": {
+      "files": 71,
+      "passed": 728,
+      "failed": 0
+    },
+    "frontend_production_build": "passed",
+    "postgres_and_redis_integration": "passed",
+    "fresh_database_parallel_startup": {
+      "gateway_a": "healthy",
+      "gateway_b": "healthy"
+    }
+  },
+  "runtime_api": {
+    "passed": true,
+    "steps": [
+      "跨节点登录与会话验证",
+      "创建账号/初始密钥 → 零余额拦截 → 跨节点兑换到账/防重复",
+      "双节点非流式/流式 → 主渠道失败切备 → Redis审计入库 → 按快照扣费/钱包核对",
+      "技能新增 → 跨节点 ZIP 下载 → 同版本编辑 → 工件与缓存更新",
+      "MCP 服务配置 → 远程完整握手/工具执行 → 原生服务停用跨节点拒绝/恢复",
+      "供应商 CSV 预览不写入 → 导入 → 导出回填 → 标识、状态、9位精度保持",
+      "管理员停用密钥 → 另一节点立即拒绝 → 用户不可自行恢复"
+    ]
+  },
+  "browser": {
+    "passed": true,
+    "steps": [
+      "管理员新建用户 → 初始密钥一次性展示 → 保存继续/不写入localStorage",
+      "管理员签发自己的测试密钥，保持账号间密钥隔离",
+      "Skills模型实测 → Playground携带SOP与任务 → 明文密钥签名 → 真实流式响应",
+      "供应商CSV上传 → 预览期间不写入 → 确认提交 → 列表显示导入行",
+      "MCP服务探针 → tools/call真实远程握手 → 回显结果及真实HTTP状态",
+      "所有管理员导航模块逐一打开，未出现白屏或渲染异常"
+    ],
+    "pageErrors": []
+  },
+  "mutations": [
+    {
+      "name": "mcp-seed-overwrites-edit",
+      "caught": true,
+      "source_overlay": true
+    },
+    {
+      "name": "csv-rate-rounded",
+      "caught": true,
+      "source_overlay": true
+    },
+    {
+      "name": "csv-escaping-not-restored",
+      "caught": true,
+      "source_overlay": true
+    },
+    {
+      "name": "supplier-import-no-transaction",
+      "caught": true,
+      "source_overlay": true
+    },
+    {
+      "name": "mcp-env-ignored",
+      "caught": true,
+      "source_overlay": true
+    },
+    {
+      "name": "mcp-native-switch-fail-open",
+      "caught": true,
+      "source_overlay": true
+    },
+    {
+      "name": "skill-disable-fail-open",
+      "caught": true,
+      "source_overlay": true
+    },
+    {
+      "name": "ecosystem-id-fail-open",
+      "caught": true,
+      "source_overlay": true
+    },
+    {
+      "name": "mcp-env-null-accepted",
+      "caught": true,
+      "source_overlay": true
+    },
+    {
+      "name": "audit-charge-erased",
+      "caught": true,
+      "source_overlay": true
+    },
+    {
+      "name": "registration-key-discarded",
+      "caught": true,
+      "source_restored": true
+    },
+    {
+      "name": "admin-initial-key-discarded",
+      "caught": true,
+      "source_restored": true
+    },
+    {
+      "name": "skill-trial-loses-sop",
+      "caught": true,
+      "source_restored": true
+    },
+    {
+      "name": "csv-preview-writes-directly",
+      "caught": true,
+      "source_restored": true
+    },
+    {
+      "name": "mcp-probe-always-success",
+      "caught": true,
+      "source_restored": true
+    },
+    {
+      "name": "async-keys-remain-unauthenticated",
+      "caught": true,
+      "source_restored": true
+    },
+    {
+      "name": "migration-lock-inherits-request-timeout",
+      "caught": true,
+      "source_overlay": true
+    }
+  ],
+  "external_services": "Controlled upstreams and protocol helpers; no paid provider, real Stripe checkout, OAuth account or SMTP delivery exercised.",
+  "verification_environment_removed": true,
+  "existing_deployment_health": {
+    "gateway_1": "healthy",
+    "gateway_2": "healthy",
+    "postgres": "healthy",
+    "redis": "healthy",
+    "storage": "healthy",
+    "load_balancer": "running"
+  }
+}

@@ -14,6 +14,8 @@ import {
   Globe
 } from 'lucide-react';
 
+import OneTimeKeyDialog from './OneTimeKeyDialog';
+
 export default function AuthPage({
   initialTab = 'login',
   onLoginSuccess,
@@ -49,6 +51,7 @@ export default function AuthPage({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [registrationResult, setRegistrationResult] = useState(null);
 
   useEffect(() => {
     fetch('/api/v1/public/status')
@@ -177,8 +180,12 @@ export default function AuthPage({
       const data = await res.json();
 
       if (res.ok && data.code === 0 && data.data?.token) {
-        localStorage.setItem('airoute_user', JSON.stringify(data.data.user));
-        onLoginSuccess(data.data.token, data.data.user);
+        if (data.data.api_key) {
+          setRegistrationResult(data.data);
+          setRegPassword('');
+        } else {
+          onLoginSuccess(data.data.token, data.data.user);
+        }
       } else {
         setError(data.error || (isZh ? '注册失败，请检查填写内容' : 'Registration failed, please check inputs'));
       }
@@ -204,6 +211,19 @@ export default function AuthPage({
       setError((isZh ? 'OAuth 异常: ' : 'OAuth error: ') + err.message);
     }
   };
+
+  if (registrationResult) {
+    return <OneTimeKeyDialog
+      credential={registrationResult.api_key}
+      username={registrationResult.user?.username}
+      lang={lang}
+      onClose={() => {
+        const result = registrationResult;
+        setRegistrationResult(null);
+        onLoginSuccess(result.token, result.user);
+      }}
+    />;
+  }
 
   return (
     <div className="min-h-screen bg-[#F7F7F5] dark:bg-[#111214] text-[#202124] dark:text-[#F1F2F4] flex flex-col justify-between py-10 px-4 sm:px-6 lg:px-8 selection:bg-[#355CFF] selection:text-white">

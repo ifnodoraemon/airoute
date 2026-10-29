@@ -373,6 +373,7 @@ export default function App() {
     activeLogDetail, setActiveLogDetail,
     traceSnapshotId, setTraceSnapshotId,
     curlExportCmd, setCurlExportCmd,
+    playgroundScenario, setPlaygroundScenario,
     reset: resetSelections,
   } = useConsoleSelections();
   const [dashboardSelectedKey, setDashboardSelectedKey] = useState('');
@@ -1381,6 +1382,7 @@ export default function App() {
             {currentTab === 'skills' && (
               <SkillHubView
                 adminFetch={apiFetch}
+                onTrial={(scenario) => { setPlaygroundScenario(scenario); setPlayModel(''); setPlayModality('chat'); setCurrentTab('playground'); }}
                 onCopy={(txt) => {
                   copyToClipboard(txt);
                 }}
@@ -1407,6 +1409,7 @@ export default function App() {
             {currentTab === 'users' && (
               <UserManagementView
                 adminUser={adminUser}
+                onUserCreated={fetchData}
                 adminFetch={apiFetch}
                 showToast={showToast}
                 lang={lang}
@@ -1439,6 +1442,7 @@ export default function App() {
                 showToast={showToast}
                 initialModel={playModel}
                 initialModality={playModality}
+                initialScenario={playgroundScenario}
                 lang={lang}
                 t={t}
               />

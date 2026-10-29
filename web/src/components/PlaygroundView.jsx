@@ -43,6 +43,7 @@ export default function PlaygroundView({
   showToast,
   initialModel = '',
   initialModality = 'chat',
+  initialScenario = null,
   lang = 'zh',
   t
 }) {
@@ -62,12 +63,19 @@ export default function PlaygroundView({
     contextKeys[0] ? String(contextKeys[0].id) : UNAUTHENTICATED_KEY
   ));
   const [sessionApiKey, setSessionApiKey] = useState('');
+  const keySelectionTouched = useRef(false);
 
   // Auto-select the first key for entitlement context, keyed off its id. A console
   // with no keys configured keeps its historical public-gateway behaviour, but as
   // an explicit unauthenticated choice rather than an empty credential.
   useEffect(() => {
-    if (selectedKeyId === UNAUTHENTICATED_KEY) return;
+    if (selectedKeyId === UNAUTHENTICATED_KEY) {
+      // Keys can arrive after the view mounts (for example just after account
+      // creation). An implicit empty-list default must not remain a public call;
+      // an explicitly chosen public context still belongs to the user.
+      if (!keySelectionTouched.current && contextKeys[0]) setSelectedKeyId(String(contextKeys[0].id));
+      return;
+    }
     if (!contextKeys.some(key => String(key.id) === selectedKeyId)) {
       setSelectedKeyId(contextKeys[0] ? String(contextKeys[0].id) : UNAUTHENTICATED_KEY);
     }
@@ -147,13 +155,13 @@ export default function PlaygroundView({
   const [temperature, setTemperature] = useState(0.7);
   const [maxTokens, setMaxTokens] = useState(2048);
   const [systemPrompt, setSystemPrompt] = useState(
-    isZh ? '你是一个极具专业素养的 AI 架构专家与全栈工程师，回答请严谨、精炼、富有洞见。' : 'You are a highly professional AI architecture expert and full-stack engineer. Answer concisely and with precision.'
+    initialScenario?.systemPrompt || (isZh ? '你是一个极具专业素养的 AI 架构专家与全栈工程师，回答请严谨、精炼、富有洞见。' : 'You are a highly professional AI architecture expert and full-stack engineer. Answer concisely and with precision.')
   );
-  const [showSystemPrompt, setShowSystemPrompt] = useState(false);
+  const [showSystemPrompt, setShowSystemPrompt] = useState(!!initialScenario);
 
   // Chat conversation history & streaming output
   const [messages, setMessages] = useState([]);
-  const [chatInput, setChatInput] = useState('');
+  const [chatInput, setChatInput] = useState(initialScenario?.prompt || '');
   const [playLoading, setPlayLoading] = useState(false);
   // `playStopped` records a user-initiated cancellation so the UI can show a
   // neutral state instead of an error; `abortRef` holds the in-flight request.
@@ -1009,7 +1017,7 @@ Execute the following mission with precision, maintainability, and zero speculat
             {/* The list is only entitlement context; it carries no credential. */}
             <select
               value={selectedKeyId}
-              onChange={(e) => setSelectedKeyId(e.target.value)}
+              onChange={(e) => { keySelectionTouched.current = true; setSelectedKeyId(e.target.value); }}
               className="ui-field font-mono"
               aria-label={isZh ? '密钥上下文（租户与模型范围）' : 'Key context (tenant and model scope)'}
             >
