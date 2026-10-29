@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -20,11 +19,7 @@ import (
 // response is allowed. It is opt-in on purpose: a fabricated verdict silently
 // defeats any downstream content filtering, so it must never be the default.
 func moderationStubEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("GATEWAY_MODERATION_STUB"))) {
-	case "1", "true", "yes", "on":
-		return true
-	}
-	return false
+	return envFlagEnabled("GATEWAY_MODERATION_STUB")
 }
 
 // ModerationRequest represents the OpenAI moderation request body.

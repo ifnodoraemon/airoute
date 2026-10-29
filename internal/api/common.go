@@ -2,12 +2,15 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -612,6 +615,23 @@ func getAPIKeyConfig(c *gin.Context) *model.APIKeyConfig {
 	return nil
 }
 
+// callerOwner identifies the caller that owns a stored object (a Responses
+// conversation, a video task): the authenticated user when the API key belongs to
+// one, otherwise the API-key digest. Two credentials must never share an object,
+// so the owner string has to be stable across requests and must not collide
+// between a user and a bare key.
+func callerOwner(c *gin.Context) string {
+	key := getAPIKeyConfig(c)
+	if key == nil || key.Key == "" {
+		return ""
+	}
+	if key.UserID > 0 {
+		return "user:" + strconv.FormatInt(key.UserID, 10)
+	}
+	digest := sha256.Sum256([]byte(key.Key))
+	return "key:" + hex.EncodeToString(digest[:])
+}
+
 // estimateTokens is the single token-estimation heuristic used by every audit
 // path that has to approximate usage because the upstream did not report it.
 // ~4 bytes per token is the widely used rule of thumb for mixed English/JSON
@@ -794,7 +814,9 @@ func resolveRerankTokens(req *model.RerankRequest, usage model.RerankUsage) (int
 		}
 		return 0, usageSourceUpstream
 	}
-	local := localRerankPromptEstimate(req)
+	// One estimator for the API layer and the router: the model package owns it so
+	// the two cannot drift apart.
+	local := req.EstimatedPromptTokens()
 	if usage.TotalTokens > 0 {
 		observePromptEstimate(req.Model, local, usage.TotalTokens)
 		return usage.TotalTokens, usageSourceUpstream
@@ -803,18 +825,6 @@ func resolveRerankTokens(req *model.RerankRequest, usage model.RerankUsage) (int
 		return 0, usageSourceUpstream
 	}
 	return calibratedPromptEstimate(req.Model, local), usageSourceEstimated
-}
-
-// localRerankPromptEstimate counts the local estimate for a rerank request.
-func localRerankPromptEstimate(req *model.RerankRequest) int {
-	if req == nil {
-		return 0
-	}
-	chars := len(req.Query)
-	for _, doc := range req.GetDocumentTexts() {
-		chars += len(doc)
-	}
-	return estimateTokens(chars)
 }
 
 // estimateCanonicalPromptTokens approximates prompt tokens from the canonical

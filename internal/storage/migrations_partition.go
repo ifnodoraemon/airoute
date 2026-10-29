@@ -583,7 +583,6 @@ func legacyUsageLogTables(db *DB) ([]string, error) {
 // usageLogPartition describes one child partition of a partitioned usage_logs.
 type usageLogPartition struct {
 	name      string
-	from      time.Time
 	to        time.Time
 	isDefault bool
 }
@@ -625,12 +624,12 @@ func (r *Repository) usageLogPartitions() ([]usageLogPartition, error) {
 			// partition: skip it and leave it to the batched DELETE path.
 			continue
 		}
-		from, fromErr := parsePartitionBoundTime(match[1])
+		_, fromErr := parsePartitionBoundTime(match[1])
 		to, toErr := parsePartitionBoundTime(match[2])
 		if fromErr != nil || toErr != nil {
 			continue
 		}
-		partition.from, partition.to = from, to
+		partition.to = to
 		partitions = append(partitions, partition)
 	}
 	return partitions, rows.Err()

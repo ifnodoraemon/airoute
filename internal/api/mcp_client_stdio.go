@@ -140,11 +140,10 @@ func executeStdioMCPTool(ctx context.Context, cmdParts []string, toolName string
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 	select {
-	case waitErr := <-done:
-		waited = true
+	case <-done:
 		// A server may exit non-zero after answering; the reply we already have
 		// is still valid, so the exit status is not itself a tool failure.
-		_ = waitErr
+		waited = true
 	case <-callCtx.Done():
 		_ = cmd.Process.Kill()
 		<-done
