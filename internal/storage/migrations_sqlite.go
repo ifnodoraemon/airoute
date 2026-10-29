@@ -521,6 +521,14 @@ func (db *DB) migrate() error {
 		{Version: 40, Name: "drop_legacy_governance_objects", Up: dropLegacyGovernanceObjects},
 		{Version: 41, Name: "billing_scale_indexes", Up: addBillingScaleIndexes},
 		{Version: 42, Name: "storage_index_and_trace_search_repairs", Up: repairStorageIndexesAndTraceSearch},
+		// Migration 43 exists only on PostgreSQL, where it rewrites usage_logs into
+		// monthly partitions behind GATEWAY_ENABLE_TABLE_PARTITIONING. SQLite has no
+		// declarative partitioning, so there is nothing to apply - but the version is
+		// still recorded here so the two dialect lists read alike instead of looking
+		// like one side silently skipped a schema step. On PostgreSQL the version
+		// only appears when the opt-in ran, so "43 recorded" means "partitioning
+		// applied" there and "partitioning not applicable" here.
+		{Version: 43, Name: "usage_logs_monthly_partitions", Up: skipSQLiteTablePartitioning},
 		// 44/45 close the two control-plane defects from the 2026-10-29 hunt:
 		// account identity must be case-insensitive at the storage level too, and an
 		// administrator's revocation of a key must be preserved as its own state so a
