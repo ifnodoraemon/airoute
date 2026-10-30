@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"os"
 	"sort"
 	"strconv"
@@ -169,7 +170,7 @@ func (w *BillingLedgerRetention) pruneOnce() (int64, int64, error) {
 
 	var deleted, archivedUnits int64
 	for batch := 0; batch < billingLedgerPruneMaxBatches; batch++ {
-		batchRows, batchUnits, err := w.pruneBatch(cutoff)
+		batchRows, batchUnits, err := w.pruneBatchWithRetry(cutoff)
 		if err != nil {
 			return deleted, archivedUnits, err
 		}
@@ -192,6 +193,45 @@ func (w *BillingLedgerRetention) pruneOnce() (int64, int64, error) {
 		)
 	}
 	return deleted, archivedUnits, nil
+}
+
+// errBillingLedgerPruneContended marks a batch that had to roll back because
+// another replica retired (or the ledger changed under us) some of the scanned
+// rows. It must never be reported as "nothing to do": the earlier code returned
+// (0, 0, nil), which made pruneOnce stop the whole pass silently and made a
+// replica collision invisible in the logs.
+var errBillingLedgerPruneContended = errors.New("billing ledger prune contended")
+
+// ledgerPruneDeletionMismatch classifies a DELETE whose row count disagrees with
+// the scanned candidate count.
+func ledgerPruneDeletionMismatch(deleted, want int64) error {
+	if deleted == want {
+		return nil
+	}
+	return errBillingLedgerPruneContended
+}
+
+// pruneBatchWithRetry runs one batch and retries it once when a concurrent
+// retention pass (another replica) raced it. The collision is reported instead of
+// being folded into "nothing to do", so an operator can tell "the ledger has no
+// expired rows" from "two replicas keep colliding".
+func (w *BillingLedgerRetention) pruneBatchWithRetry(cutoff time.Time) (int64, int64, error) {
+	rows, units, err := w.pruneBatch(cutoff)
+	if !errors.Is(err, errBillingLedgerPruneContended) {
+		return rows, units, err
+	}
+	telemetry.GlobalMetrics.BillingLedgerPruneContended.Add(1)
+	telemetry.WarnLogger(telemetry.ScopedLogger("billing"), "billing-ledger-prune-contended", 10*time.Minute,
+		"billing ledger retention batch collided with another replica; retrying it once",
+		"cutoff", cutoff.UTC().Format(time.RFC3339),
+	)
+	rows, units, err = w.pruneBatch(cutoff)
+	if errors.Is(err, errBillingLedgerPruneContended) {
+		// Still contended: leave the rest of the pass to the next interval instead
+		// of spinning, but keep the report honest.
+		return 0, 0, err
+	}
+	return rows, units, err
 }
 
 // ledgerArchiveCandidate is one ledger row the retention policy is considering.
@@ -259,12 +299,12 @@ func (w *BillingLedgerRetention) pruneBatch(cutoff time.Time) (int64, int64, err
 	if err != nil {
 		return 0, 0, err
 	}
-	if deleted != int64(len(ids)) {
+	if err := ledgerPruneDeletionMismatch(deleted, int64(len(ids))); err != nil {
 		// Another replica's retention pass retired (or the ledger changed under
 		// us) some of these rows between the scan and the DELETE. Rolling back is
 		// the only safe answer: the archive must never claim units that are still
-		// in the ledger.
-		return 0, 0, nil
+		// in the ledger. The caller reports the contention and retries.
+		return 0, 0, err
 	}
 	if err := addLedgerArchiveUnits(tx, byKey); err != nil {
 		return 0, 0, err

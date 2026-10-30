@@ -61,6 +61,14 @@ export function useLogsData({ filters, showToast, isZh }) {
     filtersRef.current = filters;
   }, [filters]);
 
+  // The query the current selection belongs to. Row ids only mean something for the
+  // result set they were picked from: paging away or changing a filter makes the old
+  // ids unrenderable, so keeping them selected let the batch actions delete rows the
+  // operator could no longer see. The signature covers the *inputs* (offset + facets
+  // + typed values), not the resolved timestamps, so a plain poll of the same query
+  // keeps the selection.
+  const selectionSignatureRef = useRef('');
+
   const fetchLogs = useCallback(async (override = {}, overrideToken) => {
     const opts = overrideToken ? { token: overrideToken } : {};
     const generation = generationRef.current;
@@ -117,6 +125,20 @@ export function useLogsData({ filters, showToast, isZh }) {
         const et = override.customEndTime !== undefined ? override.customEndTime : filters.end;
         if (st) p.set('start_time', new Date(st).toISOString());
         if (et) p.set('end_time', new Date(et).toISOString());
+      }
+
+      // A selection is only meaningful for the query it was made in. Invalidate it
+      // as soon as the query inputs change (page cursor, facets, typed values) so a
+      // batch action can never reach rows that are no longer on screen. Stable
+      // inputs only: a poll re-issues the same query and keeps the selection.
+      const selectionSignature = [
+        off, tr, filters.start, filters.end, sf, keyId, kw,
+        current.model, current.channel, current.status, current.cache, current.latency,
+        correlationField(override.correlationType ?? current.correlation_type),
+      ].map((value) => (value === undefined || value === null ? '' : String(value))).join('\u0001');
+      if (selectionSignature !== selectionSignatureRef.current) {
+        selectionSignatureRef.current = selectionSignature;
+        setSelectedLogIds((prev) => (prev.length > 0 ? [] : prev));
       }
 
       const res = await apiFetch(`/api/v1/admin/logs?${p.toString()}`, opts);
@@ -241,6 +263,7 @@ export function useLogsData({ filters, showToast, isZh }) {
   const reset = useCallback(() => {
     generationRef.current += 1;
     requestRef.current += 1;
+    selectionSignatureRef.current = '';
     setLogFacets({ models: [], channels: [] });
     setLogs([]);
     setRecentLogs([]);

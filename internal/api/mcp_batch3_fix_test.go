@@ -12,7 +12,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"hash/fnv"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -238,12 +237,17 @@ func TestFixMCPChatSessionAffinityTenantScoped(t *testing.T) {
 		t.Fatalf("test fixture produced identical tenants %q", keyA.TenantID)
 	}
 
-	affinityIndex := func(scoped string) int {
-		h := fnv.New32a()
-		_, _ = h.Write([]byte(scoped))
-		_, _ = h.Write([]byte(":"))
-		_, _ = h.Write([]byte(modelName))
-		return int(h.Sum32() % 2)
+	// Derive the expected channel through the real routing path instead of
+	// re-implementing the selector's hash: the affinity strategy is an
+	// implementation detail (it moved from modulo-N to rendezvous hashing), while
+	// what this test pins is tenant isolation of the session key.
+	routedChannel := func(scoped string) string {
+		ctx := context.WithValue(context.Background(), router.ContextKeySessionID, scoped)
+		candidates := dispatcher.GetChannelsForModelAndProtocolWithContext(ctx, modelName, "openai_chat")
+		if len(candidates) != 2 {
+			t.Fatalf("expected 2 candidate channels, got %d", len(candidates))
+		}
+		return candidates[0].Name
 	}
 	scopedA := func(sid string) string {
 		return scopedSessionID(sessionIdentityFor(keyA.TenantID, keyA.UserID, keyA.Key), sid)
@@ -256,7 +260,7 @@ func TestFixMCPChatSessionAffinityTenantScoped(t *testing.T) {
 	sessionID := ""
 	for i := 0; i < 500 && sessionID == ""; i++ {
 		candidate := "sess-" + strings.Repeat("x", i%5) + "-" + strconv.Itoa(i)
-		if affinityIndex(scopedA(candidate)) != affinityIndex(scopedB(candidate)) {
+		if routedChannel(scopedA(candidate)) != routedChannel(scopedB(candidate)) {
 			sessionID = candidate
 		}
 	}
@@ -277,15 +281,16 @@ func TestFixMCPChatSessionAffinityTenantScoped(t *testing.T) {
 	call(keyA.Key)
 	call(keyB.Key)
 
-	wantA := affinityIndex(scopedA(sessionID))
-	wantB := affinityIndex(scopedB(sessionID))
+	wantA := routedChannel(scopedA(sessionID))
+	wantB := routedChannel(scopedB(sessionID))
 	if wantA == wantB {
 		t.Fatal("fixture error: tenants resolve to the same channel")
 	}
-	// Group order is [chan-a, chan-b], so index 0 => srvA and index 1 => srvB.
+	hits := map[string]int{"chan-a": hitA, "chan-b": hitB}
 	// Distinct namespaces must spread the two tenants over both channels; a bare
 	// session id (the HEAD behaviour) sends both to the same one.
-	if hitA != 1 || hitB != 1 {
-		t.Errorf("BUG: tenants with the same session id were not isolated (hits a=%d b=%d)", hitA, hitB)
+	if hits[wantA] != 1 || hits[wantB] != 1 {
+		t.Errorf("BUG: tenants with the same session id were not isolated (want one hit each on %s / %s, got a=%d b=%d)",
+			wantA, wantB, hitA, hitB)
 	}
 }

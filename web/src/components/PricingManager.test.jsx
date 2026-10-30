@@ -392,6 +392,7 @@ describe('PricingManager supplier prices sub-tab', () => {
       model: 'gpt-z',
       input_cost: 3,
       output_cost: 6,
+      status: 'active',
     });
   });
 });

@@ -22,7 +22,6 @@ type S3Storage struct {
 	accessKey       string
 	secretKey       string
 	region          string
-	useSSL          bool
 	pathStyle       bool
 	publicURLPrefix string
 	client          *http.Client
@@ -70,7 +69,6 @@ func NewS3Storage(cfg config.S3Config) (*S3Storage, error) {
 		accessKey:       cfg.AccessKey,
 		secretKey:       cfg.SecretKey,
 		region:          region,
-		useSSL:          cfg.UseSSL || u.Scheme == "https",
 		pathStyle:       cfg.PathStyle,
 		publicURLPrefix: strings.TrimRight(cfg.PublicURLPrefix, "/"),
 		client: &http.Client{

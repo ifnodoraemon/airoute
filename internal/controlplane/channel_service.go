@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/storage"
@@ -136,7 +137,9 @@ func (s *ChannelService) Create(ctx context.Context, rec *storage.ChannelRecord)
 // wipe a credential or a routing weight.
 func (s *ChannelService) Update(ctx context.Context, id int64, patch *channelPatch) (*storage.ChannelRecord, error) {
 	updated, err := s.store.PatchChannel(id, func(current *storage.ChannelRecord) error {
-		mergeChannelUpdate(current, patch)
+		if err := mergeChannelUpdate(current, patch); err != nil {
+			return err
+		}
 		timeout, err := normalizeChannelTimeout(current.TimeoutSeconds)
 		if err != nil {
 			return err
@@ -176,7 +179,11 @@ func (s *ChannelService) BatchDelete(ctx context.Context, ids []int64) (int64, e
 
 // BatchStatus toggles several channels and reloads once.
 func (s *ChannelService) BatchStatus(ctx context.Context, ids []int64, status string) (int64, error) {
-	n, err := s.store.BatchUpdateChannelStatus(ids, normalizeChannelStatus(status))
+	normalized := normalizeChannelStatus(status)
+	if normalized == "" {
+		return 0, &ValidationError{Message: "无效的状态，仅支持 active 或 disabled"}
+	}
+	n, err := s.store.BatchUpdateChannelStatus(ids, normalized)
 	if err != nil {
 		return 0, err
 	}
@@ -200,6 +207,14 @@ func (s *ChannelService) reload(ctx context.Context, reason string) error {
 func validateNewChannel(rec *storage.ChannelRecord) error {
 	if rec == nil || rec.Name == "" || rec.BaseURL == "" || rec.Type == "" {
 		return &ValidationError{Message: "渠道名称、类型与 base_url 为必填项"}
+	}
+	// A provided status must be one the data plane understands; see the note in
+	// mergeChannelUpdate.
+	if status := strings.ToLower(strings.TrimSpace(rec.Status)); status != "" {
+		if !validToggleStatus(status) {
+			return &ValidationError{Message: "无效的状态，仅支持 active 或 disabled"}
+		}
+		rec.Status = status
 	}
 	timeout, err := normalizeChannelTimeout(rec.TimeoutSeconds)
 	if err != nil {
@@ -236,13 +251,23 @@ func normalizeChannelTimeout(seconds int) (int, error) {
 	return seconds, nil
 }
 
-// normalizeChannelStatus enforces the two-state contract: anything that is not
-// "disabled" is treated as "active".
+// normalizeChannelStatus enforces the two-state contract.
+//
+// It returns "" for an unrecognised value so callers must decide what to do; it
+// used to coerce anything that was not exactly "disabled" to "active", which made
+// a misspelled disable silently ENABLE the channel (BUG-CP-03).
 func normalizeChannelStatus(status string) string {
-	if status == "disabled" {
-		return "disabled"
+	status = strings.ToLower(strings.TrimSpace(status))
+	if status == "" {
+		// An omitted status in a bulk request means "no opinion": callers that
+		// reach here through bindBatchStatus never do (it rejects an empty value
+		// before this point).
+		return ""
 	}
-	return "active"
+	if !validToggleStatus(status) {
+		return ""
+	}
+	return status
 }
 
 // mergeChannelUpdate copies only the fields the client actually provided onto the
@@ -258,9 +283,9 @@ func normalizeChannelStatus(status string) string {
 // 1 and weight 0 becomes 10 there. The point of this function is that the API no
 // longer pretends a field was applied when it was dropped, not that storage's
 // default policy changes.
-func mergeChannelUpdate(existing *storage.ChannelRecord, patch *channelPatch) {
+func mergeChannelUpdate(existing *storage.ChannelRecord, patch *channelPatch) error {
 	if patch == nil {
-		return
+		return nil
 	}
 	if patch.Name != "" {
 		existing.Name = patch.Name
@@ -293,6 +318,15 @@ func mergeChannelUpdate(existing *storage.ChannelRecord, patch *channelPatch) {
 		existing.TimeoutSeconds = *patch.TimeoutSeconds
 	}
 	if patch.Status != "" {
-		existing.Status = patch.Status
+		// An unknown status is rejected rather than stored: the data plane treats
+		// every value except "" and "active" as disabled, so a typo ("disable"),
+		// or a value from an older client, silently took a channel out of service
+		// (or, through the batch endpoint, silently enabled it). See BUG-CP-03.
+		status := strings.ToLower(strings.TrimSpace(patch.Status))
+		if !validToggleStatus(status) {
+			return &ValidationError{Message: "无效的状态，仅支持 active 或 disabled"}
+		}
+		existing.Status = status
 	}
+	return nil
 }

@@ -204,7 +204,21 @@ export async function executeHarnessTool(toolName, args = {}, context = {}) {
       case 'get_cluster_telemetry': {
         const totalChans = channels.length;
         const activeChans = channels.filter(c => c.status === 'active').length;
-        const trippedChans = channels.filter(c => c.breaker_status === 'open').length;
+        // The gateway serialises upstream breaker state as "OPEN"/"HALF-OPEN"/
+        // "CLOSED" (router/circuit_breaker.go). Comparing it case-sensitively to
+        // 'open' never matched, so the copilot used to report a perfect health score
+        // while channels were actually tripped.
+        const breakerOf = (c) => String(c?.breaker_status || '').toUpperCase();
+        const trippedChans = channels.filter(c => breakerOf(c) === 'OPEN' || breakerOf(c) === 'HALF-OPEN' || breakerOf(c) === 'TRIPPED').length;
+        // Cache-hit rate is not a field the stats endpoint returns; it is derived
+        // from the cached prompt tokens. No prompt tokens means no sample, not 0%.
+        const promptTokens = Number(stats?.prompt_tokens) || 0;
+        const cachedTokens = Number(stats?.total_cached_tokens) || 0;
+        const cacheHitRate = promptTokens > 0 ? `${((cachedTokens / promptTokens) * 100).toFixed(1)}%` : 'n/a';
+        // TTFT: 0 means "no samples yet", which must stay distinguishable from a
+        // measured zero instead of being filled with an invented 120 ms baseline.
+        const ttftSamples = Number(stats?.ttft_samples) || 0;
+        const avgTtft = ttftSamples > 0 || Number(stats?.avg_ttft_ms) > 0 ? Number(stats.avg_ttft_ms) : null;
 
         const result = {
           timestamp: new Date().toISOString(),
@@ -219,9 +233,14 @@ export async function executeHarnessTool(toolName, args = {}, context = {}) {
           },
           performance_metrics: {
             total_requests: stats?.total_requests || 0,
-            avg_ttft_ms: stats?.avg_ttft_ms || 120,
-            cache_hit_rate: stats?.cache_hit_rate || '0%',
-            total_cost_usd: stats?.total_cost || 0
+            // null, not a fabricated number: the report says "no samples".
+            avg_ttft_ms: avgTtft,
+            ttft_samples: ttftSamples,
+            cache_hit_rate: cacheHitRate,
+            // Wallet and billing amounts are CNY everywhere in this gateway; naming
+            // the value "usd" made every report off by a currency.
+            total_cost: Number(stats?.total_cost) || 0,
+            currency: 'CNY'
           }
         };
 
@@ -302,13 +321,18 @@ export async function executeHarnessTool(toolName, args = {}, context = {}) {
         const spofVulnerable = [];
         const redundantSafe = [];
 
+        // Provider rows from /api/v1/admin/models/routes name the channel
+        // `channel_name` (router.ModelProviderInfo) — not `channel`. Reading the
+        // wrong field made every advisory name the fictional channel "default".
+        const providerChannel = (p) => p?.channel_name || p?.name || (p?.channel_id != null ? `channel#${p.channel_id}` : 'unknown');
+
         routesToAudit.forEach(r => {
           const providerCount = (r.providers || []).length;
           if (providerCount <= 1) {
             spofVulnerable.push({
               model: r.model,
               provider_count: providerCount,
-              primary_channel: r.providers?.[0]?.channel || 'default',
+              primary_channel: r.providers?.[0] ? providerChannel(r.providers[0]) : 'no-provider',
               risk_level: 'HIGH (SPOF)',
               recommendation: '建议在模型路由中添加第二上游提供商作为备用通道，并设置优先级 2 及故障转移策略'
             });
@@ -316,7 +340,7 @@ export async function executeHarnessTool(toolName, args = {}, context = {}) {
             redundantSafe.push({
               model: r.model,
               provider_count: providerCount,
-              providers: r.providers.map(p => ({ channel: p.channel, priority: p.priority, weight: p.weight }))
+              providers: r.providers.map(p => ({ channel: providerChannel(p), priority: p.priority, weight: p.weight }))
             });
           }
         });
@@ -369,12 +393,15 @@ export async function executeHarnessTool(toolName, args = {}, context = {}) {
           name: c.name,
           provider: c.provider,
           status: c.status,
-          breaker_status: c.breaker_status || 'closed',
+          breaker_status: c.breaker_status || 'CLOSED',
           priority: c.priority ?? 1,
           weight: c.weight ?? 100,
           associated_models_count: (c.models || []).length,
           models_sample: (c.models || []).slice(0, 5),
-          health_eval: c.breaker_status === 'open' ? 'TRIPPED (熔断隔离中)' : 'HEALTHY (健康活跃)'
+          // Same casing rule as the telemetry tool: the gateway reports "OPEN".
+          health_eval: ['OPEN', 'HALF-OPEN', 'TRIPPED'].includes(String(c.breaker_status || '').toUpperCase())
+            ? 'TRIPPED (熔断隔离中)'
+            : 'HEALTHY (健康活跃)'
         }));
 
         const duration_ms = Math.round(performance.now() - startTime);

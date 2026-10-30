@@ -531,9 +531,19 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
             <div className="p-3.5 flex justify-between">
               <span className="text-slate-500 dark:text-slate-400 font-medium">{isZh ? 'Token 明细' : 'Token Breakdown'}</span>
               <span className="text-slate-800 dark:text-slate-200 font-mono tabular-nums text-xs">
-                {isZh ? '未缓存输入: ' : 'Uncached: '}<strong className="text-slate-900 dark:text-white font-semibold">{Math.max(0, (log.prompt_tokens || 0) - (log.cached_tokens || 0)).toLocaleString()}</strong> ·
+                {/* prompt_tokens includes the tokens written to the prompt cache
+                    (storage.UsagePricingSnapshot documents that), so the genuinely
+                    uncached input is prompt - cached - cache-creation. Counting the
+                    writes as ordinary input mis-described both the split and the bill. */}
+                {isZh ? '未缓存输入: ' : 'Uncached: '}<strong className="text-slate-900 dark:text-white font-semibold">{Math.max(0, (log.prompt_tokens || 0) - (log.cached_tokens || 0) - (log.cache_creation_tokens || 0)).toLocaleString()}</strong> ·
                 {isZh ? ' 输出: ' : ' Output: '}<strong className="text-slate-900 dark:text-white font-semibold">{(log.completion_tokens || 0).toLocaleString()}</strong> ·
-                {isZh ? ' 缓存: ' : ' Cached: '}<strong className="text-amber-600 dark:text-amber-400 font-semibold">{(log.cached_tokens || 0).toLocaleString()}</strong>
+                {isZh ? ' 缓存命中: ' : ' Cache read: '}<strong className="text-amber-600 dark:text-amber-400 font-semibold">{(log.cached_tokens || 0).toLocaleString()}</strong>
+                {log.cache_creation_tokens > 0 && (
+                  <>
+                    {isZh ? ' · 缓存写入: ' : ' · Cache write: '}
+                    <strong className="text-sky-600 dark:text-sky-400 font-semibold">{(log.cache_creation_tokens || 0).toLocaleString()}</strong>
+                  </>
+                )}
                 {log.usage_source === 'estimated' && (
                   <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 align-middle">
                     {isZh ? '估算' : 'estimated'}
@@ -568,18 +578,29 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
                   const pTokens = log.prompt_tokens || 0;
                   const cTokens = log.completion_tokens || 0;
                   const cachedTokens = Math.min(pTokens, log.cached_tokens || 0);
-                  const uncachedPrompt = Math.max(0, pTokens - cachedTokens);
+                  const cacheWriteTokens = Math.min(pTokens - cachedTokens, log.cache_creation_tokens || 0);
+                  const uncachedPrompt = Math.max(0, pTokens - cachedTokens - cacheWriteTokens);
 
                   if (matchedPrice) {
                     const pPrice = matchedPrice.prompt_price ?? 0;
                     const cPrice = matchedPrice.completion_price ?? 0;
                     const cachePrice = matchedPrice.cache_read_price ?? 0;
+                    // Cache *writes* are billed at their own rate (storage
+                    // UsagePricingSnapshot.cache_write_price); leaving the term out
+                    // made the displayed formula disagree with the charged amount for
+                    // every cache-writing request.
+                    const cacheWritePrice = matchedPrice.cache_write_price ?? 0;
                     const fixedPrice = matchedPrice.fixed_price ?? 0;
 
                     const parts = [];
-                    if (cachedTokens > 0) {
+                    if (cachedTokens > 0 || cacheWriteTokens > 0) {
                       parts.push(`${isZh ? '未缓存' : 'Uncached'} ${uncachedPrompt.toLocaleString()} × ¥${pPrice}/1M`);
-                      parts.push(`${isZh ? '缓存' : 'Cache'} ${cachedTokens.toLocaleString()} × ¥${cachePrice}/1M`);
+                      if (cachedTokens > 0) {
+                        parts.push(`${isZh ? '缓存命中' : 'Cache read'} ${cachedTokens.toLocaleString()} × ¥${cachePrice}/1M`);
+                      }
+                      if (cacheWriteTokens > 0) {
+                        parts.push(`${isZh ? '缓存写入' : 'Cache write'} ${cacheWriteTokens.toLocaleString()} × ¥${cacheWritePrice}/1M`);
+                      }
                     } else {
                       parts.push(`${isZh ? '输入' : 'Prompt'} ${pTokens.toLocaleString()} × ¥${pPrice}/1M`);
                     }

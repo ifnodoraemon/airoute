@@ -60,6 +60,13 @@ func isReservedUsername(username string) bool {
 
 // Register registers a new regular user account with email verification and creates initial balance.
 func (h *AdminHandler) Register(c *gin.Context) {
+	// Registration creates an account and signs the caller in; it is
+	// unauthenticated and state-changing, so it carries the same cross-site gates
+	// as login (CP-05).
+	if !requireJSONBody(c) || !requireSameOrigin(c) {
+		return
+	}
+
 	if !config.GetGlobalConfig().IsRegistrationAllowed() {
 		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "企业已关闭自主注册通道，请联系管理员分配账号"})
 		return
@@ -223,6 +230,12 @@ func (h *AdminHandler) Register(c *gin.Context) {
 func respondRegistrationFailure(c *gin.Context, err error) {
 	if errors.Is(err, storage.ErrEmailAlreadyRegistered) {
 		c.JSON(http.StatusConflict, gin.H{"code": 409, "error": "该邮箱已被绑定注册"})
+		return
+	}
+	if errors.Is(err, storage.ErrUsernameAlreadyRegistered) {
+		// Account identity is case-insensitive (migration 44): "Alice" and "alice"
+		// are the same account name, and saying so is friendlier than a 500.
+		c.JSON(http.StatusConflict, gin.H{"code": 409, "error": "该用户名已被注册（用户名不区分大小写）"})
 		return
 	}
 	c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "创建账号及初始密钥失败，请重试"})

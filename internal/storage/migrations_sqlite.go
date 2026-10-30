@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 func ensureSQLiteColumn(db *sql.DB, table, col, colType string) {
@@ -18,6 +19,25 @@ func sqliteColumnExists(db *sql.DB, table, col string) bool {
 	var count int
 	_ = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM pragma_table_info('%s') WHERE name='%s';", table, col)).Scan(&count)
 	return count > 0
+}
+
+// tableExists reports whether a table is present in the current schema, for both
+// dialects. Migrations that add constraints or columns to a table run after the
+// migration that creates it, but a database can legitimately be in a synthetic
+// state (test fixtures, a hand-repaired deployment) where an earlier version is
+// recorded and the table is absent; such a migration has nothing to do.
+func tableExists(db *DB, table string) (bool, error) {
+	var count int
+	var err error
+	if db.Dialect() == "postgres" {
+		err = db.DB.QueryRow(`SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = $1`, table).Scan(&count)
+	} else {
+		err = db.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&count)
+	}
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 // migrate creates required tables if they don't exist for SQLite.
@@ -501,6 +521,137 @@ func (db *DB) migrate() error {
 		{Version: 40, Name: "drop_legacy_governance_objects", Up: dropLegacyGovernanceObjects},
 		{Version: 41, Name: "billing_scale_indexes", Up: addBillingScaleIndexes},
 		{Version: 42, Name: "storage_index_and_trace_search_repairs", Up: repairStorageIndexesAndTraceSearch},
+		// Migration 43 exists only on PostgreSQL, where it rewrites usage_logs into
+		// monthly partitions behind GATEWAY_ENABLE_TABLE_PARTITIONING. SQLite has no
+		// declarative partitioning, so there is nothing to apply - but the version is
+		// still recorded here so the two dialect lists read alike instead of looking
+		// like one side silently skipped a schema step. On PostgreSQL the version
+		// only appears when the opt-in ran, so "43 recorded" means "partitioning
+		// applied" there and "partitioning not applicable" here.
+		{Version: 43, Name: "usage_logs_monthly_partitions", Up: skipSQLiteTablePartitioning},
+		// 44/45 close the two control-plane defects from the 2026-10-29 hunt:
+		// account identity must be case-insensitive at the storage level too, and an
+		// administrator's revocation of a key must be preserved as its own state so a
+		// tenant cannot undo it (see docs/audit/2026-10-29-bughunt/01-controlplane.md).
+		{Version: 44, Name: "users_username_lower_unique", Up: createUsersUsernameUniqueLowerIndex},
+		{Version: 45, Name: "api_keys_admin_disabled", Up: addAPIKeyAdminDisabledColumn},
 	}
 	return db.runMigrations(migrations)
+}
+
+// usersUsernameUniqueIndex is the case-insensitive unique index on
+// users.username created by migration 44.
+//
+// Account identity has to be case-insensitive in exactly one place: the login
+// throttle lower-cases the username before building its lockout bucket, so
+// "victim" and "VICTIM" being two separate accounts would let an attacker who
+// owns the harmless-looking variant reset the victim's failure counter by logging
+// in (see BUG-CP-02 in docs/audit/2026-10-29-bughunt/01-controlplane.md). The
+// index makes the database the authority on uniqueness, and
+// Repository.GetUserByUsername resolves through LOWER(username) so lookups agree
+// with it.
+const usersUsernameUniqueIndex = "uq_users_username_lower"
+
+// createUsersUsernameUniqueLowerIndex adds case-insensitive uniqueness for the
+// login identifier.
+//
+// It refuses to run on data that already contains case-variant duplicates
+// instead of guessing which row is the real account: deleting or merging accounts
+// is an operator decision, and a silent choice here would attribute one person's
+// keys, balance and audit history to another. The migration reports the
+// conflicting names and is deferred (the gateway still starts, no version is
+// recorded, so every restart retries it) - the same policy the email index in
+// migration 27 uses, because an upgrade must not leave the gateway down.
+func createUsersUsernameUniqueLowerIndex(db *DB) error {
+	exists, err := tableExists(db, "users")
+	if err != nil {
+		return fmt.Errorf("check users table before the username index: %w", err)
+	}
+	if !exists {
+		// Nothing to constrain: the users table has not been created in this
+		// database yet (synthetic/legacy fixture).
+		return nil
+	}
+	rows, err := db.DB.Query(`SELECT LOWER(username) AS normalized FROM users GROUP BY LOWER(username) HAVING COUNT(*) > 1`)
+	if err != nil {
+		return fmt.Errorf("scan duplicate users.username values: %w", err)
+	}
+	duplicates := make([]string, 0)
+	for rows.Next() {
+		var normalized string
+		if err := rows.Scan(&normalized); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan duplicate users.username values: %w", err)
+		}
+		duplicates = append(duplicates, normalized)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("scan duplicate users.username values: %w", err)
+	}
+	rows.Close()
+
+	if len(duplicates) > 0 {
+		conflicts := make([]string, 0, len(duplicates))
+		for _, normalized := range duplicates {
+			names, err := db.usernamesSharingNormalizedValue(normalized)
+			if err != nil {
+				return err
+			}
+			conflicts = append(conflicts, strings.Join(names, " / "))
+		}
+		return fmt.Errorf("%w: users.username must be unique ignoring case, but these accounts differ only by case: %s. "+
+			"Rename or delete all but one of each group (the console user list shows them), then restart. No data was modified.",
+			errMigrationDeferred, strings.Join(conflicts, "; "))
+	}
+
+	statement := `CREATE UNIQUE INDEX IF NOT EXISTS ` + usersUsernameUniqueIndex + ` ON users (LOWER(username))`
+	if _, err := db.DB.Exec(statement); err != nil {
+		return fmt.Errorf("%w: could not create the case-insensitive unique index on users.username (%v); "+
+			"see the duplicate list above", errMigrationDeferred, err)
+	}
+	return nil
+}
+
+// usernamesSharingNormalizedValue lists the stored spellings that collapse to one
+// normalized username, for the operator-facing conflict report.
+func (db *DB) usernamesSharingNormalizedValue(normalized string) ([]string, error) {
+	rows, err := db.DB.Query(db.Rebind(`SELECT username FROM users WHERE LOWER(username) = ? ORDER BY id ASC`), normalized)
+	if err != nil {
+		return nil, fmt.Errorf("read conflicting users.username values: %w", err)
+	}
+	defer rows.Close()
+	names := make([]string, 0, 2)
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("read conflicting users.username values: %w", err)
+		}
+		names = append(names, name)
+	}
+	return names, rows.Err()
+}
+
+// addAPIKeyAdminDisabledColumn adds the state that distinguishes "the tenant
+// switched this key off" from "an administrator revoked it".
+//
+// Without it, a tenant could PATCH their own disabled key back to active and undo
+// an operator's revocation (BUG-CP-01), because updates had no way to know who
+// disabled the key. Default false keeps every existing row behaving as before.
+func addAPIKeyAdminDisabledColumn(db *DB) error {
+	exists, err := tableExists(db, "api_keys")
+	if err != nil {
+		return fmt.Errorf("check api_keys table before adding admin_disabled: %w", err)
+	}
+	if !exists {
+		return nil
+	}
+	if db.Dialect() == "postgres" {
+		if _, err := db.DB.Exec(`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS admin_disabled BOOLEAN NOT NULL DEFAULT FALSE`); err != nil {
+			return fmt.Errorf("add api_keys.admin_disabled: %w", err)
+		}
+		return nil
+	}
+	ensureSQLiteColumn(db.DB, "api_keys", "admin_disabled", "INTEGER NOT NULL DEFAULT 0")
+	return nil
 }

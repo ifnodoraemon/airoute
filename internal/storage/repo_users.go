@@ -44,8 +44,17 @@ func (u *UserRecord) resolveBalanceUnits() {
 // GetUserByUsername resolves a canonical account identity, never an email alias.
 // Deleted identities remain reserved so old tokens and payment orders cannot
 // become attached to a newly registered account with the same username.
+//
+// The comparison ignores case, because account identity is case-insensitive
+// everywhere else: the login throttle lower-cases the username before building
+// its lockout bucket (controlplane.login_guard), and allowing "Admin" and "admin"
+// to be two accounts let an attacker own the case variant of a victim's name and
+// reset the victim's failure counter by logging in (BUG-CP-02). Migration 44
+// enforces the same rule as a unique index on LOWER(username); ORDER BY id keeps
+// the result deterministic on databases where that index is still deferred
+// because duplicate rows exist.
 func (r *Repository) GetUserByUsername(username string) (*UserRecord, error) {
-	row := r.db.QueryRow(`SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE username = ?`, username)
+	row := r.db.QueryRow(`SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE LOWER(username) = LOWER(?) ORDER BY id ASC LIMIT 1`, strings.TrimSpace(username))
 	var u UserRecord
 	if err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.Balance, &u.BalanceUnits, &u.GroupName, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		return nil, err
@@ -127,6 +136,12 @@ type userInserter interface {
 // client error instead of a generic failure.
 var ErrEmailAlreadyRegistered = errors.New("email already registered")
 
+// ErrUsernameAlreadyRegistered is returned when creating an account would
+// duplicate an existing username ignoring case. Account identity is
+// case-insensitive (see GetUserByUsername and migration 44), so "Alice" cannot be
+// created next to "alice".
+var ErrUsernameAlreadyRegistered = errors.New("username already registered")
+
 // isEmailConflictError reports whether err is the unique violation raised by
 // usersEmailUniqueIndex. Both drivers put the index name in the error text;
 // PostgreSQL additionally reports the SQLSTATE code.
@@ -139,6 +154,19 @@ func isEmailConflictError(err error) bool {
 		return strings.Contains(strings.ToLower(pqErr.Constraint), usersEmailUniqueIndex)
 	}
 	return strings.Contains(strings.ToLower(err.Error()), usersEmailUniqueIndex)
+}
+
+// isUsernameConflictError reports whether err is the unique violation raised by
+// usersUsernameUniqueIndex (the case-insensitive index on username).
+func isUsernameConflictError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) && string(pqErr.Code) == "23505" {
+		return strings.Contains(strings.ToLower(pqErr.Constraint), usersUsernameUniqueIndex)
+	}
+	return strings.Contains(strings.ToLower(err.Error()), usersUsernameUniqueIndex)
 }
 
 func insertUser(db userInserter, u *UserRecord) error {
@@ -165,11 +193,26 @@ func insertUser(db userInserter, u *UserRecord) error {
 			return ErrEmailAlreadyRegistered
 		}
 	}
+	// Same for the username, which is unique ignoring case (migration 44). The
+	// pre-check keeps the common sequential path a clean client error even on a
+	// database where the index is still deferred due to legacy duplicates.
+	if username := strings.TrimSpace(u.Username); username != "" {
+		var taken int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM users WHERE LOWER(username) = LOWER(?)`, username).Scan(&taken); err != nil {
+			return err
+		}
+		if taken > 0 {
+			return ErrUsernameAlreadyRegistered
+		}
+	}
 	id, err := db.InsertGetID(`INSERT INTO users (username, email, password_hash, role, status, balance, balance_units, group_name, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 		u.Username, u.Email, u.PasswordHash, u.Role, u.Status, u.Balance, ToUnits(u.Balance), u.GroupName)
 	if err != nil {
 		if isEmailConflictError(err) {
 			return ErrEmailAlreadyRegistered
+		}
+		if isUsernameConflictError(err) {
+			return ErrUsernameAlreadyRegistered
 		}
 		return err
 	}

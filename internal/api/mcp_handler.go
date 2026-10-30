@@ -287,13 +287,14 @@ func (h *MCPHandler) ProcessRPC(ctx context.Context, req *mcpRequest) mcpRespons
 
 		// All possible MCP Tools corresponding to Agent Skills & 3-Stage Progressive Discovery
 		allTools := getBuiltinMCPTools()
+		nativeEnabled := h.nativeMCPServerEnabled()
 
 		// Filter tools on-demand based on enabled skills
 		var activeTools []gin.H
 		existingToolNames := make(map[string]bool)
 		for _, t := range allTools {
 			name := t["name"].(string)
-			if h.repo == nil || h.repo.IsToolEnabled(name) {
+			if nativeEnabled && (h.repo == nil || h.repo.IsToolEnabled(name)) {
 				activeTools = append(activeTools, t)
 				existingToolNames[name] = true
 			}
@@ -307,7 +308,7 @@ func (h *MCPHandler) ProcessRPC(ctx context.Context, req *mcpRequest) mcpRespons
 						continue
 					}
 					for _, tName := range srv.Tools {
-						if !existingToolNames[tName] {
+						if !existingToolNames[tName] && (!builtinMCPToolSet[tName] || nativeEnabled) {
 							existingToolNames[tName] = true
 							activeTools = append(activeTools, gin.H{
 								"name":        tName,
@@ -396,6 +397,9 @@ func (h *MCPHandler) ProcessRPC(ctx context.Context, req *mcpRequest) mcpRespons
 
 // executeTool dispatches tool execution across domain modules.
 func (h *MCPHandler) executeTool(ctx context.Context, name string, args map[string]interface{}) (string, bool) {
+	if !h.builtinMCPToolEnabled(name) {
+		return "Airoute native MCP server is disabled", true
+	}
 	if res, isErr, handled := h.executeSkillTools(ctx, name, args); handled {
 		return res, isErr
 	}

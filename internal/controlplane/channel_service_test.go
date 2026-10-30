@@ -541,18 +541,41 @@ func TestChannelServiceBatchDeleteReloadsOnce(t *testing.T) {
 	}
 }
 
-func TestChannelServiceBatchStatusNormalizesUnknownStatusToActive(t *testing.T) {
-	cases := []struct {
-		in   string
-		want string
-	}{
+// TestChannelServiceBatchStatusRefusesUnknownStatus is the regression for
+// BUG-CP-03: an unrecognised status used to be coerced to "active", so a
+// misspelled bulk disable enabled the channel. It must now be refused, and nothing
+// may be written or reloaded.
+func TestChannelServiceBatchStatusRefusesUnknownStatus(t *testing.T) {
+	// Case and surrounding whitespace are normalised (that preserves the operator's
+	// intent); anything that is not a known state is refused.
+	for _, in := range []string{"bogus", "disable", "off", ""} {
+		t.Run("status="+in, func(t *testing.T) {
+			store := newFakeChannelStore()
+			rec := store.seed(&storage.ChannelRecord{Name: "a", Status: "disabled"})
+			reloader := &fakeReloader{}
+			svc := NewChannelService(store, reloader, nil)
+
+			if _, err := svc.BatchStatus(context.Background(), []int64{rec.ID}, in); err == nil {
+				t.Fatalf("BatchStatus(%q) accepted an unknown status", in)
+			}
+			if store.lastBatchStatus != "" {
+				t.Errorf("store received status %q for an invalid request", store.lastBatchStatus)
+			}
+			if len(reloader.reasons) != 0 {
+				t.Errorf("reload happened for an invalid request: %v", reloader.reasons)
+			}
+		})
+	}
+}
+
+// TestChannelServiceBatchStatusAppliesKnownStatus keeps the happy path pinned.
+func TestChannelServiceBatchStatusAppliesKnownStatus(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
 		{"disabled", "disabled"},
 		{"active", "active"},
-		{"", "active"},
-		{"bogus", "active"},
-	}
-
-	for _, tc := range cases {
+		{" Disabled ", "disabled"},
+		{"ACTIVE", "active"},
+	} {
 		t.Run("status="+tc.in, func(t *testing.T) {
 			store := newFakeChannelStore()
 			rec := store.seed(&storage.ChannelRecord{Name: "a", Status: "disabled"})

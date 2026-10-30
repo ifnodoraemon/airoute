@@ -163,6 +163,7 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `GATEWAY_USAGE_SPILL_DIR` | `data` | Disk fallback for billing records when Redis/DB fail (`-` disables, not recommended) |
 | `GATEWAY_USAGE_SPILL_MAX_MB` | `256` | Disk fallback size ceiling |
 | `GATEWAY_USAGE_SPILL_CLAIM_GRACE_SEC` | `600` | Grace period before another replica may claim a spilled record (shared spill directory) |
+| `GATEWAY_USAGE_SPILL_REPLAY_SEC` | `60` | Cadence of the periodic spill replay (records written to disk while the DB/Redis were down are replayed without waiting for a restart; a DB recovery also kicks one immediately) |
 | `GATEWAY_BILLING_RECONCILE_HOURS` | `6` | Ledger reconciliation period; `0` disables |
 | `GATEWAY_MODERATION_STUB` | `false` | Return a local fake "all safe" moderation response when no moderation channel exists (development only) |
 | `GATEWAY_DB_MAX_OPEN_CONNS` | `25` | PostgreSQL pool size **per replica**; keep `replicas × value` below the server `max_connections` |

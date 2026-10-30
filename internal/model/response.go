@@ -712,7 +712,10 @@ func ConvertChatResponseToResponseResult(chatResp *ChatCompletionResponse) *Resp
 		usage.OutputTokens = chatResp.Usage.CompletionTokens
 		usage.TotalTokens = chatResp.Usage.TotalTokens
 		usage.InputTokensDetails = &ResponseInputTokensDetails{CachedTokens: chatResp.Usage.GetCachedTokens()}
-		usage.OutputTokensDetails = &ResponseOutputTokensDetails{ReasoningTokens: 0}
+		// Report the reasoning share the upstream actually billed instead of a
+		// hardcoded 0: the count is preserved in Usage.Extra and agents key
+		// continuation/cost decisions off it (F-02).
+		usage.OutputTokensDetails = &ResponseOutputTokensDetails{ReasoningTokens: chatResp.Usage.GetReasoningTokens()}
 	}
 
 	// A truncated or filtered answer must not be reported as a normally completed

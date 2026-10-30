@@ -522,5 +522,16 @@ func (db *DB) migratePostgres() error {
 			Up:      addUsageLogsMonthlyPartitions,
 		})
 	}
+
+	// 44/45 close the two control-plane defects from the 2026-10-29 hunt: account
+	// identity must be case-insensitive at the storage level too, and an
+	// administrator's revocation of a key must be its own state so a tenant cannot
+	// undo it (see docs/audit/2026-10-29-bughunt/01-controlplane.md). They are
+	// appended after the opt-in partitioning step so versions stay ordered whether
+	// or not partitioning is enabled.
+	migrations = append(migrations,
+		Migration{Version: 44, Name: "users_username_lower_unique", Up: createUsersUsernameUniqueLowerIndex},
+		Migration{Version: 45, Name: "api_keys_admin_disabled", Up: addAPIKeyAdminDisabledColumn},
+	)
 	return db.runMigrations(migrations)
 }

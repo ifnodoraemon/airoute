@@ -6,7 +6,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ifnodoraemon/airoute/internal/model"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -60,7 +62,7 @@ func (b *mcpStdioStderrBuffer) String() string {
 
 // executeStdioMCPTool runs the full stdio lifecycle against cmdParts and returns
 // the tool result text and isError flag.
-func executeStdioMCPTool(ctx context.Context, cmdParts []string, toolName string, args map[string]interface{}) (string, bool) {
+func executeStdioMCPTool(ctx context.Context, cmdParts []string, toolName string, args map[string]interface{}, environment ...string) (string, bool) {
 	if len(cmdParts) == 0 || strings.TrimSpace(cmdParts[0]) == "" {
 		return "MCP stdio server command is empty", true
 	}
@@ -69,6 +71,16 @@ func executeStdioMCPTool(ctx context.Context, cmdParts []string, toolName string
 	defer cancel()
 
 	cmd := exec.CommandContext(callCtx, cmdParts[0], cmdParts[1:]...)
+	if len(environment) > 0 {
+		env, err := model.ParseMCPEnv(environment[0])
+		if err != nil {
+			return err.Error(), true
+		}
+		cmd.Env = os.Environ()
+		for key, value := range env {
+			cmd.Env = append(cmd.Env, key+"="+value)
+		}
+	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return fmt.Sprintf("Stdio process setup error: %v", err), true
@@ -140,11 +152,10 @@ func executeStdioMCPTool(ctx context.Context, cmdParts []string, toolName string
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 	select {
-	case waitErr := <-done:
-		waited = true
+	case <-done:
 		// A server may exit non-zero after answering; the reply we already have
 		// is still valid, so the exit status is not itself a tool failure.
-		_ = waitErr
+		waited = true
 	case <-callCtx.Done():
 		_ = cmd.Process.Kill()
 		<-done

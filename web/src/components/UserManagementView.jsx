@@ -20,8 +20,9 @@ import useModalA11y from '../hooks/useModalA11y';
 import useFormDirty from '../hooks/useFormDirty';
 import useUnsavedGuard from '../hooks/useUnsavedGuard';
 import DiscardChangesDialog from './DiscardChangesDialog';
+import OneTimeKeyDialog from './OneTimeKeyDialog';
 
-export default function UserManagementView({ adminUser, adminFetch, showToast, lang = 'zh' }) {
+export default function UserManagementView({ adminUser, adminFetch, showToast, onUserCreated, lang = 'zh' }) {
   const isZh = lang === 'zh';
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -39,6 +40,7 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
   const [newGroupName, setNewGroupName] = useState('default');
   const [creating, setCreating] = useState(false);
   const [addModalError, setAddModalError] = useState('');
+  const [createdAccount, setCreatedAccount] = useState(null);
 
   // Quota Adjustment Modal State
   const [quotaTargetUser, setQuotaTargetUser] = useState(null);
@@ -207,6 +209,8 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
+        if (data.data?.api_key) setCreatedAccount(data.data);
+        onUserCreated?.();
         if (showToast) showToast(isZh ? `用户 [${newUsername}] 创建成功，已自动生成 API 密钥` : `User [${newUsername}] created successfully with API key`, 'success');
         // Reset the draft to its baseline first, so the unsaved guard can never
         // block the close that follows a successful create.
@@ -764,6 +768,8 @@ export default function UserManagementView({ adminUser, adminFetch, showToast, l
       </div>
 
       {/* MODAL 1: Create New User */}
+      {createdAccount && <OneTimeKeyDialog credential={createdAccount.api_key} username={createdAccount.username} lang={lang} onClose={() => setCreatedAccount(null)} />}
+
       {showAddModal && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-xs animate-in fade-in"

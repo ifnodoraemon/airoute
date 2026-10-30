@@ -136,3 +136,10 @@ func repairUsageLogFTSTriggers(db *DB) error {
 	}
 	return nil
 }
+
+// skipSQLiteTablePartitioning records version 43 on SQLite, where the
+// PostgreSQL-only monthly-partitioning migration has nothing to do. Recording it
+// keeps the two dialect migration lists shaped alike for anyone comparing them;
+// the migration itself refuses to run on SQLite, so this can never be a half
+// applied schema change.
+func skipSQLiteTablePartitioning(*DB) error { return nil }

@@ -40,6 +40,8 @@ export function useConsoleData({ adminUser }) {
   // captures the generation it started in and discards its result if reset ran
   // while it was in the air.
   const generationRef = useRef(0);
+  // Order of refreshes within one session (see `refresh`): newest wins.
+  const requestSeqRef = useRef(0);
 
   // Clear every piece of tenant-scoped data so a following session (or React
   // DevTools) cannot observe the previous account's channels, keys, stats or
@@ -75,6 +77,12 @@ export function useConsoleData({ adminUser }) {
     // result is stale and must be dropped rather than written into the cleared
     // state.
     const generation = generationRef.current;
+    // Which load is the newest. The shell polls this every 8s while every mutation
+    // also refreshes it, so without an ordering guard a poll that started before a
+    // create/edit can answer after it and put the pre-mutation snapshot back: the
+    // row the operator just created disappears until the next tick.
+    const seq = ++requestSeqRef.current;
+    const isCurrent = () => seq === requestSeqRef.current && generation === generationRef.current;
     let failed = false;
     const getJSON = (url) =>
       apiFetch(url, opts)
@@ -106,9 +114,9 @@ export function useConsoleData({ adminUser }) {
         getJSON('/api/v1/admin/pricing'),
       ]);
 
-      if (generation !== generationRef.current) {
-        // The session was cleared (or replaced) while these requests were in the
-        // air. Applying them would put the previous account's data back.
+      if (!isCurrent()) {
+        // Superseded by a newer refresh (or the session was cleared) while these
+        // requests were in the air: applying them would put stale data back.
         return false;
       }
 

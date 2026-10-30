@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
@@ -25,8 +26,11 @@ type TraceCapture struct {
 	// stopOnce makes Stop idempotent now that two goroutines may be running
 	// (capture worker and retention purger).
 	stopOnce sync.Once
-	wg       sync.WaitGroup
-	repo     *Repository
+	// stopped makes Record report the truth after Stop: there is no worker left to
+	// persist a snapshot, so claiming "queued" would silently lose it.
+	stopped atomic.Bool
+	wg      sync.WaitGroup
+	repo    *Repository
 	// purgeInterval is how often expired snapshots are deleted. It is a field
 	// (not a constant) so tests can drive the retention loop without waiting an
 	// hour; production always uses one hour.
@@ -127,7 +131,7 @@ func ResolveTraceConfig() resolvedTraceConfig {
 // random draw. Evaluating the rate in both places compounded it — three checks
 // on the success path turned a configured 10% into roughly 0.1%.
 func (tc *TraceCapture) Enabled(statusCode int) bool {
-	if tc == nil || tc.mode == "off" {
+	if tc == nil || tc.mode == "off" || tc.stopped.Load() {
 		return false
 	}
 	if statusCode >= 400 {
@@ -143,6 +147,11 @@ func (tc *TraceCapture) Enabled(statusCode int) bool {
 // this request or the queue was full, so callers can treat it as "not archived".
 func (tc *TraceCapture) Record(rec *RequestTraceRecord) bool {
 	if tc == nil || rec == nil || tc.mode == "off" {
+		return false
+	}
+	// After Stop there is no worker to drain the queue: accepting the record would
+	// report success for a snapshot that can never be archived.
+	if tc.stopped.Load() {
 		return false
 	}
 	if !tc.Enabled(rec.StatusCode) {
@@ -239,6 +248,7 @@ func (tc *TraceCapture) Stop() {
 		return
 	}
 	tc.stopOnce.Do(func() {
+		tc.stopped.Store(true)
 		if tc.stop != nil {
 			close(tc.stop)
 		}

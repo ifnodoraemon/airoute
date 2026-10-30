@@ -63,12 +63,25 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
     onBalanceUpdateRef.current = onBalanceUpdate;
   });
 
+  // Wallet loads are sequenced and cancellable. A slot-filling refresh can be
+  // overtaken by an older one (the tab-return gesture used to fire two), and an old
+  // snapshot landing last would show a balance that is no longer true — the exact
+  // number a user decides a top-up on.
+  const walletRequestSeqRef = useRef(0);
+  const walletAbortRef = useRef(null);
+
   const fetchWallet = useCallback(async () => {
-    if (!adminFetch) return;
+    if (!adminFetch) return false;
+    const seq = ++walletRequestSeqRef.current;
+    walletAbortRef.current?.abort();
+    const controller = new AbortController();
+    walletAbortRef.current = controller;
+    const isCurrent = () => seq === walletRequestSeqRef.current && !controller.signal.aborted;
     setLoading(true);
     try {
-      const res = await adminFetch('/api/v1/user/wallet');
+      const res = await adminFetch('/api/v1/user/wallet', { signal: controller.signal });
       const data = await res.json();
+      if (!isCurrent()) return false;
       if (res.ok && data.code === 0 && data.data) {
         setWalletData((previous) => ({
           ...previous, ...data.data,
@@ -86,10 +99,12 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
       }
       throw new Error('Wallet unavailable');
     } catch {
+      if (!isCurrent()) return false;
       setWalletError(isZh ? '余额和充值记录刷新失败，当前显示可能不是最新数据。请重试。' : 'Could not refresh your wallet. Displayed balances may be outdated. Please retry.');
       return false;
     } finally {
-      setLoading(false);
+      if (seq === walletRequestSeqRef.current) setLoading(false);
+      if (walletAbortRef.current === controller) walletAbortRef.current = null;
     }
   }, [adminFetch, isZh]);
 
@@ -116,8 +131,20 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
     }
   }, [fetchWallet, fetchRedemptions, isAdmin]);
 
+  // Coming back to the tab fires BOTH `focus` and `visibilitychange` for one user
+  // gesture. Treat that gesture as a single refresh: a short coalescing window keeps
+  // the second event from issuing a duplicate request, and the loaders above make
+  // any straggler harmless anyway.
   useEffect(() => {
-    const refresh = () => { if (document.visibilityState !== 'hidden') fetchWallet(); };
+    let lastRefreshAt = 0;
+    const GESTURE_WINDOW_MS = 500;
+    const refresh = () => {
+      if (document.visibilityState === 'hidden') return;
+      const now = Date.now();
+      if (now - lastRefreshAt < GESTURE_WINDOW_MS) return;
+      lastRefreshAt = now;
+      fetchWallet();
+    };
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', refresh);
     return () => {
@@ -125,6 +152,13 @@ export default function WalletManagementView({ adminUser, adminFetch, showToast,
       document.removeEventListener('visibilitychange', refresh);
     };
   }, [fetchWallet]);
+
+  // Cancel anything still in the air when the view goes away.
+  useEffect(() => () => {
+    walletRequestSeqRef.current += 1;
+    walletAbortRef.current?.abort();
+    walletAbortRef.current = null;
+  }, []);
 
   useEffect(() => {
     if (!checkoutReturn.state) return;

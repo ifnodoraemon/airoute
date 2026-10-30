@@ -19,9 +19,8 @@ import (
 // The ratio is an exponentially weighted mean per model, clamped to a sane band so
 // a few pathological requests cannot swing it.
 type EstimateCalibrator struct {
-	mu       sync.RWMutex
-	samples  map[string]*ratioSample
-	observed uint64
+	mu      sync.RWMutex
+	samples map[string]*ratioSample
 	// persist is invoked every calibrationPersistEvery observations so learned
 	// ratios reach durable storage quickly instead of waiting for a timer.
 	persist func() error
@@ -78,7 +77,6 @@ func (c *EstimateCalibrator) Observe(modelName string, localEstimate, upstreamAc
 		sample.ratio = sample.ratio*(1-calibrationAlpha) + ratio*calibrationAlpha
 	}
 	sample.count++
-	c.observed++
 	c.pending++
 	shouldPersist := c.persist != nil && c.pending >= calibrationPersistEvery
 	if shouldPersist {

@@ -2,9 +2,7 @@ package api
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,20 +18,8 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
-func videoOwner(c *gin.Context) string {
-	key := getAPIKeyConfig(c)
-	if key == nil || key.Key == "" {
-		return ""
-	}
-	if key.UserID > 0 {
-		return "user:" + strconv.FormatInt(key.UserID, 10)
-	}
-	digest := sha256.Sum256([]byte(key.Key))
-	return "key:" + hex.EncodeToString(digest[:])
-}
-
 func (h *MultimodalHandler) requireVideoOwner(c *gin.Context) (string, bool) {
-	owner := videoOwner(c)
+	owner := callerOwner(c)
 	if owner == "" {
 		RespondOpenAIError(c, http.StatusUnauthorized, "Video tasks require an API key", "authentication_error", "api_key_required")
 		return "", false

@@ -56,10 +56,28 @@ type Metrics struct {
 
 	// UsageLogRecordsSpilled counts billing records written to the local
 	// append-only spill file because no queue accepted them. Any non-zero value
-	// means the pipeline is degraded; the records are replayed on restart.
+	// means the pipeline is degraded; the records are replayed by the periodic
+	// replay loop (and again at the next start if they cannot be persisted).
 	UsageLogRecordsSpilled atomic.Uint64
 	// UsageLogSpillReplayFailures counts unreadable spill lines.
 	UsageLogSpillReplayFailures atomic.Uint64
+	// UsageLogSpillReplays counts records successfully replayed from a spill file.
+	UsageLogSpillReplays atomic.Uint64
+	// UsageLogStreamReadFailures counts failed XREADGROUP calls on the distributed
+	// audit stream. A sustained rate means the consumer cannot read (a lost
+	// consumer group, a Redis outage) — the condition that used to be invisible
+	// while writers kept appending and nothing was ever persisted.
+	UsageLogStreamReadFailures atomic.Uint64
+	// UsageLogGroupRecreated counts successful consumer-group rebuilds after the
+	// group went missing. Non-zero means a Redis state loss was recovered without
+	// a process restart.
+	UsageLogGroupRecreated atomic.Uint64
+	// UsageLogStreamPoisoned counts stream entries that could not be decoded and
+	// were dead-lettered instead of being silently acknowledged and dropped.
+	UsageLogStreamPoisoned atomic.Uint64
+	// BillingLedgerPruneContended counts ledger retention batches that collided
+	// with another replica and had to be retried.
+	BillingLedgerPruneContended atomic.Uint64
 	// BillingLedgerDriftUnits is the absolute per-key difference between
 	// api_keys.used_cost_units and SUM(usage_logs.cost_units), refreshed by the
 	// reconciliation worker.

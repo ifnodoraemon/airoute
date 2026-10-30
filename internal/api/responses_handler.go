@@ -2,13 +2,10 @@ package api
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -170,27 +167,12 @@ func (h *Handler) handleResponsesNonStreaming(
 	c.JSON(http.StatusOK, result)
 }
 
-// responseContextOwner identifies the caller that owns a stored Responses
-// conversation: the authenticated user when the API key belongs to one,
-// otherwise the API-key digest. Two credentials must never share a conversation.
-func responseContextOwner(c *gin.Context) string {
-	key := getAPIKeyConfig(c)
-	if key == nil || key.Key == "" {
-		return ""
-	}
-	if key.UserID > 0 {
-		return "user:" + strconv.FormatInt(key.UserID, 10)
-	}
-	digest := sha256.Sum256([]byte(key.Key))
-	return "key:" + hex.EncodeToString(digest[:])
-}
-
 // restoreResponseContext loads the conversation behind a previous_response_id
 // for the current caller. On any unresolvable id it writes the documented 400
 // and reports false; quietly continuing without history is exactly the bug this
 // replaces.
 func restoreResponseContext(c *gin.Context, previousID string) ([]model.ChatMessage, bool) {
-	owner := responseContextOwner(c)
+	owner := callerOwner(c)
 	repo := storage.GetGlobalRepository()
 	if repo == nil || owner == "" {
 		respondPreviousResponseNotFound(c, previousID)
@@ -222,7 +204,7 @@ func restoreResponseContext(c *gin.Context, previousID string) ([]model.ChatMess
 // response: storage trouble must not turn a successful provider answer into an
 // error.
 func persistResponseContext(c *gin.Context, responseID string, conversation []model.ChatMessage, assistant *model.ChatMessage) {
-	owner := responseContextOwner(c)
+	owner := callerOwner(c)
 	repo := storage.GetGlobalRepository()
 	if repo == nil || owner == "" || responseID == "" {
 		return

@@ -144,6 +144,11 @@ services:
     env_file: [.env]
     environment:
       <<: *gateway-env
+      # Stable identity for this replica. Redis consumer entries (XREADGROUP) and
+      # the live-stats snapshot keys are keyed by it, so pinning it here means a
+      # restart or redeploy reuses the same entries instead of leaving one dead
+      # consumer behind per process start.
+      NODE_ID: gateway-1
     volumes:
       - gateway-data:/app/data
       - ./configs/config.yaml:/app/configs/config.yaml:ro
@@ -189,6 +194,9 @@ services:
     env_file: [.env]
     environment:
       <<: *gateway-env
+      # See gateway-1: the identity must stay stable across restarts so the Redis
+      # consumer group and the live-stats keys describe replicas, not processes.
+      NODE_ID: gateway-2
     volumes:
       - gateway-data:/app/data
       - ./configs/config.yaml:/app/configs/config.yaml:ro

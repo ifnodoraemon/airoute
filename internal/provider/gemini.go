@@ -42,9 +42,11 @@ func buildGeminiURL(baseURL, modelName string, stream bool) string {
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = "https://generativelanguage.googleapis.com"
 	}
-	endpoint := "/v1beta/models/" + modelName + ":generateContent"
+	// Accept the "models/<id>" form Google documents (F-03).
+	modelPath := geminiModelPath(modelName)
+	endpoint := "/v1beta/models/" + modelPath + ":generateContent"
 	if stream {
-		return joinAPIURLVersioned(baseURL, GeminiAPIVersion, "/v1beta/models/"+modelName+":streamGenerateContent", url.Values{"alt": {"sse"}})
+		return joinAPIURLVersioned(baseURL, GeminiAPIVersion, "/v1beta/models/"+modelPath+":streamGenerateContent", url.Values{"alt": {"sse"}})
 	}
 	return joinAPIURLVersioned(baseURL, GeminiAPIVersion, endpoint, nil)
 }

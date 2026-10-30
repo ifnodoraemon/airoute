@@ -14,8 +14,9 @@ import {
 } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
 
+import OneTimeKeyDialog from './OneTimeKeyDialog';
+
 export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh' }) {
-  useModalA11y(isOpen, onClose);
 
   const isZh = lang === 'zh';
   const [activeTab, setActiveTab] = useState('login'); // 'login' or 'register'
@@ -36,6 +37,10 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [registrationResult, setRegistrationResult] = useState(null);
+
+  const requestClose = () => { if (!loading && !registrationResult) onClose(); };
+  useModalA11y(isOpen, requestClose);
 
   // Enterprise public capability configuration
   const [sysConfig, setSysConfig] = useState({
@@ -60,6 +65,19 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
       })
       .catch(() => {});
   }, []);
+
+  // The resend countdown owns its interval so the timer stops with the dialog. This
+  // component stays mounted while closed (`if (!isOpen) return null`), so the guard
+  // is `isOpen` as well as the remaining time — otherwise a closed dialog would keep
+  // ticking for the rest of the minute.
+  const isCountingDown = isOpen && codeCountdown > 0;
+  React.useEffect(() => {
+    if (!isCountingDown) return undefined;
+    const timer = setInterval(() => {
+      setCodeCountdown((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isCountingDown]);
 
   // Handle Login Submit
   const handleLoginSubmit = async (e) => {
@@ -110,15 +128,6 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
       if (res.ok && data.code === 0) {
         setSuccessMsg(data.message || (isZh ? '验证码已发送至邮箱，请查收' : 'Verification code sent to your email'));
         setCodeCountdown(60);
-        const timer = setInterval(() => {
-          setCodeCountdown((prev) => {
-            if (prev <= 1) {
-              clearInterval(timer);
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
       } else {
         setError(data.error || (isZh ? '发送验证码失败' : 'Failed to send code'));
       }
@@ -150,9 +159,13 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
       const data = await res.json();
 
       if (res.ok && data.code === 0 && data.data?.token) {
-        localStorage.setItem('airoute_user', JSON.stringify(data.data.user));
-        onLoginSuccess(data.data.token, data.data.user);
-        onClose();
+        if (data.data.api_key) {
+          setRegistrationResult(data.data);
+          setRegPassword('');
+        } else {
+          onLoginSuccess(data.data.token, data.data.user);
+          onClose();
+        }
       } else {
         setError(data.error || (isZh ? '注册失败' : 'Registration failed'));
       }
@@ -184,11 +197,27 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
 
   if (!isOpen) return null;
 
+  if (registrationResult) {
+    return <OneTimeKeyDialog
+      credential={registrationResult.api_key}
+      username={registrationResult.user?.username}
+      lang={lang}
+      onClose={() => {
+        const result = registrationResult;
+        setRegistrationResult(null);
+        onLoginSuccess(result.token, result.user);
+        onClose();
+      }}
+    />;
+  }
+
+
+
   return (
     <div
       className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) requestClose();
       }}
     >
       <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
@@ -206,7 +235,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={requestClose}
             className="p-1.5 hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] rounded-lg text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4] transition cursor-pointer"
           >
             <X className="w-5 h-5" />
