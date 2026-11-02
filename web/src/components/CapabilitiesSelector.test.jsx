@@ -8,10 +8,10 @@ import CapabilitiesSelector from './CapabilitiesSelector';
 // `anthropic_native` is a marker (the upstream speaks Claude natively), not an
 // extra route, but it is a selectable protocol like the rest.
 const ALL_IDS = [
-  'openai_chat', 'openai_response', 'openai_text', 'anthropic_messages', 'anthropic_native',
+  'openai_chat', 'openai_response', 'anthropic_messages', 'anthropic_native',
   'images', 'audio_speech', 'audio_transcription', 'embeddings', 'rerank', 'videos',
 ];
-const CHAT_IDS = ['openai_chat', 'openai_response', 'openai_text', 'anthropic_messages'];
+const CHAT_IDS = ['openai_chat', 'openai_response', 'anthropic_messages'];
 
 function setup(props = {}) {
   const handlers = { onToggle: vi.fn(), onSetProtocols: vi.fn() };
@@ -34,13 +34,13 @@ describe('CapabilitiesSelector', () => {
   it('counts the selected protocols', () => {
     setup({ protocols: ['openai_chat', 'images'] });
 
-    expect(screen.getByText('协议能力 (2/11)')).toBeInTheDocument();
+    expect(screen.getByText('协议能力 (2/10)')).toBeInTheDocument();
   });
 
   it('counts zero when nothing is selected', () => {
     setup();
 
-    expect(screen.getByText('协议能力 (0/11)')).toBeInTheDocument();
+    expect(screen.getByText('协议能力 (0/10)')).toBeInTheDocument();
   });
 
   it('reports the toggle for the capability that was clicked', () => {
@@ -115,7 +115,7 @@ describe('CapabilitiesSelector', () => {
   it('renders English labels when asked', () => {
     setup({ lang: 'en', protocols: ['openai_chat'] });
 
-    expect(screen.getByText('Protocol Capabilities (1/11)')).toBeInTheDocument();
+    expect(screen.getByText('Protocol Capabilities (1/10)')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Select All' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Chat Only' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument();

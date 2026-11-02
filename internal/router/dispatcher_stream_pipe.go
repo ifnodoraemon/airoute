@@ -120,11 +120,14 @@ func pipeStreamEvents(ctx context.Context, outChan chan<- *model.StreamEvent, pr
 }
 
 func streamEventHasContent(event *model.StreamEvent) bool {
+	if event != nil && event.NativeProtocol != "" {
+		return event.NativeContent
+	}
 	if event == nil || event.Chunk == nil {
 		return event != nil && (event.NativeAnthropicType == "content_block_delta" || event.NativeAnthropicType == "content_block_start")
 	}
 	for _, choice := range event.Chunk.Choices {
-		if choice.Delta.Content != "" || choice.Delta.ReasoningContent != "" || len(choice.Delta.ToolCalls) > 0 {
+		if choice.Delta.Content != "" || choice.Delta.ReasoningContent != "" || len(choice.Delta.ToolCalls) > 0 || len(choice.Delta.Extra["media"]) > 0 {
 			return true
 		}
 	}

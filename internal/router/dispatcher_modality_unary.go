@@ -67,7 +67,16 @@ func (d *Dispatcher) dispatchEmbeddingOnce(ctx context.Context, req *model.Embed
 			d.circuitBreaker.AbortCanary(ch.Name)
 			continue
 		}
-		callCtx, cancelCall := channelCallContext(ctx, ch)
+		callCtx, cancelCall, admissionErr := d.beginChannelCall(ctx, ch, req.Model)
+		if admissionErr != nil {
+			d.circuitBreaker.AbortCanary(ch.Name)
+			if ctx.Err() != nil {
+				return nil, admissionDispatchError(ctx, req.Model, attempted, admissionErr)
+			}
+			lastErr = admissionErr
+			skipped = append(skipped, ch.Name)
+			continue
+		}
 		resp, err = embedProv.Embed(callCtx, req, ch)
 		cancelCall()
 
@@ -85,6 +94,7 @@ func (d *Dispatcher) dispatchEmbeddingOnce(ctx context.Context, req *model.Embed
 				return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
 			}
 			lastErr = err
+			d.observeUpstreamError(ctx, ch, req.Model, err)
 			// 404 is node-specific: the next candidate channel may host the model
 			// (B-03). Only a deterministic payload error ends the fan-out.
 			if provider.IsModelNotFound(err) {
@@ -109,6 +119,7 @@ func (d *Dispatcher) dispatchEmbeddingOnce(ctx context.Context, req *model.Embed
 		if resp.Usage.PromptTokens > 0 {
 			promptTokens = resp.Usage.PromptTokens
 		}
+		d.rememberSessionChannel(ctx, req.Model, ch.Name)
 		resp.Channel = d.recordChannelSuccess(ctx, attempted, ch.Name, time.Since(start), promptTokens, 0)
 		return resp, nil
 	}
@@ -166,7 +177,16 @@ func (d *Dispatcher) dispatchRerankOnce(ctx context.Context, req *model.RerankRe
 			continue
 		}
 
-		callCtx, cancelCall := channelCallContext(ctx, ch)
+		callCtx, cancelCall, admissionErr := d.beginChannelCall(ctx, ch, req.Model)
+		if admissionErr != nil {
+			d.circuitBreaker.AbortCanary(ch.Name)
+			if ctx.Err() != nil {
+				return nil, admissionDispatchError(ctx, req.Model, attempted, admissionErr)
+			}
+			lastErr = admissionErr
+			skipped = append(skipped, ch.Name)
+			continue
+		}
 		resp, err := rerankProv.Rerank(callCtx, req, ch)
 		cancelCall()
 		if err != nil {
@@ -183,6 +203,7 @@ func (d *Dispatcher) dispatchRerankOnce(ctx context.Context, req *model.RerankRe
 				return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
 			}
 			lastErr = err
+			d.observeUpstreamError(ctx, ch, req.Model, err)
 			// 404 is node-specific: the next candidate channel may host the model
 			// (B-03). Only a deterministic payload error ends the fan-out.
 			if provider.IsModelNotFound(err) {
@@ -207,6 +228,7 @@ func (d *Dispatcher) dispatchRerankOnce(ctx context.Context, req *model.RerankRe
 		if resp.Usage.TotalTokens > 0 {
 			totalTokens = resp.Usage.TotalTokens
 		}
+		d.rememberSessionChannel(ctx, req.Model, ch.Name)
 		resp.Channel = d.recordChannelSuccess(ctx, attempted, ch.Name, time.Since(start), totalTokens, 0)
 		return resp, nil
 	}

@@ -128,7 +128,6 @@ func (h *Handler) HandleV1Info(c *gin.Context) {
 		"protocols": []string{
 			"OpenAI Chat Completions (/v1/chat/completions)",
 			"OpenAI Responses API (/v1/responses)",
-			"OpenAI Text Completions (/v1/completions)",
 			"OpenAI Models Registry (/v1/models)",
 			"OpenAI Embeddings (/v1/embeddings)",
 			"OpenAI Moderations (/v1/moderations)",
@@ -145,7 +144,6 @@ func (h *Handler) HandleV1Info(c *gin.Context) {
 		},
 		"endpoints": gin.H{
 			"chat_completions":     "/v1/chat/completions",
-			"completions":          "/v1/completions",
 			"responses":            "/v1/responses",
 			"models":               "/v1/models",
 			"embeddings":           "/v1/embeddings",

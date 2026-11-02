@@ -38,11 +38,13 @@ channels:
       "my-corp/llama3": "meta-llama/Llama-3.1-8B-Instruct"
     protocols:
       - "openai_chat"
-      - "openai_text"
       - "images"
     priority: 1
     weight: 10
     timeout_seconds: 60
+    max_concurrency: 0          # Per replica, shared by channels using the same endpoint + API key; 0 = unlimited
+    queue_limit: 0              # Bounded FIFO queue; 0 = immediately try the next channel
+    queue_wait_seconds: 0       # With a nonzero queue, 0 uses the 5-second default
 
   - name: "google-gemini-official"
     type: "gemini"
@@ -135,6 +137,8 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `GATEWAY_BREAKER_ENABLED` | `true` | Tri-state circuit breaker. `false` = advisory mode (records state, never rejects traffic) — recommended for single-channel deployments |
 | `GATEWAY_BREAKER_FAILURES` | `3` | Consecutive channel failures before the breaker opens. HTTP 429 never counts as a channel failure |
 | `GATEWAY_BREAKER_COOLDOWN_SEC` | `30` | Open-state cooldown before half-open probing |
+| `GATEWAY_SESSION_AFFINITY_TTL_SEC` | `1800` | Pin a session to the channel that successfully answered. Local and Redis pins expire after this TTL (1–86400 seconds); failures only remove a matching pin |
+| `GATEWAY_UPSTREAM_COOLDOWN_SEC` | `1` | Default cooldown after an upstream 429 without retry metadata. Explicit Retry-After/reset headers take precedence. `0` disables only the default wait. Cooldown is per endpoint + credential + upstream model unless the upstream declares an account-wide limit |
 | `GATEWAY_DRAIN_ABORTED_UPSTREAM` | `true` | Keep consuming the upstream after the client disconnects and bill the upstream-reported usage; `false` = cancel immediately and bill an estimate |
 | `GATEWAY_DRAIN_TIMEOUT_SEC` | `120` | Maximum time a single aborted request may be drained |
 | `GATEWAY_REQUEST_BUDGET_SEC` | `300` | Total budget for a non-streaming dispatch across channel attempts and cross-model fallback; `0` disables it. Streaming requests keep the first-token timeout instead |

@@ -34,12 +34,11 @@
   - 彻底免去用户手动配置模型列表与协议的繁琐操作。
 
 ### 2. 🔄 全双工协议自动转译 (Bidirectional Protocol Translation)
-- **纯补全下游自动适应**：当下游模型仅支持传统的 `/v1/completions` 接口时，网关透明地将入站的 Chat 请求与 SSE 流转译为补全 Prompt，并将响应包装回标准 Chat Choices 与 SSE Deltas。
 - **Claude Messages 接入**：原生 Anthropic 渠道保留签名思考块、缓存标记和 SSE 事件；普通文本与工具调用可转译到兼容渠道。需要原生语义的请求只路由到 Anthropic 渠道。
 - **Gemini 原生格式转译**：官方 Gemini Developer API 专用协议透明转译，支持多模态多轮会话。
 
 ### 3. 🎨 文本/图像/语音/视频全模态支持 (Unified Multimodal Pipeline)
-- **对话、智能体响应与补全**：`/v1/chat/completions`, `/v1/responses` (OpenAI 官方新代智能体协议), `/v1/completions`, `/v1/messages`
+- **对话与智能体响应**：`/v1/chat/completions`, `/v1/responses` (OpenAI 官方新代智能体协议), `/v1/messages`
 - **AI 图像生成**：`/v1/images/generations`（DALL-E 3、Flux、SD3）
 - **语音合成 TTS**：`/v1/audio/speech`（响应体流式转发）
 - **语音识别 STT**：`/v1/audio/transcriptions`（Whisper Multipart 流式转录）
@@ -85,7 +84,7 @@ flowchart TD
     LB --> NodeN
 
     subgraph DataPlane["1. 数据面内核 (Data Plane - 极致性能与低延迟)"]
-        Adapter["Any-to-Any 协议矩阵 (Chat / Text / Messages / 多模态)"]
+        Adapter["Any-to-Any 协议矩阵 (Chat / Responses / Messages / 多模态)"]
         Dispatcher["统一分发管道与协议路由 (DispatchHTTP / DispatchStream)"]
         Breaker["三态熔断器 (Tri-State Circuit Breaker)"]
         Fallback["首字前无感容灾窗 (Safe Fallback Window)"]
@@ -181,7 +180,7 @@ make test
 - 首字前无感容灾窗口（非流式与流式）
 - Google Gemini 协议与 Anthropic Claude 双向流式转换
 - 多模态生图、TTS、Whisper STT 与视频生成管道
-- 纯文本补全下游全双工协议转译与智能探测 (`TestAutoProbe_OpenAIAndGPUStack`)
+- 智能探测 (`TestAutoProbe_OpenAIAndGPUStack`)
 
 ### 2. 服务启动后的集群端到端测试 (Cluster End-to-End Tests)
 在服务或 Docker Compose 集群启动后，一键对真实运行环境进行全链路验收：

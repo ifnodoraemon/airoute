@@ -99,6 +99,9 @@ func (r *ChatCompletionRequest) EstimatedPromptTokens() int {
 		return 0
 	}
 	tokens := 0
+	if r.Native != nil {
+		tokens = max(0, r.Native.PriorTokens)
+	}
 	for i := range r.Messages {
 		tokens += EstimateContentTokens(r.Messages[i].Content)
 	}

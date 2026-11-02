@@ -19,7 +19,6 @@ If no API keys are configured, the gateway operates in open bypass mode (no auth
 ### 2.1 Chat Completions
 - **Endpoint**: `POST /v1/chat/completions`
 - **Supported Providers**: All (OpenAI, DeepSeek, vLLM, SGLang, GPUStack, Sub2API, Anthropic Claude, Google Gemini).
-- **Protocol Adaptation**: If downstream only supports text completion (`/v1/completions`), Airoute automatically formats messages into a prompt and translates the response back.
 
 #### Request Example:
 ```bash
@@ -37,23 +36,7 @@ curl -X POST http://localhost:8080/v1/chat/completions \
   }'
 ```
 
-### 2.2 Legacy Text Completions
-- **Endpoint**: `POST /v1/completions`
-- **Supported Providers**: All. If downstream only supports chat completions, the request is automatically wrapped into a user chat message.
-
-#### Request Example:
-```bash
-curl -X POST http://localhost:8080/v1/completions \
-  -H "Authorization: Bearer sk-airoute-xxxx" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "text-davinci-003",
-    "prompt": "Translate the following English text to French: Hello world",
-    "max_tokens": 128
-  }'
-```
-
-### 2.3 Anthropic Claude Messages API
+### 2.2 Anthropic Claude Messages API
 - **Endpoint**: `POST /v1/messages`
 - **Supported Clients**: Native Anthropic Python/TypeScript SDK, Claude Code, Cursor, Cline.
 - **Full-Duplex Translation**: Clients using Anthropic format can query upstream OpenAI or GPUStack clusters; request and SSE stream responses are bidirectionally converted with zero latency.
@@ -73,7 +56,7 @@ curl -X POST http://localhost:8080/v1/messages \
   }'
 ```
 
-### 2.4 Anthropic Claude Token Counting
+### 2.3 Anthropic Claude Token Counting
 - **Endpoint**: `POST /v1/messages/count_tokens`
 - **Supported Clients**: Anthropic SDKs (e.g. `client.messages.count_tokens(...)`), Agent token budget estimators.
 - **Accuracy**: Delegates counting to a native Anthropic upstream, including tools and image/document blocks. Returns `501` when no native Anthropic channel is configured; it does not claim a character-based estimate is an exact token count.
@@ -99,15 +82,26 @@ curl -X POST http://localhost:8080/v1/messages/count_tokens \
 }
 ```
 
-### 2.5 Google Gemini Native API
+### 2.4 Google Gemini Native API
 - **Endpoints**:
   - `POST /v1beta/models/:model:generateContent`
   - `POST /v1beta/models/:model:streamGenerateContent`
   - `POST /v1beta/models/:model:countTokens`
+  - `POST /v1beta/models/:model:embedContent` / `:batchEmbedContents`
+  - `POST /v1beta/models/:model:batchGenerateContent` / `:asyncBatchEmbedContent`
+  - Files / cachedContents / batches resource routes under `/v1beta`
+  - Upload: `/upload/v1beta/files` (including resumable sessions); download: `/v1beta/files/:id:download?alt=media`
+  - Interactions: `POST /v1beta/interactions`, `GET/DELETE /v1beta/interactions/:id`, `POST /v1beta/interactions/:id/cancel`
+  - Live WebSocket: `/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent` (also `v1alpha`)
   - `GET /v1beta/models`
   - `GET /v1beta/models/:model`
-- **Supported Clients**: Google GenAI SDK (`@google/genai`, `google-generativeai`), Gemini CLI, Vertex AI compatible tooling.
-- **Protocol Adaptation**: Full-duplex protocol conversion translating Gemini SDK calls into upstream format (Gemini upstream forwarding, or adapted to OpenAI/DeepSeek/Claude models).
+- **Supported Clients**: Current Google GenAI SDKs (`@google/genai`, `google-genai`, `google.golang.org/genai`), Gemini CLI. Configure the SDK Base URL to the gateway and use an Airoute key; Vertex upstream project/authentication is configured on the channel.
+
+Resource management and resumption require authenticated callers. Lists contain only resources created or observed through this gateway by the same owner. IDs, cached content, uploaded files, interaction continuations and Live resumption handles are pinned to the original upstream credential; rotating that credential requires creating new resources. File uploads without an explicit model select an allowed Google channel; use `?model=<alias>` when multiple Google accounts are configured. Set `PUBLIC_URL` to the external HTTPS origin for resumable upload URLs.
+
+Batch and background Interactions are metered by a PostgreSQL-backed worker even if the client stops polling. Result JSONL files are read for upstream usage; missing usage is explicitly marked as estimated. Stored job state and deterministic billing IDs prevent duplicate settlement across replicas. Batch discounts and cache storage fees are not automatically imported from Google: the gateway uses its configured prices.
+
+The model catalog uses per-upstream metadata when available and otherwise conservative model/protocol declarations. Native forwarding retains vendor fields; incompatible cross-protocol features return an error. The console **Gemini Native** tab accepts inline image/audio/video/document inputs, displays native media, and preserves complete signed parts when appending history.
 
 #### Request Example (countTokens):
 ```bash
@@ -262,7 +256,6 @@ curl -X GET http://localhost:8080/v1/videos/tasks/video_task_123 \
 ### 3.6 Vector Embeddings
 - **Endpoint**: `POST /v1/embeddings`
 - **Supported Providers**: OpenAI, GPUStack, vLLM, Ollama, SGLang, Sub2API, Google Gemini.
-- **Protocol Adaptation**: Full native translation for Google Gemini (`:embedContent` and `:batchEmbedContents`), model rewriting, token tracking, and automatic safe fallback across candidate embedding nodes. Supports single string or batch string inputs.
 
 #### Request Example:
 ```bash

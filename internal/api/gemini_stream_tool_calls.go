@@ -1,16 +1,18 @@
 package api
 
 import (
-	"encoding/json"
 	"strings"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/provider"
 )
 
 // geminiStreamToolCall is one tool call being assembled across stream deltas.
 type geminiStreamToolCall struct {
-	name string
-	args strings.Builder
+	id        string
+	signature string
+	name      string
+	args      strings.Builder
 }
 
 // geminiStreamToolCalls assembles OpenAI-style streaming tool_call fragments into
@@ -71,6 +73,12 @@ func (g *geminiStreamToolCalls) add(tc model.ToolCall) {
 	if call.name == "" && tc.Function.Name != "" {
 		call.name = tc.Function.Name
 	}
+	if tc.ID != "" {
+		call.id = tc.ID
+	}
+	if signature := tc.ThoughtSignature(); signature != "" {
+		call.signature = signature
+	}
 	if tc.Function.Arguments != "" {
 		call.args.WriteString(tc.Function.Arguments)
 	}
@@ -103,14 +111,8 @@ func (g *geminiStreamToolCalls) drainFunctionCalls() []geminiFunctionCall {
 		if call == nil {
 			continue
 		}
-		var args map[string]any
-		if raw := strings.TrimSpace(call.args.String()); raw != "" {
-			_ = json.Unmarshal([]byte(raw), &args)
-		}
-		if args == nil {
-			args = map[string]any{}
-		}
-		out = append(out, geminiFunctionCall{Name: call.name, Args: args})
+		args := provider.GeminiFunctionArguments(call.args.String())
+		out = append(out, geminiFunctionCall{ID: call.id, Signature: call.signature, Name: call.name, Args: args})
 	}
 	g.order = nil
 	g.calls = make(map[int]*geminiStreamToolCall)
@@ -120,6 +122,8 @@ func (g *geminiStreamToolCalls) drainFunctionCalls() []geminiFunctionCall {
 
 // geminiFunctionCall is the transport-neutral shape of a Gemini functionCall part.
 type geminiFunctionCall struct {
-	Name string
-	Args map[string]any
+	ID        string
+	Signature string
+	Name      string
+	Args      map[string]any
 }

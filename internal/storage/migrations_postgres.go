@@ -532,6 +532,9 @@ func (db *DB) migratePostgres() error {
 	migrations = append(migrations,
 		Migration{Version: 44, Name: "users_username_lower_unique", Up: createUsersUsernameUniqueLowerIndex},
 		Migration{Version: 45, Name: "api_keys_admin_disabled", Up: addAPIKeyAdminDisabledColumn},
+		Migration{Version: 46, Name: "channel_capacity", Up: addChannelCapacity},
+		Migration{Version: 47, Name: "retire_text_completions", Up: retireTextCompletions},
+		Migration{Version: 48, Name: "native_states", Up: createNativeStates},
 	)
 	return db.runMigrations(migrations)
 }

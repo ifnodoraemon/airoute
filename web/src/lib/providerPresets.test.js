@@ -10,7 +10,7 @@ describe('providerPresets', () => {
   it('offers a preset for every provider the form lists', () => {
     const expected = [
       'gpustack', 'deepseek', 'zhipu', 'doubao', 'moonshot', 'aliyun', 'baidu', 'tencent',
-      'openai', 'anthropic', 'gemini', 'ollama', 'vllm', 'sub2api', 'custom',
+      'openai', 'anthropic', 'gemini', 'vertex', 'ollama', 'vllm', 'sub2api', 'custom',
     ];
     expected.forEach((key) => expect(PROVIDER_PRESETS[key]).toBeTruthy());
   });

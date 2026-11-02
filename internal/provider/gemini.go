@@ -14,7 +14,7 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/model"
 )
 
-// GeminiProvider handles Google's specialized Gemini Developer API & Vertex AI protocols.
+// GeminiProvider handles the Gemini Developer API and compatible REST endpoints.
 type GeminiProvider struct {
 	client *http.Client
 }
@@ -39,6 +39,17 @@ func (p *GeminiProvider) Type() model.ProviderType {
 // semantics: a bare origin becomes /v1beta, a root that already carries /v1beta
 // is not doubled, and custom prefixes are preserved.
 func buildGeminiURL(baseURL, modelName string, stream bool) string {
+	if strings.Contains(baseURL, "/publishers/google") {
+		action := "generateContent"
+		if stream {
+			action = "streamGenerateContent"
+		}
+		target := GeminiActionURL(baseURL, modelName, action)
+		if stream {
+			target += "?alt=sse"
+		}
+		return target
+	}
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = "https://generativelanguage.googleapis.com"
 	}
@@ -53,14 +64,28 @@ func buildGeminiURL(baseURL, modelName string, stream bool) string {
 
 // ChatComplete executes a non-streaming Gemini call and converts to OpenAI format.
 func (p *GeminiProvider) ChatComplete(ctx context.Context, req *model.ChatCompletionRequest, channel *model.ChannelConfig) (*model.ChatCompletionResponse, error) {
+	if response, done, err := maybeNativeUnary(ctx, p.client, req, channel, model.NativeGemini); done {
+		return response, err
+	}
+	var historyErr error
+	req, historyErr = restoreGeminiHistory(ctx, req, channel)
+	if historyErr != nil {
+		return nil, historyErr
+	}
+	if err := validateGeminiChatOptions(req); err != nil {
+		return nil, err
+	}
 	geminiReq := convertOpenAIToGemini(req)
+	targetModel := channel.GetUpstreamModel(req.Model)
+	if err := applyGeminiThinking(geminiReq.GenerationConfig, req, targetModel); err != nil {
+		return nil, err
+	}
 	payloadBytes, err := json.Marshal(geminiReq)
 	if err != nil {
 		return nil, fmt.Errorf("marshal gemini request error: %w", err)
 	}
 
-	targetModel := channel.GetUpstreamModel(req.Model)
-	targetURL := buildGeminiURL(channel.BaseURL, targetModel, false)
+	targetURL := buildGeminiURL(GeminiBaseURL(channel), targetModel, false)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(payloadBytes))
 	if err != nil {
@@ -68,7 +93,9 @@ func (p *GeminiProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-goog-api-key", channel.APIKey)
+	if err := ConfigureGoogleRequest(ctx, httpReq, channel); err != nil {
+		return nil, err
+	}
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
@@ -82,7 +109,7 @@ func (p *GeminiProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
+		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes, resp.Header)
 	}
 
 	var geminiResp GeminiResponse
@@ -93,37 +120,19 @@ func (p *GeminiProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 	// returning an empty completion for it hid the failure from the client, the
 	// audit row and the circuit breaker.
 	if geminiResp.Error != nil {
-		return nil, NewUpstreamError(channel.Name, http.StatusBadGateway, bodyBytes)
+		return nil, NewUpstreamError(channel.Name, streamErrorStatus(geminiResp.Error.Code, geminiResp.Error.Status), bodyBytes, resp.Header)
 	}
 
-	replyText := ""
-	finishReason := "stop"
-	var toolCalls []model.ToolCall
-	if len(geminiResp.Candidates) > 0 {
-		cand := geminiResp.Candidates[0]
-		var sb strings.Builder
-		for _, part := range cand.Content.Parts {
-			if part.Text != "" {
-				sb.WriteString(part.Text)
-			}
-			if part.FunctionCall != nil {
-				argsBytes, _ := json.Marshal(part.FunctionCall.Args)
-				toolCalls = append(toolCalls, model.ToolCall{
-					ID:   fmt.Sprintf("call_%d_%s", time.Now().UnixMicro(), part.FunctionCall.Name),
-					Type: "function",
-					Function: model.FunctionCall{
-						Name:      part.FunctionCall.Name,
-						Arguments: string(argsBytes),
-					},
-				})
+	choices := geminiResponseChoices(&geminiResp)
+	for i := range choices {
+		if i < len(geminiResp.Candidates) {
+			if err := preserveGeminiMessage(ctx, channel, req.Model, geminiResp.Candidates[i].Content.Parts, &choices[i].Message); err != nil {
+				return nil, err
 			}
 		}
-		replyText = sb.String()
-		if len(toolCalls) > 0 {
-			finishReason = "tool_calls"
-		} else if cand.FinishReason == "MAX_TOKENS" {
-			finishReason = "length"
-		}
+	}
+	if len(choices) == 0 {
+		return nil, fmt.Errorf("Gemini response contains neither candidates nor prompt feedback")
 	}
 
 	var usage *model.Usage
@@ -136,17 +145,7 @@ func (p *GeminiProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 		Object:  "chat.completion",
 		Created: time.Now().Unix(),
 		Model:   req.Model,
-		Choices: []model.ChatCompletionChoice{
-			{
-				Index: 0,
-				Message: model.ChatMessage{
-					Role:      "assistant",
-					Content:   replyText,
-					ToolCalls: toolCalls,
-				},
-				FinishReason: &finishReason,
-			},
-		},
-		Usage: usage,
+		Choices: choices,
+		Usage:   usage,
 	}, nil
 }

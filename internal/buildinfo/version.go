@@ -1,7 +1,7 @@
 package buildinfo
 
 // BaseVersion is the next planned release. Keep frontend package metadata in sync.
-const BaseVersion = "1.1.0"
+const BaseVersion = "2.0.0"
 
 // Builds without linker metadata are development builds, never release artifacts.
 const DefaultVersion = BaseVersion + "-dev"

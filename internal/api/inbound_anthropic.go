@@ -44,7 +44,8 @@ func ConvertAnthropicToCanonical(req *AnthropicInboundRequest) *model.ChatComple
 func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 	CaptureRequestSnapshot(c)
 	var req AnthropicInboundRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	native, err := bindNativeJSON(c, &req, model.NativeMessages)
+	if err != nil {
 		if isRequestBodyTooLarge(err) {
 			RespondAnthropicError(c, http.StatusRequestEntityTooLarge,
 				"Request body is too large for this endpoint. Reduce it or configure GATEWAY_MAX_BODY_BYTES.", "invalid_request_error")
@@ -82,6 +83,7 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 
 	start := time.Now()
 	canonicalReq := ConvertAnthropicToCanonical(&req)
+	canonicalReq.Native = native
 	canonicalReq.AnthropicBeta = c.GetHeader("anthropic-beta")
 
 	sessionID := resolveSessionID(c, canonicalReq.Model, canonicalReq.Messages, "")
@@ -108,6 +110,18 @@ func (h *Handler) handleAnthropicUnary(c *gin.Context, reqCtx context.Context, r
 		statusCode, errType, _, _ := resolveUpstreamFailureStatus(err)
 		recordFailedRequestWithError(c, sessionID, canonicalReq.Model, time.Since(start), statusCode, err)
 		RespondAnthropicError(c, statusCode, sanitizeErrorMessage(err), errType)
+		return
+	}
+	if len(resp.NativeResponse) > 0 {
+		input, output, cached, source := resolveChatUsage(canonicalReq, resp)
+		writes := 0
+		if resp.Usage != nil {
+			writes = resp.Usage.GetCacheCreationTokens()
+		}
+		RecordUsage(c, AuditRecordParams{SessionID: sessionID, ChatID: resp.ID, Channel: resp.Channel, Model: req.Model,
+			PromptTokens: input, CompletionTokens: output, CachedTokens: cached, CacheCreationTokens: writes,
+			Duration: time.Since(start), StatusCode: http.StatusOK, UsageSource: source})
+		c.Data(http.StatusOK, "application/json", resp.NativeResponse)
 		return
 	}
 	if len(resp.NativeAnthropicResponse) > 0 {

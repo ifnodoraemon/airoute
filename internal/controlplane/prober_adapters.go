@@ -321,7 +321,7 @@ func (p *DownstreamProber) probeGPUStack(ctx context.Context, baseURL, apiKey st
 						SuggestedName:    "gpustack-cluster",
 						SuggestedBaseURL: suggestedBaseURL,
 						Models:           []string{},
-						Protocols:        []string{"openai_chat", "openai_response", "openai_text", "embeddings", "rerank", "images"},
+						Protocols:        []string{"openai_chat", "openai_response", "embeddings", "rerank", "images"},
 						LatencyMs:        time.Since(start).Milliseconds(),
 						Message:          fmt.Sprintf("已成功识别 GPUStack 企业集群 (版本 %s)，但提供的 API Key 鉴权失败 (401 Unauthorized)，请检查 API Key 后重试。", versionStr),
 					}, nil
@@ -341,7 +341,7 @@ func (p *DownstreamProber) probeGPUStack(ctx context.Context, baseURL, apiKey st
 		SuggestedName:    "gpustack-cluster",
 		SuggestedBaseURL: suggestedBaseURL,
 		Models:           []string{},
-		Protocols:        []string{"openai_chat", "openai_response", "openai_text", "embeddings", "rerank", "images"},
+		Protocols:        []string{"openai_chat", "openai_response", "embeddings", "rerank", "images"},
 		LatencyMs:        dur,
 		Message:          fmt.Sprintf("已成功识别并连通 GPUStack 企业算力集群 (%s响应延迟 %dms)！检测到下游开启了访问密钥保护 (401 Unauthorized)，请在上方填入 API Key 后点击【获取模型列表】以拉取部署的模型。", verMsg, dur),
 	}, nil

@@ -66,13 +66,16 @@ func TestPostgresMigrationsAndRepositoryRoundTrip(t *testing.T) {
 	// Channel round trip (BIGSERIAL id, JSON text columns).
 	model := "pg-it-model-" + suffix
 	ch := &ChannelRecord{
-		Name:     "pg-it-chan-" + suffix,
-		Type:     "openai",
-		BaseURL:  "http://pg.invalid",
-		APIKey:   "k",
-		Models:   []string{model},
-		Priority: 1,
-		Weight:   10,
+		Name:             "pg-it-chan-" + suffix,
+		Type:             "openai",
+		BaseURL:          "http://pg.invalid",
+		APIKey:           "k",
+		Models:           []string{model},
+		Priority:         1,
+		Weight:           10,
+		MaxConcurrency:   3,
+		QueueLimit:       7,
+		QueueWaitSeconds: 12,
 	}
 	if err := repo.CreateChannel(ch); err != nil {
 		t.Fatalf("CreateChannel on postgres: %v", err)
@@ -86,6 +89,9 @@ func TestPostgresMigrationsAndRepositoryRoundTrip(t *testing.T) {
 	}
 	if gotCh.Name != ch.Name {
 		t.Fatalf("channel name round trip = %q, want %q", gotCh.Name, ch.Name)
+	}
+	if gotCh.MaxConcurrency != 3 || gotCh.QueueLimit != 7 || gotCh.QueueWaitSeconds != 12 {
+		t.Fatalf("channel capacity round trip lost fields: %+v", gotCh)
 	}
 	if len(gotCh.Models) != 1 || gotCh.Models[0] != model {
 		t.Fatalf("channel models round trip = %v, want [%s]", gotCh.Models, model)

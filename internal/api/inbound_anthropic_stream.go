@@ -37,6 +37,12 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 		RespondAnthropicError(c, statusCode, sanitizeErrorMessage(err), errType)
 		return
 	}
+	var nativeHandled bool
+	streamChan, nativeHandled = h.useNativeStream(c, reqCtx, canonicalReq, streamChan, sessionID, start)
+	if nativeHandled {
+		return
+	}
+
 	firstEvent, open := <-streamChan
 	if !open || firstEvent == nil {
 		streamErr := errors.New("upstream stream closed before response")

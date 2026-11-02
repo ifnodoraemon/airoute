@@ -333,6 +333,9 @@ func runServer(args []string) {
 
 	// Setup HTTP Engine (Data Plane + Control Plane Admin API + Embedded Web UI)
 	engine := api.SetupRouter(dispatcher, adminHandler)
+	jobsCtx, stopJobs := context.WithCancel(context.Background())
+	defer stopJobs()
+	api.StartNativeJobReconciler(jobsCtx, dispatcher)
 
 	// Only configured proxy hops may declare the client address. Gin trusts every
 	// peer by default, so an unset GATEWAY_TRUSTED_PROXIES would let any caller
@@ -496,16 +499,19 @@ func seedChannelsFromConfig(repo *storage.Repository, cfg *config.Config) error 
 		}
 		seen[name] = struct{}{}
 		if err := repo.CreateChannel(&storage.ChannelRecord{
-			Name:           ch.Name,
-			Type:           ch.Type,
-			BaseURL:        ch.BaseURL,
-			APIKey:         ch.APIKey,
-			Models:         ch.Models,
-			ModelMapping:   ch.ModelMapping,
-			Protocols:      ch.Protocols,
-			Priority:       ch.Priority,
-			Weight:         ch.Weight,
-			TimeoutSeconds: ch.TimeoutSeconds,
+			Name:             ch.Name,
+			Type:             ch.Type,
+			BaseURL:          ch.BaseURL,
+			APIKey:           ch.APIKey,
+			Models:           ch.Models,
+			ModelMapping:     ch.ModelMapping,
+			Protocols:        ch.Protocols,
+			Priority:         ch.Priority,
+			Weight:           ch.Weight,
+			TimeoutSeconds:   ch.TimeoutSeconds,
+			MaxConcurrency:   ch.MaxConcurrency,
+			QueueLimit:       ch.QueueLimit,
+			QueueWaitSeconds: ch.QueueWaitSeconds,
 		}); err != nil {
 			return fmt.Errorf("cannot create channel %q: %w", ch.Name, err)
 		}

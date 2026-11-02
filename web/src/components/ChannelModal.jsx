@@ -3,6 +3,7 @@ import { X, Sparkles, RefreshCw, Search, Eye, EyeOff, Loader2 } from 'lucide-rea
 import ModelChipManager from './ModelChipManager';
 import ModelMappingEditor from './ModelMappingEditor';
 import CapabilitiesSelector from './CapabilitiesSelector';
+import ChannelCapacityFields from './ChannelCapacityFields';
 import useModalA11y from '../hooks/useModalA11y';
 import useFormDirty from '../hooks/useFormDirty';
 import useUnsavedGuard from '../hooks/useUnsavedGuard';
@@ -123,6 +124,7 @@ export default function ChannelModal({
                   { key: 'openai', label: 'OpenAI', badge: isZh ? '全协议' : 'Full Suite' },
                   { key: 'anthropic', label: 'Claude', badge: 'Anthropic' },
                   { key: 'gemini', label: 'Google Gemini', badge: isZh ? '多模态' : 'Multimodal' },
+                  { key: 'vertex', label: 'Google Vertex AI', badge: 'ADC' },
                   { key: 'ollama', label: 'Ollama', badge: isZh ? '本地开源' : 'Local' },
                   { key: 'vllm', label: 'vLLM', badge: isZh ? '自建集群' : 'vLLM' },
                 ].map(p => (
@@ -171,6 +173,7 @@ export default function ChannelModal({
                     if (lower.includes('deepseek')) updates.name = 'deepseek-provider';
                     else if (lower.includes('anthropic')) updates.name = 'claude-provider';
                     else if (lower.includes('openai')) updates.name = 'openai-provider';
+                    else if (lower.includes('aiplatform.googleapis.com')) updates.name = 'vertex-provider';
                     else if (lower.includes('gemini') || lower.includes('googleapis')) updates.name = 'gemini-provider';
                     else if (lower.includes('ollama') || lower.includes('11434')) updates.name = 'ollama-local';
                     else if (lower.includes('gpustack')) updates.name = 'gpustack-cluster';
@@ -183,6 +186,7 @@ export default function ChannelModal({
                   }
                   if (lower.includes('anthropic')) updates.type = 'anthropic';
                   else if (lower.includes('deepseek')) updates.type = 'deepseek';
+                  else if (lower.includes('aiplatform.googleapis.com')) updates.type = 'vertex';
                   else if (lower.includes('gemini') || lower.includes('googleapis')) updates.type = 'gemini';
                   else if (lower.includes('ollama') || lower.includes('11434')) updates.type = 'ollama';
                   else if (lower.includes('gpustack')) updates.type = 'gpustack';
@@ -277,6 +281,7 @@ export default function ChannelModal({
                   <option value="openai">{isZh ? 'OpenAI (及所有兼容服务商)' : 'OpenAI (and compatible)'}</option>
                   <option value="anthropic">Claude / Anthropic</option>
                   <option value="gemini">Gemini</option>
+                  <option value="vertex">Google Vertex AI</option>
                   <option value="vllm">vLLM</option>
                   <option value="sglang">SGLang</option>
                   <option value="ollama">Ollama</option>
@@ -327,6 +332,7 @@ export default function ChannelModal({
                   />
                 </div>
               </div>
+              <ChannelCapacityFields channel={newChannel} onChange={setNewChannel} isZh={isZh} />
             </div>
           </details>
         </div>

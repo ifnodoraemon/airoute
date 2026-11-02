@@ -58,13 +58,13 @@ func TestNativeAnthropicRequestExcludesOtherProviders(t *testing.T) {
 	}
 }
 
-func TestNativeAnthropicRequestFallsBackWhenNoNativeProvider(t *testing.T) {
+func TestNativeAnthropicRequestRejectsWhenNoNativeProvider(t *testing.T) {
 	d := NewDispatcher([]model.ChannelConfig{
 		{Name: "gpustack", Type: model.ProviderGPUStack, Status: "active", Models: []string{"deepseek-v4.1-flash"}},
 	})
 	channels := d.candidateChannelsForRequest(context.Background(), &model.ChatCompletionRequest{Model: "deepseek-v4.1-flash", AnthropicNativeOnly: true}, "chat")
-	if len(channels) != 1 || channels[0].Name != "gpustack" {
-		t.Fatalf("expected fallback to gpustack when no native anthropic channel exists, got: %+v", channels)
+	if len(channels) != 0 {
+		t.Fatalf("native-only request must not be translated when no native channel exists: %+v", channels)
 	}
 }
 

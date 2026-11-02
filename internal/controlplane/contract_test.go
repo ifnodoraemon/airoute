@@ -128,7 +128,7 @@ func TestAdminRequestShapesAreStable(t *testing.T) {
 			got:  jsonFieldNames(reflect.TypeOf(ChannelRequest{})),
 			want: []string{
 				"name", "type", "base_url", "api_key", "models", "model_mapping",
-				"protocols", "priority", "weight", "timeout_seconds", "status",
+				"protocols", "priority", "weight", "timeout_seconds", "max_concurrency", "queue_limit", "queue_wait_seconds", "status",
 			},
 		},
 		{
@@ -409,7 +409,7 @@ func TestAdminResponseShapesAreStable(t *testing.T) {
 			got:  jsonFieldNames(reflect.TypeOf(storage.ChannelRecord{})),
 			want: []string{
 				"id", "name", "type", "base_url", "api_key", "models", "model_mapping",
-				"protocols", "priority", "weight", "timeout_seconds", "status",
+				"protocols", "priority", "weight", "timeout_seconds", "max_concurrency", "queue_limit", "queue_wait_seconds", "status",
 				"breaker_status", "created_at", "updated_at",
 			},
 		},

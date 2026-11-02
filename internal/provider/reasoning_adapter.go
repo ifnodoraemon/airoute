@@ -242,7 +242,7 @@ type streamChunkSender func(*model.ChatCompletionChunk) bool
 // split to every chunk and flushes a trailing partial tag at EOF.
 //
 // Both OpenAI-compatible streaming paths use it (chat completions and the legacy
-// text-completion adapter). Keeping one implementation is what makes the unary
+// streaming adapter). Keeping one implementation is what makes the unary
 // and streaming rules identical: the text path used to emit its raw text without
 // any reasoning split, so the same upstream reported thinking tokens inline when
 // streamed and as reasoning_content when not (B-12).

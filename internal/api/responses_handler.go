@@ -33,7 +33,8 @@ const (
 // HandleResponses handles OpenAI Responses API POST /v1/responses.
 func (h *Handler) HandleResponses(c *gin.Context) {
 	var req model.ResponseRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	native, err := bindNativeJSON(c, &req, model.NativeResponses)
+	if err != nil {
 		if respondRequestTooLarge(c, err) {
 			return
 		}
@@ -77,15 +78,22 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 	// plain chat turn.
 	chatReq, err := responsesChatRequest(req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"message": err.Error(),
-				"type":    "invalid_request_error",
-				"code":    "invalid_input",
-			},
-		})
-		return
+		if req.Input != nil || req.PreviousResponseID != "" {
+			chatReq = &model.ChatCompletionRequest{Model: req.Model, Stream: req.Stream, Protocol: responsesProtocol}
+			native.TranslationError = err
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": gin.H{
+					"message": err.Error(),
+					"type":    "invalid_request_error",
+					"code":    "invalid_input",
+				},
+			})
+			return
+		}
 	}
+	chatReq.Native = native
+	responsesTranslation(native, req, chatReq)
 
 	// A follow-up that references a previous turn must actually replay that
 	// conversation. Silently ignoring previous_response_id made every such request
@@ -96,6 +104,13 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 			return
 		}
 		chatReq.Messages = model.MergeResponseConversation(chatReq.Messages, previousMessages)
+		if value, ok := c.Get(contextNativeResponse); ok {
+			marker := value.(nativeContinuation)
+			native.PinnedIdentity, native.PriorTokens = marker.Identity, marker.Tokens
+			native.TranslationError = fmt.Errorf("previous_response_id belongs to a native Responses upstream")
+		} else {
+			native.TranslateOnly = true
+		}
 	}
 
 	telemetry.GlobalMetrics.IncActiveConns()
@@ -159,6 +174,11 @@ func (h *Handler) handleResponsesNonStreaming(
 		UsageSource:      usageSource,
 	})
 
+	if len(resp.NativeResponse) > 0 {
+		persistNativeResponseContext(c, resp.ID, resp.NativeIdentity, pTokens+cTokens)
+		c.Data(http.StatusOK, "application/json", resp.NativeResponse)
+		return
+	}
 	result := model.ConvertChatResponseToResponseResult(resp)
 	// Persist before the client sees the response id: a follow-up that uses
 	// previous_response_id can arrive immediately, and it must already resolve.
@@ -191,6 +211,11 @@ func restoreResponseContext(c *gin.Context, previousID string) ([]model.ChatMess
 	}
 	var messages []model.ChatMessage
 	if err := json.Unmarshal(stored.Messages, &messages); err != nil {
+		var marker nativeContinuation
+		if json.Unmarshal(stored.Messages, &marker) == nil && marker.Native {
+			c.Set(contextNativeResponse, marker)
+			return nil, true
+		}
 		telemetry.WarnLogger(telemetry.ScopedLogger("system"), "responses-context-decode-failed", time.Minute,
 			"stored Responses previous context is not decodable", "response_id", previousID, "error", err.Error())
 		respondPreviousResponseNotFound(c, previousID)

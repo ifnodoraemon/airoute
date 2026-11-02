@@ -68,17 +68,20 @@ func (e *ValidationError) Error() string { return e.Message }
 // storage.ChannelRecord is the full row: its zero values are indistinguishable
 // from an omitted field.
 type channelPatch struct {
-	Name           string
-	Type           model.ProviderType
-	BaseURL        string
-	APIKey         string
-	Models         []string
-	ModelMapping   map[string]string
-	Protocols      []string
-	Priority       *int
-	Weight         *int
-	TimeoutSeconds *int
-	Status         string
+	Name             string
+	Type             model.ProviderType
+	BaseURL          string
+	APIKey           string
+	Models           []string
+	ModelMapping     map[string]string
+	Protocols        []string
+	Priority         *int
+	Weight           *int
+	TimeoutSeconds   *int
+	MaxConcurrency   *int
+	QueueLimit       *int
+	QueueWaitSeconds *int
+	Status           string
 }
 
 // ChannelService owns the channel business rules: which fields a channel cannot
@@ -145,7 +148,7 @@ func (s *ChannelService) Update(ctx context.Context, id int64, patch *channelPat
 			return err
 		}
 		current.TimeoutSeconds = timeout
-		return nil
+		return validateChannelCapacity(current)
 	})
 	if err != nil {
 		// Only a genuinely missing row becomes a 404. A read or write failure
@@ -221,7 +224,7 @@ func validateNewChannel(rec *storage.ChannelRecord) error {
 		return err
 	}
 	rec.TimeoutSeconds = timeout
-	return nil
+	return validateChannelCapacity(rec)
 }
 
 // normalizeChannelTimeout turns the single operator-facing knob into a validated
@@ -316,6 +319,15 @@ func mergeChannelUpdate(existing *storage.ChannelRecord, patch *channelPatch) er
 	}
 	if patch.TimeoutSeconds != nil {
 		existing.TimeoutSeconds = *patch.TimeoutSeconds
+	}
+	if patch.MaxConcurrency != nil {
+		existing.MaxConcurrency = *patch.MaxConcurrency
+	}
+	if patch.QueueLimit != nil {
+		existing.QueueLimit = *patch.QueueLimit
+	}
+	if patch.QueueWaitSeconds != nil {
+		existing.QueueWaitSeconds = *patch.QueueWaitSeconds
 	}
 	if patch.Status != "" {
 		// An unknown status is rejected rather than stored: the data plane treats

@@ -23,6 +23,12 @@ func convertOpenAIToGemini(req *model.ChatCompletionRequest) *GeminiRequest {
 	}
 
 	for _, msg := range req.Messages {
+		if strings.EqualFold(msg.Role, "assistant") && len(msg.GeminiParts) > 0 {
+			var parts []GeminiPart
+			_ = json.Unmarshal(msg.GeminiParts, &parts)
+			contents = append(contents, GeminiContent{Role: "model", Parts: parts})
+			continue
+		}
 		if strings.ToLower(msg.Role) == "system" {
 			parts := model.ParseMessageContent(msg.Content)
 			for _, part := range parts {
@@ -50,6 +56,7 @@ func convertOpenAIToGemini(req *model.ChatCompletionRequest) *GeminiRequest {
 				Parts: []GeminiPart{
 					{
 						FunctionResponse: &GeminiFunctionResponse{
+							ID:       msg.ToolCallID,
 							Name:     fnName,
 							Response: respMap,
 						},
@@ -65,10 +72,11 @@ func convertOpenAIToGemini(req *model.ChatCompletionRequest) *GeminiRequest {
 				geminiParts = append(geminiParts, GeminiPart{Text: text})
 			}
 			for _, tc := range msg.ToolCalls {
-				var args map[string]any
-				_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
+				args := GeminiFunctionArguments(tc.Function.Arguments)
 				geminiParts = append(geminiParts, GeminiPart{
+					ThoughtSignature: tc.ThoughtSignature(),
 					FunctionCall: &GeminiFunctionCall{
+						ID:   tc.ID,
 						Name: tc.Function.Name,
 						Args: args,
 					},
@@ -154,9 +162,9 @@ func convertOpenAIToGemini(req *model.ChatCompletionRequest) *GeminiRequest {
 			fnDesc, _ := t.Function["description"].(string)
 			fnParams := t.Function["parameters"]
 			funcDecls = append(funcDecls, GeminiFunctionDeclaration{
-				Name:        fnName,
-				Description: fnDesc,
-				Parameters:  fnParams,
+				Name:                 fnName,
+				Description:          fnDesc,
+				ParametersJSONSchema: fnParams,
 			})
 		}
 		if len(funcDecls) > 0 {
@@ -177,21 +185,10 @@ func convertOpenAIToGemini(req *model.ChatCompletionRequest) *GeminiRequest {
 	}
 
 	geminiReq := &GeminiRequest{
-		Contents:   mergedContents,
-		Tools:      toolContainers,
-		ToolConfig: geminiToolConfig(req.ToolChoice),
-		GenerationConfig: &GeminiGenerationConfig{
-			Temperature:     req.Temperature,
-			TopP:            req.TopP,
-			MaxOutputTokens: req.MaxTokens,
-		},
-		// Permissive safety settings by default so enterprise and technical code aren't falsely blocked
-		SafetySettings: []GeminiSafetySetting{
-			{Category: "HARM_CATEGORY_HARASSMENT", Threshold: "BLOCK_NONE"},
-			{Category: "HARM_CATEGORY_HATE_SPEECH", Threshold: "BLOCK_NONE"},
-			{Category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", Threshold: "BLOCK_NONE"},
-			{Category: "HARM_CATEGORY_DANGEROUS_CONTENT", Threshold: "BLOCK_NONE"},
-		},
+		Contents:         mergedContents,
+		Tools:            toolContainers,
+		ToolConfig:       geminiToolConfig(req.ToolChoice),
+		GenerationConfig: geminiGenerationConfig(req),
 	}
 
 	if len(systemParts) > 0 {

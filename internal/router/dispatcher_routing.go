@@ -71,14 +71,7 @@ func (d *Dispatcher) GetChannelsForModelAndProtocolWithContext(ctx context.Conte
 	}
 
 	// Extract Session ID for Session Affinity
-	var sessionID string
-	if ctx != nil {
-		if v, ok := ctx.Value(ContextKeySessionID).(string); ok && v != "" {
-			sessionID = v
-		} else if v, ok := ctx.Value("session_id").(string); ok && v != "" {
-			sessionID = v
-		}
-	}
+	sessionID := sessionIDFromContext(ctx)
 
 	// Group channels by Priority
 	priorityGroups := make(map[int][]*model.ChannelConfig)
@@ -103,7 +96,7 @@ func (d *Dispatcher) GetChannelsForModelAndProtocolWithContext(ctx context.Conte
 
 		if groupIdx == 0 && sessionID != "" {
 			// Lock-free execution of session affinity (including Redis lookup)
-			selector := &SessionAffinitySelector{cb: d.circuitBreaker}
+			selector := &SessionAffinitySelector{cb: d.circuitBreaker, pins: d.sessionPins}
 			result = append(result, selector.Select(ctx, group, modelName, sessionID)...)
 		} else {
 			// Acquire wrrMu ONLY when calculating in-memory SWRR weights

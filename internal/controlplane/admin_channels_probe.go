@@ -112,7 +112,7 @@ func (h *AdminHandler) TestChannel(c *gin.Context) {
 	switch target.Type {
 	case model.ProviderAnthropic:
 		prov = provider.NewAnthropicProvider(nil)
-	case model.ProviderGemini:
+	case model.ProviderGemini, model.ProviderVertex:
 		prov = provider.NewGeminiProvider(nil)
 	default:
 		prov = provider.NewOpenAIProvider(nil)

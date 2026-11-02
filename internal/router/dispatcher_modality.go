@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/middleware"
@@ -18,56 +17,6 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
-// =============================================================================
-// Unified Multimodal Forwarding Pipeline (Images, Audio, Video, Generic HTTP)
-// =============================================================================
-
-// UpstreamRequest represents a generic HTTP request across any modality.
-type UpstreamRequest struct {
-	PinnedChannel   string
-	PinnedChannelID int64
-	PinnedBaseURL   string
-	Path            string            // e.g. "/v1/images/generations", "/v1/audio/speech"
-	Method          string            // "POST", "GET"
-	Headers         map[string]string // custom headers
-	Body            []byte            // serialized payload
-	ContentType     string            // "application/json", "multipart/form-data"
-	Model           string            // requested model for routing
-	Protocol        string            // e.g. "images", "audio_speech", "videos"
-	BillableUnits   int               // fixed-price units; e.g. requested image count
-}
-
-// UpstreamResponse encapsulates a generic HTTP response across any modality.
-type UpstreamResponse struct {
-	ProviderName string
-	ChannelID    int64
-	BaseURL      string
-	StatusCode   int
-	Headers      http.Header
-	Body         []byte
-	Stream       io.ReadCloser
-	// Channel is the routing chain that served this request (e.g. "A" or
-	// "A→B" after fallback). Internal-only metadata for audit logging.
-	Channel string
-}
-
-// cancelOnCloseReadCloser releases the channel's per-request budget exactly when
-// the caller is done reading the upstream body. Modality responses (image JSON,
-// audio bytes, video payloads) are streamed to the client after DispatchHTTP
-// returns, so cancelling the timeout context on return would abort the body
-// mid-copy.
-type cancelOnCloseReadCloser struct {
-	io.ReadCloser
-	cancel context.CancelFunc
-	once   sync.Once
-}
-
-func (c *cancelOnCloseReadCloser) Close() error {
-	err := c.ReadCloser.Close()
-	c.once.Do(c.cancel)
-	return err
-}
-
 // dispatchHTTPOnce routes one modality HTTP request across matching candidate
 // channels. The exported DispatchHTTP wrapper adds the total request budget, the
 // cross-model fallback and the budget release tied to the response body lifetime.
@@ -75,13 +24,22 @@ func (d *Dispatcher) dispatchHTTPOnce(ctx context.Context, req *UpstreamRequest)
 	var channels []*model.ChannelConfig
 	if req.PinnedChannel != "" {
 		for _, ch := range d.ListChannelsForModel(req.Model, req.Protocol) {
-			if ((req.PinnedChannelID > 0 && ch.ID == req.PinnedChannelID) || (req.PinnedChannelID == 0 && ch.Name == req.PinnedChannel)) && ch.BaseURL == req.PinnedBaseURL {
+			if ((req.PinnedChannelID > 0 && ch.ID == req.PinnedChannelID) || (req.PinnedChannelID == 0 && ch.Name == req.PinnedChannel)) && ch.BaseURL == req.PinnedBaseURL && (req.PinnedIdentity == "" || req.PinnedIdentity == model.UpstreamIdentity(ch)) {
 				channels = append(channels, ch)
 				break
 			}
 		}
 	} else {
 		channels = d.ResolveCandidateChannels(ctx, req.Model, req.Protocol)
+	}
+	if req.GeminiAction != "" || req.GeminiPath != "" {
+		native := channels[:0]
+		for _, channel := range channels {
+			if model.IsGeminiProvider(channel.Type) {
+				native = append(native, channel)
+			}
+		}
+		channels = native
 	}
 	if len(channels) == 0 {
 		return nil, newNoRouteError(ctx, req.Model, fmt.Errorf("no upstream provider available for model '%s' and protocol '%s'", req.Model, req.Protocol))
@@ -91,6 +49,9 @@ func (d *Dispatcher) dispatchHTTPOnce(ctx context.Context, req *UpstreamRequest)
 	var attempted []string // channels actually called and failed
 	var skipped []string   // channels bypassed by the circuit breaker, never called
 	for i, ch := range channels {
+		if req.NoRetry && len(attempted) > 0 {
+			break
+		}
 		// The budget may have expired while waiting on the previous attempt; stop
 		// before paying the next channel timeout too (B-01).
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -112,10 +73,14 @@ func (d *Dispatcher) dispatchHTTPOnce(ctx context.Context, req *UpstreamRequest)
 		targetModel := ch.GetUpstreamModel(req.Model)
 		targetBody := req.Body
 		contentType := req.ContentType
-		if len(targetBody) > 0 {
+		if len(targetBody) > 0 && !req.NoRewriteBody {
 			switch {
 			case strings.Contains(contentType, "application/json"):
-				targetBody = RewriteJSONModel(targetBody, targetModel)
+				if req.GeminiAction != "" {
+					targetBody = provider.RewriteGeminiActionModel(targetBody, targetModel)
+				} else {
+					targetBody = RewriteJSONModel(targetBody, targetModel)
+				}
 			case strings.Contains(strings.ToLower(contentType), "multipart/form-data"):
 				// Audio transcription/translation requests carry the model in a
 				// multipart form field, not in JSON. Without this rewrite the
@@ -133,14 +98,30 @@ func (d *Dispatcher) dispatchHTTPOnce(ctx context.Context, req *UpstreamRequest)
 		}
 
 		targetURL := provider.APIURL(ch.BaseURL, req.Path)
+		if req.GeminiAction != "" {
+			targetURL = provider.GeminiActionURL(provider.GeminiBaseURL(ch), targetModel, req.GeminiAction)
+		}
+		if req.GeminiPath != "" {
+			targetURL = provider.GeminiResourceURL(provider.GeminiBaseURL(ch), req.GeminiPath)
+		}
 		// The channel timeout bounds the upstream exchange like every other
 		// dispatch path; before this, images/audio/video had no upstream budget
 		// at all and a hung provider held the request until the client left.
-		callCtx, cancelCall := channelCallContext(ctx, ch)
+		callCtx, cancelCall, admissionErr := d.beginChannelCall(ctx, ch, req.Model)
+		if admissionErr != nil {
+			d.circuitBreaker.AbortCanary(ch.Name)
+			if ctx.Err() != nil {
+				return nil, admissionDispatchError(ctx, req.Model, attempted, admissionErr)
+			}
+			lastErr = admissionErr
+			skipped = append(skipped, ch.Name)
+			continue
+		}
 		httpReq, err := http.NewRequestWithContext(callCtx, req.Method, targetURL, bytes.NewReader(targetBody))
 		if err != nil {
 			cancelCall()
 			lastErr = err
+			d.observeUpstreamError(ctx, ch, req.Model, err)
 			d.circuitBreaker.AbortCanary(ch.Name)
 			continue
 		}
@@ -148,7 +129,13 @@ func (d *Dispatcher) dispatchHTTPOnce(ctx context.Context, req *UpstreamRequest)
 		if contentType != "" {
 			httpReq.Header.Set("Content-Type", contentType)
 		}
-		if ch.APIKey != "" && ch.APIKey != "none" {
+		if req.GeminiAction != "" || req.GeminiPath != "" {
+			if err := provider.ConfigureGoogleRequest(callCtx, httpReq, ch); err != nil {
+				cancelCall()
+				lastErr = err
+				continue
+			}
+		} else if ch.APIKey != "" && ch.APIKey != "none" {
 			httpReq.Header.Set("Authorization", "Bearer "+ch.APIKey)
 			httpReq.Header.Set("x-api-key", ch.APIKey)
 		}
@@ -208,7 +195,8 @@ func (d *Dispatcher) dispatchHTTPOnce(ctx context.Context, req *UpstreamRequest)
 			bodyBytes, _ := io.ReadAll(io.LimitReader(httpResp.Body, 64<<10))
 			httpResp.Body.Close()
 			cancelCall()
-			lastErr = provider.NewUpstreamError(ch.Name, status, bodyBytes)
+			lastErr = provider.NewUpstreamError(ch.Name, status, bodyBytes, httpResp.Header)
+			d.observeUpstreamError(ctx, ch, req.Model, lastErr)
 			if provider.IsChannelFailure(lastErr) {
 				attempted = append(attempted, d.recordChannelFailure(ctx, ch.Name, lastErr, i+1))
 			} else {
@@ -256,6 +244,7 @@ func (d *Dispatcher) dispatchHTTPOnce(ctx context.Context, req *UpstreamRequest)
 		}
 
 		// Success! Mark circuit breaker healthy and record metrics
+		d.rememberSessionChannel(ctx, req.Model, ch.Name)
 		trail := d.recordChannelSuccess(ctx, attempted, ch.Name, time.Since(start), 0, 0)
 
 		return &UpstreamResponse{

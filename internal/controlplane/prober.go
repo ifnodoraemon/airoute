@@ -119,7 +119,7 @@ func (p *DownstreamProber) Probe(ctx context.Context, req *ProbeRequest) (*Probe
 		Type:          detectedType,
 		SuggestedName: suggestProviderName(detectedType, baseURL, ""),
 		Models:        []string{},
-		Protocols:     []string{"openai_chat", "openai_response", "openai_text"},
+		Protocols:     []string{"openai_chat", "openai_response"},
 		LatencyMs:     dur,
 		Message:       msg,
 	}, nil

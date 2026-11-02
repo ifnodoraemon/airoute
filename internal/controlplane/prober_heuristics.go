@@ -185,7 +185,6 @@ func inferProtocols(models []string) []string {
 	protocolsMap := map[string]bool{
 		"openai_chat":        true,
 		"openai_response":    true,
-		"openai_text":        true,
 		"anthropic_messages": true,
 	}
 
@@ -212,7 +211,7 @@ func inferProtocols(models []string) []string {
 	}
 
 	// Order canonically
-	ordered := []string{"openai_chat", "openai_response", "openai_text", "anthropic_messages", "embeddings", "rerank", "images", "audio_speech", "audio_transcription", "videos"}
+	ordered := []string{"openai_chat", "openai_response", "anthropic_messages", "embeddings", "rerank", "images", "audio_speech", "audio_transcription", "videos"}
 	var list []string
 	for _, p := range ordered {
 		if protocolsMap[p] {

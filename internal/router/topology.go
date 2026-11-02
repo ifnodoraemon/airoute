@@ -103,7 +103,7 @@ func (d *Dispatcher) GetModelRoutes() []*ModelRouteDetail {
 				convNeeded = true
 				convType = "OpenAI ⇄ Claude Messages 全双工实时转译"
 				hasCrossProto = true
-			} else if ch.Type == model.ProviderGemini {
+			} else if model.IsGeminiProvider(ch.Type) {
 				convNeeded = true
 				convType = "OpenAI ⇄ Gemini 原生协议转译"
 				hasCrossProto = true

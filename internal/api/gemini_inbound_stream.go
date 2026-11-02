@@ -24,7 +24,13 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 	if err != nil {
 		statusCode, _, _, _ := resolveUpstreamFailureStatus(err)
 		recordFailedRequestWithError(c, sessionID, canonicalReq.Model, time.Since(start), statusCode, err)
-		RespondGeminiError(c, statusCode, sanitizeErrorMessage(err), "UNAVAILABLE")
+		RespondGeminiError(c, statusCode, sanitizeErrorMessage(err), geminiErrorStatus(statusCode))
+		return
+	}
+
+	var nativeHandled bool
+	streamChan, nativeHandled = h.useNativeStream(c, reqCtx, canonicalReq, streamChan, sessionID, start)
+	if nativeHandled {
 		return
 	}
 
@@ -38,6 +44,7 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 	totalPromptTokens := 0
 	totalCompTokens := 0
 	totalCachedTokens := 0
+	totalThoughtTokens := 0
 	totalCacheCreationTokens := 0
 	firstTokenRecorded := false
 	var ttftDuration time.Duration
@@ -47,8 +54,6 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 	accumulatedChars := 0
 	usageSource := "upstream"
 	var streamError error
-	var finalCost, finalSaved float64
-	var finalCached int
 
 	// Settlement is deferred until the terminal frame has been flushed, so a
 	// saturated settlement writer cannot delay [DONE]. Preparation (cost
@@ -80,7 +85,7 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 				usageSource = "estimated"
 			}
 		}
-		finalCost, finalSaved, finalCached, finalSettle = RecordUsageDeferred(c, AuditRecordParams{
+		_, _, _, finalSettle = RecordUsageDeferred(c, AuditRecordParams{
 			SessionID:           sessionID,
 			ChatID:              geminiUpstreamChatID,
 			Channel:             upstreamChannel,
@@ -113,51 +118,20 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 	// the complete name and a complete args object. Accumulate the fragments and
 	// emit one functionCall per call — on the terminal frame, or when the stream
 	// ends without one.
-	toolCalls := newGeminiStreamToolCalls()
-
-	// emitCandidate writes one Gemini streamGenerateContent candidate frame.
-	// A nil parts slice must be encoded as [] (the Gemini schema declares parts as
-	// an array), and finishReason is omitted unless this is a terminal frame.
-	emitCandidate := func(parts []gin.H, finishReason string, withUsage bool) {
-		if parts == nil {
-			parts = []gin.H{}
+	toolsByCandidate := make(map[int]*geminiStreamToolCalls)
+	toolCallsFor := func(index int) *geminiStreamToolCalls {
+		if toolsByCandidate[index] == nil {
+			toolsByCandidate[index] = newGeminiStreamToolCalls()
 		}
-		candidate := gin.H{
-			"index": 0,
-			"content": gin.H{
-				"role":  "model",
-				"parts": parts,
-			},
-		}
-		if finishReason != "" {
-			candidate["finishReason"] = finishReason
-		}
-		chunkObj := gin.H{"candidates": []gin.H{candidate}}
-		if withUsage {
-			chunkObj["usageMetadata"] = gin.H{
-				"promptTokenCount":     totalPromptTokens,
-				"candidatesTokenCount": totalCompTokens,
-				"totalTokenCount":      totalPromptTokens + totalCompTokens,
-			}
-		}
-		if b, err := json.Marshal(chunkObj); err == nil {
-			fmt.Fprintf(w, "data: %s\n\n", b)
-			flusher.Flush()
-		}
+		return toolsByCandidate[index]
 	}
 
-	// functionCallParts renders the assembled calls as Gemini parts.
-	functionCallParts := func(calls []geminiFunctionCall) []gin.H {
-		parts := make([]gin.H, 0, len(calls))
-		for _, call := range calls {
-			parts = append(parts, gin.H{
-				"functionCall": gin.H{
-					"name": call.Name,
-					"args": call.Args,
-				},
-			})
+	emitCandidate := func(index int, parts []gin.H, finishReason string, withUsage bool) {
+		var usage gin.H
+		if withUsage {
+			usage = geminiStreamUsage(totalPromptTokens, totalCompTokens, totalCachedTokens, totalThoughtTokens)
 		}
-		return parts
+		writeGeminiCandidate(w, flusher, index, parts, finishReason, usage)
 	}
 
 	clientGone := false
@@ -177,8 +151,10 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 			if !open {
 				// A tool call that never got its terminal frame must still reach the
 				// client as one complete functionCall, not be silently dropped.
-				if toolCalls.pending() {
-					emitCandidate(functionCallParts(toolCalls.drainFunctionCalls()), "", false)
+				for index, calls := range toolsByCandidate {
+					if calls.pending() {
+						emitCandidate(index, geminiFunctionCallParts(calls.drainFunctionCalls()), "", false)
+					}
 				}
 				finalStatus := http.StatusOK
 				if clientGone {
@@ -186,9 +162,6 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 					markAbortedDrain(totalCompTokens)
 				}
 				recordOnce.Do(func() { recordStreamEnd(finalStatus) })
-				if !clientGone {
-					writeStreamUsageTrailer(w, flusher, finalCost, finalSaved, finalCached)
-				}
 				return
 			}
 
@@ -213,8 +186,10 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 			}
 
 			if event.IsDone {
-				if toolCalls.pending() {
-					emitCandidate(functionCallParts(toolCalls.drainFunctionCalls()), "", false)
+				for index, calls := range toolsByCandidate {
+					if calls.pending() {
+						emitCandidate(index, geminiFunctionCallParts(calls.drainFunctionCalls()), "", false)
+					}
 				}
 				continue
 			}
@@ -238,25 +213,29 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 					// Cache reads are part of prompt_tokens but bill at the cache
 					// rate; not forwarding them charged cached tokens as fresh input.
 					totalCachedTokens = max(totalCachedTokens, event.Chunk.Usage.GetCachedTokens())
+					totalThoughtTokens = max(totalThoughtTokens, event.Chunk.Usage.GetReasoningTokens())
 					totalCacheCreationTokens = max(totalCacheCreationTokens, event.Chunk.Usage.GetCacheCreationTokens())
 				}
 				if usageOnly {
-					usageChunk := gin.H{
-						"usageMetadata": gin.H{
-							"promptTokenCount":     totalPromptTokens,
-							"candidatesTokenCount": totalCompTokens,
-							"totalTokenCount":      totalPromptTokens + totalCompTokens,
-						},
-					}
+					usageChunk := gin.H{"usageMetadata": geminiStreamUsage(totalPromptTokens, totalCompTokens, totalCachedTokens, totalThoughtTokens)}
 					if b, err := json.Marshal(usageChunk); err == nil {
 						fmt.Fprintf(w, "data: %s\n\n", b)
 						flusher.Flush()
 					}
 				}
 
-				if len(event.Chunk.Choices) > 0 {
-					chunkChoice := event.Chunk.Choices[0]
+				for _, chunkChoice := range event.Chunk.Choices {
+					toolCalls := toolCallsFor(chunkChoice.Index)
 					var geminiParts []gin.H
+					if thought := chunkChoice.Delta.ReasoningContent; thought != "" {
+						geminiParts = append(geminiParts, gin.H{"text": thought, "thought": true})
+						accumulatedChars += len(thought)
+						telemetry.GlobalLiveMetrics.AddChars(len(thought))
+						if !firstTokenRecorded {
+							ttftDuration, firstTokenRecorded = time.Since(start), true
+							telemetry.GlobalMetrics.RecordTTFT(ttftDuration)
+						}
+					}
 
 					if chunkChoice.Delta.Content != "" {
 						if !firstTokenRecorded {
@@ -295,6 +274,8 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 							finishReason = "STOP"
 						} else if *chunkChoice.FinishReason == "length" {
 							finishReason = "MAX_TOKENS"
+						} else if *chunkChoice.FinishReason == "content_filter" {
+							finishReason = "SAFETY"
 						} else {
 							finishReason = "STOP"
 						}
@@ -303,11 +284,11 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 					// The terminal frame carries the assembled tool calls, so a client
 					// sees each call exactly once with complete arguments.
 					if finishReason != "" && toolCalls.pending() {
-						geminiParts = append(geminiParts, functionCallParts(toolCalls.drainFunctionCalls())...)
+						geminiParts = append(geminiParts, geminiFunctionCallParts(toolCalls.drainFunctionCalls())...)
 					}
 
 					if len(geminiParts) > 0 || finishReason != "" {
-						emitCandidate(geminiParts, finishReason, event.Chunk.Usage != nil)
+						emitCandidate(chunkChoice.Index, geminiParts, finishReason, event.Chunk.Usage != nil)
 					}
 				}
 			}

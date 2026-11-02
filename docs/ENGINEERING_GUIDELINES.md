@@ -31,7 +31,7 @@ Airoute 作为一个企业级、高并发的 AI 路由网关，系统稳定性�
 - `anthropic.go`（一元转换） $\leftrightarrow$ `anthropic_stream.go`（流式解析）
 - `gemini.go`（一元转换） $\leftrightarrow$ `gemini_stream.go`（流式解析）
 - `handler.go`（对话一元处理） $\leftrightarrow$ `chat_stream_handler.go`（对话 SSE 流处理）
-- `completions_handler.go`（文本补全一元） $\leftrightarrow$ `completions_stream_handler.go`（文本补全流）
+  - `responses_handler.go`（Responses 一元） $\leftrightarrow$ `responses_stream.go`（Responses 流）
 
 ---
 

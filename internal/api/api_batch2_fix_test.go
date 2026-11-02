@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -559,7 +558,6 @@ func TestFixOversizedBodyIs413(t *testing.T) {
 
 	h := NewHandler(router.NewDispatcher(nil))
 	openaiCase("chat/completions", h.HandleChatCompletions)
-	openaiCase("completions", h.HandleCompletions)
 	openaiCase("responses", h.HandleResponses)
 	openaiCase("embeddings", h.HandleEmbeddings)
 	openaiCase("rerank", h.HandleRerank)
@@ -699,83 +697,4 @@ func TestFixSessionAffinityKeyTenantScoped(t *testing.T) {
 	if got := cA.Writer.Header().Get("X-Airoute-Session-ID"); got != "shared-session" {
 		t.Errorf("X-Airoute-Session-ID = %q, want the raw client session", got)
 	}
-}
-
-// ---------------------------------------------------------------------------
-// A20: legacy /v1/completions prompt handling and stream termination
-// ---------------------------------------------------------------------------
-
-func TestFixCompletionsRejectsTokenIDPrompt(t *testing.T) {
-	upstreamCalls := 0
-	fixBatch2WithTransport(t, func(r *http.Request) (*http.Response, error) {
-		upstreamCalls++
-		return fixBatch2Response(200,
-			`{"id":"x","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`), nil
-	})
-	h := fixBatch2ChatHandler(t, "https://unused.invalid")
-
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/completions", strings.NewReader(`{"model":"m","prompt":[1,2,3]}`))
-	c.Request.Header.Set("Content-Type", "application/json")
-	h.HandleCompletions(c)
-	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "unsupported_prompt_type") {
-		t.Errorf("token-id prompt = %d %s, want 400 unsupported_prompt_type", w.Code, w.Body.String())
-	}
-	if upstreamCalls != 0 {
-		t.Errorf("BUG: token-id prompt reached the upstream %d time(s) instead of being rejected", upstreamCalls)
-	}
-
-	// A text-array prompt (e.g. ["hello"]) is still accepted and dispatched.
-	w2 := httptest.NewRecorder()
-	c2, _ := gin.CreateTestContext(w2)
-	c2.Request = httptest.NewRequest(http.MethodPost, "/v1/completions", strings.NewReader(`{"model":"m","prompt":["hello"]}`))
-	c2.Request.Header.Set("Content-Type", "application/json")
-	h.HandleCompletions(c2)
-	if strings.Contains(w2.Body.String(), "unsupported_prompt_type") {
-		t.Errorf("a text-array prompt must keep working, got %s", w2.Body.String())
-	}
-	if upstreamCalls != 1 {
-		t.Errorf("text-array prompt dispatched %d times, want 1", upstreamCalls)
-	}
-}
-
-func TestFixCompletionsStreamErrorEmitsDone(t *testing.T) {
-	fixBatch2WithTransport(t, func(r *http.Request) (*http.Response, error) {
-		body := `data: {"id":"c1","choices":[{"index":0,"delta":{"content":"partial"}}]}
-
-data: {"error":{"message":"upstream overloaded"}}
-
-`
-		return &http.Response{
-			StatusCode: 200,
-			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
-			Body:       io.NopCloser(strings.NewReader(body)),
-		}, nil
-	})
-	prevLogger := storage.GlobalAsyncLogger
-	storage.GlobalAsyncLogger = nil
-	t.Cleanup(func() { storage.GlobalAsyncLogger = prevLogger })
-	h := fixBatch2ChatHandler(t, "https://up.invalid")
-
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/completions",
-		strings.NewReader(`{"model":"m","prompt":"hi","stream":true}`))
-	c.Request.Header.Set("Content-Type", "application/json")
-	h.HandleCompletions(c)
-
-	body := w.Body.String()
-	if !strings.Contains(body, "stream_error") {
-		t.Fatalf("stream error was not surfaced:\n%s", body)
-	}
-	if !strings.Contains(body, "data: [DONE]") {
-		t.Errorf("BUG: error-terminated completions stream has no [DONE] sentinel:\n%s", body)
-	}
-	// The terminator must be the last frame so clients stop immediately.
-	trimmed := strings.TrimSpace(body)
-	if !strings.HasSuffix(trimmed, "data: [DONE]") {
-		t.Errorf("the [DONE] sentinel is not the final frame:\n%s", body)
-	}
-	_ = context.Background
 }

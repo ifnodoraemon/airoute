@@ -3,7 +3,6 @@ package router
 import (
 	"context"
 	"hash/fnv"
-	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/distributed"
 	"github.com/ifnodoraemon/airoute/internal/model"
@@ -12,7 +11,8 @@ import (
 
 // SessionAffinitySelector routes requests using sticky session affinity (Redis cache pin or rendezvous hashing).
 type SessionAffinitySelector struct {
-	cb *CircuitBreaker
+	cb   *CircuitBreaker
+	pins *sessionPins
 }
 
 // Select implements ChannelSelectorStrategy with session affinity.
@@ -24,20 +24,27 @@ func (s *SessionAffinitySelector) Select(ctx context.Context, group []*model.Cha
 	var chosen *model.ChannelConfig
 	chosenIdx := -1
 
-	// Check Distributed Redis cache pin first
+	pinnedName := s.pins.get(modelName, sessionID)
+	// Prefer the cluster's last successful channel; use the local pin when
+	// Redis is unavailable. Candidate selection never creates a pin.
 	if client := distributed.GetClient(); client != nil && client.IsActive() {
-		if pinnedName, err := client.GetSessionChannel(ctx, modelName, sessionID); err == nil && pinnedName != "" {
-			for i, ch := range group {
-				if ch.Name == pinnedName {
-					// Verify pinned channel is healthy and not tripped.
-					// Healthy() is read-only: CanExecute would consume a
-					// half-open canary slot just by evaluating candidates.
-					if s.cb == nil || s.cb.Healthy(ch.Name) {
-						chosen = ch
-						chosenIdx = i
-					}
-					break
+		readCtx, cancel := context.WithTimeout(ctx, affinityRedisTimeout)
+		if remote, err := client.GetSessionChannel(readCtx, modelName, sessionID); err == nil {
+			pinnedName = remote
+		}
+		cancel()
+	}
+	if pinnedName != "" {
+		for i, ch := range group {
+			if ch.Name == pinnedName {
+				// Verify pinned channel is healthy and not tripped.
+				// Healthy() is read-only: CanExecute would consume a
+				// half-open canary slot just by evaluating candidates.
+				if s.cb == nil || s.cb.Healthy(ch.Name) {
+					chosen = ch
+					chosenIdx = i
 				}
+				break
 			}
 		}
 	}
@@ -46,13 +53,6 @@ func (s *SessionAffinitySelector) Select(ctx context.Context, group []*model.Cha
 	// (highest-random-weight) hashing.
 	if chosen == nil {
 		chosen, chosenIdx = rendezvousPick(group, modelName, sessionID, s.cb)
-
-		// Persist pin in Redis (30-minute TTL)
-		if client := distributed.GetClient(); client != nil && client.IsActive() {
-			go func(m, s, chName string) {
-				_ = client.SetSessionChannel(context.Background(), m, s, chName, 30*time.Minute)
-			}(modelName, sessionID, chosen.Name)
-		}
 	}
 
 	telemetry.ScopedLogger("router").Debug("routed via LLM session affinity",

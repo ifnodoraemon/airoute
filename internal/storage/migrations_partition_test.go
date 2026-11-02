@@ -420,10 +420,11 @@ func TestUsageLogsPartitionRetentionDropsExpiredMonths(t *testing.T) {
 	// fully expired month (will be DROPped), boundary month (kept, trimmed), and a
 	// recent row that must survive.
 	expiredMonth := usageLogMonthStart(now.AddDate(0, 0, -300))
-	boundaryMonth := usageLogMonthStart(now.AddDate(0, 0, -100))
+	cutoff := now.AddDate(0, 0, -90)
+	boundaryMonth := usageLogMonthStart(cutoff)
 	seedPartitionTestUsageLog(t, plain, "ret-expired-1", expiredMonth.Add(2*24*time.Hour), 500)
 	seedPartitionTestUsageLog(t, plain, "ret-expired-2", expiredMonth.Add(5*24*time.Hour), 700)
-	seedPartitionTestUsageLog(t, plain, "ret-boundary-1", boundaryMonth.Add(2*24*time.Hour), 900)
+	seedPartitionTestUsageLog(t, plain, "ret-boundary-1", boundaryMonth.Add(cutoff.Sub(boundaryMonth)/2), 900)
 	seedPartitionTestUsageLog(t, plain, "ret-kept-1", now.Add(-24*time.Hour), 1100)
 	if err := plain.Close(); err != nil {
 		t.Fatalf("close unpartitioned database: %v", err)
@@ -438,7 +439,6 @@ func TestUsageLogsPartitionRetentionDropsExpiredMonths(t *testing.T) {
 	repo := NewRepository(db)
 
 	// Audit retention cutoff: everything older than 90 days goes away.
-	cutoff := now.AddDate(0, 0, -90)
 	deleted, err := repo.PurgeUsageLogsBefore(cutoff, 1000)
 	if err != nil {
 		t.Fatalf("partition retention: %v", err)

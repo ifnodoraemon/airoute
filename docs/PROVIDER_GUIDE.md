@@ -10,9 +10,18 @@ Airoute supports native multi-protocol downstream engines with zero special-casi
 - **Base URL**: `https://generativelanguage.googleapis.com`
 - **API Key**: Your Google AI Studio API key (`AIzaSy...`)
 - **Key Behavior**:
-  - Automatically translates OpenAI canonical format to Google's specialized `/v1beta/models/{model}:generateContent` and `:streamGenerateContent`.
-  - Supports system instructions, temperature, topP, and tools.
+  - Gemini clients use native generateContent / streaming / embeddings without rebuilding vendor payloads. Chat, Responses and Messages clients use explicit translation when no matching native upstream exists.
+  - Supports owned Files / cachedContents / batch operations / Interactions and Live WebSocket sessions. Resources and signature references stay on their original upstream credential.
+  - Cross-protocol history uses short tool-call references and `extra_content.google.state_ref`; clients must keep at least the relevant reference. Native Gemini history preserves all signed parts directly.
 - **Recommended Models**: `gemini-4-argon`, `gemini-3.8-flash`, `gemini-3.5-flash-lite`, `gemini-2.0-flash`
+
+### Vertex AI
+
+Use provider type `vertex` and a Base URL containing the API version, project, location and publisher, for example `https://us-central1-aiplatform.googleapis.com/v1/projects/YOUR_PROJECT/locations/us-central1/publishers/google`. Global endpoints use `https://aiplatform.googleapis.com/v1/projects/YOUR_PROJECT/locations/global/publishers/google`. For configuration-file channels with an empty Base URL, `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION` (default `global`) supply this information.
+
+Set the credential field to `adc` to use Application Default Credentials, or provide a service-account JSON document. Tokens refresh automatically through Google's OAuth2 library. `bearer:<access-token>` supports a manually managed temporary token. The account needs the appropriate Vertex permissions. Mount the ADC file read-only into **both** gateway containers and set `GOOGLE_APPLICATION_CREDENTIALS` to its container path; a host path by itself is insufficient. Prefer workload identity when available. These variables are passed through the existing Compose `env_file`.
+
+Native generation, streaming, embeddings, counting, model lookup and Live use the project endpoint and bearer authentication. Google Developer-only Files / Interactions / batch APIs remain subject to the upstream's actual support; Vertex is not treated as a Developer API account. For Live, configure a channel timeout long enough for the intended session: the upstream concurrency slot is held for the entire connection. Browser clients use the gateway key, never the upstream key.
 
 ---
 
@@ -53,7 +62,6 @@ Airoute supports native multi-protocol downstream engines with zero special-casi
 
 - **vLLM / SGLang**: Base URL usually `http://localhost:8000/v1`. Supports ultra-fast continuous batching and SSE streams.
 - **Ollama**: Base URL usually `http://localhost:11434/v1`. Auto-Probe detects local model tags from `/api/tags`.
-- **Pure Text Downstreams**: If the local engine only serves `/v1/completions`, Airoute transparently translates all incoming Chat requests into completion prompts, converting the response into standard Chat choices and streaming chunks.
 
 ---
 

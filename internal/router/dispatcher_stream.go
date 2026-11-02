@@ -25,6 +25,7 @@ func (d *Dispatcher) failStreamAttempt(ctx context.Context, req *model.ChatCompl
 		d.circuitBreaker.AbortCanary(ch.Name)
 		return newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
 	}
+	d.observeUpstreamError(ctx, ch, req.Model, err)
 	if provider.IsModelNotFound(err) {
 		// A node-specific 404 is not the caller's fault: keep fanning out.
 		d.circuitBreaker.AbortCanary(ch.Name)
@@ -49,7 +50,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 	}
 	channels := d.candidateChannelsForRequest(ctx, req, proto)
 	if len(channels) == 0 {
-		if fb := d.GetModelFallback(req.Model); fb != "" && !strings.EqualFold(fb, req.Model) {
+		if fb := d.requestFallback(req); fb != "" && !strings.EqualFold(fb, req.Model) {
 			nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
 			if fbErr != nil {
 				routerLog(ctx).Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
@@ -98,7 +99,16 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		// drain deadline on the whole request, so a channel configured for e.g.
 		// 300s is allowed to stream for 300s. The first-token window below is
 		// derived from the same number.
-		attemptCtx, attemptCancel := channelCallContext(ctx, ch)
+		attemptCtx, attemptCancel, admissionErr := d.beginChannelCall(ctx, ch, req.Model)
+		if admissionErr != nil {
+			d.circuitBreaker.AbortCanary(ch.Name)
+			if ctx.Err() != nil {
+				return nil, admissionDispatchError(ctx, req.Model, attempted, admissionErr)
+			}
+			lastErr = admissionErr
+			skipped = append(skipped, ch.Name)
+			continue
+		}
 		streamChan, err := prov.ChatCompleteStream(attemptCtx, req, ch)
 		if err != nil {
 			attemptCancel()
@@ -139,7 +149,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 					preamble = preamble[1:]
 				}
 				preamble = append(preamble, event)
-				if streamEventHasContent(event) || event.IsDone {
+				if streamEventHasContent(event) || streamEventIsTerminal(event) {
 					committed = true
 				}
 			case <-timer.C:
@@ -170,6 +180,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		}
 
 		d.circuitBreaker.RecordSuccess(ch.Name)
+		d.rememberSessionChannel(ctx, req.Model, ch.Name)
 		trail := formatChannelTrail(ctx, attempted, ch.Name)
 		outChan := make(chan *model.StreamEvent, 64)
 		// Committing the stream only proves the channel produced a first token.
@@ -177,6 +188,9 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		// truncated SSE, upstream-side timeout) is still a channel health signal,
 		// so pipeStreamEvents reports it back here (B-02).
 		recordPostCommitFailure := func(err error) {
+			if ctx.Err() == nil && !errors.Is(err, context.Canceled) {
+				d.observeUpstreamError(ctx, ch, req.Model, err)
+			}
 			d.recordStreamFailure(ctx, ch.Name, err, i+1)
 		}
 		go pipeStreamEvents(ctx, outChan, preamble, streamChan, trail, attemptCancel, recordPostCommitFailure)
@@ -189,7 +203,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		lastErr = skippedOnlyError(req.Model, skipped)
 	}
 
-	if fb := d.GetModelFallback(req.Model); fb != "" && !strings.EqualFold(fb, req.Model) {
+	if fb := d.requestFallback(req); fb != "" && !strings.EqualFold(fb, req.Model) {
 		nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
 		if fbErr != nil {
 			routerLog(ctx).Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())

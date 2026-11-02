@@ -41,11 +41,8 @@ func (a *GeminiAdapter) ToCanonical(ctx context.Context, input any) (*model.Chat
 		}
 	}
 
-	// Gemini function calls carry no id, but OpenAI and Anthropic tool messages
-	// require the assistant's tool_call/use id on the matching result. Issue a
-	// stable id per call and hand it to the functionResponse that answers it,
-	// otherwise the canonical tool message has an empty tool_call_id and upstreams
-	// reject the follow-up turn.
+	// Preserve native IDs when present; older Gemini responses need synthetic
+	// IDs so canonical tool results can reference their matching calls.
 	pendingToolIDs := make(map[string][]string)
 	issuedToolCalls := 0
 
@@ -54,14 +51,16 @@ func (a *GeminiAdapter) ToCanonical(ctx context.Context, input any) (*model.Chat
 		if role == "model" {
 			role = "assistant"
 		}
-		var text string
+		var text, reasoning string
 		var toolCalls []model.ToolCall
 		var contentParts []model.ContentPart
 		var hasMultimodal bool
 		var toolResults []model.ChatMessage
 
 		for _, p := range c.Parts {
-			if p.Text != "" {
+			if p.Thought {
+				reasoning += p.Text
+			} else if p.Text != "" {
 				text += p.Text
 				contentParts = append(contentParts, model.ContentPart{
 					Type: model.ContentPartText,
@@ -101,6 +100,9 @@ func (a *GeminiAdapter) ToCanonical(ctx context.Context, input any) (*model.Chat
 				}
 				issuedToolCalls++
 				id := fmt.Sprintf("call_%d_%s", issuedToolCalls, p.FunctionCall.Name)
+				if p.FunctionCall.ID != "" {
+					id = p.FunctionCall.ID
+				}
 				if name := p.FunctionCall.Name; name != "" {
 					pendingToolIDs[name] = append(pendingToolIDs[name], id)
 				}
@@ -113,23 +115,14 @@ func (a *GeminiAdapter) ToCanonical(ctx context.Context, input any) (*model.Chat
 						Arguments: argsStr,
 					},
 				})
+				toolCalls[len(toolCalls)-1].SetThoughtSignature(p.ThoughtSignature)
 			}
 			if p.FunctionResponse != nil {
 				// One canonical tool message per response: Gemini puts every parallel
 				// functionResponse of a turn in the same content, and collapsing them
 				// into one message silently dropped all but the last result.
 				toolName := p.FunctionResponse.Name
-				toolCallID := ""
-				// FIFO per function name: repeated calls to the same tool keep their
-				// own ids, in the order Gemini answers them.
-				if queue := pendingToolIDs[toolName]; len(queue) > 0 {
-					toolCallID = queue[0]
-					pendingToolIDs[toolName] = queue[1:]
-				} else if toolName != "" {
-					// Unpaired response (e.g. a conversation resumed elsewhere):
-					// still produce a deterministic, non-empty id.
-					toolCallID = "call_" + toolName
-				}
+				toolCallID := takeGeminiToolID(pendingToolIDs, toolName, p.FunctionResponse.ID)
 				payload := fmt.Sprintf("%v", p.FunctionResponse.Response)
 				if encoded, err := json.Marshal(p.FunctionResponse.Response); err == nil {
 					payload = string(encoded)
@@ -162,9 +155,10 @@ func (a *GeminiAdapter) ToCanonical(ctx context.Context, input any) (*model.Chat
 		}
 
 		msgs = append(msgs, model.ChatMessage{
-			Role:      role,
-			Content:   content,
-			ToolCalls: toolCalls,
+			ReasoningContent: reasoning,
+			Role:             role,
+			Content:          content,
+			ToolCalls:        toolCalls,
 		})
 	}
 
@@ -181,6 +175,9 @@ func (a *GeminiAdapter) ToCanonical(ctx context.Context, input any) (*model.Chat
 	for _, tc := range req.Tools {
 		for _, fd := range tc.FunctionDeclarations {
 			params := fd.Parameters
+			if fd.ParametersJSONSchema != nil {
+				params = fd.ParametersJSONSchema
+			}
 			if params == nil {
 				params = map[string]any{"type": "object", "properties": map[string]any{}}
 			}
@@ -195,13 +192,15 @@ func (a *GeminiAdapter) ToCanonical(ctx context.Context, input any) (*model.Chat
 		}
 	}
 
-	return &model.ChatCompletionRequest{
+	canonical := &model.ChatCompletionRequest{
 		Messages:    msgs,
 		Temperature: temp,
 		TopP:        topP,
 		MaxTokens:   maxTokens,
 		Tools:       tools,
-	}, nil
+	}
+	applyGeminiConfig(req, canonical)
+	return canonical, nil
 }
 
 func (a *GeminiAdapter) FromCanonical(ctx context.Context, resp *model.ChatCompletionResponse) (any, error) {
@@ -212,23 +211,25 @@ func (a *GeminiAdapter) FromCanonical(ctx context.Context, resp *model.ChatCompl
 	var candidates []provider.GeminiCandidate
 	for i, choice := range resp.Choices {
 		var parts []provider.GeminiPart
+		if choice.Message.ReasoningContent != "" {
+			parts = append(parts, provider.GeminiPart{Text: choice.Message.ReasoningContent, Thought: true})
+		}
 		if choice.Message.GetContentString() != "" {
 			parts = append(parts, provider.GeminiPart{Text: choice.Message.GetContentString()})
 		}
 		for _, tc := range choice.Message.ToolCalls {
-			var args map[string]any
-			if tc.Function.Arguments != "" {
-				_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
-			}
+			args := provider.GeminiFunctionArguments(tc.Function.Arguments)
 			parts = append(parts, provider.GeminiPart{
+				ThoughtSignature: tc.ThoughtSignature(),
 				FunctionCall: &provider.GeminiFunctionCall{
+					ID:   tc.ID,
 					Name: tc.Function.Name,
 					Args: args,
 				},
 			})
 		}
 		c := provider.GeminiCandidate{
-			Index: i,
+			Index: max(i, choice.Index),
 		}
 		c.Content.Role = "model"
 		c.Content.Parts = parts
@@ -237,6 +238,8 @@ func (a *GeminiAdapter) FromCanonical(ctx context.Context, resp *model.ChatCompl
 			switch *choice.FinishReason {
 			case "length":
 				finishReason = "MAX_TOKENS"
+			case "content_filter":
+				finishReason = "SAFETY"
 			default:
 				finishReason = "STOP"
 			}
@@ -266,9 +269,11 @@ func (a *GeminiAdapter) FromCanonical(ctx context.Context, resp *model.ChatCompl
 	return map[string]any{
 		"candidates": candidates,
 		"usageMetadata": provider.GeminiUsageMetadata{
-			PromptTokenCount:     pTokens,
-			CandidatesTokenCount: cTokens,
-			TotalTokenCount:      tTokens,
+			PromptTokenCount:        pTokens,
+			CandidatesTokenCount:    max(0, cTokens-geminiReasoningTokens(resp)),
+			ThoughtsTokenCount:      geminiReasoningTokens(resp),
+			CachedContentTokenCount: geminiCachedTokens(resp),
+			TotalTokenCount:         tTokens,
 		},
 		"modelVersion": resp.Model,
 	}, nil

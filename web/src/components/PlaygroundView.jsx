@@ -24,6 +24,8 @@ import {
 } from 'lucide-react';
 import { getGatewayOrigin, copyToClipboard as crossOriginCopy } from '../config';
 import MarkdownRenderer from './MarkdownRenderer';
+import GeminiPlayground from './GeminiPlayground';
+import { assistantContent, textContent } from '../lib/assistantContent';
 import { inferClientModality } from '../lib/modelModality';
 import { availableKeyModels } from '../lib/keyModels';
 import {
@@ -381,7 +383,7 @@ Execute the following mission with precision, maintainability, and zero speculat
 
   const withSystemPrompt = (msgs) => [
     ...(systemPrompt.trim() ? [{ role: 'system', content: systemPrompt.trim() }] : []),
-    ...msgs
+    ...msgs.map(({ role, content }) => ({ role, content }))
   ];
 
   const buildChatRequest = (targetModel, payloadMessages) => {
@@ -547,6 +549,13 @@ Execute the following mission with precision, maintainability, and zero speculat
       let firstByteTime = null;
       let fullContent = '';
       let fullReasoning = '';
+      let rawContent = '';
+      let explicitReasoning = '';
+      const publishContent = (complete = false) => {
+        ({ content: fullContent, reasoning: fullReasoning } = assistantContent(rawContent, explicitReasoning, complete));
+        setOutput(fullContent);
+        setReasoning(fullReasoning);
+      };
       let serverReportedTokens = 0;
 
       try {
@@ -574,14 +583,9 @@ Execute the following mission with precision, maintainability, and zero speculat
 
           const applyChunk = (parsed) => {
             const delta = parsed.choices?.[0]?.delta;
-            if (delta?.reasoning_content) {
-              fullReasoning += delta.reasoning_content;
-              setReasoning(fullReasoning);
-            }
-            if (delta?.content) {
-              fullContent += delta.content;
-              setOutput(fullContent);
-            }
+            explicitReasoning += textContent(delta?.reasoning_content);
+            rawContent += textContent(delta?.content);
+            publishContent();
           };
 
           const handleLine = (line) => {
@@ -613,7 +617,9 @@ Execute the following mission with precision, maintainability, and zero speculat
             }
           }
           // Flush a trailing event that arrived without a final newline.
+          buffer += decoder.decode();
           if (buffer.trim()) handleLine(buffer);
+          publishContent(true);
           } finally {
             try { await reader.cancel?.(); } catch { /* The stream may already be closed. */ }
             reader.releaseLock?.();
@@ -626,12 +632,9 @@ Execute the following mission with precision, maintainability, and zero speculat
             serverReportedTokens = data.usage.completion_tokens;
           }
           const choice = data.choices?.[0];
-          if (choice?.message?.reasoning_content) {
-            fullReasoning = choice.message.reasoning_content;
-            setReasoning(fullReasoning);
-          }
-          fullContent = choice?.message?.content || '';
-          setOutput(fullContent);
+          rawContent = textContent(choice?.message?.content);
+          explicitReasoning = textContent(choice?.message?.reasoning_content);
+          publishContent(true);
         }
 
         const totalMs = Date.now() - startTime;
@@ -934,6 +937,7 @@ Execute the following mission with precision, maintainability, and zero speculat
       <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-1.5 shadow-sm flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
           {[
+            { id: 'gemini', label: isZh ? 'Gemini 原生' : 'Gemini Native', icon: Sparkles, activeColor: 'bg-[#355CFF] text-white' },
             { id: 'chat', label: isZh ? 'Chat 对话' : 'Chat', icon: MessageSquare, activeColor: 'bg-[#355CFF] text-white' },
             { id: 'images', label: isZh ? 'Images 绘图' : 'Images', icon: ImageIcon, activeColor: 'bg-[#355CFF] text-white' },
             { id: 'audio_speech', label: isZh ? 'TTS 语音合成' : 'TTS Speech', icon: Volume2, activeColor: 'bg-[#355CFF] text-white' },
@@ -992,7 +996,8 @@ Execute the following mission with precision, maintainability, and zero speculat
       </div>
 
       {/* 2. Main Playground Grid Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {playModality === 'gemini' && <GeminiPlayground models={availableKeyModels(selectedKeyObj, models)} resolveCredentials={resolveCallCredentials} lang={lang} showToast={showToast} />}
+      <div className={`grid grid-cols-1 lg:grid-cols-3 gap-6 ${playModality === 'gemini' ? 'hidden' : ''}`}>
         {/* Left Column: Parameter Controls */}
         <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-6 space-y-4 shadow-sm h-fit">
           <div className="flex items-center justify-between border-b border-[#E4E6E9] dark:border-[#2C3038] pb-3">

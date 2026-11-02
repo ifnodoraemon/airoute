@@ -8,11 +8,12 @@ import "encoding/json"
 
 // RerankRequest represents the standard cross-encoder rerank payload.
 type RerankRequest struct {
-	Model           string `json:"model"`
-	Query           string `json:"query"`
-	Documents       []any  `json:"documents"` // []string or []map[string]any
-	TopN            *int   `json:"top_n,omitempty"`
-	ReturnDocuments *bool  `json:"return_documents,omitempty"`
+	Native          *NativeRequest `json:"-"`
+	Model           string         `json:"model"`
+	Query           string         `json:"query"`
+	Documents       []any          `json:"documents"` // []string or []map[string]any
+	TopN            *int           `json:"top_n,omitempty"`
+	ReturnDocuments *bool          `json:"return_documents,omitempty"`
 }
 
 // GetDocumentTexts returns all documents as a slice of strings.
@@ -73,9 +74,10 @@ type RerankUsage struct {
 
 // RerankResponse represents the standard response containing re-ranked documents.
 type RerankResponse struct {
-	Model   string       `json:"model"`
-	Results []RerankItem `json:"results"`
-	Usage   RerankUsage  `json:"usage"`
+	NativeResponse json.RawMessage `json:"-"`
+	Model          string          `json:"model"`
+	Results        []RerankItem    `json:"results"`
+	Usage          RerankUsage     `json:"usage"`
 
 	// Extra preserves response members this struct does not model (id, created,
 	// meta, ...) so a same-protocol upstream's answer is not silently rewritten.

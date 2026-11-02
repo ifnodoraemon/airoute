@@ -59,12 +59,13 @@ func TestInboundAnthropic_ToOpenAIUpstream(t *testing.T) {
 	// Configure channel
 	channels := []model.ChannelConfig{
 		{
-			Name:     "deepseek-upstream",
-			Type:     model.ProviderOpenAI,
-			BaseURL:  upstreamServer.URL,
-			APIKey:   "sk-test-key",
-			Models:   []string{"claude-3-5-sonnet"}, // client calls claude-3-5-sonnet, routed to this channel
-			Priority: 1,
+			Name:      "deepseek-upstream",
+			Type:      model.ProviderOpenAI,
+			Protocols: []string{"openai_chat"},
+			BaseURL:   upstreamServer.URL,
+			APIKey:    "sk-test-key",
+			Models:    []string{"claude-3-5-sonnet"}, // client calls claude-3-5-sonnet, routed to this channel
+			Priority:  1,
 		},
 	}
 
@@ -167,12 +168,13 @@ func TestInboundAnthropic_Streaming(t *testing.T) {
 
 	channels := []model.ChannelConfig{
 		{
-			Name:     "deepseek-upstream",
-			Type:     model.ProviderOpenAI,
-			BaseURL:  upstreamServer.URL,
-			APIKey:   "sk-test-key",
-			Models:   []string{"claude-3-5-sonnet"},
-			Priority: 1,
+			Name:      "deepseek-upstream",
+			Type:      model.ProviderOpenAI,
+			Protocols: []string{"openai_chat"},
+			BaseURL:   upstreamServer.URL,
+			APIKey:    "sk-test-key",
+			Models:    []string{"claude-3-5-sonnet"},
+			Priority:  1,
 		},
 	}
 

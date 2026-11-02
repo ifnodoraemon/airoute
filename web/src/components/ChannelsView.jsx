@@ -124,9 +124,12 @@ export default function ChannelsView({
       priority: 1,
       weight: 10,
       timeout_seconds: 60,
+              max_concurrency: 0,
+              queue_limit: 0,
+              queue_wait_seconds: 0,
       models_str: '',
       mapping_rules: [],
-      protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings', 'rerank', 'images'],
+      protocols: ['openai_chat', 'openai_response', 'embeddings', 'rerank', 'images'],
     });
     setProbeAlert(null);
     setShowChannelModal(true);
@@ -546,7 +549,6 @@ export default function ChannelsView({
                                 let label = p;
                                 if (p === 'openai_chat' || p === 'chat') label = isZh ? '对话' : 'Chat';
                                 else if (p === 'openai_response' || p === 'responses' || p === 'response') label = 'Response';
-                                else if (p === 'openai_text' || p === 'completion') label = isZh ? '补全' : 'Completion';
                                 else if (p === 'anthropic_messages' || p === 'messages') label = 'Messages';
                                 else if (p === 'images' || p === 'image_generation') label = isZh ? '生图' : 'Images';
                                 else if (p === 'audio_speech' || p === 'tts') label = 'TTS';

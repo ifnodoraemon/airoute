@@ -6,12 +6,13 @@ import (
 
 // ChatMessage represents a single chat completion message.
 type ChatMessage struct {
-	Role             string     `json:"role"`
-	Content          any        `json:"content"` // can be string or structured content
-	ReasoningContent string     `json:"reasoning_content,omitempty"`
-	Name             string     `json:"name,omitempty"`
-	ToolCalls        []ToolCall `json:"tool_calls,omitempty"`
-	ToolCallID       string     `json:"tool_call_id,omitempty"`
+	GeminiParts      json.RawMessage `json:"-"`
+	Role             string          `json:"role"`
+	Content          any             `json:"content"` // can be string or structured content
+	ReasoningContent string          `json:"reasoning_content,omitempty"`
+	Name             string          `json:"name,omitempty"`
+	ToolCalls        []ToolCall      `json:"tool_calls,omitempty"`
+	ToolCallID       string          `json:"tool_call_id,omitempty"`
 	// Extra preserves JSON fields this struct does not model, so they survive a
 	// same-protocol round trip instead of being silently dropped.
 	Extra ExtraFields `json:"-"`
@@ -31,10 +32,11 @@ func (m *ChatMessage) GetContentString() string {
 
 // ToolCall represents a tool invocation.
 type ToolCall struct {
-	Index    *int         `json:"index,omitempty"`
-	ID       string       `json:"id,omitempty"`
-	Type     string       `json:"type,omitempty"`
-	Function FunctionCall `json:"function"`
+	Index        *int            `json:"index,omitempty"`
+	ID           string          `json:"id,omitempty"`
+	Type         string          `json:"type,omitempty"`
+	Function     FunctionCall    `json:"function"`
+	ExtraContent json.RawMessage `json:"extra_content,omitempty"`
 }
 
 // FunctionCall represents the function invoked in a tool call.
@@ -75,8 +77,9 @@ type ChatCompletionRequest struct {
 	// the Responses conversion agree on who owns the key.
 	ParallelToolCalls *bool `json:"parallel_tool_calls,omitempty"`
 
-	// Protocol specifies the desired routing protocol (e.g. "openai_text", "openai_chat"). Internal metadata; never serialized.
-	Protocol string `json:"-"`
+	// Protocol specifies the desired routing protocol (e.g. "openai_chat", "responses"). Internal metadata; never serialized.
+	Protocol string         `json:"-"`
+	Native   *NativeRequest `json:"-"`
 	// AnthropicOriginal preserves native-only fields and signed content blocks when
 	// a Messages request is routed to another Anthropic endpoint.
 	AnthropicOriginal   *AnthropicInboundRequest `json:"-"`
@@ -166,18 +169,22 @@ type ChatCompletionChoice struct {
 
 // ChatCompletionResponse is the standard OpenAI non-streaming response.
 type ChatCompletionResponse struct {
-	ID      string                 `json:"id"`
-	Object  string                 `json:"object"`
-	Created int64                  `json:"created"`
-	Model   string                 `json:"model"`
-	Choices []ChatCompletionChoice `json:"choices"`
-	Usage   *Usage                 `json:"usage,omitempty"`
+	NativeOutputChars int                    `json:"-"`
+	ID                string                 `json:"id"`
+	Object            string                 `json:"object"`
+	Created           int64                  `json:"created"`
+	Model             string                 `json:"model"`
+	Choices           []ChatCompletionChoice `json:"choices"`
+	Usage             *Usage                 `json:"usage,omitempty"`
 
 	// Channel is the name of the upstream channel that actually served this
 	// request. Internal-only metadata for audit logging; never serialized.
 	Channel string `json:"-"`
 	// NativeAnthropicResponse is used only for native Messages ingress/egress.
 	NativeAnthropicResponse json.RawMessage `json:"-"`
+	NativeResponse          json.RawMessage `json:"-"`
+	NativeProtocol          string          `json:"-"`
+	NativeIdentity          string          `json:"-"`
 	// Extra preserves unmodeled response fields (system_fingerprint,
 	// service_tier, prompt_filter_results, ...).
 	Extra ExtraFields `json:"-"`
@@ -231,6 +238,12 @@ type ModelListResponse struct {
 
 // StreamEvent is an internal event passed over channels during streaming.
 type StreamEvent struct {
+	BeforeForward        func() error
+	NativeEvent          []byte
+	NativeProtocol       string
+	NativeIdentity       string
+	NativeContent        bool
+	NativeOutputChars    int
 	Chunk                *ChatCompletionChunk
 	Raw                  []byte
 	NativeAnthropicEvent []byte

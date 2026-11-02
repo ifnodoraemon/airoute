@@ -13,13 +13,15 @@ import (
 // HandleEmbeddings handles POST /v1/embeddings.
 func (h *Handler) HandleEmbeddings(c *gin.Context) {
 	var req model.EmbeddingRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	native, err := bindNativeJSON(c, &req, model.NativeEmbeddings)
+	if err != nil {
 		if respondRequestTooLarge(c, err) {
 			return
 		}
 		RespondOpenAIError(c, http.StatusBadRequest, fmt.Sprintf("Invalid JSON request body: %v", err), "invalid_request_error", "invalid_payload")
 		return
 	}
+	req.Native = native
 
 	if req.Model == "" {
 		RespondOpenAIError(c, http.StatusBadRequest, "Missing 'model' field in request body", "invalid_request_error", "missing_model")
@@ -63,5 +65,9 @@ func (h *Handler) HandleEmbeddings(c *gin.Context) {
 		UsageSource:  usageSource,
 	})
 
+	if len(resp.NativeResponse) > 0 {
+		c.Data(http.StatusOK, "application/json", resp.NativeResponse)
+		return
+	}
 	c.JSON(http.StatusOK, resp)
 }

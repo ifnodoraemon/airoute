@@ -78,17 +78,20 @@ func channelMutationPayload(rec *storage.ChannelRecord) gin.H {
 // "omitted" (keep the stored value) from an explicit 0. Their JSON names are
 // unchanged, so the pinned request contract in contract_test.go still holds.
 type ChannelRequest struct {
-	Name           string             `json:"name"`
-	Type           model.ProviderType `json:"type"`
-	BaseURL        string             `json:"base_url"`
-	APIKey         string             `json:"api_key"`
-	Models         []string           `json:"models"`
-	ModelMapping   map[string]string  `json:"model_mapping"`
-	Protocols      []string           `json:"protocols"`
-	Priority       *int               `json:"priority"`
-	Weight         *int               `json:"weight"`
-	TimeoutSeconds *int               `json:"timeout_seconds"`
-	Status         string             `json:"status"`
+	Name             string             `json:"name"`
+	Type             model.ProviderType `json:"type"`
+	BaseURL          string             `json:"base_url"`
+	APIKey           string             `json:"api_key"`
+	Models           []string           `json:"models"`
+	ModelMapping     map[string]string  `json:"model_mapping"`
+	Protocols        []string           `json:"protocols"`
+	Priority         *int               `json:"priority"`
+	Weight           *int               `json:"weight"`
+	TimeoutSeconds   *int               `json:"timeout_seconds"`
+	MaxConcurrency   *int               `json:"max_concurrency"`
+	QueueLimit       *int               `json:"queue_limit"`
+	QueueWaitSeconds *int               `json:"queue_wait_seconds"`
+	Status           string             `json:"status"`
 }
 
 // derefInt reads an optional int, using fallback when the client omitted it.
@@ -104,17 +107,20 @@ func derefInt(value *int, fallback int) int {
 // signal, exactly as before the fields became optional.
 func (r ChannelRequest) toRecord() *storage.ChannelRecord {
 	return &storage.ChannelRecord{
-		Name:           r.Name,
-		Type:           r.Type,
-		BaseURL:        r.BaseURL,
-		APIKey:         r.APIKey,
-		Models:         r.Models,
-		ModelMapping:   r.ModelMapping,
-		Protocols:      r.Protocols,
-		Priority:       derefInt(r.Priority, 0),
-		Weight:         derefInt(r.Weight, 0),
-		TimeoutSeconds: derefInt(r.TimeoutSeconds, 0),
-		Status:         r.Status,
+		Name:             r.Name,
+		Type:             r.Type,
+		BaseURL:          r.BaseURL,
+		APIKey:           r.APIKey,
+		Models:           r.Models,
+		ModelMapping:     r.ModelMapping,
+		Protocols:        r.Protocols,
+		Priority:         derefInt(r.Priority, 0),
+		Weight:           derefInt(r.Weight, 0),
+		TimeoutSeconds:   derefInt(r.TimeoutSeconds, 0),
+		MaxConcurrency:   derefInt(r.MaxConcurrency, 0),
+		QueueLimit:       derefInt(r.QueueLimit, 0),
+		QueueWaitSeconds: derefInt(r.QueueWaitSeconds, 0),
+		Status:           r.Status,
 	}
 }
 
@@ -123,17 +129,20 @@ func (r ChannelRequest) toRecord() *storage.ChannelRecord {
 // field from an explicit zero.
 func (r ChannelRequest) toPatch() *channelPatch {
 	return &channelPatch{
-		Name:           r.Name,
-		Type:           r.Type,
-		BaseURL:        r.BaseURL,
-		APIKey:         r.APIKey,
-		Models:         r.Models,
-		ModelMapping:   r.ModelMapping,
-		Protocols:      r.Protocols,
-		Priority:       r.Priority,
-		Weight:         r.Weight,
-		TimeoutSeconds: r.TimeoutSeconds,
-		Status:         r.Status,
+		Name:             r.Name,
+		Type:             r.Type,
+		BaseURL:          r.BaseURL,
+		APIKey:           r.APIKey,
+		Models:           r.Models,
+		ModelMapping:     r.ModelMapping,
+		Protocols:        r.Protocols,
+		Priority:         r.Priority,
+		Weight:           r.Weight,
+		TimeoutSeconds:   r.TimeoutSeconds,
+		MaxConcurrency:   r.MaxConcurrency,
+		QueueLimit:       r.QueueLimit,
+		QueueWaitSeconds: r.QueueWaitSeconds,
+		Status:           r.Status,
 	}
 }
 

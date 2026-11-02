@@ -52,7 +52,8 @@ func respondRequestTooLarge(c *gin.Context, err error) bool {
 func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	CaptureRequestSnapshot(c)
 	var req model.ChatCompletionRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	native, err := bindNativeJSON(c, &req, model.NativeChat)
+	if err != nil {
 		if respondRequestTooLarge(c, err) {
 			return
 		}
@@ -65,6 +66,7 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 		})
 		return
 	}
+	req.Native = native
 
 	if req.Model == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -165,5 +167,9 @@ func (h *Handler) handleChatUnary(c *gin.Context, reqCtx context.Context, req *m
 		UsageSource:      usageSource,
 	})
 	RecordSuccessTrace(c, req.Model, resp.Channel, dur, resp)
+	if len(resp.NativeResponse) > 0 {
+		c.Data(http.StatusOK, "application/json", resp.NativeResponse)
+		return
+	}
 	c.JSON(http.StatusOK, resp)
 }

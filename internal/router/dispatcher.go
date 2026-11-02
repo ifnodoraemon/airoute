@@ -23,6 +23,9 @@ type Dispatcher struct {
 	circuitBreaker *CircuitBreaker
 	modelFallbacks map[string]string
 	fallbacksMu    sync.RWMutex
+	sessionPins    *sessionPins
+	cooldowns      *cooldowns
+	lanes          *callLanes
 }
 
 // NewDispatcher creates a new Dispatcher instance.
@@ -33,6 +36,9 @@ func NewDispatcher(channels []model.ChannelConfig) *Dispatcher {
 		wrrWeights:     make(map[string]int),
 		circuitBreaker: newConfiguredCircuitBreaker(),
 		modelFallbacks: make(map[string]string),
+		sessionPins:    newSessionPins(),
+		cooldowns:      newCooldowns(),
+		lanes:          newCallLanes(channels),
 	}
 
 	// Register default providers
@@ -51,6 +57,7 @@ func NewDispatcher(channels []model.ChannelConfig) *Dispatcher {
 
 	geminiProv := provider.NewGeminiProvider(nil)
 	d.providers[model.ProviderGemini] = geminiProv
+	d.providers[model.ProviderVertex] = geminiProv
 
 	return d
 }
@@ -80,6 +87,7 @@ func (d *Dispatcher) UpdateChannels(channels []model.ChannelConfig) {
 	d.mu.Unlock()
 
 	activeNames := make(map[string]bool, len(channels))
+	d.lanes.configure(channels)
 	for _, ch := range channels {
 		activeNames[ch.Name] = true
 	}
@@ -214,7 +222,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 	}
 	channels := d.candidateChannelsForRequest(ctx, req, proto)
 	if len(channels) == 0 {
-		if fb := d.GetModelFallback(req.Model); fb != "" && !strings.EqualFold(fb, req.Model) {
+		if fb := d.requestFallback(req); fb != "" && !strings.EqualFold(fb, req.Model) {
 			nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
 			if fbErr != nil {
 				routerLog(ctx).Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
@@ -273,10 +281,20 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		)
 
 		start := time.Now()
-		callCtx, cancelCall := channelCallContext(ctx, ch)
+		callCtx, cancelCall, admissionErr := d.beginChannelCall(ctx, ch, req.Model)
+		if admissionErr != nil {
+			d.circuitBreaker.AbortCanary(ch.Name)
+			if ctx.Err() != nil {
+				return nil, admissionDispatchError(ctx, req.Model, attempted, admissionErr)
+			}
+			lastErr = admissionErr
+			skipped = append(skipped, ch.Name)
+			continue
+		}
 		resp, err := prov.ChatComplete(callCtx, req, ch)
 		cancelCall()
 		if err == nil {
+			d.rememberSessionChannel(ctx, req.Model, ch.Name)
 			promptTokens := 0
 			compTokens := 0
 			if resp.Usage != nil {
@@ -302,6 +320,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		}
 
 		lastErr = err
+		d.observeUpstreamError(ctx, ch, req.Model, err)
 		// A 404 from a single channel means this node does not host the model; the
 		// same request can succeed elsewhere, so fall through to the next channel.
 		// Every modality path uses this shared rule (B-03).
@@ -347,7 +366,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		lastErr = skippedOnlyError(req.Model, skipped)
 	}
 
-	if fb := d.GetModelFallback(req.Model); fb != "" && !strings.EqualFold(fb, req.Model) {
+	if fb := d.requestFallback(req); fb != "" && !strings.EqualFold(fb, req.Model) {
 		nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
 		if fbErr != nil {
 			routerLog(ctx).Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
@@ -371,6 +390,15 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 
 func (d *Dispatcher) candidateChannelsForRequest(ctx context.Context, req *model.ChatCompletionRequest, proto string) []*model.ChannelConfig {
 	channels := d.ResolveCandidateChannels(ctx, req.Model, proto)
+	if req.Native != nil && req.Native.PinnedIdentity != "" {
+		pinned := make([]*model.ChannelConfig, 0, 1)
+		for _, channel := range channels {
+			if model.UpstreamIdentity(channel) == req.Native.PinnedIdentity {
+				pinned = append(pinned, channel)
+			}
+		}
+		return pinned
+	}
 	if !req.AnthropicNativeOnly {
 		return channels
 	}
@@ -383,8 +411,14 @@ func (d *Dispatcher) candidateChannelsForRequest(ctx context.Context, req *model
 	if len(native) > 0 {
 		return native
 	}
-	// Fall back to general channels capable of serving the model via protocol adaptation
-	return channels
+	return nil
+}
+
+func (d *Dispatcher) requestFallback(req *model.ChatCompletionRequest) string {
+	if req.Native != nil && req.Native.PinnedIdentity != "" {
+		return ""
+	}
+	return d.GetModelFallback(req.Model)
 }
 
 // GetBreakerStatus returns the circuit breaker status of a channel.

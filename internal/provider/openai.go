@@ -73,12 +73,10 @@ func buildURL(baseURL string) string {
 
 // ChatComplete executes a standard non-streaming chat request.
 func (p *OpenAIProvider) ChatComplete(ctx context.Context, req *model.ChatCompletionRequest, channel *model.ChannelConfig) (*model.ChatCompletionResponse, error) {
-	targetModel := channel.GetUpstreamModel(req.Model)
-
-	// Automatic full-duplex protocol adaptation for text completion upstreams (/v1/completions)
-	if channel.OnlySupportsProtocol("openai_text") || (channel.SupportsProtocol("openai_text") && !channel.SupportsProtocol("openai_chat")) {
-		return p.chatCompleteText(ctx, req, channel, targetModel)
+	if response, done, err := maybeNativeUnary(ctx, p.client, req, channel, model.NativeChat, model.NativeResponses, model.NativeMessages); done {
+		return response, err
 	}
+	targetModel := channel.GetUpstreamModel(req.Model)
 
 	clonedReq := *req
 	clonedReq.Model = targetModel
@@ -129,7 +127,7 @@ func (p *OpenAIProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 					continue
 				}
 			}
-			return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
+			return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes, resp.Header)
 		}
 
 		var chatResp model.ChatCompletionResponse
@@ -168,6 +166,9 @@ func stripReasoningContent(messages []model.ChatMessage) []model.ChatMessage {
 
 // ChatCompleteStream executes a streaming chat request.
 func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.ChatCompletionRequest, channel *model.ChannelConfig) (<-chan *model.StreamEvent, error) {
+	if stream, done, err := maybeNativeStream(ctx, p.client, req, channel, model.NativeChat, model.NativeResponses, model.NativeMessages); done {
+		return stream, err
+	}
 	return p.chatCompleteStream(ctx, req, channel, true)
 }
 
@@ -175,11 +176,6 @@ func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 // the context-overflow auto-heal can never recurse without bound.
 func (p *OpenAIProvider) chatCompleteStream(ctx context.Context, req *model.ChatCompletionRequest, channel *model.ChannelConfig, allowClamp bool) (<-chan *model.StreamEvent, error) {
 	targetModel := channel.GetUpstreamModel(req.Model)
-
-	// Automatic full-duplex streaming protocol adaptation for text completion upstreams (/v1/completions)
-	if channel.OnlySupportsProtocol("openai_text") || (channel.SupportsProtocol("openai_text") && !channel.SupportsProtocol("openai_chat")) {
-		return p.chatCompleteTextStream(ctx, req, channel, targetModel)
-	}
 
 	clonedReq := *req
 	clonedReq.Model = targetModel
@@ -228,7 +224,7 @@ func (p *OpenAIProvider) chatCompleteStream(ctx context.Context, req *model.Chat
 				return p.chatCompleteStream(ctx, &retryReq, channel, false)
 			}
 		}
-		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
+		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes, resp.Header)
 	}
 
 	eventChan := make(chan *model.StreamEvent, 64)

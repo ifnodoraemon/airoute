@@ -86,9 +86,8 @@ func TestStreamingContract_UsageTrailerAndDone(t *testing.T) {
 	}
 }
 
-// TestStreamingReasoningSeparatedFromContent verifies that literal  thinking tags
-// are split into reasoning_content, so clients no longer need a tag fallback.
-func TestStreamingReasoningSeparatedFromContent(t *testing.T) {
+// Native Chat content remains opaque. Playground handles presentation tags.
+func TestNativeChatStreamPreservesInlineThinking(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
@@ -116,14 +115,24 @@ func TestStreamingReasoningSeparatedFromContent(t *testing.T) {
 	engine.ServeHTTP(w, req)
 	out := w.Body.String()
 
-	if !strings.Contains(out, `"reasoning_content":"step one"`) {
-		t.Fatalf("expected reasoning_content to be emitted:\n%s", out)
+	var content string
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.HasPrefix(line, "data: {") {
+			continue
+		}
+		var chunk model.ChatCompletionChunk
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &chunk); err != nil {
+			t.Fatal(err)
+		}
+		for _, choice := range chunk.Choices {
+			content += choice.Delta.Content
+			if choice.Delta.ReasoningContent != "" {
+				t.Fatalf("gateway altered native thinking content: %s", line)
+			}
+		}
 	}
-	if strings.Contains(out, "</think>") || strings.Contains(out, "<think>") {
-		t.Fatalf("think tags must not leak into the wire stream:\n%s", out)
-	}
-	if !strings.Contains(out, `"content":"final answer"`) {
-		t.Fatalf("expected the answer to be emitted as content:\n%s", out)
+	if content != "<think>step one</think>final answer" {
+		t.Fatalf("native content changed: %q", content)
 	}
 }
 
@@ -222,36 +231,6 @@ func TestUpstream4xxDoesNotTripBreaker(t *testing.T) {
 // TestTextOnlyChannelRejectsToolRequests verifies the adapter refuses to silently
 // drop tool definitions (previously they vanished and the model could never call
 // a tool, with no error to explain why).
-func TestTextOnlyChannelRejectsToolRequests(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"id":"cmpl-1","object":"text_completion","created":1,"model":"m1","choices":[{"text":"x","index":0,"finish_reason":"stop"}]}`)
-	}))
-	defer upstream.Close()
-
-	engine, _ := newChatEngine(t, []model.ChannelConfig{{
-		Name:      "text-only-up",
-		Type:      model.ProviderOpenAI,
-		BaseURL:   upstream.URL,
-		Models:    []string{"m1"},
-		Protocols: []string{"openai_text"},
-		Priority:  1,
-		Weight:    10,
-	}})
-
-	body := `{"model":"m1","messages":[{"role":"user","content":"hi"}],"tools":[{"type":"function","function":{"name":"get_weather","description":"d","parameters":{"type":"object"}}}]}`
-	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	engine.ServeHTTP(w, req)
-
-	if w.Code == http.StatusOK {
-		t.Fatalf("a tool request must not be served by a text-only channel, got 200: %s", w.Body.String())
-	}
-	if !strings.Contains(strings.ToLower(w.Body.String()), "text-completion") {
-		t.Fatalf("expected an explanatory capability error, got: %s", w.Body.String())
-	}
-}
 
 // TestPostgresStatementTimeoutInjection covers the DSN hardening that bounds
 // context-free queries on the server side.

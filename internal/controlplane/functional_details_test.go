@@ -7,15 +7,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/billing"
-	"github.com/ifnodoraemon/airoute/internal/model"
-	"github.com/ifnodoraemon/airoute/internal/provider"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -123,33 +120,6 @@ func TestAuditReviewPriceReadFailureDoesNotOverwriteRates(t *testing.T) {
 	err := service.UpdateModelRoute(context.Background(), &UpdateModelRouteRequest{Model: "audit-model", FixedPrice: priceFloat(1)})
 	if err == nil || store.applyCalls != 0 {
 		t.Fatalf("read error ignored: applyCalls=%d; written prompt=%v completion=%v", store.applyCalls, store.lastBundle.Price.PromptPrice, store.lastBundle.Price.CompletionPrice)
-	}
-}
-
-func TestAuditReviewChannelTestRespectsTextProtocol(t *testing.T) {
-	h, repo := newSecurityTestHandler(t)
-	ch := &storage.ChannelRecord{Name: "text-only", Type: model.ProviderOpenAI, BaseURL: "https://audit.invalid/v1", Models: []string{"text-model"}, Protocols: []string{"openai_text"}, Status: "active"}
-	if err := repo.CreateChannel(ch); err != nil {
-		t.Fatal(err)
-	}
-	previousClient := provider.SharedDefaultHTTPClient
-	t.Cleanup(func() { provider.SharedDefaultHTTPClient = previousClient })
-	var calledPath string
-	provider.SharedDefaultHTTPClient = &http.Client{Transport: regressionTransport(func(r *http.Request) (*http.Response, error) {
-		calledPath = r.URL.Path
-		body, status := `{"choices":[{"text":"pong","finish_reason":"stop"}]}`, 200
-		if calledPath != "/v1/completions" {
-			body, status = `{"error":{"message":"endpoint not supported"}}`, 404
-		}
-		return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}, nil
-	})}
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Params = gin.Params{{Key: "id", Value: strconv.FormatInt(ch.ID, 10)}}
-	c.Request = httptest.NewRequest("POST", "/channels/test", nil)
-	h.TestChannel(c)
-	if calledPath != "/v1/completions" {
-		t.Fatalf("text-only configured channel tested with %s; response=%s", calledPath, w.Body.String())
 	}
 }
 

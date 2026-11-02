@@ -36,6 +36,12 @@ func (h *Handler) handleResponsesStreaming(
 		return
 	}
 
+	var nativeHandled bool
+	streamChan, nativeHandled = h.useNativeStream(c, reqCtx, chatReq, streamChan, sessionID, start)
+	if nativeHandled {
+		return
+	}
+
 	flusher, ok := InitSSEStream(c)
 	if !ok {
 		RespondOpenAIError(c, http.StatusInternalServerError, "Streaming unsupported by response writer", "server_error", "streaming_unsupported")

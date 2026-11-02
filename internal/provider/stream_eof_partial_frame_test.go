@@ -21,7 +21,7 @@ import (
 //   - Anthropic: the message_delta carrying output_tokens was lost, so usage fell
 //     back to a character estimate.
 //
-// The openai and openai_text readers already handled this case; these tests pin
+// The OpenAI reader already handled this case; these tests pin
 // the same behaviour for the other two, including that a processed line is never
 // re-processed.
 

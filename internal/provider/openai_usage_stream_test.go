@@ -12,7 +12,7 @@ import (
 )
 
 func TestGPUStackStreamRequestsAndRetainsUsageTrailer(t *testing.T) {
-	for _, protocol := range []string{"openai_chat", "openai_text"} {
+	for _, protocol := range []string{"openai_chat"} {
 		t.Run(protocol, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				var request struct {

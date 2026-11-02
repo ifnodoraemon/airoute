@@ -16,6 +16,9 @@ import (
 
 // ChatCompleteStream executes a streaming Anthropic request and translates SSE chunks to OpenAI format.
 func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.ChatCompletionRequest, channel *model.ChannelConfig) (<-chan *model.StreamEvent, error) {
+	if stream, done, err := maybeNativeStream(ctx, p.client, req, channel, model.NativeMessages); done {
+		return stream, err
+	}
 	anthropicReq := convertOpenAIToAnthropic(req, channel)
 	anthropicReq.Stream = true
 
@@ -50,7 +53,7 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
+		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes, resp.Header)
 	}
 
 	eventChan := make(chan *model.StreamEvent, 64)

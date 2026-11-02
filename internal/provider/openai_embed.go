@@ -21,6 +21,19 @@ func (p *OpenAIProvider) postJSON(ctx context.Context, channel *model.ChannelCon
 	if err != nil {
 		return fmt.Errorf("marshal %s request error: %w", label, err)
 	}
+	nativeModel := ""
+	switch request := payload.(type) {
+	case *model.EmbeddingRequest:
+		if request.Native != nil && request.Native.Protocol == model.NativeEmbeddings {
+			payloadBytes = RewriteNativeModel(request.Native.Body, request.Model)
+			nativeModel = request.Model
+		}
+	case *model.RerankRequest:
+		if request.Native != nil && request.Native.Protocol == model.NativeRerank {
+			payloadBytes = RewriteNativeModel(request.Native.Body, request.Model)
+			nativeModel = request.Model
+		}
+	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, APIURL(channel.BaseURL, path), bytes.NewReader(payloadBytes))
 	if err != nil {
@@ -45,17 +58,37 @@ func (p *OpenAIProvider) postJSON(ctx context.Context, channel *model.ChannelCon
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
+		return NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes, resp.Header)
 	}
 
-	if err := json.Unmarshal(bodyBytes, out); err != nil {
-		return fmt.Errorf("unmarshal %s response error: %w", label, err)
+	decodeErr := json.Unmarshal(bodyBytes, out)
+	if nativeModel != "" && json.Valid(bodyBytes) {
+		switch response := out.(type) {
+		case *model.EmbeddingResponse:
+			response.NativeResponse = bodyBytes
+			// base64 vectors are valid native responses even though the canonical
+			// float-vector representation cannot decode them.
+			var counters struct {
+				Usage model.EmbeddingUsage `json:"usage"`
+			}
+			_ = json.Unmarshal(bodyBytes, &counters)
+			response.Usage = counters.Usage
+		case *model.RerankResponse:
+			response.NativeResponse = bodyBytes
+		}
+		return nil
+	}
+	if decodeErr != nil {
+		return fmt.Errorf("unmarshal %s response error: %w", label, decodeErr)
 	}
 	return nil
 }
 
 // Embed executes an embedding generation request against standard OpenAI-compatible endpoints.
 func (p *OpenAIProvider) Embed(ctx context.Context, req *model.EmbeddingRequest, channel *model.ChannelConfig) (*model.EmbeddingResponse, error) {
+	if req.Native != nil && req.Native.TranslationError != nil {
+		return nil, &UnsupportedTranslationError{Reason: req.Native.TranslationError.Error()}
+	}
 	cloned := *req
 	cloned.Model = channel.GetUpstreamModel(req.Model)
 
@@ -66,6 +99,9 @@ func (p *OpenAIProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 
 	// Restore user's requested model in the response
 	embResp.Model = req.Model
+	if len(embResp.NativeResponse) > 0 {
+		embResp.NativeResponse = RewriteNativeModel(embResp.NativeResponse, req.Model)
+	}
 	return &embResp, nil
 }
 
@@ -81,5 +117,8 @@ func (p *OpenAIProvider) Rerank(ctx context.Context, req *model.RerankRequest, c
 
 	// Restore user's requested model in the response
 	rerankResp.Model = req.Model
+	if len(rerankResp.NativeResponse) > 0 {
+		rerankResp.NativeResponse = RewriteNativeModel(rerankResp.NativeResponse, req.Model)
+	}
 	return &rerankResp, nil
 }

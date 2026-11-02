@@ -1,16 +1,19 @@
 package model
 
+import "encoding/json"
+
 // =============================================================================
 // Embeddings Models (Vector / Embedding APIs)
 // =============================================================================
 
 // EmbeddingRequest represents the standard OpenAI embedding request payload.
 type EmbeddingRequest struct {
-	Input          any    `json:"input"`                     // string, []string, []int, or [][]int
-	Model          string `json:"model"`                     // model identifier
-	EncodingFormat string `json:"encoding_format,omitempty"` // "float" or "base64"
-	Dimensions     *int   `json:"dimensions,omitempty"`      // number of dimensions for output embedding
-	User           string `json:"user,omitempty"`
+	Native         *NativeRequest `json:"-"`
+	Input          any            `json:"input"`                     // string, []string, []int, or [][]int
+	Model          string         `json:"model"`                     // model identifier
+	EncodingFormat string         `json:"encoding_format,omitempty"` // "float" or "base64"
+	Dimensions     *int           `json:"dimensions,omitempty"`      // number of dimensions for output embedding
+	User           string         `json:"user,omitempty"`
 }
 
 // GetInputStrings returns input as a slice of strings.
@@ -45,16 +48,18 @@ type EmbeddingItem struct {
 
 // EmbeddingUsage reports token consumption for embedding generation.
 type EmbeddingUsage struct {
-	PromptTokens int `json:"prompt_tokens"`
-	TotalTokens  int `json:"total_tokens"`
+	Estimated    bool `json:"-"`
+	PromptTokens int  `json:"prompt_tokens"`
+	TotalTokens  int  `json:"total_tokens"`
 }
 
 // EmbeddingResponse represents the standard response containing generated embeddings.
 type EmbeddingResponse struct {
-	Object string          `json:"object"` // "list"
-	Data   []EmbeddingItem `json:"data"`
-	Model  string          `json:"model"`
-	Usage  EmbeddingUsage  `json:"usage"`
+	NativeResponse json.RawMessage `json:"-"`
+	Object         string          `json:"object"` // "list"
+	Data           []EmbeddingItem `json:"data"`
+	Model          string          `json:"model"`
+	Usage          EmbeddingUsage  `json:"usage"`
 
 	// Channel is the routing chain that served this request (e.g. "A" or
 	// "A→B" after fallback). Internal-only metadata for audit logging.

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"strconv"
 	"strings"
 )
@@ -20,6 +21,8 @@ type UpstreamError struct {
 	Channel string
 	Status  int
 	Body    string
+	// Headers retains only upstream retry metadata, never credentials or cookies.
+	Headers http.Header
 }
 
 // Error implements the error interface.
@@ -55,8 +58,12 @@ func (e *UpstreamError) StatusCode() int {
 }
 
 // NewUpstreamError builds an UpstreamError for a non-2xx upstream response.
-func NewUpstreamError(channel string, status int, body []byte) *UpstreamError {
-	return &UpstreamError{Channel: channel, Status: status, Body: string(body)}
+func NewUpstreamError(channel string, status int, body []byte, headers ...http.Header) *UpstreamError {
+	e := &UpstreamError{Channel: channel, Status: status, Body: string(body)}
+	if len(headers) > 0 {
+		e.Headers = retryHeaders(headers[0])
+	}
+	return e
 }
 
 // AsUpstreamError extracts an *UpstreamError from an error chain.

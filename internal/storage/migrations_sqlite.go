@@ -535,6 +535,9 @@ func (db *DB) migrate() error {
 		// tenant cannot undo it (see docs/audit/2026-10-29-bughunt/01-controlplane.md).
 		{Version: 44, Name: "users_username_lower_unique", Up: createUsersUsernameUniqueLowerIndex},
 		{Version: 45, Name: "api_keys_admin_disabled", Up: addAPIKeyAdminDisabledColumn},
+		{Version: 46, Name: "channel_capacity", Up: addChannelCapacity},
+		{Version: 47, Name: "retire_text_completions", Up: retireTextCompletions},
+		{Version: 48, Name: "native_states", Up: createNativeStates},
 	}
 	return db.runMigrations(migrations)
 }

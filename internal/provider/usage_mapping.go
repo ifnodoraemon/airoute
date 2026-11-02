@@ -1,6 +1,9 @@
 package provider
 
-import "github.com/ifnodoraemon/airoute/internal/model"
+import (
+	"encoding/json"
+	"github.com/ifnodoraemon/airoute/internal/model"
+)
 
 // anthropicUsageToModel converts Anthropic usage into canonical OpenAI-style usage.
 //
@@ -65,6 +68,10 @@ func geminiUsageToModel(u *GeminiUsageMetadata) *model.Usage {
 	}
 	if u.CachedContentTokenCount > 0 {
 		usage.PromptTokensDetails = &model.PromptTokensDetails{CachedTokens: u.CachedContentTokenCount}
+	}
+	if u.ThoughtsTokenCount > 0 {
+		details, _ := json.Marshal(map[string]int{"reasoning_tokens": u.ThoughtsTokenCount})
+		usage.Extra = model.ExtraFields{"completion_tokens_details": details}
 	}
 	return usage
 }

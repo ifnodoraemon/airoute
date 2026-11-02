@@ -13,8 +13,7 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
-// Both gateway-owned streaming entrypoints (legacy /v1/completions and Gemini
-// streamGenerateContent) read only PromptTokens/CompletionTokens from the
+// The Gemini streaming entrypoint previously read only prompt/output counts from the
 // upstream usage frame and dropped PromptTokensDetails.CachedTokens. The cached
 // share of the prompt was therefore billed at the full prompt rate: 900 cached
 // tokens cost 0.002080 instead of 0.000460 at prompt=2, cache_read=0.2,
@@ -78,17 +77,4 @@ data: [DONE]
 		assertCachedCost(t, repo)
 	})
 
-	t.Run("completions", func(t *testing.T) {
-		handler, repo := newFixture(t)
-		chatReq := model.ChatCompletionRequest{
-			Model:    modelName,
-			Stream:   true,
-			Messages: []model.ChatMessage{{Role: "user", Content: "hello"}},
-			Protocol: "openai_text",
-		}
-		req := LegacyCompletionRequest{Model: modelName, Prompt: "hello", Stream: true}
-		c, _ := newTestContext(http.MethodPost, "/v1/completions")
-		handler.handleCompletionsStream(c, c.Request.Context(), req, chatReq, "sess-completions", time.Now())
-		assertCachedCost(t, repo)
-	})
 }

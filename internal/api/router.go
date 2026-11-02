@@ -14,9 +14,8 @@ import (
 // for SDKs configured with a BaseURL that has no /v1 suffix. One list keeps the
 // two surfaces from drifting apart.
 func registerDataPlaneRoutes(g *gin.RouterGroup, handler *Handler, mmHandler *MultimodalHandler) {
-	// OpenAI ingress (Chat completions + Text completions + Responses + Models + Embeddings + Rerank + Moderations)
+	// OpenAI ingress (Chat completions + Responses + Models + Embeddings + Rerank + Moderations)
 	g.POST("/chat/completions", handler.HandleChatCompletions)
-	g.POST("/completions", handler.HandleCompletions)
 	g.POST("/responses", handler.HandleResponses)
 	g.GET("/models", handler.HandleModels)
 	g.GET("/models/*model", handler.HandleModelDetail)
@@ -56,8 +55,8 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key, X-API-Key, anthropic-version, x-goog-api-key, x-admin-token, X-Session-ID, X-Request-ID, X-Airoute-Trace-Id, MCP-Protocol-Version, Stripe-Signature")
-		c.Header("Access-Control-Expose-Headers", "Content-Disposition, Content-Length, X-Airoute-Trace-Id, X-Request-Id, X-Airoute-Cost, X-Airoute-Off-Peak, X-Airoute-Off-Peak-Discount, X-Airoute-Cached-Tokens, X-Airoute-Saved-Cost, X-Cache-Status, X-RateLimit-Limit-Requests, Retry-After")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key, X-API-Key, anthropic-version, x-goog-api-key, x-admin-token, X-Session-ID, X-Request-ID, X-Airoute-Trace-Id, MCP-Protocol-Version, Stripe-Signature, X-Goog-Upload-Protocol, X-Goog-Upload-Command, X-Goog-Upload-Offset, X-Goog-Upload-Header-Content-Type, X-Goog-Upload-Header-Content-Length, Range, If-Match")
+		c.Header("Access-Control-Expose-Headers", "Content-Disposition, Content-Length, X-Airoute-Trace-Id, X-Request-Id, X-Airoute-Cost, X-Airoute-Off-Peak, X-Airoute-Off-Peak-Discount, X-Airoute-Cached-Tokens, X-Airoute-Saved-Cost, X-Cache-Status, X-RateLimit-Limit-Requests, Retry-After, X-Goog-Upload-URL, X-Goog-Upload-Status, X-Goog-Upload-Size-Received, Content-Range")
 		c.Header("X-Content-Type-Options", "nosniff")
 		c.Header("X-Frame-Options", "SAMEORIGIN")
 		c.Header("X-XSS-Protection", "1; mode=block")
@@ -71,6 +70,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "+
 				"font-src 'self' https://fonts.gstatic.com data:; "+
 				"img-src 'self' data: blob: https:; "+
+				"media-src 'self' data: blob: https:; "+
 				"connect-src 'self'; "+
 				"base-uri 'self'; form-action 'self'; frame-ancestors 'self'")
 		if c.Request.TLS != nil {
@@ -323,7 +323,10 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 		v1beta.GET("/models", handler.HandleGeminiModels)
 		v1beta.GET("/models/*modelAction", handler.HandleGeminiModelDetail)
 		v1beta.POST("/models/*modelAction", handler.HandleGeminiAction)
+		registerGeminiResources(v1beta, handler)
 	}
+	registerGeminiUpload(r, handler, middleware.AuthMiddleware(), middleware.RateLimitMiddleware())
+	registerGeminiLive(r, handler)
 
 	// Root-level aliases for clients configured with BaseURL without trailing /v1
 	// (e.g., OpenAI(base_url="http://localhost:8080"), Anthropic(base_url="http://localhost:8080"))

@@ -27,6 +27,7 @@ import (
 // AuditRecordParams encapsulates parameters required to record usage, calculate billing,
 // and update system telemetry. Applying Separation of Concerns (SoC) and DRY.
 type AuditRecordParams struct {
+	BillingID        string
 	SessionID        string
 	ChatID           string
 	Channel          string
@@ -310,6 +311,7 @@ func prepareUsage(c *gin.Context, params AuditRecordParams) (*storage.UsageLogRe
 		apiKey = getRequestAPIKey(c)
 	}
 	record := &storage.UsageLogRecord{
+		BillingID:        params.BillingID,
 		TraceID:          traceID,
 		ChatID:           params.ChatID,
 		Channel:          params.Channel,
@@ -570,6 +572,7 @@ func channelFromError(err error) string {
 // dispatch error — recording only a status code left operators staring at a 502
 // row with an empty message.
 func recordFailedRequestWithError(c *gin.Context, sessionID, modelName string, dur time.Duration, statusCode int, err error) {
+	setUpstreamRetryAfter(c, err)
 	msg := ""
 	channel := ""
 	if err != nil {
@@ -621,6 +624,10 @@ func getAPIKeyConfig(c *gin.Context) *model.APIKeyConfig {
 // so the owner string has to be stable across requests and must not collide
 // between a user and a bare key.
 func callerOwner(c *gin.Context) string {
+	if value, ok := c.Get("native_job_owner"); ok {
+		owner, _ := value.(string)
+		return owner
+	}
 	key := getAPIKeyConfig(c)
 	if key == nil || key.Key == "" {
 		return ""
@@ -739,7 +746,11 @@ func resolveChatUsage(req *model.ChatCompletionRequest, resp *model.ChatCompleti
 		observePromptEstimate(modelNameOf(req), localEstimate, promptTokens)
 	}
 	if completionTokens == 0 && resp != nil {
-		if estimated := estimateCompletionFromChoices(resp.Choices); estimated > 0 {
+		estimated := estimateCompletionFromChoices(resp.Choices)
+		if estimated == 0 {
+			estimated = model.EstimateTokensFromChars(resp.NativeOutputChars)
+		}
+		if estimated > 0 {
 			completionTokens = estimated
 			source = usageSourceEstimated
 		}
@@ -764,7 +775,7 @@ func resolveEmbeddingTokens(req *model.EmbeddingRequest, usage model.EmbeddingUs
 		return 0, usageSourceUpstream
 	}
 	local, exact := localEmbeddingPromptEstimate(req)
-	if usage.PromptTokens > 0 {
+	if usage.PromptTokens > 0 && !usage.Estimated {
 		if !exact {
 			observePromptEstimate(req.Model, local, usage.PromptTokens)
 		}
@@ -894,6 +905,10 @@ func sanitizeErrorMessage(err error) string {
 // resolveUpstreamFailureStatus extracts the authentic underlying status code, error types,
 // and failing channel from an upstream dispatch error, preventing misleading 502 masks.
 func resolveUpstreamFailureStatus(err error) (statusCode int, errType string, errCode string, channel string) {
+	var unsupported *provider.UnsupportedTranslationError
+	if errors.As(err, &unsupported) {
+		return http.StatusBadRequest, "invalid_request_error", "unsupported_translation", channelFromError(err)
+	}
 	statusCode = http.StatusBadGateway
 	errType = "gateway_error"
 	errCode = "upstream_failure"

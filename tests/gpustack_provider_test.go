@@ -55,7 +55,7 @@ func TestGPUStackAndCustomProviderRouting(t *testing.T) {
 			BaseURL:   mockGPUStackServer.URL,
 			APIKey:    "test-gpu-key",
 			Models:    []string{"meta-llama/Llama-3.1-8B-Instruct"},
-			Protocols: []string{"openai_chat", "openai_text"},
+			Protocols: []string{"openai_chat"},
 			Priority:  1,
 			Weight:    10,
 		},
