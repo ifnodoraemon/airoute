@@ -953,6 +953,8 @@ func resolveUpstreamFailureStatus(err error) (statusCode int, errType string, er
 		}
 		if ue.Status > 0 {
 			switch ue.Status {
+			case http.StatusPaymentRequired:
+				return http.StatusPaymentRequired, "billing_error", "upstream_payment_required", channel
 			case http.StatusNotFound:
 				return http.StatusNotFound, "invalid_request_error", "model_not_found", channel
 			case http.StatusTooManyRequests:
