@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -239,19 +238,25 @@ func (h *AdminHandler) GetUserWallet(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询充值记录失败"})
 		return
 	}
+	paymentConfig, paymentErr := loadStripeConfig()
+	paymentEnabled := paymentErr == nil && paymentConfig.enabled()
+	if paymentEnabled {
+		paymentEnabled = h.repo.BindPaymentMode(paymentConfig.Mode) == nil
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
 		"data": gin.H{
-			"username":       user.Username,
-			"email":          user.Email,
-			"role":           user.Role,
-			"status":         user.Status,
-			"balance":        user.Balance,
-			"is_admin":       strings.EqualFold(user.Role, "admin"),
-			"group_name":     user.GroupName,
-			"orders":         orders,
-			"stripe_enabled": strings.TrimSpace(os.Getenv("STRIPE_API_KEY")) != "" && strings.TrimSpace(os.Getenv("STRIPE_WEBHOOK_SECRET")) != "",
+			"username":          user.Username,
+			"email":             user.Email,
+			"role":              user.Role,
+			"status":            user.Status,
+			"balance":           user.Balance,
+			"is_admin":          strings.EqualFold(user.Role, "admin"),
+			"group_name":        user.GroupName,
+			"orders":            orders,
+			"stripe_enabled":    paymentEnabled,
+			"stripe_min_amount": paymentConfig.MinAmount,
 		},
 	})
 }

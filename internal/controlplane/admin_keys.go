@@ -72,9 +72,6 @@ func (h *AdminHandler) ListAPIKeys(c *gin.Context) {
 // The accepted set is exactly the columns CreateAPIKey writes.
 // TestCreateAPIKeyRequestAcceptsExactlyTheWritableColumns enforces that, so a new
 // column cannot silently leave the API behind.
-//
-// Note the asymmetry with CreateUserKeyRequest in user_keys_handler.go: the
-// user-facing endpoint already had its own request type. This closes that gap.
 type CreateAPIKeyRequest struct {
 	Key              string   `json:"key"`
 	TenantID         string   `json:"tenant_id"`

@@ -45,16 +45,6 @@ func skillZipBytes(skill *storage.SkillRecord) ([]byte, error) {
 		return nil, err
 	}
 
-	// scripts/run.sh helper
-	wScript, err := zw.Create(fmt.Sprintf("%s/scripts/run.sh", skill.ID))
-	if err != nil {
-		return nil, err
-	}
-	runScript := fmt.Sprintf("#!/usr/bin/env bash\n# Executable helper script for %s\n# agentskills.io open standard\necho \"[Skill %s] Executing task with tools: %s\"\n", skill.ID, skill.ID, strings.Join(skill.Tools, ", "))
-	if _, err := wScript.Write([]byte(runScript)); err != nil {
-		return nil, err
-	}
-
 	// references/metadata.json
 	wRef, err := zw.Create(fmt.Sprintf("%s/references/metadata.json", skill.ID))
 	if err != nil {
@@ -126,8 +116,6 @@ func etagMatches(ifNoneMatch, etag string) bool {
 // DownloadSkillZip streams a standard .zip archive containing the skill bundle directory:
 // <skill-id>/
 // ├── SKILL.md
-// ├── scripts/
-// │   └── run.sh
 // └── references/
 //
 //	└── metadata.json

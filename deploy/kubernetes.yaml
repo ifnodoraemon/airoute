@@ -26,6 +26,28 @@ spec:
         env:
         - name: GIN_MODE
           value: "release"
+        - name: STRIPE_MODE
+          value: "live"
+        - name: STRIPE_MIN_RECHARGE_CNY
+          value: "10"
+        - name: PUBLIC_URL
+          valueFrom:
+            configMapKeyRef:
+              name: airoute-config
+              key: public-url
+              optional: true
+        - name: STRIPE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: airoute-stripe
+              key: api-key
+              optional: true
+        - name: STRIPE_WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: airoute-stripe
+              key: webhook-secret
+              optional: true
         - name: GATEWAY_PORT
           value: "8080"
         - name: DATABASE_URL

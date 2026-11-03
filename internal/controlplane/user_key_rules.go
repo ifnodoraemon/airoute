@@ -1,11 +1,5 @@
 package controlplane
 
-import (
-	"strings"
-
-	"github.com/ifnodoraemon/airoute/internal/storage"
-)
-
 const (
 	// DefaultUserKeyTPM is the token-per-minute allowance a self-service key gets
 	// when the request does not ask for one. The value is a default rather than a
@@ -64,57 +58,4 @@ func clampSelfServiceTPM(tpm int) int {
 // bounded key.
 func clampSelfServiceQuotas(rpm, tpm int) (int, int) {
 	return clampSelfServiceRPM(rpm), clampSelfServiceTPM(tpm)
-}
-
-// PlanUserKey turns a personal key request into the row to store.
-//
-// It takes the generated credential rather than minting one, so the rule itself is
-// pure and the entropy source stays in the handler.
-//
-// Rules enforced here:
-//
-//   - Tenant identity is server-owned. It is the caller's account identity and can
-//     never come from the request body: deriving it from the display name let a
-//     tenant label its traffic as another tenant (for example "admin") in
-//     usage_logs, dashboards and exports. The administrator creation path is
-//     unchanged — an operator may still deliberately create a key under another
-//     tenant there.
-//   - Quotas get safe defaults. Omitted RPM used to stay 0 (unlimited); it now
-//     defaults to DefaultUserKeyRPM and is capped at MaxSelfServiceKeyRPM. TPM gets
-//     the documented default and the same cap.
-func PlanUserKey(user *storage.UserRecord, req CreateUserKeyRequest, generatedKey string) *storage.APIKeyRecord {
-	allowedModels := req.AllowedModels
-	if len(allowedModels) == 0 {
-		// An empty list would deny every model; the documented default is "all".
-		allowedModels = []string{"*"}
-	}
-
-	rpm, tpm := clampSelfServiceQuotas(req.RPM, req.TPM)
-
-	budget := req.Budget
-	if budget < 0 {
-		budget = 0
-	}
-
-	// Tenant identity is server-owned: a personal key belongs to the authenticated
-	// account. Request fields (tenant_id, name) are deliberately ignored here.
-	tenantID := ""
-	if user != nil {
-		tenantID = strings.TrimSpace(user.Username)
-	}
-
-	rec := &storage.APIKeyRecord{
-		Key:           generatedKey,
-		TenantID:      tenantID,
-		AllowedModels: allowedModels,
-		RPM:           rpm,
-		TPM:           tpm,
-		Budget:        budget,
-		Status:        "active",
-	}
-	if user != nil {
-		rec.UserID = user.ID
-		rec.GroupName = user.GroupName
-	}
-	return rec
 }

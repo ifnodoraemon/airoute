@@ -148,7 +148,7 @@ func (r *KeyCreationRules) PlanCreate(claims *AdminClaims, req CreateAPIKeyReque
 		// Quotas are server-owned for self-service keys. The /admin/keys route is
 		// also reachable by regular accounts, so without this clamp a tenant could
 		// submit rpm=0 (which the storage layer treats as unlimited) and bypass
-		// the self-service policy enforced by /user/keys.
+		// the self-service quota policy.
 		rec.RPM, rec.TPM = clampSelfServiceQuotas(rec.RPM, rec.TPM)
 		if rec.Budget < 0 {
 			rec.Budget = 0

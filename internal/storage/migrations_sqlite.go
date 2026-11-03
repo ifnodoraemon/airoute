@@ -538,6 +538,7 @@ func (db *DB) migrate() error {
 		{Version: 46, Name: "channel_capacity", Up: addChannelCapacity},
 		{Version: 47, Name: "retire_text_completions", Up: retireTextCompletions},
 		{Version: 48, Name: "native_states", Up: createNativeStates},
+		{Version: 49, Name: "payment_lifecycle", Up: addPaymentLifecycle},
 	}
 	return db.runMigrations(migrations)
 }
@@ -604,7 +605,7 @@ func createUsersUsernameUniqueLowerIndex(db *DB) error {
 			conflicts = append(conflicts, strings.Join(names, " / "))
 		}
 		return fmt.Errorf("%w: users.username must be unique ignoring case, but these accounts differ only by case: %s. "+
-			"Rename or delete all but one of each group (the console user list shows them), then restart. No data was modified.",
+			"Rename or delete all but one of each group (the console user list shows them), then restart. No data was modified",
 			errMigrationDeferred, strings.Join(conflicts, "; "))
 	}
 

@@ -1,0 +1,110 @@
+{
+  "phase": "prepublication validation",
+  "baseline": "fe2675be411800a54d28a04a2757f954fd8bdd2a",
+  "findings": {
+    "R01": "fixed",
+    "R02": "fixed",
+    "R03": "fixed",
+    "R04": "fixed",
+    "R05": "fixed",
+    "R06": "fixed",
+    "R07": "fixed",
+    "R08": "fixed",
+    "R09": "fixed"
+  },
+  "checks": {
+    "go_race_project_packages": 16,
+    "go_vet": "passed",
+    "staticcheck_findings": 0,
+    "frontend_lint": "passed",
+    "frontend_build": "passed",
+    "frontend_tests": {
+      "files": 75,
+      "passed": 752
+    },
+    "postgres_redis_integration": "passed",
+    "release_automation_tests": 8,
+    "actionlint": "passed",
+    "helm_lint_and_render": "passed",
+    "compose_config": "passed"
+  },
+  "runtime_journeys": {
+    "checks": [
+      "empty wallet rejects before upstream",
+      "redemption -> duplicate refusal -> unary and streamed inference -> exact 0.008 CNY charge",
+      "both requests produce owned audit rows",
+      "removed duplicate key writer; malformed canonical request rejected without creating a credential",
+      "lifetime tokens and TPM ceiling are displayed as separate quantities",
+      "admin key disable immediately rejects inference; customer cannot reenable it",
+      "password change immediately revokes old session token"
+    ],
+    "findings": [
+      {
+        "id": "CLOSURE-03",
+        "scenario": "channel rename",
+        "currentChannel": "review-provider-after",
+        "supplierCostChannel": "review-provider-after"
+      },
+      {
+        "id": "CLOSURE-01",
+        "scenario": "log -> test this model",
+        "logModel": "audit-omega",
+        "playgroundModel": "audit-omega"
+      },
+      {
+        "id": "CLOSURE-04",
+        "scenario": "Gemini safety blocking feedback",
+        "httpStatus": 200,
+        "gatewayCarriesSafety": true,
+        "visibleSafetyReason": true,
+        "alerts": []
+      }
+    ],
+    "upstreamCalls": [
+      {
+        "path": "/v1/chat/completions",
+        "model": "audit-omega"
+      },
+      {
+        "path": "/v1/chat/completions",
+        "model": "audit-omega",
+        "stream": true
+      },
+      {
+        "path": "/v1beta/models/gemini-audit-block:streamGenerateContent?alt=sse"
+      }
+    ]
+  },
+  "ecosystem": {
+    "artifact": {
+      "files": [
+        "review-skill/SKILL.md",
+        "review-skill/references/metadata.json"
+      ],
+      "placeholder_script_present": false
+    },
+    "malformed_toggle": {
+      "body": "{",
+      "skill_initial_enabled": false,
+      "skill_final_enabled": false,
+      "mcp_initial_enabled": false,
+      "mcp_final_enabled": false
+    }
+  },
+  "rename_conflict": {
+    "status": 409,
+    "channel_name_preserved": true,
+    "message": "新渠道名称下已存在同模型的供应商报价，请先处理报价冲突；渠道和报价均未修改"
+  },
+  "version_automation": {
+    "canonical_file": "VERSION",
+    "version": "2.0.0",
+    "historical_tag_preserved": "v1.0.0",
+    "tag_trigger": "successful current main CI",
+    "explicit_publisher_dispatch": true,
+    "development_image": "main",
+    "stable_image": "latest",
+    "publication_status": "executes after commit and successful GitHub CI"
+  },
+  "boundary": "Synthetic upstreams and disposable application/PostgreSQL/Redis only; no live payments or provider charges."
+}

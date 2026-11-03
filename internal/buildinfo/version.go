@@ -1,6 +1,6 @@
 package buildinfo
 
-// BaseVersion is the next planned release. Keep frontend package metadata in sync.
+// BaseVersion mirrors the canonical VERSION file via scripts/version.mjs.
 const BaseVersion = "2.0.0"
 
 // Builds without linker metadata are development builds, never release artifacts.

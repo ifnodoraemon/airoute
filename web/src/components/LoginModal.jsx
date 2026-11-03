@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useAuthForm } from '../hooks/useAuthForm';
 import {
   X,
   Lock,
@@ -19,182 +19,15 @@ import OneTimeKeyDialog from './OneTimeKeyDialog';
 export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh' }) {
 
   const isZh = lang === 'zh';
-  const [activeTab, setActiveTab] = useState('login'); // 'login' or 'register'
-
-  // Login state
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-
-  // Register state
-  const [regUsername, setRegUsername] = useState('');
-  const [regEmail, setRegEmail] = useState('');
-  const [regPassword, setRegPassword] = useState('');
-  const [regCode, setRegCode] = useState('');
-  const [sendingCode, setSendingCode] = useState(false);
-  const [codeCountdown, setCodeCountdown] = useState(0);
-
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
-  const [registrationResult, setRegistrationResult] = useState(null);
+  const {
+    activeTab, setActiveTab, username, setUsername, password, setPassword, showPassword, setShowPassword,
+    regUsername, setRegUsername, regEmail, setRegEmail, regPassword, setRegPassword, regCode, setRegCode,
+    sendingCode, codeCountdown, loading, error, setError, successMsg, setSuccessMsg, sysConfig, registrationResult,
+    handleLoginSubmit, handleSendCode, handleRegisterSubmit, handleOAuthLogin, completeRegistration,
+  } = useAuthForm({ isOpen, lang, onLoginSuccess, onClose });
 
   const requestClose = () => { if (!loading && !registrationResult) onClose(); };
   useModalA11y(isOpen, requestClose);
-
-  // Enterprise public capability configuration
-  const [sysConfig, setSysConfig] = useState({
-    allow_registration: true,
-    require_email_verification: false,
-    oauth_github_enabled: false,
-    oauth_google_enabled: false
-  });
-
-  React.useEffect(() => {
-    fetch('/api/v1/public/status')
-      .then(res => res.json())
-      .then(data => {
-        if (data.code === 0 && data.data) {
-          setSysConfig({
-            allow_registration: data.data.allow_registration !== false,
-            require_email_verification: !!data.data.require_email_verification,
-            oauth_github_enabled: !!data.data.oauth_github_enabled,
-            oauth_google_enabled: !!data.data.oauth_google_enabled
-          });
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  // The resend countdown owns its interval so the timer stops with the dialog. This
-  // component stays mounted while closed (`if (!isOpen) return null`), so the guard
-  // is `isOpen` as well as the remaining time — otherwise a closed dialog would keep
-  // ticking for the rest of the minute.
-  const isCountingDown = isOpen && codeCountdown > 0;
-  React.useEffect(() => {
-    if (!isCountingDown) return undefined;
-    const timer = setInterval(() => {
-      setCodeCountdown((prev) => (prev <= 1 ? 0 : prev - 1));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [isCountingDown]);
-
-  // Handle Login Submit
-  const handleLoginSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSuccessMsg('');
-    setLoading(true);
-
-    try {
-      const res = await fetch('/api/v1/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username.trim(), password })
-      });
-      const data = await res.json();
-
-      if (res.ok && data.code === 0 && data.data?.token) {
-        localStorage.setItem('airoute_user', JSON.stringify(data.data.user));
-        onLoginSuccess(data.data.token, data.data.user);
-        onClose();
-      } else {
-        setError(data.error || (isZh ? '登录失败，请检查账号或密码' : 'Sign in failed, please check credentials'));
-      }
-    } catch (err) {
-      setError(isZh ? ('网络请求失败，请确保网关服务正在运行: ' + err.message) : ('Network request failed: ' + err.message));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Send Email Verification Code
-  const handleSendCode = async () => {
-    if (!regEmail.trim()) {
-      setError(isZh ? '请先填写有效的电子邮箱' : 'Please enter a valid email address first');
-      return;
-    }
-    setError('');
-    setSuccessMsg('');
-    setSendingCode(true);
-
-    try {
-      const res = await fetch('/api/v1/auth/send-verification-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: regEmail.trim(), purpose: 'register' })
-      });
-      const data = await res.json();
-      if (res.ok && data.code === 0) {
-        setSuccessMsg(data.message || (isZh ? '验证码已发送至邮箱，请查收' : 'Verification code sent to your email'));
-        setCodeCountdown(60);
-      } else {
-        setError(data.error || (isZh ? '发送验证码失败' : 'Failed to send code'));
-      }
-    } catch (err) {
-      setError((isZh ? '请求异常: ' : 'Request error: ') + err.message);
-    } finally {
-      setSendingCode(false);
-    }
-  };
-
-  // Handle Register Submit
-  const handleRegisterSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSuccessMsg('');
-    setLoading(true);
-
-    try {
-      const res = await fetch('/api/v1/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: regUsername.trim(),
-          email: regEmail.trim(),
-          password: regPassword,
-          code: sysConfig.require_email_verification ? regCode.trim() : undefined
-        })
-      });
-      const data = await res.json();
-
-      if (res.ok && data.code === 0 && data.data?.token) {
-        if (data.data.api_key) {
-          setRegistrationResult(data.data);
-          setRegPassword('');
-        } else {
-          onLoginSuccess(data.data.token, data.data.user);
-          onClose();
-        }
-      } else {
-        setError(data.error || (isZh ? '注册失败' : 'Registration failed'));
-      }
-    } catch (err) {
-      setError((isZh ? '网络请求失败: ' : 'Network request failed: ') + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 1-Click OAuth Login (GitHub / Google)
-  const handleOAuthLogin = async (provider) => {
-    setError('');
-    try {
-      // Always start the flow on the server: it mints the signed, cookie-bound
-      // OAuth `state` that the callback now requires. Building the authorize
-      // URL here bypassed that and the callback was rejected as CSRF.
-      const res = await fetch(`/api/v1/auth/oauth/${provider}`, { credentials: 'same-origin' });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.auth_url) {
-        window.location.href = data.auth_url;
-        return;
-      }
-      setError(data.error || (isZh ? `企业未配置 ${provider.toUpperCase()} 登录通道` : `${provider.toUpperCase()} SSO login is not configured`));
-    } catch (err) {
-      setError((isZh ? 'OAuth 异常: ' : 'OAuth error: ') + err.message);
-    }
-  };
-
   if (!isOpen) return null;
 
   if (registrationResult) {
@@ -202,12 +35,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
       credential={registrationResult.api_key}
       username={registrationResult.user?.username}
       lang={lang}
-      onClose={() => {
-        const result = registrationResult;
-        setRegistrationResult(null);
-        onLoginSuccess(result.token, result.user);
-        onClose();
-      }}
+      onClose={completeRegistration}
     />;
   }
 

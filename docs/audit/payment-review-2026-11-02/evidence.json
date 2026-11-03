@@ -1,0 +1,66 @@
+[
+  {
+    "balance_after": 60,
+    "balance_before": 10,
+    "caller_role": "user",
+    "case": "release_sandbox_flag",
+    "existing_order_channel": "stripe",
+    "flag_false_http": 403,
+    "flag_true_http": 200,
+    "issue_reproduced": true,
+    "method": "GET",
+    "order_status": "paid",
+    "provider_requests": 0
+  },
+  {
+    "balance_after_payment": 60,
+    "balance_after_reversals": 60,
+    "case": "refund_and_dispute_ignored",
+    "charge_refunded_http": 200,
+    "dispute_http": 200,
+    "issue_reproduced": true,
+    "order_status": "paid",
+    "refund_http": 200,
+    "user_status": "active"
+  },
+  {
+    "balance": 10,
+    "case": "checkout_retry_creates_new_session",
+    "issue_reproduced": true,
+    "local_orders": 2,
+    "outbound_idempotency_keys": [
+      "",
+      ""
+    ],
+    "provider_sessions": 2,
+    "response_codes": [
+      200,
+      200
+    ]
+  },
+  {
+    "balance": 10,
+    "case": "poll_does_not_reconcile",
+    "issue_reproduced": true,
+    "local_status": "pending",
+    "polls": 3,
+    "provider_get_requests": 0,
+    "simulated_provider_status": "paid"
+  },
+  {
+    "balance": 60,
+    "case": "release_accepts_signed_test_event",
+    "event_livemode": false,
+    "gin_mode": "release",
+    "http": 200,
+    "issue_reproduced": true,
+    "requires_misconfigured_test_credentials": true
+  },
+  {
+    "case": "provider_session_precedes_local_order",
+    "checkout_url_withheld": true,
+    "http": 500,
+    "issue_reproduced": true,
+    "provider_sessions_created": 1
+  }
+]

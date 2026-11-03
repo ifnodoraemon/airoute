@@ -17,12 +17,8 @@ func GeminiResourceURL(base, path string) string {
 	}
 	parts := strings.SplitN(path, "?", 2)
 	root := strings.TrimRight(u.Path, "/")
-	if strings.HasSuffix(root, "/v1beta") {
-		root = strings.TrimSuffix(root, "/v1beta")
-	}
-	if strings.HasSuffix(root, "/v1") {
-		root = strings.TrimSuffix(root, "/v1")
-	}
+	root = strings.TrimSuffix(root, "/v1beta")
+	root = strings.TrimSuffix(root, "/v1")
 	if strings.Contains(root, "/publishers/google") {
 		if i := strings.Index(root, "/publishers/google"); i >= 0 {
 			root = root[:i]

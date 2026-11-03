@@ -210,7 +210,7 @@ func geminiErrorStatus(statusCode int) string {
 		return "INVALID_ARGUMENT"
 	case http.StatusNotFound:
 		return "NOT_FOUND"
-	case http.StatusTooManyRequests:
+	case http.StatusPaymentRequired, http.StatusTooManyRequests:
 		return "RESOURCE_EXHAUSTED"
 	case http.StatusGatewayTimeout:
 		return "DEADLINE_EXCEEDED"

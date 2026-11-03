@@ -1,0 +1,1230 @@
+{
+  "baseline": "fe2675be411800a54d28a04a2757f954fd8bdd2a",
+  "date": "2026-11-03",
+  "scope": "post-deployment read-only review; business mutations only in disposable instance; no business source changes",
+  "deployment": {
+    "commit_pushed": true,
+    "version": "2.0.0-dev+gfe2675b",
+    "replicas": {
+      "airoute-1": "ready",
+      "airoute-2": "ready"
+    },
+    "dependencies": [
+      "database",
+      "redis",
+      "data_plane"
+    ],
+    "nginx_config_and_reload": "passed",
+    "drift_check": "passed",
+    "storage_driver": "s3",
+    "stripe_configured": false
+  },
+  "checks": {
+    "go_race_all": {
+      "status": "passed",
+      "tested_project_packages": 16,
+      "unintended_dependency_package": "web/node_modules/flatted/golang/pkg/flatted"
+    },
+    "go_vet": "passed",
+    "web_lint": "passed",
+    "web_build": "passed",
+    "web_test": {
+      "status": "passed",
+      "files": 75,
+      "tests": 746
+    },
+    "postgres_redis_integration": {
+      "status": "passed",
+      "postgres": "16-alpine",
+      "redis": "7-alpine",
+      "payment_lifecycle_included": true,
+      "disposable_services": true
+    },
+    "staticcheck": {
+      "status": "findings",
+      "count": 21,
+      "classes": {
+        "ST1005": 16,
+        "S1017": 2,
+        "S1011": 1,
+        "U1000": 1,
+        "S1023": 1
+      },
+      "output": [
+        "internal/api/gemini_inbound_embed.go:112:2: redundant return statement (S1023)",
+        "internal/api/gemini_live.go:100:18: error strings should not be capitalized (ST1005)",
+        "internal/api/gemini_live.go:115:19: error strings should not be capitalized (ST1005)",
+        "internal/api/gemini_translation.go:86:12: error strings should not be capitalized (ST1005)",
+        "internal/api/native_request.go:54:30: error strings should not be capitalized (ST1005)",
+        "internal/api/native_request.go:60:30: error strings should not be capitalized (ST1005)",
+        "internal/api/stream_usage_accumulation_test.go:13:7: const streamUsageModel is unused (U1000)",
+        "internal/config/validation_rules_glob_test.go:38:2: should replace loop with cfg.ModelValidation.Rules = append(cfg.ModelValidation.Rules, []ModelValidationRule{",
+        "\t{Model: \"claude-*\", Protocol: \"anthropic\", Level: \"strict\"},",
+        "\t{Model: \"o1*\", Protocol: \"openai\", Level: \"strict\", DisallowTemperature: true},",
+        "\t{Model: \"*flash\", Level: \"lenient\"},",
+        "\t{Model: \"gpt-4o\", Level: \"lenient\"},",
+        "\t{Model: \"\", Level: \"off\"},",
+        "}...) (S1011)",
+        "internal/controlplane/payment_client.go:85:10: error strings should not be capitalized (ST1005)",
+        "internal/controlplane/payment_client.go:93:10: error strings should not be capitalized (ST1005)",
+        "internal/controlplane/payment_client.go:159:23: error strings should not be capitalized (ST1005)",
+        "internal/controlplane/payment_config.go:41:13: error strings should not be capitalized (ST1005)",
+        "internal/controlplane/payment_config.go:44:13: error strings should not be capitalized (ST1005)",
+        "internal/controlplane/payment_config.go:63:13: error strings should not be capitalized (ST1005)",
+        "internal/controlplane/payment_service.go:168:11: error strings should not be capitalized (ST1005)",
+        "internal/provider/gemini.go:135:15: error strings should not be capitalized (ST1005)",
+        "internal/provider/gemini_embed_native.go:51:15: error strings should not be capitalized (ST1005)",
+        "internal/provider/gemini_resource.go:20:2: should replace this if statement with an unconditional strings.TrimSuffix (S1017)",
+        "internal/provider/gemini_resource.go:23:2: should replace this if statement with an unconditional strings.TrimSuffix (S1017)",
+        "internal/provider/google_auth.go:92:16: error strings should not be capitalized (ST1005)",
+        "internal/storage/migrations_sqlite.go:607:10: error strings should not end with punctuation or newlines (ST1005)"
+      ]
+    },
+    "deadcode": {
+      "tool": "golang.org/x/tools/cmd/deadcode v0.52.0",
+      "production_output": [
+        "internal/api/mcp_client.go:400:6: unreachable func: forwardJSONRPCToolCall",
+        "internal/api/mcp_handler.go:102:22: unreachable func: MCPHandler.authenticateCaller",
+        "internal/api/ops_handler.go:56:6: unreachable func: ResetReadinessChecks",
+        "internal/telemetry/context.go:72:6: unreachable func: ResetWarnGate"
+      ],
+      "with_test_roots_output": [
+        "web/node_modules/flatted/golang/pkg/flatted/flatted.go:16:6: unreachable func: Stringify",
+        "web/node_modules/flatted/golang/pkg/flatted/flatted.go:146:6: unreachable func: Parse",
+        "web/node_modules/flatted/golang/pkg/flatted/flatted.go:208:6: unreachable func: revive",
+        "web/node_modules/flatted/golang/pkg/flatted/flatted.go:227:6: unreachable func: loop",
+        "web/node_modules/flatted/golang/pkg/flatted/flatted.go:249:6: unreachable func: ref",
+        "web/node_modules/flatted/golang/pkg/flatted/flatted.go:262:6: unreachable func: ToJSON",
+        "web/node_modules/flatted/golang/pkg/flatted/flatted.go:273:6: unreachable func: FromJSON"
+      ],
+      "unreachable_project_functions_with_test_roots": 0
+    },
+    "frontend_reachability": {
+      "files": 85,
+      "unreachable": [],
+      "unusedProductionExports": [
+        {
+          "file": "App.jsx",
+          "name": "ViewLoader",
+          "line": 92
+        },
+        {
+          "file": "api/client.js",
+          "name": "resetApiClient",
+          "line": 35
+        },
+        {
+          "file": "components/MarkdownRenderer.jsx",
+          "name": "RenderInline",
+          "line": 114
+        },
+        {
+          "file": "config.js",
+          "name": "csvEscape",
+          "line": 56
+        },
+        {
+          "file": "hooks/useFormDirty.js",
+          "name": "stableStringify",
+          "line": 4
+        },
+        {
+          "file": "hooks/useKeyActions.js",
+          "name": "clampSelfServiceRpm",
+          "line": 21
+        },
+        {
+          "file": "hooks/useKeyActions.js",
+          "name": "clampSelfServiceTpm",
+          "line": 27
+        },
+        {
+          "file": "hooks/useModalA11y.js",
+          "name": "resetBodyScrollLock",
+          "line": 44
+        },
+        {
+          "file": "hooks/useModalA11y.js",
+          "name": "useModalA11y",
+          "line": 66
+        },
+        {
+          "file": "lib/escapeLayer.js",
+          "name": "hasEscapeLayers",
+          "line": 59
+        },
+        {
+          "file": "lib/escapeLayer.js",
+          "name": "resetEscapeLayers",
+          "line": 64
+        },
+        {
+          "file": "lib/mcpClientConfig.js",
+          "name": "parseMCPCommand",
+          "line": 2
+        },
+        {
+          "file": "lib/navGroups.js",
+          "name": "navTabs",
+          "line": 90
+        },
+        {
+          "file": "lib/providerPresets.js",
+          "name": "ALL_PROTOCOLS",
+          "line": 15
+        },
+        {
+          "file": "lib/providerPresets.js",
+          "name": "PROVIDER_PRESETS",
+          "line": 46
+        }
+      ]
+    }
+  },
+  "findings": [
+    {
+      "id": "R01",
+      "priority": "P2",
+      "title": "malformed key creation persists default key",
+      "verification": "isolated real HTTP",
+      "source": "internal/controlplane/user_keys_handler.go",
+      "line": 59,
+      "status": "open"
+    },
+    {
+      "id": "R02",
+      "priority": "P2",
+      "title": "malformed Skills/MCP toggles enable disabled objects",
+      "verification": "isolated real HTTP",
+      "source": "internal/controlplane/admin_skills.go",
+      "line": 40,
+      "status": "open"
+    },
+    {
+      "id": "R03",
+      "priority": "P2",
+      "title": "log-to-playground loses selected model",
+      "verification": "isolated browser and real HTTP",
+      "source": "web/src/App.jsx",
+      "line": 856,
+      "status": "open"
+    },
+    {
+      "id": "R04",
+      "priority": "P2",
+      "title": "Gemini safety feedback not shown",
+      "verification": "isolated browser, real gateway and synthetic upstream",
+      "source": "web/src/lib/geminiPlayground.js",
+      "line": 5,
+      "status": "open"
+    },
+    {
+      "id": "R05",
+      "priority": "P2",
+      "title": "channel rename leaves supplier quote under old name",
+      "verification": "isolated real HTTP",
+      "source": "internal/storage/repo_channels.go",
+      "line": 188,
+      "status": "open"
+    },
+    {
+      "id": "R06",
+      "priority": "P2",
+      "title": "lifetime token counter labeled as TPM usage",
+      "verification": "source inspection of UI, settlement and limiter",
+      "source": "web/src/components/MyUsageView.jsx",
+      "line": 155,
+      "status": "open"
+    },
+    {
+      "id": "R07",
+      "priority": "P2",
+      "title": "optional storage required by rebuild script",
+      "verification": "original script with isolated command stubs",
+      "source": "scripts/docker-rebuild.sh",
+      "line": 22,
+      "status": "open"
+    },
+    {
+      "id": "R08",
+      "priority": "P2",
+      "title": "load balancer compose changes not reconciled",
+      "verification": "original script with isolated command stubs",
+      "source": "scripts/docker-rebuild.sh",
+      "line": 70,
+      "status": "open"
+    },
+    {
+      "id": "R09",
+      "priority": "P3",
+      "title": "skill artifact tree mismatch and echo-only helper",
+      "verification": "isolated HTTP ZIP download and helper execution",
+      "source": "web/src/components/SkillHubView.jsx",
+      "line": 911,
+      "status": "open"
+    }
+  ],
+  "browser": [
+    {
+      "name": "deployed",
+      "loginStatus": 200,
+      "pages": [
+        {
+          "tab": "dashboard",
+          "hash": "#/dashboard",
+          "headings": [
+            "Airoute",
+            "运营总览",
+            "需要关注",
+            "全平台实时速率遥测 (Platform Telemetry)",
+            "上游渠道健康度与测速",
+            "最近调用流水"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "channels",
+          "hash": "#/channels",
+          "headings": [
+            "Airoute",
+            "服务商管理"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "models",
+          "hash": "#/models",
+          "headings": [
+            "Airoute",
+            "模型路由与分发"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "pricing",
+          "hash": "#/pricing",
+          "headings": [
+            "Airoute",
+            "模型定价"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "reconciliation",
+          "hash": "#/reconciliation",
+          "headings": [
+            "Airoute",
+            "供应商整体对账"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "wallet",
+          "hash": "#/wallet",
+          "headings": [
+            "Airoute",
+            "钱包与额度充值",
+            "钱包余额在线充值",
+            "最近充值记录"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "keys",
+          "hash": "#/keys",
+          "headings": [
+            "Airoute",
+            "API 密钥管理"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "users",
+          "hash": "#/users",
+          "headings": [
+            "Airoute",
+            "用户管理"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "playground",
+          "hash": "#/playground",
+          "headings": [
+            "Airoute",
+            "参数配置"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "skills",
+          "hash": "#/skills",
+          "headings": [
+            "Airoute",
+            "Agent 技能中心 (Skills)",
+            "浏览器无头自动化与页面端到端测试",
+            "Git 规范协作与代码审查工作流",
+            "企业级代码安全审计与合规检查",
+            "TDD 测试驱动开发与缺陷排查"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "mcp",
+          "hash": "#/mcp",
+          "headings": [
+            "Airoute",
+            "Model Context Protocol (MCP) 广场",
+            "Airoute 网关原生核心服务",
+            "Brave Search 全球实时网络检索",
+            "Puppeteer 无头浏览器渲染服务",
+            "Docker / K8s 容器与集群探针",
+            "飞书 / Lark 办公智能体协议服务",
+            "Fetch 快速网页提取与 Markdown 转换",
+            "Filesystem 沙箱文件安全交互",
+            "Git 本地版本控制与代码审计",
+            "GitHub 研发协作协议服务",
+            "Knowledge Graph 跨会话长期记忆",
+            "ModelScope 联网检索与正文提取",
+            "PostgreSQL 企业数据安全审计服务",
+            "Sentry 生产异常监控与错误追踪",
+            "Sequential Thinking 动态思维链推理",
+            "SQLite 轻量嵌入式分析数据库"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "logs",
+          "hash": "#/logs",
+          "headings": [
+            "Airoute",
+            "对话审计与请求日志"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "docs",
+          "hash": "#/docs",
+          "headings": [
+            "Airoute",
+            "Airoute 核心架构与高可用设计规范"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "dashboard",
+          "mobile": true,
+          "width": {
+            "viewport": 390,
+            "document": 390
+          }
+        },
+        {
+          "tab": "wallet",
+          "mobile": true,
+          "width": {
+            "viewport": 390,
+            "document": 390
+          }
+        },
+        {
+          "tab": "keys",
+          "mobile": true,
+          "width": {
+            "viewport": 390,
+            "document": 390
+          }
+        },
+        {
+          "tab": "playground",
+          "mobile": true,
+          "width": {
+            "viewport": 390,
+            "document": 390
+          }
+        },
+        {
+          "tab": "pricing",
+          "mobile": true,
+          "width": {
+            "viewport": 390,
+            "document": 390
+          }
+        },
+        {
+          "tab": "logs",
+          "mobile": true,
+          "width": {
+            "viewport": 390,
+            "document": 390
+          }
+        }
+      ],
+      "errors": [],
+      "httpErrors": []
+    },
+    {
+      "name": "isolated",
+      "loginStatus": 200,
+      "pages": [
+        {
+          "tab": "dashboard",
+          "hash": "#/dashboard",
+          "headings": [
+            "Airoute",
+            "运营总览",
+            "需要关注",
+            "全平台实时速率遥测 (Platform Telemetry)",
+            "上游渠道健康度与测速",
+            "最近调用流水"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "channels",
+          "hash": "#/channels",
+          "headings": [
+            "Airoute",
+            "服务商管理"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "models",
+          "hash": "#/models",
+          "headings": [
+            "Airoute",
+            "模型路由与分发"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "pricing",
+          "hash": "#/pricing",
+          "headings": [
+            "Airoute",
+            "模型定价"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "reconciliation",
+          "hash": "#/reconciliation",
+          "headings": [
+            "Airoute",
+            "供应商整体对账"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "wallet",
+          "hash": "#/wallet",
+          "headings": [
+            "Airoute",
+            "钱包与额度充值",
+            "钱包余额在线充值",
+            "最近充值记录"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "keys",
+          "hash": "#/keys",
+          "headings": [
+            "Airoute",
+            "API 密钥管理"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "users",
+          "hash": "#/users",
+          "headings": [
+            "Airoute",
+            "用户管理"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "playground",
+          "hash": "#/playground",
+          "headings": [
+            "Airoute",
+            "参数配置"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "skills",
+          "hash": "#/skills",
+          "headings": [
+            "Airoute",
+            "Agent 技能中心 (Skills)",
+            "浏览器无头自动化与页面端到端测试",
+            "Git 规范协作与代码审查工作流",
+            "企业级代码安全审计与合规检查",
+            "TDD 测试驱动开发与缺陷排查"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "mcp",
+          "hash": "#/mcp",
+          "headings": [
+            "Airoute",
+            "Model Context Protocol (MCP) 广场",
+            "Airoute 网关原生核心服务",
+            "Puppeteer 无头浏览器渲染服务",
+            "Fetch 快速网页提取与 Markdown 转换",
+            "Filesystem 沙箱文件安全交互",
+            "GitHub 研发协作协议服务",
+            "ModelScope 联网检索与正文提取",
+            "PostgreSQL 企业数据安全审计服务",
+            "Sentry 生产异常监控与错误追踪",
+            "SQLite 轻量嵌入式分析数据库"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "logs",
+          "hash": "#/logs",
+          "headings": [
+            "Airoute",
+            "对话审计与请求日志"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "docs",
+          "hash": "#/docs",
+          "headings": [
+            "Airoute",
+            "Airoute 核心架构与高可用设计规范"
+          ],
+          "width": {
+            "viewport": 1440,
+            "document": 1440
+          },
+          "boundary": false
+        },
+        {
+          "tab": "dashboard",
+          "mobile": true,
+          "width": {
+            "viewport": 390,
+            "document": 390
+          }
+        },
+        {
+          "tab": "wallet",
+          "mobile": true,
+          "width": {
+            "viewport": 390,
+            "document": 390
+          }
+        },
+        {
+          "tab": "keys",
+          "mobile": true,
+          "width": {
+            "viewport": 390,
+            "document": 390
+          }
+        },
+        {
+          "tab": "playground",
+          "mobile": true,
+          "width": {
+            "viewport": 390,
+            "document": 390
+          }
+        },
+        {
+          "tab": "pricing",
+          "mobile": true,
+          "width": {
+            "viewport": 390,
+            "document": 390
+          }
+        },
+        {
+          "tab": "logs",
+          "mobile": true,
+          "width": {
+            "viewport": 390,
+            "document": 390
+          }
+        }
+      ],
+      "errors": [],
+      "httpErrors": [],
+      "userCreationStatus": 200,
+      "userLoginHash": "#/dashboard",
+      "userPages": [
+        {
+          "tab": "dashboard",
+          "hash": "#/dashboard",
+          "headings": [
+            "Airoute",
+            "我的用量"
+          ]
+        },
+        {
+          "tab": "wallet",
+          "hash": "#/wallet",
+          "headings": [
+            "Airoute",
+            "钱包与额度充值",
+            "钱包余额在线充值",
+            "最近充值记录"
+          ]
+        },
+        {
+          "tab": "keys",
+          "hash": "#/keys",
+          "headings": [
+            "Airoute",
+            "API 密钥管理"
+          ]
+        },
+        {
+          "tab": "pricing",
+          "hash": "#/pricing",
+          "headings": [
+            "Airoute",
+            "模型定价"
+          ]
+        },
+        {
+          "tab": "playground",
+          "hash": "#/playground",
+          "headings": [
+            "Airoute",
+            "参数配置"
+          ]
+        },
+        {
+          "tab": "logs",
+          "hash": "#/logs",
+          "headings": [
+            "Airoute",
+            "对话审计与请求日志"
+          ]
+        },
+        {
+          "tab": "docs",
+          "hash": "#/docs",
+          "headings": [
+            "Airoute",
+            "Airoute 核心架构与高可用设计规范"
+          ]
+        },
+        {
+          "tab": "channels",
+          "hash": "#/dashboard",
+          "headings": [
+            "Airoute",
+            "我的用量"
+          ]
+        },
+        {
+          "tab": "users",
+          "hash": "#users",
+          "headings": [
+            "Airoute",
+            "我的用量"
+          ]
+        }
+      ]
+    }
+  ],
+  "business_journeys": {
+    "checks": [
+      "empty wallet rejects before upstream",
+      "redemption -> duplicate refusal -> unary and streamed inference -> exact 0.008 CNY charge",
+      "both requests produce owned audit rows",
+      "admin key disable immediately rejects inference; customer cannot reenable it",
+      "password change immediately revokes old session token"
+    ],
+    "findings": [
+      {
+        "id": "CLOSURE-02",
+        "scenario": "malformed self-service key JSON",
+        "httpStatus": 200,
+        "before": 1,
+        "after": 2,
+        "createdScope": [
+          "*"
+        ],
+        "createdBudget": 0
+      },
+      {
+        "id": "CLOSURE-03",
+        "scenario": "channel rename",
+        "currentChannel": "review-provider-after",
+        "supplierCostChannel": "review-provider-before"
+      },
+      {
+        "id": "CLOSURE-01",
+        "scenario": "log -> test this model",
+        "logModel": "audit-omega",
+        "playgroundModel": "audit-alpha"
+      },
+      {
+        "id": "CLOSURE-04",
+        "scenario": "Gemini safety blocking feedback",
+        "httpStatus": 200,
+        "gatewayCarriesSafety": true,
+        "visibleSafetyReason": false,
+        "alerts": []
+      }
+    ],
+    "upstreamCalls": [
+      {
+        "path": "/v1/chat/completions",
+        "model": "audit-omega"
+      },
+      {
+        "path": "/v1/chat/completions",
+        "model": "audit-omega",
+        "stream": true
+      },
+      {
+        "path": "/v1beta/models/gemini-audit-block:streamGenerateContent?alt=sse"
+      }
+    ]
+  },
+  "ecosystem_probes": {
+    "artifact": {
+      "files": [
+        "review-skill/SKILL.md",
+        "review-skill/scripts/run.sh",
+        "review-skill/references/metadata.json"
+      ],
+      "run_script": "#!/usr/bin/env bash\n# Executable helper script for review-skill\n# agentskills.io open standard\necho \"[Skill review-skill] Executing task with tools: review_tool\"\n",
+      "run_exit_code": 0,
+      "run_output": "[Skill review-skill] Executing task with tools: review_tool\n"
+    },
+    "malformed_toggle": {
+      "body": "{",
+      "skill_initial_enabled": false,
+      "skill_final_enabled": true,
+      "mcp_initial_enabled": false,
+      "mcp_final_enabled": true
+    }
+  },
+  "deployment_probes": [
+    {
+      "scenario": "local-storage-disabled",
+      "exit_code": 1,
+      "output": "==> Building airoute image (review-probe)...\n==> Reconciling dependency containers (postgres, redis, storage)...\nairoute-storage did not become healthy (last status: unhealthy)\n",
+      "storage_requested": true,
+      "gateway_recreated": false,
+      "lb_compose_up": false,
+      "nginx_reload": false,
+      "calls": [
+        [
+          "compose",
+          "build"
+        ],
+        [
+          "compose",
+          "up",
+          "-d",
+          "--no-deps",
+          "postgres",
+          "redis",
+          "storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-postgres"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-redis"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ]
+      ]
+    },
+    {
+      "scenario": "edge-compose-change",
+      "exit_code": 0,
+      "output": "==> Building airoute image (review-probe)...\n==> Reconciling dependency containers (postgres, redis, storage)...\n==> Recreating gateway-2...\n==> airoute-2 is healthy\n==> Recreating gateway-1...\n==> airoute-1 is healthy\n==> Reconciling load balancer...\n==> Gateway cluster is running version review-probe\n",
+      "storage_requested": true,
+      "gateway_recreated": true,
+      "lb_compose_up": false,
+      "nginx_reload": true,
+      "calls": [
+        [
+          "compose",
+          "build"
+        ],
+        [
+          "compose",
+          "up",
+          "-d",
+          "--no-deps",
+          "postgres",
+          "redis",
+          "storage"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-postgres"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-redis"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-storage"
+        ],
+        [
+          "compose",
+          "up",
+          "-d",
+          "--no-deps",
+          "--force-recreate",
+          "gateway-2"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-2"
+        ],
+        [
+          "compose",
+          "up",
+          "-d",
+          "--no-deps",
+          "--force-recreate",
+          "gateway-1"
+        ],
+        [
+          "inspect",
+          "-f",
+          "{{.State.Health.Status}}",
+          "airoute-1"
+        ],
+        [
+          "exec",
+          "airoute-lb",
+          "md5sum",
+          "/etc/nginx/conf.d/default.conf"
+        ],
+        [
+          "exec",
+          "airoute-lb",
+          "nginx",
+          "-t"
+        ],
+        [
+          "exec",
+          "airoute-lb",
+          "nginx",
+          "-s",
+          "reload"
+        ]
+      ]
+    }
+  ],
+  "external_acceptance": {
+    "live_model_provider_credentials": "not exercised",
+    "smtp_delivery": "not exercised",
+    "live_oauth": "not exercised",
+    "stripe_hosted_checkout_and_public_webhooks": "not exercised"
+  },
+  "temporary_artifacts": "/tmp/airoute-full-review-20261103"
+}

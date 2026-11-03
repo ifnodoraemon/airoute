@@ -35,15 +35,13 @@ func TestValidationRuleGlobMatchesLegacyBehaviour(t *testing.T) {
 	cfg.ModelValidation.DefaultLevel = "off"
 
 	// Rule order matters: the first matching rule wins, as before.
-	for _, rule := range []ModelValidationRule{
+	cfg.ModelValidation.Rules = append(cfg.ModelValidation.Rules, []ModelValidationRule{
 		{Model: "claude-*", Protocol: "anthropic", Level: "strict"},
 		{Model: "o1*", Protocol: "openai", Level: "strict", DisallowTemperature: true},
 		{Model: "*flash", Level: "lenient"},
 		{Model: "gpt-4o", Level: "lenient"},
 		{Model: "", Level: "off"}, // empty pattern: catch-all, last so it never wins
-	} {
-		cfg.ModelValidation.Rules = append(cfg.ModelValidation.Rules, rule)
-	}
+	}...)
 
 	patterns := []string{"claude-*", "o1*", "*flash", "gpt-4o", "*", ""}
 	models := []string{

@@ -34,7 +34,7 @@ function stubGateway(overrides = {}) {
   };
   globalThis.fetch.mockImplementation(async (url) => {
     const path = String(url);
-    const hit = Object.keys(routes).find((fragment) => path.includes(fragment));
+    const hit = Object.keys(routes).sort((a, b) => b.length - a.length).find((fragment) => path.includes(fragment));
     return hit ? routes[hit]() : jsonResponse({ code: 0, data: [] });
   });
 }
@@ -55,6 +55,21 @@ async function waitForConsoleLoad() {
 }
 
 describe('App integration', () => {
+  it('opens the inspected log model rather than the first available model', async () => {
+    signIn();
+    stubGateway({
+      '/api/v1/auth/me': () => jsonResponse({ code: 0, data: { user: { username: 'root', role: 'admin' } } }),
+      '/api/v1/admin/models': () => jsonResponse({ code: 0, data: ['audit-alpha', 'audit-omega'] }),
+      '/api/v1/admin/models/routes': () => jsonResponse({ code: 0, data: ['audit-alpha', 'audit-omega'].map(model => ({ model, modality: 'chat', providers: [] })) }),
+      '/api/v1/admin/logs': () => jsonResponse({ code: 0, total: 1, data: [{ id: 1, model: 'audit-omega', status_code: 200, cost: 0, total_tokens: 1, duration_ms: 10, created_at: '2026-11-03T00:00:00Z' }] }),
+    });
+    window.history.replaceState(null, '', '/app/#logs');
+    render(<App />);
+    fireEvent.click(await screen.findByRole('row', { name: /audit-omega/ }, { timeout: 8000 }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Playground 演练' }));
+    await waitFor(() => expect(screen.getByRole('option', { name: 'audit-omega', exact: true }).parentElement).toHaveValue('audit-omega'));
+  }, 15000);
+
   beforeEach(() => {
     localStorage.clear();
     window.history.replaceState(null, '', '/');

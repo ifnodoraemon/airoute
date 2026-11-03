@@ -105,7 +105,6 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `GATEWAY_READ_TIMEOUT_SEC` | `600` | `http.Server.ReadTimeout`. Overrides `server.read_timeout_sec` in the config file, which the Compose stack mounts read-only |
 | `GATEWAY_WRITE_TIMEOUT_SEC` | `600` | `http.Server.WriteTimeout`. Bounds non-streaming responses (streaming responses clear the deadline). Overrides `server.write_timeout_sec` |
 | `GATEWAY_LOG_LEVEL` | `info` | `debug`/`info`/`warn`/`error`. Overrides `server.log_level` |
-| `GIN_MODE` | `release` (Compose/Swarm) | Kept for compatibility: gin is forced into release mode in code and the credential gate no longer depends on this value. Only affects the Stripe-webhook startup warning |
 
 ### 2.2 Admin, auth & quotas
 
@@ -176,9 +175,13 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `STORAGE_LOCAL_PATH` | `data/storage` | Directory used by the `local` driver |
 | `STORAGE_S3_ENDPOINT` / `STORAGE_S3_BUCKET` / `STORAGE_S3_ACCESS_KEY` / `STORAGE_S3_SECRET_KEY` / `STORAGE_S3_REGION` / `STORAGE_S3_USE_SSL` / `STORAGE_S3_PATH_STYLE` / `STORAGE_S3_PUBLIC_URL_PREFIX` | endpoint/bucket/region have defaults; credentials are **empty** | S3-compatible artifact storage. `s3`/`rustfs` without explicit access key + secret key refuses to start (no default credential ships); partial `storage:` blocks are merged field-by-field over the defaults |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | unset | E-mail delivery for verification codes and password resets; disabled when `SMTP_HOST` is empty |
-| `STRIPE_API_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_SUCCESS_URL` / `STRIPE_API_BASE` | unset | Stripe payments; webhooks are rejected while `STRIPE_WEBHOOK_SECRET` is empty |
+| `STRIPE_API_KEY` / `STRIPE_WEBHOOK_SECRET` | unset | Stripe API key and snapshot webhook secret; both must be configured together and match `STRIPE_MODE`. Invalid payment configuration refuses startup. See [payment setup](PAYMENTS.md) |
+| `STRIPE_MODE` | `live` | `live` or `test`; the database binds permanently to its first payment mode. Use an independent database and model quota for testing |
+| `STRIPE_MIN_RECHARGE_CNY` | `10` | Business minimum for online CNY recharges; configure it to satisfy the merchant's settlement-currency minimum. Returned to the console for validation |
+| `STRIPE_SUCCESS_URL` | `PUBLIC_URL/app/` | Optional return page on the same origin as the configured public URL; order number and confirmation query parameters are added automatically |
+| `STRIPE_API_BASE` | `https://api.stripe.com` | Custom endpoints are restricted to loopback in explicit `test` mode; intended for local automated tests |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` / `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | unset | OAuth login providers. Both the client id **and** the client secret are read from the environment: the real authorization-code exchange runs only when both are non-empty, and with an empty secret the provider answers `403` (“系统未配置 … 生产应用密钥”) unless `ENABLE_SIMULATED_OAUTH=true` (development only). `GITHUB_REDIRECT_URI` / `GOOGLE_REDIRECT_URI` optionally override the callback derived from `PUBLIC_URL`; the real exchange also requires a valid `state` cookie |
-| `ENABLE_SANDBOX_RECHARGE` / `ENABLE_SIMULATED_OAUTH` | `false` | Local development only: enable fake recharge / simulated OAuth |
+| `ENABLE_SIMULATED_OAUTH` | `false` | Local development only: enable simulated OAuth |
 | `AIROUTE_DEV_VERIFICATION_CODE` | unset | Set `true` to return e-mail verification codes in API responses (development only) |
 
 ### 2.5 CLI-only variables

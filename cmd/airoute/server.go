@@ -97,7 +97,6 @@ func runServer(args []string) {
 	// warn/error), which the shipped Compose/Swarm files never set, so the guard
 	// silently did nothing on the deployments it was written for. Local
 	// development can opt out explicitly with GATEWAY_ALLOW_INSECURE_DEFAULTS.
-	isRelease := os.Getenv("GIN_MODE") == "release" || cfg.Server.LogLevel == "warn" || cfg.Server.LogLevel == "error"
 	if issues := productionSecurityIssues(cfg); len(issues) > 0 {
 		for _, issue := range issues {
 			telemetry.ScopedLogger("system").Warn("SECURITY WARNING: "+issue, "remediation", "set GATEWAY_ADMIN_SECRET and GATEWAY_ADMIN_PASSWORD to strong random values")
@@ -108,9 +107,6 @@ func runServer(args []string) {
 			os.Exit(1)
 		}
 		telemetry.ScopedLogger("system").Warn("starting with insecure default credentials because GATEWAY_ALLOW_INSECURE_DEFAULTS is enabled; never use this in production")
-	}
-	if isRelease && os.Getenv("STRIPE_WEBHOOK_SECRET") == "" {
-		telemetry.ScopedLogger("system").Warn("SECURITY WARNING: STRIPE_WEBHOOK_SECRET is unset in production release mode. Stripe payment webhooks will be rejected.")
 	}
 	// Without a shared secret the HMAC signing key is generated randomly per
 	// process: every restart invalidates all issued tokens, and in a multi-replica
@@ -330,12 +326,22 @@ func runServer(args []string) {
 	// Initialize Admin Handler
 	adminHandler := controlplane.NewAdminHandler(repo, synchronizer, dispatcher)
 	adminHandler.SetArtifactStorage(artifactStorage)
+	if err := adminHandler.ValidatePaymentConfiguration(); err != nil {
+		telemetry.ScopedLogger("system").Error("invalid payment configuration; refusing to start", "error", err.Error())
+		os.Exit(1)
+	}
 
 	// Setup HTTP Engine (Data Plane + Control Plane Admin API + Embedded Web UI)
 	engine := api.SetupRouter(dispatcher, adminHandler)
 	jobsCtx, stopJobs := context.WithCancel(context.Background())
 	defer stopJobs()
 	api.StartNativeJobReconciler(jobsCtx, dispatcher)
+	paymentsDone := make(chan struct{})
+	go func() {
+		defer close(paymentsDone)
+		adminHandler.RunPaymentReconciler(jobsCtx)
+	}()
+	defer func() { stopJobs(); <-paymentsDone }()
 
 	// Only configured proxy hops may declare the client address. Gin trusts every
 	// peer by default, so an unset GATEWAY_TRUSTED_PROXIES would let any caller

@@ -125,7 +125,8 @@ export default function MyUsageView({ adminFetch, showToast, lang = 'zh' }) {
                 <th className="py-2 pr-3">{isZh ? '状态' : 'Status'}</th>
                 <th className="py-2 pr-3">{isZh ? '预算水位' : 'Budget'}</th>
                 <th className="py-2 pr-3">RPM</th>
-                <th className="py-2">{isZh ? '已用 / 限额 (TPM)' : 'Used / limit (TPM)'}</th>
+                <th className="py-2 pr-3">{isZh ? '累计 Tokens' : 'Lifetime tokens'}</th>
+                <th className="py-2">{isZh ? 'TPM 上限' : 'TPM limit'}</th>
               </tr>
             </thead>
             <tbody>
@@ -152,12 +153,13 @@ export default function MyUsageView({ adminFetch, showToast, lang = 'zh' }) {
                       )}
                     </td>
                     <td className="py-2 pr-3 font-mono text-[11px]">{key.rpm > 0 ? key.rpm : '∞'}</td>
-                    <td className="py-2 font-mono text-[11px]">{key.tpm > 0 ? `${formatNumber(key.used_tokens)} / ${formatNumber(key.tpm)}` : '∞'}</td>
+                    <td className="py-2 pr-3 font-mono text-[11px]">{formatNumber(key.used_tokens)}</td>
+                    <td className="py-2 font-mono text-[11px]">{key.tpm > 0 ? formatNumber(key.tpm) : '∞'}</td>
                   </tr>
                 );
               })}
               {keys.length === 0 && (
-                <tr><td colSpan={5} className="py-6 text-center text-[11px] text-[#656B75] dark:text-[#A1A7B0]">{isZh ? '还没有密钥' : 'No keys yet'}</td></tr>
+                <tr><td colSpan={6} className="py-6 text-center text-[11px] text-[#656B75] dark:text-[#A1A7B0]">{isZh ? '还没有密钥' : 'No keys yet'}</td></tr>
               )}
             </tbody>
           </table>

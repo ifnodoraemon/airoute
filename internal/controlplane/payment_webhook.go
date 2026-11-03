@@ -1,20 +1,21 @@
 package controlplane
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
 // VerifyStripeWebhookSignature validates Stripe webhook HMAC-SHA256 signature against webhook secret.
@@ -84,81 +85,81 @@ func VerifyStripeWebhookSignature(payload []byte, sigHeader, secret string, tole
 	return nil
 }
 
-// StripeWebhook processes Stripe payment webhook events.
+func handledStripeEvent(kind string) bool {
+	switch kind {
+	case "checkout.session.completed", "checkout.session.async_payment_succeeded", "checkout.session.async_payment_failed", "checkout.session.expired",
+		"refund.created", "refund.updated", "refund.failed", "charge.refunded",
+		"charge.dispute.created", "charge.dispute.updated", "charge.dispute.closed", "charge.dispute.funds_withdrawn", "charge.dispute.funds_reinstated":
+		return true
+	}
+	return false
+}
+
+// Notifications select which object to reconcile. Their amount/status snapshot
+// never directly grants or removes wallet credit: current Stripe state does.
 func (h *AdminHandler) StripeWebhook(c *gin.Context) {
-	webhookSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
-	sigHeader := c.GetHeader("Stripe-Signature")
-
-	body, err := io.ReadAll(c.Request.Body)
+	cfg, err := loadStripeConfig()
+	if err != nil || !cfg.enabled() {
+		c.JSON(503, gin.H{"error": "支付通知服务未配置或配置无效"})
+		return
+	}
+	if err := h.repo.BindPaymentMode(cfg.Mode); err != nil {
+		c.JSON(503, gin.H{"error": "支付环境与数据库不一致"})
+		return
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, 128*1024))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无法读取请求体"})
+		c.JSON(400, gin.H{"error": "无法读取支付通知"})
 		return
 	}
-
-	// In production, refuse to process webhooks if secret is not configured
-	if gin.Mode() == gin.ReleaseMode && webhookSecret == "" {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "生产环境未配置 STRIPE_WEBHOOK_SECRET，拒绝接收未经签名的 Webhook 请求"})
+	if err := VerifyStripeWebhookSignature(body, c.GetHeader("Stripe-Signature"), cfg.Secret, 5*time.Minute); err != nil {
+		c.JSON(400, gin.H{"error": "Stripe 签名校验失败"})
 		return
 	}
-
-	// Verify webhook signature in production or whenever secret/signature header is present
-	if webhookSecret != "" || sigHeader != "" || gin.Mode() != gin.TestMode {
-		if err := VerifyStripeWebhookSignature(body, sigHeader, webhookSecret, 5*time.Minute); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Stripe 签名校验失败: " + err.Error()})
-			return
-		}
-	}
-
 	var event struct {
-		Type string `json:"type"`
-		Data struct {
+		ID       string `json:"id"`
+		Type     string `json:"type"`
+		Version  string `json:"api_version"`
+		LiveMode *bool  `json:"livemode"`
+		Data     struct {
 			Object struct {
-				ID                string `json:"id"`
-				ClientReferenceID string `json:"client_reference_id"`
-				PaymentStatus     string `json:"payment_status"`
-				AmountTotal       int64  `json:"amount_total"`
-				Currency          string `json:"currency"`
+				ID string `json:"id"`
 			} `json:"object"`
 		} `json:"data"`
 	}
-
 	if err := json.Unmarshal(body, &event); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "解析事件失败"})
+		c.JSON(400, gin.H{"error": "支付事件格式无效"})
 		return
 	}
-
-	switch event.Type {
-	case "checkout.session.completed", "checkout.session.async_payment_succeeded", "checkout.session.expired", "checkout.session.async_payment_failed":
-		obj := event.Data.Object
-		if (event.Type == "checkout.session.completed" || event.Type == "checkout.session.async_payment_succeeded") && obj.PaymentStatus != "paid" {
-			c.JSON(http.StatusOK, gin.H{"received": true, "status": event.Data.Object.PaymentStatus})
-			return
-		}
-		order, err := h.repo.GetRechargeOrder(obj.ClientReferenceID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "订单暂不可用，请重试"})
-			return
-		}
-		if order.Channel != "stripe" || obj.ID == "" || order.StripeSessionID != obj.ID || !strings.EqualFold(order.Currency, obj.Currency) || int64(math.Round(order.Amount*100)) != obj.AmountTotal {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "支付事件与订单的会话、金额或币种不一致"})
-			return
-		}
-		switch event.Type {
-		case "checkout.session.expired":
-			err = h.repo.CloseRechargeOrder(order.OrderNo, "expired")
-		case "checkout.session.async_payment_failed":
-			err = h.repo.CloseRechargeOrder(order.OrderNo, "failed")
-		default:
-			_, err = h.repo.CompleteRechargeOrder(order.OrderNo)
-		}
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "订单处理失败: " + err.Error()})
-			return
-		}
-		if obj.PaymentStatus == "paid" {
-			h.syncDataPlane()
-		}
+	if !handledStripeEvent(event.Type) {
+		c.JSON(200, gin.H{"received": true})
+		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{"received": true})
+	if event.ID == "" || event.Data.Object.ID == "" || event.LiveMode == nil || *event.LiveMode != (cfg.Mode == "live") || event.Version != StripeAPIVersion {
+		c.JSON(400, gin.H{"error": "支付事件的标识、环境或 API 版本不匹配"})
+		return
+	}
+	e := storage.StripeEventRecord{ID: event.ID, Type: event.Type, ObjectID: event.Data.Object.ID, Mode: cfg.Mode}
+	done, err := h.repo.SaveStripeEvent(e)
+	if err != nil {
+		c.JSON(503, gin.H{"error": "保存支付通知失败，请重试"})
+		return
+	}
+	if done {
+		c.JSON(200, gin.H{"received": true})
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
+	defer cancel()
+	err = h.processStripeEvent(ctx, e, cfg)
+	if finishErr := h.repo.FinishStripeEvent(e.ID, err); finishErr != nil {
+		c.JSON(503, gin.H{"error": "记录支付处理结果失败，请重试"})
+		return
+	}
+	if err != nil {
+		telemetry.ScopedLogger("payment").Warn("Stripe notification queued for recovery", "event_id", e.ID, "error", err.Error())
+		c.JSON(503, gin.H{"error": "支付通知已保存，等待重新核验"})
+		return
+	}
+	c.JSON(200, gin.H{"received": true})
 }

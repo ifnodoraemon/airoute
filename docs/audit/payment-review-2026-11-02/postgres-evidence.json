@@ -1,0 +1,29 @@
+[
+  {
+    "balance_cny": 50,
+    "case": "same_order_concurrent_completion",
+    "passed": true,
+    "requests": 64,
+    "successful_idempotent_responses": 64
+  },
+  {
+    "balance_cny": 39.36,
+    "case": "different_orders_same_wallet",
+    "orders": 32,
+    "passed": true,
+    "successful_responses": 32
+  },
+  {
+    "case": "missing_wallet_rolls_back_order",
+    "error_returned": true,
+    "order_status": "pending",
+    "passed": true
+  },
+  {
+    "balance_cny": 1.23,
+    "case": "same_redemption_concurrent_use",
+    "passed": true,
+    "requests": 32,
+    "successful_redemptions": 1
+  }
+]

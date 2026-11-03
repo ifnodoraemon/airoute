@@ -334,7 +334,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
               <button
                 onClick={() => {
                   onClose();
-                  onNavigate('playground');
+                  onNavigate('playground', log.model);
                 }}
                 className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#191B1F] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] text-[#202124] dark:text-[#F1F2F4] text-xs font-medium border border-[#E4E6E9] dark:border-[#2C3038] transition flex items-center space-x-1.5 shadow-2xs cursor-pointer"
                 title={isZh ? '在 Playground 演练测试此模型' : 'Test this model in Playground'}
@@ -714,7 +714,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
                   <button
                     onClick={() => {
                       onClose();
-                      onNavigate(rca.actionTab);
+                      onNavigate(rca.actionTab, log.model);
                     }}
                     className="ui-btn ui-btn-primary ui-btn-sm"
                   >

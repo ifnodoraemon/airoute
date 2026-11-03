@@ -103,6 +103,12 @@ services:
       - STORAGE_S3_SECRET_KEY=${STORAGE_S3_SECRET_KEY:-}
       - STORAGE_S3_REGION=${STORAGE_S3_REGION:-us-east-1}
       - GIN_MODE=release
+      - PUBLIC_URL=${PUBLIC_URL:-}
+      - STRIPE_MODE=${STRIPE_MODE:-live}
+      - STRIPE_API_KEY=${STRIPE_API_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - STRIPE_SUCCESS_URL=${STRIPE_SUCCESS_URL:-}
+      - STRIPE_MIN_RECHARGE_CNY=${STRIPE_MIN_RECHARGE_CNY:-10}
       # When set, /metrics requires "Authorization: Bearer <token>".
       - GATEWAY_METRICS_TOKEN=${GATEWAY_METRICS_TOKEN:-}
       # Proxies whose X-Forwarded-For is trusted. Swarm assigns task addresses

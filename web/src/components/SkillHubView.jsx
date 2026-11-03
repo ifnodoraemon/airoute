@@ -908,23 +908,12 @@ cat .cursor/skills/${currentId}/SKILL.md >> .cursorrules`}
                         <span>├── 📄 SKILL.md</span>
                         <span className="text-gray-400 text-xs">{isZh ? '# 核心 SOP 流程契约与三级执行阶段' : '# Core SOP contract & 3-stage execution'}</span>
                       </div>
-                      <div className="flex items-center justify-between text-yellow-300">
-                        <span>├── 📄 metadata.json</span>
-                        <span className="text-gray-400 text-xs">{isZh ? '# 技能描述、版本与作者元数据' : '# Skill description, version, and author metadata'}</span>
-                      </div>
-                      <div className="text-blue-300">
-                        <span>├── 📁 scripts/</span>
-                      </div>
-                      <div className="pl-6 flex items-center justify-between text-purple-300">
-                        <span>│   └── ⚙️ run.sh</span>
-                        <span className="text-gray-400 text-xs">{isZh ? '# 可选本机自动化演练或 Hook 脚本' : '# Optional local rehearsal or hook script'}</span>
-                      </div>
                       <div className="text-blue-300">
                         <span>└── 📁 references/</span>
                       </div>
                       <div className="pl-6 flex items-center justify-between text-sky-300">
-                        <span>    └── 📑 context.md</span>
-                        <span className="text-gray-400 text-xs">{isZh ? '# 补充上下文与规则详情' : '# Supplemental context & rule details'}</span>
+                        <span>    └── 📑 metadata.json</span>
+                        <span className="text-gray-400 text-xs">{isZh ? '# 技能描述、版本与作者元数据' : '# Skill description, version, and author metadata'}</span>
                       </div>
                     </div>
                   </div>

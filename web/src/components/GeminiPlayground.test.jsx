@@ -22,6 +22,20 @@ describe('Gemini native playground', () => {
     expect(request.contents[1].parts).toEqual(parts);
   });
 
+  it.each([
+    [{ promptFeedback: { blockReason: 'SAFETY', safetyRatings: [{ category: 'danger', blocked: true }] } }, 'SAFETY'],
+    [{ candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [{ text: 'partial answer' }] } }] }, 'MAX_TOKENS'],
+    [{ candidates: [{ finishReason: 'RECITATION' }] }, 'RECITATION'],
+    [{}, '未返回内容'],
+  ])('explains native termination instead of leaving a blank result', async (frame, reason) => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => frame })));
+    render(<GeminiPlayground models={['m']} resolveCredentials={() => ({ key: 'sk-test' })} />);
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: '发送原生请求' }));
+    expect(await screen.findByRole('status')).toHaveTextContent(reason);
+    expect(screen.queryByRole('button', { name: '将完整回复加入下一轮' })).not.toBeInTheDocument();
+  });
+
   it('refuses a missing credential before making a request', () => {
     vi.stubGlobal('fetch', vi.fn());
     render(<GeminiPlayground models={['m']} resolveCredentials={() => null} />);
