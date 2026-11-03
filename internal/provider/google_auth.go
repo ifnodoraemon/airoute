@@ -89,7 +89,7 @@ func googleTokenSource(credential string) (oauth2.TokenSource, error) {
 		source = config.TokenSource(ctx)
 	} else {
 		if credential != "" && credential != "adc" && credential != "none" {
-			return nil, fmt.Errorf("Vertex requires adc, service-account JSON or bearer:<access-token>")
+			return nil, fmt.Errorf("vertex requires adc, service-account JSON or bearer:<access-token>")
 		}
 		config, err := google.FindDefaultCredentials(ctx, "https://www.googleapis.com/auth/cloud-platform")
 		if err != nil {

@@ -17,6 +17,7 @@ import (
 func TestKeyCreationReturnsPlaintextOnceAndListsOnlyThePublicID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	h, repo := regressionHandler(t)
+	h.keyCreation = NewKeyCreationRules(repo)
 
 	user := &storage.UserRecord{Username: "keyowner", Email: "keyowner@example.invalid", PasswordHash: "x", Role: "user", Status: "active", Balance: 10, GroupName: "default"}
 	if err := repo.CreateUser(user); err != nil {
@@ -26,10 +27,10 @@ func TestKeyCreationReturnsPlaintextOnceAndListsOnlyThePublicID(t *testing.T) {
 	// Creation through the user-facing handler with a session for that user.
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/keys", strings.NewReader(`{"tenant_id":"keyowner","rpm":60}`))
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/keys", strings.NewReader(`{"tenant_id":"keyowner","rpm":60}`))
 	c.Request.Header.Set("Content-Type", "application/json")
 	c.Set("admin_claims", &AdminClaims{Username: "keyowner", Role: "user"})
-	h.CreateUserKey(c)
+	h.CreateAPIKey(c)
 	if w.Code != http.StatusOK {
 		t.Fatalf("create key status=%d body=%s", w.Code, w.Body.String())
 	}

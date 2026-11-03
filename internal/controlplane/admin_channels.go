@@ -19,6 +19,8 @@ import (
 func writeChannelError(c *gin.Context, err error, fallback string) {
 	var verr *ValidationError
 	switch {
+	case errors.Is(err, storage.ErrSupplierCostRenameConflict):
+		c.JSON(http.StatusConflict, gin.H{"error": "新渠道名称下已存在同模型的供应商报价，请先处理报价冲突；渠道和报价均未修改"})
 	case errors.As(err, &verr):
 		c.JSON(http.StatusBadRequest, gin.H{"error": verr.Message})
 	case errors.Is(err, ErrChannelNotFound):

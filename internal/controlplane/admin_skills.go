@@ -37,17 +37,13 @@ func (h *AdminHandler) ToggleSkill(c *gin.Context) {
 	previous, _ := h.repo.GetSkill(id)
 
 	var req ToggleSkillRequest
-	if err := c.ShouldBindJSON(&req); err == nil && req.Enabled != nil {
-		if err := h.repo.SetSkillEnabled(id, *req.Enabled); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "更新技能状态失败: " + err.Error()})
-			return
-		}
-	} else {
-		current := h.repo.IsSkillEnabled(id)
-		if err := h.repo.SetSkillEnabled(id, !current); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "切换技能状态失败: " + err.Error()})
-			return
-		}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Enabled == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "请提供布尔值 enabled"})
+		return
+	}
+	if err := h.repo.SetSkillEnabled(id, *req.Enabled); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "更新技能状态失败: " + err.Error()})
+		return
 	}
 
 	if previous != nil {

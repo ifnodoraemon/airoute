@@ -51,13 +51,13 @@ func responsesTranslation(native *model.NativeRequest, req model.ResponseRequest
 		"tool_choice": true, "parallel_tool_calls": true, "metadata": true, "reasoning": true, "text": true, "service_tier": true}
 	for name := range fields {
 		if !known[name] {
-			native.TranslationError = fmt.Errorf("Responses field %q requires a native Responses upstream", name)
+			native.TranslationError = fmt.Errorf("responses field %q requires a native Responses upstream", name)
 			return
 		}
 	}
 	for _, tool := range req.Tools {
 		if object, ok := tool.(map[string]any); ok && object["type"] != "function" {
-			native.TranslationError = fmt.Errorf("Responses tool %q requires a native Responses upstream", object["type"])
+			native.TranslationError = fmt.Errorf("responses tool %q requires a native Responses upstream", object["type"])
 			return
 		}
 	}

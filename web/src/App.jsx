@@ -853,7 +853,12 @@ export default function App() {
           }}
           onOpenTrace={adminUser?.role === 'admin' ? ((value, field = 'trace_id') => setTraceSnapshotId({ value, field })) : undefined}
           onDeleteLog={adminUser?.role === 'admin' ? handleDeleteSingleLog : undefined}
-          onNavigate={(targetTab) => {
+          onNavigate={(targetTab, model) => {
+            if (targetTab === 'playground' && model) {
+              setPlaygroundScenario(null);
+              setPlayModel(model);
+              setPlayModality(modelRoutes.find(route => route.model === model)?.modality || inferClientModality(model));
+            }
             setCurrentTab(targetTab);
             setViewMode('console');
             setActiveLogDetail(null);

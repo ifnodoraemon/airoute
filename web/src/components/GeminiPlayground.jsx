@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { applyGeminiOutput, createGeminiOutput, readGeminiSSE } from '../lib/geminiPlayground';
+import { applyGeminiOutput, createGeminiOutput, geminiOutputNotice, readGeminiSSE } from '../lib/geminiPlayground';
 import { assistantContent } from '../lib/assistantContent';
 import MarkdownRenderer from './MarkdownRenderer';
 import GeminiMediaOutput from './GeminiMediaOutput';
@@ -14,11 +14,13 @@ export default function GeminiPlayground({ models = [], resolveCredentials, lang
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(createGeminiOutput);
   const [error, setError] = useState('');
+  const [outcome, setOutcome] = useState('idle');
   const [mediaKey, setMediaKey] = useState('');
   const controller = useRef(null);
   useEffect(() => () => controller.current?.abort(), []);
   const activeModel = models.includes(model) ? model : models[0] || '';
   const display = assistantContent(result.text, result.reasoning, !loading);
+  const notice = outcome === 'complete' ? geminiOutputNotice(result, isZh) : '';
 
   const attach = async (file) => {
     if (!file) return;
@@ -41,7 +43,7 @@ export default function GeminiPlayground({ models = [], resolveCredentials, lang
     let request;
     try { request = JSON.parse(body); } catch { setError(isZh ? '请求 JSON 格式不正确' : 'Invalid request JSON'); return; }
     const abort = new AbortController(); controller.current = abort;
-    setLoading(true); setError(''); setResult(createGeminiOutput()); setMediaKey(credentials.key || '');
+    setLoading(true); setError(''); setOutcome('idle'); setResult(createGeminiOutput()); setMediaKey(credentials.key || '');
     const output = createGeminiOutput();
     try {
       const action = stream ? 'streamGenerateContent?alt=sse' : 'generateContent';
@@ -54,7 +56,7 @@ export default function GeminiPlayground({ models = [], resolveCredentials, lang
       if (stream && response.body) await readGeminiSSE(response, accept); else accept(await response.json());
     } catch (failure) {
       if (failure.name !== 'AbortError') { setError(failure.message); showToast?.(failure.message, 'error'); }
-    } finally { if (controller.current === abort) { controller.current = null; setLoading(false); } }
+    } finally { if (controller.current === abort) { controller.current = null; setLoading(false); setOutcome(abort.signal.aborted ? 'stopped' : 'complete'); } }
   };
 
   const appendHistory = () => {
@@ -85,12 +87,15 @@ export default function GeminiPlayground({ models = [], resolveCredentials, lang
         {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
       </div>
       <div className="space-y-4 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 overflow-auto">
+        {notice && !error && <p role="status" className="text-sm text-amber-700 dark:text-amber-300">{notice}</p>}
+        {outcome === 'stopped' && <p role="status" className="text-sm text-slate-500">{isZh ? '生成已停止，已保留收到的内容。' : 'Generation stopped. Received content is preserved.'}</p>}
+        {(result.feedback?.safetyRatings || result.safetyRatings.length > 0) && <details><summary>{isZh ? '安全评估' : 'Safety ratings'}</summary><pre className="text-xs whitespace-pre-wrap">{JSON.stringify(result.feedback?.safetyRatings || result.safetyRatings, null, 2)}</pre></details>}
         {display.reasoning && <details open><summary>{isZh ? '思考内容' : 'Reasoning'}</summary><pre className="whitespace-pre-wrap text-xs">{display.reasoning}</pre></details>}
         {display.content && <MarkdownRenderer content={display.content} lang={lang} />}
         {result.media.map((item, index) => <GeminiMediaOutput key={index} item={item} index={index} lang={lang} apiKey={mediaKey} />)}
         {result.tools.length > 0 && <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(result.tools, null, 2)}</pre>}
         {result.usage && <pre className="text-xs whitespace-pre-wrap text-slate-500">{JSON.stringify(result.usage, null, 2)}</pre>}
-        {!loading && result.rawParts.length > 0 && <button className="ui-btn-secondary" onClick={appendHistory}>{isZh ? '将完整回复加入下一轮' : 'Append complete response to history'}</button>}
+        {!loading && outcome === 'complete' && !notice && !error && result.rawParts.length > 0 && <button className="ui-btn-secondary" onClick={appendHistory}>{isZh ? '将完整回复加入下一轮' : 'Append complete response to history'}</button>}
       </div>
     </section>
   );

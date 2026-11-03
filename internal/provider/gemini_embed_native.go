@@ -48,7 +48,7 @@ func (p *GeminiProvider) embedNative(ctx context.Context, req *model.EmbeddingRe
 		return nil, nativeEventError(channel.Name, parsed.Error)
 	}
 	if len(parsed.Embedding.Values) == 0 {
-		return nil, fmt.Errorf("Gemini response is missing embedding values")
+		return nil, fmt.Errorf("gemini response is missing embedding values")
 	}
 	result := &model.EmbeddingResponse{Model: req.Model, Object: "list", NativeResponse: data,
 		Data: []model.EmbeddingItem{{Object: "embedding", Index: 0, Embedding: parsed.Embedding.Values}},

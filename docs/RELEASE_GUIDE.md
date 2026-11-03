@@ -4,7 +4,7 @@
 
 ## 当前基线
 
-仓库已发布 `v1.0.0`，该标签不得移动或重新发布。本轮移除公开的旧版 `/v1/completions` 接口，按最高变更级别将下一正式版本定为 **v2.0.0**。发布前的主分支构建标识为 `2.0.0-dev+g<提交号>`，不将尚未发布的提交冒充成原来的 `1.0.0`。
+历史标签 `v1.0.0` 不得移动或重新发布。当前产品基线为 **2.0.0**：移除公开的旧版 `/v1/completions` 接口属于兼容性破坏，因此升级主版本。正式标签由成功的主分支 CI 自动创建；未发版提交的构建标识为 `2.0.0-dev+g<提交号>`。
 
 ## 递进原则
 
@@ -32,27 +32,40 @@
 
 `+g<提交号>` 是构建元数据，不构成另一个正式版本。候选版发现缺陷后增加候选编号；正式发布后修复用 PATCH，不能继续复用旧候选版或正式标签。
 
-## 版本来源与校验
+## 版本来源与自动发布
 
-`internal/buildinfo/version.go` 的 `BaseVersion` 表示下一计划版本，`web/package.json` 及锁文件中的项目版本必须与它一致。未注入链接参数的 Go 构建显示 `<BaseVersion>-dev`。
+根目录 `VERSION` 是唯一版本来源。升级版本只执行一次：
 
-`sh scripts/build-version.sh` 为 Makefile、镜像 CI 和二进制发布统一解析构建版本。CI 会拒绝 Go 与前端基线不一致、标签与基线不一致以及非法候选编号。Dockerfile 的默认开发版本（`ARG VERSION=...`）与 `docker-compose.yml` 的 `${VERSION:-...}` 回退值也必须等于 `<BaseVersion>-dev`：CI 的 `Validate version metadata` 步骤会静态比对这三个来源，忘记同步会直接失败。`/health`、`/v1`、`/v1beta` 和 CLI 报告同一构建版本。
+```bash
+node scripts/version.mjs 2.0.1
+```
 
-调整版本时：先按本规范确定下一目标版本，再同步修改上述来源并提交。不要仅为使版本显示成新数字而移动已有标签。
+脚本同步 Go `BaseVersion`、前端 package/lock 文件、Dockerfile 和 Compose 的开发版默认值、Helm chart/appVersion；拒绝非法版本和倒退版本。`node scripts/version.mjs --check` 只检查、不写文件，并作为 CI 门禁。Helm 默认镜像标签取 chart 的 appVersion，可通过 `image.tag` 覆盖。
 
-## 发布步骤
+版本级别仍按上文的兼容性原则选择，不按提交次数自动增加版本号。日常修复在已发布版本之上继续开发时保留开发版标识；准备新版本时运行同步命令、提交并推送。
 
-1. 确定版本级别，更新版本来源、变更说明和必要的升级注意事项。
-2. 完成前端 lint、测试、生产构建，Go 竞态测试和相关 PostgreSQL / Redis 集成测试；CI 必须通过。
-3. 提交并推送，确认工作区干净且待发布内容在同一提交。
-4. 需要验收时先创建新的附注候选标签；正式发版时创建新的附注正式标签。示例：
+`Publish Version Tag` 工作流监听主分支 CI 的成功结果：
 
-   ```bash
-   git tag -a v2.0.0 -m "Release v2.0.0: native Google APIs and retired legacy completions"
-   git push origin v2.0.0
-   ```
+1. 再次核对当前主分支提交与成功 CI 的 SHA；过期结果、PR 或其他仓库的结果不能发版。
+2. 读取 `VERSION`，创建指向该提交的附注标签 `v<版本>`；已有历史标签不会移动。版本没有变化且标签已存在时自动跳过。
+3. 显式触发同一标签上的二进制和镜像发布工作流。GitHub 的 `GITHUB_TOKEN` 创建标签不会自动触发标签 push 工作流，因此这里使用 `workflow_dispatch`，不需要额外配置 PAT。见 [GitHub 官方触发规则](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)。
+4. 发布 Linux/macOS/Windows 二进制、GitHub Release 及 GHCR 多架构镜像。发布资产不覆盖已有同名文件。
 
-5. 标签触发 `.github/workflows/release.yml` 和 `.github/workflows/docker.yml`；两者均在质量检查通过后发布产物。核对 CLI、健康接口、镜像版本和发布说明一致后更新服务。
+镜像渠道约定：
+
+- `main` 与 `sha-<提交号>`：开发构建。
+- `2.0.0`、`2.0`：正式版本及次版本渠道。
+- `latest`：正式发布版本，主分支开发构建不再覆盖它。
+- 手工候选标签仍支持 `v2.0.0-rc.1`，其 Release 标记为 prerelease，不更新 `latest`。
+
+发布工作流仍执行质量门禁。需要补跑当前提交的发布时，可在 `Publish Version Tag` 手工运行中设置 `retry=true`；已经前进到其他主分支提交时，按不可变标签直接补跑对应发布器：
+
+```bash
+gh workflow run release.yml --ref v2.0.0
+gh workflow run docker.yml --ref v2.0.0
+```
+
+补跑用于完成缺失产物，不修改已有标签或同名资产。正式发布前仍应按功能实际启用情况完成外部服务验收。
 
 本地构建容器时保留版本信息：
 

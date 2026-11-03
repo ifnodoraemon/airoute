@@ -148,7 +148,7 @@ export GATEWAY_ADMIN_SECRET='<至少 32 位随机字符串>'
 # 然后启动 2 副本 Gateway + Nginx 负载均衡器
 docker compose up -d --build
 
-# 推荐：按当前提交重建镜像（二进制报告 1.1.0-dev+g<commit>）并滚动重启两个副本
+# 推荐：按当前提交重建镜像（二进制报告 2.0.0-dev+g<commit>）并滚动重启两个副本
 make docker-rebuild
 ```
 Nginx 会自动在 `http://localhost:8080` 暴露统一入口（宿主端口由 `.env` 的 `GATEWAY_INGRESS_PORT` 决定，默认 8080，映射到容器 80），并以 `least_conn` 算法向双节点分发流量，自动关闭 SSE 缓冲 (`proxy_buffering off`)。Compose/Swarm/Helm 都会以 release 语义启动，弱管理员凭证会直接拒绝启动。

@@ -48,6 +48,11 @@ jobs:
       # Static analysis must run BEFORE the build. Vite/esbuild cannot detect an
       # undefined identifier (it is only a runtime error in JS), which is how two
       # ReferenceErrors once shipped in the console.
+      - name: Validate canonical version and release automation
+        run: |
+          node scripts/version.mjs --check
+          node --test scripts/*.test.cjs
+
       - name: Lint Web UI (undefined identifiers, hook rules)
         run: |
           cd web
@@ -79,11 +84,11 @@ jobs:
       # Printf verbs, unreachable code, lock copying) could only surface at runtime.
       - name: Vet Go Sources
         run: |
-          go vet ./...
+          go vet $(go list ./... | grep -v '/web/node_modules/')
 
       - name: Run Unit Tests with Race Detector
         run: |
-          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+          go test -v -race -coverprofile=coverage.out -covermode=atomic $(go list ./... | grep -v '/web/node_modules/')
 
       - name: Compile Standalone Gateway Binary
         run: |

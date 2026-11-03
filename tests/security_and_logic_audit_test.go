@@ -300,14 +300,14 @@ func TestLogic_CreateUserKey_Options(t *testing.T) {
 	token, _ := tokenForTestUser("charlie", "user", 24*time.Hour)
 
 	payload, _ := json.Marshal(map[string]interface{}{
-		"name":           "production-bot",
+		"tenant_id":      "another-tenant",
 		"rpm":            0, // unlimited
 		"budget":         88.5,
 		"allowed_models": []string{"gpt-4o", "claude-3-5-sonnet"},
 	})
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("POST", "/api/v1/user/keys", bytes.NewReader(payload))
+	req, _ := http.NewRequest("POST", "/api/v1/admin/keys", bytes.NewReader(payload))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	engine.ServeHTTP(w, req)

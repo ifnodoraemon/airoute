@@ -10,8 +10,6 @@ data: [DONE]
 
 `
 
-const streamUsageModel = "usage-accumulation-model"
-
 // TestGeminiStreamUsageAccumulatesAcrossFrames pins the Gemini entrypoint: the
 // terminal usageMetadata must keep the prompt count reported earlier.
 func TestGeminiStreamUsageAccumulatesAcrossFrames(t *testing.T) {

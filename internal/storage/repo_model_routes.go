@@ -176,6 +176,9 @@ func upsertModelPriceTx(tx *Tx, rec *ModelPriceRecord) error {
 //     defaults here silently overrode the control plane, which since D-14 accepts
 //     explicit zeros.
 func updateChannelTx(tx *Tx, rec *ChannelRecord) error {
+	if err := rebindChannelSupplierCosts(tx, rec); err != nil {
+		return err
+	}
 	modelsBytes, _ := json.Marshal(rec.Models)
 	mappingBytes, _ := json.Marshal(rec.ModelMapping)
 	protocolsBytes, _ := json.Marshal(rec.Protocols)
