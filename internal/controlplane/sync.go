@@ -382,6 +382,11 @@ func snapshotFingerprint(snap *ConfigSnapshot) string {
 	hasher := sha256.New()
 	encoder := json.NewEncoder(hasher)
 	_ = encoder.Encode(snap.Channels)
+	// The repository attaches one shared route snapshot to every active channel.
+	// RouteRules is runtime-only in ChannelConfig JSON, so hash it explicitly.
+	if len(snap.Channels) > 0 {
+		_ = encoder.Encode(snap.Channels[0].RouteRules)
+	}
 	_ = encoder.Encode(configOnly)
 	_ = encoder.Encode(snap.HasKeys)
 	_ = encoder.Encode(snap.Fallbacks)

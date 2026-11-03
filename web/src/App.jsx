@@ -473,6 +473,8 @@ export default function App() {
     channels,
     keys,
     models,
+    thinkingCapabilities,
+    thinkingProfiles,
     modelRoutes,
     prices,
     pricingGroups,
@@ -1440,6 +1442,7 @@ export default function App() {
             {/* 5. MULTIMODAL PLAYGROUND TAB */}
             {currentTab === 'playground' && (
               <PlaygroundView
+                thinkingCapabilities={thinkingCapabilities}
                 onCreateKey={() => { setCurrentTab('keys'); handleOpenCreateKey(); }}
                 keys={keys}
                 models={models}
@@ -1466,6 +1469,7 @@ export default function App() {
       <Suspense fallback={null}>
         {/* Modal: New Provider with Smart Auto-Probe */}
         <ChannelModal
+          thinkingProfiles={thinkingProfiles}
           isOpen={showChannelModal}
           onClose={() => setShowChannelModal(false)}
           editingChannelId={editingChannelId}
@@ -1615,6 +1619,7 @@ export default function App() {
 
         {/* Airoute AI Copilot (Cmd+J / Floating Omnibar) */}
         <AiCopilot
+          thinkingCapabilities={thinkingCapabilities}
           onCreateKey={handleOpenCreateKey}
           isOpen={showAiCopilot}
           onClose={() => setShowAiCopilot(false)}

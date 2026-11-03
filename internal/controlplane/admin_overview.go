@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/config"
 	"github.com/ifnodoraemon/airoute/internal/distributed"
+	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
@@ -306,7 +307,7 @@ func (h *AdminHandler) GetSystemMiddlewares(c *gin.Context) {
 // ListModels returns all configured models.
 func (h *AdminHandler) ListModels(c *gin.Context) {
 	models := h.dispatcher.GetAllSupportedModels()
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": models})
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": models, "thinking": h.dispatcher.GetThinkingCapabilities(models), "thinking_profiles": model.ThinkingProfiles()})
 }
 
 // GetStorageStatus returns current artifact storage configuration and health.

@@ -2,6 +2,7 @@ package controlplane
 
 import (
 	"errors"
+	"github.com/ifnodoraemon/airoute/internal/model"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -9,7 +10,8 @@ import (
 
 // UpdateModelRouteRequest specifies model-level distribution, mapping, and fallback settings.
 type UpdateModelRouteRequest struct {
-	Model string `json:"model" binding:"required"`
+	Model          string                `json:"model" binding:"required"`
+	ThinkingPolicy *model.ThinkingPolicy `json:"thinking_policy,omitempty"`
 	// GroupName selects the pricing group being edited. Empty means "default".
 	// Without it, editing a non-default group silently read and wrote the
 	// default group's rates.

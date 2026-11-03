@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/ifnodoraemon/airoute/internal/model"
 	"strconv"
 	"strings"
 	"time"
@@ -134,28 +135,29 @@ func encodePricingSnapshot(snapshot *UsagePricingSnapshot) string {
 
 // UsageLogRecord represents an audit log entry.
 type UsageLogRecord struct {
-	ID               int64                 `json:"id"`
-	TraceID          string                `json:"trace_id"`
-	ChatID           string                `json:"chat_id,omitempty"`
-	SessionID        string                `json:"session_id,omitempty"`
-	APIKey           string                `json:"api_key"`
-	TenantID         string                `json:"tenant_id"`
-	Model            string                `json:"model"`
-	Channel          string                `json:"channel"`
-	PromptTokens     int                   `json:"prompt_tokens"`
-	CompletionTokens int                   `json:"completion_tokens"`
-	CachedTokens     int                   `json:"cached_tokens"`
-	TotalTokens      int                   `json:"total_tokens"`
-	Cost             float64               `json:"cost"`
-	PricingSnapshot  *UsagePricingSnapshot `json:"pricing_snapshot,omitempty"`
-	IsOffPeak        bool                  `json:"is_off_peak"`
-	OffPeakDiscount  float64               `json:"off_peak_discount"`
-	DurationMs       int64                 `json:"duration_ms"`
-	TTFTMs           int64                 `json:"ttft_ms"`
-	StatusCode       int                   `json:"status_code"`
-	UsageSource      string                `json:"usage_source"` // "upstream" (reported) or "estimated" (local fallback)
-	ErrorMessage     string                `json:"error_message,omitempty"`
-	CreatedAt        time.Time             `json:"created_at"`
+	Thinking         *model.ThinkingObservation `json:"thinking,omitempty"`
+	ID               int64                      `json:"id"`
+	TraceID          string                     `json:"trace_id"`
+	ChatID           string                     `json:"chat_id,omitempty"`
+	SessionID        string                     `json:"session_id,omitempty"`
+	APIKey           string                     `json:"api_key"`
+	TenantID         string                     `json:"tenant_id"`
+	Model            string                     `json:"model"`
+	Channel          string                     `json:"channel"`
+	PromptTokens     int                        `json:"prompt_tokens"`
+	CompletionTokens int                        `json:"completion_tokens"`
+	CachedTokens     int                        `json:"cached_tokens"`
+	TotalTokens      int                        `json:"total_tokens"`
+	Cost             float64                    `json:"cost"`
+	PricingSnapshot  *UsagePricingSnapshot      `json:"pricing_snapshot,omitempty"`
+	IsOffPeak        bool                       `json:"is_off_peak"`
+	OffPeakDiscount  float64                    `json:"off_peak_discount"`
+	DurationMs       int64                      `json:"duration_ms"`
+	TTFTMs           int64                      `json:"ttft_ms"`
+	StatusCode       int                        `json:"status_code"`
+	UsageSource      string                     `json:"usage_source"` // "upstream" (reported) or "estimated" (local fallback)
+	ErrorMessage     string                     `json:"error_message,omitempty"`
+	CreatedAt        time.Time                  `json:"created_at"`
 	// BillingID is the server-generated idempotency key for this billable row.
 	// It is never taken from client input: trace_id is client-controllable
 	// (X-Request-ID / traceparent) and one reused value already spans dozens of
@@ -337,7 +339,7 @@ func (r *Repository) ListUsageLogsWithFilterAndCount(f LogFilter) ([]*UsageLogRe
 		}
 	}
 
-	query := `SELECT id, trace_id, COALESCE(chat_id, ''), COALESCE(session_id, ''), COALESCE(api_key, ''), COALESCE(tenant_id, ''), COALESCE(model, ''), COALESCE(channel, ''), prompt_tokens, completion_tokens, COALESCE(cached_tokens, 0), total_tokens, COALESCE(cost, 0.0), COALESCE(is_off_peak, 0), COALESCE(off_peak_discount, 1.0), duration_ms, ttft_ms, status_code, COALESCE(usage_source, 'upstream'), COALESCE(error_message, ''), COALESCE(pricing_snapshot, ''), created_at FROM usage_logs WHERE 1=1` + where + ` ORDER BY id DESC LIMIT ? OFFSET ?`
+	query := `SELECT id, trace_id, COALESCE(chat_id, ''), COALESCE(session_id, ''), COALESCE(api_key, ''), COALESCE(tenant_id, ''), COALESCE(model, ''), COALESCE(channel, ''), prompt_tokens, completion_tokens, COALESCE(cached_tokens, 0), total_tokens, COALESCE(cost, 0.0), COALESCE(is_off_peak, 0), COALESCE(off_peak_discount, 1.0), duration_ms, ttft_ms, status_code, COALESCE(usage_source, 'upstream'), COALESCE(error_message, ''), COALESCE(pricing_snapshot, ''), created_at, COALESCE(thinking, '') FROM usage_logs WHERE 1=1` + where + ` ORDER BY id DESC LIMIT ? OFFSET ?`
 	args := append(append([]interface{}{}, whereArgs...), f.Limit, f.Offset)
 
 	rows, err := r.db.Query(query, args...)
@@ -351,12 +353,15 @@ func (r *Repository) ListUsageLogsWithFilterAndCount(f LogFilter) ([]*UsageLogRe
 		var l UsageLogRecord
 		var isOff int
 		var createdAt time.Time
-		var pricingJSON string
-		if err := rows.Scan(&l.ID, &l.TraceID, &l.ChatID, &l.SessionID, &l.APIKey, &l.TenantID, &l.Model, &l.Channel, &l.PromptTokens, &l.CompletionTokens, &l.CachedTokens, &l.TotalTokens, &l.Cost, &isOff, &l.OffPeakDiscount, &l.DurationMs, &l.TTFTMs, &l.StatusCode, &l.UsageSource, &l.ErrorMessage, &pricingJSON, &createdAt); err != nil {
+		var pricingJSON, thinkingJSON string
+		if err := rows.Scan(&l.ID, &l.TraceID, &l.ChatID, &l.SessionID, &l.APIKey, &l.TenantID, &l.Model, &l.Channel, &l.PromptTokens, &l.CompletionTokens, &l.CachedTokens, &l.TotalTokens, &l.Cost, &isOff, &l.OffPeakDiscount, &l.DurationMs, &l.TTFTMs, &l.StatusCode, &l.UsageSource, &l.ErrorMessage, &pricingJSON, &createdAt, &thinkingJSON); err != nil {
 			return nil, 0, err
 		}
 		if pricingJSON != "" {
 			_ = json.Unmarshal([]byte(pricingJSON), &l.PricingSnapshot)
+		}
+		if thinkingJSON != "" {
+			_ = json.Unmarshal([]byte(thinkingJSON), &l.Thinking)
 		}
 		l.IsOffPeak = isOff == 1
 		l.CreatedAt = createdAt
@@ -622,4 +627,12 @@ func usageLogsBefore(tx *Tx, cutoffValue any, batchSize int) ([]int64, int64, er
 		return nil, 0, err
 	}
 	return ids, units, nil
+}
+
+func encodeThinkingObservation(observation *model.ThinkingObservation) string {
+	if observation == nil {
+		return ""
+	}
+	raw, _ := json.Marshal(observation)
+	return string(raw)
 }

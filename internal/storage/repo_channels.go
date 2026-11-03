@@ -17,15 +17,15 @@ import (
 var ErrChannelNotFound = errors.New("channel not found")
 
 // channelColumns is the projection shared by every single-channel read.
-const channelColumns = `id, name, type, base_url, api_key, models, model_mapping, protocols, priority, weight, timeout_seconds, max_concurrency, queue_limit, queue_wait_seconds, status, created_at, updated_at`
+const channelColumns = `id, name, type, base_url, api_key, models, model_mapping, protocols, priority, weight, timeout_seconds, max_concurrency, queue_limit, queue_wait_seconds, status, created_at, updated_at, model_capabilities`
 
 // scanChannel reads one channel row, decoding its JSON columns.
 func scanChannel(row *sql.Row) (*ChannelRecord, error) {
 	var rec ChannelRecord
-	var modelsJSON, mappingJSON, protocolsJSON sql.NullString
+	var modelsJSON, mappingJSON, protocolsJSON, capabilitiesJSON sql.NullString
 	if err := row.Scan(&rec.ID, &rec.Name, &rec.Type, &rec.BaseURL, &rec.APIKey,
 		&modelsJSON, &mappingJSON, &protocolsJSON, &rec.Priority, &rec.Weight,
-		&rec.TimeoutSeconds, &rec.MaxConcurrency, &rec.QueueLimit, &rec.QueueWaitSeconds, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+		&rec.TimeoutSeconds, &rec.MaxConcurrency, &rec.QueueLimit, &rec.QueueWaitSeconds, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt, &capabilitiesJSON); err != nil {
 		return nil, err
 	}
 	if modelsJSON.Valid {
@@ -37,34 +37,40 @@ func scanChannel(row *sql.Row) (*ChannelRecord, error) {
 	if protocolsJSON.Valid {
 		_ = json.Unmarshal([]byte(protocolsJSON.String), &rec.Protocols)
 	}
+	if capabilitiesJSON.Valid && capabilitiesJSON.String != "" {
+		if err := json.Unmarshal([]byte(capabilitiesJSON.String), &rec.ModelCapabilities); err != nil {
+			return nil, fmt.Errorf("decode channel capabilities: %w", err)
+		}
+	}
 	return &rec, nil
 }
 
 // ChannelRecord represents the database row for channels.
 type ChannelRecord struct {
-	ID               int64              `json:"id"`
-	Name             string             `json:"name"`
-	Type             model.ProviderType `json:"type"`
-	BaseURL          string             `json:"base_url"`
-	APIKey           string             `json:"api_key"`
-	Models           []string           `json:"models"`
-	ModelMapping     map[string]string  `json:"model_mapping"`
-	Protocols        []string           `json:"protocols,omitempty"`
-	Priority         int                `json:"priority"`
-	Weight           int                `json:"weight"`
-	TimeoutSeconds   int                `json:"timeout_seconds"`
-	MaxConcurrency   int                `json:"max_concurrency"`
-	QueueLimit       int                `json:"queue_limit"`
-	QueueWaitSeconds int                `json:"queue_wait_seconds"`
-	Status           string             `json:"status"` // active, inactive
-	BreakerStatus    string             `json:"breaker_status,omitempty"`
-	CreatedAt        time.Time          `json:"created_at"`
-	UpdatedAt        time.Time          `json:"updated_at"`
+	ID                int64                                  `json:"id"`
+	Name              string                                 `json:"name"`
+	Type              model.ProviderType                     `json:"type"`
+	BaseURL           string                                 `json:"base_url"`
+	APIKey            string                                 `json:"api_key"`
+	ModelCapabilities map[string]model.ModelCapabilityConfig `json:"model_capabilities,omitempty"`
+	Models            []string                               `json:"models"`
+	ModelMapping      map[string]string                      `json:"model_mapping"`
+	Protocols         []string                               `json:"protocols,omitempty"`
+	Priority          int                                    `json:"priority"`
+	Weight            int                                    `json:"weight"`
+	TimeoutSeconds    int                                    `json:"timeout_seconds"`
+	MaxConcurrency    int                                    `json:"max_concurrency"`
+	QueueLimit        int                                    `json:"queue_limit"`
+	QueueWaitSeconds  int                                    `json:"queue_wait_seconds"`
+	Status            string                                 `json:"status"` // active, inactive
+	BreakerStatus     string                                 `json:"breaker_status,omitempty"`
+	CreatedAt         time.Time                              `json:"created_at"`
+	UpdatedAt         time.Time                              `json:"updated_at"`
 }
 
 // ListChannels returns all channels.
 func (r *Repository) ListChannels() ([]*ChannelRecord, error) {
-	rows, err := r.db.Query(`SELECT id, name, type, base_url, api_key, models, model_mapping, protocols, priority, weight, timeout_seconds, max_concurrency, queue_limit, queue_wait_seconds, status, created_at, updated_at FROM channels ORDER BY priority ASC, id ASC`)
+	rows, err := r.db.Query(`SELECT id, name, type, base_url, api_key, models, model_mapping, protocols, priority, weight, timeout_seconds, max_concurrency, queue_limit, queue_wait_seconds, status, created_at, updated_at, model_capabilities FROM channels ORDER BY priority ASC, id ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -73,8 +79,8 @@ func (r *Repository) ListChannels() ([]*ChannelRecord, error) {
 	var list []*ChannelRecord
 	for rows.Next() {
 		var rec ChannelRecord
-		var modelsJSON, mappingJSON, protocolsJSON sql.NullString
-		err := rows.Scan(&rec.ID, &rec.Name, &rec.Type, &rec.BaseURL, &rec.APIKey, &modelsJSON, &mappingJSON, &protocolsJSON, &rec.Priority, &rec.Weight, &rec.TimeoutSeconds, &rec.MaxConcurrency, &rec.QueueLimit, &rec.QueueWaitSeconds, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt)
+		var modelsJSON, mappingJSON, protocolsJSON, capabilitiesJSON sql.NullString
+		err := rows.Scan(&rec.ID, &rec.Name, &rec.Type, &rec.BaseURL, &rec.APIKey, &modelsJSON, &mappingJSON, &protocolsJSON, &rec.Priority, &rec.Weight, &rec.TimeoutSeconds, &rec.MaxConcurrency, &rec.QueueLimit, &rec.QueueWaitSeconds, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt, &capabilitiesJSON)
 		if err != nil {
 			return nil, err
 		}
@@ -86,6 +92,11 @@ func (r *Repository) ListChannels() ([]*ChannelRecord, error) {
 		}
 		if protocolsJSON.Valid && protocolsJSON.String != "" {
 			_ = json.Unmarshal([]byte(protocolsJSON.String), &rec.Protocols)
+		}
+		if capabilitiesJSON.Valid && capabilitiesJSON.String != "" {
+			if err := json.Unmarshal([]byte(capabilitiesJSON.String), &rec.ModelCapabilities); err != nil {
+				return nil, fmt.Errorf("decode channel capabilities: %w", err)
+			}
 		}
 		list = append(list, &rec)
 	}
@@ -100,6 +111,7 @@ func (r *Repository) CreateChannel(rec *ChannelRecord) error {
 	modelsBytes, _ := json.Marshal(rec.Models)
 	mappingBytes, _ := json.Marshal(rec.ModelMapping)
 	protocolsBytes, _ := json.Marshal(rec.Protocols)
+	capabilitiesBytes, _ := json.Marshal(rec.ModelCapabilities)
 	if rec.Status == "" {
 		rec.Status = "active"
 	}
@@ -113,8 +125,8 @@ func (r *Repository) CreateChannel(rec *ChannelRecord) error {
 		rec.TimeoutSeconds = 60
 	}
 
-	id, err := r.db.InsertGetID(`INSERT INTO channels (name, type, base_url, api_key, models, model_mapping, protocols, priority, weight, timeout_seconds, max_concurrency, queue_limit, queue_wait_seconds, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-		rec.Name, rec.Type, rec.BaseURL, rec.APIKey, string(modelsBytes), string(mappingBytes), string(protocolsBytes), rec.Priority, rec.Weight, rec.TimeoutSeconds, rec.MaxConcurrency, rec.QueueLimit, rec.QueueWaitSeconds, rec.Status)
+	id, err := r.db.InsertGetID(`INSERT INTO channels (name, type, base_url, api_key, models, model_mapping, protocols, priority, weight, timeout_seconds, max_concurrency, queue_limit, queue_wait_seconds, status, model_capabilities, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		rec.Name, rec.Type, rec.BaseURL, rec.APIKey, string(modelsBytes), string(mappingBytes), string(protocolsBytes), rec.Priority, rec.Weight, rec.TimeoutSeconds, rec.MaxConcurrency, rec.QueueLimit, rec.QueueWaitSeconds, rec.Status, string(capabilitiesBytes))
 	if err != nil {
 		return err
 	}
@@ -326,22 +338,23 @@ func (r *Repository) ToModelChannels() ([]model.ChannelConfig, error) {
 			continue
 		}
 		res = append(res, model.ChannelConfig{
-			RouteRules:       rules,
-			ID:               rec.ID,
-			Name:             rec.Name,
-			Type:             rec.Type,
-			BaseURL:          rec.BaseURL,
-			APIKey:           rec.APIKey,
-			Models:           rec.Models,
-			ModelMapping:     rec.ModelMapping,
-			Protocols:        rec.Protocols,
-			Priority:         rec.Priority,
-			Weight:           rec.Weight,
-			TimeoutSeconds:   rec.TimeoutSeconds,
-			MaxConcurrency:   rec.MaxConcurrency,
-			QueueLimit:       rec.QueueLimit,
-			QueueWaitSeconds: rec.QueueWaitSeconds,
-			Status:           rec.Status,
+			RouteRules:        rules,
+			ID:                rec.ID,
+			Name:              rec.Name,
+			Type:              rec.Type,
+			BaseURL:           rec.BaseURL,
+			APIKey:            rec.APIKey,
+			Models:            rec.Models,
+			ModelMapping:      rec.ModelMapping,
+			ModelCapabilities: rec.ModelCapabilities,
+			Protocols:         rec.Protocols,
+			Priority:          rec.Priority,
+			Weight:            rec.Weight,
+			TimeoutSeconds:    rec.TimeoutSeconds,
+			MaxConcurrency:    rec.MaxConcurrency,
+			QueueLimit:        rec.QueueLimit,
+			QueueWaitSeconds:  rec.QueueWaitSeconds,
+			Status:            rec.Status,
 		})
 	}
 	return res, nil

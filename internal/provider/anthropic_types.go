@@ -23,6 +23,7 @@ type AnthropicRequest struct {
 	StopSequences []string           `json:"stop_sequences,omitempty"`
 	TopK          *int               `json:"top_k,omitempty"`
 	Thinking      any                `json:"thinking,omitempty"`
+	OutputConfig  any                `json:"output_config,omitempty"`
 	Metadata      any                `json:"metadata,omitempty"`
 }
 

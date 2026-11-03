@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -220,7 +221,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 	if req.Protocol != "" {
 		proto = req.Protocol
 	}
-	channels := d.candidateChannelsForRequest(ctx, req, proto)
+	var intentErr error
+	req, intentErr = d.withThinkingIntent(req)
+	if intentErr != nil {
+		return nil, intentErr
+	}
+	channels, capabilityErr := d.candidateChannelsForRequest(ctx, req, proto)
 	if len(channels) == 0 {
 		if fb := d.requestFallback(req); fb != "" && !strings.EqualFold(fb, req.Model) {
 			nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
@@ -235,6 +241,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 			reqCopy := *req
 			reqCopy.Model = fb
 			return d.Dispatch(nextCtx, &reqCopy)
+		}
+		if capabilityErr != nil {
+			return nil, capabilityErr
 		}
 		return nil, newNoRouteError(ctx, req.Model, fmt.Errorf("no upstream provider available for requested model '%s'", req.Model))
 	}
@@ -251,6 +260,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 				return nil, newRequestBudgetError(req.Model, attempted, lastErr)
 			}
 			return nil, newCanceledError(ctx, attempted, "", 0)
+		}
+
+		callReq, thinkingErr := provider.PrepareThinkingRequest(req, ch)
+		if thinkingErr != nil {
+			lastErr = thinkingErr
+			continue
 		}
 
 		// High-Availability Circuit Breaker: fail fast if upstream is down
@@ -291,9 +306,24 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 			skipped = append(skipped, ch.Name)
 			continue
 		}
-		resp, err := prov.ChatComplete(callCtx, req, ch)
+		resp, err := prov.ChatComplete(callCtx, callReq, ch)
 		cancelCall()
 		if err == nil {
+			trace := beginThinkingTrace(ctx, callReq, ch)
+			reasoning, finish := "", ""
+			for _, choice := range resp.Choices {
+				reasoning += choice.Message.ReasoningContent
+				if choice.FinishReason != nil {
+					finish = *choice.FinishReason
+				}
+			}
+			trace.Observe(resp.Usage, reasoning, finish, resp.NativeResponse)
+			if snapshot := trace.Snapshot(); snapshot != nil {
+				if resp.Extra == nil {
+					resp.Extra = make(model.ExtraFields)
+				}
+				resp.Extra["airoute_thinking"], _ = json.Marshal(snapshot)
+			}
 			d.rememberSessionChannel(ctx, req.Model, ch.Name)
 			promptTokens := 0
 			compTokens := 0
@@ -388,30 +418,37 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 	return nil, newExhaustedError(ctx, req.Model, exhaustedTrail(attempted, skipped), fmt.Errorf("all %d candidate channels failed for model %s. Last error: %w", len(channels), req.Model, lastErr))
 }
 
-func (d *Dispatcher) candidateChannelsForRequest(ctx context.Context, req *model.ChatCompletionRequest, proto string) []*model.ChannelConfig {
-	channels := d.ResolveCandidateChannels(ctx, req.Model, proto)
-	if req.Native != nil && req.Native.PinnedIdentity != "" {
-		pinned := make([]*model.ChannelConfig, 0, 1)
-		for _, channel := range channels {
-			if model.UpstreamIdentity(channel) == req.Native.PinnedIdentity {
-				pinned = append(pinned, channel)
-			}
+func (d *Dispatcher) candidateChannelsForRequest(ctx context.Context, req *model.ChatCompletionRequest, proto string) ([]*model.ChannelConfig, error) {
+	var lastErr error
+	eligible := func(ch *model.ChannelConfig) bool {
+		if req.Native != nil && req.Native.PinnedIdentity != "" && model.UpstreamIdentity(ch) != req.Native.PinnedIdentity {
+			return false
 		}
-		return pinned
-	}
-	if !req.AnthropicNativeOnly {
-		return channels
-	}
-	native := make([]*model.ChannelConfig, 0, len(channels))
-	for _, channel := range channels {
-		if isAnthropicWireChannel(channel) {
-			native = append(native, channel)
+		if req.AnthropicNativeOnly && !isAnthropicWireChannel(ch) {
+			return false
 		}
+		if _, err := provider.PrepareThinkingRequest(req, ch); err != nil {
+			lastErr = err
+			return false
+		}
+		return true
 	}
-	if len(native) > 0 {
-		return native
+	channels := d.channelsForRequest(ctx, req.Model, proto, eligible)
+	// Fall back across protocols only if there were no configured protocol matches,
+	// never to reintroduce a candidate rejected for its thinking contract.
+	if len(channels) == 0 && proto != "" && len(d.ListChannelsForModel(req.Model, proto)) == 0 {
+		channels = d.channelsForRequest(ctx, req.Model, "", eligible)
 	}
-	return nil
+	return channels, lastErr
+}
+
+// Freeze route defaults before attempting a different model. A fallback cannot
+// turn the original route's required thinking into that model's disabled default.
+func (d *Dispatcher) withThinkingIntent(req *model.ChatCompletionRequest) (*model.ChatCompletionRequest, error) {
+	if req.ThinkingIntent != nil {
+		return req, nil
+	}
+	return provider.ResolveThinkingIntent(req, d.thinkingPolicyForModel(req.Model))
 }
 
 func (d *Dispatcher) requestFallback(req *model.ChatCompletionRequest) string {

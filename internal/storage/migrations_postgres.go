@@ -536,6 +536,7 @@ func (db *DB) migratePostgres() error {
 		Migration{Version: 47, Name: "retire_text_completions", Up: retireTextCompletions},
 		Migration{Version: 48, Name: "native_states", Up: createNativeStates},
 		Migration{Version: 49, Name: "payment_lifecycle", Up: addPaymentLifecycle},
+		Migration{Version: 50, Name: "thinking_configuration", Up: addThinkingConfiguration},
 	)
 	return db.runMigrations(migrations)
 }

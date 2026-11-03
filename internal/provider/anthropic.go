@@ -150,6 +150,12 @@ func (p *AnthropicProvider) ChatComplete(ctx context.Context, req *model.ChatCom
 		},
 		Usage: anthropicUsageToModel(&anthropicResp.Usage),
 	}
+	var original struct {
+		Content json.RawMessage `json:"content"`
+	}
+	if json.Unmarshal(bodyBytes, &original) == nil {
+		openAIResp.Choices[0].Message.Extra = anthropicHistoryExtra(original.Content)
+	}
 	if req.AnthropicOriginal != nil {
 		openAIResp.NativeAnthropicResponse = bodyBytes
 	}

@@ -16,10 +16,11 @@ type ModelRouteProvider = model.RouteProvider
 // Providers nil leaves the existing policy intact (or inherits channel defaults
 // for a new route); an empty, non-nil list explicitly selects no providers.
 type ModelRouteBundle struct {
-	Model         string
-	FallbackModel string
-	Price         *ModelPriceRecord
-	Providers     []ModelRouteProvider
+	Model          string
+	FallbackModel  string
+	Price          *ModelPriceRecord
+	Providers      []ModelRouteProvider
+	ThinkingPolicy *model.ThinkingPolicy
 }
 
 func createModelRoutesTable(db *DB) error {
@@ -71,9 +72,17 @@ func (r *Repository) ApplyModelRouteBundle(ctx context.Context, b *ModelRouteBun
 		}
 		providers = string(raw)
 	}
-	_, err = tx.Exec(`INSERT INTO model_routes (model, disabled, providers) VALUES (?, 0, ?)
+	var policy any
+	if b.ThinkingPolicy != nil {
+		raw, marshalErr := json.Marshal(b.ThinkingPolicy)
+		if marshalErr != nil {
+			return marshalErr
+		}
+		policy = string(raw)
+	}
+	_, err = tx.Exec(`INSERT INTO model_routes (model, disabled, providers, thinking_policy) VALUES (?, 0, ?, ?)
   ON CONFLICT(model) DO UPDATE SET disabled=0,
-   providers=COALESCE(excluded.providers, model_routes.providers), updated_at=CURRENT_TIMESTAMP`, b.Model, providers)
+   providers=COALESCE(excluded.providers, model_routes.providers), thinking_policy=COALESCE(excluded.thinking_policy,model_routes.thinking_policy), updated_at=CURRENT_TIMESTAMP`, b.Model, providers, policy)
 	if err != nil {
 		return err
 	}
@@ -90,7 +99,7 @@ func (r *Repository) DeleteModelRoutes(ctx context.Context, models []string) err
 	defer func() { _ = tx.Rollback() }()
 	for _, name := range models {
 		if _, err := tx.Exec(`INSERT INTO model_routes (model, disabled, providers) VALUES (?, 1, NULL)
-   ON CONFLICT(model) DO UPDATE SET disabled=1, providers=NULL, updated_at=CURRENT_TIMESTAMP`, name); err != nil {
+   ON CONFLICT(model) DO UPDATE SET disabled=1, providers=NULL, thinking_policy=NULL, updated_at=CURRENT_TIMESTAMP`, name); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(`DELETE FROM model_fallbacks WHERE model=?`, name); err != nil {
@@ -101,7 +110,7 @@ func (r *Repository) DeleteModelRoutes(ctx context.Context, models []string) err
 }
 
 func (r *Repository) ListModelRouteRules() (map[string]model.ModelRouteRule, error) {
-	rows, err := r.db.Query(`SELECT model, disabled, providers FROM model_routes`)
+	rows, err := r.db.Query(`SELECT model, disabled, providers, thinking_policy FROM model_routes`)
 	if err != nil {
 		return nil, err
 	}
@@ -110,14 +119,19 @@ func (r *Repository) ListModelRouteRules() (map[string]model.ModelRouteRule, err
 	for rows.Next() {
 		var name string
 		var disabled int
-		var raw sql.NullString
-		if err := rows.Scan(&name, &disabled, &raw); err != nil {
+		var raw, policy sql.NullString
+		if err := rows.Scan(&name, &disabled, &raw, &policy); err != nil {
 			return nil, err
 		}
 		rule := model.ModelRouteRule{Disabled: disabled != 0}
 		if raw.Valid {
 			if err := json.Unmarshal([]byte(raw.String), &rule.Providers); err != nil {
 				return nil, fmt.Errorf("decode route %q: %w", name, err)
+			}
+		}
+		if policy.Valid {
+			if err := json.Unmarshal([]byte(policy.String), &rule.ThinkingPolicy); err != nil {
+				return nil, fmt.Errorf("decode thinking policy %q: %w", name, err)
 			}
 		}
 		rules[name] = rule
@@ -182,12 +196,13 @@ func updateChannelTx(tx *Tx, rec *ChannelRecord) error {
 	modelsBytes, _ := json.Marshal(rec.Models)
 	mappingBytes, _ := json.Marshal(rec.ModelMapping)
 	protocolsBytes, _ := json.Marshal(rec.Protocols)
+	capabilitiesBytes, _ := json.Marshal(rec.ModelCapabilities)
 
 	if rec.Status == "" {
 		rec.Status = "active"
 	}
 
-	_, err := tx.Exec(`UPDATE channels SET name=?, type=?, base_url=?, api_key=?, models=?, model_mapping=?, protocols=?, priority=?, weight=?, timeout_seconds=?, max_concurrency=?, queue_limit=?, queue_wait_seconds=?, status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-		rec.Name, rec.Type, rec.BaseURL, rec.APIKey, string(modelsBytes), string(mappingBytes), string(protocolsBytes), rec.Priority, rec.Weight, rec.TimeoutSeconds, rec.MaxConcurrency, rec.QueueLimit, rec.QueueWaitSeconds, rec.Status, rec.ID)
+	_, err := tx.Exec(`UPDATE channels SET name=?, type=?, base_url=?, api_key=?, models=?, model_mapping=?, protocols=?, priority=?, weight=?, timeout_seconds=?, max_concurrency=?, queue_limit=?, queue_wait_seconds=?, status=?, model_capabilities=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+		rec.Name, rec.Type, rec.BaseURL, rec.APIKey, string(modelsBytes), string(mappingBytes), string(protocolsBytes), rec.Priority, rec.Weight, rec.TimeoutSeconds, rec.MaxConcurrency, rec.QueueLimit, rec.QueueWaitSeconds, rec.Status, string(capabilitiesBytes), rec.ID)
 	return err
 }

@@ -12,32 +12,34 @@ import (
 
 // ModelRouteDetail encapsulates complete routing and multi-provider topology for a single model.
 type ModelRouteDetail struct {
-	Model                  string               `json:"model"`
-	Modality               string               `json:"modality"`
-	Providers              []*ModelProviderInfo `json:"providers"`
-	PrimaryProvidersCount  int                  `json:"primary_providers_count"`
-	FallbackProvidersCount int                  `json:"fallback_providers_count"`
-	TotalPrimaryWeight     int                  `json:"total_primary_weight"`
-	FallbackModel          string               `json:"fallback_model,omitempty"`
-	HasCrossProtocol       bool                 `json:"has_cross_protocol"`
-	HasFallbackTier        bool                 `json:"has_fallback_tier"`
+	ThinkingPolicy         *model.ThinkingPolicy `json:"thinking_policy,omitempty"`
+	Model                  string                `json:"model"`
+	Modality               string                `json:"modality"`
+	Providers              []*ModelProviderInfo  `json:"providers"`
+	PrimaryProvidersCount  int                   `json:"primary_providers_count"`
+	FallbackProvidersCount int                   `json:"fallback_providers_count"`
+	TotalPrimaryWeight     int                   `json:"total_primary_weight"`
+	FallbackModel          string                `json:"fallback_model,omitempty"`
+	HasCrossProtocol       bool                  `json:"has_cross_protocol"`
+	HasFallbackTier        bool                  `json:"has_fallback_tier"`
 }
 
 // ModelProviderInfo details an individual downstream provider serving a given model.
 type ModelProviderInfo struct {
-	ChannelID        int64    `json:"channel_id"`
-	ChannelName      string   `json:"channel_name"`
-	ChannelType      string   `json:"channel_type"`
-	BaseURL          string   `json:"base_url"`
-	Priority         int      `json:"priority"`
-	Weight           int      `json:"weight"`
-	WeightPercent    float64  `json:"weight_percent"`
-	MappedModel      string   `json:"mapped_model"`
-	Protocols        []string `json:"protocols"`
-	BreakerStatus    string   `json:"breaker_status"`
-	Status           string   `json:"status"`
-	ConversionNeeded bool     `json:"conversion_needed"`
-	ConversionType   string   `json:"conversion_type"`
+	Thinking         model.ThinkingCapability `json:"thinking"`
+	ChannelID        int64                    `json:"channel_id"`
+	ChannelName      string                   `json:"channel_name"`
+	ChannelType      string                   `json:"channel_type"`
+	BaseURL          string                   `json:"base_url"`
+	Priority         int                      `json:"priority"`
+	Weight           int                      `json:"weight"`
+	WeightPercent    float64                  `json:"weight_percent"`
+	MappedModel      string                   `json:"mapped_model"`
+	Protocols        []string                 `json:"protocols"`
+	BreakerStatus    string                   `json:"breaker_status"`
+	Status           string                   `json:"status"`
+	ConversionNeeded bool                     `json:"conversion_needed"`
+	ConversionType   string                   `json:"conversion_type"`
 	// SharedModelCount describes capabilities; route-local weights and priorities
 	// can be edited independently of these other models.
 	SharedModelCount int `json:"shared_model_count"`
@@ -62,10 +64,11 @@ func (d *Dispatcher) GetModelRoutes() []*ModelRouteDetail {
 	var routes []*ModelRouteDetail
 	for _, m := range allModels {
 		detail := &ModelRouteDetail{
-			Model:         m,
-			Modality:      InferModality(m),
-			FallbackModel: fallbacks[m],
-			Providers:     make([]*ModelProviderInfo, 0),
+			Model:          m,
+			ThinkingPolicy: d.thinkingPolicyForModel(m),
+			Modality:       InferModality(m),
+			FallbackModel:  fallbacks[m],
+			Providers:      make([]*ModelProviderInfo, 0),
 		}
 
 		var matched []*model.ChannelConfig
@@ -94,6 +97,8 @@ func (d *Dispatcher) GetModelRoutes() []*ModelRouteDetail {
 
 		for _, ch := range matched {
 			mapped := ch.GetUpstreamModel(m)
+			profile, source := model.ResolveThinkingProfile(ch, m)
+			detail.ThinkingPolicy = ch.ThinkingPolicyFor(m)
 			breaker := d.GetBreakerStatus(ch.Name)
 
 			convNeeded := false
@@ -121,6 +126,7 @@ func (d *Dispatcher) GetModelRoutes() []*ModelRouteDetail {
 
 			info := &ModelProviderInfo{
 				ChannelID:        ch.ID,
+				Thinking:         profile.Capability(source),
 				ChannelName:      ch.Name,
 				ChannelType:      string(ch.Type),
 				BaseURL:          ch.BaseURL,

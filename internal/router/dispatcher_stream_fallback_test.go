@@ -52,7 +52,7 @@ func TestNativeAnthropicRequestExcludesOtherProviders(t *testing.T) {
 		{Name: "openai", Type: model.ProviderOpenAI, Status: "active", Models: []string{"example"}},
 		{Name: "anthropic", Type: model.ProviderAnthropic, Status: "active", Models: []string{"example"}},
 	})
-	channels := d.candidateChannelsForRequest(context.Background(), &model.ChatCompletionRequest{Model: "example", AnthropicNativeOnly: true}, "chat")
+	channels, _ := d.candidateChannelsForRequest(context.Background(), &model.ChatCompletionRequest{Model: "example", AnthropicNativeOnly: true}, "chat")
 	if len(channels) != 1 || channels[0].Name != "anthropic" {
 		t.Fatalf("unexpected native channels: %+v", channels)
 	}
@@ -62,7 +62,7 @@ func TestNativeAnthropicRequestRejectsWhenNoNativeProvider(t *testing.T) {
 	d := NewDispatcher([]model.ChannelConfig{
 		{Name: "gpustack", Type: model.ProviderGPUStack, Status: "active", Models: []string{"deepseek-v4.1-flash"}},
 	})
-	channels := d.candidateChannelsForRequest(context.Background(), &model.ChatCompletionRequest{Model: "deepseek-v4.1-flash", AnthropicNativeOnly: true}, "chat")
+	channels, _ := d.candidateChannelsForRequest(context.Background(), &model.ChatCompletionRequest{Model: "deepseek-v4.1-flash", AnthropicNativeOnly: true}, "chat")
 	if len(channels) != 0 {
 		t.Fatalf("native-only request must not be translated when no native channel exists: %+v", channels)
 	}

@@ -54,6 +54,12 @@ func convertOpenAIToAnthropic(req *model.ChatCompletionRequest, channel *model.C
 			continue
 		}
 
+		if strings.ToLower(msg.Role) == "assistant" {
+			if content := restoredAnthropicHistory(msg); len(content) > 0 {
+				anthropicMsgs = append(anthropicMsgs, AnthropicMessage{Role: "assistant", Content: content})
+				continue
+			}
+		}
 		if strings.ToLower(msg.Role) == "assistant" && len(msg.ToolCalls) > 0 {
 			var blocks []any
 			contentStr := msg.GetContentString()
@@ -181,7 +187,7 @@ func convertOpenAIToAnthropic(req *model.ChatCompletionRequest, channel *model.C
 		}
 	}
 
-	return &AnthropicRequest{
+	request := &AnthropicRequest{
 		Model:         channel.GetUpstreamModel(req.Model),
 		Messages:      anthropicMsgs,
 		System:        strings.Join(systemParts, "\n\n"),
@@ -193,6 +199,8 @@ func convertOpenAIToAnthropic(req *model.ChatCompletionRequest, channel *model.C
 		ToolChoice:    anthropicToolChoice(req.ToolChoice),
 		StopSequences: stopSeqs,
 	}
+	applyPreparedAnthropicThinking(request, req.PreparedThinking)
+	return request
 }
 
 // anthropicToolChoice maps an OpenAI tool_choice value onto the Anthropic

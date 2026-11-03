@@ -78,8 +78,11 @@ type ChatCompletionRequest struct {
 	ParallelToolCalls *bool `json:"parallel_tool_calls,omitempty"`
 
 	// Protocol specifies the desired routing protocol (e.g. "openai_chat", "responses"). Internal metadata; never serialized.
-	Protocol string         `json:"-"`
-	Native   *NativeRequest `json:"-"`
+	Protocol             string            `json:"-"`
+	PreparedThinking     *PreparedThinking `json:"-"`
+	ThinkingIntent       *ThinkingControl  `json:"-"`
+	ThinkingIntentPolicy *ThinkingPolicy   `json:"-"`
+	Native               *NativeRequest    `json:"-"`
 	// AnthropicOriginal preserves native-only fields and signed content blocks when
 	// a Messages request is routed to another Anthropic endpoint.
 	AnthropicOriginal   *AnthropicInboundRequest `json:"-"`
@@ -142,20 +145,28 @@ func (u *Usage) GetCacheCreationTokens() int {
 // usage member (Usage.Extra), which is why reading it here is enough to stop
 // /v1/responses from always reporting zero (F-02).
 func (u *Usage) GetReasoningTokens() int {
-	if u == nil || len(u.Extra) == 0 {
-		return 0
+	if count := u.ReportedReasoningTokens(); count != nil {
+		return *count
 	}
-	raw, ok := u.Extra["completion_tokens_details"]
-	if !ok {
-		return 0
+	return 0
+}
+
+// ReportedReasoningTokens distinguishes absence from a provider-reported zero.
+func (u *Usage) ReportedReasoningTokens() *int {
+	if u == nil {
+		return nil
 	}
 	var details struct {
-		ReasoningTokens int `json:"reasoning_tokens"`
+		ReasoningTokens *int `json:"reasoning_tokens"`
 	}
-	if err := json.Unmarshal(raw, &details); err != nil {
-		return 0
+	if json.Unmarshal(u.Extra["completion_tokens_details"], &details) == nil && details.ReasoningTokens != nil {
+		return details.ReasoningTokens
 	}
-	return details.ReasoningTokens
+	var count *int
+	if json.Unmarshal(u.Extra["reasoning_tokens"], &count) == nil {
+		return count
+	}
+	return nil
 }
 
 // ChatCompletionChoice is an individual completion choice.

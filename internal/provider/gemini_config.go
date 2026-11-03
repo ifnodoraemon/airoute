@@ -65,6 +65,10 @@ func geminiGenerationConfig(req *model.ChatCompletionRequest) *GeminiGenerationC
 }
 
 func applyGeminiThinking(cfg *GeminiGenerationConfig, req *model.ChatCompletionRequest, upstreamModel string) error {
+	if req.PreparedThinking != nil {
+		applyPreparedGeminiThinking(cfg, req.PreparedThinking)
+		return nil
+	}
 	raw := req.Extra["reasoning_effort"]
 	if len(raw) == 0 {
 		return nil

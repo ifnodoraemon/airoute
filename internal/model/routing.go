@@ -15,8 +15,9 @@ type RouteProvider struct {
 // A nil Providers list inherits capabilities; an empty list selects no channel.
 // Disabled persists an explicit deletion so a channel edit cannot recreate it.
 type ModelRouteRule struct {
-	Disabled  bool
-	Providers []RouteProvider
+	Disabled       bool
+	Providers      []RouteProvider
+	ThinkingPolicy *ThinkingPolicy
 }
 
 func (c *ChannelConfig) routeProvider(modelName string) (RouteProvider, bool, bool) {

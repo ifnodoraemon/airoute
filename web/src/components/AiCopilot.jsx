@@ -1,3 +1,6 @@
+import ThinkingControls from './ThinkingControls';
+import ThinkingStatus from './ThinkingStatus';
+import { thinkingRequest, thinkingResult, assistantHistory } from '../lib/thinking';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Sparkles,
@@ -46,6 +49,7 @@ export default function AiCopilot({
   setCurrentTab,
   setViewMode,
   models = [],
+  thinkingCapabilities = {},
   channels = [],
   keys = [],
   logs = [],
@@ -67,6 +71,7 @@ export default function AiCopilot({
   const [copiedId, setCopiedId] = useState(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedModel, setSelectedModel] = useState('');
+  const [thinkingByModel,setThinkingByModel]=useState({});
   const [expandedReasoningIds, setExpandedReasoningIds] = useState({});
   const [expandedTraceIds, setExpandedTraceIds] = useState({});
   const [expandedStepObsIds, setExpandedStepObsIds] = useState({});
@@ -618,6 +623,8 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
     const targetModel = selectedModel;
     let fullContent = '';
     let fullReasoning = '';
+    let completedReasoningTokens=0;
+    let hasReasoningCount=false;
     const accumulatedTrace = [];
 
     try {
@@ -633,7 +640,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
           // answer back to the model.
           .filter(m => m.id !== 'welcome' && !m.id.startsWith('err_') && !m.isError && !m.isFallback)
           .slice(-6)
-          .map(m => ({ role: m.role, content: m.content })),
+          .map(m => assistantHistory(m,true,targetModel)),
         { role: 'user', content: text }
       ];
 
@@ -644,6 +651,10 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
 
       while (shouldContinue && iteration < MAX_ITERATIONS) {
         iteration++;
+        let iterationContent='';
+        let iterationReasoning='';
+        let iterationExtra;
+        let iterationObservation={};
 
         const response = await consoleFetch('/v1/chat/completions', callKeyId, {
           method: 'POST',
@@ -651,11 +662,13 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
           signal: controller.signal,
           body: JSON.stringify({
             model: targetModel,
+            ...thinkingRequest(thinkingCapabilities[targetModel],thinkingByModel[targetModel]),
+            stream_options: {include_usage:true},
             messages: payloadMessages,
             tools: COPILOT_HARNESS_TOOLS,
             stream: true,
             temperature: 0.5,
-            max_tokens: 3500
+            max_tokens: 16384
           })
         });
 
@@ -708,16 +721,24 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
             eventError.streamError = true;
             throw eventError;
           }
+          iterationObservation=thinkingResult(parsed,iterationObservation);
+          const displayedObservation={...iterationObservation};
+          if (Number.isFinite(iterationObservation.reasoning_tokens)) displayedObservation.reasoning_tokens=completedReasoningTokens+iterationObservation.reasoning_tokens;
+          else if (hasReasoningCount) displayedObservation.reasoning_tokens=completedReasoningTokens;
+          setMessages(prev => prev.map(m => m.id===assistantMsgId ? {...m,thinking:displayedObservation} : m));
           const choice = parsed.choices?.[0];
           if (!choice) return;
 
           const delta = choice.delta;
           if (!delta) return;
 
+          if (delta.extra_content) iterationExtra=delta.extra_content;
           if (delta.reasoning_content) {
+            iterationReasoning += delta.reasoning_content;
             fullReasoning += delta.reasoning_content;
           }
           if (delta.content) {
+            iterationContent += delta.content;
             fullContent += delta.content;
           }
 
@@ -733,6 +754,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                 };
               }
               if (tc.id) streamedToolCalls[idx].id = tc.id;
+              if (tc.extra_content) streamedToolCalls[idx].extra_content=tc.extra_content;
               if (tc.function?.name) streamedToolCalls[idx].name += tc.function.name;
               if (tc.function?.arguments) streamedToolCalls[idx].arguments += tc.function.arguments;
             }
@@ -745,7 +767,11 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                 ...m,
                 content: fullContent,
                 reasoning: fullReasoning,
-                harnessTrace: [...accumulatedTrace]
+                harnessTrace: [...accumulatedTrace],
+                extra_content:iterationExtra,
+                model:targetModel,
+                thinking:displayedObservation,
+                reasoning_content:iterationReasoning
               };
             }
             return m;
@@ -776,6 +802,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
           try { reader.releaseLock?.(); } catch { /* lock already released */ }
         }
 
+        if (Number.isFinite(iterationObservation.reasoning_tokens)) {completedReasoningTokens+=iterationObservation.reasoning_tokens;hasReasoningCount=true;}
         const toolCallsArray = Object.values(streamedToolCalls).filter(tc => tc.name);
 
         if (toolCallsArray.length > 0) {
@@ -783,10 +810,13 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
           // 1. Append assistant call to payload
           payloadMessages.push({
             role: 'assistant',
-            content: fullContent,
+            content: iterationContent,
+            reasoning_content:iterationReasoning,
+            ...(iterationExtra ? {extra_content:iterationExtra} : {}),
             tool_calls: toolCallsArray.map(tc => ({
               id: tc.id,
               type: 'function',
+              ...(tc.extra_content ? {extra_content:tc.extra_content} : {}),
               function: {
                 name: tc.name,
                 arguments: tc.arguments
@@ -1223,6 +1253,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                   </div>
                 )}
 
+                {!isUser && <ThinkingStatus observation={m.thinking} reasoning={m.reasoning} complete={!isLoading} lang={lang} />}
                 {/* 消息正文 */}
                 {isUser ? (
                   <div className="whitespace-pre-wrap font-sans text-xs leading-relaxed">{m.content}</div>
@@ -1311,6 +1342,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
         </div>}
       </div>
 
+      <div className="px-3 py-2 border-t border-slate-200 dark:border-slate-700"><ThinkingControls capability={thinkingCapabilities[selectedModel]} value={thinkingByModel[selectedModel]} onChange={value => setThinkingByModel(prev => ({...prev,[selectedModel]:value}))} tools disabled={isLoading} lang={lang} /></div>
       {/* 底部输入栏 */}
       <form
         onSubmit={(e) => {

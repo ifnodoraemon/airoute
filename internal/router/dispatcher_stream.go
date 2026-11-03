@@ -48,7 +48,12 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 	if req.Protocol != "" {
 		proto = req.Protocol
 	}
-	channels := d.candidateChannelsForRequest(ctx, req, proto)
+	var intentErr error
+	req, intentErr = d.withThinkingIntent(req)
+	if intentErr != nil {
+		return nil, intentErr
+	}
+	channels, capabilityErr := d.candidateChannelsForRequest(ctx, req, proto)
 	if len(channels) == 0 {
 		if fb := d.requestFallback(req); fb != "" && !strings.EqualFold(fb, req.Model) {
 			nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
@@ -64,6 +69,9 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			reqCopy.Model = fb
 			return d.DispatchStream(nextCtx, &reqCopy)
 		}
+		if capabilityErr != nil {
+			return nil, capabilityErr
+		}
 		return nil, newNoRouteError(ctx, req.Model, fmt.Errorf("no upstream provider available for requested model '%s'", req.Model))
 	}
 
@@ -72,6 +80,12 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 	var skipped []string   // channels bypassed by the circuit breaker, never called
 	for i, ch := range channels {
 		// High-Availability Circuit Breaker: fail fast if upstream is down
+		callReq, thinkingErr := provider.PrepareThinkingRequest(req, ch)
+		if thinkingErr != nil {
+			lastErr = thinkingErr
+			continue
+		}
+
 		if !d.circuitBreaker.CanExecute(ch.Name) {
 			telemetry.WarnLogger(routerLog(ctx), "breaker-open-stream:"+ch.Name, 30*time.Second,
 				"circuit breaker is OPEN, bypassing dead upstream stream",
@@ -109,7 +123,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			skipped = append(skipped, ch.Name)
 			continue
 		}
-		streamChan, err := prov.ChatCompleteStream(attemptCtx, req, ch)
+		streamChan, err := prov.ChatCompleteStream(attemptCtx, callReq, ch)
 		if err != nil {
 			attemptCancel()
 			if stopErr := d.failStreamAttempt(ctx, req, ch, attempted, err, "stream connection failed, trying next channel"); stopErr != nil {
@@ -193,7 +207,8 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			}
 			d.recordStreamFailure(ctx, ch.Name, err, i+1)
 		}
-		go pipeStreamEvents(ctx, outChan, preamble, streamChan, trail, attemptCancel, recordPostCommitFailure)
+		trace := beginThinkingTrace(ctx, callReq, ch)
+		go pipeStreamEvents(ctx, outChan, preamble, streamChan, trail, attemptCancel, recordPostCommitFailure, trace.ObserveEvent)
 		return outChan, nil
 	}
 

@@ -310,7 +310,12 @@ func prepareUsage(c *gin.Context, params AuditRecordParams) (*storage.UsageLogRe
 	if apiKey == "" {
 		apiKey = getRequestAPIKey(c)
 	}
+	var thinkingObservation *model.ThinkingObservation
+	if c != nil && c.Request != nil {
+		thinkingObservation = model.ThinkingTraceFromContext(c.Request.Context()).Snapshot()
+	}
 	record := &storage.UsageLogRecord{
+		Thinking:         thinkingObservation,
 		BillingID:        params.BillingID,
 		TraceID:          traceID,
 		ChatID:           params.ChatID,

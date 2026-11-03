@@ -539,6 +539,7 @@ func (db *DB) migrate() error {
 		{Version: 47, Name: "retire_text_completions", Up: retireTextCompletions},
 		{Version: 48, Name: "native_states", Up: createNativeStates},
 		{Version: 49, Name: "payment_lifecycle", Up: addPaymentLifecycle},
+		{Version: 50, Name: "thinking_configuration", Up: addThinkingConfiguration},
 	}
 	return db.runMigrations(migrations)
 }

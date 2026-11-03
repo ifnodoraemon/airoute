@@ -1,3 +1,6 @@
+import ThinkingControls from './ThinkingControls';
+import ThinkingStatus from './ThinkingStatus';
+import { reasoningTokens } from '../lib/thinking';
 import { useEffect, useRef, useState } from 'react';
 import { applyGeminiOutput, createGeminiOutput, geminiOutputNotice, readGeminiSSE } from '../lib/geminiPlayground';
 import { assistantContent } from '../lib/assistantContent';
@@ -8,7 +11,7 @@ import { extractErrorMessage } from '../api/client';
 
 const example = JSON.stringify({ contents: [{ role: 'user', parts: [{ text: '你好，请介绍一下你自己。' }] }], generationConfig: {} }, null, 2);
 
-export default function GeminiPlayground({ models = [], resolveCredentials, lang = 'zh', showToast }) {
+export default function GeminiPlayground({ models = [], thinkingCapabilities = {}, resolveCredentials, lang = 'zh', showToast }) {
   const isZh = lang === 'zh';
   const [model, setModel] = useState(models[0] || '');
   const [body, setBody] = useState(example);
@@ -22,6 +25,17 @@ export default function GeminiPlayground({ models = [], resolveCredentials, lang
   useEffect(() => () => controller.current?.abort(), []);
   const activeModel = models.includes(model) ? model : models[0] || '';
   const display = assistantContent(result.text, result.reasoning, !loading);
+  let document;
+  try { document=JSON.parse(body); } catch { document=null; }
+  const nativeThinking=document?.generationConfig?.thinkingConfig;
+  if (document && !nativeThinking && !document.thinking_control && thinkingCapabilities[activeModel]?.summary) document={...document,thinking_control:{mode:'auto',include_summary:true}};
+  const effectiveBody=document && !nativeThinking && !JSON.parse(body).thinking_control && document.thinking_control ? JSON.stringify(document,null,2) : body;
+  const setThinking=value => {
+    if (!document) return;
+    const next={...document,thinking_control:value};
+    if (next.generationConfig?.thinkingConfig) {next.generationConfig={...next.generationConfig};delete next.generationConfig.thinkingConfig;}
+    setBody(JSON.stringify(next,null,2));
+  };
   const notice = outcome === 'complete' ? geminiOutputNotice(result, isZh) : '';
 
   const attach = async (file) => {
@@ -43,7 +57,7 @@ export default function GeminiPlayground({ models = [], resolveCredentials, lang
     const credentials = resolveCredentials();
     if (!credentials || !activeModel || loading) return;
     let request;
-    try { request = JSON.parse(body); } catch { setError(isZh ? '请求 JSON 格式不正确' : 'Invalid request JSON'); return; }
+    try { request = JSON.parse(effectiveBody); } catch { setError(isZh ? '请求 JSON 格式不正确' : 'Invalid request JSON'); return; }
     const abort = new AbortController(); controller.current = abort;
     setLoading(true); setError(''); setOutcome('idle'); setResult(createGeminiOutput()); setMediaKeyId(credentials.keyId);
     const output = createGeminiOutput();
@@ -73,10 +87,12 @@ export default function GeminiPlayground({ models = [], resolveCredentials, lang
     <section className="grid lg:grid-cols-2 gap-4" aria-label={isZh ? 'Gemini 原生调试' : 'Gemini native playground'}>
       <div className="space-y-3 rounded-2xl border border-slate-200 dark:border-slate-700 p-5">
         <label className="block text-xs font-semibold">{isZh ? '模型' : 'Model'}
-          <select aria-label={isZh ? 'Gemini 模型' : 'Gemini model'} value={activeModel} onChange={event => setModel(event.target.value)} className="ui-field mt-1">{models.map(name => <option key={name}>{name}</option>)}</select>
+          <select aria-label={isZh ? 'Gemini 模型' : 'Gemini model'} value={activeModel} onChange={event => {setModel(event.target.value);if (document) {const next={...document};delete next.thinking_control;if (next.generationConfig?.thinkingConfig) {next.generationConfig={...next.generationConfig};delete next.generationConfig.thinkingConfig;}if (thinkingCapabilities[event.target.value]?.summary) next.thinking_control={mode:'auto',include_summary:true};setBody(JSON.stringify(next,null,2));}}} className="ui-field mt-1">{models.map(name => <option key={name}>{name}</option>)}</select>
         </label>
+        <ThinkingControls capability={thinkingCapabilities[activeModel]} value={document?.thinking_control} onChange={setThinking} disabled={loading || !document} lang={lang} />
+        {nativeThinking && <p className="text-xs text-slate-500">{isZh ? 'JSON 已设置原生 thinkingConfig；修改上方控件会改为统一思考设置。' : 'Native thinkingConfig is set in JSON. Changing the controls replaces it with unified settings.'}</p>}
         <label className="block text-xs font-semibold">{isZh ? '原生请求 JSON' : 'Native request JSON'}
-          <textarea aria-label={isZh ? 'Gemini 请求 JSON' : 'Gemini request JSON'} value={body} onChange={event => setBody(event.target.value)} rows={16} className="ui-field font-mono mt-1" />
+          <textarea aria-label={isZh ? 'Gemini 请求 JSON' : 'Gemini request JSON'} value={effectiveBody} onChange={event => setBody(event.target.value)} rows={16} className="ui-field font-mono mt-1" />
         </label>
         <label className="block text-xs">{isZh ? '附加图片、音频、视频或文档' : 'Attach image, audio, video or document'}
           <input type="file" accept="image/*,audio/*,video/*,application/pdf" onChange={event => attach(event.target.files?.[0])} className="block mt-2 text-xs" />
@@ -92,7 +108,8 @@ export default function GeminiPlayground({ models = [], resolveCredentials, lang
         {notice && !error && <p role="status" className="text-sm text-amber-700 dark:text-amber-300">{notice}</p>}
         {outcome === 'stopped' && <p role="status" className="text-sm text-slate-500">{isZh ? '生成已停止，已保留收到的内容。' : 'Generation stopped. Received content is preserved.'}</p>}
         {(result.feedback?.safetyRatings || result.safetyRatings.length > 0) && <details><summary>{isZh ? '安全评估' : 'Safety ratings'}</summary><pre className="text-xs whitespace-pre-wrap">{JSON.stringify(result.feedback?.safetyRatings || result.safetyRatings, null, 2)}</pre></details>}
-        {display.reasoning && <details open><summary>{isZh ? '思考内容' : 'Reasoning'}</summary><pre className="whitespace-pre-wrap text-xs">{display.reasoning}</pre></details>}
+        <ThinkingStatus observation={outcome==='complete' ? {reasoning_tokens:reasoningTokens(result.usage),finish_reason:result.finishReason} : null} reasoning={display.reasoning} complete={!loading} lang={lang} />
+        {display.reasoning && <details open><summary>{isZh ? '思考内容 / 摘要' : 'Thinking content / summary'}</summary><pre className="whitespace-pre-wrap text-xs">{display.reasoning}</pre></details>}
         {display.content && <MarkdownRenderer content={display.content} lang={lang} />}
         {result.media.map((item, index) => <GeminiMediaOutput key={index} item={item} index={index} lang={lang} keyId={mediaKeyId} />)}
         {result.tools.length > 0 && <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(result.tools, null, 2)}</pre>}

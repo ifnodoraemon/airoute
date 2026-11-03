@@ -23,6 +23,8 @@ export function useConsoleData({ adminUser }) {
   const [groupMultipliers, setGroupMultipliers] = useState({ default: 1.0, vip: 0.8, enterprise: 1.5 });
   const [modelRoutes, setModelRoutes] = useState([]);
   const [models, setModels] = useState([]);
+  const [thinkingCapabilities,setThinkingCapabilities]=useState({});
+  const [thinkingProfiles,setThinkingProfiles]=useState([]);
   const [playModel, setPlayModel] = useState('');
 
   // refresh can run in the same tick as the session state update, before the new
@@ -62,6 +64,8 @@ export function useConsoleData({ adminUser }) {
     setGroupMultipliers({ default: 1.0, vip: 0.8, enterprise: 1.5 });
     setModelRoutes([]);
     setModels([]);
+    setThinkingCapabilities({});
+    setThinkingProfiles([]);
     setPlayModel('');
   }, []);
 
@@ -145,6 +149,8 @@ export function useConsoleData({ adminUser }) {
         const allM = mRes.data;
         const routes = routesRes.data || [];
         setModels(allM);
+        setThinkingCapabilities(mRes.thinking || {});
+        setThinkingProfiles(mRes.thinking_profiles || []);
 
         const getInferred = (mod) => allM.filter((m) => inferClientModality(m) === mod);
         const getModModels = (mod) => {
@@ -173,6 +179,8 @@ export function useConsoleData({ adminUser }) {
     setGroupMultipliers,
     modelRoutes,
     models,
+    thinkingCapabilities,
+    thinkingProfiles,
     playModel,
     setPlayModel,
     refresh,

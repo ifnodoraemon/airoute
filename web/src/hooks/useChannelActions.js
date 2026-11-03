@@ -278,6 +278,7 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
       max_concurrency: ch.max_concurrency ?? 0,
       queue_limit: ch.queue_limit ?? 0,
       queue_wait_seconds: ch.queue_wait_seconds ?? 0,
+      model_capabilities: ch.model_capabilities || {},
       models_str: (ch.models || []).join(', '),
       mapping_rules: Object.entries(ch.model_mapping || {}).map(([from, to]) => ({ from, to })),
       protocols: ch.protocols || emptyChannel().protocols,

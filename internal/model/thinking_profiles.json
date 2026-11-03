@@ -1,0 +1,555 @@
+{
+  "profiles": [
+    {
+      "id": "unknown",
+      "label": "能力未确认 · 禁止自动推断",
+      "wire": "unknown",
+      "on": false,
+      "off": false,
+      "efforts": [],
+      "output": "unknown"
+    },
+    {
+      "id": "unsupported",
+      "label": "无思考模式 / No thinking mode",
+      "wire": "none",
+      "on": false,
+      "off": true,
+      "efforts": [],
+      "output": "none"
+    },
+    {
+      "id": "openai-required",
+      "label": "OpenAI · 必须思考",
+      "wire": "openai",
+      "on": true,
+      "off": false,
+      "efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "default_effort": "medium",
+      "output": "usage",
+      "source_url": "https://developers.openai.com/api/docs/guides/reasoning"
+    },
+    {
+      "id": "openai-gpt5",
+      "label": "OpenAI · GPT-5",
+      "wire": "openai",
+      "on": true,
+      "off": false,
+      "efforts": [
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
+      "default_effort": "medium",
+      "output": "usage",
+      "source_url": "https://developers.openai.com/api/docs/guides/reasoning"
+    },
+    {
+      "id": "openai-toggle",
+      "label": "OpenAI · 可关闭思考",
+      "wire": "openai",
+      "on": true,
+      "off": true,
+      "efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "default_effort": "medium",
+      "output": "usage",
+      "source_url": "https://developers.openai.com/api/docs/guides/reasoning"
+    },
+    {
+      "id": "openai-xhigh",
+      "label": "OpenAI · 支持 xhigh",
+      "wire": "openai",
+      "on": true,
+      "off": true,
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "default_effort": "medium",
+      "output": "usage",
+      "source_url": "https://developers.openai.com/api/docs/guides/reasoning"
+    },
+    {
+      "id": "openai-max",
+      "label": "OpenAI · 支持 max / 可关闭",
+      "wire": "openai",
+      "on": true,
+      "off": true,
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default_effort": "medium",
+      "output": "usage",
+      "source_url": "https://developers.openai.com/api/docs/guides/reasoning",
+      "tools_require_responses": true
+    },
+    {
+      "id": "openai-max-required",
+      "label": "OpenAI · 支持 max / 必须思考",
+      "wire": "openai",
+      "on": true,
+      "off": false,
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default_effort": "medium",
+      "output": "usage",
+      "source_url": "https://developers.openai.com/api/docs/guides/reasoning",
+      "tools_require_responses": true
+    },
+    {
+      "id": "gemini-levels",
+      "label": "Gemini · low / medium / high",
+      "wire": "gemini-level",
+      "on": true,
+      "off": false,
+      "efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "default_effort": "high",
+      "output": "summary",
+      "source_url": "https://ai.google.dev/api/generate-content#thinkingconfig"
+    },
+    {
+      "id": "gemini-minimal",
+      "label": "Gemini · 支持 minimal",
+      "wire": "gemini-level",
+      "on": true,
+      "off": false,
+      "efforts": [
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
+      "default_effort": "high",
+      "output": "summary",
+      "source_url": "https://ai.google.dev/gemini-api/docs/openai"
+    },
+    {
+      "id": "gemini-3-pro",
+      "label": "Gemini 3 Pro · low / high",
+      "wire": "gemini-level",
+      "on": true,
+      "off": false,
+      "efforts": [
+        "low",
+        "high"
+      ],
+      "default_effort": "high",
+      "output": "summary",
+      "source_url": "https://ai.google.dev/gemini-api/docs/generate-content/thinking?hl=en"
+    },
+    {
+      "id": "gemini-budget",
+      "label": "Gemini 2.5 Flash · 思考预算",
+      "wire": "gemini-budget",
+      "on": true,
+      "off": true,
+      "efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "default_effort": "medium",
+      "budgets": {
+        "low": 1024,
+        "medium": 8192,
+        "high": 24576
+      },
+      "output": "summary",
+      "source_url": "https://ai.google.dev/gemini-api/docs/generate-content/thinking?hl=en"
+    },
+    {
+      "id": "gemini-budget-required",
+      "label": "Gemini 2.5 Pro · 思考预算",
+      "wire": "gemini-budget",
+      "on": true,
+      "off": false,
+      "efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "default_effort": "medium",
+      "budgets": {
+        "low": 1024,
+        "medium": 8192,
+        "high": 24576
+      },
+      "output": "summary",
+      "source_url": "https://ai.google.dev/gemini-api/docs/generate-content/thinking?hl=en"
+    },
+    {
+      "id": "gemma",
+      "label": "Gemma · high / minimal",
+      "wire": "gemma",
+      "on": true,
+      "off": true,
+      "efforts": [
+        "high"
+      ],
+      "default_effort": "high",
+      "output": "reasoning",
+      "source_url": "https://ai.google.dev/gemma/docs/core/gemma_on_gemini_api"
+    },
+    {
+      "id": "deepseek",
+      "label": "DeepSeek · 开关与强度",
+      "wire": "deepseek",
+      "on": true,
+      "off": true,
+      "efforts": [
+        "low",
+        "high",
+        "max"
+      ],
+      "default_effort": "high",
+      "output": "reasoning",
+      "source_url": "https://api-docs.deepseek.com/guides/thinking_mode/"
+    },
+    {
+      "id": "qwen",
+      "label": "Qwen / DashScope · 思考预算",
+      "wire": "qwen",
+      "on": true,
+      "off": true,
+      "efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "default_effort": "medium",
+      "budgets": {
+        "low": 1024,
+        "medium": 8192,
+        "high": 24576
+      },
+      "output": "reasoning",
+      "source_url": "https://help.aliyun.com/zh/model-studio/deep-thinking"
+    },
+    {
+      "id": "qwen-toggle",
+      "label": "Qwen / DashScope · 仅开关",
+      "wire": "qwen",
+      "on": true,
+      "off": true,
+      "efforts": [],
+      "output": "reasoning",
+      "source_url": "https://help.aliyun.com/zh/model-studio/deep-thinking"
+    },
+    {
+      "id": "qwen-required",
+      "label": "Qwen · 仅思考 / 预算",
+      "wire": "qwen",
+      "on": true,
+      "off": false,
+      "efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "default_effort": "medium",
+      "budgets": {
+        "low": 1024,
+        "medium": 8192,
+        "high": 24576
+      },
+      "output": "reasoning",
+      "source_url": "https://help.aliyun.com/zh/model-studio/deep-thinking"
+    },
+    {
+      "id": "vllm-qwen",
+      "label": "vLLM / SGLang · 模板开关",
+      "wire": "template",
+      "on": true,
+      "off": true,
+      "efforts": [],
+      "output": "reasoning",
+      "source_url": "https://docs.vllm.ai/en/latest/features/reasoning_outputs/"
+    },
+    {
+      "id": "claude-budget",
+      "label": "Claude · 手动思考预算",
+      "wire": "claude-budget",
+      "on": true,
+      "off": true,
+      "efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "default_effort": "low",
+      "budgets": {
+        "low": 1024,
+        "medium": 8192,
+        "high": 24576
+      },
+      "output": "summary",
+      "source_url": "https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+    },
+    {
+      "id": "claude-adaptive",
+      "label": "Claude · 自适应思考",
+      "wire": "claude-adaptive",
+      "on": true,
+      "off": true,
+      "efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "default_effort": "high",
+      "output": "summary",
+      "source_url": "https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking"
+    },
+    {
+      "id": "claude-always",
+      "label": "Claude · 必须思考",
+      "wire": "claude-adaptive",
+      "on": true,
+      "off": false,
+      "efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "default_effort": "high",
+      "output": "summary",
+      "source_url": "https://platform.claude.com/docs/en/build-with-claude/thinking-troubleshooting"
+    },
+    {
+      "id": "gemini-summary",
+      "label": "Gemini 滚动别名 · 摘要（开关及档位待配置）",
+      "wire": "gemini-summary",
+      "on": false,
+      "off": false,
+      "efforts": [],
+      "output": "summary",
+      "source_url": "https://ai.google.dev/api/generate-content#thinkingconfig"
+    },
+    {
+      "id": "ollama-toggle",
+      "label": "Ollama · think 开关",
+      "wire": "ollama",
+      "on": true,
+      "off": true,
+      "efforts": [],
+      "output": "reasoning",
+      "source_url": "https://docs.ollama.com/capabilities/thinking"
+    },
+    {
+      "id": "ollama-levels",
+      "label": "Ollama · think 档位",
+      "wire": "ollama-level",
+      "on": true,
+      "off": false,
+      "efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "default_effort": "medium",
+      "output": "reasoning",
+      "source_url": "https://docs.ollama.com/capabilities/thinking"
+    },
+    {
+      "id": "vllm-deepseek41",
+      "label": "vLLM / GPUStack · DeepSeek V4.1（数值强度）",
+      "wire": "deepseek-template",
+      "on": true,
+      "off": true,
+      "efforts": [
+        "low",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "default_effort": "high",
+      "budgets": {
+        "low": 25,
+        "high": 50,
+        "xhigh": 75,
+        "max": 100
+      },
+      "output": "reasoning",
+      "source_url": "https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash"
+    },
+    {
+      "id": "vllm-deepseek4",
+      "label": "vLLM · DeepSeek V4（模板开关）",
+      "wire": "deepseek-template",
+      "on": true,
+      "off": true,
+      "efforts": [
+        "low",
+        "high",
+        "max"
+      ],
+      "default_effort": "high",
+      "output": "reasoning",
+      "source_url": "https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4-Flash"
+    },
+    {
+      "id": "glm53",
+      "label": "GLM 5.3 · 必须思考",
+      "wire": "glm",
+      "on": true,
+      "off": false,
+      "efforts": [
+        "low",
+        "high",
+        "max"
+      ],
+      "default_effort": "max",
+      "output": "reasoning",
+      "source_url": "https://www.alibabacloud.com/help/en/model-studio/glm"
+    },
+    {
+      "id": "reasoning-only",
+      "label": "上游固定思考 · 不支持开关或强度参数",
+      "wire": "none",
+      "on": true,
+      "off": false,
+      "efforts": [],
+      "output": "reasoning"
+    },
+    {
+      "id": "qwen-required-toggle",
+      "label": "Qwen · 固定开启思考（无预算映射）",
+      "wire": "qwen",
+      "on": true,
+      "off": false,
+      "efforts": [],
+      "output": "reasoning",
+      "source_url": "https://help.aliyun.com/zh/model-studio/deep-thinking"
+    }
+  ],
+  "rules": [
+    {
+      "pattern": "(^|/)deepseek-v4[.-]1",
+      "provider": "vllm|gpustack",
+      "profile": "vllm-deepseek41"
+    },
+    {
+      "pattern": "(^|/)glm-5[.-]3",
+      "provider": "openai|custom",
+      "profile": "glm53"
+    },
+    {
+      "pattern": "(^|/)gemini-2\\.5-pro",
+      "profile": "gemini-budget-required",
+      "provider": "gemini|vertex"
+    },
+    {
+      "pattern": "(^|/)gemini-2\\.5-flash",
+      "profile": "gemini-budget",
+      "provider": "gemini|vertex"
+    },
+    {
+      "pattern": "(^|/)gemini-3-pro",
+      "profile": "gemini-3-pro",
+      "provider": "gemini|vertex"
+    },
+    {
+      "pattern": "(^|/)gemini-3-flash|(^|/)gemini-3\\.[156]-flash",
+      "profile": "gemini-minimal",
+      "provider": "gemini|vertex"
+    },
+    {
+      "pattern": "(^|/)gemini-3\\.(1-pro|8-flash)|(^|/)gemini-4-argon",
+      "profile": "gemini-levels",
+      "provider": "gemini|vertex"
+    },
+    {
+      "pattern": "(^|/)gemma-4",
+      "provider": "gemini|vertex",
+      "profile": "gemma"
+    },
+    {
+      "pattern": "(^|/)deepseek-(v4|flash)",
+      "profile": "deepseek",
+      "provider": "deepseek"
+    },
+    {
+      "pattern": "qwen.*(thinking|reasoner)",
+      "profile": "qwen-required-toggle",
+      "provider": "openai|custom"
+    },
+    {
+      "pattern": "qwen3",
+      "provider": "vllm|sglang",
+      "profile": "vllm-qwen"
+    },
+    {
+      "pattern": "(^|/)qwen3-(\\d+b|\\d+b-a\\d+b)($|-)",
+      "profile": "qwen-toggle",
+      "provider": "openai|custom"
+    },
+    {
+      "pattern": "(^|/)gpt-6\\.1-sol|(^|/)gpt-6-astra",
+      "profile": "openai-max-required"
+    },
+    {
+      "pattern": "(^|/)gpt-6-(sol|luna)",
+      "profile": "openai-max"
+    },
+    {
+      "pattern": "(^|/)gpt-5\\.[2-5]",
+      "profile": "openai-xhigh"
+    },
+    {
+      "pattern": "(^|/)gpt-5\\.1",
+      "profile": "openai-toggle"
+    },
+    {
+      "pattern": "(^|/)gpt-5($|[-/])",
+      "profile": "openai-gpt5"
+    },
+    {
+      "pattern": "(^|/)o[134]($|[-/])",
+      "profile": "openai-required"
+    },
+    {
+      "pattern": "(^|/)claude-(mythos|fable)",
+      "profile": "claude-always",
+      "provider": "anthropic"
+    },
+    {
+      "pattern": "(^|/)claude-.*4[-.]([678])|(^|/)claude-(sonnet|opus)-5",
+      "profile": "claude-adaptive",
+      "provider": "anthropic"
+    },
+    {
+      "pattern": "(^|/)claude-.*4",
+      "profile": "claude-budget",
+      "provider": "anthropic"
+    },
+    {
+      "pattern": "(^|/)gemini-.*-latest$",
+      "provider": "gemini|vertex",
+      "profile": "gemini-summary"
+    }
+  ]
+}

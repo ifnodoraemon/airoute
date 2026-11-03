@@ -66,6 +66,7 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 		messageID := fmt.Sprintf("chatcmpl-claude-%d", time.Now().Unix())
 		created := time.Now().Unix()
 
+		var history anthropicHistoryState
 		var currentEvent string
 		inputTokens := 0
 		outputTokens := 0
@@ -171,6 +172,7 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 					continue
 				}
 
+				history.Observe([]byte(dataStr))
 				switch currentEvent {
 				case "message_start":
 					if msgObj, ok := eventMap["message"].(map[string]any); ok {
@@ -356,7 +358,7 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 						Choices: []model.ChunkChoice{
 							{
 								Index:        0,
-								Delta:        model.ChunkDelta{},
+								Delta:        model.ChunkDelta{Extra: history.Extra()},
 								FinishReason: &stopReason,
 							},
 						},

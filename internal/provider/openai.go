@@ -81,7 +81,9 @@ func (p *OpenAIProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 	clonedReq := *req
 	clonedReq.Model = targetModel
 	clonedReq.Stream = false
-	clonedReq.Messages = stripReasoningContent(clonedReq.Messages)
+	if !keepThinkingHistory(req) {
+		clonedReq.Messages = stripReasoningContent(clonedReq.Messages)
+	}
 
 	for attempt := 0; ; attempt++ {
 		payloadBytes, err := json.Marshal(clonedReq)
@@ -181,7 +183,9 @@ func (p *OpenAIProvider) chatCompleteStream(ctx context.Context, req *model.Chat
 	clonedReq.Model = targetModel
 	clonedReq.Stream = true
 	clonedReq.StreamOptions = &model.StreamOptions{IncludeUsage: true}
-	clonedReq.Messages = stripReasoningContent(clonedReq.Messages)
+	if !keepThinkingHistory(req) {
+		clonedReq.Messages = stripReasoningContent(clonedReq.Messages)
+	}
 
 	payloadBytes, err := json.Marshal(clonedReq)
 	if err != nil {
@@ -327,4 +331,8 @@ func (p *OpenAIProvider) chatCompleteStream(ctx context.Context, req *model.Chat
 	}()
 
 	return eventChan, nil
+}
+
+func keepThinkingHistory(req *model.ChatCompletionRequest) bool {
+	return len(req.Tools) > 0 && req.PreparedThinking != nil && (req.PreparedThinking.Profile.Wire == "deepseek" || req.PreparedThinking.Profile.Wire == "deepseek-template")
 }

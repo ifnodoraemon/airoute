@@ -92,7 +92,7 @@ func TestAdminRequestShapesAreStable(t *testing.T) {
 			name: "UpdateModelRouteRequest",
 			got:  jsonFieldNames(reflect.TypeOf(UpdateModelRouteRequest{})),
 			want: []string{
-				"model", "group_name", "fallback_model", "provider_updates",
+				"model", "group_name", "fallback_model", "provider_updates", "thinking_policy",
 				"prompt_price", "completion_price", "cache_read_price", "fixed_price",
 				"currency", "off_peak_enabled", "off_peak_mode", "off_peak_slots",
 				"weekend_all_day", "off_peak_start", "off_peak_end", "off_peak_discount",
@@ -127,7 +127,7 @@ func TestAdminRequestShapesAreStable(t *testing.T) {
 			name: "ChannelRequest",
 			got:  jsonFieldNames(reflect.TypeOf(ChannelRequest{})),
 			want: []string{
-				"name", "type", "base_url", "api_key", "models", "model_mapping",
+				"name", "type", "base_url", "api_key", "models", "model_mapping", "model_capabilities",
 				"protocols", "priority", "weight", "timeout_seconds", "max_concurrency", "queue_limit", "queue_wait_seconds", "status",
 			},
 		},
@@ -408,7 +408,7 @@ func TestAdminResponseShapesAreStable(t *testing.T) {
 			name: "storage.ChannelRecord",
 			got:  jsonFieldNames(reflect.TypeOf(storage.ChannelRecord{})),
 			want: []string{
-				"id", "name", "type", "base_url", "api_key", "models", "model_mapping",
+				"id", "name", "type", "base_url", "api_key", "models", "model_mapping", "model_capabilities",
 				"protocols", "priority", "weight", "timeout_seconds", "max_concurrency", "queue_limit", "queue_wait_seconds", "status",
 				"breaker_status", "created_at", "updated_at",
 			},
@@ -440,7 +440,7 @@ func TestAdminResponseShapesAreStable(t *testing.T) {
 			name: "router.ModelRouteDetail",
 			got:  jsonFieldNames(reflect.TypeOf(router.ModelRouteDetail{})),
 			want: []string{
-				"model", "modality", "providers", "primary_providers_count",
+				"model", "thinking_policy", "modality", "providers", "primary_providers_count",
 				"fallback_providers_count", "total_primary_weight", "fallback_model",
 				"has_cross_protocol", "has_fallback_tier",
 			},
@@ -452,7 +452,7 @@ func TestAdminResponseShapesAreStable(t *testing.T) {
 				"channel_id", "channel_name", "channel_type", "base_url", "priority",
 				"weight", "weight_percent", "mapped_model", "protocols",
 				"breaker_status", "status", "conversion_needed", "conversion_type",
-				"shared_model_count",
+				"shared_model_count", "thinking",
 			},
 		},
 	}

@@ -25,6 +25,7 @@ func IsGeminiProvider(kind ProviderType) bool {
 
 // ChannelConfig defines an upstream endpoint configuration.
 type ChannelConfig struct {
+	ModelCapabilities map[string]ModelCapabilityConfig `yaml:"model_capabilities,omitempty" json:"model_capabilities,omitempty"`
 	// RouteRules is an immutable runtime snapshot loaded separately from channels.
 	RouteRules       map[string]ModelRouteRule `yaml:"-" json:"-"`
 	ID               int64                     `yaml:"id,omitempty" json:"id,omitempty"`

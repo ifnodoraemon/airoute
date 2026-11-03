@@ -123,7 +123,7 @@ func TestNativeOnlyCandidatesRequireNativeWire(t *testing.T) {
 		Model: "gpt-x", Protocol: "anthropic_messages", AnthropicNativeOnly: true,
 		AnthropicOriginal: &model.AnthropicInboundRequest{Model: "gpt-x", Thinking: map[string]any{"type": "enabled"}},
 	}
-	channels := d.candidateChannelsForRequest(context.Background(), req, "anthropic_messages")
+	channels, _ := d.candidateChannelsForRequest(context.Background(), req, "anthropic_messages")
 	// A native-only request cannot be downgraded to a general channel.
 	if len(channels) != 0 {
 		t.Fatalf("candidate %+v must not be classified as a native Anthropic channel", channels)

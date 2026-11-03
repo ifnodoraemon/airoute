@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/nativestate"
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
@@ -67,6 +68,7 @@ func upstreamRequestContext(c *gin.Context) (context.Context, context.CancelFunc
 	if c == nil {
 		return context.WithCancel(context.Background())
 	}
+	c.Request = c.Request.WithContext(model.WithThinkingTrace(c.Request.Context()))
 	clientCtx := nativestate.WithOwner(c.Request.Context(), callerOwner(c))
 	if !upstreamDrainingEnabled() {
 		// Keep the original cancellation semantics: an abort cancels the upstream.

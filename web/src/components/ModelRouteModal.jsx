@@ -62,6 +62,7 @@ export default function ModelRouteModal({
   const isNew = !modelRoute || modelRoute.isNew;
   const [modelName, setModelName] = useState(modelRoute?.model || '');
   const [fallbackModel, setFallbackModel] = useState(modelRoute?.fallback_model || '');
+  const [thinkingPolicy,setThinkingPolicy]=useState(modelRoute?.thinking_policy || {default_mode:'auto',default_effort:'',allowed_modes:null,allowed_efforts:null});
   
   // Model pricing rates & Time-of-use
   const [promptPrice, setPromptPrice] = useState(modelRoute?.prompt_price ?? 2.0);
@@ -80,6 +81,7 @@ export default function ModelRouteModal({
       channel_id: p.channel_id,
       channel_name: p.channel_name,
       channel_type: p.channel_type,
+      thinking: p.thinking,
       priority: p.priority ?? 1,
       // Preserve a real weight (including 0 / small values); the old `|| 50`
       // silently rewrote any falsy weight to 50 on every save.
@@ -95,7 +97,7 @@ export default function ModelRouteModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const isDirty = useFormDirty(isOpen, { modelName, fallbackModel, promptPrice, completionPrice, cacheReadPrice, fixedPrice, currency, offPeakEnabled, providers });
+  const isDirty = useFormDirty(isOpen, { modelName, fallbackModel, promptPrice, completionPrice, cacheReadPrice, fixedPrice, currency, offPeakEnabled, providers, thinkingPolicy });
   const { confirming, requestClose, keepEditing, discard } = useUnsavedGuard({ isOpen, isDirty, onClose });
   const dismiss = () => { if (!saving) requestClose(); };
   useModalA11y(isOpen, dismiss);
@@ -106,7 +108,7 @@ export default function ModelRouteModal({
   };
 
   const handleMappedModelChange = (channelId, name) => {
-    setProviders(prev => prev.map(p => p.channel_id === channelId ? { ...p, mapped_model: name } : p));
+    setProviders(prev => prev.map(p => p.channel_id === channelId ? { ...p, mapped_model: name, thinking:undefined } : p));
   };
 
   const handleRemoveProvider = (channelId) => {
@@ -227,6 +229,7 @@ export default function ModelRouteModal({
       const payload = {
         model: targetModel,
         fallback_model: fallbackModel === targetModel ? '' : fallbackModel,
+        thinking_policy: thinkingPolicy,
         provider_updates: providers.map(p => ({
           channel_id: p.channel_id,
           priority: p.priority || 1,
@@ -595,6 +598,18 @@ export default function ModelRouteModal({
             )}
           </div>
 
+          <fieldset className="border-t pt-3 space-y-3">
+            <legend className="font-semibold">{isZh ? '路由思考策略' : 'Route thinking policy'}</legend>
+            <p className="text-slate-500">{isZh ? '此处设置默认值和限制。实际能力取自各渠道映射后的上游模型；不能通过路由增加上游不支持的能力。' : 'Defaults and restrictions only. Capabilities come from each channel and mapped upstream model.'}</p>
+            {providers.map(item => <p key={item.channel_id} className="text-[11px] text-slate-500 break-all">{item.channel_name} → {item.mapped_model}: {item.thinking?.known ? `${item.thinking.on ? (isZh ? '可开启' : 'On') : ''}${item.thinking.off ? (isZh ? ' 可关闭' : ' Off') : ''} · ${(item.thinking.efforts || []).join(' / ') || (isZh ? '无可调档位' : 'No levels')} · ${item.thinking.source}` : (isZh ? '能力未知或映射有修改，保存后重新解析' : 'Unknown or mapping changed; resolves after save')}</p>)}
+            <label className="block">{isZh ? '默认思考模式' : 'Default thinking mode'}<select aria-label={isZh ? '默认思考模式' : 'Default thinking mode'} className="ui-field mt-1" value={thinkingPolicy.default_mode || 'auto'} onChange={event => setThinkingPolicy(prev => ({...prev,default_mode:event.target.value,allowed_modes:prev.allowed_modes ? [event.target.value] : null,default_effort:event.target.value==='on' ? prev.default_effort : ''}))}>
+              <option value="auto">{isZh ? '上游默认' : 'Upstream default'}</option><option value="on">{isZh ? '开启' : 'On'}</option><option value="off">{isZh ? '关闭' : 'Off'}</option>
+            </select></label>
+            {thinkingPolicy.default_mode==='on' && <label className="block">{isZh ? '默认强度' : 'Default effort'}<select aria-label={isZh ? '默认思考强度' : 'Default thinking effort'} className="ui-field mt-1" value={thinkingPolicy.default_effort || ''} onChange={event => setThinkingPolicy(prev => ({...prev,default_effort:event.target.value}))}><option value="">{isZh ? '模型默认' : 'Model default'}</option>{['minimal','low','medium','high','xhigh','max'].map(effort => <option key={effort}>{effort}</option>)}</select></label>}
+            <label className="flex gap-2 items-center"><input type="checkbox" checked={thinkingPolicy.allowed_modes!=null} onChange={event => setThinkingPolicy(prev => ({...prev,allowed_modes:event.target.checked ? [prev.default_mode || 'auto'] : null}))} />{isZh ? '只允许默认模式（禁止用户切换）' : 'Allow only the default mode'}</label>
+            <label className="block">{isZh ? '允许的强度（留空表示不限）' : 'Allowed effort levels (blank for unrestricted)'}<input className="ui-field mt-1" aria-label={isZh ? '允许的思考强度' : 'Allowed thinking efforts'} value={thinkingPolicy.allowed_efforts?.join(', ') || ''} placeholder="low, medium, high" onChange={event => setThinkingPolicy(prev => ({...prev,allowed_efforts:event.target.value.trim() ? event.target.value.split(',').map(value=>value.trim()).filter(Boolean) : null}))} /></label>
+            <p className="text-slate-500">{isZh ? '渠道能力请在“服务商 → 编辑 → 按上游模型配置思考能力”维护；修改会对引用该上游模型的所有路由生效。' : 'Manage shared capabilities in Providers → Edit → Thinking capability per upstream model.'}</p>
+          </fieldset>
           {/* Field 3: Fallback & Pricing (Clean and Compact) */}
           <div className="border-t border-slate-100 dark:border-slate-800 pt-3 space-y-3">
             {/* Fallback Model */}

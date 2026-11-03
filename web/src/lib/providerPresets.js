@@ -36,6 +36,7 @@ export function emptyChannel() {
     queue_wait_seconds: 0,
     models_str: '',
     mapping_rules: [],
+    model_capabilities: {},
     protocols: [...ALL_PROTOCOLS],
   };
 }

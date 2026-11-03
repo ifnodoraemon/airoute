@@ -68,20 +68,21 @@ func (e *ValidationError) Error() string { return e.Message }
 // storage.ChannelRecord is the full row: its zero values are indistinguishable
 // from an omitted field.
 type channelPatch struct {
-	Name             string
-	Type             model.ProviderType
-	BaseURL          string
-	APIKey           string
-	Models           []string
-	ModelMapping     map[string]string
-	Protocols        []string
-	Priority         *int
-	Weight           *int
-	TimeoutSeconds   *int
-	MaxConcurrency   *int
-	QueueLimit       *int
-	QueueWaitSeconds *int
-	Status           string
+	Name              string
+	Type              model.ProviderType
+	BaseURL           string
+	APIKey            string
+	Models            []string
+	ModelMapping      map[string]string
+	ModelCapabilities map[string]model.ModelCapabilityConfig
+	Protocols         []string
+	Priority          *int
+	Weight            *int
+	TimeoutSeconds    *int
+	MaxConcurrency    *int
+	QueueLimit        *int
+	QueueWaitSeconds  *int
+	Status            string
 }
 
 // ChannelService owns the channel business rules: which fields a channel cannot
@@ -148,6 +149,9 @@ func (s *ChannelService) Update(ctx context.Context, id int64, patch *channelPat
 			return err
 		}
 		current.TimeoutSeconds = timeout
+		if err := model.ValidateChannelThinking(current.Type, current.ModelCapabilities); err != nil {
+			return &ValidationError{Message: err.Error()}
+		}
 		return validateChannelCapacity(current)
 	})
 	if err != nil {
@@ -224,6 +228,9 @@ func validateNewChannel(rec *storage.ChannelRecord) error {
 		return err
 	}
 	rec.TimeoutSeconds = timeout
+	if err := model.ValidateChannelThinking(rec.Type, rec.ModelCapabilities); err != nil {
+		return &ValidationError{Message: err.Error()}
+	}
 	return validateChannelCapacity(rec)
 }
 
@@ -307,6 +314,9 @@ func mergeChannelUpdate(existing *storage.ChannelRecord, patch *channelPatch) er
 	}
 	if patch.ModelMapping != nil {
 		existing.ModelMapping = patch.ModelMapping
+	}
+	if patch.ModelCapabilities != nil {
+		existing.ModelCapabilities = patch.ModelCapabilities
 	}
 	if patch.Protocols != nil {
 		existing.Protocols = patch.Protocols

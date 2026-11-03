@@ -14,7 +14,7 @@ import (
 func geminiTranslationError(body []byte) error {
 	var fields map[string]json.RawMessage
 	_ = json.Unmarshal(body, &fields)
-	if err := geminiKnownFields(body, "request", "contents systemInstruction generationConfig tools toolConfig"); err != nil {
+	if err := geminiKnownFields(body, "request", "contents systemInstruction generationConfig tools toolConfig thinking_control"); err != nil {
 		return err
 	}
 	if err := geminiKnownFields(fields["generationConfig"], "generationConfig", "temperature topP maxOutputTokens stopSequences candidateCount presencePenalty frequencyPenalty seed responseMimeType responseJsonSchema responseSchema thinkingConfig"); err != nil {

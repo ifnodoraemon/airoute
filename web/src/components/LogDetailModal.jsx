@@ -1,3 +1,4 @@
+import ThinkingStatus from './ThinkingStatus';
 import { useState, useMemo } from 'react';
 import {
   X,
@@ -420,6 +421,8 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
             </div>
           )}
 
+          <ThinkingStatus observation={log?.thinking} lang={isZh ? 'zh' : 'en'} />
+          {log?.thinking?.upstream_model && <p className="text-xs font-mono break-all text-slate-500">{isZh ? '思考参数对应上游：' : 'Thinking upstream: '}{log.thinking.upstream_model}</p>}
           {/* Details list */}
           <div className="rounded-xl border border-slate-200/70 dark:border-slate-800/80 divide-y divide-slate-100 dark:divide-slate-800/70 overflow-hidden text-xs">
             <div className="p-3.5 flex items-center justify-between">

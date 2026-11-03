@@ -1,3 +1,6 @@
+import ThinkingControls from './ThinkingControls';
+import ThinkingStatus from './ThinkingStatus';
+import { thinkingRequest, thinkingResult, assistantHistory } from '../lib/thinking';
 import { useState, useEffect, useRef } from 'react';
 import {
   MessageSquare,
@@ -35,6 +38,7 @@ import { useConsoleKeySelection } from '../hooks/useConsoleKeySelection';
 export default function PlaygroundView({
   keys = [],
   models = [],
+  thinkingCapabilities = {},
   modelRoutes = [],
   prices = [],
   showToast,
@@ -114,6 +118,9 @@ export default function PlaygroundView({
     return { discount, label: `${Math.round(discount * 10)}` };
   })();
   const [playStream, setPlayStream] = useState(true);
+  const [thinkingByModel,setThinkingByModel]=useState({});
+  const [playThinking,setPlayThinking]=useState(null);
+  const [arenaThinkingB,setArenaThinkingB]=useState(null);
   const [temperature, setTemperature] = useState(0.7);
   const [maxTokens, setMaxTokens] = useState(2048);
   const [systemPrompt, setSystemPrompt] = useState(
@@ -337,14 +344,16 @@ Execute the following mission with precision, maintainability, and zero speculat
     }
   });
 
-  const withSystemPrompt = (msgs) => [
+  const withSystemPrompt = (msgs, targetModel=playModel) => [
     ...(systemPrompt.trim() ? [{ role: 'system', content: systemPrompt.trim() }] : []),
-    ...msgs.map(({ role, content }) => ({ role, content }))
+    ...msgs.map(message => assistantHistory(message,false,targetModel))
   ];
 
   const buildChatRequest = (targetModel, payloadMessages) => {
     const body = {
       model: targetModel,
+      ...thinkingRequest(thinkingCapabilities[targetModel],thinkingByModel[targetModel]),
+      ...(playStream ? {stream_options:{include_usage:true}} : {}),
       messages: payloadMessages,
       temperature,
       stream: playStream
@@ -431,13 +440,11 @@ Execute the following mission with precision, maintainability, and zero speculat
     let calls = [];
     if (playModality === 'chat') {
       const pending = chatInput.trim();
-      const payloadMessages = withSystemPrompt(
-        pending ? [...messages, { role: 'user', content: pending }] : messages
-      );
+      const history=pending ? [...messages, {role:'user',content:pending}] : messages;
       const targets = playMode === 'arena' && arenaModelB && arenaModelB !== playModel
         ? [playModel, arenaModelB]
         : [playModel];
-      calls = targets.map(m => ({ request: buildChatRequest(m, payloadMessages), flags: playStream ? '-N' : '' }));
+      calls = targets.map(m => ({ request: buildChatRequest(m, withSystemPrompt(history,m)), flags: playStream ? '-N' : '' }));
     } else if (playModality === 'images') {
       calls = [{ request: buildImageRequest(), flags: '' }];
     } else {
@@ -488,20 +495,22 @@ Execute the following mission with precision, maintainability, and zero speculat
     if (playMode === 'arena') {
       setArenaOutputB('');
       setArenaReasoningB('');
+      setArenaThinkingB(null);
       setArenaTTFTB(0);
       setArenaDurationB(0);
       setArenaTokensPerSecB(0);
     }
 
-    const payloadMessages = withSystemPrompt(newMessages);
 
-    const runModelStream = async (targetModel, setOutput, setReasoning, setTTFT, setDuration, setTPS) => {
+    const runModelStream = async (targetModel, setOutput, setReasoning, setTTFT, setDuration, setTPS, setThinking) => {
       const startTime = Date.now();
       let firstByteTime = null;
       let fullContent = '';
       let fullReasoning = '';
       let rawContent = '';
       let explicitReasoning = '';
+      let observation={};
+      let extraContent;
       const publishContent = (complete = false) => {
         ({ content: fullContent, reasoning: fullReasoning } = assistantContent(rawContent, explicitReasoning, complete));
         setOutput(fullContent);
@@ -510,7 +519,7 @@ Execute the following mission with precision, maintainability, and zero speculat
       let serverReportedTokens = 0;
 
       try {
-        const request = buildChatRequest(targetModel, payloadMessages);
+        const request = buildChatRequest(targetModel, withSystemPrompt(newMessages,targetModel));
 
         const res = await consoleFetch(request.path, credentials.keyId, {
           method: request.method,
@@ -533,7 +542,10 @@ Execute the following mission with precision, maintainability, and zero speculat
           let buffer = '';
 
           const applyChunk = (parsed) => {
+            observation=thinkingResult(parsed,observation);
+            setThinking(observation);
             const delta = parsed.choices?.[0]?.delta;
+            if (delta?.extra_content) extraContent=delta.extra_content;
             explicitReasoning += textContent(delta?.reasoning_content);
             rawContent += textContent(delta?.content);
             publishContent();
@@ -582,7 +594,10 @@ Execute the following mission with precision, maintainability, and zero speculat
           if (data.usage?.completion_tokens) {
             serverReportedTokens = data.usage.completion_tokens;
           }
+          observation=thinkingResult(data,observation);
+          setThinking(observation);
           const choice = data.choices?.[0];
+          extraContent=choice?.message?.extra_content;
           rawContent = textContent(choice?.message?.content);
           explicitReasoning = textContent(choice?.message?.reasoning_content);
           publishContent(true);
@@ -596,7 +611,7 @@ Execute the following mission with precision, maintainability, and zero speculat
           setTPS((tokensCount / activeSec).toFixed(1));
         }
 
-        return { content: fullContent, reasoning: fullReasoning };
+        return { content: fullContent, reasoning: fullReasoning, thinking:observation, extra_content:extraContent };
       } catch (e) {
         // A user-initiated stop is not an error: keep whatever arrived and stay quiet.
         if (isAbortError(e)) {
@@ -609,10 +624,10 @@ Execute the following mission with precision, maintainability, and zero speculat
     };
 
     // Run Model A
-    const promises = [runModelStream(playModel, setPlayOutput, setPlayReasoningOutput, setPlayTTFTMs, setPlayDurationMs, setPlayTokensPerSec)];
+    const promises = [runModelStream(playModel, setPlayOutput, setPlayReasoningOutput, setPlayTTFTMs, setPlayDurationMs, setPlayTokensPerSec, setPlayThinking)];
     // If Arena mode, run Model B in parallel!
     if (playMode === 'arena' && arenaModelB) {
-      promises.push(runModelStream(arenaModelB, setArenaOutputB, setArenaReasoningB, setArenaTTFTB, setArenaDurationB, setArenaTokensPerSecB));
+      promises.push(runModelStream(arenaModelB, setArenaOutputB, setArenaReasoningB, setArenaTTFTB, setArenaDurationB, setArenaTokensPerSecB, setArenaThinkingB));
     }
 
     try {
@@ -628,7 +643,10 @@ Execute the following mission with precision, maintainability, and zero speculat
           {
             role: 'assistant',
             content: results[0].content,
-            reasoning: results[0].reasoning
+            reasoning: results[0].reasoning,
+            thinking: results[0].thinking,
+            model:playModel,
+            extra_content: results[0].extra_content
           }
         ]);
         setPlayOutput('');
@@ -964,7 +982,7 @@ Execute the following mission with precision, maintainability, and zero speculat
             {!selectedKeyId && onCreateKey && <button type="button" className="ui-btn-secondary" onClick={onCreateKey}>{isZh ? '创建访问密钥' : 'Create API key'}</button>}
           </div>
 
-      {playModality === 'gemini' && <GeminiPlayground models={availableKeyModels(selectedKeyObj, models)} resolveCredentials={resolveCallCredentials} lang={lang} showToast={showToast} />}
+      {playModality === 'gemini' && <GeminiPlayground thinkingCapabilities={thinkingCapabilities} models={availableKeyModels(selectedKeyObj, models)} resolveCredentials={resolveCallCredentials} lang={lang} showToast={showToast} />}
       <div className={`grid grid-cols-1 lg:grid-cols-3 gap-6 ${playModality === 'gemini' ? 'hidden' : ''}`}>
         {/* Left Column: Parameter Controls */}
         <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-6 space-y-4 shadow-sm h-fit">
@@ -1043,6 +1061,8 @@ Execute the following mission with precision, maintainability, and zero speculat
                 )}
               </div>
 
+              <ThinkingControls capability={thinkingCapabilities[playModel]} value={thinkingByModel[playModel]} onChange={value => setThinkingByModel(prev => ({...prev,[playModel]:value}))} disabled={playLoading} lang={lang} />
+              {playMode === 'arena' && arenaModelB && <div className="border-t pt-2 space-y-2"><p className="text-xs font-semibold">{arenaModelB}</p><ThinkingControls capability={thinkingCapabilities[arenaModelB]} value={thinkingByModel[arenaModelB]} onChange={value => setThinkingByModel(prev => ({...prev,[arenaModelB]:value}))} disabled={playLoading} lang={lang} /></div>}
               {/* Hyperparameters: Temperature & MaxTokens */}
               <div className="space-y-3 pt-2 border-t border-[#E4E6E9] dark:border-[#2C3038]">
                 <div>
@@ -1462,7 +1482,7 @@ Execute the following mission with precision, maintainability, and zero speculat
                     <div className="h-full min-h-[240px] flex flex-col items-center justify-center text-center py-16 text-slate-400 dark:text-slate-500">
                       <MessageSquare className="w-10 h-10 mb-3 opacity-30 stroke-1" />
                       <p className="text-xs font-medium">{isZh ? '输入提示词开始调试演练' : 'Enter a prompt to start testing'}</p>
-                      <p className="text-[11px] opacity-75 mt-1">{isZh ? '支持流式输出、深度思维链解析与多模型竞技场对比' : 'Supports streaming responses, reasoning traces, and model arena'}</p>
+                      <p className="text-[11px] opacity-75 mt-1">{isZh ? '支持流式输出、思考内容与摘要显示与多模型竞技场对比' : 'Supports streaming responses, reasoning traces, and model arena'}</p>
                     </div>
                   )}
 
@@ -1482,11 +1502,12 @@ Execute the following mission with precision, maintainability, and zero speculat
                             : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700 shadow-sm'
                         }`}
                       >
+                        <ThinkingStatus observation={msg.thinking} reasoning={msg.reasoning} lang={lang} />
                         {msg.reasoning && (
                           <div className="mb-2.5 p-2.5 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 rounded-xl text-xs text-amber-950 dark:text-amber-200">
                             <div className="font-bold flex items-center space-x-1.5 text-amber-800 dark:text-amber-400 mb-1">
                               <Sparkles className="w-3 h-3" />
-                              <span>{isZh ? '深度思维链' : 'Reasoning Process'}</span>
+                              <span>{isZh ? '思考内容 / 摘要' : 'Thinking content / summary'}</span>
                             </div>
                             <div className="whitespace-pre-wrap text-[11px] font-mono leading-relaxed opacity-85">
                               {msg.reasoning}
@@ -1510,11 +1531,12 @@ Execute the following mission with precision, maintainability, and zero speculat
                         {playLoading && <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />}
                       </div>
                       <div className="max-w-[85%] w-full rounded-2xl p-3.5 text-xs bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700 shadow-sm leading-relaxed">
+                        <ThinkingStatus observation={playThinking} reasoning={playReasoningOutput} complete={!playLoading} lang={lang} />
                         {playReasoningOutput && (
                           <div className="mb-2.5 p-2.5 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 rounded-xl text-xs text-amber-950 dark:text-amber-200">
                             <div className="font-bold flex items-center space-x-1.5 text-amber-800 dark:text-amber-400 mb-1">
                               <Sparkles className="w-3 h-3 text-amber-500 animate-pulse" />
-                              <span>{isZh ? '深度思维链' : 'Reasoning Process'}</span>
+                              <span>{isZh ? '思考内容 / 摘要' : 'Thinking content / summary'}</span>
                             </div>
                             <div className="whitespace-pre-wrap text-[11px] font-mono leading-relaxed opacity-85">
                               {playReasoningOutput}
@@ -1579,6 +1601,7 @@ Execute the following mission with precision, maintainability, and zero speculat
                         <span>{isZh ? '总耗时' : 'Duration'}: {arenaDurationB ? `${arenaDurationB}ms` : '-'}</span>
                       </div>
                     </div>
+                    <ThinkingStatus observation={arenaThinkingB} reasoning={arenaReasoningB} complete={!playLoading} lang={lang} />
                     {arenaReasoningB && (
                       <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 text-[11px] text-amber-900 dark:text-amber-200 font-mono whitespace-pre-wrap">
                         {arenaReasoningB}

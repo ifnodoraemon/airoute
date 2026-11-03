@@ -59,7 +59,7 @@ func (d *Dispatcher) recordStreamFailure(ctx context.Context, chName string, err
 // upstream-side failure after the commit: an event carrying Err, or a channel
 // that closes without a terminal marker. Client cancellation (ctx.Done) never
 // calls it.
-func pipeStreamEvents(ctx context.Context, outChan chan<- *model.StreamEvent, preamble []*model.StreamEvent, in <-chan *model.StreamEvent, trail string, cancel context.CancelFunc, onFailure func(error)) {
+func pipeStreamEvents(ctx context.Context, outChan chan<- *model.StreamEvent, preamble []*model.StreamEvent, in <-chan *model.StreamEvent, trail string, cancel context.CancelFunc, onFailure func(error), observers ...func(*model.StreamEvent)) {
 	defer cancel()
 	defer close(outChan)
 
@@ -80,6 +80,9 @@ func pipeStreamEvents(ctx context.Context, outChan chan<- *model.StreamEvent, pr
 			done = true
 		}
 		event.Channel = trail
+		for _, observe := range observers {
+			observe(event)
+		}
 		select {
 		case outChan <- event:
 		case <-ctx.Done():
@@ -110,6 +113,9 @@ func pipeStreamEvents(ctx context.Context, outChan chan<- *model.StreamEvent, pr
 				done = true
 			}
 			event.Channel = trail
+			for _, observe := range observers {
+				observe(event)
+			}
 			select {
 			case outChan <- event:
 			case <-ctx.Done():

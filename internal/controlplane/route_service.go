@@ -6,8 +6,11 @@ import (
 	"errors"
 	"strings"
 
+	"fmt"
 	"github.com/ifnodoraemon/airoute/internal/billing"
+	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/storage"
+	"slices"
 )
 
 // RouteStore is the persistence surface the route rules need.
@@ -83,7 +86,10 @@ func (s *RouteService) UpdateModelRoute(ctx context.Context, req *UpdateModelRou
 	req.Model = model
 
 	// Build the complete change set first, then commit it as one unit.
-	bundle := &storage.ModelRouteBundle{Model: model}
+	if err := req.ThinkingPolicy.Validate(); err != nil {
+		return &ValidationError{Message: err.Error()}
+	}
+	bundle := &storage.ModelRouteBundle{Model: model, ThinkingPolicy: req.ThinkingPolicy}
 	if req.FallbackModel != "" && req.FallbackModel != model {
 		bundle.FallbackModel = req.FallbackModel
 	}
@@ -103,6 +109,9 @@ func (s *RouteService) UpdateModelRoute(ctx context.Context, req *UpdateModelRou
 		return &RouteStageError{Stage: RouteStageCollect, Err: err}
 	}
 	bundle.Providers = providers
+	if err := s.validateThinkingDefault(req, providers); err != nil {
+		return err
+	}
 
 	if err := s.store.ApplyModelRouteBundle(ctx, bundle); err != nil {
 		return &RouteStageError{Stage: RouteStagePersist, Err: err}
@@ -312,4 +321,47 @@ func (globalPriceReloader) ReloadPrices() error {
 		return nil
 	}
 	return engine.ReloadPrices()
+}
+
+// Validate the new binding's default against its actual mapped models. Capability
+// facts remain on channels; saving a route never writes shared channel state.
+func (s *RouteService) validateThinkingDefault(req *UpdateModelRouteRequest, providers []storage.ModelRouteProvider) error {
+	policy := req.ThinkingPolicy
+	if policy == nil || providers == nil || policy.DefaultMode == "" || policy.DefaultMode == "auto" {
+		return nil
+	}
+	channels, err := s.store.ListChannels()
+	if err != nil {
+		return &RouteStageError{Stage: RouteStageCollect, Err: err}
+	}
+	control, err := policy.Resolve(model.ThinkingControl{Mode: "auto"})
+	if err != nil {
+		return &ValidationError{Message: err.Error()}
+	}
+	for _, binding := range providers {
+		for _, record := range channels {
+			if record.ID != binding.ChannelID || (record.Status != "" && record.Status != "active") {
+				continue
+			}
+			ch := &model.ChannelConfig{ID: record.ID, Name: record.Name, Type: record.Type, ModelMapping: record.ModelMapping, ModelCapabilities: record.ModelCapabilities, RouteRules: map[string]model.ModelRouteRule{req.Model: {Providers: providers}}}
+			profile, _ := model.ResolveThinkingProfile(ch, req.Model)
+			if !model.ThinkingProfileCompatible(ch.Type, profile) {
+				continue
+			}
+			if profile.Validate(control) != nil {
+				continue
+			}
+			if control.Mode == "on" && control.Effort == "" && policy.AllowedEfforts != nil {
+				compatible := false
+				for _, effort := range profile.Efforts {
+					compatible = compatible || slices.Contains(policy.AllowedEfforts, effort)
+				}
+				if !compatible {
+					continue
+				}
+			}
+			return nil
+		}
+	}
+	return &ValidationError{Message: fmt.Sprintf("没有渠道能满足路由的默认思考设置（%s %s）；请先确认映射后的上游模型能力", control.Mode, control.Effort)}
 }

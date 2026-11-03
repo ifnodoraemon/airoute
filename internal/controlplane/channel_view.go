@@ -21,23 +21,24 @@ import (
 // request carries it) and read by the data plane; it simply never leaves the
 // process again. This mirrors apiKeyView for client credentials.
 type channelView struct {
-	ID               int64              `json:"id"`
-	Name             string             `json:"name"`
-	Type             model.ProviderType `json:"type"`
-	BaseURL          string             `json:"base_url"`
-	Models           []string           `json:"models"`
-	ModelMapping     map[string]string  `json:"model_mapping"`
-	Protocols        []string           `json:"protocols,omitempty"`
-	Priority         int                `json:"priority"`
-	Weight           int                `json:"weight"`
-	TimeoutSeconds   int                `json:"timeout_seconds"`
-	MaxConcurrency   int                `json:"max_concurrency"`
-	QueueLimit       int                `json:"queue_limit"`
-	QueueWaitSeconds int                `json:"queue_wait_seconds"`
-	Status           string             `json:"status"`
-	BreakerStatus    string             `json:"breaker_status,omitempty"`
-	CreatedAt        time.Time          `json:"created_at"`
-	UpdatedAt        time.Time          `json:"updated_at"`
+	ID                int64                                  `json:"id"`
+	Name              string                                 `json:"name"`
+	Type              model.ProviderType                     `json:"type"`
+	BaseURL           string                                 `json:"base_url"`
+	ModelCapabilities map[string]model.ModelCapabilityConfig `json:"model_capabilities,omitempty"`
+	Models            []string                               `json:"models"`
+	ModelMapping      map[string]string                      `json:"model_mapping"`
+	Protocols         []string                               `json:"protocols,omitempty"`
+	Priority          int                                    `json:"priority"`
+	Weight            int                                    `json:"weight"`
+	TimeoutSeconds    int                                    `json:"timeout_seconds"`
+	MaxConcurrency    int                                    `json:"max_concurrency"`
+	QueueLimit        int                                    `json:"queue_limit"`
+	QueueWaitSeconds  int                                    `json:"queue_wait_seconds"`
+	Status            string                                 `json:"status"`
+	BreakerStatus     string                                 `json:"breaker_status,omitempty"`
+	CreatedAt         time.Time                              `json:"created_at"`
+	UpdatedAt         time.Time                              `json:"updated_at"`
 	// APIKeyConfigured replaces the old "the response contains the credential"
 	// contract: the console says "already configured, leave blank to keep it".
 	APIKeyConfigured bool `json:"api_key_configured"`
@@ -52,25 +53,26 @@ func channelViewFrom(rec *storage.ChannelRecord) channelView {
 		return channelView{}
 	}
 	return channelView{
-		ID:               rec.ID,
-		Name:             rec.Name,
-		Type:             rec.Type,
-		BaseURL:          rec.BaseURL,
-		Models:           rec.Models,
-		ModelMapping:     rec.ModelMapping,
-		Protocols:        rec.Protocols,
-		Priority:         rec.Priority,
-		Weight:           rec.Weight,
-		TimeoutSeconds:   rec.TimeoutSeconds,
-		MaxConcurrency:   rec.MaxConcurrency,
-		QueueLimit:       rec.QueueLimit,
-		QueueWaitSeconds: rec.QueueWaitSeconds,
-		Status:           rec.Status,
-		BreakerStatus:    rec.BreakerStatus,
-		CreatedAt:        rec.CreatedAt,
-		UpdatedAt:        rec.UpdatedAt,
-		APIKeyConfigured: rec.APIKey != "",
-		APIKeyMasked:     storage.MaskAPIKey(rec.APIKey),
+		ID:                rec.ID,
+		Name:              rec.Name,
+		Type:              rec.Type,
+		BaseURL:           rec.BaseURL,
+		Models:            rec.Models,
+		ModelMapping:      rec.ModelMapping,
+		ModelCapabilities: rec.ModelCapabilities,
+		Protocols:         rec.Protocols,
+		Priority:          rec.Priority,
+		Weight:            rec.Weight,
+		TimeoutSeconds:    rec.TimeoutSeconds,
+		MaxConcurrency:    rec.MaxConcurrency,
+		QueueLimit:        rec.QueueLimit,
+		QueueWaitSeconds:  rec.QueueWaitSeconds,
+		Status:            rec.Status,
+		BreakerStatus:     rec.BreakerStatus,
+		CreatedAt:         rec.CreatedAt,
+		UpdatedAt:         rec.UpdatedAt,
+		APIKeyConfigured:  rec.APIKey != "",
+		APIKeyMasked:      storage.MaskAPIKey(rec.APIKey),
 	}
 }
 
