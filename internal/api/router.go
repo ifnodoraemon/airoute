@@ -55,7 +55,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key, X-API-Key, anthropic-version, x-goog-api-key, x-admin-token, X-Session-ID, X-Request-ID, X-Airoute-Trace-Id, MCP-Protocol-Version, Stripe-Signature, X-Goog-Upload-Protocol, X-Goog-Upload-Command, X-Goog-Upload-Offset, X-Goog-Upload-Header-Content-Type, X-Goog-Upload-Header-Content-Length, Range, If-Match")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, Idempotency-Key, x-api-key, X-API-Key, anthropic-version, x-goog-api-key, x-admin-token, X-Session-ID, X-Request-ID, X-Airoute-Trace-Id, MCP-Protocol-Version, Stripe-Signature, X-Goog-Upload-Protocol, X-Goog-Upload-Command, X-Goog-Upload-Offset, X-Goog-Upload-Header-Content-Type, X-Goog-Upload-Header-Content-Length, Range, If-Match")
 		c.Header("Access-Control-Expose-Headers", "Content-Disposition, Content-Length, X-Airoute-Trace-Id, X-Request-Id, X-Airoute-Cost, X-Airoute-Off-Peak, X-Airoute-Off-Peak-Discount, X-Airoute-Cached-Tokens, X-Airoute-Saved-Cost, X-Cache-Status, X-RateLimit-Limit-Requests, Retry-After, X-Goog-Upload-URL, X-Goog-Upload-Status, X-Goog-Upload-Size-Received, Content-Range")
 		c.Header("X-Content-Type-Options", "nosniff")
 		c.Header("X-Frame-Options", "SAMEORIGIN")
@@ -182,8 +182,6 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 			userGroup.GET("/wallet", adminHandler.GetUserWallet)
 			userGroup.POST("/wallet/redeem", adminHandler.RedeemWalletCode)
 			userGroup.POST("/wallet/recharge/stripe/session", adminHandler.CreateStripeRechargeSession)
-			userGroup.POST("/wallet/recharge/sandbox", adminHandler.SandboxRecharge)
-			userGroup.GET("/wallet/recharge/sandbox", adminHandler.SandboxRecharge)
 			// D-07: only the single-order lookup is used (the checkout return
 			// page). A listing endpoint with no caller is surface without a
 			// consumer, so it was removed rather than left to drift.

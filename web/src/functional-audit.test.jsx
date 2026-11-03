@@ -69,12 +69,12 @@ describe('Role journey audit: desired outcomes', () => {
     expect(result.current.models).toEqual([]);
   });
 
-  it('cancelled recharge orders should not be described as still processing', async () => {
+  it('expired recharge orders should not be described as still processing', async () => {
     const adminFetch = vi.fn(async () => response({ code: 0, data: { ...user, orders: [
-      { id: 1, order_no: 'AUDIT-CANCELLED', amount: 50, channel: 'stripe', status: 'cancelled' },
+      { id: 1, order_no: 'AUDIT-EXPIRED', amount: 50, channel: 'stripe', status: 'expired' },
     ] } }));
     render(<WalletManagementView adminUser={user} adminFetch={adminFetch} showToast={vi.fn()} lang="zh" />);
-    await screen.findByText('AUDIT-CANCELLED');
+    await screen.findByText('AUDIT-EXPIRED');
     expect(screen.queryByText('处理中')).not.toBeInTheDocument();
   });
 });

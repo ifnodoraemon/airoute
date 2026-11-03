@@ -49,6 +49,26 @@ spec:
               containerPort: {{ .Values.service.port }}
               protocol: TCP
           env:
+            {{- if .Values.payments.enabled }}
+            - name: STRIPE_MODE
+              value: {{ .Values.payments.mode | quote }}
+            - name: PUBLIC_URL
+              value: {{ required "payments.publicURL is required when payments are enabled" .Values.payments.publicURL | quote }}
+            - name: STRIPE_MIN_RECHARGE_CNY
+              value: {{ .Values.payments.minRechargeCNY | quote }}
+            - name: STRIPE_SUCCESS_URL
+              value: {{ .Values.payments.successURL | quote }}
+            - name: STRIPE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "payments.existingSecret is required when payments are enabled" .Values.payments.existingSecret | quote }}
+                  key: api-key
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.payments.existingSecret | quote }}
+                  key: webhook-secret
+            {{- end }}
             # service.port is the single port value for this chart: the Service,
             # containerPort and probes all derive from it, so the process must
             # listen on it too. Without this the app kept listening on

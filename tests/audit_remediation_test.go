@@ -3,14 +3,9 @@ package tests
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -24,118 +19,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// Helper to sign Stripe webhook payload
-func signStripePayload(payload []byte, secret string, ts int64) string {
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(fmt.Sprintf("%d.", ts)))
-	mac.Write(payload)
-	sig := hex.EncodeToString(mac.Sum(nil))
-	return fmt.Sprintf("t=%d,v1=%s", ts, sig)
-}
-
-// 1. Test Stripe Webhook Signature Verification & Fraud Prevention
-func TestAudit_StripeWebhookSignatureVerification(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	db, err := storage.OpenDB(":memory:")
-	require.NoError(t, err)
-	defer db.Close()
-
-	repo := storage.NewRepository(db)
-	dispatcher := router.NewDispatcher(nil)
-	sync := controlplane.NewSynchronizer(repo, dispatcher)
-	adminHandler := controlplane.NewAdminHandler(repo, sync, dispatcher)
-	engine := api.SetupRouter(dispatcher, adminHandler)
-
-	secret := "whsec_test_secret_12345"
-	os.Setenv("STRIPE_WEBHOOK_SECRET", secret)
-	defer os.Unsetenv("STRIPE_WEBHOOK_SECRET")
-
-	// Create user & recharge order
-	user := &storage.UserRecord{
-		Username:     "alice",
-		PasswordHash: "dummy",
-		Role:         "user",
-		Status:       "active",
-		Balance:      10.0,
-	}
-	require.NoError(t, repo.CreateUser(user))
-
-	orderNo := "ORD_TEST_999"
-	order := &storage.RechargeOrderRecord{
-		OrderNo:         orderNo,
-		Username:        "alice",
-		Amount:          100.0,
-		Status:          "pending",
-		Channel:         "stripe",
-		StripeSessionID: "cs_test_123",
-	}
-	require.NoError(t, repo.CreateRechargeOrder(order))
-
-	eventPayload := []byte(fmt.Sprintf(`{
-		"type": "checkout.session.completed",
-		"data": {
-			"object": {
-				"id": "cs_test_123",
-				"client_reference_id": "%s",
-				"payment_status": "paid",
-				"amount_total": 10000,
-				"currency": "cny"
-			}
-		}
-	}`, orderNo))
-
-	// Case 1: Attack without signature header -> Rejected
-	{
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/public/stripe/webhook", bytes.NewReader(eventPayload))
-		w := httptest.NewRecorder()
-		engine.ServeHTTP(w, req)
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-		assert.Contains(t, w.Body.String(), "Stripe 签名校验失败")
-
-		// Verify order is still pending and balance unchanged
-		u, _ := repo.GetUserByUsername("alice")
-		assert.Equal(t, 10.0, u.Balance)
-	}
-
-	// Case 2: Attack with fake/tampered signature -> Rejected
-	{
-		fakeSig := "t=1700000000,v1=0000000000000000000000000000000000000000000000000000000000000000"
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/public/stripe/webhook", bytes.NewReader(eventPayload))
-		req.Header.Set("Stripe-Signature", fakeSig)
-		w := httptest.NewRecorder()
-		engine.ServeHTTP(w, req)
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-		assert.Contains(t, w.Body.String(), "Stripe 签名校验失败")
-	}
-
-	// Case 3: Replay attack with expired timestamp (> 5 minutes) -> Rejected
-	{
-		expiredTime := time.Now().Add(-10 * time.Minute).Unix()
-		expiredSig := signStripePayload(eventPayload, secret, expiredTime)
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/public/stripe/webhook", bytes.NewReader(eventPayload))
-		req.Header.Set("Stripe-Signature", expiredSig)
-		w := httptest.NewRecorder()
-		engine.ServeHTTP(w, req)
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-		assert.Contains(t, w.Body.String(), "重放攻击")
-	}
-
-	// Case 4: Legitimate Stripe Webhook with valid HMAC-SHA256 signature -> Accepted & Credited
-	{
-		validSig := signStripePayload(eventPayload, secret, time.Now().Unix())
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/public/stripe/webhook", bytes.NewReader(eventPayload))
-		req.Header.Set("Stripe-Signature", validSig)
-		w := httptest.NewRecorder()
-		engine.ServeHTTP(w, req)
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), `"received":true`)
-
-		// Verify balance increased by 100.0
-		u, _ := repo.GetUserByUsername("alice")
-		assert.Equal(t, 110.0, u.Balance)
-	}
-}
 
 // 2. Test MCP Authentication & Tenant Log Isolation
 func TestAudit_MCPAuthAndTenantLogIsolation(t *testing.T) {
@@ -339,7 +222,7 @@ func TestAudit_RateLimiterDynamicRPMUpdate(t *testing.T) {
 }
 
 // 6. Test CORS headers and Sandbox Recharge GET route
-func TestAudit_CORSAndSandboxRecharge(t *testing.T) {
+func TestAudit_CORSAndRemovedPaymentSimulator(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, err := storage.OpenDB(":memory:")
 	require.NoError(t, err)
@@ -361,21 +244,11 @@ func TestAudit_CORSAndSandboxRecharge(t *testing.T) {
 	assert.Contains(t, corsHeaders, "x-admin-token")
 	assert.Contains(t, corsHeaders, "Stripe-Signature")
 
-	// Verify GET /api/v1/user/wallet/recharge/sandbox works
-	user := &storage.UserRecord{
-		Username:     "tester",
-		PasswordHash: "hash",
-		Role:         "admin",
-		Status:       "active",
-		Balance:      0.0,
+	// The removed payment simulator has no route for either method.
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		req := httptest.NewRequest(method, "/api/v1/user/wallet/recharge/sandbox", nil)
+		w := httptest.NewRecorder()
+		engine.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusNotFound, w.Code)
 	}
-	require.NoError(t, repo.CreateUser(user))
-	token, _ := tokenForTestUser("tester", "admin", time.Hour)
-
-	reqGet := httptest.NewRequest(http.MethodGet, "/api/v1/user/wallet/recharge/sandbox?order_no=SANDBOX123&amount=88.8", nil)
-	reqGet.Header.Set("Authorization", "Bearer "+token)
-	wGet := httptest.NewRecorder()
-	engine.ServeHTTP(wGet, reqGet)
-	assert.Equal(t, http.StatusOK, wGet.Code)
-	assert.Contains(t, wGet.Body.String(), "充值成功")
 }

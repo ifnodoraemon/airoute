@@ -14,6 +14,16 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+# Stripe secrets are supplied externally. The Secret must contain api-key and
+# webhook-secret. Test mode needs a separate gateway database and model quota.
+payments:
+  enabled: false
+  existingSecret: ""
+  mode: live
+  publicURL: ""
+  successURL: ""
+  minRechargeCNY: 10
+
 podAnnotations: {}
 
 podSecurityContext:
