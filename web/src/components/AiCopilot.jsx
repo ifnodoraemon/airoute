@@ -1,6 +1,6 @@
 import ThinkingControls from './ThinkingControls';
 import ThinkingStatus from './ThinkingStatus';
-import { thinkingRequest, thinkingResult, assistantHistory } from '../lib/thinking';
+import { thinkingRequest, thinkingResult, assistantHistory, thinkingOutputLimit } from '../lib/thinking';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Sparkles,
@@ -668,7 +668,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
             tools: COPILOT_HARNESS_TOOLS,
             stream: true,
             temperature: 0.5,
-            max_tokens: 16384
+            max_tokens: thinkingOutputLimit(thinkingCapabilities[targetModel],thinkingByModel[targetModel],16384)
           })
         });
 

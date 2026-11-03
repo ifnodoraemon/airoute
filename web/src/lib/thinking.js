@@ -41,3 +41,15 @@ export function assistantHistory(message, keepReasoning = false, targetModel) {
   }
   return result;
 }
+
+export function minimumThinkingOutput(capability, value) {
+  const mode=value?.mode || 'auto';
+  if (mode!=='on' && !(mode==='auto' && capability?.policy?.default_mode==='on')) return 0;
+  const effort=value?.effort || capability?.policy?.default_effort || 'default';
+  return capability?.minimum_output_tokens?.[effort] || capability?.minimum_output_tokens?.default || 0;
+}
+
+export function thinkingOutputLimit(capability, value, defaultLimit) {
+  const minimum=minimumThinkingOutput(capability,value);
+  return minimum>0 ? Math.max(defaultLimit,minimum+1024) : defaultLimit;
+}

@@ -15,6 +15,7 @@ type ThinkingChoices struct {
 	Efforts []string `json:"efforts"`
 }
 type ThinkingAvailability struct {
+	MinimumOutputTokens map[string]int `json:"minimum_output_tokens,omitempty"`
 	ThinkingChoices
 	Known           bool                  `json:"known"`
 	Summary         bool                  `json:"summary"`
@@ -58,11 +59,27 @@ func (d *Dispatcher) GetThinkingCapabilities(names []string) map[string]Thinking
 				}
 				eligible := func(control model.ThinkingControl) bool {
 					raw, _ := json.Marshal(control)
-					req := &model.ChatCompletionRequest{Model: name, Extra: model.ExtraFields{"thinking_control": raw}}
+					outputLimit := 131072
+					req := &model.ChatCompletionRequest{Model: name, MaxTokens: &outputLimit, Extra: model.ExtraFields{"thinking_control": raw}}
 					if tools {
 						req.Tools = []model.Tool{{Type: "function", Function: map[string]any{"name": "capability_check"}}}
 					}
-					_, err := provider.PrepareThinkingRequest(req, channel)
+					prepared, err := provider.PrepareThinkingRequest(req, channel)
+					if err == nil && prepared.PreparedThinking != nil && prepared.PreparedThinking.Control.Mode == "on" && profile.Wire == "claude-budget" {
+						effort := prepared.PreparedThinking.Control.Effort
+						if effort == "" {
+							effort = profile.DefaultEffort
+						}
+						key := control.Effort
+						if key == "" {
+							key = "default"
+						}
+						minimum := profile.Budgets[effort] + 1
+						if availability.MinimumOutputTokens == nil {
+							availability.MinimumOutputTokens = make(map[string]int)
+						}
+						availability.MinimumOutputTokens[key] = max(availability.MinimumOutputTokens[key], minimum)
+					}
 					return err == nil
 				}
 				choices.On = choices.On || eligible(model.ThinkingControl{Mode: "on"})

@@ -1,7 +1,7 @@
-import { thinkingChoices, thinkingControl } from '../lib/thinking';
+import { thinkingChoices, thinkingControl, minimumThinkingOutput } from '../lib/thinking';
 
 const effortLabels = { minimal: '极少', low: '低', medium: '中', high: '高', xhigh: '很高', max: '最高' };
-export default function ThinkingControls({ capability, value, onChange, tools = false, disabled = false, lang = 'zh' }) {
+export default function ThinkingControls({ capability, value, onChange, tools = false, disabled = false, maxTokens, lang = 'zh' }) {
   const isZh = lang === 'zh';
   const choices = thinkingChoices(capability, tools);
   const active = thinkingControl(capability, value);
@@ -25,6 +25,7 @@ export default function ThinkingControls({ capability, value, onChange, tools = 
     </div>
     {capability?.summary && <label className="flex items-center gap-2"><input type="checkbox" checked={active.include_summary !== false} disabled={disabled} onChange={event => change({ include_summary: event.target.checked })} />{isZh ? '请求上游返回思考摘要' : 'Request thinking summary'}</label>}
     {((active.mode!=='auto' && !choices[active.mode]) || (active.effort && !choices.efforts?.includes(active.effort))) && <p role="alert" className="text-amber-700 dark:text-amber-300">{isZh ? '原设置已不可用，请选择其他模式或档位；请求不会自动降级。' : 'The selected setting is no longer available. Choose another mode or level; requests will not be downgraded.'}</p>}
+    {Number(maxTokens)>0 && minimumThinkingOutput(capability,active)>Number(maxTokens) && <p role="alert" className="text-amber-700 dark:text-amber-300">{isZh ? `此设置至少需要 ${minimumThinkingOutput(capability,active)} 个输出 token，请提高输出上限。` : `This setting needs at least ${minimumThinkingOutput(capability,active)} output tokens. Increase the output limit.`}</p>}
     <p className="text-slate-500 leading-relaxed">
       {!capability?.known ? (isZh ? '思考能力未知，请在渠道的实际模型配置中确认。' : 'Thinking capability unknown. Configure the actual upstream model on its channel.')
         : !choices.on && !choices.off ? (isZh ? '当前调用方式的开关或档位尚未确认；摘要返回与内部思考独立。' : 'Toggle / effort is unavailable for this call. Summary output is independent of internal thinking.')

@@ -1061,8 +1061,8 @@ Execute the following mission with precision, maintainability, and zero speculat
                 )}
               </div>
 
-              <ThinkingControls capability={thinkingCapabilities[playModel]} value={thinkingByModel[playModel]} onChange={value => setThinkingByModel(prev => ({...prev,[playModel]:value}))} disabled={playLoading} lang={lang} />
-              {playMode === 'arena' && arenaModelB && <div className="border-t pt-2 space-y-2"><p className="text-xs font-semibold">{arenaModelB}</p><ThinkingControls capability={thinkingCapabilities[arenaModelB]} value={thinkingByModel[arenaModelB]} onChange={value => setThinkingByModel(prev => ({...prev,[arenaModelB]:value}))} disabled={playLoading} lang={lang} /></div>}
+              <ThinkingControls maxTokens={maxTokens} capability={thinkingCapabilities[playModel]} value={thinkingByModel[playModel]} onChange={value => setThinkingByModel(prev => ({...prev,[playModel]:value}))} disabled={playLoading} lang={lang} />
+              {playMode === 'arena' && arenaModelB && <div className="border-t pt-2 space-y-2"><p className="text-xs font-semibold">{arenaModelB}</p><ThinkingControls maxTokens={maxTokens} capability={thinkingCapabilities[arenaModelB]} value={thinkingByModel[arenaModelB]} onChange={value => setThinkingByModel(prev => ({...prev,[arenaModelB]:value}))} disabled={playLoading} lang={lang} /></div>}
               {/* Hyperparameters: Temperature & MaxTokens */}
               <div className="space-y-3 pt-2 border-t border-[#E4E6E9] dark:border-[#2C3038]">
                 <div>

@@ -12,6 +12,9 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'jsdom',
+    // Lazy console views already allow 8s query waits; keep the test's overall
+    // budget above that so CPU contention does not abort a valid wait at 5s.
+    testTimeout: 15000,
     include: ['src/**/*.test.{js,jsx}'],
     setupFiles: ['./src/test/setup.js'],
   },

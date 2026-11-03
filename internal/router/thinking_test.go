@@ -55,3 +55,11 @@ func TestThinkingPolicySurvivesWhenPrimaryHasNoEligibleChannel(t *testing.T) {
 	require.Empty(t, channels)
 	require.Error(t, err)
 }
+
+func TestThinkingCapabilityDiscoveryDoesNotApplyDefaultOutputLimit(t *testing.T) {
+	d := NewDispatcher([]model.ChannelConfig{{Name: "claude", Type: model.ProviderAnthropic, Models: []string{"alias"}, ModelCapabilities: map[string]model.ModelCapabilityConfig{"alias": {Thinking: &model.ThinkingConfig{Profile: "claude-budget"}}}}})
+	capability := d.GetThinkingCapabilities([]string{"alias"})["alias"]
+	require.Equal(t, []string{"low", "medium", "high"}, capability.Efforts)
+	require.Equal(t, 24577, capability.MinimumOutputTokens["high"])
+	require.Equal(t, 8193, capability.MinimumOutputTokens["medium"])
+}
