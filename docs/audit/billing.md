@@ -358,6 +358,16 @@ if callerKeyRec != nil { ... 真实 key ... }
 3. 迁移后 `DROP COLUMN cost_nano / used_cost_nano`（或至少在代码里加 `// deprecated` 并从所有查询中移除），消灭双镜像。
 4. 把 `ReconcileMoney` 接入每日巡检并对 `abs(difference)` 超阈值的 key 告警。
 
+**2026-10-27 处置（迁移 v32 / v33）**
+
+线上 ¥2.647492 的整数缺口已一次性冲销，不再作为永久基线：
+
+- **v33 冲销**（`internal/storage/migrations_usage_log_cleanup.go`）在同一个 UPDATE 里同步减掉 `used_cost_units` 与 `used_cost`，`ledger_drift_units` 由 2,647,492,000 归零。冲销用指纹匹配（`id=1` 且 `used_cost_units − SUM(billing_settlements.cost_units) = 2,647,492,000`），其它部署匹配不到即 no-op；金额写入 `system_settings.billing_repair_f9_writeoff` 保留可解释性。用"减"而不是"按账本重算赋值"，是为了不吞掉并发结算进来的新扣费。
+- `used_tokens` **有意未回写**：令牌确实消耗过，只是审计行被删，且没有可据以重建的账本（当前比 `SUM(usage_logs.total_tokens)` 高 8,730,494）。
+- **v32 重建原因文案**：725 行 `%!w(<nil>)`（`fmt.Errorf("...%w", nil)` 的产物）与 51 行空原因的合成 499 得到可读说明；**状态码不变**（客户端当时确实收到那个码）。71 行空 502 与 4 行空 404 无可靠事实可重建，保持原样。
+- 硬删端点如今只在流水未计费时才允许删除（`chargedUsageLogSQL`，`repo_logs.go:398-421`），B10 的"可删 `cost>0` 行"已不成立。
+- **双 `*_nano` 列已删除**（迁移 v34 `drop_legacy_nano_money_mirrors`）：`users.balance_nano`、`api_keys.used_cost_nano`、`api_keys.budget_nano`、`usage_logs.cost_nano`。删前核对过：全仓无运行时读取（只有迁移 v12/v15 引用）、无索引/约束覆盖、所有 INSERT 均为显式列清单、镜像独有金额的行数为 0（迁移仍先回填一次再删，防止从旧 dump 恢复时丢数）。线上执行前另做了全库备份与事务内 dry-run，删后 `audit_units == settled_units` 且管理端读路径全部 200。F16 里"`used_cost_nano` 陈旧"一项随之关闭。
+
 ---
 
 ### F10 · P2 · 按"请求模型"计费而非"实际服务模型"，跨模型降级时错价

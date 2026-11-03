@@ -19,6 +19,7 @@ func TestForeignCurrencyRecordDoesNotPoisonBatch(t *testing.T) {
 	r, key, u := billingIDTestRepo(t)
 	ctx := context.Background()
 
+	rejectedBefore := telemetry.GlobalMetrics.BillingChargesRejected.Load()
 	healthy := billingRecord(key, u.Username, "tr-healthy", "bill-healthy", 1.00)
 	legacyUSD := billingRecord(key, u.Username, "tr-legacy-usd", "bill-legacy-usd", 5.00)
 	legacyUSD.PricingSnapshot = &UsagePricingSnapshot{Model: "legacy-usd-model", Currency: "USD", PromptPrice: 3, CompletionPrice: 15}
@@ -75,9 +76,12 @@ func TestForeignCurrencyRecordDoesNotPoisonBatch(t *testing.T) {
 		t.Fatalf("error_message = %q, want the rejection reason", message)
 	}
 	// The rejection is published: a price row that cannot settle in CNY has to be
-	// visible to an operator, not just to a log line.
-	if metrics := telemetry.GlobalMetrics.ToPrometheusFormat(); !strings.Contains(metrics, "airoute_billing_charges_rejected_total 1") {
-		t.Fatalf("rejected-charge counter was not published:\n%s", metrics)
+	// visible to an operator, not just to a log line. Assert a delta rather than
+	// the absolute value: the counter is process-global, so `-count=N` (and any
+	// earlier test that rejected a charge) would otherwise make this flaky.
+	rejected := telemetry.GlobalMetrics.BillingChargesRejected.Load()
+	if rejected < rejectedBefore+1 {
+		t.Fatalf("rejected-charge counter was not published:\n%s", telemetry.GlobalMetrics.ToPrometheusFormat())
 	}
 
 	// A redelivery of the same poison record must not fail, duplicate the audit row

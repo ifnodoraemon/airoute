@@ -30,19 +30,6 @@ export function useConsoleSession({ initialRoute, onEntered, onEnded }) {
   const viewModeRef = useRef(viewMode);
   viewModeRef.current = viewMode;
 
-  const isAdmin = adminUser?.role === 'admin';
-  const isAuthenticated = !!adminUser;
-
-  /**
-   * The credential to send as a bearer token, or '' when there is none.
-   *
-   * The stored marker means "signed in via the HttpOnly cookie"; sending it would
-   * make the gateway validate the literal string and reject the request before it
-   * ever falls back to the cookie. Only a credential obtained from a sign-in
-   * endpoint is a real token.
-   */
-  const credentialToken = adminToken === SESSION_MARKER ? '' : (adminToken || '');
-
   const clearCredential = useCallback(() => {
     sessionGeneration.current += 1;
     setRestoringSession(false);
@@ -109,20 +96,6 @@ export function useConsoleSession({ initialRoute, onEntered, onEnded }) {
   }, [clearCredential]);
 
   /**
-   * Replaces the signed-in profile with a freshly fetched one, persisting the
-   * non-sensitive parts. Does not touch the credential: a profile refresh must not
-   * sign anyone in or out.
-   */
-  const refreshUser = useCallback((user) => {
-    if (!user) return;
-    setAdminUser((previous) => {
-      if (!previous || previous.username !== user.username) return previous;
-      setStoredAuth('', user);
-      return user;
-    });
-  }, []);
-
-  /**
    * Merges a partial update (a new balance, a renamed account) into the signed-in
    * profile and persists it. Written as a functional update so two patches in the
    * same tick do not overwrite each other.
@@ -141,19 +114,11 @@ export function useConsoleSession({ initialRoute, onEntered, onEnded }) {
     setAuthTab((prev) => (prev !== routeInfo.authTab ? routeInfo.authTab : prev));
   }, []);
 
-  const openAuth = useCallback((tab = 'login') => {
-    setAuthTab(tab);
-    setViewMode('auth');
-  }, []);
-
   return {
     viewMode,
     adminToken,
     adminUser,
     authTab,
-    isAdmin,
-    isAuthenticated,
-    credentialToken,
     restoringSession,
     getSessionGeneration,
     finishSessionRestore,
@@ -161,11 +126,9 @@ export function useConsoleSession({ initialRoute, onEntered, onEnded }) {
     setAuthTab,
     signIn,
     restoreSession,
-    refreshUser,
     patchUser,
     endSession,
     signOutLocal,
     applyRoute,
-    openAuth,
   };
 }

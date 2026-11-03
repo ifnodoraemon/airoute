@@ -199,11 +199,6 @@ type LogFilter struct {
 	SkipCount bool
 }
 
-// ListUsageLogs returns recent usage logs for audit and monitoring.
-func (r *Repository) ListUsageLogs(limit int, offset int) ([]*UsageLogRecord, error) {
-	return r.ListUsageLogsWithFilter(LogFilter{Limit: limit, Offset: offset})
-}
-
 // ListUsageLogsWithFilter queries logs with flexible filters (time range, trace ID, session ID, model, tenant).
 // buildUsageLogWhere assembles the WHERE clause and args shared by the page
 // query and the total-count query, so pagination always reflects the complete
@@ -220,6 +215,14 @@ func (r *Repository) buildUsageLogWhere(f LogFilter) (string, []interface{}) {
 		where += clause
 		args = append(args, value)
 	}
+	// These three filters are deliberately left unindexed.
+	//
+	// Each one is an equality OR a leading-wildcard LIKE on the same column. A
+	// B-tree cannot serve `LIKE '%q%'`, and the OR means both sides must be
+	// evaluated, so an index on the column is never chosen — it only costs a write
+	// on every audit insert (the hottest write path). Migration 42 dropped the
+	// single-column indexes v1/v7/v10 created for them. The tenant/key/model
+	// filters, which are equality plus a created_at range, keep their composites.
 	if f.TraceID != "" {
 		where += ` AND (trace_id = ? OR trace_id LIKE ? ESCAPE '\')`
 		args = append(args, f.TraceID, "%"+escapeLikePattern(f.TraceID)+"%")
@@ -302,6 +305,14 @@ func (r *Repository) ListUsageLogsWithFilter(f LogFilter) ([]*UsageLogRecord, er
 
 // ListUsageLogsWithFilterAndCount also returns the total number of rows matching
 // the filter (ignoring LIMIT/OFFSET), so the UI can paginate the real result set.
+//
+// Partitioning note: the COUNT and the page query share buildUsageLogWhere, and every
+// time filter it emits is a plain `created_at >= / <= ?` comparison (no wrapper
+// function on either dialect), so on a partitioned usage_logs both statements prune
+// to the months the request touches and neither changes meaning. A request that
+// supplies no time range legitimately spans the whole retained history and therefore
+// probes every partition — exactly the work the old single-table scan did — so the
+// console should keep sending a range for large deployments.
 func (r *Repository) ListUsageLogsWithFilterAndCount(f LogFilter) ([]*UsageLogRecord, int64, error) {
 	if f.Limit <= 0 {
 		f.Limit = 50
@@ -380,8 +391,17 @@ func addUsageAuditPrunedUnits(tx *Tx, units int64) error {
 	if units <= 0 {
 		return nil
 	}
+	// PostgreSQL requires the target side of ON CONFLICT DO UPDATE to be qualified:
+	// an unqualified `value` is ambiguous between the stored row and the proposed
+	// row (SQLSTATE 42702), which made every PostgreSQL retention pass fail. SQLite
+	// only accepts a bare column name there, so the two dialects need different
+	// spellings of the same expression.
+	currentValue := "value"
+	if tx != nil && tx.db != nil && tx.db.Dialect() == "postgres" {
+		currentValue = "system_settings.value"
+	}
 	_, err := tx.Exec(`INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
-		ON CONFLICT(key) DO UPDATE SET value = CAST(CAST(value AS BIGINT) + ? AS TEXT), updated_at = CURRENT_TIMESTAMP`,
+		ON CONFLICT(key) DO UPDATE SET value = CAST(CAST(`+currentValue+` AS BIGINT) + ? AS TEXT), updated_at = CURRENT_TIMESTAMP`,
 		usagePrunedUnitsSetting, strconv.FormatInt(units, 10), units)
 	return err
 }
@@ -439,13 +459,7 @@ func (r *Repository) BatchDeleteUsageLogs(ids []int64) (deleted int64, skipped i
 	if len(ids) == 0 {
 		return 0, 0, nil
 	}
-	placeholders := make([]string, len(ids))
-	args := make([]interface{}, len(ids))
-	for i, id := range ids {
-		placeholders[i] = "?"
-		args[i] = id
-	}
-	inList := strings.Join(placeholders, ",")
+	inList, args := inClause[int64](nil, ids)
 
 	tx, err := r.db.Begin()
 	if err != nil {
@@ -505,12 +519,27 @@ func (r *Repository) ClearAllUsageLogs() (deleted int64, skipped int64, err erro
 // PurgeUsageLogsBefore deletes audit rows created before cutoff in bounded
 // batches, so a large backlog cannot hold a long write lock on the data plane's
 // database. Returns the number of deleted rows.
+//
+// On a partitioned usage_logs the whole expired months are retired first with
+// DROP TABLE (no dead tuples, no vacuum work, O(1) instead of one DELETE per row);
+// the bounded DELETE below then only has to handle the month that straddles the
+// cutoff plus anything that landed in the DEFAULT partition. Both paths add the
+// removed rows' charged units to the pruned-audit baseline in the same transaction,
+// so audit-vs-ledger reconciliation cannot mistake deliberate retention for lost
+// revenue.
 func (r *Repository) PurgeUsageLogsBefore(cutoff time.Time, batchSize int) (int64, error) {
 	if batchSize <= 0 {
 		batchSize = 5000
 	}
-	cutoffValue := cutoff.UTC().Format(sqliteTimestampLayout)
 	var total int64
+	if r.usageLogsPartitioned() {
+		_, rowsDropped, err := r.dropExpiredUsageLogPartitions(cutoff)
+		if err != nil {
+			return 0, err
+		}
+		total += rowsDropped
+	}
+	cutoffValue := r.dialectTimePrecise(cutoff)
 	for {
 		tx, err := r.db.Begin()
 		if err != nil {
@@ -567,7 +596,11 @@ func (r *Repository) PurgeUsageLogsBefore(cutoff time.Time, batchSize int) (int6
 
 // usageLogsBefore returns the ids and the charged units of the oldest rows that
 // are older than cutoff, bounded by batchSize.
-func usageLogsBefore(tx *Tx, cutoffValue string, batchSize int) ([]int64, int64, error) {
+//
+// The predicate is on the bare created_at column (the value is pre-formatted per
+// dialect by the caller), which is what lets a partitioned usage_logs prune to the
+// expired months and lets the id index serve the ORDER BY inside each of them.
+func usageLogsBefore(tx *Tx, cutoffValue any, batchSize int) ([]int64, int64, error) {
 	rows, err := tx.Query(`SELECT id, COALESCE(cost_units, 0) FROM usage_logs WHERE created_at < ? ORDER BY id LIMIT ?`,
 		cutoffValue, batchSize)
 	if err != nil {

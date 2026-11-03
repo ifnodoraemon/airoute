@@ -173,3 +173,130 @@ groups:
           description: >-
             当前 {{ $value }} 路并发。单副本 fd 上限为 65536，但真正受限的是
             CPU（每请求约 60ms）与上游配额，超过 400 路应评估扩容。
+
+  - name: airoute-billing-settlement
+    rules:
+      # Settlement batching keeps the money path off the request's critical path:
+      # a charge whose short wait expires is deferred to the audit pipeline. That
+      # is safe for the money but means the database writer is saturated, so it
+      # must be visible before it turns into growing request latency.
+      - alert: AirouteSettlementDeferRateHigh
+        expr: |
+          (
+            rate(airoute_billing_settlements_deferred_total[5m])
+            /
+            clamp_min(rate(airoute_settlement_batches_total[5m]), 0.001)
+          ) > 0.01
+        for: 10m
+        labels:
+          severity: warning
+          component: billing
+        annotations:
+          summary: "结算攒批跟不上（超过 1% 的收费被推迟到异步管道）"
+          description: >-
+            {{ $labels.instance }} 近 5 分钟约 {{ $value | humanizePercentage }} 的收费
+            未能在请求侧等待窗口内提交。金额不会丢（审计管道会补结算），但说明数据库写
+            入能力不足：检查 GATEWAY_SETTLEMENT_BATCH_SIZE（可上调至 200-500）、
+            数据库连接/锁等待，以及是否出现热点 key。
+
+      - alert: AirouteSettlementWaitTimeouts
+        expr: increase(airoute_settlement_wait_timeouts_total[10m]) > 0
+        labels:
+          severity: warning
+          component: billing
+        annotations:
+          summary: "请求侧结算等待超时"
+          description: >-
+            {{ $value }} 笔收费在 GATEWAY_SETTLEMENT_WAIT_MS 内没拿到提交确认，已转为
+            异步补结算。偶发可接受；持续出现请结合 AirouteSettlementDeferRateHigh 一起看。
+
+      - alert: AirouteSettlementLockTimeouts
+        expr: increase(airoute_settlement_lock_timeouts_total[10m]) > 0
+        labels:
+          severity: warning
+          component: billing
+        annotations:
+          summary: "结算行锁超时/重试（热点账户）"
+          description: >-
+            {{ $value }} 次结算在 lock_timeout(500ms) 内没拿到钱包/计数器行锁并触发重试。
+            通常意味着一批请求集中在同一个 user 或同一个 API key 上；检查该 key 的并发
+            与 GATEWAY_MAX_INFLIGHT_PER_USER。
+
+      - alert: AirouteSettlementLatencyHigh
+        expr: |
+          histogram_quantile(0.99,
+            sum by (le) (rate(airoute_settlement_duration_seconds_bucket[5m]))
+          ) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          component: billing
+        annotations:
+          summary: "结算事务 p99 超过 100ms"
+          description: >-
+            结算事务（不含请求侧等待）p99 = {{ $value }}s。写入能力下降或锁竞争加剧，
+            与 AirouteSettlementDeferRateHigh 一起判断。
+
+      - alert: AirouteSettlementBatchesShrinking
+        expr: |
+          avg_over_time(airoute_settlement_batch_size_sum[10m])
+            / clamp_min(avg_over_time(airoute_settlement_batch_size_count[10m]), 1) < 3
+        for: 30m
+        labels:
+          severity: info
+          component: billing
+        annotations:
+          summary: "结算批次长期退化为单笔提交（攒批未生效）"
+          description: >-
+            平均批大小 {{ $value }} 笔。低流量时正常；若同时吞吐高，说明 flush 被 linger
+            定时器主导，可下调 GATEWAY_SETTLEMENT_LINGER_MS。
+
+      - alert: AirouteBillingReservedUnitsHigh
+        expr: |
+          sum(airoute_billing_reserved_units)
+            > 0.8 * clamp_min(sum(airoute_billing_wallet_total_units), 1)
+        for: 15m
+        labels:
+          severity: warning
+          component: billing
+        annotations:
+          summary: "在途预授权接近钱包总额（准入可能误拒）"
+          description: >-
+            预占金额已达用户钱包总额的 80% 以上。若同时出现 402 insufficient_quota，
+            检查是否有请求未释放预授权（进程重启/TTL 到期通常会在 2 分钟内自愈）。
+
+      - alert: AirouteBillingWaivedUnitsGrowing
+        expr: increase(airoute_billing_waived_units_total[1h]) > 0
+        labels:
+          severity: warning
+          component: billing
+        annotations:
+          summary: "出现透支豁免（已交付未收的钱不可追回）"
+          description: >-
+            近 1 小时有 {{ $value }} 个 1e-9 CNY 单位的收费因钱包触底被免除。这说明
+            预授权仍不足以覆盖真实请求成本：检查 GATEWAY_INFLIGHT_RESERVE_CNY 与
+            GATEWAY_MAX_INFLIGHT_PER_USER，并对相关账户做风控。
+
+      - alert: AirouteBillingLedgerDrift
+        expr: airoute_billing_ledger_drift_units > 0 or airoute_billing_wallet_drift_units > 0
+        for: 1h
+        labels:
+          severity: critical
+          component: billing
+        annotations:
+          summary: "账本/计数器/余额镜像出现漂移"
+          description: >-
+            `airoute_billing_ledger_drift_units` 或 `airoute_billing_wallet_drift_units`
+            非零。对账只报告不修账，需要人工核对 settlement 账本与 api_keys/users 的金额。
+
+      - alert: AirouteBillingAuditLag
+        expr: airoute_billing_audit_lag_units > 0
+        for: 2h
+        labels:
+          severity: warning
+          component: billing
+        annotations:
+          summary: "结算账本与审计流水长期不一致"
+          description: >-
+            audit_lag={{ $value }} 个 1e-9 CNY 单位。短暂非零是异步落库延迟；持续 2 小时
+            说明有收费已结算但审计行丢失，需核对 usage_logs 与 billing_settlements。

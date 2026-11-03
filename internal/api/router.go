@@ -1,10 +1,6 @@
 package api
 
 import (
-	"crypto/subtle"
-	"os"
-	"strings"
-
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/controlplane"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
@@ -12,6 +8,33 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/storage"
 	"github.com/ifnodoraemon/airoute/web"
 )
+
+// registerDataPlaneRoutes wires the protocol ingress once and applies it to every
+// prefix a client may use: /v1 (the OpenAI/Anthropic convention) and the bare root
+// for SDKs configured with a BaseURL that has no /v1 suffix. One list keeps the
+// two surfaces from drifting apart.
+func registerDataPlaneRoutes(g *gin.RouterGroup, handler *Handler, mmHandler *MultimodalHandler) {
+	// OpenAI ingress (Chat completions + Responses + Models + Embeddings + Rerank + Moderations)
+	g.POST("/chat/completions", handler.HandleChatCompletions)
+	g.POST("/responses", handler.HandleResponses)
+	g.GET("/models", handler.HandleModels)
+	g.GET("/models/*model", handler.HandleModelDetail)
+	g.POST("/moderations", handler.HandleModerations)
+	g.POST("/embeddings", handler.HandleEmbeddings)
+	g.POST("/rerank", handler.HandleRerank)
+
+	// Anthropic Claude Messages API ingress + Token Counting
+	g.POST("/messages", handler.HandleAnthropicMessages)
+	g.POST("/messages/count_tokens", handler.HandleAnthropicCountTokens)
+
+	// Multimodal ingress (Image, Audio TTS/STT/Translation, Video)
+	g.POST("/images/generations", mmHandler.HandleImageGenerations)
+	g.POST("/audio/speech", mmHandler.HandleAudioSpeech)
+	g.POST("/audio/transcriptions", mmHandler.HandleAudioTranscriptions)
+	g.POST("/audio/translations", mmHandler.HandleAudioTranslations)
+	g.POST("/videos/generations", mmHandler.HandleVideoGenerations)
+	g.GET("/videos/tasks/:id", mmHandler.HandleVideoTask)
+}
 
 // SetupRouter initializes and configures the Gin engine.
 func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.AdminHandler) *gin.Engine {
@@ -32,8 +55,8 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key, X-API-Key, anthropic-version, x-goog-api-key, x-admin-token, X-Session-ID, X-Request-ID, X-Airoute-Trace-Id, MCP-Protocol-Version, Stripe-Signature")
-		c.Header("Access-Control-Expose-Headers", "Content-Disposition, Content-Length, X-Airoute-Trace-Id, X-Request-Id, X-Airoute-Cost, X-Airoute-Off-Peak, X-Airoute-Off-Peak-Discount, X-Airoute-Cached-Tokens, X-Airoute-Saved-Cost, X-Cache-Status, X-RateLimit-Limit-Requests, Retry-After")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, Idempotency-Key, x-api-key, X-API-Key, anthropic-version, x-goog-api-key, x-admin-token, X-Session-ID, X-Request-ID, X-Airoute-Trace-Id, MCP-Protocol-Version, Stripe-Signature, X-Goog-Upload-Protocol, X-Goog-Upload-Command, X-Goog-Upload-Offset, X-Goog-Upload-Header-Content-Type, X-Goog-Upload-Header-Content-Length, Range, If-Match")
+		c.Header("Access-Control-Expose-Headers", "Content-Disposition, Content-Length, X-Airoute-Trace-Id, X-Request-Id, X-Airoute-Cost, X-Airoute-Off-Peak, X-Airoute-Off-Peak-Discount, X-Airoute-Cached-Tokens, X-Airoute-Saved-Cost, X-Cache-Status, X-RateLimit-Limit-Requests, Retry-After, X-Goog-Upload-URL, X-Goog-Upload-Status, X-Goog-Upload-Size-Received, Content-Range")
 		c.Header("X-Content-Type-Options", "nosniff")
 		c.Header("X-Frame-Options", "SAMEORIGIN")
 		c.Header("X-XSS-Protection", "1; mode=block")
@@ -47,6 +70,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "+
 				"font-src 'self' https://fonts.gstatic.com data:; "+
 				"img-src 'self' data: blob: https:; "+
+				"media-src 'self' data: blob: https:; "+
 				"connect-src 'self'; "+
 				"base-uri 'self'; form-action 'self'; frame-ancestors 'self'")
 		if c.Request.TLS != nil {
@@ -71,6 +95,12 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 	web.RegisterStaticRoutes(r)
 
 	handler := NewHandler(dispatcher)
+
+	// The pricing-currency pre-flight gate has to know which upstream models a
+	// channel mapping would make billing price (C-14). Install the read-only
+	// lookup once here: the dispatcher belongs to the server, so this package
+	// cannot reach it from the free function that every ingress handler calls.
+	installServedModelEnumerator(dispatcher)
 
 	// Public health and observability endpoints.
 	//
@@ -144,17 +174,20 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 		userGroup := r.Group("/api/v1/user")
 		userGroup.Use(adminHandler.AdminAuthMiddleware())
 		{
-			userGroup.GET("/me", adminHandler.GetMe)
+			// D-07: the session endpoint is /api/v1/auth/me, the only one the
+			// console and CLI call; a duplicate /user/me was never reached. Key
+			// deletion goes through DELETE /api/v1/admin/keys/:id, which applies
+			// the same owner check for regular callers. Both duplicates were
+			// removed instead of documented twice.
 			userGroup.GET("/wallet", adminHandler.GetUserWallet)
 			userGroup.POST("/wallet/redeem", adminHandler.RedeemWalletCode)
 			userGroup.POST("/wallet/recharge/stripe/session", adminHandler.CreateStripeRechargeSession)
-			userGroup.POST("/wallet/recharge/sandbox", adminHandler.SandboxRecharge)
-			userGroup.GET("/wallet/recharge/sandbox", adminHandler.SandboxRecharge)
-			userGroup.GET("/wallet/orders", adminHandler.ListUserRechargeOrders)
+			// D-07: only the single-order lookup is used (the checkout return
+			// page). A listing endpoint with no caller is surface without a
+			// consumer, so it was removed rather than left to drift.
 			userGroup.GET("/wallet/orders/:order_no", adminHandler.GetUserRechargeOrder)
 			userGroup.GET("/keys", adminHandler.ListUserKeys)
 			userGroup.POST("/keys", adminHandler.CreateUserKey)
-			userGroup.DELETE("/keys/:id", adminHandler.DeleteUserKey)
 			userGroup.POST("/password", adminHandler.ChangePassword)
 		}
 
@@ -180,7 +213,9 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 				protected.GET("/pricing", adminHandler.GetPricingRates)
 				protected.GET("/pricing/groups", adminHandler.GetPricingGroups)
 				protected.GET("/skills", adminHandler.ListSkills)
-				protected.GET("/skills/:id/download", adminHandler.DownloadSkillZip)
+				// D-07: the console and CLI download skill bundles through the
+				// public /api/v1/skills/:id/download route; this authenticated
+				// duplicate served no caller and is removed.
 				protected.GET("/mcp/settings", adminHandler.GetMCPSettings)
 				protected.GET("/logs", adminHandler.ListLogs)
 				protected.GET("/announcement", adminHandler.GetAnnouncement)
@@ -190,6 +225,11 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 				adminOnly.Use(adminHandler.RequireAdminRole())
 				{
 					// Admin-only infrastructure inspection (topology/storage/MCP secrets)
+					//
+					// D-08: /system/middlewares has no console consumer today. It
+					// is kept because ROADMAP B-07 (the console self-check page)
+					// is specified to reuse it together with /health/ready; see
+					// the handler comment before deleting it.
 					adminOnly.GET("/system/middlewares", adminHandler.GetSystemMiddlewares)
 					adminOnly.GET("/system/logs", adminHandler.GetSystemLogs)
 					adminOnly.GET("/system/logs/stream", adminHandler.StreamSystemLogs)
@@ -207,6 +247,11 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 					adminOnly.POST("/users/:username/password", adminHandler.ResetUserPassword)
 					adminOnly.POST("/users/:username/status", adminHandler.UpdateUserStatus)
 					adminOnly.POST("/users/:username/balance", adminHandler.UpdateUserBalance)
+					adminOnly.GET("/supplier-costs", adminHandler.ListSupplierCosts)
+					adminOnly.POST("/supplier-costs", adminHandler.SaveSupplierCost)
+					adminOnly.DELETE("/supplier-costs/:id", adminHandler.DeleteSupplierCost)
+					adminOnly.GET("/supplier-costs/export", adminHandler.ExportSupplierCosts)
+					adminOnly.POST("/supplier-costs/import", adminHandler.ImportSupplierCosts)
 					adminOnly.POST("/users/:username/group", adminHandler.UpdateUserGroup)
 					adminOnly.POST("/users/:username/role", adminHandler.UpdateUserRole)
 
@@ -266,29 +311,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 	v1 := r.Group("/v1")
 	v1.Use(middleware.AuthMiddleware())
 	v1.Use(middleware.RateLimitMiddleware())
-	{
-		// OpenAI ingress (Chat completions + Text completions + Responses + Models + Embeddings + Rerank + Moderations)
-		v1.POST("/chat/completions", handler.HandleChatCompletions)
-		v1.POST("/completions", handler.HandleCompletions)
-		v1.POST("/responses", handler.HandleResponses)
-		v1.GET("/models", handler.HandleModels)
-		v1.GET("/models/*model", handler.HandleModelDetail)
-		v1.POST("/moderations", handler.HandleModerations)
-		v1.POST("/embeddings", handler.HandleEmbeddings)
-		v1.POST("/rerank", handler.HandleRerank)
-
-		// Anthropic Claude Messages API ingress + Token Counting
-		v1.POST("/messages", handler.HandleAnthropicMessages)
-		v1.POST("/messages/count_tokens", handler.HandleAnthropicCountTokens)
-
-		// Multimodal Ingress (Image, Audio TTS/STT/Translation, Video)
-		v1.POST("/images/generations", mmHandler.HandleImageGenerations)
-		v1.POST("/audio/speech", mmHandler.HandleAudioSpeech)
-		v1.POST("/audio/transcriptions", mmHandler.HandleAudioTranscriptions)
-		v1.POST("/audio/translations", mmHandler.HandleAudioTranslations)
-		v1.POST("/videos/generations", mmHandler.HandleVideoGenerations)
-		v1.GET("/videos/tasks/:id", mmHandler.HandleVideoTask)
-	}
+	registerDataPlaneRoutes(v1, handler, mmHandler)
 
 	// Google Gemini v1beta Ingress group (protected by unified Auth & RateLimit middlewares)
 	v1beta := r.Group("/v1beta")
@@ -298,50 +321,27 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 		v1beta.GET("/models", handler.HandleGeminiModels)
 		v1beta.GET("/models/*modelAction", handler.HandleGeminiModelDetail)
 		v1beta.POST("/models/*modelAction", handler.HandleGeminiAction)
+		registerGeminiResources(v1beta, handler)
 	}
+	registerGeminiUpload(r, handler, middleware.AuthMiddleware(), middleware.RateLimitMiddleware())
+	registerGeminiLive(r, handler)
 
 	// Root-level aliases for clients configured with BaseURL without trailing /v1
 	// (e.g., OpenAI(base_url="http://localhost:8080"), Anthropic(base_url="http://localhost:8080"))
 	rootDataPlane := r.Group("")
 	rootDataPlane.Use(middleware.AuthMiddleware())
 	rootDataPlane.Use(middleware.RateLimitMiddleware())
-	{
-		rootDataPlane.POST("/chat/completions", handler.HandleChatCompletions)
-		rootDataPlane.POST("/completions", handler.HandleCompletions)
-		rootDataPlane.POST("/responses", handler.HandleResponses)
-		rootDataPlane.GET("/models", handler.HandleModels)
-		rootDataPlane.GET("/models/*model", handler.HandleModelDetail)
-		rootDataPlane.POST("/moderations", handler.HandleModerations)
-		rootDataPlane.POST("/embeddings", handler.HandleEmbeddings)
-		rootDataPlane.POST("/rerank", handler.HandleRerank)
-		rootDataPlane.POST("/messages", handler.HandleAnthropicMessages)
-		rootDataPlane.POST("/messages/count_tokens", handler.HandleAnthropicCountTokens)
-
-		// Multimodal Root Ingress parity
-		rootDataPlane.POST("/images/generations", mmHandler.HandleImageGenerations)
-		rootDataPlane.POST("/audio/speech", mmHandler.HandleAudioSpeech)
-		rootDataPlane.POST("/audio/transcriptions", mmHandler.HandleAudioTranscriptions)
-		rootDataPlane.POST("/audio/translations", mmHandler.HandleAudioTranslations)
-		rootDataPlane.POST("/videos/generations", mmHandler.HandleVideoGenerations)
-		rootDataPlane.GET("/videos/tasks/:id", mmHandler.HandleVideoTask)
-	}
+	registerDataPlaneRoutes(rootDataPlane, handler, mmHandler)
 
 	return r
 }
 
-// metricsAuthGuard optionally protects /metrics. When GATEWAY_METRICS_TOKEN is
-// set, the scraper must present it as a bearer token; otherwise the endpoint
-// stays public for simple Prometheus setups.
+// metricsAuthGuard rejects scrapes the access policy does not allow. The
+// policy itself lives in metrics_access.go.
 func metricsAuthGuard() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		expected := os.Getenv("GATEWAY_METRICS_TOKEN")
-		if expected == "" {
-			c.Next()
-			return
-		}
-		got := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
-		if subtle.ConstantTimeCompare([]byte(got), []byte(expected)) != 1 {
-			c.AbortWithStatus(401)
+		if status := metricsDeniedStatus(c); status != 0 {
+			c.AbortWithStatus(status)
 			return
 		}
 		c.Next()

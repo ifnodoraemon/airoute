@@ -157,7 +157,11 @@ func ValidateAnthropic(req *model.AnthropicInboundRequest, rule *config.ModelVal
 	req.Messages = mergedMsgs
 
 	// 6. Parameter validation: Temperature (0.0 ~ 1.0)
-	if req.Temperature != nil {
+	if rule != nil && rule.DisallowTemperature {
+		if !checkDisallowedTemperature(res, level, ProtocolAnthropic, "temperature", req.Model, &req.Temperature) {
+			return res
+		}
+	} else if req.Temperature != nil {
 		if *req.Temperature < 0.0 || *req.Temperature > 1.0 {
 			if level == LevelStrict {
 				res.Valid = false

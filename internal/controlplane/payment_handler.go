@@ -3,300 +3,126 @@ package controlplane
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
-	"fmt"
-	"io"
+	"errors"
 	"math"
-	"net/http"
-	"net/url"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/storage"
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
-// CreateStripeSessionRequest defines top-up checkout parameters.
 type CreateStripeSessionRequest struct {
-	Amount   float64 `json:"amount" binding:"required"`
-	Currency string  `json:"currency"`
+	Amount float64 `json:"amount" binding:"required"`
 }
 
-// CreateStripeRechargeSession initiates a Stripe Checkout Session or returns checkout configuration.
+func validCheckoutKey(key string) bool {
+	if len(key) < 8 || len(key) > 128 {
+		return false
+	}
+	for _, r := range key {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_') {
+			return false
+		}
+	}
+	return true
+}
+
 func (h *AdminHandler) CreateStripeRechargeSession(c *gin.Context) {
 	claims, ok := RequireAuthClaims(c)
 	if !ok {
 		return
 	}
-
 	var req CreateStripeSessionRequest
-	if err := c.ShouldBindJSON(&req); err != nil || req.Amount <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "请提供有效的充值金额"})
+	if err := c.ShouldBindJSON(&req); err != nil || !storage.ValidRechargeAmount(req.Amount) {
+		c.JSON(400, gin.H{"error": "充值金额须为 0.01 至 999999.99 元，最多两位小数"})
 		return
 	}
-
-	currency := strings.ToUpper(strings.TrimSpace(req.Currency))
-	if currency == "" {
-		currency = "CNY"
-	}
-	// Wallet balances are denominated in CNY. Normalize once to the minor
-	// unit used by checkout, so the charged amount and credited amount agree.
-	if currency != "CNY" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "钱包充值仅支持人民币 CNY"})
+	cfg, err := loadStripeConfig()
+	if err != nil || !cfg.enabled() {
+		c.JSON(503, gin.H{"error": "线上收款通道尚未配置或配置无效，请使用兑换券或联系管理员"})
 		return
 	}
-	cents := math.Round(req.Amount * 100)
-	if !storage.ValidRechargeAmount(req.Amount) {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "充值金额须为 0.01 至 999999.99 元，最多保留两位小数"})
+	if err := h.repo.BindPaymentMode(cfg.Mode); err != nil {
+		c.JSON(503, gin.H{"error": "支付环境与数据库不一致，请联系管理员"})
 		return
 	}
-	req.Amount = cents / 100
-
-	orderToken, err := GenerateAPIKey()
+	if req.Amount < cfg.MinAmount {
+		c.JSON(400, gin.H{"error": "充值金额低于当前收款通道最低金额", "min_amount": cfg.MinAmount})
+		return
+	}
+	key := c.GetHeader("Idempotency-Key")
+	if !validCheckoutKey(key) {
+		c.JSON(400, gin.H{"error": "请提供 8 至 128 位的 Idempotency-Key（字母、数字、短横线或下划线）"})
+		return
+	}
+	u, err := h.repo.GetUserByUsername(claims.Username)
+	if err != nil || u == nil || u.Status != "active" {
+		c.JSON(403, gin.H{"error": "当前账号不可充值"})
+		return
+	}
+	if u.Balance+req.Amount > storage.MaxUserBalance {
+		c.JSON(400, gin.H{"error": "充值后余额将超过上限"})
+		return
+	}
+	token, err := GenerateAPIKey()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成订单号失败"})
+		c.JSON(500, gin.H{"error": "生成订单号失败"})
 		return
 	}
-	orderNo := "REC" + strings.TrimPrefix(orderToken, "sk-")
-
-	order := &storage.RechargeOrderRecord{
-		OrderNo:  orderNo,
-		Username: claims.Username,
-		Amount:   req.Amount,
-		Currency: currency,
-		Channel:  "stripe",
-		Status:   "pending",
-	}
-
-	baseURL := ResolvePublicBaseURL(c)
-	stripeKey := os.Getenv("STRIPE_API_KEY")
-	if strings.TrimSpace(os.Getenv("STRIPE_WEBHOOK_SECRET")) == "" {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "error": "支付到账通知尚未配置，请使用兑换券或联系管理员"})
+	number := "REC" + strings.TrimPrefix(token, "sk-")
+	o, err := h.repo.CreateRechargeIntent(&storage.RechargeOrderRecord{OrderNo: number, Username: claims.Username, Amount: math.Round(req.Amount*100) / 100, Currency: "CNY", IdempotencyKey: key, PaymentMode: cfg.Mode,
+		SuccessURL: cfg.returnURL(number, "success"), CancelURL: cfg.returnURL(number, "cancel"), ExpiresAt: time.Now().Add(23 * time.Hour).Unix()})
+	if errors.Is(err, storage.ErrPaymentConflict) {
+		c.JSON(409, gin.H{"error": "该支付请求已绑定其他金额，请重新确认充值金额", "reason": "idempotency_conflict"})
 		return
 	}
-	successURL := os.Getenv("STRIPE_SUCCESS_URL")
-	if successURL == "" {
-		successURL = fmt.Sprintf("%s/app/?tab=wallet&recharge=success&order_no=%s", baseURL, orderNo)
-	}
-
-	if stripeKey != "" {
-		stripeBase := os.Getenv("STRIPE_API_BASE")
-		if stripeBase == "" {
-			stripeBase = os.Getenv("STRIPE_BASE_URL")
-		}
-		if stripeBase == "" {
-			stripeBase = "https://api.stripe.com"
-		}
-		stripeEndpoint := fmt.Sprintf("%s/v1/checkout/sessions", strings.TrimRight(stripeBase, "/"))
-
-		data := url.Values{}
-		data.Set("success_url", successURL)
-		data.Set("cancel_url", fmt.Sprintf("%s/app/?tab=wallet&recharge=cancel&order_no=%s", baseURL, orderNo))
-		data.Set("payment_method_types[0]", "card")
-		data.Set("mode", "payment")
-		data.Set("adaptive_pricing[enabled]", "false")
-		data.Set("client_reference_id", orderNo)
-		data.Set("line_items[0][price_data][currency]", strings.ToLower(currency))
-		data.Set("line_items[0][price_data][unit_amount]", strconv.FormatInt(int64(cents), 10))
-		data.Set("line_items[0][price_data][product_data][name]", fmt.Sprintf("Airoute 钱包充值 (¥%.2f)", req.Amount))
-		data.Set("line_items[0][quantity]", "1")
-
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
-		defer cancel()
-		httpReq, err := http.NewRequestWithContext(ctx, "POST", stripeEndpoint, strings.NewReader(data.Encode()))
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "构造支付请求失败，请稍后重试"})
-			return
-		}
-		httpReq.Header.Set("Authorization", "Bearer "+stripeKey)
-		httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-		resp, err := http.DefaultClient.Do(httpReq)
-		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{
-				"code":  502,
-				"error": fmt.Sprintf("支付服务通信异常: %v。线上充值暂不可用，请使用兑换券充值或稍后重试。", err),
-			})
-			return
-		}
-		defer resp.Body.Close()
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{
-				"code":  502,
-				"error": "读取支付服务响应失败。线上充值暂不可用，请使用兑换券充值或稍后重试。",
-			})
-			return
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			var stripeErr struct {
-				Error struct {
-					Message string `json:"message"`
-				} `json:"error"`
-			}
-			_ = json.Unmarshal(body, &stripeErr)
-			errMsg := stripeErr.Error.Message
-			if errMsg == "" {
-				errMsg = fmt.Sprintf("HTTP %d", resp.StatusCode)
-			}
-			c.JSON(http.StatusBadGateway, gin.H{
-				"code":  502,
-				"error": fmt.Sprintf("支付服务通道返回错误 (%s)。线上充值暂不可用，请使用兑换券充值或联系管理员。", errMsg),
-			})
-			return
-		}
-
-		var stripeRes struct {
-			ID  string `json:"id"`
-			URL string `json:"url"`
-		}
-		if err := json.Unmarshal(body, &stripeRes); err != nil || stripeRes.URL == "" || stripeRes.ID == "" {
-			c.JSON(http.StatusBadGateway, gin.H{
-				"code":  502,
-				"error": "支付服务响应数据解析失败。线上充值暂不可用，请使用兑换券充值或稍后重试。",
-			})
-			return
-		}
-
-		order.StripeSessionID = stripeRes.ID
-		if err := h.repo.CreateRechargeOrder(order); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"code":  500,
-				"error": "创建充值订单记录失败，支付流程已终止。未产生有效账单且未扣款，请使用兑换券充值或联系管理员。",
-			})
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"code":         0,
-			"order_no":     orderNo,
-			"checkout_url": stripeRes.URL,
-			"session_id":   stripeRes.ID,
-		})
+	if err != nil {
+		c.JSON(500, gin.H{"error": "保存充值订单失败，未发起支付请求"})
 		return
 	}
-
-	// Online payment gateway is not configured: strictly reject, no sandbox fallback.
-	c.JSON(http.StatusServiceUnavailable, gin.H{
-		"code":  503,
-		"error": "系统尚未配置线上收款通道。当前不支持在线支付，请使用额度兑换券进行充值或联系管理员。",
-	})
+	number = o.OrderNo
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
+	defer cancel()
+	o, err = h.syncStripeOrder(ctx, number, cfg, true, "")
+	if err != nil {
+		telemetry.ScopedLogger("payment").Warn("checkout creation or recovery pending", "order_no", number, "error", err.Error())
+		c.Header("Retry-After", "5")
+		c.JSON(503, gin.H{"error": "支付服务暂不可用，请稍后重试同一请求，避免重复支付", "order_no": number, "retryable": true})
+		return
+	}
+	result := gin.H{"code": 0, "order_no": o.OrderNo, "status": o.Status}
+	if o.Status == "pending" && o.CheckoutURL != "" && o.ExpiresAt > time.Now().Unix() {
+		result["checkout_url"] = o.CheckoutURL
+	}
+	c.JSON(200, result)
 }
 
-// GetUserRechargeOrder polls the authenticated customer's own checkout only.
 func (h *AdminHandler) GetUserRechargeOrder(c *gin.Context) {
 	claims, ok := RequireAuthClaims(c)
 	if !ok {
 		return
 	}
-	order, err := h.repo.GetRechargeOrder(c.Param("order_no"))
-	if err != nil && err != sql.ErrNoRows {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询订单失败"})
+	o, err := h.repo.GetRechargeOrder(c.Param("order_no"))
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		c.JSON(500, gin.H{"error": "查询订单失败"})
 		return
 	}
-	if order == nil || order.Username != claims.Username {
-		c.JSON(http.StatusNotFound, gin.H{"error": "订单不存在"})
+	if o == nil || o.Username != claims.Username {
+		c.JSON(404, gin.H{"error": "订单不存在"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": order})
-}
-
-// SandboxRecharge allows instant wallet recharge for direct/fast checkout (Admin/Dev/Test only).
-func (h *AdminHandler) SandboxRecharge(c *gin.Context) {
-	claimsVal, exists := c.Get("admin_claims")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "未登录或登录凭证已失效"})
-		return
-	}
-	claims, ok := claimsVal.(*AdminClaims)
-	if !ok || claims == nil || claims.Username == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "无效的认证凭证"})
-		return
-	}
-
-	isTestOrDev := gin.Mode() == gin.TestMode || strings.HasSuffix(os.Args[0], ".test") || strings.EqualFold(os.Getenv("ENABLE_SANDBOX_RECHARGE"), "true")
-	if !isTestOrDev {
-		c.JSON(http.StatusForbidden, gin.H{
-			"code":  403,
-			"error": "充值沙箱与模拟支付已停用。系统不支持模拟充值，请使用额度兑换券进行充值。",
-		})
-		return
-	}
-
-	username := claims.Username
-
-	var req struct {
-		OrderNo string  `json:"order_no"`
-		Amount  float64 `json:"amount"`
-	}
-	_ = c.ShouldBindJSON(&req)
-
-	if req.OrderNo == "" {
-		req.OrderNo = c.Query("order_no")
-	}
-	if req.Amount <= 0 {
-		amtStr := c.Query("amount")
-		if a, err := strconv.ParseFloat(amtStr, 64); err == nil && a > 0 {
-			req.Amount = a
+	if cfg, err := loadStripeConfig(); err == nil && cfg.enabled() && o.PaymentMode == cfg.Mode {
+		if err := h.repo.BindPaymentMode(cfg.Mode); err != nil {
+			c.JSON(503, gin.H{"error": "支付环境与数据库不一致"})
+			return
+		}
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
+		defer cancel()
+		if updated, err := h.syncStripeOrder(ctx, o.OrderNo, cfg, false, ""); err == nil {
+			o = updated
 		}
 	}
-	if req.Amount <= 0 {
-		req.Amount = 50.0
-	}
-
-	if req.OrderNo == "" {
-		req.OrderNo = fmt.Sprintf("SANDBOX%d", time.Now().UnixMicro()%1000000)
-	}
-
-	// Create or complete order
-	order := &storage.RechargeOrderRecord{
-		OrderNo:         req.OrderNo,
-		Username:        username,
-		Amount:          req.Amount,
-		Currency:        "CNY",
-		Channel:         "sandbox",
-		StripeSessionID: "sandbox_" + req.OrderNo,
-		Status:          "pending",
-	}
-	_ = h.repo.CreateRechargeOrder(order)
-	completed, err := h.repo.CompleteRechargeOrder(req.OrderNo)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "充值入账失败: " + err.Error()})
-		return
-	}
-
-	u, _ := h.repo.GetUserByUsername(username)
-	var newBal float64
-	if u != nil {
-		newBal = u.Balance
-	}
-	// Credit the data-plane snapshot immediately; the wallet check runs against
-	// that snapshot on every inference request.
-	h.syncDataPlane()
-
-	c.JSON(http.StatusOK, gin.H{
-		"code":        0,
-		"message":     fmt.Sprintf("充值成功！已为用户 [%s] 入账 ¥%.2f", username, completed.Amount),
-		"new_balance": newBal,
-		"order_no":    req.OrderNo,
-	})
-}
-
-// ListUserRechargeOrders returns order history for current user.
-func (h *AdminHandler) ListUserRechargeOrders(c *gin.Context) {
-	claims, ok := RequireAuthClaims(c)
-	if !ok {
-		return
-	}
-
-	orders, err := h.repo.ListRechargeOrders(claims.Username)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "查询充值记录失败: " + err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": orders})
+	c.JSON(200, gin.H{"code": 0, "data": o})
 }

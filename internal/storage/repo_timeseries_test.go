@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -34,13 +35,13 @@ func TestGetStatsTimeSeries(t *testing.T) {
 		} else if i == 3 {
 			record.StatusCode = 500
 		}
-		if err := repo.RecordUsageLog(record); err != nil {
+		if err := repo.RecordUsageLogContext(context.Background(), record); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// Insert another log for a different tenant
-	if err := repo.RecordUsageLog(&UsageLogRecord{
+	if err := repo.RecordUsageLogContext(context.Background(), &UsageLogRecord{
 		APIKey:      "other-key",
 		Model:       "claude-3-opus",
 		StatusCode:  200,

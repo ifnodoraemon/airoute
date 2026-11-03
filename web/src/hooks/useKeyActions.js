@@ -7,6 +7,7 @@
 import { useCallback, useState } from 'react';
 import { apiFetch, apiJSON } from '../api/client';
 import { copyToClipboard as crossOriginCopy } from '../config';
+import { keyDisplayRef } from '../lib/apiKey';
 
 // Self-service key quotas. The gateway applies these to keys created through the
 // personal-key endpoint, and clamps rather than rejects: the form states the same
@@ -43,6 +44,9 @@ function emptyKey(adminUser, isZh, keyCount) {
     budget: 0,
     allowed_models: [],
     group_name: isAdmin ? 'default' : (adminUser?.group_name || 'default'),
+    // Empty follows the gateway-wide model_validation.default_level; the admin
+    // create form may pin it per key. Only the admin endpoint accepts it.
+    format_validation: '',
   };
 }
 
@@ -64,12 +68,6 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
     setCreatedKey(null);
     setShowKeyModal(true);
   }, [adminUser, isZh, keys]);
-
-  // Closing the dialog is also what drops the one-time plaintext credential.
-  const closeKeyModal = useCallback(() => {
-    setShowKeyModal(false);
-    setCreatedKey(null);
-  }, []);
 
   // Handle Key Creation
   const handleCreateKey = useCallback(async (e) => {
@@ -95,6 +93,11 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
     if (isAdmin) {
       payload.tenant_id = newKey.tenant_id.trim();
       payload.key = newKey.key || '';
+      // The self-service endpoint has no such field; sending it there would be a
+      // silently ignored key, so the console only offers it to administrators.
+      if (newKey.format_validation) {
+        payload.format_validation = newKey.format_validation;
+      }
     }
 
     setSubmittingKey(true);
@@ -109,10 +112,13 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
         const created = data.data || {};
         showToast(isZh ? 'API 访问密钥创建成功' : 'API access key created successfully', 'success');
         // Keep the dialog open: the plaintext credential exists only in this
-        // response, so this is the single chance to show it.
+        // response, so this is the single chance to show it. Re-open it explicitly:
+        // a dismissal may have slipped through while the request was in flight, and
+        // it must not swallow the one-time credential.
+        setShowKeyModal(true);
         setCreatedKey({
           key: created.key || '',
-          fingerprint: created.key_fingerprint || '',
+          keyId: created.key_id || '',
           tenant: created.tenant_id || (adminUser?.username || ''),
           rpm: created.rpm ?? payload.rpm,
           tpm: created.tpm ?? payload.tpm,
@@ -167,6 +173,8 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
   const handleToggleKeyStatus = useCallback(async (k) => {
     const nextStatus = k.status === 'disabled' ? 'active' : 'disabled';
     const actionText = nextStatus === 'active' ? (isZh ? '启用' : 'enable') : (isZh ? '禁用/停用' : 'disable');
+    // Name the key by its public identifier: the list no longer carries a credential.
+    const keyRef = keyDisplayRef(k);
     try {
       await apiJSON(`/api/v1/admin/keys/${k.id}`, {
         method: 'PUT',
@@ -175,8 +183,8 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
       });
       showToast(
         isZh
-          ? `已${actionText}密钥 ${k.key}，集群毫秒级热同步完成`
-          : `Key ${k.key} status set to ${nextStatus}, cluster synced`,
+          ? `已${actionText}密钥 ${keyRef}，集群毫秒级热同步完成`
+          : `Key ${keyRef} status set to ${nextStatus}, cluster synced`,
         'success'
       );
       refresh();
@@ -228,12 +236,23 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
     }
   }, [selectedKeyIds, isZh, showToast, refresh]);
 
-  // Copy text helper
+  // Copy text helper. The clipboard helper reports whether the copy really
+  // happened; a failed copy must never be announced as a success, because the
+  // caller may then close the one-time-credential dialog believing the secret
+  // was saved.
   const copyToClipboard = useCallback(async (txt) => {
-    await crossOriginCopy(txt);
+    const copied = await crossOriginCopy(txt);
+    if (!copied) {
+      showToast(
+        isZh ? '复制失败，请手动选中并复制' : 'Copy failed — select the text and copy it manually',
+        'error'
+      );
+      return false;
+    }
     setCopiedKey(txt);
     showToast(isZh ? '已成功复制到剪贴板！' : 'Copied to clipboard!', 'success');
     setTimeout(() => setCopiedKey(''), 2500);
+    return true;
   }, [isZh, showToast]);
 
   const reset = useCallback(() => {
@@ -252,7 +271,6 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
     createdKey,
     setNewKey,
     setShowKeyModal,
-    closeKeyModal,
     setSelectedKeyIds,
     setCopiedKey,
     handleOpenCreateKey,

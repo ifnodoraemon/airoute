@@ -1,9 +1,11 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -35,27 +37,13 @@ type ModelPriceKey struct {
 	Group string `json:"group"`
 }
 
-// ModelFallbackRecord represents a cross-model fallback rule.
-type ModelFallbackRecord struct {
-	Model         string    `json:"model"`
-	FallbackModel string    `json:"fallback_model"`
-	Enabled       bool      `json:"enabled"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
-}
-
 // BatchDeleteModelPrices deletes pricing for multiple models.
 func (r *Repository) BatchDeleteModelPrices(models []string) (int64, error) {
 	if len(models) == 0 {
 		return 0, nil
 	}
-	placeholders := make([]string, len(models))
-	args := make([]interface{}, len(models))
-	for i, m := range models {
-		placeholders[i] = "?"
-		args[i] = m
-	}
-	q := fmt.Sprintf(`DELETE FROM model_prices WHERE model IN (%s)`, strings.Join(placeholders, ","))
+	placeholders, args := inClause[string](nil, models)
+	q := fmt.Sprintf(`DELETE FROM model_prices WHERE model IN (%s)`, placeholders)
 	res, err := r.db.Exec(q, args...)
 	if err != nil {
 		return 0, err
@@ -104,29 +92,49 @@ func (r *Repository) GetModelFallbacks() (map[string]string, error) {
 	return m, nil
 }
 
-// SetModelFallback creates or updates a model fallback mapping.
-func (r *Repository) SetModelFallback(model, fallbackModel string, enabled bool) error {
-	en := 1
-	if !enabled {
-		en = 0
+// SetModelFallbacks creates or updates a set of model fallback mappings in one
+// transaction, so a caller that rewrites the fallback table cannot leave half of
+// it applied when a statement fails.
+//
+// Every entry is written enabled: the fallback rows the gateway serves are the
+// enabled ones (GetModelFallbacks filters on enabled = 1), and disabling a
+// mapping is expressed by removing it.
+func (r *Repository) SetModelFallbacks(fallbacks map[string]string) error {
+	if len(fallbacks) == 0 {
+		return nil
 	}
-	_, err := r.db.Exec(`
-		INSERT INTO model_fallbacks (model, fallback_model, enabled, updated_at)
-		VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-		ON CONFLICT(model) DO UPDATE SET fallback_model = excluded.fallback_model, enabled = excluded.enabled, updated_at = CURRENT_TIMESTAMP
-	`, model, fallbackModel, en)
-	return err
-}
+	models := make([]string, 0, len(fallbacks))
+	for model := range fallbacks {
+		models = append(models, model)
+	}
+	sort.Strings(models)
 
-// DeleteModelFallback removes a model fallback mapping.
-func (r *Repository) DeleteModelFallback(model string) error {
-	_, err := r.db.Exec(`DELETE FROM model_fallbacks WHERE model = ?`, model)
-	return err
+	tx, err := r.db.BeginTx(context.Background())
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+	for _, model := range models {
+		if _, err := tx.Exec(`
+			INSERT INTO model_fallbacks (model, fallback_model, enabled, updated_at)
+			VALUES (?, ?, 1, CURRENT_TIMESTAMP)
+			ON CONFLICT(model) DO UPDATE SET fallback_model = excluded.fallback_model, enabled = 1, updated_at = CURRENT_TIMESTAMP
+		`, model, fallbacks[model]); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // ListModelPrices returns all configured model pricing rates.
+//
+// It reads through Reader(): the billing engine reloads this list on cache misses,
+// and on SQLite it used to queue behind the single settlement writer (one slow
+// flush delayed every price lookup on the request path).
 func (r *Repository) ListModelPrices() ([]*ModelPriceRecord, error) {
-	rows, err := r.db.Query(`SELECT id, model, COALESCE(group_name, 'default'), prompt_price, completion_price, cache_read_price, fixed_price, currency, COALESCE(off_peak_enabled, 1), COALESCE(off_peak_start, '00:00'), COALESCE(off_peak_end, '08:30'), COALESCE(off_peak_discount, 0.5), COALESCE(off_peak_mode, 'custom'), COALESCE(off_peak_slots, ''), COALESCE(weekend_all_day, 1), created_at, updated_at FROM model_prices ORDER BY id ASC`)
+	rows, err := r.db.Reader().Query(r.db.Rebind(`SELECT id, model, COALESCE(group_name, 'default'), prompt_price, completion_price, cache_read_price, fixed_price, currency, COALESCE(off_peak_enabled, 1), COALESCE(off_peak_start, '00:00'), COALESCE(off_peak_end, '08:30'), COALESCE(off_peak_discount, 0.5), COALESCE(off_peak_mode, 'custom'), COALESCE(off_peak_slots, ''), COALESCE(weekend_all_day, 1), created_at, updated_at FROM model_prices ORDER BY id ASC`))
 	if err != nil {
 		return nil, err
 	}
@@ -144,11 +152,6 @@ func (r *Repository) ListModelPrices() ([]*ModelPriceRecord, error) {
 		list = append(list, &rec)
 	}
 	return list, nil
-}
-
-// GetModelPrice returns pricing rates for a specific model (defaulting to default group).
-func (r *Repository) GetModelPrice(modelName string) (*ModelPriceRecord, error) {
-	return r.GetModelPriceWithGroup(modelName, "default")
 }
 
 // GetModelPriceExact returns pricing rates for an exact model and group without fallback.
@@ -215,7 +218,11 @@ func normalizeModelPrice(rec *ModelPriceRecord) {
 		rec.OffPeakEnd = "08:30"
 	}
 	if rec.OffPeakDiscount <= 0 || rec.OffPeakDiscount > 1.0 {
-		rec.OffPeakDiscount = 0.5
+		// 0 (or an unset field) means "no discount". It used to become 0.5, so a
+		// rule the operator created without a coefficient silently billed half
+		// price. An out-of-range factor is clamped to full price for the same
+		// reason: never invent a discount.
+		rec.OffPeakDiscount = 1.0
 	}
 }
 

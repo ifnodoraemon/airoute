@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -127,7 +128,6 @@ func (h *Handler) HandleV1Info(c *gin.Context) {
 		"protocols": []string{
 			"OpenAI Chat Completions (/v1/chat/completions)",
 			"OpenAI Responses API (/v1/responses)",
-			"OpenAI Text Completions (/v1/completions)",
 			"OpenAI Models Registry (/v1/models)",
 			"OpenAI Embeddings (/v1/embeddings)",
 			"OpenAI Moderations (/v1/moderations)",
@@ -135,11 +135,15 @@ func (h *Handler) HandleV1Info(c *gin.Context) {
 			"Anthropic Claude Messages (/v1/messages)",
 			"Google Gemini Models (/v1beta/models)",
 			"Multimodal Ingress (/v1/images/generations, /v1/audio/speech, /v1/audio/transcriptions, /v1/videos/generations)",
-			"Model Context Protocol (MCP 2024-11-05) (/v1/mcp, /v1/mcp/sse, /v1/mcp/messages)",
+			// D-10: rendered from the MCP handler's own negotiation table so the
+			// discovery answer cannot advertise a different revision than
+			// /mcp's server block (it said 2024-11-05 while the server spoke
+			// 2026-07-28 and negotiated down to 2024-11-05).
+			fmt.Sprintf("Model Context Protocol (MCP %s, down to %s) (/v1/mcp, /v1/mcp/sse, /v1/mcp/messages)",
+				mcpDefaultProtocolVersion, mcpSupportedVersions[len(mcpSupportedVersions)-1]),
 		},
 		"endpoints": gin.H{
 			"chat_completions":     "/v1/chat/completions",
-			"completions":          "/v1/completions",
 			"responses":            "/v1/responses",
 			"models":               "/v1/models",
 			"embeddings":           "/v1/embeddings",
@@ -242,7 +246,6 @@ func (h *Handler) HandlePublicStatus(c *gin.Context) {
 			"oauth_github_enabled":       os.Getenv("GITHUB_CLIENT_ID") != "",
 			"oauth_google_enabled":       os.Getenv("GOOGLE_CLIENT_ID") != "",
 			"stripe_enabled":             strings.TrimSpace(os.Getenv("STRIPE_API_KEY")) != "" && strings.TrimSpace(os.Getenv("STRIPE_WEBHOOK_SECRET")) != "",
-			"sandbox_recharge_enabled":   os.Getenv("ENABLE_SANDBOX_RECHARGE") == "true",
 		},
 	})
 }

@@ -5,7 +5,7 @@ import {
   Key,
   Terminal,
   ShieldAlert,
-  ExternalLink,
+
   AlertCircle,
   Cpu,
   Sparkles,
@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import AnnouncementBanner from './components/AnnouncementBanner';
 import Toast from './components/Toast';
+import ErrorBoundary from './components/ErrorBoundary';
 import { apiFetch } from './api/client';
 import { useApiSession } from './hooks/useApiSession';
 import { useSessionRestore } from './hooks/useSessionRestore';
@@ -38,6 +39,13 @@ import { useLogsData, LOG_PAGE_SIZE } from './hooks/useLogsData';
 import { useChannelActions } from './hooks/useChannelActions';
 import { useKeyActions } from './hooks/useKeyActions';
 import { getConsoleRoute } from './lib/consoleRoute';
+import {
+  ADMIN_NAV_GROUPS,
+  USER_NAV_GROUPS,
+  allowedTabsFor,
+  navGroupForTab,
+  navGroupLabel,
+} from './lib/navGroups';
 
 // Lazy loaded views and heavy modals for code splitting and fast initial loading.
 const QuickStartModal = lazy(() => import('./components/QuickStartModal'));
@@ -64,6 +72,7 @@ const SupplierReconciliationView = lazy(() => import('./components/SupplierRecon
 const KeysView = lazy(() => import('./components/KeysView'));
 const LogsView = lazy(() => import('./components/LogsView'));
 const DashboardView = lazy(() => import('./components/DashboardView'));
+const MyUsageView = lazy(() => import('./components/MyUsageView'));
 const PlaygroundView = lazy(() => import('./components/PlaygroundView'));
 const DocsView = lazy(() => import('./components/DocsView'));
 const OnboardingModal = lazy(() => import('./components/OnboardingModal'));
@@ -71,11 +80,21 @@ const VisualTopologyModal = lazy(() => import('./components/VisualTopologyModal'
 const AnnouncementModal = lazy(() => import('./components/AnnouncementModal'));
 const AiCopilot = lazy(() => import('./components/AiCopilot'));
 
-function ViewLoader() {
+/**
+ * Suspense fallback for the lazily loaded views and modals.
+ *
+ * Takes the language explicitly instead of reading I18nContext: one of its call
+ * sites (the session-restore loader below) renders before the provider is mounted,
+ * so context would silently fall back to Chinese in an English console.
+ *
+ * Exported for the shell's regression tests.
+ */
+export function ViewLoader({ lang = 'zh' }) {
+  const t = translations[lang] || translations.zh;
   return (
     <div className="flex flex-col items-center justify-center p-16 text-[#656B75] dark:text-[#A1A7B0]">
       <div className="w-7 h-7 border-2 border-[#355CFF] border-t-transparent rounded-full animate-spin mb-3"></div>
-      <span className="text-xs font-medium tracking-wide">Loading module...</span>
+      <span className="text-xs font-medium tracking-wide">{t.loadingModule}</span>
     </div>
   );
 }
@@ -89,6 +108,44 @@ import { useConsoleOverlays } from './hooks/useConsoleOverlays';
 import { useConsoleSelections } from './hooks/useConsoleSelections';
 import { useConsoleChrome } from './hooks/useConsoleChrome';
 import { useConsoleSession } from './hooks/useConsoleSession';
+
+// Sidebar item metadata: one entry per console tab, holding the icon, the label
+// and (where applicable) the count badge. Group membership and order live in
+// lib/navGroups.js; this map only says how a tab looks, so the grouped renderer
+// below is a plain map over the group config and the sidebar and the breadcrumb
+// read the same navigation description.
+//
+// `label`/`title` receive the translation table, the language flag and the role
+// because several tabs have no i18n key yet (wallet in the admin console) or
+// legitimately read differently per role (wallet is "credits & top-up" for
+// admins, "my wallet" for users). `title` only exists where the tooltip differs
+// from the visible label (users).
+// `count` receives the console data slices (and the role, for the one badge that
+// differs) and returns the badge number, or 0/undefined for tabs without a badge.
+const SIDEBAR_ITEMS = {
+  dashboard: { icon: BarChart3, label: (t) => t.navDashboard },
+  // The loaded-row badge has always been an admin-only detail; the regular-user
+  // sidebar rendered logs without it.
+  logs: { icon: History, label: (t) => t.navLogs, count: (d, isAdmin) => (isAdmin ? d.logs : 0) },
+  models: { icon: Cpu, label: (t) => t.navModels, count: (d) => d.models },
+  channels: { icon: Server, label: (t) => t.navChannels, count: (d) => d.channels },
+  reconciliation: { icon: Coins, label: (t) => t.navReconciliation },
+  pricing: { icon: DollarSign, label: (t) => t.navPricing },
+  wallet: {
+    icon: Wallet,
+    label: (t, isZh, isAdmin) =>
+      isAdmin ? (isZh ? '卡密与充值' : 'Wallet & Credits') : (t.navWallet || (isZh ? '我的钱包' : 'My Wallet')),
+  },
+  keys: { icon: Key, label: (t) => t.navKeys, count: (d) => d.keys },
+  users: {
+    icon: ShieldCheck,
+    label: (t, isZh) => t.navUsers || (isZh ? '用户管理' : 'Users'),
+    title: (t, isZh) => t.navUsers || (isZh ? '用户管理' : 'User Management'),
+  },
+  playground: { icon: Terminal, label: (t) => t.navPlayground },
+  skills: { icon: Sparkles, label: (t) => t.navSkills || 'Skill Hub' },
+  mcp: { icon: Cpu, label: (t, isZh) => t.navMcp || (isZh ? 'MCP 广场' : 'MCP Hub') },
+};
 
 export default function App() {
   // Language, theme and the toast each carry their own logic (persistence, the
@@ -287,6 +344,16 @@ export default function App() {
     setEditingChannelId(null);
     setShowChannelModal(false);
     setShowKeyModal(false);
+    // Console-shell state that is scoped to the account rather than to a view.
+    // These were missed: the dashboard stayed drilled into the previous operator's
+    // key row (so the next session's KPI cards reported that key, or all zeros
+    // once it was deleted), and an announcement dialog left open survived into the
+    // next session. The audit-log key filter is account-scoped too: a stale
+    // `key_id` from another account silently filters the new account's log to
+    // empty, so the cursor and key drill-down are reset with it.
+    setDashboardSelectedKey('');
+    setShowAnnouncementModal(false);
+    setLogFilters({ key_id: '', page: '1' });
   };
 
   const handleLogout = async () => {
@@ -306,6 +373,7 @@ export default function App() {
     activeLogDetail, setActiveLogDetail,
     traceSnapshotId, setTraceSnapshotId,
     curlExportCmd, setCurlExportCmd,
+    playgroundScenario, setPlaygroundScenario,
     reset: resetSelections,
   } = useConsoleSelections();
   const [dashboardSelectedKey, setDashboardSelectedKey] = useState('');
@@ -379,19 +447,21 @@ export default function App() {
     };
   }, [handleLocationChange]);
 
-  // Automatically ensure regular user stays within permitted tabs.
+  // Keep the active tab inside what the signed-in role may open.
   //
-  // 'models' is intentionally absent: the model-routes view is built entirely on
-  // admin-only endpoints (/admin/models/routes, /admin/channels), so a regular
-  // user landing there saw a page that could only fail with permission errors.
-  // 'pricing' stays (GET /admin/pricing is available to any authenticated key
-  // owner) but its write actions are hidden for non-admins.
+  // The allowed set comes from lib/navGroups.js — the same list the sidebar renders
+  // and lib/consoleRoute.js resolves deep links against — so a tab can no longer be
+  // advertised in the navigation while a hand-written guard forbids it. That drift
+  // is exactly what hid the self-service usage page from regular users: the guard's
+  // private list omitted `dashboard`, so "Overview" bounced them to the wallet.
+  //
+  // An unknown/forbidden tab falls back to the role's FIRST allowed tab (the same
+  // rule the route resolver uses) instead of a hard-coded page.
   useEffect(() => {
-    if (!restoringSession && adminUser && adminUser.role !== 'admin') {
-      const allowedTabs = ['wallet', 'keys', 'playground', 'pricing', 'logs', 'docs'];
-      if (!allowedTabs.includes(currentTab)) {
-        setCurrentTab('wallet');
-      }
+    if (restoringSession || !adminUser) return;
+    const allowedTabs = allowedTabsFor(adminUser.role === 'admin');
+    if (!allowedTabs.includes(currentTab)) {
+      setCurrentTab(allowedTabs[0]);
     }
   }, [adminUser, currentTab, setCurrentTab, restoringSession]);
 
@@ -611,21 +681,18 @@ export default function App() {
   // matched on fields the client does not check, e.g. error_message).
   const filteredLogs = logs;
 
-  if (restoringSession && viewMode === 'console') return <ViewLoader />;
+  if (restoringSession && viewMode === 'console') return <ViewLoader lang={lang} />;
 
   if (viewMode === 'landing') {
     return (
       <I18nContext.Provider value={{ lang, setLang, toggleLang, t }}>
         <div className="min-h-screen bg-[#F7F7F5] dark:bg-[#111214] text-[#202124] dark:text-[#F1F2F4] font-sans selection:bg-[#355CFF] selection:text-white">
           <Toast toast={toast} onClose={dismissToast} />
-          <Suspense fallback={<ViewLoader />}>
+          <Suspense fallback={<ViewLoader lang={lang} />}>
             <LandingPage
               isLoggedIn={!!adminToken || !!adminUser}
-              adminUser={adminUser}
               lang={lang}
-              setLang={setLang}
               toggleLang={toggleLang}
-              t={t}
               onOpenLogin={() => {
                 setAuthTab('login');
                 setViewMode('auth');
@@ -651,15 +718,11 @@ export default function App() {
                 }
               }}
               onViewStatus={() => setViewMode('status')}
-              stats={stats}
-              channelsCount={channels.length}
-              modelsCount={models.length}
             />
             <LoginModal
               isOpen={showLoginModal}
               onClose={() => setShowLoginModal(false)}
               lang={lang}
-              t={t}
               onLoginSuccess={(token, user) => {
                 resetWorkspaceState();
                 signIn(user, { token, tab: user.role === 'admin' ? 'dashboard' : 'wallet' });
@@ -679,13 +742,11 @@ export default function App() {
       <I18nContext.Provider value={{ lang, setLang, toggleLang, t }}>
         <div className="min-h-screen bg-[#F7F7F5] dark:bg-[#111214] text-[#202124] dark:text-[#F1F2F4] font-sans selection:bg-[#355CFF] selection:text-white">
           <Toast toast={toast} onClose={dismissToast} />
-          <Suspense fallback={<ViewLoader />}>
+          <Suspense fallback={<ViewLoader lang={lang} />}>
             <AuthPage
               initialTab={authTab}
               lang={lang}
-              setLang={setLang}
               toggleLang={toggleLang}
-              t={t}
               onLoginSuccess={(token, user) => {
                 // Every login path must start from a clean workspace: without this
                 // a session begun here inherited the previous account's keys, logs,
@@ -709,7 +770,7 @@ export default function App() {
       <I18nContext.Provider value={{ lang, setLang, toggleLang, t }}>
         <div className="min-h-screen bg-[#F7F7F5] dark:bg-[#111214] text-[#202124] dark:text-[#F1F2F4] font-sans selection:bg-[#355CFF] selection:text-white">
           <Toast toast={toast} onClose={dismissToast} />
-          <Suspense fallback={<ViewLoader />}>
+          <Suspense fallback={<ViewLoader lang={lang} />}>
             <ServiceStatus
               isStandalone={true}
               onBackHome={() => setViewMode('landing')}
@@ -733,7 +794,6 @@ export default function App() {
               channels={channels}
               onRefresh={fetchData}
               probeLatencies={channelLatencies}
-              adminFetch={apiFetch}
               showToast={showToast}
               onBatchProbe={handleBatchPing}
               batchTesting={batchTesting}
@@ -742,7 +802,6 @@ export default function App() {
               isOpen={showLoginModal}
               onClose={() => setShowLoginModal(false)}
               lang={lang}
-              t={t}
               onLoginSuccess={(token, user) => {
                 resetWorkspaceState();
                 signIn(user, { token, tab: user.role === 'admin' ? 'dashboard' : 'wallet' });
@@ -773,7 +832,6 @@ export default function App() {
             copyToClipboard(txt);
           }}
           lang={lang}
-          t={t}
         />
       )}
 
@@ -781,7 +839,6 @@ export default function App() {
       {activeLogDetail && (
         <LogDetailModal
           log={activeLogDetail}
-          prices={prices}
           onClose={() => setActiveLogDetail(null)}
           onCopy={(txt) => {
             copyToClipboard(txt);
@@ -802,7 +859,6 @@ export default function App() {
             setActiveLogDetail(null);
           }}
           lang={lang}
-          t={t}
         />
       )}
 
@@ -815,7 +871,6 @@ export default function App() {
             copyToClipboard(txt);
           }}
           lang={lang}
-          t={t}
         />
       )}
 
@@ -888,303 +943,70 @@ export default function App() {
           }`;
           const navIconColor = (tab) => (currentTab === tab ? 'text-[#355CFF] dark:text-[#91A7FF]' : 'text-[#656B75] dark:text-[#A1A7B0]');
 
+          // One grouped navigation for both roles. Membership and order come from
+          // lib/navGroups.js (the same config the breadcrumb reads); appearance
+          // comes from SIDEBAR_ITEMS. The admin and regular-user trees used to be
+          // hand-written separately, which is how the breadcrumb drifted.
+          const isAdmin = adminUser?.role === 'admin';
+          const groups = isAdmin ? ADMIN_NAV_GROUPS : USER_NAV_GROUPS;
+          const counts = {
+            logs: logs.length,
+            models: models.length,
+            channels: channels.length,
+            keys: keys.length,
+          };
+
           return (
             <nav className="flex-1 p-2 space-y-4 overflow-y-auto">
-              {adminUser?.role === 'admin' ? (
-                /* Admin Grouped Enterprise Navigation */
-                <div className="space-y-4">
-                  {/* Group 1: 监控与分析 */}
-                  <div>
+              <div className="space-y-4">
+                {groups.map((group) => (
+                  <div key={group.id}>
                     {!sidebarCollapsed && (
                       <span className="px-2.5 text-[10px] font-semibold tracking-wider text-[#656B75] dark:text-[#A1A7B0] uppercase block mb-1">
-                        {isZh ? '监控与分析' : 'Monitoring'}
+                        {navGroupLabel(group, isZh)}
                       </span>
                     )}
                     <div className="space-y-0.5">
-                      <button
-                        onClick={() => setCurrentTab('dashboard')}
-                        title={t.navDashboard}
-                        className={navBtnClass('dashboard')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <BarChart3 className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('dashboard')}`} />
-                          {!sidebarCollapsed && <span>{t.navDashboard}</span>}
-                        </div>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('logs')}
-                        title={t.navLogs}
-                        className={navBtnClass('logs')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <History className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('logs')}`} />
-                          {!sidebarCollapsed && <span>{t.navLogs}</span>}
-                        </div>
-                        {!sidebarCollapsed && logs.length > 0 && (
-                          <span className={`text-xs font-mono ${currentTab === 'logs' ? 'text-[#355CFF] dark:text-[#91A7FF]' : 'text-[#656B75] dark:text-[#A1A7B0]'}`}>
-                            {logs.length}
-                          </span>
-                        )}
-                      </button>
+                      {group.tabs.map((tab) => {
+                        const item = SIDEBAR_ITEMS[tab];
+                        const Icon = item.icon;
+                        const label = item.label(t, isZh, isAdmin);
+                        const title = item.title ? item.title(t, isZh, isAdmin) : label;
+                        const count = item.count ? item.count(counts, isAdmin) : 0;
+                        return (
+                          <button
+                            key={tab}
+                            onClick={() => setCurrentTab(tab)}
+                            title={title}
+                            className={navBtnClass(tab)}
+                          >
+                            <div className="flex items-center space-x-2.5">
+                              <Icon className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor(tab)}`} />
+                              {!sidebarCollapsed && <span>{label}</span>}
+                            </div>
+                            {!sidebarCollapsed && count > 0 && (
+                              <span className={`text-xs font-mono ${currentTab === tab ? 'text-[#355CFF] dark:text-[#91A7FF]' : 'text-[#656B75] dark:text-[#A1A7B0]'}`}>
+                                {count}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
-
-                  {/* Group 2: 模型网关与调度 */}
-                  <div>
-                    {!sidebarCollapsed && (
-                      <span className="px-2.5 text-[10px] font-semibold tracking-wider text-[#656B75] dark:text-[#A1A7B0] uppercase block mb-1">
-                        {isZh ? '模型网关与调度' : 'Gateway'}
-                      </span>
-                    )}
-                    <div className="space-y-0.5">
-                      <button
-                        onClick={() => setCurrentTab('models')}
-                        title={t.navModels}
-                        className={navBtnClass('models')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Cpu className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('models')}`} />
-                          {!sidebarCollapsed && <span>{t.navModels}</span>}
-                        </div>
-                        {!sidebarCollapsed && models.length > 0 && (
-                          <span className={`text-xs font-mono ${currentTab === 'models' ? 'text-[#355CFF] dark:text-[#91A7FF]' : 'text-[#656B75] dark:text-[#A1A7B0]'}`}>
-                            {models.length}
-                          </span>
-                        )}
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('channels')}
-                        title={t.navChannels}
-                        className={navBtnClass('channels')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Server className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('channels')}`} />
-                          {!sidebarCollapsed && <span>{t.navChannels}</span>}
-                        </div>
-                        {!sidebarCollapsed && channels.length > 0 && (
-                          <span className={`text-xs font-mono ${currentTab === 'channels' ? 'text-[#355CFF] dark:text-[#91A7FF]' : 'text-[#656B75] dark:text-[#A1A7B0]'}`}>
-                            {channels.length}
-                          </span>
-                        )}
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('reconciliation')}
-                        title={t.navReconciliation}
-                        className={navBtnClass('reconciliation')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Coins className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('reconciliation')}`} />
-                          {!sidebarCollapsed && <span>{t.navReconciliation}</span>}
-                        </div>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('pricing')}
-                        title={t.navPricing}
-                        className={navBtnClass('pricing')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <DollarSign className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('pricing')}`} />
-                          {!sidebarCollapsed && <span>{t.navPricing}</span>}
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Group 3: 访问控制与资产 */}
-                  <div>
-                    {!sidebarCollapsed && (
-                      <span className="px-2.5 text-[10px] font-semibold tracking-wider text-[#656B75] dark:text-[#A1A7B0] uppercase block mb-1">
-                        {isZh ? '安全与资产' : 'Security'}
-                      </span>
-                    )}
-                    <div className="space-y-0.5">
-                      <button
-                        onClick={() => setCurrentTab('keys')}
-                        title={t.navKeys}
-                        className={navBtnClass('keys')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Key className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('keys')}`} />
-                          {!sidebarCollapsed && <span>{t.navKeys}</span>}
-                        </div>
-                        {!sidebarCollapsed && keys.length > 0 && (
-                          <span className={`text-xs font-mono ${currentTab === 'keys' ? 'text-[#355CFF] dark:text-[#91A7FF]' : 'text-[#656B75] dark:text-[#A1A7B0]'}`}>
-                            {keys.length}
-                          </span>
-                        )}
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('users')}
-                        title={t.navUsers || (isZh ? '用户管理' : 'User Management')}
-                        className={navBtnClass('users')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <ShieldCheck className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('users')}`} />
-                          {!sidebarCollapsed && <span>{t.navUsers || (isZh ? '用户管理' : 'Users')}</span>}
-                        </div>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('wallet')}
-                        title={isZh ? '卡密与充值' : 'Wallet & Credits'}
-                        className={navBtnClass('wallet')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Wallet className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('wallet')}`} />
-                          {!sidebarCollapsed && <span>{isZh ? '卡密与充值' : 'Wallet & Credits'}</span>}
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Group 4: 演练与协议生态 */}
-                  <div>
-                    {!sidebarCollapsed && (
-                      <span className="px-2.5 text-[10px] font-semibold tracking-wider text-[#656B75] dark:text-[#A1A7B0] uppercase block mb-1">
-                        {isZh ? '演练与生态' : 'Ecosystem'}
-                      </span>
-                    )}
-                    <div className="space-y-0.5">
-                      <button
-                        onClick={() => setCurrentTab('playground')}
-                        title={t.navPlayground}
-                        className={navBtnClass('playground')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Terminal className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('playground')}`} />
-                          {!sidebarCollapsed && <span>{t.navPlayground}</span>}
-                        </div>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('skills')}
-                        title={t.navSkills || 'Skill Hub'}
-                        className={navBtnClass('skills')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Sparkles className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('skills')}`} />
-                          {!sidebarCollapsed && <span>{t.navSkills || 'Skill Hub'}</span>}
-                        </div>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('mcp')}
-                        title={t.navMcp || (isZh ? 'MCP 广场' : 'MCP Hub')}
-                        className={navBtnClass('mcp')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Cpu className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('mcp')}`} />
-                          {!sidebarCollapsed && <span>{t.navMcp || (isZh ? 'MCP 广场' : 'MCP Hub')}</span>}
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                /* Regular User Navigation */
-                <div className="space-y-4">
-                  <div>
-                    {!sidebarCollapsed && (
-                      <span className="px-2.5 text-[10px] font-semibold tracking-wider text-[#656B75] dark:text-[#A1A7B0] uppercase block mb-1">
-                        {isZh ? '资产与凭据' : 'Assets'}
-                      </span>
-                    )}
-                    <div className="space-y-0.5">
-                      <button
-                        onClick={() => setCurrentTab('wallet')}
-                        title={t.navWallet || (isZh ? '我的钱包' : 'My Wallet')}
-                        className={navBtnClass('wallet')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Wallet className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('wallet')}`} />
-                          {!sidebarCollapsed && <span>{t.navWallet || (isZh ? '我的钱包' : 'My Wallet')}</span>}
-                        </div>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('keys')}
-                        title={t.navKeys}
-                        className={navBtnClass('keys')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Key className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('keys')}`} />
-                          {!sidebarCollapsed && <span>{t.navKeys}</span>}
-                        </div>
-                        {!sidebarCollapsed && keys.length > 0 && (
-                          <span className={`text-xs font-mono ${currentTab === 'keys' ? 'text-[#355CFF] dark:text-[#91A7FF]' : 'text-[#656B75] dark:text-[#A1A7B0]'}`}>
-                            {keys.length}
-                          </span>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    {!sidebarCollapsed && (
-                      <span className="px-2.5 text-[10px] font-semibold tracking-wider text-[#656B75] dark:text-[#A1A7B0] uppercase block mb-1">
-                        {isZh ? '演练与使用' : 'Usage'}
-                      </span>
-                    )}
-                    <div className="space-y-0.5">
-                      <button
-                        onClick={() => setCurrentTab('playground')}
-                        title={t.navPlayground}
-                        className={navBtnClass('playground')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <Terminal className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('playground')}`} />
-                          {!sidebarCollapsed && <span>{t.navPlayground}</span>}
-                        </div>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('pricing')}
-                        title={t.navPricing}
-                        className={navBtnClass('pricing')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <DollarSign className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('pricing')}`} />
-                          {!sidebarCollapsed && <span>{t.navPricing}</span>}
-                        </div>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentTab('logs')}
-                        title={t.navLogs}
-                        className={navBtnClass('logs')}
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          <History className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('logs')}`} />
-                          {!sidebarCollapsed && <span>{t.navLogs}</span>}
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+                ))}
+              </div>
 
               <div className="pt-2 border-t border-[#E4E6E9] dark:border-[#2C3038]">
                 <button
-                  onClick={() => {
-                    setViewMode('landing');
-                    setTimeout(() => {
-                      const el = document.getElementById('docs');
-                      if (el) el.scrollIntoView({ behavior: 'smooth' });
-                    }, 100);
-                  }}
-                  className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] transition-colors cursor-pointer group`}
+                  onClick={() => setCurrentTab('docs')}
+                  className={navBtnClass('docs')}
                   title={isZh ? '查阅开发文档' : 'Documentation'}
                 >
                   <div className="flex items-center space-x-2.5">
-                    <BookOpen className="w-4 h-4 text-[#656B75] dark:text-[#A1A7B0] group-hover:text-[#202124] dark:group-hover:text-[#F1F2F4]" />
-                    {!sidebarCollapsed && <span>{t.navViewDocs || (isZh ? '开发文档 ↗' : 'Docs ↗')}</span>}
+                    <BookOpen className={`w-4 h-4 shrink-0 transition-colors duration-150 ${navIconColor('docs')}`} />
+                    {!sidebarCollapsed && <span>{t.navViewDocs || (isZh ? '开发文档' : 'Docs')}</span>}
                   </div>
-                  {!sidebarCollapsed && <ExternalLink className="w-3 h-3 opacity-40 group-hover:opacity-80" />}
                 </button>
               </div>
             </nav>
@@ -1222,17 +1044,12 @@ export default function App() {
             {/* Clean Breadcrumb */}
             <div className="flex items-center space-x-2 text-xs">
               <span className="text-[#656B75] dark:text-[#A1A7B0] font-normal">
-                {adminUser?.role === 'admin'
-                  ? ['dashboard', 'logs'].includes(currentTab)
-                    ? (isZh ? '监控与分析' : 'Monitoring')
-                    : ['models', 'channels', 'reconciliation', 'pricing'].includes(currentTab)
-                    ? (isZh ? '模型网关与调度' : 'Gateway')
-                    : ['keys', 'users', 'wallet'].includes(currentTab)
-                    ? (isZh ? '安全与资产' : 'Security')
-                    : (isZh ? '演练与生态' : 'Ecosystem')
-                  : ['wallet', 'keys'].includes(currentTab)
-                  ? (isZh ? '资产与凭据' : 'Assets')
-                  : (isZh ? '演练与使用' : 'Usage')}
+                {/* The group label is derived from the same config as the
+                    sidebar, so what a tab is filed under can no longer differ
+                    between the two. `docs` is group-less by design and falls
+                    back to its own label. */}
+                {navGroupLabel(navGroupForTab(currentTab, adminUser?.role === 'admin'), isZh)
+                  || (isZh ? '文档' : 'Docs')}
               </span>
               <span className="text-[#E4E6E9] dark:text-[#2C3038]">/</span>
               <span className="font-semibold text-[#202124] dark:text-[#F1F2F4]">
@@ -1379,9 +1196,19 @@ export default function App() {
             </div>
           )}
 
-          <Suspense fallback={<ViewLoader />}>
+          {/* A crashed view must not take the shell with it: the sidebar, header and
+              the module switcher stay usable and the retry button re-renders just
+              this region. Keyed by tab, so moving to another module always starts
+              from a clean boundary. */}
+          <ErrorBoundary key={currentTab} lang={lang}>
+            <Suspense fallback={<ViewLoader lang={lang} />}>
+            {/* 1a. SELF-SERVICE DASHBOARD (regular users) */}
+            {currentTab === 'dashboard' && adminUser?.role !== 'admin' && (
+              <MyUsageView adminFetch={apiFetch} showToast={showToast} lang={lang} />
+            )}
+
             {/* 1. ENTERPRISE BUSINESS & TELEMETRY DASHBOARD */}
-            {currentTab === 'dashboard' && (
+            {currentTab === 'dashboard' && adminUser?.role === 'admin' && (
               <DashboardView
                 stats={stats}
                 onNavigateToErrors={() => {
@@ -1420,17 +1247,7 @@ export default function App() {
                 adminFetch={apiFetch}
                 showToast={showToast}
                 lang={lang}
-                t={t}
                 setCurrentTab={setCurrentTab}
-                onNavigateToPlayground={(m, modality) => {
-                  setPlayModel(m);
-                  if (modality && modality !== 'chat') {
-                    setPlayModality(modality);
-                  } else {
-                    setPlayModality('chat');
-                  }
-                  setCurrentTab('playground');
-                }}
               />
             )}
 
@@ -1439,10 +1256,8 @@ export default function App() {
               <PricingManager
                 adminFetch={apiFetch}
                 showToast={showToast}
-                stats={stats}
                 isAdmin={adminUser?.role === 'admin'}
                 lang={lang}
-                t={t}
                 modelRoutes={modelRoutes}
                 setCurrentTab={setCurrentTab}
                 groupMultipliers={groupMultipliers}
@@ -1472,7 +1287,6 @@ export default function App() {
                 handleDeleteChannel={handleDeleteChannel}
                 onNavigateToReconciliation={() => setCurrentTab('reconciliation')}
                 lang={lang}
-                t={t}
               />
             )}
 
@@ -1486,7 +1300,6 @@ export default function App() {
                   setCurrentTab('logs');
                 }}
                 lang={lang}
-                t={t}
               />
             )}
 
@@ -1511,18 +1324,19 @@ export default function App() {
                 pricingGroups={pricingGroups}
                 groupMultipliers={groupMultipliers}
                 onNavigateToPricing={() => setCurrentTab('pricing')}
-                onNavigateToDashboard={(keyStr, keyId) => {
+                onNavigateToDashboard={(keyId) => {
                   if (adminUser?.role !== 'admin') {
                     setLogFilters({ q: '', key_id: String(keyId), session: '', correlation_type: 'session_id', range: 'all', start: '', end: '', model: 'all', channel: 'all', status: 'all', cache: 'all', latency: 'all' });
                     resetOffset();
                     setCurrentTab('logs');
                   } else {
-                    setDashboardSelectedKey(keyStr);
+                    // The dashboard drills down by row id: the key ID (`ak_…`)
+                    // shown in the list is a display identifier, not a filter.
+                    setDashboardSelectedKey(keyId != null ? String(keyId) : '');
                     setCurrentTab('dashboard');
                   }
                 }}
                 lang={lang}
-                t={t}
               />
             )}
 
@@ -1561,7 +1375,6 @@ export default function App() {
                 handleDeleteSingleLog={handleDeleteSingleLog}
                 isAdmin={adminUser?.role === 'admin'}
                 lang={lang}
-                t={t}
               />
             )}
 
@@ -1569,6 +1382,7 @@ export default function App() {
             {currentTab === 'skills' && (
               <SkillHubView
                 adminFetch={apiFetch}
+                onTrial={(scenario) => { setPlaygroundScenario(scenario); setPlayModel(''); setPlayModality('chat'); setCurrentTab('playground'); }}
                 onCopy={(txt) => {
                   copyToClipboard(txt);
                 }}
@@ -1582,8 +1396,6 @@ export default function App() {
             {currentTab === 'mcp' && (
               <McpIntegrationView
                 adminFetch={apiFetch}
-                adminToken={adminToken}
-                keys={keys}
                 onCopy={(txt) => {
                   copyToClipboard(txt);
                 }}
@@ -1597,11 +1409,10 @@ export default function App() {
             {currentTab === 'users' && (
               <UserManagementView
                 adminUser={adminUser}
-                adminToken={adminToken}
+                onUserCreated={fetchData}
                 adminFetch={apiFetch}
                 showToast={showToast}
                 lang={lang}
-                t={t}
               />
             )}
 
@@ -1609,7 +1420,6 @@ export default function App() {
             {currentTab === 'wallet' && (
               <WalletManagementView
                 adminUser={adminUser}
-                adminToken={adminToken}
                 adminFetch={apiFetch}
                 showToast={showToast}
                 onUserUpdated={(updatedUser) => {
@@ -1619,7 +1429,6 @@ export default function App() {
                   if (newBal !== undefined) patchUser({ balance: newBal });
                 }}
                 lang={lang}
-                t={t}
               />
             )}
 
@@ -1630,10 +1439,10 @@ export default function App() {
                 models={models}
                 modelRoutes={modelRoutes}
                 prices={prices}
-                adminFetch={apiFetch}
                 showToast={showToast}
                 initialModel={playModel}
                 initialModality={playModality}
+                initialScenario={playgroundScenario}
                 lang={lang}
                 t={t}
               />
@@ -1641,9 +1450,10 @@ export default function App() {
 
             {/* 6. DOCS TAB */}
             {currentTab === 'docs' && (
-              <DocsView showToast={showToast} lang={lang} t={t} />
+              <DocsView showToast={showToast} lang={lang}  />
             )}
-          </Suspense>
+            </Suspense>
+          </ErrorBoundary>
         </div>
       </main>
 
@@ -1663,7 +1473,6 @@ export default function App() {
           onSubmit={handleCreateChannel}
           submitting={submittingChannel}
           lang={lang}
-          t={t}
         />
 
         {/* Modal: New API Key */}
@@ -1689,11 +1498,9 @@ export default function App() {
           initialTab={accountModalTab}
           onClose={() => setShowAccountModal(false)}
           adminUser={adminUser}
-          adminToken={adminToken}
           adminFetch={apiFetch}
           showToast={showToast}
           lang={lang}
-          t={t}
           onPasswordChanged={() => {
             showToast(isZh ? '密码修改成功，请牢记新密码' : 'Password changed successfully', 'success');
           }}
@@ -1717,7 +1524,6 @@ export default function App() {
           onCreateKey={() => { setShowOnboardingModal(false); setCurrentTab('keys'); handleOpenCreateKey(); }}
           showToast={showToast}
           lang={lang}
-          t={t}
         />
 
         {/* Visual Routing Topology & Failover Modal */}
@@ -1762,16 +1568,13 @@ export default function App() {
         <CommandPalette
           isOpen={showCommandPalette}
           onClose={() => setShowCommandPalette(false)}
-          currentTab={currentTab}
           setCurrentTab={setCurrentTab}
           setViewMode={setViewMode}
           models={models}
-          channels={channels}
           onSelectModel={(model) => {
             setPlayModel(model);
             setPlayModality(modelRoutes.find(route => route.model === model)?.modality || inferClientModality(model));
           }}
-          keys={keys}
           adminUser={adminUser}
           onOpenNewKey={handleOpenCreateKey}
           onOpenNewChannel={() => {
@@ -1784,9 +1587,12 @@ export default function App() {
               priority: 1,
               weight: 10,
               timeout_seconds: 60,
+              max_concurrency: 0,
+              queue_limit: 0,
+              queue_wait_seconds: 0,
               models_str: '',
               mapping_rules: [],
-              protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings', 'rerank', 'images'],
+              protocols: ['openai_chat', 'openai_response', 'embeddings', 'rerank', 'images'],
             });
             setProbeAlert(null);
             setShowChannelModal(true);
@@ -1818,7 +1624,6 @@ export default function App() {
           lang={lang}
           t={t}
           showToast={showToast}
-          adminUser={adminUser}
           adminFetch={apiFetch}
           initialQuery={copilotInitialQuery}
           onClearInitialQuery={() => setCopilotInitialQuery('')}

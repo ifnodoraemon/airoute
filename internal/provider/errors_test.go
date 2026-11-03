@@ -16,3 +16,28 @@ func TestUpstreamErrorWithoutBodyDoesNotDangle(t *testing.T) {
 		t.Fatalf("body formatting changed, got %q", got)
 	}
 }
+
+// B-03: every dispatch path must classify a 404 as "this node does not host the
+// model, try the next channel", never as a deterministic client error that ends
+// the fan-out. Only 400/413/422 are fatal payload errors.
+func TestPayloadClassificationKeeps404Retryable(t *testing.T) {
+	if !IsModelNotFound(NewUpstreamError("node-a", 404, nil)) {
+		t.Fatal("404 must be recognised as a node-specific model miss")
+	}
+	if IsFatalPayloadError(NewUpstreamError("node-a", 404, nil)) {
+		t.Fatal("404 must not be fatal: another node may host the model")
+	}
+	for _, status := range []int{400, 413, 422} {
+		if !IsFatalPayloadError(NewUpstreamError("ch", status, nil)) {
+			t.Fatalf("%d must be a fatal payload error", status)
+		}
+	}
+	for _, status := range []int{401, 403, 408, 429, 500} {
+		if IsFatalPayloadError(NewUpstreamError("ch", status, nil)) {
+			t.Fatalf("%d must not be a fatal payload error", status)
+		}
+	}
+	if IsModelNotFound(nil) || IsFatalPayloadError(nil) {
+		t.Fatal("nil error must not be classified as an upstream status")
+	}
+}

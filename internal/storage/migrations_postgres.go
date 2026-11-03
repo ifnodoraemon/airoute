@@ -495,6 +495,47 @@ func (db *DB) migratePostgres() error {
 		{Version: 27, Name: "users_email_unique", Up: createUsersEmailUniqueIndex},
 		{Version: 28, Name: "operational_indexes", Up: addOperationalIndexes},
 		{Version: 29, Name: "api_key_digests", Up: migrateAPIKeysToDigests},
+		{Version: 31, Name: "response_contexts", Up: createResponseContexts},
+		{Version: 32, Name: "legacy_usage_log_reasons", Up: rewriteLegacyUsageLogReasons},
+		{Version: 33, Name: "billing_counter_artifact_repair", Up: repairDeletedAuditCounterDrift},
+		{Version: 34, Name: "drop_legacy_nano_money_mirrors", Up: dropLegacyNanoMoneyColumns},
+		{Version: 37, Name: "supplier_costs", Up: CreateSupplierCosts},
+		{Version: 39, Name: "api_key_public_ids", Up: addAPIKeyPublicIDs},
+		{Version: 40, Name: "drop_legacy_governance_objects", Up: dropLegacyGovernanceObjects},
+		{Version: 41, Name: "billing_scale_indexes", Up: addBillingScaleIndexes},
+		{Version: 42, Name: "storage_index_and_trace_search_repairs", Up: repairStorageIndexesAndTraceSearch},
 	}
+
+	// Migration 43 rewrites the live usage_logs table (copy-switch into monthly
+	// partitions) and is parked behind an explicit opt-in. It is registered only
+	// when GATEWAY_ENABLE_TABLE_PARTITIONING=true; with the default configuration
+	// the version list is the pre-partitioning one, so a restart can never surprise
+	// an operator by rewriting a 250 MB table and holding an ACCESS EXCLUSIVE lock
+	// on the audit write path.
+	//
+	// SQLite never registers it: SQLite has no declarative partitioning and keeps
+	// the single-table + UNIQUE(billing_id) dedupe path unchanged.
+	if tablePartitioningEnabled() {
+		migrations = append(migrations, Migration{
+			Version: 43,
+			Name:    "usage_logs_monthly_partitions",
+			Up:      addUsageLogsMonthlyPartitions,
+		})
+	}
+
+	// 44/45 close the two control-plane defects from the 2026-10-29 hunt: account
+	// identity must be case-insensitive at the storage level too, and an
+	// administrator's revocation of a key must be its own state so a tenant cannot
+	// undo it (see docs/audit/2026-10-29-bughunt/01-controlplane.md). They are
+	// appended after the opt-in partitioning step so versions stay ordered whether
+	// or not partitioning is enabled.
+	migrations = append(migrations,
+		Migration{Version: 44, Name: "users_username_lower_unique", Up: createUsersUsernameUniqueLowerIndex},
+		Migration{Version: 45, Name: "api_keys_admin_disabled", Up: addAPIKeyAdminDisabledColumn},
+		Migration{Version: 46, Name: "channel_capacity", Up: addChannelCapacity},
+		Migration{Version: 47, Name: "retire_text_completions", Up: retireTextCompletions},
+		Migration{Version: 48, Name: "native_states", Up: createNativeStates},
+		Migration{Version: 49, Name: "payment_lifecycle", Up: addPaymentLifecycle},
+	)
 	return db.runMigrations(migrations)
 }

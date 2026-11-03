@@ -42,7 +42,7 @@ func TestRedemptionAndIdentityNeverMatchAnotherUsersEmail(t *testing.T) {
 		t.Fatalf("email login no longer works: %+v %v", u, err)
 	}
 	card := &RedemptionCodeRecord{Code: "CARD-OWNER", Amount: 19.99}
-	if err := r.CreateRedemptionCode(card); err != nil {
+	if err := r.CreateRedemptionCodes([]*RedemptionCodeRecord{card}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := r.RedeemCode(card.Code, owner.Username); err != nil {
@@ -69,7 +69,7 @@ func TestRedemptionBatchRollsBackAndCannotDoubleCredit(t *testing.T) {
 		t.Fatalf("partial batch persisted: %+v %v", cards, err)
 	}
 	card := &RedemptionCodeRecord{Code: "single-use", Amount: 20}
-	if err := r.CreateRedemptionCode(card); err != nil {
+	if err := r.CreateRedemptionCodes([]*RedemptionCodeRecord{card}); err != nil {
 		t.Fatal(err)
 	}
 	results := make(chan error, 8)

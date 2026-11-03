@@ -19,9 +19,8 @@ import (
 // The ratio is an exponentially weighted mean per model, clamped to a sane band so
 // a few pathological requests cannot swing it.
 type EstimateCalibrator struct {
-	mu       sync.RWMutex
-	samples  map[string]*ratioSample
-	observed uint64
+	mu      sync.RWMutex
+	samples map[string]*ratioSample
 	// persist is invoked every calibrationPersistEvery observations so learned
 	// ratios reach durable storage quickly instead of waiting for a timer.
 	persist func() error
@@ -78,9 +77,6 @@ func (c *EstimateCalibrator) Observe(modelName string, localEstimate, upstreamAc
 		sample.ratio = sample.ratio*(1-calibrationAlpha) + ratio*calibrationAlpha
 	}
 	sample.count++
-	sampleCount := sample.count
-	sampleRatio := sample.ratio
-	c.observed++
 	c.pending++
 	shouldPersist := c.persist != nil && c.pending >= calibrationPersistEvery
 	if shouldPersist {
@@ -97,23 +93,36 @@ func (c *EstimateCalibrator) Observe(modelName string, localEstimate, upstreamAc
 	// residual misalignment on estimated charges is visible on /metrics. The
 	// per-model value is published alongside a sample-weighted total: storing just
 	// this sample in one global gauge made "the estimator bias" depend on whichever
-	// model happened to be observed last.
-	telemetry.GlobalMetrics.SetEstimateBias(modelName, int64(math.Round((sampleRatio-1)*1e6)), sampleCount)
+	// model happened to be observed last. The sample count travels with it because
+	// Adjust stays silent below calibrationMinSamples - without it an operator
+	// cannot tell "ratio is in effect" from "not enough samples yet" - and Ratio is
+	// the accessor that owns that pair.
+	learnedRatio, learnedSamples := c.Ratio(modelName)
+	telemetry.GlobalMetrics.SetEstimateBias(modelName, int64(math.Round((learnedRatio-1)*1e6)), learnedSamples)
 }
 
 // Adjust applies the learned ratio to a local estimate. It returns the input
 // unchanged until enough upstream samples exist for that model.
+//
+// The ratio and the sample count are copied *inside* the read lock: ratioSample is
+// a shared pointer and Observe mutates its fields under the write lock, so reading
+// them after RUnlock raced with a concurrent Observe (the calibrator runs on the
+// request path, where both calls are normal).
 func (c *EstimateCalibrator) Adjust(modelName string, localEstimate int) int {
 	if c == nil || modelName == "" || localEstimate <= 0 {
 		return localEstimate
 	}
 	c.mu.RLock()
-	sample := c.samples[modelName]
+	var ratio float64
+	var count uint64
+	if sample := c.samples[modelName]; sample != nil {
+		ratio, count = sample.ratio, sample.count
+	}
 	c.mu.RUnlock()
-	if sample == nil || sample.count < calibrationMinSamples {
+	if count < calibrationMinSamples {
 		return localEstimate
 	}
-	adjusted := int(math.Round(float64(localEstimate) * sample.ratio))
+	adjusted := int(math.Round(float64(localEstimate) * ratio))
 	if adjusted < 1 {
 		adjusted = 1
 	}
@@ -121,7 +130,8 @@ func (c *EstimateCalibrator) Adjust(modelName string, localEstimate int) int {
 }
 
 // Ratio reports the learned ratio and sample count for a model. Ratio is 1.0
-// before any observation.
+// before any observation. It is the single accessor for that pair: Observe
+// publishes both to the estimate-bias/samples gauges through it.
 func (c *EstimateCalibrator) Ratio(modelName string) (float64, uint64) {
 	if c == nil {
 		return 1.0, 0

@@ -40,18 +40,23 @@ func TestTokenQuotaUnlimitedWhenZero(t *testing.T) {
 	}
 }
 
-func TestTokenQuotaWindowRollsOver(t *testing.T) {
+func TestTokenQuotaWindowSlides(t *testing.T) {
 	tr := &TokenQuotaTracker{buckets: make(map[string]*tokenQuotaBucket)}
 	key := "sk-window"
 	tr.Consume(key, 100, 100)
 	if tr.Remaining(key, 100) != 0 {
 		t.Fatalf("expected exhausted budget, got %d", tr.Remaining(key, 100))
 	}
-	// Force the window backwards, then a call should roll it forward and reset.
-	tr.mu.Lock()
-	tr.buckets[key].windowFrom = time.Now().Add(-2 * time.Minute)
-	tr.mu.Unlock()
-	if tr.Remaining(key, 100) != 100 {
-		t.Fatalf("expected window reset, got %d", tr.Remaining(key, 100))
+
+	// Age the recorded consumption past the window (rather than moving a fixed
+	// window anchor): a sliding window forgets only tokens that fell out of the
+	// trailing minute.
+	bucket := tr.bucket(key, 100)
+	bucket.mu.Lock()
+	bucket.usage[0].at = time.Now().Add(-2 * tokenWindowSpan).UnixNano()
+	bucket.mu.Unlock()
+
+	if got := tr.Remaining(key, 100); got != 100 {
+		t.Fatalf("expected the expired consumption to slide out, got %d", got)
 	}
 }

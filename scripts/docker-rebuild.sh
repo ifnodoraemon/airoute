@@ -57,10 +57,24 @@ for service in gateway-2 gateway-1; do
 done
 
 # The edge container carries its own ulimits and resolves upstream addresses at
-# (re)load time. Recreate it only when its config changed, then force a reload so
-# a freshly recreated gateway is never routed through a stale upstream IP.
+# (re)load time. Recreate it when its configuration changed, then validate and
+# reload so a freshly recreated gateway is never routed through a stale IP.
+#
+# A single-file bind mount pins the inode Docker saw when the container was
+# created: editing the file on the host can leave the running container reading
+# the previous content even though `nginx -s reload` reports success. Compare
+# content hashes and recreate the edge when they drift.
 echo "==> Reconciling load balancer..."
-VERSION="$version" docker compose up -d --no-deps lb
-docker exec airoute-lb nginx -s reload || true
+edge_config_hash=$(md5sum deploy/nginx-compose.conf | cut -d' ' -f1)
+edge_running_hash=$(docker exec airoute-lb md5sum /etc/nginx/conf.d/default.conf 2>/dev/null | cut -d' ' -f1 || true)
+if [ "$edge_config_hash" != "$edge_running_hash" ]; then
+    echo "    nginx config drift detected; recreating the edge container"
+    VERSION="$version" docker compose up -d --no-deps --force-recreate lb
+fi
+if ! docker exec airoute-lb nginx -t; then
+    echo "nginx rejected the edge configuration" >&2
+    exit 1
+fi
+docker exec airoute-lb nginx -s reload
 
 echo "==> Gateway cluster is running version $version"

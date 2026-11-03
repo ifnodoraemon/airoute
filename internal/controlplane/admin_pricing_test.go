@@ -144,8 +144,10 @@ func TestSavePricingRateHTTPContract(t *testing.T) {
 	t.Run("rejects overlapping off-peak slots with 400", func(t *testing.T) {
 		handler, _ := newPricingTestHandler(t)
 
+		// Slots are read only in the "custom" mode, so that is the mode whose
+		// overlapping windows have to be refused.
 		w := invokePricing(t, handler.SavePricingRate, http.MethodPost,
-			`{"model":"gpt-x","off_peak_enabled":true,"off_peak_slots":"00:00-10:00,05:00-12:00"}`,
+			`{"model":"gpt-x","off_peak_enabled":true,"off_peak_mode":"custom","off_peak_slots":"[{\"start\":\"00:00\",\"end\":\"10:00\",\"discount\":0.5,\"days\":[1]},{\"start\":\"05:00\",\"end\":\"12:00\",\"discount\":0.5,\"days\":[1]}]"}`,
 			"/api/v1/admin/pricing", nil)
 
 		if w.Code != http.StatusBadRequest {

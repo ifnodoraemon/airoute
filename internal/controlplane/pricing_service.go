@@ -193,7 +193,10 @@ func (s *PricingService) SaveRate(ctx context.Context, rec *storage.ModelPriceRe
 		return err
 	}
 	if rec.OffPeakEnabled && rec.OffPeakSlots != "" {
-		if err := billing.ValidateSlotsOverlap(rec.OffPeakSlots); err != nil {
+		// Validate exactly what the engine will read: only OffPeakMode=="custom"
+		// evaluates OffPeakSlots (see billing.ValidateOffPeakSlots). Using the
+		// mode-less entry point here rejected slots for modes that never read them.
+		if err := billing.ValidateOffPeakSlots(rec.OffPeakMode, rec.OffPeakSlots); err != nil {
 			return &ValidationError{Message: err.Error()}
 		}
 	}

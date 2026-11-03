@@ -18,22 +18,26 @@ func (h *MCPHandler) HandleMCPInfo(c *gin.Context) {
 		mcpEnabled = h.repo.GetSetting("mcp_enabled", "true") == "true"
 	}
 
-	skills, _ := h.repo.ListSkills()
 	enabledSkills := 0
-	for _, s := range skills {
-		if s.Enabled {
-			enabledSkills++
+	if h.repo != nil {
+		skills, _ := h.repo.ListSkills()
+		for _, s := range skills {
+			if s.Enabled {
+				enabledSkills++
+			}
 		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"server": gin.H{
-			"name":               "AI路由器",
-			"version":            "1.0.0",
-			"protocol":           "mcp/2026-07-28",
-			"supported_versions": []string{"2026-07-28", "2025-11-25", "2024-11-05"},
+			"name":    "AI路由器",
+			"version": "1.0.0",
+			// D-10: rendered from the negotiation table so this block, /v1 and the
+			// protocol handshake can never advertise different revisions.
+			"protocol":           "mcp/" + mcpDefaultProtocolVersion,
+			"supported_versions": mcpSupportedVersions,
 			"architecture":       "stateless-http",
-			"description":        "AI路由器 - Model Context Protocol (MCP 2026-07-28 无状态标准) 与扩展广场",
+			"description":        "AI路由器 - Model Context Protocol (MCP " + mcpDefaultProtocolVersion + " 无状态标准) 与扩展广场",
 			"mcp_enabled":        mcpEnabled,
 			"enabled_skills":     enabledSkills,
 		},

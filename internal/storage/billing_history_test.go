@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -35,10 +36,10 @@ func TestPricingSnapshotsSurvivePriceChangesAndBatchWrites(t *testing.T) {
 	for _, batch := range []bool{false, true} {
 		logs := []*UsageLogRecord{{Model: "images", Cost: 16, PricingSnapshot: snapshot, StatusCode: 200}, {Model: "images", Cost: 16, PricingSnapshot: snapshot, StatusCode: 200, CreatedAt: time.Now()}}
 		if batch {
-			err = r.BatchRecordUsageLogs(logs)
+			err = r.BatchRecordUsageLogsContext(context.Background(), logs)
 		} else {
 			for _, l := range logs {
-				if err = r.RecordUsageLog(l); err != nil {
+				if err = r.RecordUsageLogContext(context.Background(), l); err != nil {
 					break
 				}
 			}
@@ -50,7 +51,7 @@ func TestPricingSnapshotsSurvivePriceChangesAndBatchWrites(t *testing.T) {
 	if err := r.SaveModelPrice(&ModelPriceRecord{Model: "images", FixedPrice: 99}); err != nil {
 		t.Fatal(err)
 	}
-	logs, err := r.ListUsageLogs(50, 0)
+	logs, _, err := r.ListUsageLogsWithFilterAndCount(LogFilter{Limit: 50, Offset: 0})
 	if err != nil {
 		t.Fatal(err)
 	}

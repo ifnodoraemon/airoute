@@ -66,13 +66,16 @@ func TestPostgresMigrationsAndRepositoryRoundTrip(t *testing.T) {
 	// Channel round trip (BIGSERIAL id, JSON text columns).
 	model := "pg-it-model-" + suffix
 	ch := &ChannelRecord{
-		Name:     "pg-it-chan-" + suffix,
-		Type:     "openai",
-		BaseURL:  "http://pg.invalid",
-		APIKey:   "k",
-		Models:   []string{model},
-		Priority: 1,
-		Weight:   10,
+		Name:             "pg-it-chan-" + suffix,
+		Type:             "openai",
+		BaseURL:          "http://pg.invalid",
+		APIKey:           "k",
+		Models:           []string{model},
+		Priority:         1,
+		Weight:           10,
+		MaxConcurrency:   3,
+		QueueLimit:       7,
+		QueueWaitSeconds: 12,
 	}
 	if err := repo.CreateChannel(ch); err != nil {
 		t.Fatalf("CreateChannel on postgres: %v", err)
@@ -80,12 +83,15 @@ func TestPostgresMigrationsAndRepositoryRoundTrip(t *testing.T) {
 	if ch.ID == 0 {
 		t.Fatal("CreateChannel did not populate the id on postgres")
 	}
-	gotCh, err := repo.GetChannel(ch.ID)
+	gotCh, err := findChannel(t, repo, ch.ID)
 	if err != nil {
 		t.Fatalf("GetChannel on postgres: %v", err)
 	}
 	if gotCh.Name != ch.Name {
 		t.Fatalf("channel name round trip = %q, want %q", gotCh.Name, ch.Name)
+	}
+	if gotCh.MaxConcurrency != 3 || gotCh.QueueLimit != 7 || gotCh.QueueWaitSeconds != 12 {
+		t.Fatalf("channel capacity round trip lost fields: %+v", gotCh)
 	}
 	if len(gotCh.Models) != 1 || gotCh.Models[0] != model {
 		t.Fatalf("channel models round trip = %v, want [%s]", gotCh.Models, model)
@@ -191,7 +197,7 @@ func TestPostgresApplyModelRouteBundleIsAtomic(t *testing.T) {
 	}
 
 	// Step 3a: the update that succeeded before the failure must be undone.
-	gotFirst, err := repo.GetChannel(first.ID)
+	gotFirst, err := findChannel(t, repo, first.ID)
 	if err != nil {
 		t.Fatalf("reload first channel: %v", err)
 	}
@@ -233,7 +239,7 @@ func TestPostgresPatchChannel(t *testing.T) {
 	}
 
 	// A concurrent writer changes the credential through the full-row path.
-	stale, err := repo.GetChannel(rec.ID)
+	stale, err := findChannel(t, repo, rec.ID)
 	if err != nil {
 		t.Fatalf("GetChannel: %v", err)
 	}
@@ -259,7 +265,7 @@ func TestPostgresPatchChannel(t *testing.T) {
 	}
 
 	// And it is durable.
-	stored, err := repo.GetChannel(rec.ID)
+	stored, err := findChannel(t, repo, rec.ID)
 	if err != nil {
 		t.Fatalf("reload channel: %v", err)
 	}
@@ -353,7 +359,7 @@ func TestPostgresPatchChannelSerializesConcurrentWriters(t *testing.T) {
 
 	// Both changes must survive. This fails without FOR UPDATE: the second writer
 	// would rewrite the name from its pre-commit read.
-	stored, err := repo.GetChannel(rec.ID)
+	stored, err := findChannel(t, repo, rec.ID)
 	if err != nil {
 		t.Fatalf("reload channel: %v", err)
 	}

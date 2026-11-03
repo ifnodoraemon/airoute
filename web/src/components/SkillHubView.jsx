@@ -9,6 +9,7 @@ import {
   Plus,
   Search,
   Trash2,
+  Pencil,
   Play,
   X,
   ShieldCheck,
@@ -16,7 +17,6 @@ import {
   Code2,
   Workflow,
   DownloadCloud,
-  CheckCircle2,
   GitBranch,
   Bug,
   Globe,
@@ -29,8 +29,9 @@ import {
 } from 'lucide-react';
 import { getGatewayOrigin, copyToClipboard } from '../config';
 import useModalA11y from '../hooks/useModalA11y';
+import SkillTrialModal from './SkillTrialModal';
 
-export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh', t }) {
+export default function SkillHubView({ adminFetch, onCopy, onTrial, showToast, lang = 'zh', t }) {
   const isZh = lang === 'zh';
   const [skills, setSkills] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -47,14 +48,12 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
   const [activeClientTab, setActiveClientTab] = useState('claude-code'); // 'claude-code' | 'opencode' | 'codex' | 'cursor'
 
   const [testModalSkill, setTestModalSkill] = useState(null);
-  const [testPrompt, setTestPrompt] = useState('');
-  const [testOutput, setTestOutput] = useState(null);
-  const [testingSkill, setTestingSkill] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [editingSkillId, setEditingSkillId] = useState('');
+  const [savingSkill, setSavingSkill] = useState(false);
 
   useModalA11y(clientGuideModalOpen, () => setClientGuideModalOpen(false));
   useModalA11y(!!manifestSkill, () => setManifestSkill(null));
-  useModalA11y(!!testModalSkill, () => setTestModalSkill(null));
   useModalA11y(createModalOpen, () => setCreateModalOpen(false));
 
   // New Skill Form
@@ -136,7 +135,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
 
   const handleCreateSkill = async (e) => {
     e.preventDefault();
-    if (!adminFetch) return;
+    if (!adminFetch || savingSkill) return;
     if (!newSkill.name.trim() || !newSkill.description.trim()) {
       if (showToast) showToast(isZh ? '技能名称与描述不能为空' : 'Skill name and description cannot be empty', 'error');
       return;
@@ -146,9 +145,10 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
       ...newSkill,
       id: newSkill.id.trim() || `skill_${Date.now()}`,
       tools: newSkill.tools ? newSkill.tools.split(/[,，\n]/).map(s => s.trim()).filter(Boolean) : ['run_command', 'view_file'],
-      enabled: true
+      enabled: editingSkillId ? newSkill.enabled : true
     };
 
+    setSavingSkill(true);
     try {
       const res = await adminFetch('/api/v1/admin/skills', {
         method: 'POST',
@@ -157,7 +157,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
       });
       const data = await res.json();
       if (res.ok && data.code === 0) {
-        if (showToast) showToast(isZh ? '自定义技能创建成功' : 'Custom skill created successfully', 'success');
+        if (showToast) showToast(isZh ? '技能已保存' : 'Skill saved', 'success');
         setCreateModalOpen(false);
         setNewSkill({
           id: '',
@@ -176,6 +176,8 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
       }
     } catch (err) {
       if (showToast) showToast((isZh ? '请求异常: ' : 'Request error: ') + err.message, 'error');
+    } finally {
+      setSavingSkill(false);
     }
   };
 
@@ -207,49 +209,6 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(''), 2000);
     if (showToast) showToast(isZh ? '已复制到剪贴板' : 'Copied to clipboard', 'success');
-  };
-
-  const handleOpenTest = (skill) => {
-    setTestModalSkill(skill);
-    setTestOutput(null);
-    if (skill.id === 'git-workflow') {
-      setTestPrompt(isZh ? '请分析当前暂存区的改动，并按照 Conventional Commits 格式撰写一条严谨的 feat 提交说明。' : 'Analyze git staged changes and draft a Conventional Commits feat message.');
-    } else if (skill.id === 'test-driven-development') {
-      setTestPrompt(isZh ? '为字符串反转函数设计失败测试用例，覆盖空串、中文字符与 Emoji 边界。' : 'Design failing test cases for a string reverse function covering empty strings and unicode.');
-    } else if (skill.id === 'browser-automation') {
-      setTestPrompt(isZh ? `打开 ${origin} 并截图确认页面核心标题正常渲染。` : `Open ${origin} and verify title renders properly.`);
-    } else if (skill.id === 'security-audit') {
-      setTestPrompt(isZh ? '扫描项目中所有 SQL 查询代码，检查是否存在未做参数化绑定的字符串拼接注入漏洞。' : 'Scan SQL queries in project to inspect parameter binding vulnerabilities.');
-    } else {
-      setTestPrompt(isZh ? '按照该技能的规范执行一次标准作业步骤。' : 'Execute standard SOP steps according to skill spec.');
-    }
-    setTestModalSkill(skill);
-  };
-
-  const handleExecuteTest = async () => {
-    if (!testModalSkill) return;
-    setTestingSkill(true);
-    setTestOutput(null);
-
-    // Simulate standard SOP execution trace
-    setTimeout(() => {
-      setTestingSkill(false);
-      setTestOutput({
-        status: 'SUCCESS',
-        skill_id: testModalSkill.id,
-        sop_stage: 'L3_EXECUTION_COMPLETED',
-        tools_called: testModalSkill.tools,
-        trace: [
-          isZh ? `[L1] 匹配技能触发词，加载元数据 (${testModalSkill.id})` : `[L1] Match trigger keyword, load metadata (${testModalSkill.id})`,
-          isZh ? `[L2] 解析并激活 SKILL.md 执行指引与前置约束` : `[L2] Parse & activate SKILL.md SOP guidelines & constraints`,
-          isZh ? `[L3] 智能体使用宿主/MCP 工具集 [${(testModalSkill.tools || []).join(', ')}] 完成验证` : `[L3] Agent completes verification with host/MCP tools [${(testModalSkill.tools || []).join(', ')}]`
-        ],
-        verdict: isZh
-          ? `✓ 已按照 ${testModalSkill.name} 标准作业程序（SOP）成功模拟执行，输入：“${testPrompt}” 符合规范契约。`
-          : `✓ Successfully rehearsed following ${testModalSkill.name} SOP. Input: "${testPrompt}" conforms to specification contract.`
-      });
-      if (showToast) showToast(isZh ? '技能演练模拟执行成功' : 'Skill rehearsal simulated successfully', 'success');
-    }, 400);
   };
 
   const categories = [
@@ -309,7 +268,7 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
             <span>{isZh ? '客户端接入指南' : 'Client Guide'}</span>
           </button>
           <button
-            onClick={() => setCreateModalOpen(true)}
+            onClick={() => { setEditingSkillId(''); setNewSkill({ id: '', name: '', category: 'dev', description: '', author: 'Community Standard', version: '1.0.0', loading_mode: 'lazy', tools: '', manifest: '' }); setCreateModalOpen(true); }}
             className="ui-btn bg-amber-600 hover:bg-amber-700 text-white shadow-2xs"
           >
             <Plus className="w-4 h-4" />
@@ -520,11 +479,16 @@ export default function SkillHubView({ adminFetch, onCopy, showToast, lang = 'zh
                       <span>{isZh ? '接入' : 'Connect'}</span>
                     </button>
                     <button
-                      onClick={() => handleOpenTest(skill)}
+                      title={isZh ? '编辑技能' : 'Edit skill'}
+                      onClick={() => { setEditingSkillId(skill.id); setNewSkill({ ...skill, tools: (skill.tools || []).join(', ') }); setCreateModalOpen(true); }}
+                      className="ui-btn-secondary"
+                    ><Pencil className="w-3.5 h-3.5" />{isZh ? '编辑' : 'Edit'}</button>
+                    <button
+                      onClick={() => setTestModalSkill(skill)}
                       className="ui-btn-ghost ui-btn-sm"
                     >
                       <Play className="w-3 h-3" />
-                      <span>{isZh ? '演练' : 'Test'}</span>
+                      <span>{isZh ? '模型实测' : 'Model test'}</span>
                     </button>
                   </div>
 
@@ -1049,90 +1013,7 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
         </div>
       )}
 
-      {/* 模拟演练弹窗 */}
-      {testModalSkill && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setTestModalSkill(null);
-          }}
-        >
-          <div className="bg-white dark:bg-[#191B1F] rounded-xl shadow-2xl border border-gray-200 dark:border-slate-800 max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-linear-to-br from-amber-500 to-orange-600 text-white rounded-lg">
-                  <Play className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-gray-900 dark:text-white">
-                    {isZh ? `模拟 SOP 执行演练: ${testModalSkill.name}` : `Simulated SOP Execution: ${testModalSkill.name}`}
-                  </h3>
-                  <p className="ui-meta">
-                    {isZh ? '模拟智能体在此技能指引下的三级执行链路与输出' : 'Simulating Agent 3-tier execution trace and output under this skill'}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setTestModalSkill(null)}
-                className="ui-icon-btn"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="ui-label">
-                  {isZh ? '用户意图与输入场景 (Prompt / Scenario)' : 'User Intent & Scenario (Prompt / Scenario)'}
-                </label>
-                <textarea
-                  rows="3"
-                  value={testPrompt}
-                  onChange={(e) => setTestPrompt(e.target.value)}
-                  className="ui-field bg-gray-50 dark:bg-gray-900"
-                />
-              </div>
-
-              <div className="flex justify-end">
-                <button
-                  onClick={handleExecuteTest}
-                  disabled={testingSkill}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-amber-600 rounded-lg hover:bg-amber-700 transition-colors shadow-sm disabled:opacity-50"
-                >
-                  <Play className={`w-3.5 h-3.5 ${testingSkill ? 'animate-pulse' : ''}`} />
-                  <span>{testingSkill ? (isZh ? '执行演练中...' : 'Simulating...') : (isZh ? '启动模拟演练' : 'Start Simulation')}</span>
-                </button>
-              </div>
-
-              {testOutput && (
-                <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>{isZh ? '执行跟踪链路 (Execution Trace)' : 'Execution Trace'}</span>
-                  </div>
-                  <div className="bg-gray-900 text-gray-100 p-3.5 rounded-xl font-mono text-xs overflow-x-auto space-y-1.5 border border-gray-800">
-                    {testOutput.trace?.map((line, idx) => (
-                      <div key={idx} className="text-gray-300 text-xs">{line}</div>
-                    ))}
-                    <div className="mt-2 pt-2 border-t border-gray-800 text-emerald-400 font-bold">
-                      {testOutput.verdict}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end pt-2 border-t border-gray-100 dark:border-gray-800">
-              <button
-                onClick={() => setTestModalSkill(null)}
-                className="px-4 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700"
-              >
-                {isZh ? '关闭' : 'Close'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {testModalSkill && <SkillTrialModal skill={testModalSkill} lang={lang} onClose={() => setTestModalSkill(null)} onTrial={onTrial} />}
 
       {/* 新建自定义技能模态框 */}
       {createModalOpen && (
@@ -1150,7 +1031,7 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-gray-900 dark:text-white">
-                    {isZh ? '新建自定义 Agent 技能' : 'Create Custom Agent Skill'}
+                    {editingSkillId ? (isZh ? '编辑 Agent 技能' : 'Edit Agent Skill') : (isZh ? '新建自定义 Agent 技能' : 'Create Custom Agent Skill')}
                   </h3>
                   <p className="ui-meta">
                     {isZh ? '遵循 agentskills.io 规范编写自定义工作流 SOP' : 'Author custom workflow SOP adhering to agentskills.io standards'}
@@ -1175,6 +1056,7 @@ unzip -q -o ${manifestSkill.id}.zip -d skills/`}
                     type="text"
                     required
                     placeholder={isZh ? "如: api-designer" : "e.g. api-designer"}
+                    readOnly={!!editingSkillId}
                     value={newSkill.id}
                     onChange={(e) => setNewSkill({ ...newSkill, id: e.target.value })}
                     className="ui-field bg-gray-50 dark:bg-gray-900"
@@ -1271,9 +1153,10 @@ allowed-tools:
                 </button>
                 <button
                   type="submit"
+                  disabled={savingSkill}
                   className="px-4 py-2 text-xs font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 shadow-sm"
                 >
-                  {isZh ? '创建技能' : 'Create Skill'}
+                  {savingSkill ? (isZh ? '保存中...' : 'Saving...') : (isZh ? '保存技能' : 'Save Skill')}
                 </button>
               </div>
             </form>

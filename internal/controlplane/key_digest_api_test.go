@@ -11,10 +11,10 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
-// Regression (A12): the key creation response returns the credential exactly once,
-// while list responses expose only a mask and the fingerprint. Neither response may
-// contain the stored digest (it must never be presented as a usable key).
-func TestKeyCreationReturnsPlaintextOnceAndListsMasked(t *testing.T) {
+// Regression (A12): the key creation response returns the credential exactly
+// once. Every other response names the key by its public identifier (key_id) and
+// must contain neither the credential nor the stored digest.
+func TestKeyCreationReturnsPlaintextOnceAndListsOnlyThePublicID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	h, repo := regressionHandler(t)
 
@@ -36,8 +36,8 @@ func TestKeyCreationReturnsPlaintextOnceAndListsMasked(t *testing.T) {
 
 	var created struct {
 		Data struct {
-			Key         string `json:"key"`
-			Fingerprint string `json:"key_fingerprint"`
+			Key   string `json:"key"`
+			KeyID string `json:"key_id"`
 		} `json:"data"`
 		KeyReturnedOnce bool `json:"key_returned_once"`
 	}
@@ -54,6 +54,9 @@ func TestKeyCreationReturnsPlaintextOnceAndListsMasked(t *testing.T) {
 	if !strings.HasPrefix(plaintext, "sk-airoute-") {
 		t.Fatalf("returned credential %q is not a generated key", plaintext)
 	}
+	if !strings.HasPrefix(created.Data.KeyID, "ak_") {
+		t.Fatalf("creation response key_id = %q, want an ak_ identifier", created.Data.KeyID)
+	}
 
 	// The credential is usable and stored only as a digest.
 	digest := storage.HashAPIKey(plaintext)
@@ -68,7 +71,8 @@ func TestKeyCreationReturnsPlaintextOnceAndListsMasked(t *testing.T) {
 		t.Fatalf("returned credential cannot authenticate: %v", err)
 	}
 
-	// Listing must not disclose the credential or the digest.
+	// Listing must disclose neither the credential nor the digest, and must not
+	// ship the old display mask either: the public identifier replaces it.
 	listW := httptest.NewRecorder()
 	listC, _ := gin.CreateTestContext(listW)
 	listC.Request = httptest.NewRequest(http.MethodGet, "/api/v1/user/keys", nil)
@@ -84,7 +88,27 @@ func TestKeyCreationReturnsPlaintextOnceAndListsMasked(t *testing.T) {
 	if strings.Contains(body, digest) {
 		t.Fatalf("list response discloses the stored digest as a key: %s", body)
 	}
-	if !strings.Contains(body, "***") {
-		t.Fatalf("list response does not carry a masked key: %s", body)
+	if strings.Contains(body, "***") {
+		t.Fatalf("list response still carries a display mask: %s", body)
+	}
+
+	var listed struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(listW.Body.Bytes(), &listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(listed.Data) != 1 {
+		t.Fatalf("list returned %d keys, want 1: %s", len(listed.Data), body)
+	}
+	item := listed.Data[0]
+	if _, ok := item["key"]; ok {
+		t.Fatalf("list response still has a key field: %s", body)
+	}
+	if _, ok := item["key_fingerprint"]; ok {
+		t.Fatalf("list response still has a key_fingerprint field: %s", body)
+	}
+	if item["key_id"] != created.Data.KeyID {
+		t.Fatalf("list key_id = %v, want %q", item["key_id"], created.Data.KeyID)
 	}
 }

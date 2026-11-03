@@ -27,7 +27,9 @@ type MCPServerRecord struct {
 
 // ListMCPServers returns all registered MCP Servers.
 func (r *Repository) ListMCPServers() ([]*MCPServerRecord, error) {
-	_ = r.SeedDefaultMCPServers()
+	if err := r.SeedDefaultMCPServers(); err != nil {
+		return nil, err
+	}
 
 	rows, err := r.db.Query(`SELECT id, name, description, category, transport, endpoint, status, author, version, tools, prompts, resources, env_vars, enabled, updated_at FROM system_mcp_servers ORDER BY id ASC`)
 	if err != nil {
@@ -59,7 +61,9 @@ func (r *Repository) ListMCPServers() ([]*MCPServerRecord, error) {
 
 // GetMCPServer retrieves an MCP server by ID.
 func (r *Repository) GetMCPServer(id string) (*MCPServerRecord, error) {
-	_ = r.SeedDefaultMCPServers()
+	if err := r.SeedDefaultMCPServers(); err != nil {
+		return nil, err
+	}
 
 	var s MCPServerRecord
 	var toolsStr, promptsStr, resourcesStr string
@@ -80,6 +84,9 @@ func (r *Repository) GetMCPServer(id string) (*MCPServerRecord, error) {
 
 // SaveMCPServer saves or updates an MCP Server.
 func (r *Repository) SaveMCPServer(s *MCPServerRecord) error {
+	if err := ValidateEcosystemID(s.ID); err != nil {
+		return err
+	}
 	toolsJSON, _ := json.Marshal(s.Tools)
 	promptsJSON, _ := json.Marshal(s.Prompts)
 	resourcesJSON, _ := json.Marshal(s.Resources)
@@ -121,7 +128,9 @@ func (r *Repository) SaveMCPServer(s *MCPServerRecord) error {
 
 // SetMCPServerEnabled toggles an MCP server's enabled state.
 func (r *Repository) SetMCPServerEnabled(id string, enabled bool) error {
-	_ = r.SeedDefaultMCPServers()
+	if err := r.SeedDefaultMCPServers(); err != nil {
+		return err
+	}
 	enabledInt := 0
 	if enabled {
 		enabledInt = 1

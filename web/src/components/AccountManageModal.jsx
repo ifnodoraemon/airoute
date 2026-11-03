@@ -21,13 +21,11 @@ export default function AccountManageModal({
   isOpen,
   onClose,
   adminUser,
-  adminToken,
   adminFetch,
   showToast,
   onPasswordChanged,
   initialTab = 'profile',
   lang = 'zh',
-  t
 }) {
   const isZh = lang === 'zh';
 

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/config"
@@ -218,14 +219,22 @@ func (h *AdminHandler) bindBatchIDs(c *gin.Context, emptyErrMsg string) ([]int64
 }
 
 // bindBatchStatus binds a JSON body containing IDs and a status ("active" or "disabled").
+//
+// An unrecognised status is a client error, never a default. It used to fall back
+// to "active", which meant a bulk revocation whose payload said anything other than
+// exactly "disabled" (a typo, the UI's own wording, an older client) silently
+// ENABLED the selected keys and channels - the opposite of the intent, on a
+// security-relevant operation (BUG-CP-03).
 func (h *AdminHandler) bindBatchStatus(c *gin.Context) (*BatchStatusRequest, bool) {
 	var req BatchStatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil || len(req.IDs) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效请求参数"})
 		return nil, false
 	}
-	if req.Status != "active" && req.Status != "disabled" {
-		req.Status = "active"
+	req.Status = strings.ToLower(strings.TrimSpace(req.Status))
+	if !validToggleStatus(req.Status) {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "无效的状态，仅支持 active 或 disabled"})
+		return nil, false
 	}
 	return &req, true
 }

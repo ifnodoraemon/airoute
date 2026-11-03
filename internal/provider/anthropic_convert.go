@@ -3,6 +3,7 @@ package provider
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
@@ -108,6 +109,20 @@ func convertOpenAIToAnthropic(req *model.ChatCompletionRequest, channel *model.C
 					}
 				case model.ContentPartImageURL:
 					if p.ImageURL != nil && p.ImageURL.URL != "" {
+						if model.IsRemoteContentURL(p.ImageURL.URL) {
+							// A remote image is a URL on Anthropic's wire
+							// (source.type="url"). Writing it into the base64
+							// field made the upstream reject a payload the
+							// client is allowed to send (F-07).
+							blocks = append(blocks, map[string]any{
+								"type": "image",
+								"source": map[string]any{
+									"type": "url",
+									"url":  p.ImageURL.URL,
+								},
+							})
+							continue
+						}
 						mime, b64 := model.ParseDataURI(p.ImageURL.URL)
 						if mime == "" {
 							mime = "image/jpeg"
@@ -175,8 +190,58 @@ func convertOpenAIToAnthropic(req *model.ChatCompletionRequest, channel *model.C
 		TopP:          req.TopP,
 		Stream:        req.Stream,
 		Tools:         tools,
+		ToolChoice:    anthropicToolChoice(req.ToolChoice),
 		StopSequences: stopSeqs,
 	}
+}
+
+// anthropicToolChoice maps an OpenAI tool_choice value onto the Anthropic
+// tool_choice schema.
+//
+// Anthropic has no way to express "none" (the caller should omit the tools), so
+// that value and anything unrecognised are dropped with a warning instead of
+// being silently coerced to auto: a client that pinned a function must not get a
+// free choice back without noticing (F-04).
+func anthropicToolChoice(raw any) any {
+	switch choice := raw.(type) {
+	case nil:
+		return nil
+	case string:
+		switch strings.ToLower(strings.TrimSpace(choice)) {
+		case "":
+			return nil
+		case "auto":
+			return map[string]any{"type": "auto"}
+		case "required", "any":
+			return map[string]any{"type": "any"}
+		case "none":
+			slog.Warn("openai tool_choice=\"none\" has no Anthropic equivalent; omitting tool_choice")
+			return nil
+		}
+		slog.Warn("unsupported openai tool_choice string for Anthropic; omitting tool_choice", "value", choice)
+		return nil
+	case map[string]any:
+		choiceType, _ := choice["type"].(string)
+		switch strings.ToLower(choiceType) {
+		case "function":
+			if fn, ok := choice["function"].(map[string]any); ok {
+				if name, _ := fn["name"].(string); name != "" {
+					return map[string]any{"type": "tool", "name": name}
+				}
+			}
+			slog.Warn("openai tool_choice function without a name; omitting tool_choice", "value", choice)
+			return nil
+		case "auto":
+			return map[string]any{"type": "auto"}
+		case "any", "required":
+			return map[string]any{"type": "any"}
+		case "none":
+			slog.Warn("openai tool_choice=\"none\" has no Anthropic equivalent; omitting tool_choice")
+			return nil
+		}
+	}
+	slog.Warn("unsupported openai tool_choice value for Anthropic; omitting tool_choice", "value", raw)
+	return nil
 }
 
 func convertNativeMessages(messages []model.AnthropicInboundMessage) []AnthropicMessage {

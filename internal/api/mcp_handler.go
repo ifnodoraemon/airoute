@@ -15,7 +15,11 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
-// MCPHandler implements the Model Context Protocol (MCP 2024-11-05) over HTTP & SSE.
+// MCPHandler implements the Model Context Protocol over HTTP & SSE.
+//
+// It speaks every revision in mcpSupportedVersions (newest first), negotiates
+// down to the revision a client asks for, and defaults to
+// mcpDefaultProtocolVersion.
 type MCPHandler struct {
 	dispatcher *router.Dispatcher
 	repo       *storage.Repository
@@ -283,13 +287,14 @@ func (h *MCPHandler) ProcessRPC(ctx context.Context, req *mcpRequest) mcpRespons
 
 		// All possible MCP Tools corresponding to Agent Skills & 3-Stage Progressive Discovery
 		allTools := getBuiltinMCPTools()
+		nativeEnabled := h.nativeMCPServerEnabled()
 
 		// Filter tools on-demand based on enabled skills
 		var activeTools []gin.H
 		existingToolNames := make(map[string]bool)
 		for _, t := range allTools {
 			name := t["name"].(string)
-			if h.repo == nil || h.repo.IsToolEnabled(name) {
+			if nativeEnabled && (h.repo == nil || h.repo.IsToolEnabled(name)) {
 				activeTools = append(activeTools, t)
 				existingToolNames[name] = true
 			}
@@ -303,7 +308,7 @@ func (h *MCPHandler) ProcessRPC(ctx context.Context, req *mcpRequest) mcpRespons
 						continue
 					}
 					for _, tName := range srv.Tools {
-						if !existingToolNames[tName] {
+						if !existingToolNames[tName] && (!builtinMCPToolSet[tName] || nativeEnabled) {
 							existingToolNames[tName] = true
 							activeTools = append(activeTools, gin.H{
 								"name":        tName,
@@ -367,7 +372,7 @@ func (h *MCPHandler) ProcessRPC(ctx context.Context, req *mcpRequest) mcpRespons
 		// A16: infrastructure-disclosure tools (channel inventory, routing
 		// topology) are administrator-only. The gate used to be "is there a valid
 		// API key", so any tenant could enumerate the upstream fleet.
-		if isAdminOnlyMCPTool(callParams.Name) && !h.mcpCallerIsAdmin(ctx, callParams.Arguments) {
+		if isAdminOnlyMCPTool(callParams.Name) && !h.callerIsAdmin(ctx, callParams.Arguments) {
 			return newMCPErrorResponse(req.ID, -32002,
 				fmt.Sprintf("Permission denied: tool '%s' is restricted to gateway administrators", callParams.Name))
 		}
@@ -392,6 +397,9 @@ func (h *MCPHandler) ProcessRPC(ctx context.Context, req *mcpRequest) mcpRespons
 
 // executeTool dispatches tool execution across domain modules.
 func (h *MCPHandler) executeTool(ctx context.Context, name string, args map[string]interface{}) (string, bool) {
+	if !h.builtinMCPToolEnabled(name) {
+		return "Airoute native MCP server is disabled", true
+	}
 	if res, isErr, handled := h.executeSkillTools(ctx, name, args); handled {
 		return res, isErr
 	}

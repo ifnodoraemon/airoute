@@ -13,9 +13,14 @@ import {
   ArrowRight,
   Layers,
   Percent,
-  Sliders
+  Sliders,
+  Coins
 } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
+import useFormDirty from '../hooks/useFormDirty';
+import useUnsavedGuard from '../hooks/useUnsavedGuard';
+import DiscardChangesDialog from './DiscardChangesDialog';
+import SupplierCostPanel from './SupplierCostPanel';
 
 function formatDaysLabel(days, isZh = true) {
   if (!days || days.length === 0 || days.length === 7) return '';
@@ -129,17 +134,15 @@ function parseSlotsFromPrice(p, isZh = true) {
 export default function PricingManager({
   adminFetch,
   showToast,
-  stats = {},
   isAdmin = true,
   lang = 'zh',
-  t,
   modelRoutes = [],
   setCurrentTab,
   groupMultipliers,
   onUpdateGroupMultipliers
 }) {
   const isZh = lang === 'zh';
-  const [pricingSubTab, setPricingSubTab] = useState('models'); // 'models' | 'groups'
+  const [pricingSubTab, setPricingSubTab] = useState('models'); // 'models' | 'groups' | 'suppliers'
   const [localGroupMultipliers, setLocalGroupMultipliers] = useState(groupMultipliers || { default: 1.0, vip: 0.8, enterprise: 1.5 });
   const [savingGroups, setSavingGroups] = useState(false);
   const [showAddGroupModal, setShowAddGroupModal] = useState(false);
@@ -149,7 +152,6 @@ export default function PricingManager({
   const [prices, setPrices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  useModalA11y(showModal, () => setShowModal(false));
   useModalA11y(showAddGroupModal, () => setShowAddGroupModal(false));
   const [editingPrice, setEditingPrice] = useState(null);
   // The gateway reports its own clock because off-peak windows are evaluated in
@@ -179,6 +181,18 @@ export default function PricingManager({
   });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+
+  // Dismissing the add/edit rule sheet (backdrop / X / Cancel / Esc) must not
+  // silently drop a half-configured price and its off-peak slots. A successful
+  // save closes directly, because there is nothing left to discard.
+  const pricingFormDirty = useFormDirty(showModal, formData);
+  const {
+    confirming: pricingConfirming,
+    requestClose: requestClosePricing,
+    keepEditing: keepEditingPricing,
+    discard: discardPricing
+  } = useUnsavedGuard({ isOpen: showModal, isDirty: pricingFormDirty, onClose: () => setShowModal(false) });
+  useModalA11y(showModal, requestClosePricing);
 
   // Wrapped so the mount effect can depend on it without re-running every render.
   // Its own dependencies are the props it reads, all of which are stable in
@@ -664,7 +678,9 @@ export default function PricingManager({
             {isZh ? '模型定价' : 'Model Pricing'}
           </h1>
           <p className="ui-page-subtitle">
-            {isZh ? '配置与管理官方参考基准定价与业务分组折扣倍率' : 'Configure official baseline token pricing and tier discount multipliers'}
+            {isZh
+              ? '配置官方参考基准定价、业务分组折扣倍率，并排对照供应商单价'
+              : 'Configure baseline token pricing and tier multipliers, and compare supplier prices side by side'}
           </p>
         </div>
 
@@ -689,7 +705,7 @@ export default function PricingManager({
         </div>
       </div>
 
-      {/* 1.5 Sub Navigation: Model Baseline Pricing vs Group Discount Tiers */}
+      {/* 1.5 Sub Navigation: Model Baseline Pricing vs Group Discount Tiers vs Supplier Prices */}
       <div className="flex items-center space-x-2 border-b border-[#E4E6E9] dark:border-[#2C3038] pb-2">
         <button
           type="button"
@@ -721,6 +737,21 @@ export default function PricingManager({
           <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${pricingSubTab === 'groups' ? 'bg-white/20 text-white' : 'bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0]'}`}>
             {Object.keys(localGroupMultipliers).length}
           </span>
+        </button>
+
+        {/* Supplier prices sit next to our selling prices: the two lists are
+            stored separately, so this tab only pairs them and shows the spread. */}
+        <button
+          type="button"
+          onClick={() => setPricingSubTab('suppliers')}
+          className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+            pricingSubTab === 'suppliers'
+              ? 'bg-[#355CFF] text-white shadow-xs'
+              : 'bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
+          }`}
+        >
+          <Coins className="w-4 h-4" />
+          <span>{isZh ? '供应商单价' : 'Supplier Prices'}</span>
         </button>
       </div>
 
@@ -1375,15 +1406,28 @@ export default function PricingManager({
         </div>
       )}
 
+      {/* 2.6 Supplier Prices View: our selling price next to the supplier price.
+          Both lists are loaded and edited independently; the table only pairs them
+          by model so the spread (ours - supplier) is readable in one place. */}
+      {pricingSubTab === 'suppliers' && (
+        <SupplierCostPanel
+          adminFetch={adminFetch}
+          showToast={showToast}
+          lang={lang}
+          prices={prices}
+        />
+      )}
+
       {/* 3. Flexible Multi-Slot Edit / Add Modal */}
       {showModal && (
         <div
+          data-testid="pricing-modal-overlay"
           className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-xs animate-in fade-in"
           onClick={(e) => {
-            if (e.target === e.currentTarget) setShowModal(false);
+            if (e.target === e.currentTarget) requestClosePricing();
           }}
         >
-          <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl p-6 sm:p-8 max-w-xl w-full shadow-xl space-y-5 animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+          <div className="relative bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl p-6 sm:p-8 max-w-xl w-full shadow-xl space-y-5 animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <div className="border-b border-[#E4E6E9] dark:border-[#2C3038] pb-3 flex items-center justify-between">
               <div>
                 <h3 className="font-semibold text-[#202124] dark:text-[#F1F2F4] text-base">
@@ -1393,7 +1437,9 @@ export default function PricingManager({
                 </h3>
               </div>
               <button
-                onClick={() => setShowModal(false)}
+                type="button"
+                onClick={() => requestClosePricing()}
+                aria-label={isZh ? '关闭' : 'Close'}
                 className="p-1.5 hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] rounded-lg text-[#656B75] hover:text-[#202124] dark:text-[#A1A7B0] dark:hover:text-[#F1F2F4] transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -1736,7 +1782,7 @@ export default function PricingManager({
               <div className="pt-2 flex items-center justify-end space-x-2.5">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={() => requestClosePricing()}
                   className="ui-btn-secondary ui-btn-sm"
                 >
                   {isZh ? '取消' : 'Cancel'}
@@ -1757,6 +1803,14 @@ export default function PricingManager({
                 </button>
               </div>
             </form>
+
+            <DiscardChangesDialog
+              open={pricingConfirming}
+              onKeepEditing={keepEditingPricing}
+              onDiscard={discardPricing}
+              lang={lang}
+              title={isZh ? '放弃未保存的定价修改？' : 'Discard these pricing edits?'}
+            />
           </div>
         </div>
       )}

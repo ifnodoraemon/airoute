@@ -65,6 +65,14 @@ func KeyStatusDenial(status string) *AccessDenial {
 }
 
 // KeyBudgetDenial reports a key whose assigned quota budget is exhausted.
+//
+// The check runs before dispatch and compares the usage settled so far, so it is
+// a soft ceiling rather than a reservation: concurrent requests that all pass
+// this check can push the key past its budget, bounded by the number of in-flight
+// requests times the per-request cost. Concurrency is resolved at settlement
+// (atomic increments), which keeps used_cost_units exactly equal to the sum of
+// the recorded usage rows — see the rate-limiting section of
+// docs/CONFIGURATION.md.
 func KeyBudgetDenial(budgetUnits, usedUnits int64, budget, used float64) *AccessDenial {
 	if !budgetExceeded(budgetUnits, usedUnits, budget, used) {
 		return nil
@@ -77,13 +85,10 @@ func KeyBudgetDenial(budgetUnits, usedUnits int64, budget, used float64) *Access
 	}
 }
 
-// AccountDenial reports a locked/deleted owner or an exhausted wallet. An empty
-// user status means the memory snapshot was not populated; the middleware then
-// falls back to storage, and open/dev-mode keys have no owner at all.
-func AccountDenial(userStatus, userRole string, userBalance float64) *AccessDenial {
-	if userStatus == "" {
-		return nil
-	}
+// AccountLockedDenial reports a locked/deleted owner account. It is split out
+// from AccountDenial so read-only endpoints that are exempt from the wallet
+// balance gate (video task polling) can still refuse a locked/deleted account.
+func AccountLockedDenial(userStatus string) *AccessDenial {
 	if strings.EqualFold(userStatus, "locked") || strings.EqualFold(userStatus, "deleted") {
 		return &AccessDenial{
 			StatusCode: http.StatusForbidden,
@@ -91,6 +96,19 @@ func AccountDenial(userStatus, userRole string, userBalance float64) *AccessDeni
 			Type:       "account_locked",
 			Code:       "account_locked",
 		}
+	}
+	return nil
+}
+
+// AccountDenial reports a locked/deleted owner or an exhausted wallet. An empty
+// user status means the memory snapshot was not populated; the middleware then
+// falls back to storage, and open/dev-mode keys have no owner at all.
+func AccountDenial(userStatus, userRole string, userBalance float64) *AccessDenial {
+	if userStatus == "" {
+		return nil
+	}
+	if denial := AccountLockedDenial(userStatus); denial != nil {
+		return denial
 	}
 	// Admin accounts have unlimited quota.
 	if strings.EqualFold(userRole, "admin") {
@@ -105,6 +123,52 @@ func AccountDenial(userStatus, userRole string, userBalance float64) *AccessDeni
 		}
 	}
 	return nil
+}
+
+// BalanceUnknownDenial is the fail-closed response served when the gateway knows
+// a key belongs to a user but cannot establish that user's status or balance:
+// the in-memory snapshot was built without user fields and the authoritative
+// lookup timed out.
+//
+// Failing open here (the old behaviour) meant a database stall silently disabled
+// the wallet gate *and* the pre-authorisation for those requests: exactly the
+// burst the amount reservation exists to stop. A short 503 with Retry-After is
+// the safe direction: the client retries when storage answers again.
+func BalanceUnknownDenial() *AccessDenial {
+	return &AccessDenial{
+		StatusCode: http.StatusServiceUnavailable,
+		Message:    "Account state is temporarily unavailable; the request was not admitted because the wallet balance could not be verified. Please retry shortly.",
+		Type:       "service_unavailable",
+		Code:       "account_state_unavailable",
+		Headers:    map[string]string{"Retry-After": "2"},
+		LogMessage: "account status/balance could not be resolved; failing closed",
+	}
+}
+
+// IsFreeReadVideoTaskQuery reports whether the request is exactly a GET for a
+// video task status (/v1/videos/tasks/:id, and the root-mounted
+// /videos/tasks/:id). Those reads are never billed — the task was already
+// charged when it was created — so an exhausted wallet, per-key budget or
+// in-flight reservation must not block a customer from polling a job the
+// provider is still running. Authentication, key status and locked/deleted
+// account checks still apply.
+func IsFreeReadVideoTaskQuery(c *gin.Context) bool {
+	if c == nil || c.Request == nil || c.Request.Method != http.MethodGet {
+		return false
+	}
+	var rest string
+	for _, prefix := range []string{"/v1/videos/tasks/", "/videos/tasks/"} {
+		if strings.HasPrefix(c.Request.URL.Path, prefix) {
+			rest = strings.TrimPrefix(c.Request.URL.Path, prefix)
+			break
+		}
+	}
+	if rest == "" {
+		return false
+	}
+	// Exactly one path segment: a trailing slash is tolerated, a nested path is not.
+	rest = strings.TrimSuffix(rest, "/")
+	return rest != "" && !strings.Contains(rest, "/")
 }
 
 // AuthorizeKey applies the key/account admission rules shared by every
@@ -211,7 +275,9 @@ func CheckKeyRateLimits(ctx context.Context, key *model.APIKeyConfig) KeyRateLim
 		// On Redis error/timeout, gracefully fall through to the local bucket.
 	}
 
-	// 2. Fallback to the local in-memory token bucket
+	// 2. Fallback to the local in-memory sliding window. It enforces the same 60s
+	// semantics as the Redis path above, so a Redis outage does not loosen the
+	// limit (see rpmWindowSpan).
 	bucket := GlobalRateLimiter.GetBucket(key.Key, key.RPM)
 	if !bucket.Allow() {
 		outcome.Denial = &AccessDenial{
@@ -227,16 +293,6 @@ func CheckKeyRateLimits(ctx context.Context, key *model.APIKeyConfig) KeyRateLim
 		}
 	}
 	return outcome
-}
-
-// ReserveUserQuota reserves one in-flight request slot for a non-admin user.
-func ReserveUserQuota(userID int64, balance float64) (bool, QuotaBackend) {
-	return globalQuotaTracker.TryAcquire(userID, balance)
-}
-
-// ReleaseUserQuota frees a reservation acquired with ReserveUserQuota.
-func ReleaseUserQuota(userID int64, backend QuotaBackend) {
-	globalQuotaTracker.Release(userID, backend)
 }
 
 // ---------------------------------------------------------------------------
@@ -315,6 +371,46 @@ func TrustedProxiesFromEnv() ([]*net.IPNet, error) {
 	nets, err := ParseTrustedProxies(spec)
 	trustedProxyCache.Store(&trustedProxyCacheEntry{spec: spec, nets: nets, err: err})
 	return nets, err
+}
+
+// PeerIsTrustedProxy reports whether the request's direct TCP peer is one of the
+// configured trusted reverse proxies. Forwarding headers may only be believed when
+// this is true: an untrusted peer can write any value it likes into them.
+//
+// It mirrors the peer check inside ResolveClientIdentity; callers that need the
+// *scheme* rather than the address (cookie Secure flags, redirect building) use it
+// directly.
+func PeerIsTrustedProxy(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	peer := peerIP(r.RemoteAddr)
+	if peer == "" {
+		return false
+	}
+	trusted, err := TrustedProxiesFromEnv()
+	if err != nil {
+		return false
+	}
+	return ipInNetworks(net.ParseIP(peer), trusted)
+}
+
+// TrustedForwardedProto returns the X-Forwarded-Proto value only when the request
+// arrived from a configured trusted proxy. Any other request reports ("", false),
+// because the header is then the caller's own claim rather than the proxy's
+// observation of the scheme it terminated.
+func TrustedForwardedProto(c *gin.Context) (string, bool) {
+	if c == nil || c.Request == nil {
+		return "", false
+	}
+	if !PeerIsTrustedProxy(c.Request) {
+		return "", false
+	}
+	proto := strings.ToLower(strings.TrimSpace(c.GetHeader("X-Forwarded-Proto")))
+	if proto == "" {
+		return "", false
+	}
+	return proto, true
 }
 
 // TrustedProxyConfigured reports whether any reverse proxy is trusted. Without

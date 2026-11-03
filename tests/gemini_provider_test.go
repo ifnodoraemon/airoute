@@ -35,9 +35,9 @@ func TestGeminiProvider_NonStreaming(t *testing.T) {
 			return
 		}
 
-		// Verify safety settings are present
-		if len(geminiReq.SafetySettings) == 0 {
-			http.Error(w, "missing safety settings", http.StatusBadRequest)
+		// Preserve the upstream's defaults when the caller requested no override.
+		if len(geminiReq.SafetySettings) != 0 {
+			http.Error(w, "unexpected safety settings override", http.StatusBadRequest)
 			return
 		}
 

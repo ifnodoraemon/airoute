@@ -13,7 +13,7 @@
 // Anthropic protocol, so it must be opted into per channel instead of being
 // claimed by every new channel.
 export const ALL_PROTOCOLS = [
-  'openai_chat', 'openai_response', 'openai_text', 'anthropic_messages',
+  'openai_chat', 'openai_response', 'anthropic_messages',
   'embeddings', 'rerank', 'images', 'audio_speech', 'audio_transcription', 'videos',
 ];
 
@@ -31,14 +31,17 @@ export function emptyChannel() {
     priority: 1,
     weight: 10,
     timeout_seconds: 60,
+    max_concurrency: 0,
+    queue_limit: 0,
+    queue_wait_seconds: 0,
     models_str: '',
     mapping_rules: [],
     protocols: [...ALL_PROTOCOLS],
   };
 }
 
-const CHAT_ONLY = ['openai_chat', 'openai_response', 'openai_text'];
-const CHAT_AND_TOOLS = ['openai_chat', 'openai_response', 'openai_text', 'embeddings', 'rerank', 'images'];
+const CHAT_ONLY = ['openai_chat', 'openai_response'];
+const CHAT_AND_TOOLS = ['openai_chat', 'openai_response', 'embeddings', 'rerank', 'images'];
 
 export const PROVIDER_PRESETS = {
   gpustack: {
@@ -81,7 +84,7 @@ export const PROVIDER_PRESETS = {
       timeout_seconds: 60,
       models_str: 'glm-5.3, glm-5.3-flash, glm-4-plus, cogvideox-5b, cogview-3-plus',
       mapping_rules: [],
-      protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings', 'images', 'videos'],
+      protocols: ['openai_chat', 'openai_response', 'embeddings', 'images', 'videos'],
     },
     zh: '已载入 智谱 GLM 官方模板及模型列表',
     en: 'Loaded Zhipu GLM official template and models',
@@ -96,7 +99,7 @@ export const PROVIDER_PRESETS = {
       timeout_seconds: 60,
       models_str: 'doubao-seed-2.1-pro, doubao-seed-2.1-turbo, doubao-1.5-pro, seedance-2.5',
       mapping_rules: [],
-      protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings', 'images', 'audio_speech', 'videos'],
+      protocols: ['openai_chat', 'openai_response', 'embeddings', 'images', 'audio_speech', 'videos'],
     },
     zh: '已载入 字节火山豆包 官方模板及模型列表',
     en: 'Loaded Volcengine Doubao official template and models',
@@ -115,6 +118,51 @@ export const PROVIDER_PRESETS = {
     },
     zh: '已载入 月之暗面 Kimi 官方模板及模型列表',
     en: 'Loaded Moonshot Kimi official template and models',
+  },
+  aliyun: {
+    patch: {
+      name: 'aliyun-dashscope',
+      type: 'openai',
+      base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      priority: 1,
+      weight: 10,
+      timeout_seconds: 60,
+      models_str: 'qwen-max, qwen-plus, qwen-turbo, text-embedding-v3',
+      mapping_rules: [],
+      protocols: CHAT_AND_TOOLS,
+    },
+    zh: '已载入 阿里云百炼 DashScope 模板（OpenAI 兼容模式）',
+    en: 'Loaded Aliyun Bailian DashScope template (OpenAI-compatible mode)',
+  },
+  baidu: {
+    patch: {
+      name: 'baidu-qianfan',
+      type: 'openai',
+      base_url: 'https://qianfan.baidubce.com/v2',
+      priority: 1,
+      weight: 10,
+      timeout_seconds: 60,
+      models_str: 'ernie-4.5-turbo-128k, ernie-4.0-8k, embedding-v1',
+      mapping_rules: [],
+      protocols: CHAT_AND_TOOLS,
+    },
+    zh: '已载入 百度智能云千帆模板（OpenAI 兼容 v2）',
+    en: 'Loaded Baidu Qianfan template (OpenAI-compatible v2)',
+  },
+  tencent: {
+    patch: {
+      name: 'tencent-hunyuan',
+      type: 'openai',
+      base_url: 'https://api.hunyuan.cloud.tencent.com/v1',
+      priority: 1,
+      weight: 10,
+      timeout_seconds: 60,
+      models_str: 'hunyuan-turbos-latest, hunyuan-pro, hunyuan-standard',
+      mapping_rules: [],
+      protocols: CHAT_ONLY,
+    },
+    zh: '已载入 腾讯混元模板（OpenAI 兼容）',
+    en: 'Loaded Tencent Hunyuan template (OpenAI-compatible)',
   },
   openai: {
     patch: {
@@ -163,6 +211,18 @@ export const PROVIDER_PRESETS = {
     zh: '已载入 Google Gemini 官方模板及模型列表',
     en: 'Loaded Google Gemini official template and models',
   },
+  vertex: {
+    patch: {
+      name: 'google-vertex', type: 'vertex', api_key: 'adc',
+      priority: 1, weight: 10, timeout_seconds: 60,
+      models_str: '', mapping_rules: [],
+      protocols: ['openai_chat', 'openai_response', 'anthropic_messages', 'embeddings'],
+    },
+    zh: '已载入 Vertex 模板，请填写包含项目和区域的 Base URL，使用 ADC 或服务账号 JSON 认证',
+    en: 'Loaded Vertex template. Enter a project/location Base URL and use ADC or service-account JSON.',
+    keepEndpoint: true,
+    keepModels: true,
+  },
   ollama: {
     patch: {
       name: 'ollama-service',
@@ -173,7 +233,7 @@ export const PROVIDER_PRESETS = {
       timeout_seconds: 60,
       models_str: 'llama3.3, qwen3.8:27b, deepseek-r1:8b',
       mapping_rules: [],
-      protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings'],
+      protocols: ['openai_chat', 'openai_response', 'embeddings'],
     },
     zh: '已载入 Ollama 模型列表模板，请输入您的端点地址',
     en: 'Loaded Ollama template. Please enter your endpoint URL',
@@ -189,7 +249,7 @@ export const PROVIDER_PRESETS = {
       timeout_seconds: 60,
       models_str: 'Qwen/Qwen3.8-27B-Instruct, deepseek-ai/DeepSeek-V4.1-Flash',
       mapping_rules: [],
-      protocols: ['openai_chat', 'openai_response', 'openai_text', 'embeddings'],
+      protocols: ['openai_chat', 'openai_response', 'embeddings'],
     },
     zh: '已载入 vLLM 模型列表模板，请输入您的端点地址',
     en: 'Loaded vLLM template. Please enter your endpoint URL',

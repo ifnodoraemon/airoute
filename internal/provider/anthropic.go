@@ -56,6 +56,9 @@ func buildAnthropicURL(baseURL string) string {
 
 // ChatComplete executes a non-streaming Anthropic request and converts the response to OpenAI format.
 func (p *AnthropicProvider) ChatComplete(ctx context.Context, req *model.ChatCompletionRequest, channel *model.ChannelConfig) (*model.ChatCompletionResponse, error) {
+	if response, done, err := maybeNativeUnary(ctx, p.client, req, channel, model.NativeMessages); done {
+		return response, err
+	}
 	anthropicReq := convertOpenAIToAnthropic(req, channel)
 	anthropicReq.Stream = false
 
@@ -93,7 +96,7 @@ func (p *AnthropicProvider) ChatComplete(ctx context.Context, req *model.ChatCom
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
+		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes, resp.Header)
 	}
 
 	var anthropicResp AnthropicResponse

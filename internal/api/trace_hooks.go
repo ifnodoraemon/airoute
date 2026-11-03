@@ -2,7 +2,9 @@ package api
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -26,6 +28,13 @@ const ContextKeyChatID = "chat_id"
 // namespaced by the authenticated caller (A18); traces must show the session the
 // client actually sent, so handlers publish that raw value here.
 const ContextKeyLLMSessionID = "llm_session_id"
+
+// ContextKeyTraceRecorded marks that a trace snapshot for this request was
+// already archived. One request has exactly one trace row: dispatch failures
+// record their trace before the usage recorder runs, and the 499 audit path can
+// be reached more than once (forced flip plus a repeated recordUsage). Without
+// the flag the console showed duplicate rows for one trace_id.
+const ContextKeyTraceRecorded = "trace_recorded"
 
 // traceSessionID resolves the session id to persist in a trace record.
 func traceSessionID(c *gin.Context) string {
@@ -77,18 +86,53 @@ func CaptureRequestSnapshot(c *gin.Context) {
 	}
 }
 
+// RecordSuccessTrace archives a successful unary exchange. The response is
+// marshalled here rather than at the call site, because the snippet has to exist
+// before the single sampling decision is drawn.
+//
+// E-01: the capture policy is evaluated once, in TraceCapture.Record. This
+// function used to pre-check Enabled here, and RecordTrace pre-checked it again
+// before Record checked it a third time; when Enabled also applied the success
+// sampling rate, a configured 10% became roughly 0.1% because each check drew an
+// independent random number. Record now returns whether the snapshot was queued,
+// and that answer drives the per-request dedupe marker.
+func RecordSuccessTrace(c *gin.Context, modelName, channel string, dur time.Duration, resp any) {
+	if storage.GlobalTraceCapture == nil || c == nil {
+		return
+	}
+	snippet := ""
+	if resp != nil {
+		if b, err := json.Marshal(resp); err == nil {
+			snippet = string(b)
+		}
+	}
+	RecordTrace(c, modelName, channel, http.StatusOK, "", snippet, dur)
+}
+
 // RecordTrace archives a redacted snapshot for the given response status. The
 // request snippet comes from CaptureRequestSnapshot; the response snippet is
 // supplied by the caller when it is cheap to do so.
+//
+// The capture policy (mode and success sampling) is decided inside
+// TraceCapture.Record, which returns whether the snapshot was actually queued.
 func RecordTrace(c *gin.Context, modelName, channel string, statusCode int, errMsg, responseSnippet string, duration time.Duration) {
 	tc := storage.GlobalTraceCapture
-	if tc == nil || c == nil || !tc.Enabled(statusCode) {
+	if tc == nil || c == nil {
 		return
 	}
+	// Dedupe per request: one request produces at most one trace row. The marker
+	// is set only when Record accepted the snapshot, so a request sampled out (or
+	// dropped by a full queue) does not consume the slot. Callers keep their
+	// richer message: a dispatch error recorded first wins over the synthesized
+	// 499 explanation from the usage recorder.
+	if _, recorded := c.Get(ContextKeyTraceRecorded); recorded {
+		return
+	}
+
 	reqSnap, _ := c.Get(ContextKeyRequestSnapshot)
 	reqStr, _ := reqSnap.(string)
 
-	tc.Record(&storage.RequestTraceRecord{
+	if tc.Record(&storage.RequestTraceRecord{
 		TraceID:         middleware.GetTraceID(c),
 		ChatID:          c.GetString(ContextKeyChatID),
 		SessionID:       traceSessionID(c),
@@ -101,26 +145,7 @@ func RecordTrace(c *gin.Context, modelName, channel string, statusCode int, errM
 		RequestSnippet:  reqStr,
 		ResponseSnippet: responseSnippet,
 		DurationMs:      duration.Milliseconds(),
-	})
-}
-
-// RecordTraceFromError is a convenience wrapper for dispatch failures.
-func RecordTraceFromError(c *gin.Context, modelName, sessionID string, statusCode int, err error, duration time.Duration) {
-	if c == nil {
-		return
+	}) {
+		c.Set(ContextKeyTraceRecorded, true)
 	}
-	if sessionID != "" {
-		c.Set(router.ContextKeySessionID, sessionID)
-	}
-	msg := ""
-	if err != nil {
-		msg = err.Error()
-	}
-	RecordTrace(c, modelName, "", statusCode, msg, "", duration)
-}
-
-// respondWithTraceError writes an OpenAI-shaped error and archives the snapshot.
-func respondWithTraceError(c *gin.Context, modelName string, statusCode int, message, errType, code string, duration time.Duration) {
-	RecordTrace(c, modelName, "", statusCode, message, "", duration)
-	RespondOpenAIError(c, statusCode, message, errType, code)
 }

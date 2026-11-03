@@ -37,7 +37,7 @@ func TestUnitPricingUsesOneRateSnapshot(t *testing.T) {
 				t.Fatal(err)
 			}
 			e := NewEngine(r)
-			cost, _, _, _, discount, snapshot := e.CalculateCostForUnits(base.Model, "vip", 1_000_000, 1_000_000, 0, tc.units, time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC))
+			cost, _, _, _, discount, snapshot := e.CalculateCostForUnitsWithCacheCreation(base.Model, "vip", 1_000_000, 1_000_000, 0, 0, tc.units, time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC))
 			if cost != tc.want {
 				t.Fatalf("want %v, got %v", tc.want, cost)
 			}

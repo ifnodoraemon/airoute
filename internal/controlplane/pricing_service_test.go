@@ -296,8 +296,11 @@ func TestPricingServiceSaveRejectsOverlappingOffPeakSlots(t *testing.T) {
 	sync := &fakePricingSync{}
 	svc := NewPricingService(store, sync, nil, nil)
 
+	// The overlap rule only applies to "custom", the one mode whose strategy reads
+	// OffPeakSlots (billing.ValidateOffPeakSlots gates on the mode).
 	err := svc.SaveRate(context.Background(), &storage.ModelPriceRecord{
-		Model: "gpt-x", OffPeakEnabled: true, OffPeakSlots: "00:00-10:00,05:00-12:00",
+		Model: "gpt-x", OffPeakEnabled: true, OffPeakMode: "custom",
+		OffPeakSlots: `[{"start":"00:00","end":"10:00","discount":0.5,"days":[1]},{"start":"05:00","end":"12:00","discount":0.5,"days":[1]}]`,
 	})
 
 	var verr *ValidationError

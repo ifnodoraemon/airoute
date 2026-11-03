@@ -22,7 +22,6 @@ type S3Storage struct {
 	accessKey       string
 	secretKey       string
 	region          string
-	useSSL          bool
 	pathStyle       bool
 	publicURLPrefix string
 	client          *http.Client
@@ -30,12 +29,13 @@ type S3Storage struct {
 
 // NewS3Storage creates an S3/RustFS storage driver.
 func NewS3Storage(cfg config.S3Config) (*S3Storage, error) {
+	// Only the documented variable is honoured. The previous S3_ENDPOINT fallback
+	// is the generic name used by every S3 SDK/CLI, so any stray value in the
+	// environment silently redirected the gateway's artifact storage to a
+	// different service; configuration must be explicit.
 	endpointStr := cfg.Endpoint
 	if endpointStr == "" {
 		endpointStr = os.Getenv("STORAGE_S3_ENDPOINT")
-		if endpointStr == "" {
-			endpointStr = os.Getenv("S3_ENDPOINT")
-		}
 	}
 	if endpointStr == "" {
 		return nil, fmt.Errorf("S3/RustFS storage endpoint is not configured (STORAGE_S3_ENDPOINT is required)")
@@ -69,7 +69,6 @@ func NewS3Storage(cfg config.S3Config) (*S3Storage, error) {
 		accessKey:       cfg.AccessKey,
 		secretKey:       cfg.SecretKey,
 		region:          region,
-		useSSL:          cfg.UseSSL || u.Scheme == "https",
 		pathStyle:       cfg.PathStyle,
 		publicURLPrefix: strings.TrimRight(cfg.PublicURLPrefix, "/"),
 		client: &http.Client{

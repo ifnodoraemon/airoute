@@ -17,9 +17,11 @@ func TestResolvePriceSource(t *testing.T) {
 		prices: map[string]*storage.ModelPriceRecord{
 			"default:exact-model": {Model: "exact-model", GroupName: "default"},
 			"vip:group-model":     {Model: "group-model", GroupName: "vip"},
-			"vip:*":               {Model: "*", GroupName: "vip"},
 		},
-		wildcard:         []wildcardRule{{group: "default", prefix: "gpt-4", price: &storage.ModelPriceRecord{Model: "gpt-4*"}}},
+		wildcard: []wildcardRule{
+			{group: "default", pattern: "gpt-4*", price: &storage.ModelPriceRecord{Model: "gpt-4*"}},
+			{group: "vip", pattern: "*", price: &storage.ModelPriceRecord{Model: "*", GroupName: "vip"}},
+		},
 		groupMultipliers: map[string]float64{"default": 1, "vip": 0.8},
 		deflt:            &storage.ModelPriceRecord{Model: "*"},
 	}

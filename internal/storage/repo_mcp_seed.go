@@ -1,12 +1,16 @@
 package storage
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 )
 
 // SeedDefaultMCPServers ensures default curated ModelScope-style MCP servers exist.
 func (r *Repository) SeedDefaultMCPServers() error {
+	if r.GetSetting("mcp_servers_seeded_v1", "") == "1" {
+		return nil
+	}
 	defaults := []MCPServerRecord{
 		{
 			ID:          "airoute-gateway",
@@ -150,6 +154,11 @@ func (r *Repository) SeedDefaultMCPServers() error {
 		},
 	}
 
+	tx, err := r.db.BeginTx(context.Background())
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
 	for _, s := range defaults {
 		toolsJSON, _ := json.Marshal(s.Tools)
 		promptsJSON, _ := json.Marshal(s.Prompts)
@@ -158,22 +167,17 @@ func (r *Repository) SeedDefaultMCPServers() error {
 		if s.Enabled {
 			enabledInt = 1
 		}
-		_, _ = r.db.Exec(`
+		_, err := tx.Exec(`
 			INSERT INTO system_mcp_servers (id, name, description, category, transport, endpoint, status, author, version, tools, prompts, resources, env_vars, enabled, created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-			ON CONFLICT(id) DO UPDATE SET
-				name = excluded.name,
-				description = excluded.description,
-				category = excluded.category,
-				transport = excluded.transport,
-				endpoint = excluded.endpoint,
-				status = excluded.status,
-				author = excluded.author,
-				version = excluded.version,
-				tools = excluded.tools,
-				prompts = excluded.prompts,
-				resources = excluded.resources
+			ON CONFLICT(id) DO NOTHING
 		`, s.ID, s.Name, s.Description, s.Category, s.Transport, s.Endpoint, s.Status, s.Author, s.Version, string(toolsJSON), string(promptsJSON), string(resourcesJSON), s.EnvVars, enabledInt)
+		if err != nil {
+			return err
+		}
 	}
-	return nil
+	if _, err := tx.Exec(`INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value = excluded.value`, "mcp_servers_seeded_v1", "1"); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

@@ -38,11 +38,13 @@ channels:
       "my-corp/llama3": "meta-llama/Llama-3.1-8B-Instruct"
     protocols:
       - "openai_chat"
-      - "openai_text"
       - "images"
     priority: 1
     weight: 10
     timeout_seconds: 60
+    max_concurrency: 0          # Per replica, shared by channels using the same endpoint + API key; 0 = unlimited
+    queue_limit: 0              # Bounded FIFO queue; 0 = immediately try the next channel
+    queue_wait_seconds: 0       # With a nonzero queue, 0 uses the 5-second default
 
   - name: "google-gemini-official"
     type: "gemini"
@@ -95,12 +97,14 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `GATEWAY_HOST` | `0.0.0.0` | HTTP listen address |
 | `GATEWAY_PORT` | `8080` | HTTP listen port. In the Helm chart this is derived from `service.port` |
 | `GATEWAY_CONFIG` | `configs/config.yaml` | Path to the YAML config file. **Required**: a missing file aborts startup |
-| `GATEWAY_DB_DSN` / `GATEWAY_DB` | `data/gateway.db` | SQLite path used when `DATABASE_URL` is unset (equivalent to `-db`) |
+| `GATEWAY_DB_DSN` / `GATEWAY_DB` | `data/gateway.db` | SQLite path used when `DATABASE_URL` is unset. `GATEWAY_DB` is the **legacy alias**: it is read only when `GATEWAY_DB_DSN` is empty, and the `-db` flag overrides both. Risk: changing the path on an existing deployment silently starts on an *empty* database (fresh admin, no seeded keys), so move the file and change the value together |
 | `DATABASE_URL` | unset | PostgreSQL URL; when set, SQLite is not used |
 | `REDIS_URL` | unset | Redis connection for distributed rate limits, cache invalidation and the log queue |
 | `PUBLIC_URL` / `GATEWAY_PUBLIC_URL` | unset | Externally reachable base URL (used for OAuth redirects and printed endpoints) |
 | `GATEWAY_INGRESS_PORT` | falls back to `GATEWAY_PORT` | Host port the Compose load balancer publishes; also the default port the CLI probes |
-| `GIN_MODE` | `release` (Compose/Swarm) | Kept for compatibility: gin is forced into release mode in code and the credential gate no longer depends on this value. Only affects the Stripe-webhook startup warning |
+| `GATEWAY_READ_TIMEOUT_SEC` | `600` | `http.Server.ReadTimeout`. Overrides `server.read_timeout_sec` in the config file, which the Compose stack mounts read-only |
+| `GATEWAY_WRITE_TIMEOUT_SEC` | `600` | `http.Server.WriteTimeout`. Bounds non-streaming responses (streaming responses clear the deadline). Overrides `server.write_timeout_sec` |
+| `GATEWAY_LOG_LEVEL` | `info` | `debug`/`info`/`warn`/`error`. Overrides `server.log_level` |
 
 ### 2.2 Admin, auth & quotas
 
@@ -109,7 +113,7 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `GATEWAY_ADMIN_USER` | `admin` | Initial admin username |
 | `GATEWAY_ADMIN_USERNAME` | unset | Legacy alias, used only when `GATEWAY_ADMIN_USER` is empty |
 | `GATEWAY_ADMIN_PASSWORD` | — | Initial admin password. Startup is **fail-closed**: `admin123`, a password shorter than 8 characters, or an empty value aborts the process |
-| `GATEWAY_ADMIN_SECRET` | — | HMAC signing secret. Empty or well-known placeholder values abort startup; use one stable random value (≥ 32 chars) shared by every replica |
+| `GATEWAY_ADMIN_SECRET` | — | HMAC signing secret for admin tokens. Startup is **fail-closed**: an empty value, a value shorter than 32 characters, or one of the placeholder values shipped in sample manifests aborts the process. Use one stable random value (≥ 32 chars) shared by every replica |
 | `GATEWAY_ALLOW_INSECURE_DEFAULTS` | `false` | Escape hatch for throwaway local development: `true` downgrades the credential gate to a warning. Never enable in production |
 | `GATEWAY_ADMIN_RESET` | `false` | One-shot: force the stored admin password back to `GATEWAY_ADMIN_PASSWORD` on the next start, then set it back to `false` |
 | `ALLOW_REGISTRATION` | `false` (shipped config & `.env.example`) | Public self-registration. Off in the shipped `configs/config.yaml`; enable deliberately |
@@ -117,9 +121,10 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `DEFAULT_TRIAL_BALANCE` | unset | Legacy alias of `INITIAL_USER_BALANCE`, used only when the latter is empty |
 | `REQUIRE_EMAIL_VERIFICATION` | `true` (`.env.example`) | Require the e-mail verification code during registration (needs SMTP) |
 | `TOKEN_EXPIRY_HOURS` | `168` | Session/token lifetime in hours |
-| `GATEWAY_METRICS_TOKEN` | unset | When set, `/metrics` requires `Authorization: Bearer <token>` |
-| `GATEWAY_TRUSTED_PROXIES` | unset | Comma-separated proxy CIDRs whose `X-Forwarded-For` is trusted for client-IP limits/logging. Empty trusts no forwarding headers (safe default). Behind the bundled nginx set the Compose network, e.g. `172.22.0.0/16`. An invalid list refuses startup |
-| `GATEWAY_ADMIN_ALLOWED_IPS` | unset (loopback + private) | Control-plane CIDR/IP allowlist (`/api/v1/admin`, `/app`). Overrides the default loopback/private rule; an invalid entry fails closed with 503 |
+| `GATEWAY_METRICS_TOKEN` | unset | When set, `/metrics` requires `Authorization: Bearer <token>` from every client. When unset, `/metrics` is limited to loopback/private clients |
+| `GATEWAY_METRICS_ALLOW_PUBLIC` | `false` | Explicitly open `/metrics` to public clients when no token is configured (not recommended) |
+| `GATEWAY_TRUSTED_PROXIES` | unset (trust no forwarding header) | Comma-separated proxy CIDRs whose `X-Forwarded-For`/`X-Real-IP` are trusted for client-IP limits, logging **and the control-plane guard**. Empty trusts nothing, so behind a reverse proxy every request is attributed to the proxy and the control plane fails closed with `403` — set this to the proxy CIDRs. List **proxy addresses**, never whole network ranges: host-published traffic reaches the proxy from the bridge gateway address (`172.30.0.1`), so trusting the edge subnet would treat that address as another proxy hop, leave the client unattributable, and fail the control plane closed with `403` even for the host's own browser. The shipped Compose stack pins nginx to `172.30.0.10` and passes `172.30.0.10/32` as the default. An invalid list refuses startup |
+| `GATEWAY_ADMIN_ALLOWED_IPS` | unset (loopback + forwarded private clients) | Control-plane CIDR/IP allowlist (`/api/v1/admin`, `/app`). Replaces the default rule; an invalid entry fails closed with 503. A peer that cannot be attributed to a client (no trusted proxy hop) only passes when the peer address itself is on the list |
 | `GATEWAY_ADMIN_ALLOWED_HOSTS` | unset | Optional `Host` allowlist for the control plane; supports `*.example.com` |
 | `GATEWAY_ADMIN_ALLOW_PUBLIC` | `false` | Explicitly open the control plane to public clients (not recommended) |
 
@@ -127,12 +132,15 @@ The following environment variables are read by the server. YAML supports `${NAM
 
 | Environment Variable | Default Value | Description |
 | :--- | :--- | :--- |
-| `GATEWAY_FIRST_TOKEN_TIMEOUT` | derived from the channel timeout | Only applies to channels without `timeout_seconds`; otherwise 30s (60s for reasoning model names such as o1/o3/r1/thinking) |
+| `GATEWAY_FIRST_TOKEN_TIMEOUT` | derived from the channel timeout | **Global upper bound**: it applies to **every** channel and can only shorten the channel's own `timeout_seconds`, never extend it (the effective window is `min(channel timeout, this value)`). When unset it is derived: 30s, or 60s for reasoning model names such as o1/o3/r1/thinking. Setting it to 10 silently caps a `timeout_seconds: 3600` reasoning channel at 10s |
 | `GATEWAY_BREAKER_ENABLED` | `true` | Tri-state circuit breaker. `false` = advisory mode (records state, never rejects traffic) — recommended for single-channel deployments |
 | `GATEWAY_BREAKER_FAILURES` | `3` | Consecutive channel failures before the breaker opens. HTTP 429 never counts as a channel failure |
 | `GATEWAY_BREAKER_COOLDOWN_SEC` | `30` | Open-state cooldown before half-open probing |
+| `GATEWAY_SESSION_AFFINITY_TTL_SEC` | `1800` | Pin a session to the channel that successfully answered. Local and Redis pins expire after this TTL (1–86400 seconds); failures only remove a matching pin |
+| `GATEWAY_UPSTREAM_COOLDOWN_SEC` | `1` | Default cooldown after an upstream 429 without retry metadata. Explicit Retry-After/reset headers take precedence. `0` disables only the default wait. Cooldown is per endpoint + credential + upstream model unless the upstream declares an account-wide limit |
 | `GATEWAY_DRAIN_ABORTED_UPSTREAM` | `true` | Keep consuming the upstream after the client disconnects and bill the upstream-reported usage; `false` = cancel immediately and bill an estimate |
 | `GATEWAY_DRAIN_TIMEOUT_SEC` | `120` | Maximum time a single aborted request may be drained |
+| `GATEWAY_REQUEST_BUDGET_SEC` | `300` | Total budget for a non-streaming dispatch across channel attempts and cross-model fallback; `0` disables it. Streaming requests keep the first-token timeout instead |
 | `GATEWAY_SHUTDOWN_TIMEOUT_SEC` | derived: `GATEWAY_DRAIN_TIMEOUT_SEC + 15` (135) | How long in-flight requests may finish after SIGTERM. Must be below the container's `stop_grace_period` / `terminationGracePeriodSeconds` |
 | `GATEWAY_PUBLIC_STATUS` | `true` | Set `false` to hide the model catalog on the public status page |
 | `GATEWAY_BLOCK_PRIVATE_PROBE` | `false` | Reject probing RFC1918 private upstream addresses |
@@ -150,6 +158,7 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `GATEWAY_TRACE_MAX_SNIPPET` | `4096` | Maximum bytes retained per request/response snippet |
 | `GATEWAY_USAGE_LOG_RETENTION_DAYS` | `365` | Retention window for audit (`usage_logs`) rows; `0` keeps every row |
 | `GATEWAY_USAGE_LOG_PRUNE_INTERVAL_HOURS` | `6` | How often expired audit rows are pruned |
+| `GATEWAY_ENABLE_TABLE_PARTITIONING` | unset (**off**) | PostgreSQL-only opt-in: `1`/`true`/`yes`/`on` registers migration 43, which rewrites `usage_logs` into monthly range partitions (exclusive lock + full table copy). Any other value — including unset — registers no v43 migration, so startup is unchanged. Read *Usage-log table partitioning* below before enabling |
 | `GATEWAY_VERIFICATION_RETENTION_DAYS` | `7` | Retention for e-mail verification codes; `0` keeps every row |
 | `GATEWAY_VIDEO_TASK_RETENTION_DAYS` | `30` | Retention for video task records; `0` keeps every row |
 | `GATEWAY_TIMESERIES_TTFT_SAMPLE` | `5000` | Row cap for TTFT percentile sampling in the dashboard time series |
@@ -157,6 +166,7 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `GATEWAY_USAGE_SPILL_DIR` | `data` | Disk fallback for billing records when Redis/DB fail (`-` disables, not recommended) |
 | `GATEWAY_USAGE_SPILL_MAX_MB` | `256` | Disk fallback size ceiling |
 | `GATEWAY_USAGE_SPILL_CLAIM_GRACE_SEC` | `600` | Grace period before another replica may claim a spilled record (shared spill directory) |
+| `GATEWAY_USAGE_SPILL_REPLAY_SEC` | `60` | Cadence of the periodic spill replay (records written to disk while the DB/Redis were down are replayed without waiting for a restart; a DB recovery also kicks one immediately) |
 | `GATEWAY_BILLING_RECONCILE_HOURS` | `6` | Ledger reconciliation period; `0` disables |
 | `GATEWAY_MODERATION_STUB` | `false` | Return a local fake "all safe" moderation response when no moderation channel exists (development only) |
 | `GATEWAY_DB_MAX_OPEN_CONNS` | `25` | PostgreSQL pool size **per replica**; keep `replicas × value` below the server `max_connections` |
@@ -165,9 +175,13 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `STORAGE_LOCAL_PATH` | `data/storage` | Directory used by the `local` driver |
 | `STORAGE_S3_ENDPOINT` / `STORAGE_S3_BUCKET` / `STORAGE_S3_ACCESS_KEY` / `STORAGE_S3_SECRET_KEY` / `STORAGE_S3_REGION` / `STORAGE_S3_USE_SSL` / `STORAGE_S3_PATH_STYLE` / `STORAGE_S3_PUBLIC_URL_PREFIX` | endpoint/bucket/region have defaults; credentials are **empty** | S3-compatible artifact storage. `s3`/`rustfs` without explicit access key + secret key refuses to start (no default credential ships); partial `storage:` blocks are merged field-by-field over the defaults |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | unset | E-mail delivery for verification codes and password resets; disabled when `SMTP_HOST` is empty |
-| `STRIPE_API_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_SUCCESS_URL` / `STRIPE_API_BASE` | unset | Stripe payments; webhooks are rejected while `STRIPE_WEBHOOK_SECRET` is empty |
-| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` / `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | unset | OAuth login providers |
-| `ENABLE_SANDBOX_RECHARGE` / `ENABLE_SIMULATED_OAUTH` | `false` | Local development only: enable fake recharge / simulated OAuth |
+| `STRIPE_API_KEY` / `STRIPE_WEBHOOK_SECRET` | unset | Stripe API key and snapshot webhook secret; both must be configured together and match `STRIPE_MODE`. Invalid payment configuration refuses startup. See [payment setup](PAYMENTS.md) |
+| `STRIPE_MODE` | `live` | `live` or `test`; the database binds permanently to its first payment mode. Use an independent database and model quota for testing |
+| `STRIPE_MIN_RECHARGE_CNY` | `10` | Business minimum for online CNY recharges; configure it to satisfy the merchant's settlement-currency minimum. Returned to the console for validation |
+| `STRIPE_SUCCESS_URL` | `PUBLIC_URL/app/` | Optional return page on the same origin as the configured public URL; order number and confirmation query parameters are added automatically |
+| `STRIPE_API_BASE` | `https://api.stripe.com` | Custom endpoints are restricted to loopback in explicit `test` mode; intended for local automated tests |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` / `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | unset | OAuth login providers. Both the client id **and** the client secret are read from the environment: the real authorization-code exchange runs only when both are non-empty, and with an empty secret the provider answers `403` (“系统未配置 … 生产应用密钥”) unless `ENABLE_SIMULATED_OAUTH=true` (development only). `GITHUB_REDIRECT_URI` / `GOOGLE_REDIRECT_URI` optionally override the callback derived from `PUBLIC_URL`; the real exchange also requires a valid `state` cookie |
+| `ENABLE_SIMULATED_OAUTH` | `false` | Local development only: enable simulated OAuth |
 | `AIROUTE_DEV_VERIFICATION_CODE` | unset | Set `true` to return e-mail verification codes in API responses (development only) |
 
 ### 2.5 CLI-only variables
@@ -179,9 +193,21 @@ The following environment variables are read by the server. YAML supports `${NAM
 
 Snapshot contents are redacted (API keys, tokens, passwords) before storage and are queryable at `GET /api/v1/admin/traces?trace_id=…` (admin only; regular users see only their own keys).
 
+### Usage-log table partitioning (opt-in, PostgreSQL only)
+
+`GATEWAY_ENABLE_TABLE_PARTITIONING` is the only switch that changes the physical schema of `usage_logs`; with it unset (the default) no v43 migration is registered and the table is written exactly as before. What enabling it does:
+
+* **PostgreSQL only.** SQLite has no declarative partitioning and never registers the migration; the single-table + `UNIQUE(billing_id)` path stays unchanged there.
+* **It rewrites a live table.** Migration 43 takes `ACCESS EXCLUSIVE` on `usage_logs`, copies every row into `usage_logs_partitioned` (≈2× table size in heap + WAL) and rebuilds about a dozen indexes. The DDL runs under `lock_timeout=5s`: when the lock cannot be taken the migration is *deferred* (`errMigrationDeferred`) instead of blocking startup, and the next restart retries it. Budget a quiet window — writes to the audit path block for the duration of the copy.
+* **The dedupe unique key moves.** PostgreSQL requires every `UNIQUE`/`PRIMARY KEY` on a partitioned table to include the partition key, so `UNIQUE(billing_id)` cannot survive. It is replaced by the short-lived `usage_audit_ids(billing_id PRIMARY KEY, created_at)` registry: the writer reserves the billing id there first and only inserts the audit row when the reservation was new (same transaction). Money-side idempotency in `billing_settlements` is deliberately **not** partitioned and keeps its unique key.
+* **Upgrade every replica first.** A binary that predates the registry writer inserts with `ON CONFLICT (billing_id) DO NOTHING`, which PostgreSQL rejects with `42P10` against a partitioned table. Roll out a build containing the registry path to all replicas, keep the flag off during the rolling deploy, then enable it in a separate restart. Charges are never at risk (the wallet settles before the audit row and delivery is retried), but old replicas' audit writes would fail.
+* **Rollback needs no dump.** The switch keeps the pre-partition table as `usage_logs_legacy_<unix>` and never drops it. Stop the gateway, unset the flag, rename `usage_logs` to `usage_logs_partitioned_rollback`, rename the legacy table back, restore the `legacy_`-prefixed index names and clean the v43 row from `schema_migrations`; the exact SQL is in the header comment of `internal/storage/migrations_partition.go`.
+
 ### Startup credential gate
 
-The admin password and signing secret are validated before the database is opened. An empty signing secret, a password equal to `admin123` (or shorter than 8 characters), or one of the placeholder values that ship in sample manifests aborts startup with `refusing to start: insecure default credentials detected`. `GATEWAY_ALLOW_INSECURE_DEFAULTS=true` downgrades this to a warning for throwaway local environments only. The Helm chart generates a random password/secret, so it passes by construction.
+The admin password and signing secret are validated before the database is opened. Startup aborts with `refusing to start: insecure default credentials detected` when: the signing secret is empty, shorter than 32 characters, or one of the placeholder values that ship in sample manifests; or the password equals `admin123`, is shorter than 8 characters, or is empty. `GATEWAY_ALLOW_INSECURE_DEFAULTS=true` downgrades this to a warning for throwaway local environments only. The Helm chart generates a random password/secret, so it passes by construction.
+
+Note that the 32-character signing-secret floor is a breaking change for an existing deployment whose `GATEWAY_ADMIN_SECRET` was shorter: the process now refuses to start (fail-closed) instead of running with a brute-forcible token signing key. Rotating it invalidates existing admin sessions.
 
 ### Timeout chain
 
@@ -189,7 +215,7 @@ There is one operator-facing timeout: each channel's `timeout_seconds`, which al
 
 * channel timeout ≤ `model.MaxChannelTimeoutSeconds` (86340s, derived from the 86400s edge budget);
 * every shipped edge proxy must allow the same 86400s budget — `cmd/airoute/nginx_timeout_test.go` asserts this for `deploy/nginx-compose.conf`, `deploy/swarm/nginx-swarm.conf`, `deploy/nginx.conf` and the Helm ingress annotations, so a drifting edge turns the test red;
-* streaming (SSE) responses clear the Go `http.Server.WriteTimeout` deadline (`write_timeout_sec`, 600s in `configs/config.yaml`, 180s in the Helm chart) so long generations are not cut mid-stream; **non-streaming** responses remain bounded by that value;
+* streaming (SSE) responses clear the Go `http.Server.WriteTimeout` deadline (`write_timeout_sec`, overridable with `GATEWAY_WRITE_TIMEOUT_SEC`; 600s in `configs/config.yaml`, 180s in the Helm chart) so long generations are not cut mid-stream; **non-streaming** responses remain bounded by that value, and the startup self-check now reports `server_write_timeout` on every channel line and warns when `channel timeout > write timeout` — that is the layer that used to cut a request while the report claimed the budget was proven;
 * the SIGTERM drain budget (`GATEWAY_SHUTDOWN_TIMEOUT_SEC`, derived from `GATEWAY_DRAIN_TIMEOUT_SEC + 15s`) must fit inside the deployment's stop grace period — the Compose/Swarm services set `stop_grace_period: 150s` and the Helm chart sets `terminationGracePeriodSeconds: 180`.
 
 ### Health probes
@@ -209,11 +235,25 @@ On `SIGTERM`/`SIGINT` the process stops accepting connections and waits up to `G
 
 ### Control-plane exposure
 
-The control plane (`/api/v1/admin` and the embedded console under `/app`) is enforced **inside the gateway**, not by the nginx `Host` header. By default only loopback and private-network clients may reach it; public clients receive `403` even through the catch-all virtual host (`deploy/nginx-compose.conf` also applies the same allow/deny list at the edge as defence in depth). This keeps `http://127.0.0.1:8080` and LAN access working without exposing management endpoints to the internet.
+The control plane is exactly two path prefixes: **`/api/v1/admin`** (the management API) and **`/app`** (the console shell). It is enforced **inside the gateway**, not by the nginx `Host` header, and the edge configs apply the same allow/deny list as defence in depth (`deploy/nginx-compose.conf`, `deploy/swarm/nginx-swarm.conf`, `deploy/nginx.conf`; `cmd/airoute/nginx_admin_acl_test.go` keeps them aligned).
+
+What is deliberately *not* part of that predicate:
+
+* `GET /` renders the **public landing page and login screen** (`web/src/lib/consoleRoute.js` resolves a bare `/` to `viewMode: 'landing'`), so guarding it would make the public entrance unreachable;
+* `/assets` only serves the content-hashed JS/CSS bundles of that shell (no API data);
+* `/api/v1/auth/*` is the CLI's remote-login path;
+* `/api/v1/user/*` is the tenant self-service API (wallet, usage), reachable by ordinary customers.
+
+The guard decides on the **client identity**, not the raw TCP peer: a request is attributable only when it arrived through a proxy listed in `GATEWAY_TRUSTED_PROXIES`. Loopback clients are always attributable; private clients that came through a trusted proxy are admitted; public clients receive `403`; and a request from a non-loopback peer with no forwarding information (an unconfigured proxy) **fails closed with `403`** — the error names `GATEWAY_TRUSTED_PROXIES` as the fix. This is why the shipped Compose topology fixes the nginx↔gateway subnet (`172.30.0.0/16`) and passes it as the default: without it every request would be attributed to the load balancer, which is exactly how the old guard ended up admitting everyone.
+
+Note the console SPA is also the app served on `/`; the management *data* is only reachable through the guarded `/api/v1/admin` API, so a public visitor gets the landing page but no administrative capability.
+
+A deployment **without** a reverse proxy (bare binary on a LAN, direct in-cluster access, `deploy/kubernetes.yaml` without an ingress) has no forwarding header to attribute, so it must set `GATEWAY_ADMIN_ALLOWED_IPS` to the client CIDR — the explicit list also admits a matching direct TCP peer. Leaving both variables unset restricts the control plane to loopback, which is the intended fail-closed default.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `GATEWAY_ADMIN_ALLOWED_IPS` | unset | Comma-separated CIDR/IP allowlist that replaces the loopback/private default. An invalid entry fails closed (`503`) |
+| `GATEWAY_TRUSTED_PROXIES` | unset | Proxy CIDRs whose forwarding headers are trusted. Empty means no client attribution, so the control plane fails closed behind a proxy |
+| `GATEWAY_ADMIN_ALLOWED_IPS` | unset | Comma-separated CIDR/IP allowlist that replaces the loopback/forwarded-private default. An invalid entry fails closed (`503`); a non-attributable peer passes only if the peer itself is listed |
 | `GATEWAY_ADMIN_ALLOWED_HOSTS` | unset | Optional comma-separated `Host` allowlist (`*.example.com` wildcard supported) |
 | `GATEWAY_ADMIN_ALLOW_PUBLIC` | `false` | Explicitly allow public clients (not recommended; the guard logs a warning) |
 
@@ -313,7 +353,16 @@ api_keys:
 
 ### Rate limiting and sessions
 
-- **RPM** is enforced with a distributed Redis sliding window (or a local token bucket without Redis).
+- **Key quota budget** (`budget`, CNY) is a *pre-dispatch* ceiling: the check compares the usage already
+  settled against the limit. Requests that are already in flight when the budget is crossed still complete
+  and are charged, so a burst can overshoot by up to (in-flight requests × per-request cost); afterwards the
+  key answers `402 key_budget_exceeded`. The ledger itself stays exact — `used_cost_units` always equals the
+  sum of `usage_logs.cost_units` for that key, verified under concurrent cross-replica load.
+- **Multi-replica config propagation**: with `REDIS_URL` set, channel/pricing/key changes are broadcast to
+  peers immediately. Without Redis each replica reloads its data-plane snapshot from the database every 10s,
+  so a freshly created channel can stay unroutable on a peer for up to ~10s (those requests fail with
+  `404 model_not_found`); requests already routed keep working.
+- **RPM** is enforced with a 60s sliding window: the same rule is implemented in Redis (cross-replica, `internal/distributed`) and locally in the gateway (when Redis is not configured or a Redis call fails). Both admit at most `rpm` requests in any 60s interval, so falling back to the local limiter does **not** loosen the quota; during an outage the only difference is scope — each replica enforces `rpm` on its own share of the traffic instead of the cluster-wide count.
 - **TPM** is enforced with a per-key, one-minute sliding window and reports `X-RateLimit-Limit-Tokens` / `X-RateLimit-Remaining-Tokens`; over-budget requests get `429` with `Retry-After: 60`.
 - **Sessions** are cookie-based: login sets an HttpOnly `airoute_session` cookie plus a readable `airoute_csrf` cookie. State-changing requests authenticated by cookie must echo the CSRF value in `X-CSRF-Token`. API clients keep using `Authorization: Bearer`.
 - **Login throttling** locks an account/IP pair for 15 minutes after 5 consecutive failures (HTTP 429).

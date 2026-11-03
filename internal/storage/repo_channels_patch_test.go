@@ -6,6 +6,23 @@ import (
 	"testing"
 )
 
+// findChannel is the test-side replacement for the deleted Repository.GetChannel.
+// The production read paths use ListChannels (there is no single-channel read), so
+// the tests read through the same API the gateway does.
+func findChannel(t *testing.T, repo *Repository, id int64) (*ChannelRecord, error) {
+	t.Helper()
+	channels, err := repo.ListChannels()
+	if err != nil {
+		return nil, err
+	}
+	for _, ch := range channels {
+		if ch.ID == id {
+			return ch, nil
+		}
+	}
+	return nil, sql.ErrNoRows
+}
+
 func seedPatchChannel(t *testing.T, repo *Repository, rec *ChannelRecord) *ChannelRecord {
 	t.Helper()
 	if err := repo.CreateChannel(rec); err != nil {
@@ -39,7 +56,7 @@ func TestPatchChannelAppliesAndPersists(t *testing.T) {
 		t.Errorf("returned name = %q, want renamed", updated.Name)
 	}
 
-	stored, err := repo.GetChannel(rec.ID)
+	stored, err := findChannel(t, repo, rec.ID)
 	if err != nil {
 		t.Fatalf("GetChannel: %v", err)
 	}
@@ -70,7 +87,7 @@ func TestPatchChannelMergesAgainstTheCurrentRow(t *testing.T) {
 	})
 
 	// A second writer changes the credential through the ordinary full-row path.
-	stale, err := repo.GetChannel(rec.ID)
+	stale, err := findChannel(t, repo, rec.ID)
 	if err != nil {
 		t.Fatalf("GetChannel: %v", err)
 	}
@@ -89,7 +106,7 @@ func TestPatchChannelMergesAgainstTheCurrentRow(t *testing.T) {
 		t.Fatalf("PatchChannel: %v", err)
 	}
 
-	stored, err := repo.GetChannel(rec.ID)
+	stored, err := findChannel(t, repo, rec.ID)
 	if err != nil {
 		t.Fatalf("GetChannel: %v", err)
 	}
@@ -148,7 +165,7 @@ func TestPatchChannelAbortsWhenTheMutationFails(t *testing.T) {
 		t.Fatalf("err = %v, want the mutation error", err)
 	}
 
-	stored, err := repo.GetChannel(rec.ID)
+	stored, err := findChannel(t, repo, rec.ID)
 	if err != nil {
 		t.Fatalf("GetChannel: %v", err)
 	}

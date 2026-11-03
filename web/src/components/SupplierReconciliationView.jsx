@@ -25,7 +25,6 @@ export default function SupplierReconciliationView({
   showToast,
   onNavigateToLogs,
   lang = 'zh',
-  t
 }) {
   const isZh = lang === 'zh';
   const [loading, setLoading] = useState(false);

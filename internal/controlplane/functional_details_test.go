@@ -7,15 +7,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/billing"
-	"github.com/ifnodoraemon/airoute/internal/model"
-	"github.com/ifnodoraemon/airoute/internal/provider"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -126,33 +123,6 @@ func TestAuditReviewPriceReadFailureDoesNotOverwriteRates(t *testing.T) {
 	}
 }
 
-func TestAuditReviewChannelTestRespectsTextProtocol(t *testing.T) {
-	h, repo := newSecurityTestHandler(t)
-	ch := &storage.ChannelRecord{Name: "text-only", Type: model.ProviderOpenAI, BaseURL: "https://audit.invalid/v1", Models: []string{"text-model"}, Protocols: []string{"openai_text"}, Status: "active"}
-	if err := repo.CreateChannel(ch); err != nil {
-		t.Fatal(err)
-	}
-	previousClient := provider.SharedDefaultHTTPClient
-	t.Cleanup(func() { provider.SharedDefaultHTTPClient = previousClient })
-	var calledPath string
-	provider.SharedDefaultHTTPClient = &http.Client{Transport: regressionTransport(func(r *http.Request) (*http.Response, error) {
-		calledPath = r.URL.Path
-		body, status := `{"choices":[{"text":"pong","finish_reason":"stop"}]}`, 200
-		if calledPath != "/v1/completions" {
-			body, status = `{"error":{"message":"endpoint not supported"}}`, 404
-		}
-		return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}, nil
-	})}
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Params = gin.Params{{Key: "id", Value: strconv.FormatInt(ch.ID, 10)}}
-	c.Request = httptest.NewRequest("POST", "/channels/test", nil)
-	h.TestChannel(c)
-	if calledPath != "/v1/completions" {
-		t.Fatalf("text-only configured channel tested with %s; response=%s", calledPath, w.Body.String())
-	}
-}
-
 func TestAuditReviewForeignCurrencyDoesNotDebitCNYAtFaceValue(t *testing.T) {
 	_, repo := newSecurityTestHandler(t)
 	u := &storage.UserRecord{Username: "currency-user", Email: "currency@example.invalid", PasswordHash: "unused", Role: "user", Status: "active", Balance: 10}
@@ -169,7 +139,7 @@ func TestAuditReviewForeignCurrencyDoesNotDebitCNYAtFaceValue(t *testing.T) {
 		return
 	} // A single-currency wallet may correctly reject USD.
 	engine := billing.NewEngine(repo)
-	cost, _, _, _, _, snapshot := engine.CalculateCostForUnits("currency-model", "default", 1_000_000, 0, 0, 1, time.Now())
+	cost, _, _, _, _, snapshot := engine.CalculateCostForUnitsWithCacheCreation("currency-model", "default", 1_000_000, 0, 0, 0, 1, time.Now())
 	rec := &storage.UsageLogRecord{APIKey: key.Key, TenantID: u.Username, Model: "currency-model", PromptTokens: 1_000_000, TotalTokens: 1_000_000, Cost: cost, PricingSnapshot: snapshot, StatusCode: 200}
 	if err := repo.BatchRecordUsageLogsContext(context.Background(), []*storage.UsageLogRecord{rec}); err != nil {
 		t.Fatal(err)

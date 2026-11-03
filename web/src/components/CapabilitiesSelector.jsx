@@ -1,9 +1,8 @@
-import { Layers, MessageSquare, Zap, Terminal, Sparkles, Image, Volume2, Mic, Cpu, Sliders, Video } from 'lucide-react';
+import { Layers, MessageSquare, Zap, Sparkles, Image, Volume2, Mic, Cpu, Sliders, Video } from 'lucide-react';
 
 const CAPABILITIES = [
   { id: 'openai_chat', name: 'Chat', nameZh: '对话', path: '/v1/chat/completions', icon: MessageSquare, color: 'text-indigo-500' },
   { id: 'openai_response', name: 'Responses', nameZh: '智能体响应', path: '/v1/responses', icon: Zap, color: 'text-emerald-500' },
-  { id: 'openai_text', name: 'Text Completions', nameZh: 'Text 补全', path: '/v1/completions', icon: Terminal, color: 'text-sky-500' },
   { id: 'anthropic_messages', name: 'Claude Messages', nameZh: 'Claude 消息', path: '/v1/messages', icon: Sparkles, color: 'text-amber-500' },
   // A marker, not an extra route: it records that the upstream already speaks the
   // Anthropic protocol natively, so the gateway forwards instead of translating.
@@ -39,7 +38,7 @@ export default function CapabilitiesSelector({ protocols = [], onToggle, onSetPr
   };
 
   const handleSelectChatOnly = () => {
-    onSetProtocols(['openai_chat', 'openai_response', 'openai_text', 'anthropic_messages', ...unknownProtocols]);
+    onSetProtocols(['openai_chat', 'openai_response', 'anthropic_messages', ...unknownProtocols]);
   };
 
   const handleClear = () => {

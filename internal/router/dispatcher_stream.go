@@ -15,6 +15,33 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
+// failStreamAttempt classifies one failed stream attempt. It updates the circuit
+// breaker and the fallback counter, and returns a non-nil error when the dispatch
+// must stop instead of fanning out to the next channel: a client cancellation, or
+// a client payload error that would fail identically everywhere. A node-specific
+// 404 falls through to the next candidate channel, like any other channel failure.
+func (d *Dispatcher) failStreamAttempt(ctx context.Context, req *model.ChatCompletionRequest, ch *model.ChannelConfig, attempted []string, err error, logMsg string) error {
+	if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
+		d.circuitBreaker.AbortCanary(ch.Name)
+		return newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
+	}
+	d.observeUpstreamError(ctx, ch, req.Model, err)
+	if provider.IsModelNotFound(err) {
+		// A node-specific 404 is not the caller's fault: keep fanning out.
+		d.circuitBreaker.AbortCanary(ch.Name)
+	} else if provider.IsFatalPayloadError(err) {
+		d.circuitBreaker.AbortCanary(ch.Name)
+		return err
+	} else if provider.IsChannelFailure(err) {
+		d.circuitBreaker.RecordFailure(ch.Name)
+	} else {
+		d.circuitBreaker.AbortCanary(ch.Name)
+	}
+	telemetry.GlobalMetrics.RecordFallback()
+	routerLog(ctx).Warn(logMsg, "channel", ch.Name, "error", err.Error())
+	return nil
+}
+
 // DispatchStream executes streaming chat with Safe Fallback Window before the first token.
 func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompletionRequest) (<-chan *model.StreamEvent, error) {
 	proto := "chat"
@@ -23,7 +50,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 	}
 	channels := d.candidateChannelsForRequest(ctx, req, proto)
 	if len(channels) == 0 {
-		if fb := d.GetModelFallback(req.Model); fb != "" && !strings.EqualFold(fb, req.Model) {
+		if fb := d.requestFallback(req); fb != "" && !strings.EqualFold(fb, req.Model) {
 			nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
 			if fbErr != nil {
 				routerLog(ctx).Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
@@ -72,33 +99,24 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		// drain deadline on the whole request, so a channel configured for e.g.
 		// 300s is allowed to stream for 300s. The first-token window below is
 		// derived from the same number.
-		attemptCtx, attemptCancel := channelCallContext(ctx, ch)
+		attemptCtx, attemptCancel, admissionErr := d.beginChannelCall(ctx, ch, req.Model)
+		if admissionErr != nil {
+			d.circuitBreaker.AbortCanary(ch.Name)
+			if ctx.Err() != nil {
+				return nil, admissionDispatchError(ctx, req.Model, attempted, admissionErr)
+			}
+			lastErr = admissionErr
+			skipped = append(skipped, ch.Name)
+			continue
+		}
 		streamChan, err := prov.ChatCompleteStream(attemptCtx, req, ch)
 		if err != nil {
 			attemptCancel()
-			if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
-				d.circuitBreaker.AbortCanary(ch.Name)
-				return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
-			}
-			// Client syntax/schema errors (400, 422, 413) fail identically on every channel:
-			// do not trip the breaker and do not fan out.
-			// Node-specific 404 (model missing on this instance) falls through to next candidate channel.
-			if isFatalClientPayloadError(err) {
-				d.circuitBreaker.AbortCanary(ch.Name)
-				return nil, err
-			}
-			if provider.IsChannelFailure(err) {
-				d.circuitBreaker.RecordFailure(ch.Name)
-			} else {
-				d.circuitBreaker.AbortCanary(ch.Name)
+			if stopErr := d.failStreamAttempt(ctx, req, ch, attempted, err, "stream connection failed, trying next channel"); stopErr != nil {
+				return nil, stopErr
 			}
 			lastErr = err
 			attempted = append(attempted, ch.Name)
-			telemetry.GlobalMetrics.RecordFallback()
-			routerLog(ctx).Warn("stream connection failed, trying next channel",
-				"channel", ch.Name,
-				"error", err.Error(),
-			)
 			continue
 		}
 
@@ -131,7 +149,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 					preamble = preamble[1:]
 				}
 				preamble = append(preamble, event)
-				if streamEventHasContent(event) || event.IsDone {
+				if streamEventHasContent(event) || streamEventIsTerminal(event) {
 					committed = true
 				}
 			case <-timer.C:
@@ -153,30 +171,29 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		timer.Stop()
 		if firstErr != nil {
 			attemptCancel()
-			if ctx.Err() == context.Canceled || errors.Is(firstErr, context.Canceled) {
-				d.circuitBreaker.AbortCanary(ch.Name)
-				return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
-			}
-			if isFatalClientPayloadError(firstErr) {
-				d.circuitBreaker.AbortCanary(ch.Name)
-				return nil, firstErr
-			}
-			if provider.IsChannelFailure(firstErr) {
-				d.circuitBreaker.RecordFailure(ch.Name)
-			} else {
-				d.circuitBreaker.AbortCanary(ch.Name)
+			if stopErr := d.failStreamAttempt(ctx, req, ch, attempted, firstErr, "channel failed before first valid token, falling back"); stopErr != nil {
+				return nil, stopErr
 			}
 			lastErr = firstErr
 			attempted = append(attempted, ch.Name)
-			telemetry.GlobalMetrics.RecordFallback()
-			routerLog(ctx).Warn("channel failed before first valid token, falling back", "channel", ch.Name, "error", firstErr.Error())
 			continue
 		}
 
 		d.circuitBreaker.RecordSuccess(ch.Name)
+		d.rememberSessionChannel(ctx, req.Model, ch.Name)
 		trail := formatChannelTrail(ctx, attempted, ch.Name)
 		outChan := make(chan *model.StreamEvent, 64)
-		go pipeStreamEvents(ctx, outChan, preamble, streamChan, trail, attemptCancel)
+		// Committing the stream only proves the channel produced a first token.
+		// Anything that goes wrong after this point (mid-stream error frame,
+		// truncated SSE, upstream-side timeout) is still a channel health signal,
+		// so pipeStreamEvents reports it back here (B-02).
+		recordPostCommitFailure := func(err error) {
+			if ctx.Err() == nil && !errors.Is(err, context.Canceled) {
+				d.observeUpstreamError(ctx, ch, req.Model, err)
+			}
+			d.recordStreamFailure(ctx, ch.Name, err, i+1)
+		}
+		go pipeStreamEvents(ctx, outChan, preamble, streamChan, trail, attemptCancel, recordPostCommitFailure)
 		return outChan, nil
 	}
 
@@ -186,7 +203,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		lastErr = skippedOnlyError(req.Model, skipped)
 	}
 
-	if fb := d.GetModelFallback(req.Model); fb != "" && !strings.EqualFold(fb, req.Model) {
+	if fb := d.requestFallback(req); fb != "" && !strings.EqualFold(fb, req.Model) {
 		nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
 		if fbErr != nil {
 			routerLog(ctx).Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
@@ -209,51 +226,6 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 // It is a memory bound, not a promise to drop the committing event: when it is
 // reached the oldest event is discarded.
 const maxPreambleEvents = 64
-
-// pipeStreamEvents pipes events from upstream stream channel to client channel with cancellation guard.
-func pipeStreamEvents(ctx context.Context, outChan chan<- *model.StreamEvent, preamble []*model.StreamEvent, in <-chan *model.StreamEvent, trail string, cancel context.CancelFunc) {
-	defer cancel()
-	defer close(outChan)
-	for _, event := range preamble {
-		event.Channel = trail
-		select {
-		case outChan <- event:
-		case <-ctx.Done():
-			return
-		}
-	}
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case event, ok := <-in:
-			if !ok {
-				return
-			}
-			if event == nil {
-				continue
-			}
-			event.Channel = trail
-			select {
-			case outChan <- event:
-			case <-ctx.Done():
-				return
-			}
-		}
-	}
-}
-
-func streamEventHasContent(event *model.StreamEvent) bool {
-	if event == nil || event.Chunk == nil {
-		return event != nil && (event.NativeAnthropicType == "content_block_delta" || event.NativeAnthropicType == "content_block_start")
-	}
-	for _, choice := range event.Chunk.Choices {
-		if choice.Delta.Content != "" || choice.Delta.ReasoningContent != "" || len(choice.Delta.ToolCalls) > 0 {
-			return true
-		}
-	}
-	return false
-}
 
 // GetFirstTokenTimeout is how long a single attempt may stay silent before the
 // gateway gives up on it. It is derived from the channel timeout, not configured

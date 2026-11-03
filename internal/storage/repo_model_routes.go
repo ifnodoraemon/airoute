@@ -162,7 +162,19 @@ func upsertModelPriceTx(tx *Tx, rec *ModelPriceRecord) error {
 	return err
 }
 
-// updateChannelTx mirrors UpdateChannel but participates in a transaction.
+// updateChannelTx writes a channel row inside a transaction. It is the single
+// update path (UpdateChannel delegates here).
+//
+// Create and update deliberately treat a zero routing field differently:
+//
+//   - CreateChannel turns priority/weight/timeout 0 into 1/10/60, because an
+//     omitted field in a create request means "use the default" and the columns
+//     must not end up 0;
+//   - an update carries the operator's explicit value, so 0 is stored as 0.
+//     Priority 0, weight 0 and timeout 0 are meaningful (highest priority, no
+//     weight in the lottery, no per-channel deadline); rewriting them to the
+//     defaults here silently overrode the control plane, which since D-14 accepts
+//     explicit zeros.
 func updateChannelTx(tx *Tx, rec *ChannelRecord) error {
 	modelsBytes, _ := json.Marshal(rec.Models)
 	mappingBytes, _ := json.Marshal(rec.ModelMapping)
@@ -171,48 +183,8 @@ func updateChannelTx(tx *Tx, rec *ChannelRecord) error {
 	if rec.Status == "" {
 		rec.Status = "active"
 	}
-	if rec.Priority == 0 {
-		rec.Priority = 1
-	}
-	if rec.Weight == 0 {
-		rec.Weight = 10
-	}
-	if rec.TimeoutSeconds == 0 {
-		rec.TimeoutSeconds = 60
-	}
 
-	_, err := tx.Exec(`UPDATE channels SET name=?, type=?, base_url=?, api_key=?, models=?, model_mapping=?, protocols=?, priority=?, weight=?, timeout_seconds=?, status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-		rec.Name, rec.Type, rec.BaseURL, rec.APIKey, string(modelsBytes), string(mappingBytes), string(protocolsBytes), rec.Priority, rec.Weight, rec.TimeoutSeconds, rec.Status, rec.ID)
+	_, err := tx.Exec(`UPDATE channels SET name=?, type=?, base_url=?, api_key=?, models=?, model_mapping=?, protocols=?, priority=?, weight=?, timeout_seconds=?, max_concurrency=?, queue_limit=?, queue_wait_seconds=?, status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+		rec.Name, rec.Type, rec.BaseURL, rec.APIKey, string(modelsBytes), string(mappingBytes), string(protocolsBytes), rec.Priority, rec.Weight, rec.TimeoutSeconds, rec.MaxConcurrency, rec.QueueLimit, rec.QueueWaitSeconds, rec.Status, rec.ID)
 	return err
-}
-
-// CountChannelsServingModel returns how many active channels serve the model.
-func (r *Repository) CountChannelsServingModel(modelName string) (int, error) {
-	rows, err := r.db.Query(`SELECT models FROM channels WHERE status = 'active' OR status IS NULL OR status = ''`)
-	if err != nil {
-		return 0, err
-	}
-	defer rows.Close()
-
-	count := 0
-	for rows.Next() {
-		var raw sql.NullString
-		if err := rows.Scan(&raw); err != nil {
-			return count, err
-		}
-		if !raw.Valid || raw.String == "" {
-			continue
-		}
-		var models []string
-		if err := json.Unmarshal([]byte(raw.String), &models); err != nil {
-			continue
-		}
-		for _, m := range models {
-			if m == modelName {
-				count++
-				break
-			}
-		}
-	}
-	return count, rows.Err()
 }

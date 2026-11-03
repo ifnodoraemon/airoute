@@ -22,6 +22,9 @@ const (
 	KeyCreationGroupForbidden
 	// KeyCreationEntropyUnavailable means a credential could not be generated.
 	KeyCreationEntropyUnavailable
+	// KeyCreationInvalidValue means a provided value is not one the field accepts.
+	// Handlers map it to 400 rather than the generic 403.
+	KeyCreationInvalidValue
 )
 
 // KeyCreationOutcome is the result of planning an API key creation. The zero
@@ -82,6 +85,17 @@ func (r *KeyCreationRules) PlanCreate(claims *AdminClaims, req CreateAPIKeyReque
 	rec := req.toRecord()
 	callerIsAdmin := claims != nil && claims.Role == "admin"
 
+	// Normalise the requested status before the role rules look at it: otherwise an
+	// administrator posting "DISABLED" would store a status the data plane treats as
+	// revoked while leaving admin_disabled unset, and the owner could re-enable it.
+	if rec.Status != "" {
+		status := strings.ToLower(strings.TrimSpace(rec.Status))
+		if !validToggleStatus(status) {
+			return KeyCreationOutcome{Denial: KeyCreationInvalidValue, Message: "状态仅支持 active 或 disabled"}
+		}
+		rec.Status = status
+	}
+
 	switch {
 	case claims == nil:
 		// No session: nothing is known about the caller, so only the group is
@@ -96,6 +110,11 @@ func (r *KeyCreationRules) PlanCreate(claims *AdminClaims, req CreateAPIKeyReque
 			}
 		}
 		rec.GroupName = normalizeKeyGroup(rec.GroupName)
+		// An operator issuing an already-disabled key is making the same decision
+		// as disabling one later: record it so the owner cannot re-enable it.
+		if rec.Status == "disabled" {
+			rec.AdminDisabled = true
+		}
 
 	default:
 		var user *storage.UserRecord
@@ -130,21 +149,12 @@ func (r *KeyCreationRules) PlanCreate(claims *AdminClaims, req CreateAPIKeyReque
 		// also reachable by regular accounts, so without this clamp a tenant could
 		// submit rpm=0 (which the storage layer treats as unlimited) and bypass
 		// the self-service policy enforced by /user/keys.
-		switch {
-		case rec.RPM <= 0:
-			rec.RPM = DefaultUserKeyRPM
-		case rec.RPM > MaxSelfServiceKeyRPM:
-			rec.RPM = MaxSelfServiceKeyRPM
-		}
-		switch {
-		case rec.TPM <= 0:
-			rec.TPM = DefaultUserKeyTPM
-		case rec.TPM > MaxSelfServiceKeyTPM:
-			rec.TPM = MaxSelfServiceKeyTPM
-		}
+		rec.RPM, rec.TPM = clampSelfServiceQuotas(rec.RPM, rec.TPM)
 		if rec.Budget < 0 {
 			rec.Budget = 0
 		}
+		// The administrator revocation flag is not a tenant-settable field.
+		rec.AdminDisabled = false
 	}
 
 	// The credential is a secret: a non-administrator never chooses it, and an

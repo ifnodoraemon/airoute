@@ -2,6 +2,7 @@ package provider
 
 import (
 	"encoding/json"
+	"log/slog"
 	"strings"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
@@ -22,6 +23,12 @@ func convertOpenAIToGemini(req *model.ChatCompletionRequest) *GeminiRequest {
 	}
 
 	for _, msg := range req.Messages {
+		if strings.EqualFold(msg.Role, "assistant") && len(msg.GeminiParts) > 0 {
+			var parts []GeminiPart
+			_ = json.Unmarshal(msg.GeminiParts, &parts)
+			contents = append(contents, GeminiContent{Role: "model", Parts: parts})
+			continue
+		}
 		if strings.ToLower(msg.Role) == "system" {
 			parts := model.ParseMessageContent(msg.Content)
 			for _, part := range parts {
@@ -49,6 +56,7 @@ func convertOpenAIToGemini(req *model.ChatCompletionRequest) *GeminiRequest {
 				Parts: []GeminiPart{
 					{
 						FunctionResponse: &GeminiFunctionResponse{
+							ID:       msg.ToolCallID,
 							Name:     fnName,
 							Response: respMap,
 						},
@@ -64,10 +72,11 @@ func convertOpenAIToGemini(req *model.ChatCompletionRequest) *GeminiRequest {
 				geminiParts = append(geminiParts, GeminiPart{Text: text})
 			}
 			for _, tc := range msg.ToolCalls {
-				var args map[string]any
-				_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
+				args := GeminiFunctionArguments(tc.Function.Arguments)
 				geminiParts = append(geminiParts, GeminiPart{
+					ThoughtSignature: tc.ThoughtSignature(),
 					FunctionCall: &GeminiFunctionCall{
+						ID:   tc.ID,
 						Name: tc.Function.Name,
 						Args: args,
 					},
@@ -100,6 +109,19 @@ func convertOpenAIToGemini(req *model.ChatCompletionRequest) *GeminiRequest {
 				}
 			case model.ContentPartImageURL:
 				if part.ImageURL != nil && part.ImageURL.URL != "" {
+					if model.IsRemoteContentURL(part.ImageURL.URL) {
+						// Gemini's inlineData.data is base64 only. A remote
+						// resource belongs in fileData.fileUri; putting the URL
+						// in the base64 field made the upstream reject the
+						// request (F-07).
+						geminiParts = append(geminiParts, GeminiPart{
+							FileData: &GeminiFileData{
+								MimeType: "image/jpeg",
+								FileURI:  part.ImageURL.URL,
+							},
+						})
+						continue
+					}
 					mime, b64 := model.ParseDataURI(part.ImageURL.URL)
 					geminiParts = append(geminiParts, GeminiPart{
 						InlineData: &GeminiInlineData{
@@ -140,9 +162,9 @@ func convertOpenAIToGemini(req *model.ChatCompletionRequest) *GeminiRequest {
 			fnDesc, _ := t.Function["description"].(string)
 			fnParams := t.Function["parameters"]
 			funcDecls = append(funcDecls, GeminiFunctionDeclaration{
-				Name:        fnName,
-				Description: fnDesc,
-				Parameters:  fnParams,
+				Name:                 fnName,
+				Description:          fnDesc,
+				ParametersJSONSchema: fnParams,
 			})
 		}
 		if len(funcDecls) > 0 {
@@ -163,20 +185,10 @@ func convertOpenAIToGemini(req *model.ChatCompletionRequest) *GeminiRequest {
 	}
 
 	geminiReq := &GeminiRequest{
-		Contents: mergedContents,
-		Tools:    toolContainers,
-		GenerationConfig: &GeminiGenerationConfig{
-			Temperature:     req.Temperature,
-			TopP:            req.TopP,
-			MaxOutputTokens: req.MaxTokens,
-		},
-		// Permissive safety settings by default so enterprise and technical code aren't falsely blocked
-		SafetySettings: []GeminiSafetySetting{
-			{Category: "HARM_CATEGORY_HARASSMENT", Threshold: "BLOCK_NONE"},
-			{Category: "HARM_CATEGORY_HATE_SPEECH", Threshold: "BLOCK_NONE"},
-			{Category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", Threshold: "BLOCK_NONE"},
-			{Category: "HARM_CATEGORY_DANGEROUS_CONTENT", Threshold: "BLOCK_NONE"},
-		},
+		Contents:         mergedContents,
+		Tools:            toolContainers,
+		ToolConfig:       geminiToolConfig(req.ToolChoice),
+		GenerationConfig: geminiGenerationConfig(req),
 	}
 
 	if len(systemParts) > 0 {
@@ -184,4 +196,59 @@ func convertOpenAIToGemini(req *model.ChatCompletionRequest) *GeminiRequest {
 	}
 
 	return geminiReq
+}
+
+// geminiToolConfig maps an OpenAI tool_choice value onto Gemini's
+// generationConfig-equivalent toolConfig.functionCallingConfig.
+//
+// Gemini spells the modes AUTO / ANY / NONE. A pinned function is expressed as
+// mode ANY plus allowedFunctionNames, which is the only way to force one specific
+// tool. Unsupported values are dropped with a warning rather than silently
+// coerced to AUTO: a client that pinned a tool must not get a free choice back
+// without noticing (F-04).
+func geminiToolConfig(raw any) *GeminiToolConfig {
+	switch choice := raw.(type) {
+	case nil:
+		return nil
+	case string:
+		switch strings.ToLower(strings.TrimSpace(choice)) {
+		case "":
+			return nil
+		case "auto":
+			return geminiToolConfigMode("AUTO")
+		case "required", "any":
+			return geminiToolConfigMode("ANY")
+		case "none":
+			return geminiToolConfigMode("NONE")
+		}
+		slog.Warn("unsupported openai tool_choice string for Gemini; omitting toolConfig", "value", choice)
+		return nil
+	case map[string]any:
+		choiceType, _ := choice["type"].(string)
+		switch strings.ToLower(choiceType) {
+		case "function":
+			if fn, ok := choice["function"].(map[string]any); ok {
+				if name, _ := fn["name"].(string); name != "" {
+					return &GeminiToolConfig{FunctionCallingConfig: &GeminiFunctionCallingConfig{
+						Mode:                 "ANY",
+						AllowedFunctionNames: []string{name},
+					}}
+				}
+			}
+			slog.Warn("openai tool_choice function without a name; omitting toolConfig", "value", choice)
+			return nil
+		case "auto":
+			return geminiToolConfigMode("AUTO")
+		case "any", "required":
+			return geminiToolConfigMode("ANY")
+		case "none":
+			return geminiToolConfigMode("NONE")
+		}
+	}
+	slog.Warn("unsupported openai tool_choice value for Gemini; omitting toolConfig", "value", raw)
+	return nil
+}
+
+func geminiToolConfigMode(mode string) *GeminiToolConfig {
+	return &GeminiToolConfig{FunctionCallingConfig: &GeminiFunctionCallingConfig{Mode: mode}}
 }

@@ -2,6 +2,7 @@ package tests
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -172,9 +173,9 @@ func TestMCPServerAndSessionLogs(t *testing.T) {
 			CreatedAt:        yesterday,
 		}
 
-		err := repo.RecordUsageLog(log1)
+		err := repo.RecordUsageLogContext(context.Background(), log1)
 		require.NoError(t, err)
-		err = repo.RecordUsageLog(log2)
+		err = repo.RecordUsageLogContext(context.Background(), log2)
 		require.NoError(t, err)
 
 		// 1. Filter by SessionID = sess-conv-alpha

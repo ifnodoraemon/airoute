@@ -1,6 +1,7 @@
 package controlplane
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -118,9 +119,11 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
+	// Account identity is case-insensitive (migration 44): "Alice" and "alice" are
+	// the same name, so the duplicate check must not be byte-exact.
 	existing, _ := h.repo.GetUserByUsername(req.Username)
 	if existing != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "该用户名已存在"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "该用户名已存在（用户名不区分大小写）"})
 		return
 	}
 	if req.Email != "" {
@@ -162,6 +165,16 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 		Budget:        100.0,
 		Status:        "active",
 	}); err != nil {
+		// A concurrent create can lose the uniqueness race; report it as the client
+		// error it is instead of a generic 500.
+		if errors.Is(err, storage.ErrUsernameAlreadyRegistered) {
+			c.JSON(http.StatusConflict, gin.H{"code": 409, "error": "该用户名已被注册（用户名不区分大小写）"})
+			return
+		}
+		if errors.Is(err, storage.ErrEmailAlreadyRegistered) {
+			c.JSON(http.StatusConflict, gin.H{"code": 409, "error": "该邮箱已被绑定注册"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "创建账号及初始密钥失败，请重试"})
 		return
 	}

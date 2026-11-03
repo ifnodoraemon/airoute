@@ -35,12 +35,11 @@ export default function KeyModal({
       onClose?.();
       return;
     }
-    // A save already in flight owns the draft: don't prompt about discarding
-    // it, and never trap the user if the request hangs.
-    if (submitting) {
-      onClose?.();
-      return;
-    }
+    // A create request is in flight. The plaintext credential exists only in that
+    // response, so dismissing now would drop it for good: ignore the attempt and
+    // let the response reveal the key. The request always settles (success or
+    // failure), so this never traps the user permanently.
+    if (submitting) return;
     requestClose();
   };
   useModalA11y(isOpen, guardedClose);
@@ -89,10 +88,18 @@ export default function KeyModal({
             </div>
           </div>
 
-          {createdKey.fingerprint && (
-            <div className="text-xs">
-              <span className="text-[#656B75] dark:text-[#A1A7B0]">{t?.keyFingerprintLabel || copy('密钥指纹', 'Key fingerprint')}: </span>
-              <code className="font-mono select-all">{createdKey.fingerprint}</code>
+          {createdKey.keyId && (
+            <div className="text-xs space-y-0.5">
+              <div>
+                <span className="text-[#656B75] dark:text-[#A1A7B0]">{t?.keyIdLabel || copy('密钥 ID', 'Key ID')}: </span>
+                <code className="font-mono select-all">{createdKey.keyId}</code>
+              </div>
+              <p className="text-[11px] leading-relaxed text-[#656B75] dark:text-[#A1A7B0]">
+                {t?.keyIdHint || copy(
+                  '密钥 ID 仅用于在日志、账单和工单中识别密钥，不能用于鉴权。',
+                  'The key ID identifies the key in logs, billing and support tickets; it cannot authenticate a call.',
+                )}
+              </p>
             </div>
           )}
 
@@ -289,6 +296,30 @@ export default function KeyModal({
                 ? '密钥明文仅在创建时显示一次，创建后请立即复制保存。'
                 : 'The plaintext key is shown once, at creation — copy it before closing.')}
             </p>
+          )}
+
+          {/* Protocol format validation level. Empty means "follow the gateway
+              default", which is what the resolver does with no key-level value.
+              Only the admin create endpoint accepts this field. */}
+          {isAdmin && (
+            <div>
+              <label className="ui-label">{isZh ? '格式校验级别' : 'Format validation'}</label>
+              <select
+                value={newKey.format_validation || ''}
+                onChange={(e) => setNewKey({ ...newKey, format_validation: e.target.value })}
+                className="ui-field cursor-pointer"
+              >
+                <option value="">{isZh ? '跟随全局（默认）' : 'Follow gateway default'}</option>
+                <option value="off">{isZh ? '关闭 (off)' : 'Off'}</option>
+                <option value="lenient">{isZh ? '宽松纠错 (lenient)' : 'Lenient'}</option>
+                <option value="strict">{isZh ? '严格拦截 (strict)' : 'Strict'}</option>
+              </select>
+              <p className="ui-meta-sm mt-1">
+                {isZh
+                  ? '按协议校验该密钥的请求体格式；留空时沿用网关全局设置。'
+                  : 'Validates request bodies sent with this key; empty follows the gateway-wide setting.'}
+              </p>
+            </div>
           )}
 
           <div>

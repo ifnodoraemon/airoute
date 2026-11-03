@@ -41,21 +41,17 @@ func (c *Config) GetValidationRule(modelName, protocol string) (string, *ModelVa
 			continue
 		}
 
+		// One pattern language for the whole repository: the glob implementation
+		// lives in internal/model (MatchModelPattern) and is shared with pricing.
+		// The rules used to carry their own prefix/suffix/exact matcher, which
+		// drifted from pricing's definition (and rejected infix patterns like
+		// "gpt-4o*mini" by treating them as exact names). An empty pattern still
+		// means "all models", which is how these rules have always behaved.
 		pat := strings.ToLower(strings.TrimSpace(r.Model))
-		matched := false
-		if pat == "*" || pat == "" {
-			matched = true
-		} else if strings.HasSuffix(pat, "*") {
-			prefix := strings.TrimSuffix(pat, "*")
-			matched = strings.HasPrefix(modelLower, prefix)
-		} else if strings.HasPrefix(pat, "*") {
-			suffix := strings.TrimPrefix(pat, "*")
-			matched = strings.HasSuffix(modelLower, suffix)
-		} else {
-			matched = (pat == modelLower)
+		if pat == "" {
+			pat = "*"
 		}
-
-		if matched {
+		if model.MatchModelPattern(pat, modelLower) {
 			lvl := r.Level
 			if lvl == "" {
 				lvl = defaultLvl

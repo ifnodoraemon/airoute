@@ -50,7 +50,13 @@ type UsageLogRetention struct {
 }
 
 // InitUsageLogRetention starts the pruning worker. A zero retention window (or a
-// nil repository) disables it, so an operator can opt out and keep every row.
+// nil repository) disables audit-row pruning, so an operator can opt out and keep
+// every row.
+//
+// A partitioned usage_logs keeps the worker running even with retention disabled: the
+// audit dedupe registry (usage_audit_ids) has its own 30-day clock and the month
+// partitions must stay ahead of the calendar, otherwise the registry grows forever
+// and new audit rows start falling into the DEFAULT partition.
 func InitUsageLogRetention(repo *Repository) *UsageLogRetention {
 	retention, interval := ResolveUsageLogRetention()
 	worker := &UsageLogRetention{
@@ -59,7 +65,8 @@ func InitUsageLogRetention(repo *Repository) *UsageLogRetention {
 		interval:  interval,
 		stop:      make(chan struct{}),
 	}
-	if repo == nil || retention <= 0 {
+	partitioned := repo != nil && repo.usageLogsPartitioned()
+	if repo == nil || retention <= 0 && !partitioned {
 		return worker
 	}
 	worker.wg.Add(1)
@@ -98,7 +105,32 @@ func (w *UsageLogRetention) worker() {
 	}
 }
 
+// usageAuditIDRetention is how long the partitioned-mode audit dedupe registry
+// remembers a billing_id. See usageAuditIDRetentionDays.
+const usageAuditIDRetention = time.Duration(usageAuditIDRetentionDays) * 24 * time.Hour
+
 func (w *UsageLogRetention) pruneOnce() {
+	if w.repo.usageLogsPartitioned() {
+		// Partition health is independent of the audit retention window: keep the
+		// calendar provisioned and trim the dedupe registry on its own clock first, so
+		// a deployment that keeps audit rows forever still cannot grow those two
+		// structures without bound.
+		if err := w.repo.EnsureUsageLogMonthPartitions(usageLogPartitionMonthsAhead); err != nil {
+			telemetry.ScopedLogger("billing").Warn("failed to provision usage_logs month partitions",
+				"error", err.Error())
+		}
+		if deleted, err := w.repo.PurgeUsageAuditIDsBefore(time.Now().Add(-usageAuditIDRetention), usageLogPruneBatchSize); err != nil {
+			telemetry.ScopedLogger("billing").Warn("failed to prune the audit dedupe registry",
+				"error", err.Error())
+		} else if deleted > 0 {
+			telemetry.ScopedLogger("billing").Info("pruned expired audit dedupe ids",
+				"deleted", deleted, "retention_days", usageAuditIDRetentionDays)
+		}
+	}
+
+	if w.retention <= 0 {
+		return
+	}
 	cutoff := time.Now().Add(-w.retention)
 	deleted, err := w.repo.PurgeUsageLogsBefore(cutoff, usageLogPruneBatchSize)
 	if err != nil {
@@ -115,4 +147,35 @@ func (w *UsageLogRetention) pruneOnce() {
 			"cutoff", cutoff.UTC().Format(time.RFC3339),
 		)
 	}
+}
+
+// PurgeUsageAuditIDsBefore deletes audit dedupe registry rows older than cutoff in
+// bounded batches. It is a no-op unless usage_logs is partitioned (the registry only
+// exists there) and is meant to run long after the audit rows themselves, so a
+// redelivery inside the delivery window is still deduplicated.
+func (r *Repository) PurgeUsageAuditIDsBefore(cutoff time.Time, batchSize int) (int64, error) {
+	if r == nil || r.db == nil || !r.usageLogsPartitioned() {
+		return 0, nil
+	}
+	if batchSize <= 0 {
+		batchSize = 5000
+	}
+	var total int64
+	for {
+		res, err := r.db.Exec(`DELETE FROM `+usageAuditIDsTable+` WHERE billing_id IN (
+			SELECT billing_id FROM `+usageAuditIDsTable+` WHERE created_at < ? LIMIT ?)`,
+			cutoff.UTC(), batchSize)
+		if err != nil {
+			return total, err
+		}
+		deleted, err := res.RowsAffected()
+		if err != nil {
+			return total, err
+		}
+		total += deleted
+		if deleted < int64(batchSize) {
+			break
+		}
+	}
+	return total, nil
 }

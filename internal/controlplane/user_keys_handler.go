@@ -2,7 +2,6 @@ package controlplane
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -25,8 +24,7 @@ func (h *AdminHandler) ListUserKeys(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "查询密钥列表失败: " + err.Error()})
 		return
 	}
-	maskKeysForDisplay(keys)
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": keys})
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": apiKeyViews(keys)})
 }
 
 // CreateUserKeyRequest defines personal API key creation.
@@ -76,52 +74,12 @@ func (h *AdminHandler) CreateUserKey(c *gin.Context) {
 
 	// CreateAPIKey stores only the digest and leaves it in rec.Key, so the
 	// plaintext (held in newKey) is returned exactly once, in this response.
-	created := *rec
-	created.Key = newKey
+	view := apiKeyViewFrom(rec)
+	view.Key = newKey
 	c.JSON(http.StatusOK, gin.H{
 		"code":              0,
 		"key_returned_once": true,
 		"message":           "API 密钥创建成功",
-		"data":              &created,
+		"data":              &view,
 	})
-}
-
-// DeleteUserKey deletes an API key owned by the current user.
-func (h *AdminHandler) DeleteUserKey(c *gin.Context) {
-	claims, ok := RequireAuthClaims(c)
-	if !ok {
-		return
-	}
-
-	user, err := h.repo.GetUserByUsername(claims.Username)
-	if err != nil || user == nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": 404, "error": "用户不存在"})
-		return
-	}
-
-	idStr := c.Param("id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "无效的密钥ID"})
-		return
-	}
-
-	k, err := h.repo.GetAPIKey(id)
-	if err != nil || k == nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": 404, "error": "密钥不存在"})
-		return
-	}
-
-	if k.UserID != user.ID && claims.Role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "无权删除非本人的 API 密钥"})
-		return
-	}
-
-	if err := h.repo.DeleteAPIKey(id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "删除密钥失败: " + err.Error()})
-		return
-	}
-	h.syncDataPlane()
-
-	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "密钥已成功删除"})
 }

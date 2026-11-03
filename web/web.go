@@ -74,7 +74,13 @@ func RegisterStaticRoutes(r *gin.Engine) {
 		c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
 	}
 
-	// Serve index.html directly on root / for zero-friction access
+	// Serve index.html directly on root / for zero-friction access.
+	//
+	// This is the PUBLIC entrance, not the control plane: the SPA itself resolves a
+	// bare "/" to the landing/login page (web/src/lib/consoleRoute.js), and admin
+	// data is only reachable through the guarded /api/v1/admin API. Do not add "/"
+	// to middleware.isControlPlanePath - that would lock the public login screen out
+	// behind the private-network guard.
 	r.GET("/", serveIndex)
 
 	// The console entry point MUST go through serveIndex (not StaticFS) so it

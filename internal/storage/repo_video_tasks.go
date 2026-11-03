@@ -16,13 +16,36 @@ type VideoTask struct {
 	ChannelID                                          int64
 }
 
+// createVideoTasks creates the channel-pin table used to poll a video task.
+//
+// The DDL is dialect-specific for the timestamp column: PostgreSQL's
+// `TIMESTAMP` is a zone-less wall-clock value whose CURRENT_TIMESTAMP default is
+// the session's local time, while SQLite's CURRENT_TIMESTAMP is UTC. Sharing one
+// DDL therefore gave the two dialects different meanings for the same column, and
+// the retention purge (which binds a UTC cutoff) deleted the wrong window on any
+// PostgreSQL server that is not set to UTC. Every other table in this schema uses
+// TIMESTAMPTZ on PostgreSQL for the same reason.
 func createVideoTasks(db *DB) error {
-	_, err := db.DB.Exec(`CREATE TABLE IF NOT EXISTS video_tasks (
+	_, err := db.DB.Exec(videoTasksDDL(db.Dialect()))
+	return err
+}
+
+// videoTasksDDL renders the table definition for a dialect. It is separate from
+// createVideoTasks so the two branches can be asserted without a PostgreSQL
+// server.
+func videoTasksDDL(dialect string) string {
+	if dialect == "postgres" {
+		return `CREATE TABLE IF NOT EXISTS video_tasks (
+			id TEXT PRIMARY KEY, upstream_id TEXT NOT NULL, owner TEXT NOT NULL,
+			model TEXT NOT NULL, channel_id BIGINT NOT NULL, channel_name TEXT NOT NULL,
+			base_url TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+		)`
+	}
+	return `CREATE TABLE IF NOT EXISTS video_tasks (
 		id TEXT PRIMARY KEY, upstream_id TEXT NOT NULL, owner TEXT NOT NULL,
 		model TEXT NOT NULL, channel_id BIGINT NOT NULL, channel_name TEXT NOT NULL,
-		base_url TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-	)`)
-	return err
+		base_url TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`
 }
 
 // videoTaskURLCredentialParams are the query parameters that carry credentials in

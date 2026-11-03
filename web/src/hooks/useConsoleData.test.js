@@ -75,7 +75,7 @@ describe('useConsoleData', () => {
   it('fills the slices from the answers', async () => {
     stubGateway({
       '/admin/channels': () => jsonResponse({ code: 0, data: [{ id: 1, name: 'c1' }] }),
-      '/admin/keys': () => jsonResponse({ code: 0, data: [{ id: 2, key: 'sk-1' }] }),
+      '/admin/keys': () => jsonResponse({ code: 0, data: [{ id: 2, key_id: 'ak_1f0013dea24034ac0001' }] }),
       '/admin/stats/overview': () => jsonResponse({ code: 0, data: { total_requests: 7 } }),
       '/admin/models/routes': () => jsonResponse({ code: 0, data: [] }),
       '/admin/models': () => jsonResponse({ code: 0, data: ['gpt-x'] }),
@@ -87,7 +87,7 @@ describe('useConsoleData', () => {
     });
 
     expect(result.current.channels).toEqual([{ id: 1, name: 'c1' }]);
-    expect(result.current.keys).toEqual([{ id: 2, key: 'sk-1' }]);
+    expect(result.current.keys).toEqual([{ id: 2, key_id: 'ak_1f0013dea24034ac0001' }]);
     expect(result.current.stats).toEqual({ total_requests: 7 });
     expect(result.current.models).toEqual(['gpt-x']);
   });
@@ -263,7 +263,7 @@ describe('useConsoleData in-flight invalidation', () => {
     globalThis.fetch.mockImplementation(async (url) => {
       await gate;
       if (String(url).includes('/admin/keys')) {
-        return jsonResponse({ code: 0, data: [{ id: 1, key: 'sk-previous-account' }] });
+        return jsonResponse({ code: 0, data: [{ id: 1, key_id: 'ak_1111aaaa2222bbbb3333' }] });
       }
       if (String(url).includes('/admin/stats/overview')) {
         return jsonResponse({ code: 0, data: { total_requests: 999 } });
@@ -342,7 +342,7 @@ describe('useConsoleData in-flight invalidation', () => {
   it('applies data loaded after a reset in the new session', async () => {
     globalThis.fetch.mockImplementation(async (url) => {
       if (String(url).includes('/admin/keys')) {
-        return jsonResponse({ code: 0, data: [{ id: 2, key: 'sk-new-account' }] });
+        return jsonResponse({ code: 0, data: [{ id: 2, key_id: 'ak_4444cccc5555dddd6666' }] });
       }
       return jsonResponse({ code: 0, data: [] });
     });
@@ -356,6 +356,6 @@ describe('useConsoleData in-flight invalidation', () => {
       await result.current.refresh();
     });
 
-    expect(result.current.keys).toEqual([{ id: 2, key: 'sk-new-account' }]);
+    expect(result.current.keys).toEqual([{ id: 2, key_id: 'ak_4444cccc5555dddd6666' }]);
   });
 });

@@ -56,6 +56,24 @@ func decodeEnvelope(t *testing.T, w *httptest.ResponseRecorder) map[string]inter
 	return out
 }
 
+// storedChannel reads one channel back by id. The repository no longer exposes a
+// single-row read (only ListChannels and PatchChannel), so tests look it up in the
+// list — which is also how the console sees channels.
+func storedChannel(t *testing.T, repo *storage.Repository, id int64) *storage.ChannelRecord {
+	t.Helper()
+	channels, err := repo.ListChannels()
+	if err != nil {
+		t.Fatalf("ListChannels: %v", err)
+	}
+	for _, ch := range channels {
+		if ch.ID == id {
+			return ch
+		}
+	}
+	t.Fatalf("channel %d not found", id)
+	return nil
+}
+
 const validChannelBody = `{"name":"chan-a","type":"openai","base_url":"http://a.invalid","api_key":"secret","models":["m1"],"priority":3,"weight":7,"status":"active"}`
 
 func TestCreateChannelCommittedReloadWarning(t *testing.T) {
@@ -142,10 +160,7 @@ func TestUpdateChannelHTTPContract(t *testing.T) {
 			t.Fatalf("status = %d, want 200 (body: %s)", w.Code, w.Body.String())
 		}
 
-		stored, err := repo.GetChannel(seeded.ID)
-		if err != nil {
-			t.Fatalf("GetChannel: %v", err)
-		}
+		stored := storedChannel(t, repo, seeded.ID)
 		if stored.Name != "renamed" {
 			t.Errorf("name = %q, want renamed", stored.Name)
 		}
@@ -251,28 +266,24 @@ func TestBatchChannelHTTPContract(t *testing.T) {
 			t.Fatalf("status = %d, want 200 (body: %s)", w.Code, w.Body.String())
 		}
 		for _, id := range []int64{a.ID, b.ID} {
-			stored, err := repo.GetChannel(id)
-			if err != nil {
-				t.Fatalf("GetChannel(%d): %v", id, err)
-			}
+			stored := storedChannel(t, repo, id)
 			if stored.Status != "disabled" {
 				t.Errorf("channel %d status = %q, want disabled", id, stored.Status)
 			}
 		}
 	})
 
-	t.Run("coerces an unknown status to active", func(t *testing.T) {
+	t.Run("rejects an unknown status instead of enabling the channel", func(t *testing.T) {
+		// Regression for BUG-CP-03: this used to answer 200 and coerce "nonsense" to
+		// "active", so a misspelled bulk disable ENABLED the selected channels.
 		body := `{"ids":[` + int64String(a.ID) + `],"status":"nonsense"}`
 		w := invokeChannel(t, handler.BatchStatusChannels, http.MethodPost, body, "")
-		if w.Code != http.StatusOK {
-			t.Fatalf("status = %d, want 200", w.Code)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400 (body: %s)", w.Code, w.Body.String())
 		}
-		stored, err := repo.GetChannel(a.ID)
-		if err != nil {
-			t.Fatalf("GetChannel: %v", err)
-		}
-		if stored.Status != "active" {
-			t.Errorf("status = %q, want active", stored.Status)
+		stored := storedChannel(t, repo, a.ID)
+		if stored.Status != "disabled" {
+			t.Errorf("status = %q, want the previous disabled state to be untouched", stored.Status)
 		}
 	})
 }

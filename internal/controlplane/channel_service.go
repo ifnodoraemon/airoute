@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/storage"
@@ -49,6 +50,39 @@ var ErrChannelNotFound = errors.New("channel not found")
 type ValidationError struct{ Message string }
 
 func (e *ValidationError) Error() string { return e.Message }
+
+// channelPatch is a partial channel update.
+//
+// The numeric fields are pointers so the merge can tell "the client omitted it"
+// from "the client sent 0". The distinction is load-bearing for priority and
+// weight: they are ordered/weighted router inputs where 0 is a value an operator
+// may want, and the old merge (`if patch.Priority != 0`) silently treated it as
+// "leave unchanged", so a request to set 0 returned 200 while changing nothing.
+//
+// Text fields stay plain strings where empty means "not provided". That is not an
+// oversight: name, type and base_url are required, so an empty value can never be
+// a meaningful update, and api_key empty is the documented "keep the stored
+// credential". The zero-value ambiguity only exists for the numbers.
+//
+// It is a controlplane type rather than a storage one because
+// storage.ChannelRecord is the full row: its zero values are indistinguishable
+// from an omitted field.
+type channelPatch struct {
+	Name             string
+	Type             model.ProviderType
+	BaseURL          string
+	APIKey           string
+	Models           []string
+	ModelMapping     map[string]string
+	Protocols        []string
+	Priority         *int
+	Weight           *int
+	TimeoutSeconds   *int
+	MaxConcurrency   *int
+	QueueLimit       *int
+	QueueWaitSeconds *int
+	Status           string
+}
 
 // ChannelService owns the channel business rules: which fields a channel cannot
 // be created without, how a partial update merges onto the stored record, which
@@ -104,15 +138,17 @@ func (s *ChannelService) Create(ctx context.Context, rec *storage.ChannelRecord)
 //
 // Fields the caller omitted keep their stored values, so a partial update cannot
 // wipe a credential or a routing weight.
-func (s *ChannelService) Update(ctx context.Context, id int64, patch *storage.ChannelRecord) (*storage.ChannelRecord, error) {
+func (s *ChannelService) Update(ctx context.Context, id int64, patch *channelPatch) (*storage.ChannelRecord, error) {
 	updated, err := s.store.PatchChannel(id, func(current *storage.ChannelRecord) error {
-		mergeChannelUpdate(current, patch)
+		if err := mergeChannelUpdate(current, patch); err != nil {
+			return err
+		}
 		timeout, err := normalizeChannelTimeout(current.TimeoutSeconds)
 		if err != nil {
 			return err
 		}
 		current.TimeoutSeconds = timeout
-		return nil
+		return validateChannelCapacity(current)
 	})
 	if err != nil {
 		// Only a genuinely missing row becomes a 404. A read or write failure
@@ -146,7 +182,11 @@ func (s *ChannelService) BatchDelete(ctx context.Context, ids []int64) (int64, e
 
 // BatchStatus toggles several channels and reloads once.
 func (s *ChannelService) BatchStatus(ctx context.Context, ids []int64, status string) (int64, error) {
-	n, err := s.store.BatchUpdateChannelStatus(ids, normalizeChannelStatus(status))
+	normalized := normalizeChannelStatus(status)
+	if normalized == "" {
+		return 0, &ValidationError{Message: "无效的状态，仅支持 active 或 disabled"}
+	}
+	n, err := s.store.BatchUpdateChannelStatus(ids, normalized)
 	if err != nil {
 		return 0, err
 	}
@@ -171,12 +211,20 @@ func validateNewChannel(rec *storage.ChannelRecord) error {
 	if rec == nil || rec.Name == "" || rec.BaseURL == "" || rec.Type == "" {
 		return &ValidationError{Message: "渠道名称、类型与 base_url 为必填项"}
 	}
+	// A provided status must be one the data plane understands; see the note in
+	// mergeChannelUpdate.
+	if status := strings.ToLower(strings.TrimSpace(rec.Status)); status != "" {
+		if !validToggleStatus(status) {
+			return &ValidationError{Message: "无效的状态，仅支持 active 或 disabled"}
+		}
+		rec.Status = status
+	}
 	timeout, err := normalizeChannelTimeout(rec.TimeoutSeconds)
 	if err != nil {
 		return err
 	}
 	rec.TimeoutSeconds = timeout
-	return nil
+	return validateChannelCapacity(rec)
 }
 
 // normalizeChannelTimeout turns the single operator-facing knob into a validated
@@ -206,26 +254,41 @@ func normalizeChannelTimeout(seconds int) (int, error) {
 	return seconds, nil
 }
 
-// normalizeChannelStatus enforces the two-state contract: anything that is not
-// "disabled" is treated as "active".
+// normalizeChannelStatus enforces the two-state contract.
+//
+// It returns "" for an unrecognised value so callers must decide what to do; it
+// used to coerce anything that was not exactly "disabled" to "active", which made
+// a misspelled disable silently ENABLE the channel (BUG-CP-03).
 func normalizeChannelStatus(status string) string {
-	if status == "disabled" {
-		return "disabled"
+	status = strings.ToLower(strings.TrimSpace(status))
+	if status == "" {
+		// An omitted status in a bulk request means "no opinion": callers that
+		// reach here through bindBatchStatus never do (it rejects an empty value
+		// before this point).
+		return ""
 	}
-	return "active"
+	if !validToggleStatus(status) {
+		return ""
+	}
+	return status
 }
 
 // mergeChannelUpdate copies only the fields the client actually provided onto the
 // existing channel record.
 //
-// The zero-value tests are load-bearing: an omitted priority, weight or timeout
-// keeps its stored value, so a partial update cannot silently reset routing
-// weights to 0. The same convention means those three fields cannot be set to 0
-// through this endpoint — 0 is read as "not provided" — which is consistent with
-// the storage layer, where 0 also means "use the default".
-func mergeChannelUpdate(existing, patch *storage.ChannelRecord) {
+// For the numeric fields "provided" is decided by the pointer being non-nil,
+// never by the value being non-zero: an explicit priority=0 or weight=0 therefore
+// reaches storage instead of being silently discarded. An omitted field keeps its
+// stored value, so a partial update cannot reset routing weights.
+//
+// A provided zero is still subject to the same "0 means default" rule that
+// creation uses (see storage.CreateChannel / updateChannelTx): priority 0 becomes
+// 1 and weight 0 becomes 10 there. The point of this function is that the API no
+// longer pretends a field was applied when it was dropped, not that storage's
+// default policy changes.
+func mergeChannelUpdate(existing *storage.ChannelRecord, patch *channelPatch) error {
 	if patch == nil {
-		return
+		return nil
 	}
 	if patch.Name != "" {
 		existing.Name = patch.Name
@@ -248,16 +311,34 @@ func mergeChannelUpdate(existing, patch *storage.ChannelRecord) {
 	if patch.Protocols != nil {
 		existing.Protocols = patch.Protocols
 	}
-	if patch.Priority != 0 {
-		existing.Priority = patch.Priority
+	if patch.Priority != nil {
+		existing.Priority = *patch.Priority
 	}
-	if patch.Weight != 0 {
-		existing.Weight = patch.Weight
+	if patch.Weight != nil {
+		existing.Weight = *patch.Weight
 	}
-	if patch.TimeoutSeconds != 0 {
-		existing.TimeoutSeconds = patch.TimeoutSeconds
+	if patch.TimeoutSeconds != nil {
+		existing.TimeoutSeconds = *patch.TimeoutSeconds
+	}
+	if patch.MaxConcurrency != nil {
+		existing.MaxConcurrency = *patch.MaxConcurrency
+	}
+	if patch.QueueLimit != nil {
+		existing.QueueLimit = *patch.QueueLimit
+	}
+	if patch.QueueWaitSeconds != nil {
+		existing.QueueWaitSeconds = *patch.QueueWaitSeconds
 	}
 	if patch.Status != "" {
-		existing.Status = patch.Status
+		// An unknown status is rejected rather than stored: the data plane treats
+		// every value except "" and "active" as disabled, so a typo ("disable"),
+		// or a value from an older client, silently took a channel out of service
+		// (or, through the batch endpoint, silently enabled it). See BUG-CP-03.
+		status := strings.ToLower(strings.TrimSpace(patch.Status))
+		if !validToggleStatus(status) {
+			return &ValidationError{Message: "无效的状态，仅支持 active 或 disabled"}
+		}
+		existing.Status = status
 	}
+	return nil
 }

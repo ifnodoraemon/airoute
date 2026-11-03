@@ -2,13 +2,18 @@ package adapter
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/provider"
 )
 
-func TestAnthropicAdapter_Bidirectional(t *testing.T) {
+// The Anthropic adapter is inbound-only: Messages responses are rendered by
+// internal/api/inbound_anthropic.go (a canonical response must never be turned
+// into an unsigned {"type":"thinking"} block). This test pins the inbound
+// conversion and the outbound refusal (B-05).
+func TestAnthropicAdapter_InboundOnly(t *testing.T) {
 	ad := NewAnthropicAdapter()
 	if ad.Protocol() != "anthropic" {
 		t.Fatalf("expected protocol 'anthropic', got '%s'", ad.Protocol())
@@ -36,37 +41,13 @@ func TestAnthropicAdapter_Bidirectional(t *testing.T) {
 		t.Fatalf("unexpected message roles: %+v", canonical.Messages)
 	}
 
-	// 2. FromCanonical
-	stop := "stop"
-	canonResp := &model.ChatCompletionResponse{
-		ID:    "chatcmpl-test",
-		Model: "claude-3-5-sonnet",
-		Choices: []model.ChatCompletionChoice{
-			{
-				Index: 0,
-				Message: model.ChatMessage{
-					Role:    "assistant",
-					Content: "Hello! How can I assist you today?",
-				},
-				FinishReason: &stop,
-			},
-		},
-		Usage: &model.Usage{
-			PromptTokens:     10,
-			CompletionTokens: 15,
-		},
+	// 2. FromCanonical must refuse: the live implementation lives in internal/api.
+	if _, err := ad.FromCanonical(context.Background(), &model.ChatCompletionResponse{}); !errors.Is(err, ErrAnthropicOutboundUnsupported) {
+		t.Fatalf("FromCanonical error = %v, want ErrAnthropicOutboundUnsupported", err)
 	}
-
-	anthropicOut, err := ad.FromCanonical(context.Background(), canonResp)
-	if err != nil {
-		t.Fatalf("FromCanonical failed: %v", err)
-	}
-	outMap, ok := anthropicOut.(map[string]any)
-	if !ok {
-		t.Fatalf("expected map[string]any output, got %T", anthropicOut)
-	}
-	if outMap["role"] != "assistant" || outMap["stop_reason"] != "end_turn" {
-		t.Fatalf("unexpected Anthropic output fields: %+v", outMap)
+	// 3. The anthropic adapter is not registered for outbound conversion.
+	if _, ok := Get("anthropic"); ok {
+		t.Fatal("anthropic must not be registered as a bidirectional protocol adapter")
 	}
 }
 
@@ -250,10 +231,10 @@ func TestGeminiAdapter_ToolCalls(t *testing.T) {
 	}
 }
 
-func TestAnthropicAdapter_ArraySystemAndReasoning(t *testing.T) {
+func TestAnthropicAdapter_ArraySystemAndToolChoice(t *testing.T) {
 	ad := NewAnthropicAdapter()
 
-	// 1. Array system with cache_control blocks and stop sequences
+	// Array system with cache_control blocks, stop sequences and tool_choice.
 	inbound := &model.AnthropicInboundRequest{
 		Model: "claude-3-7-sonnet",
 		System: []any{
@@ -295,39 +276,5 @@ func TestAnthropicAdapter_ArraySystemAndReasoning(t *testing.T) {
 	}
 	if canonical.ToolChoice != "required" {
 		t.Fatalf("expected tool_choice 'required', got %+v", canonical.ToolChoice)
-	}
-
-	// 2. FromCanonical with ReasoningContent (thinking)
-	finishStop := "stop"
-	canonResp := &model.ChatCompletionResponse{
-		ID:    "msg_test_reasoning",
-		Model: "deepseek-r1",
-		Choices: []model.ChatCompletionChoice{
-			{
-				Index: 0,
-				Message: model.ChatMessage{
-					Role:             "assistant",
-					ReasoningContent: "Thinking step 1... Done.",
-					Content:          "Final answer.",
-				},
-				FinishReason: &finishStop,
-			},
-		},
-	}
-
-	anthropicOut, err := ad.FromCanonical(context.Background(), canonResp)
-	if err != nil {
-		t.Fatalf("FromCanonical failed: %v", err)
-	}
-	outMap := anthropicOut.(map[string]any)
-	blocks := outMap["content"].([]map[string]any)
-	if len(blocks) != 2 {
-		t.Fatalf("expected 2 blocks (thinking + text), got %d: %+v", len(blocks), blocks)
-	}
-	if blocks[0]["type"] != "thinking" || blocks[0]["thinking"] != "Thinking step 1... Done." {
-		t.Fatalf("unexpected thinking block: %+v", blocks[0])
-	}
-	if blocks[1]["type"] != "text" || blocks[1]["text"] != "Final answer." {
-		t.Fatalf("unexpected text block: %+v", blocks[1])
 	}
 }

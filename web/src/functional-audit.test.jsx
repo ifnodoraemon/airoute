@@ -6,7 +6,7 @@ import WalletManagementView from './components/WalletManagementView.jsx';
 import { useConsoleData } from './hooks/useConsoleData.js';
 
 const user = { id: 77, username: 'audit-customer', role: 'user', balance: 100, group_name: 'default' };
-const key = { id: 77, key: 'sk-audit-synthetic-key-only', tenant_id: 'audit-client', status: 'active', allowed_models: ['*'], rpm: 60, budget: 100 };
+const key = { id: 77, key_id: 'ak_77f0013dea24034ac0077', tenant_id: 'audit-client', status: 'active', allowed_models: ['*'], rpm: 60, budget: 100 };
 const response = (data) => ({ ok: true, status: 200, json: async () => data });
 
 beforeEach(() => {
@@ -40,7 +40,7 @@ describe('Role journey audit: desired outcomes', () => {
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(window.location.hash).toBe('#/logs');
     await waitFor(() => expect(fetch.mock.calls.some(([url]) => { const u = new URL(String(url), 'http://localhost'); return u.pathname.endsWith('/admin/logs') && u.searchParams.get('key_id') === '77' && !u.searchParams.has('q'); })).toBe(true));
-    expect(window.location.search).not.toContain(key.key);
+    expect(window.location.search).not.toContain(key.key_id);
   });
 
   it('onboarding should use loaded credentials after initially mounting without data', () => {
@@ -48,7 +48,14 @@ describe('Role journey audit: desired outcomes', () => {
     const { rerender } = render(<OnboardingModal {...props} isOpen={false} keys={[]} models={[]} />);
     rerender(<OnboardingModal {...props} isOpen keys={[key]} models={['audit-chat']} />);
     expect(screen.queryByText('sk-airoute-demo-key')).not.toBeInTheDocument();
-    expect(screen.getByText(key.key)).toBeInTheDocument();
+    // The listed row is only an identifier: the wizard keys off its id and never
+    // renders the stored value (the API exposes a key ID instead).
+    expect(screen.queryByText(key.key_id)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('密钥上下文（租户与模型范围）')).toHaveValue('77');
+    // The "loaded credential" that matters is the entitlement: the model catalog
+    // is filtered by the key that arrived after the initial empty mount.
+    fireEvent.click(screen.getByRole('button', { name: /下一步：选择/ }));
+    expect(screen.getByRole('combobox')).toHaveValue('audit-chat');
   });
 
   it('removing the final available model should clear the model catalog', async () => {
@@ -62,12 +69,12 @@ describe('Role journey audit: desired outcomes', () => {
     expect(result.current.models).toEqual([]);
   });
 
-  it('cancelled recharge orders should not be described as still processing', async () => {
+  it('expired recharge orders should not be described as still processing', async () => {
     const adminFetch = vi.fn(async () => response({ code: 0, data: { ...user, orders: [
-      { id: 1, order_no: 'AUDIT-CANCELLED', amount: 50, channel: 'stripe', status: 'cancelled' },
+      { id: 1, order_no: 'AUDIT-EXPIRED', amount: 50, channel: 'stripe', status: 'expired' },
     ] } }));
     render(<WalletManagementView adminUser={user} adminFetch={adminFetch} showToast={vi.fn()} lang="zh" />);
-    await screen.findByText('AUDIT-CANCELLED');
+    await screen.findByText('AUDIT-EXPIRED');
     expect(screen.queryByText('处理中')).not.toBeInTheDocument();
   });
 });

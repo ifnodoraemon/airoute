@@ -17,10 +17,17 @@ const (
 	// call site imports, the context key is the same string value.
 	ContextKeyTraceID      = telemetry.ContextKeyTraceID
 	ContextKeyErrorMessage = "error_message"
-	HeaderAirouteTraceID   = "X-Airoute-Trace-ID"
-	HeaderRequestID        = "X-Request-ID"
-	HeaderTraceID          = "X-Trace-ID"
-	HeaderTraceParent      = "traceparent"
+	// ContextKeyAuditStatus carries the status persisted to usage_logs when it
+	// differs from the wire status. A 499 "client closed request" is synthesized
+	// by the gateway: on a streaming response the head was already written as
+	// 200, and a unary success is flipped to 499 in the audit record. Without
+	// this key the access line claimed a clean 200 for an aborted, billed
+	// request, and told the console nothing about the audit status.
+	ContextKeyAuditStatus = "audit_status"
+	HeaderAirouteTraceID  = "X-Airoute-Trace-ID"
+	HeaderRequestID       = "X-Request-ID"
+	HeaderTraceID         = "X-Trace-ID"
+	HeaderTraceParent     = "traceparent"
 )
 
 // GenerateTraceID creates a unique, high-performance distributed trace identifier.
@@ -41,8 +48,7 @@ func TraceMiddleware() gin.HandlerFunc {
 
 		// Inject into Gin context and standard context.Context
 		c.Set(ContextKeyTraceID, traceID)
-		ctx := context.WithValue(c.Request.Context(), ContextKeyTraceID, traceID)
-		c.Request = c.Request.WithContext(ctx)
+		c.Request = c.Request.WithContext(telemetry.WithTraceID(c.Request.Context(), traceID))
 
 		// Set response headers for client tracking
 		c.Writer.Header().Set(HeaderAirouteTraceID, traceID)
@@ -52,22 +58,83 @@ func TraceMiddleware() gin.HandlerFunc {
 	}
 }
 
+// maxTraceIDLen bounds a client-supplied trace id. The value is echoed in a
+// response header, written to every access-log line and persisted as
+// usage_logs.trace_id, so it must stay short enough for those sinks.
+const maxTraceIDLen = 64
+
+// validCustomTraceID reports whether a client-supplied trace id may be adopted.
+//
+// The value is attacker-controlled and ends up in headers, log lines and the audit
+// table, so only a conservative alphabet is accepted: control characters could
+// forge extra log fields, and an unbounded length turns one header into an
+// arbitrarily large database row. An invalid value is replaced by a freshly
+// generated id rather than truncated - a truncated id could collide with a
+// legitimate trace.
+func validCustomTraceID(id string) bool {
+	if id == "" || len(id) > maxTraceIDLen {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		c := id[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		case c == '-', c == '_', c == '.':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func isLowerHex(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// traceIDFromTraceparent validates a W3C traceparent header
+// (version-trace_id-parent_id-trace_flags) and returns the trace id to adopt.
+//
+// The previous implementation only checked that the trace-id field was 32
+// characters long, so "00-" + 32 arbitrary characters + "-..." was accepted as a
+// distributed trace id.
+func traceIDFromTraceparent(tp string) (string, bool) {
+	parts := strings.Split(tp, "-")
+	if len(parts) != 4 {
+		return "", false
+	}
+	version, traceID, parentID, flags := parts[0], parts[1], parts[2], parts[3]
+	if len(version) != 2 || len(traceID) != 32 || len(parentID) != 16 || len(flags) != 2 {
+		return "", false
+	}
+	if !isLowerHex(version) || !isLowerHex(traceID) || !isLowerHex(parentID) || !isLowerHex(flags) {
+		return "", false
+	}
+	// W3C forbids the all-zero trace-id and parent-id (they mean "unknown").
+	if strings.Trim(traceID, "0") == "" || strings.Trim(parentID, "0") == "" {
+		return "", false
+	}
+	return "tr-" + traceID, true
+}
+
 // extractTraceID inspects incoming headers (X-Airoute-Trace-ID, X-Request-ID, X-Trace-ID, W3C traceparent).
+//
+// Only values that pass validation are adopted; anything else is ignored, so the
+// caller generates a fresh id instead of trusting attacker-controlled input.
 func extractTraceID(c *gin.Context) string {
-	if tid := strings.TrimSpace(c.GetHeader(HeaderAirouteTraceID)); tid != "" {
-		return tid
-	}
-	if tid := strings.TrimSpace(c.GetHeader(HeaderRequestID)); tid != "" {
-		return tid
-	}
-	if tid := strings.TrimSpace(c.GetHeader(HeaderTraceID)); tid != "" {
-		return tid
+	for _, header := range []string{HeaderAirouteTraceID, HeaderRequestID, HeaderTraceID} {
+		if tid := strings.TrimSpace(c.GetHeader(header)); validCustomTraceID(tid) {
+			return tid
+		}
 	}
 	if tp := strings.TrimSpace(c.GetHeader(HeaderTraceParent)); tp != "" {
-		// W3C format: version-trace_id-parent_id-trace_flags (e.g., 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01)
-		parts := strings.Split(tp, "-")
-		if len(parts) >= 4 && len(parts[1]) == 32 {
-			return "tr-" + parts[1]
+		if tid, ok := traceIDFromTraceparent(tp); ok {
+			return tid
 		}
 	}
 	return ""
@@ -92,15 +159,7 @@ func GetTraceID(c *gin.Context) string {
 
 // GetTraceIDFromContext retrieves the TraceID from a Go standard context.Context.
 func GetTraceIDFromContext(ctx context.Context) string {
-	if ctx == nil {
-		return ""
-	}
-	if val := ctx.Value(ContextKeyTraceID); val != nil {
-		if s, ok := val.(string); ok && s != "" {
-			return s
-		}
-	}
-	return ""
+	return telemetry.TraceIDFromContext(ctx)
 }
 
 func sanitizeURLQuery(raw string) string {
@@ -135,8 +194,15 @@ func AccessLogMiddleware() gin.HandlerFunc {
 
 		c.Next()
 
-		// Skip high-frequency probes and metrics scrapers to keep logs clean
-		if path == "/health" || path == "/api/v1/public/status" || path == "/metrics" {
+		// Skip high-frequency probes and metrics scrapers to keep logs clean.
+		//
+		// The prefix match matters: every shipped deployment probes /health/ready
+		// (readiness) every 5-10s, while the bare /health the list used to name is
+		// only probed by liveness. Without this the readiness probes - the highest
+		// frequency lines in the log - were exactly the ones that were not filtered.
+		if path == "/health" || strings.HasPrefix(path, "/health/") ||
+			path == "/healthz" || strings.HasPrefix(path, "/healthz/") ||
+			path == "/readyz" || path == "/api/v1/public/status" || path == "/metrics" {
 			return
 		}
 
@@ -168,19 +234,28 @@ func AccessLogMiddleware() gin.HandlerFunc {
 			if message := c.GetString(ContextKeyErrorMessage); message != "" {
 				fields = append(fields, "error", message)
 			}
+		} else if auditStatus := c.GetInt(ContextKeyAuditStatus); auditStatus != 0 && auditStatus != status {
+			// The wire and the audit trail disagree: the response head was already
+			// a 200 when the gateway recorded a 499 because the downstream hung up.
+			// Printing only "status=200" hid the abort from stdout and forced a
+			// database join to discover that the request had failed AND been billed.
+			fields = append(fields, "audit_status", auditStatus)
+			if message := c.GetString(ContextKeyErrorMessage); message != "" {
+				fields = append(fields, "error", message)
+			}
 		}
 		telemetry.ScopedLogger("system").Info("http_access", fields...)
 	}
 }
 
-// accessLogKey renders the authenticated credential for the access line.
+// accessLogKey renders the authenticated key for the access line.
 //
-// ContextKeyAPIKey holds the stored digest (never the credential), and
-// ContextKeyAPIKeyFingerprint holds the display identifier; the fingerprint is
-// preferred so the line stays comparable with the console's key column.
+// ContextKeyAPIKey holds the stored digest (never the credential) and
+// ContextKeyAPIKeyID holds the public identifier; the identifier is preferred so
+// the line stays comparable with the console's key column.
 func accessLogKey(c *gin.Context) string {
-	if fingerprint := c.GetString(ContextKeyAPIKeyFingerprint); fingerprint != "" {
-		return fingerprint
+	if keyID := c.GetString(ContextKeyAPIKeyID); keyID != "" {
+		return keyID
 	}
 	return maskAPIKey(c.GetString(ContextKeyAPIKey))
 }

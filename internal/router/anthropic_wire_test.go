@@ -112,7 +112,7 @@ func TestExplicitNativeMarkerUsesNativeProvider(t *testing.T) {
 
 // R-04: native-only requests (extended thinking, cache_control, top_k) must not be
 // routed to an OpenAI channel that merely declares the capability; with no native
-// channel available the documented translation fallback still applies.
+// channel available it must fail rather than discard signed/native fields.
 func TestNativeOnlyCandidatesRequireNativeWire(t *testing.T) {
 	d, _, _ := anthropicWireDispatcher(t, []model.ChannelConfig{{
 		Name: "openai-official", Type: model.ProviderOpenAI, BaseURL: "https://api.openai.com/v1",
@@ -124,8 +124,8 @@ func TestNativeOnlyCandidatesRequireNativeWire(t *testing.T) {
 		AnthropicOriginal: &model.AnthropicInboundRequest{Model: "gpt-x", Thinking: map[string]any{"type": "enabled"}},
 	}
 	channels := d.candidateChannelsForRequest(context.Background(), req, "anthropic_messages")
-	// No native channel exists, so the documented fallback returns the general channels.
-	if len(channels) != 1 || isAnthropicWireChannel(channels[0]) {
+	// A native-only request cannot be downgraded to a general channel.
+	if len(channels) != 0 {
 		t.Fatalf("candidate %+v must not be classified as a native Anthropic channel", channels)
 	}
 }

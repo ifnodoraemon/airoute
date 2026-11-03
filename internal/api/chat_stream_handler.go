@@ -27,9 +27,16 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 		req.StreamOptions.IncludeUsage = true
 	}
 
+	topUpQuotaForRequest(c, req)
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, req)
 	if err != nil {
 		respondUpstreamDispatchError(c, sessionID, req.Model, time.Since(start), err)
+		return
+	}
+
+	var nativeHandled bool
+	streamChan, nativeHandled = h.useNativeStream(c, reqCtx, req, streamChan, sessionID, start)
+	if nativeHandled {
 		return
 	}
 
@@ -44,6 +51,7 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 	totalPromptTokens := 0
 	totalCompTokens := 0
 	totalCachedTokens := 0
+	totalCacheCreationTokens := 0
 	accumulatedCompChars := 0
 	upstreamChatID := ""  // real upstream response ID, captured from the first chunk (may stay empty)
 	upstreamChannel := "" // populated from the first stream event
@@ -59,6 +67,20 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 	usageSource := "upstream"
 	var finalCost, finalSaved float64
 	var finalCached int
+	// Settlement is deferred until the terminal frame has been flushed, so a
+	// saturated settlement writer cannot delay [DONE]. Preparation (cost
+	// calculation, headers, audit enqueue) already happened in recordStreamEnd.
+	var finalSettle func()
+	settled := false
+	runFinalSettle := func() {
+		if settled {
+			return
+		}
+		settled = true
+		if finalSettle != nil {
+			finalSettle()
+		}
+	}
 	recordStreamEnd := func() {
 		dur := time.Since(start)
 		statusCode := http.StatusOK
@@ -88,19 +110,20 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 			}
 		}
 
-		finalCost, finalSaved, finalCached = recordUsage(c, AuditRecordParams{
-			ChatID:           upstreamChatID,
-			Channel:          upstreamChannel,
-			SessionID:        sessionID,
-			Model:            req.Model,
-			PromptTokens:     totalPromptTokens,
-			CompletionTokens: totalCompTokens,
-			CachedTokens:     totalCachedTokens,
-			Duration:         dur,
-			TTFT:             ttftDuration,
-			StatusCode:       statusCode,
-			UsageSource:      usageSource,
-			LiveTracked:      true, // stream deltas already fed the live token meter
+		finalCost, finalSaved, finalCached, finalSettle = RecordUsageDeferred(c, AuditRecordParams{
+			ChatID:              upstreamChatID,
+			Channel:             upstreamChannel,
+			SessionID:           sessionID,
+			Model:               req.Model,
+			PromptTokens:        totalPromptTokens,
+			CompletionTokens:    totalCompTokens,
+			CachedTokens:        totalCachedTokens,
+			CacheCreationTokens: totalCacheCreationTokens,
+			Duration:            dur,
+			TTFT:                ttftDuration,
+			StatusCode:          statusCode,
+			UsageSource:         usageSource,
+			LiveTracked:         true, // stream deltas already fed the live token meter
 			ErrorMessage: func() string {
 				if streamError != nil {
 					return streamError.Error()
@@ -108,7 +131,16 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 				return ""
 			}(),
 		})
+		if statusCode == http.StatusOK {
+			// Successful streams were never archived: only the 499/error paths
+			// called RecordTrace, so GATEWAY_TRACE_CAPTURE=all captured nothing.
+			// The response body is not retained for a stream; the redacted request
+			// snapshot plus status and channel are what an operator needs to
+			// correlate a trace id with the provider call.
+			RecordSuccessTrace(c, req.Model, upstreamChannel, dur, nil)
+		}
 	}
+	defer runFinalSettle()
 	defer recordOnce.Do(recordStreamEnd)
 
 	w := c.Writer
@@ -227,6 +259,7 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 					totalPromptTokens = max(totalPromptTokens, event.Chunk.Usage.PromptTokens)
 					totalCompTokens = max(totalCompTokens, event.Chunk.Usage.CompletionTokens)
 					totalCachedTokens = max(totalCachedTokens, event.Chunk.Usage.GetCachedTokens())
+					totalCacheCreationTokens = max(totalCacheCreationTokens, event.Chunk.Usage.GetCacheCreationTokens())
 				}
 
 				chunkBytes, err := json.Marshal(event.Chunk)

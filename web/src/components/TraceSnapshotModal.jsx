@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X, RefreshCw, AlertTriangle } from 'lucide-react';
 
 // TraceSnapshotModal shows the redacted request/response snapshot archived for a
@@ -12,35 +12,60 @@ export default function TraceSnapshotModal({ isOpen, traceId, initialQueryField 
   const [queryField, setQueryField] = useState('trace_id');
   const [queryValue, setQueryValue] = useState(traceId || '');
 
+  // Every load starts a new sequence and aborts the previous one. Two guards,
+  // because an abort does not always beat a response that is already being parsed:
+  // without them a slow answer for the previous correlation id replaced the rows of
+  // the query the operator was actually looking at (the modal then showed trace A's
+  // snapshot under the search box for chat B). Same pattern as
+  // SupplierReconciliationView.
+  const requestSeqRef = useRef(0);
+  const requestAbortRef = useRef(null);
+
   const load = async (field = queryField, value = queryValue || traceId) => {
     if (!value) {
       setRows([]);
       return;
     }
+    const seq = ++requestSeqRef.current;
+    requestAbortRef.current?.abort();
+    const controller = new AbortController();
+    requestAbortRef.current = controller;
+    const isCurrent = () => seq === requestSeqRef.current && !controller.signal.aborted;
+
     setLoading(true);
     setError('');
     try {
       const params = new URLSearchParams({ limit: '20' });
       params.set(field, value);
-      const res = await adminFetch(`/api/v1/admin/traces?${params.toString()}`);
+      const res = await adminFetch(`/api/v1/admin/traces?${params.toString()}`, { signal: controller.signal });
       const data = await res.json();
+      // A superseded response must not replace the newer query's rows.
+      if (!isCurrent()) return;
       if (!res.ok || data.code !== 0) {
         throw new Error(data.error || `HTTP ${res.status}`);
       }
       setRows(data.data || []);
     } catch (e) {
+      if (controller.signal.aborted || seq !== requestSeqRef.current) return;
       setError(e.message || String(e));
     } finally {
-      setLoading(false);
+      if (seq === requestSeqRef.current) setLoading(false);
+      if (requestAbortRef.current === controller) requestAbortRef.current = null;
     }
   };
 
   useEffect(() => {
-    if (isOpen) {
-      setQueryValue(traceId || '');
-      setQueryField(initialQueryField);
-      load(initialQueryField, traceId);
-    }
+    if (!isOpen) return undefined;
+    setQueryValue(traceId || '');
+    setQueryField(initialQueryField);
+    load(initialQueryField, traceId);
+    // Closing the modal (or switching to another trace) cancels the request that is
+    // still in the air and invalidates any response that is already being parsed.
+    return () => {
+      requestSeqRef.current += 1;
+      requestAbortRef.current?.abort();
+      requestAbortRef.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, traceId, initialQueryField]);
 

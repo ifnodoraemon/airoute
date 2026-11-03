@@ -34,6 +34,25 @@ func (h *MultimodalHandler) dispatchAndForward(c *gin.Context, upReq *router.Ups
 	h.dispatchAndTransform(c, upReq, sessionID, nil, defaultContentType...)
 }
 
+// maxMultimodalResponseBytes bounds how much of an upstream modality response is
+// buffered before it is billed and written. Modality payloads (image JSON, audio
+// files, video task JSON) are small; 64 MiB leaves ample room while keeping a
+// runaway or malformed upstream from consuming unbounded memory.
+const maxMultimodalResponseBytes int64 = 64 << 20
+
+// readMultimodalBody reads the whole upstream body up to limit+1 bytes so a
+// truncated/failed read is reported before anything is charged or written.
+func readMultimodalBody(stream io.Reader, limit int64) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(stream, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > limit {
+		return nil, fmt.Errorf("upstream response exceeds %d bytes", limit)
+	}
+	return body, nil
+}
+
 func (h *MultimodalHandler) dispatchAndTransform(c *gin.Context, upReq *router.UpstreamRequest, sessionID string, transform func(*router.UpstreamResponse) error, defaultContentType ...string) {
 	if upReq.Method != http.MethodGet && billing.GlobalEngine != nil && os.Getenv("GATEWAY_ALLOW_UNPRICED_MULTIMODAL") != "1" {
 		price := billing.GlobalEngine.GetPriceWithGroup(upReq.Model, getKeyGroup(c))
@@ -77,6 +96,21 @@ func (h *MultimodalHandler) dispatchAndTransform(c *gin.Context, upReq *router.U
 		if err := transform(resp); err != nil {
 			recordFailedRequestWithError(c, sessionID, upReq.Model, dur, http.StatusBadGateway, err)
 			RespondOpenAIError(c, http.StatusBadGateway, "Unable to persist or read video task", "upstream_error", "video_task_error")
+			return
+		}
+	}
+
+	// Read (and buffer, and repair the model name of) the upstream body BEFORE
+	// charging or writing the response head. The old flow billed and flushed HTTP
+	// 200 first, then copied the stream and ignored the copy error: a truncated
+	// upstream response was charged as a success while the client received a
+	// broken 200. The body is also what the video transform may already have
+	// replaced with its rewritten JSON, so reading here keeps the persisted task
+	// id path intact.
+	if succeeded {
+		if readErr := h.bufferAndRepairResponseBody(resp, upReq.Model); readErr != nil {
+			recordFailedRequestWithError(c, sessionID, upReq.Model, dur, http.StatusBadGateway, readErr)
+			RespondOpenAIError(c, http.StatusBadGateway, "Unable to read upstream response", "upstream_error", "upstream_read_error")
 			return
 		}
 	}

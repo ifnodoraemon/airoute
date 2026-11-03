@@ -22,7 +22,6 @@ export default function SystemLogConsole({
   onClose,
   showToast,
   lang = 'zh',
-  t
 }) {
   const isZh = lang === 'zh';
   const [logs, setLogs] = useState([]);

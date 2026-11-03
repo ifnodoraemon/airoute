@@ -181,7 +181,7 @@ func (r *Repository) GetStatsTimeSeries(timeframe string, keys []string) (*TimeS
 	}
 
 	startTime := now.Add(-time.Duration(numBuckets) * interval)
-	startValue := startTime.UTC().Format(sqliteTimestampLayout)
+	startValue := r.dialectTimePrecise(startTime)
 
 	// Only the authorization scope filters here; all aggregation happens in SQL.
 	keyCond := ""
@@ -263,7 +263,7 @@ func (r *Repository) GetStatsTimeSeries(timeframe string, keys []string) (*TimeS
 	}
 
 	// 2. Real-time rates over the trailing 60 seconds.
-	recentValue := now.Add(-60 * time.Second).UTC().Format(sqliteTimestampLayout)
+	recentValue := r.dialectTimePrecise(now.Add(-60 * time.Second))
 	recentArgs := append([]any{recentValue}, keyArgs...)
 	var currentRPM, currentTPM int64
 	if err := r.db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(total_tokens), 0) FROM usage_logs WHERE created_at >= ?`+keyCond, recentArgs...).
@@ -271,14 +271,11 @@ func (r *Repository) GetStatsTimeSeries(timeframe string, keys []string) (*TimeS
 		return nil, fmt.Errorf("query timeseries realtime rates error: %w", err)
 	}
 
-	// 3. Peak per-minute volume inside the window.
-	var peakRPM, peakTPM int64
-	peakQuery := fmt.Sprintf(`SELECT COALESCE(MAX(reqs), 0), COALESCE(MAX(toks), 0) FROM (
-		SELECT COUNT(*) AS reqs, COALESCE(SUM(total_tokens), 0) AS toks
-		FROM usage_logs WHERE created_at >= ?%s
-		GROUP BY %s / 60) AS minute_agg`, keyCond, epochExpr)
-	if err := r.db.QueryRow(peakQuery, windowArgs...).Scan(&peakRPM, &peakTPM); err != nil {
-		return nil, fmt.Errorf("query timeseries peak rates error: %w", err)
+	// 3. Peak per-minute volume inside the window. The same helper backs the
+	// overview's fallback figure, so the two endpoints cannot disagree.
+	peakRPM, peakTPM, err := r.peakRates(startValue, keyCond, keyArgs)
+	if err != nil {
+		return nil, err
 	}
 
 	// 4. Latency percentiles from a bounded sample.
@@ -407,4 +404,29 @@ func inferModalityCategory(modelName string) string {
 		return "video"
 	}
 	return "chat"
+}
+
+// peakRates returns the busiest one-minute window's request count and token total
+// inside the window that starts at windowStart.
+//
+// It is shared by the time series (which passes its timeframe start) and the
+// overview (which passes a fixed recent window), so "peak RPM/TPM" means the same
+// thing on both endpoints.
+func (r *Repository) peakRates(windowStart any, keyCond string, keyArgs []any) (int64, int64, error) {
+	// The epoch expression is dialect-specific: SQLite has strftime, PostgreSQL
+	// has EXTRACT. Both yield whole seconds, so the grouping is identical.
+	epochExpr := `CAST(strftime('%s', created_at) AS INTEGER)`
+	if r.db.Dialect() == "postgres" {
+		epochExpr = `CAST(EXTRACT(EPOCH FROM created_at) AS BIGINT)`
+	}
+	query := fmt.Sprintf(`SELECT COALESCE(MAX(reqs), 0), COALESCE(MAX(toks), 0) FROM (
+		SELECT COUNT(*) AS reqs, COALESCE(SUM(total_tokens), 0) AS toks
+		FROM usage_logs WHERE created_at >= ?%s
+		GROUP BY %s / 60) AS minute_agg`, keyCond, epochExpr)
+	args := append([]any{windowStart}, keyArgs...)
+	var peakRPM, peakTPM int64
+	if err := r.db.QueryRow(query, args...).Scan(&peakRPM, &peakTPM); err != nil {
+		return 0, 0, fmt.Errorf("query peak rates error: %w", err)
+	}
+	return peakRPM, peakTPM, nil
 }

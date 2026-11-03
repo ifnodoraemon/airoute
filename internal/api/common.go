@@ -2,12 +2,15 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,6 +27,7 @@ import (
 // AuditRecordParams encapsulates parameters required to record usage, calculate billing,
 // and update system telemetry. Applying Separation of Concerns (SoC) and DRY.
 type AuditRecordParams struct {
+	BillingID        string
 	SessionID        string
 	ChatID           string
 	Channel          string
@@ -75,6 +79,17 @@ func SetServedModelResolver(resolver func(channel, model string) string) {
 	servedModelResolver = resolver
 }
 
+// settleCostReporter reports the cost actually settled for a request back to the
+// admission layer, so the in-flight wallet pre-authorisation is released at the
+// real amount instead of the conservative estimate. Installed by the server at
+// startup (the api package does not own the reservation bookkeeping).
+var settleCostReporter func(c *gin.Context, cost float64)
+
+// SetSettledCostReporter installs the callback used by settleUsage.
+func SetSettledCostReporter(reporter func(c *gin.Context, cost float64)) {
+	settleCostReporter = reporter
+}
+
 // billingModelFor decides which model's rate card to charge.
 //
 // The upstream invoices us for the model it served, so billing must follow the
@@ -96,20 +111,88 @@ func billingModelFor(params AuditRecordParams, keyGroup string) string {
 	return params.Model
 }
 
-// settlementTimeout bounds the synchronous wallet settlement on the request
-// path. The database is local, so this only fires when something is wrong; the
-// record is then deferred to the async pipeline instead of stalling the response.
-const settlementTimeout = 1500 * time.Millisecond
-
 // statusClientClosed is the de-facto "client closed request" status recorded in
 // the audit trail when the downstream disconnects mid-stream. It is not part of
 // net/http's status constants because no server in the Go standard library
 // generates it.
 const statusClientClosed = 499
 
+// clientClosedAuditReasonPrefix is the stable opening of every synthesized 499
+// explanation. Operators and the console key on the phrase, so it must not be
+// reworded without updating that contract.
+const clientClosedAuditReasonPrefix = "client closed request"
+
+// clientClosedAuditReason explains a 499 audit row in plain English.
+//
+// A 499 is synthesized by Airoute: no upstream provider returns it, and a
+// canceled downstream request can still have produced (and billed) a full
+// provider response. Persisting a bare 499 with an empty error_message made the
+// console blame the provider for a client-side abort and left operators unable
+// to tell whether the gateway, the provider, or the customer caused it. The text
+// this returns states the gateway origin, reports what the provider had already
+// produced, and never claims an upstream failure.
+//
+// The message must stay credential-free and survive auditErrorMessage: callers
+// persist it through that scrubber.
+func clientClosedAuditReason(params AuditRecordParams) string {
+	if params.StatusCode != statusClientClosed {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(clientClosedAuditReasonPrefix)
+	b.WriteString(": 499 is synthesized by the gateway for a downstream disconnect and is not a status code returned by the upstream provider")
+
+	// Prompt tokens count as usage too: a dispatch-time cancellation bills the
+	// estimated prompt the provider already accepted, and reporting "no usage"
+	// there would contradict the bill.
+	hasTokens := params.PromptTokens > 0 || params.CompletionTokens > 0
+	hasUnits := params.BillableUnits > 0
+	switch {
+	case hasTokens && hasUnits:
+		fmt.Fprintf(&b, "; the provider had already produced %d completion tokens and %d prompt tokens (plus %d billable units) before the client left, and the usage was billed",
+			params.CompletionTokens, params.PromptTokens, params.BillableUnits)
+	case hasTokens:
+		fmt.Fprintf(&b, "; the provider had already produced %d completion tokens and %d prompt tokens before the client left, and the usage was billed",
+			params.CompletionTokens, params.PromptTokens)
+	case hasUnits:
+		fmt.Fprintf(&b, "; the provider had already produced %d billable units before the client left, and the usage was billed",
+			params.BillableUnits)
+	default:
+		b.WriteString("; the downstream disconnected before any provider usage was received")
+	}
+	if hasTokens && params.UsageSource == usageSourceEstimated {
+		// The upstream never reported usage, so the counts above come from the
+		// local estimator. Saying so keeps an estimated bill auditable.
+		b.WriteString(" (the token counts are estimated because the upstream did not report usage)")
+	}
+	return b.String()
+}
+
 // recordUsage is the full-fidelity variant, also returning the saved cost and
 // cached token count so streaming handlers can emit them as a trailer.
 func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, int) {
+	record, cost, savedCost, cached := prepareUsage(c, params)
+	settleUsage(c, record)
+	return cost, savedCost, cached
+}
+
+// RecordUsageDeferred is RecordUsage for streaming responses.
+//
+// It performs every part of the accounting that the client can observe (cost
+// calculation, X-Airoute-* headers, audit enqueue) and returns a settle
+// closure. Handlers write the usage trailer and the protocol's terminal frame,
+// flush them, and only then call settle. The money movement still happens on
+// the request goroutine, but after the last byte reached the client, so a
+// saturated settlement writer can no longer delay [DONE]. That tail latency is
+// what the audit measured (up to 1.5 s when the old synchronous settlement
+// timed out).
+func RecordUsageDeferred(c *gin.Context, params AuditRecordParams) (cost float64, savedCost float64, cachedTokens int, settle func()) {
+	record, cost, savedCost, cachedTokens := prepareUsage(c, params)
+	return cost, savedCost, cachedTokens, func() { settleUsage(c, record) }
+}
+
+// prepareUsage does everything except moving money.
+func prepareUsage(c *gin.Context, params AuditRecordParams) (*storage.UsageLogRecord, float64, float64, int) {
 	var cost, savedCost float64
 	var pricingSnapshot *storage.UsagePricingSnapshot
 	var isOffPeak bool
@@ -124,6 +207,15 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 	if c != nil && c.Request != nil && c.Request.Context().Err() != nil &&
 		params.StatusCode >= 200 && params.StatusCode < 400 {
 		params.StatusCode = statusClientClosed
+	}
+	// A 499 audit row without a message is unreadable: 499 exists only in the
+	// gateway's audit trail, so the row itself has to say who caused it and what
+	// the provider had already done. Synthesize the explanation here rather than
+	// in each handler, because both the ctx-canceled flip above and handlers that
+	// pass 499 directly (a drained stream, a dispatch cancellation) end up in
+	// this recorder.
+	if params.StatusCode == statusClientClosed && params.ErrorMessage == "" {
+		params.ErrorMessage = clientClosedAuditReason(params)
 	}
 	success := params.StatusCode >= 200 && params.StatusCode < 400
 
@@ -152,6 +244,13 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 			params.BillableUnits,
 			time.Now(),
 		)
+		// Settlement rejects a legacy foreign-currency price and zeroes the audit
+		// row. Do the same before the response headers are written, otherwise
+		// X-Airoute-Cost advertises money that was never charged.
+		if normalizedCost, normalizedSaved, unbillable := normalizeUnbillableCurrency(cost, savedCost, pricingSnapshot); unbillable {
+			cost, savedCost = normalizedCost, normalizedSaved
+			isOffPeak, offPeakDiscount = false, 1.0
+		}
 	}
 
 	totTokens := params.TotalTokens
@@ -212,6 +311,7 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 		apiKey = getRequestAPIKey(c)
 	}
 	record := &storage.UsageLogRecord{
+		BillingID:        params.BillingID,
 		TraceID:          traceID,
 		ChatID:           params.ChatID,
 		Channel:          params.Channel,
@@ -242,18 +342,16 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 		CreatedAt: time.Now(),
 	}
 
-	// Settle the charge now, independently of the audit pipeline. A failure here
-	// (database unavailable, settlement runtime not installed) is not fatal: the
-	// record still travels through Redis/spill and is settled by the async
-	// writer, which is exactly the previous behaviour.
-	if record.Cost > 0 || record.TotalTokens > 0 {
-		settleCtx, cancelSettle := context.WithTimeout(context.Background(), settlementTimeout)
-		_ = storage.SettleChargeNow(settleCtx, record)
-		cancelSettle()
-	}
-
-	if storage.GlobalAsyncLogger != nil {
-		storage.GlobalAsyncLogger.Record(record)
+	// A 499 can live only in the audit trail: on a streaming request the wire
+	// already said 200 before the customer hung up, and a unary 2xx is flipped
+	// above. Publish the audit status so the access line can show both numbers,
+	// and archive the trace the console joins on — a 499 row without a snapshot
+	// left operators with an empty Trace ID exactly when they needed it.
+	// RecordTrace dedupes per request, so a dispatch failure that already
+	// archived its trace is not recorded twice.
+	if c != nil && params.StatusCode == statusClientClosed {
+		c.Set(middleware.ContextKeyAuditStatus, statusClientClosed)
+		RecordTrace(c, params.Model, params.Channel, statusClientClosed, params.ErrorMessage, "", params.Duration)
 	}
 
 	// Publish the failure reason for the access log. Every failed dispatch funnels
@@ -280,7 +378,73 @@ func recordUsage(c *gin.Context, params AuditRecordParams) (float64, float64, in
 		}
 	}
 
-	return cost, savedCost, params.CachedTokens
+	return record, cost, savedCost, params.CachedTokens
+}
+
+// settleUsage moves the prepared record's money and reports the actual cost to
+// the admission layer so its in-flight pre-authorisation can be released at the
+// real amount instead of the conservative estimate.
+func settleUsage(c *gin.Context, record *storage.UsageLogRecord) {
+	if record == nil {
+		return
+	}
+	if settleCostReporter != nil {
+		settleCostReporter(c, record.Cost)
+	}
+	// Pin the idempotency key before anything can duplicate the record: the audit
+	// copy below and the ledger row must carry the same key, otherwise a redelivery
+	// would settle under a different one and charge twice.
+	if record.BillingID == "" {
+		record.BillingID = storage.NewBillingID()
+	}
+
+	// Audit evidence first. The pipeline is the at-least-once durability path; if
+	// the process dies between here and the settlement below, the replayed record
+	// settles the charge and the audit row is never lost. The copy matters: both
+	// the pipeline and the batcher mutate the record they receive, and the request
+	// goroutine must keep ownership of its own.
+	if storage.GlobalAsyncLogger != nil {
+		storage.GlobalAsyncLogger.Record(record.CloneForPipeline())
+	}
+
+	// Zero-cost records (failed dispatches, 4xx denials, free reads) have no money
+	// to move; the audit row above is the evidence.
+	if record.Cost <= 0 && record.TotalTokens <= 0 {
+		return
+	}
+
+	// Group-commit settlement: the wait is short on purpose. When it expires the
+	// charge is already on the audit pipeline and is settled there; only the timing
+	// changes, never the amount or the idempotency guarantee. The ledger's unique
+	// billing_id makes this settlement and the pipeline's retry apply exactly once,
+	// whichever runs first.
+	settleCtx, cancelSettle := context.WithTimeout(context.Background(), storage.SettlementWaitTimeout())
+	_ = storage.SettleChargeBatched(settleCtx, record)
+	cancelSettle()
+}
+
+// topUpQuotaForRequest refines the admission-time wallet pre-authorisation with a
+// conservative cost estimate, now that the request body has been parsed.
+//
+// Authentication runs before the body is read, so it can only reserve a coarse
+// constant. At dispatch the model, prompt size and max_tokens are known, and the
+// database advertises the prompt's true cost; topping the reservation up closes
+// the gap between "the wallet is positive" and "the wallet covers this request".
+// It is best-effort: a failed top-up leaves the admission-time amount in place
+// and never fails the request.
+func topUpQuotaForRequest(c *gin.Context, req *model.ChatCompletionRequest) {
+	if c == nil || req == nil {
+		return
+	}
+	maxTokens := 0
+	if req.MaxTokens != nil {
+		maxTokens = *req.MaxTokens
+	}
+	estimate := billing.EstimateCostCNY(req.Model, getKeyGroup(c), req.EstimatedPromptTokens(), maxTokens)
+	if estimate <= 0 {
+		return
+	}
+	middleware.TopUpUserQuota(c, estimate)
 }
 
 // writeStreamUsageTrailer appends the billing metadata as an SSE comment so
@@ -408,6 +572,7 @@ func channelFromError(err error) string {
 // dispatch error — recording only a status code left operators staring at a 502
 // row with an empty message.
 func recordFailedRequestWithError(c *gin.Context, sessionID, modelName string, dur time.Duration, statusCode int, err error) {
+	setUpstreamRetryAfter(c, err)
 	msg := ""
 	channel := ""
 	if err != nil {
@@ -451,6 +616,27 @@ func getAPIKeyConfig(c *gin.Context) *model.APIKeyConfig {
 		}
 	}
 	return nil
+}
+
+// callerOwner identifies the caller that owns a stored object (a Responses
+// conversation, a video task): the authenticated user when the API key belongs to
+// one, otherwise the API-key digest. Two credentials must never share an object,
+// so the owner string has to be stable across requests and must not collide
+// between a user and a bare key.
+func callerOwner(c *gin.Context) string {
+	if value, ok := c.Get("native_job_owner"); ok {
+		owner, _ := value.(string)
+		return owner
+	}
+	key := getAPIKeyConfig(c)
+	if key == nil || key.Key == "" {
+		return ""
+	}
+	if key.UserID > 0 {
+		return "user:" + strconv.FormatInt(key.UserID, 10)
+	}
+	digest := sha256.Sum256([]byte(key.Key))
+	return "key:" + hex.EncodeToString(digest[:])
 }
 
 // estimateTokens is the single token-estimation heuristic used by every audit
@@ -560,7 +746,11 @@ func resolveChatUsage(req *model.ChatCompletionRequest, resp *model.ChatCompleti
 		observePromptEstimate(modelNameOf(req), localEstimate, promptTokens)
 	}
 	if completionTokens == 0 && resp != nil {
-		if estimated := estimateCompletionFromChoices(resp.Choices); estimated > 0 {
+		estimated := estimateCompletionFromChoices(resp.Choices)
+		if estimated == 0 {
+			estimated = model.EstimateTokensFromChars(resp.NativeOutputChars)
+		}
+		if estimated > 0 {
 			completionTokens = estimated
 			source = usageSourceEstimated
 		}
@@ -571,59 +761,93 @@ func resolveChatUsage(req *model.ChatCompletionRequest, resp *model.ChatCompleti
 // resolveEmbeddingTokens approximates prompt tokens for an embedding request when
 // the upstream returned no usage. String inputs are measured by length; token-id
 // arrays are already token counts.
+//
+// C-04: the estimate goes through the per-model calibrator like every chat
+// estimate does, and a real upstream count feeds the calibrator instead of only
+// being billed. Before this the two modality estimators were the only prompt
+// estimates in the gateway that ignored the learned tokenizer ratio, so the same
+// text was billed differently depending on whether the upstream reported usage.
 func resolveEmbeddingTokens(req *model.EmbeddingRequest, usage model.EmbeddingUsage) (int, string) {
-	if usage.PromptTokens > 0 {
+	if req == nil {
+		if usage.PromptTokens > 0 {
+			return usage.PromptTokens, usageSourceUpstream
+		}
+		return 0, usageSourceUpstream
+	}
+	local, exact := localEmbeddingPromptEstimate(req)
+	if usage.PromptTokens > 0 && !usage.Estimated {
+		if !exact {
+			observePromptEstimate(req.Model, local, usage.PromptTokens)
+		}
 		return usage.PromptTokens, usageSourceUpstream
 	}
-	if req == nil {
+	if local <= 0 {
 		return 0, usageSourceUpstream
+	}
+	if exact {
+		// Token-id input is already an exact count; calibrating it would
+		// double-apply the tokenizer ratio.
+		return local, usageSourceEstimated
+	}
+	return calibratedPromptEstimate(req.Model, local), usageSourceEstimated
+}
+
+// localEmbeddingPromptEstimate counts the local estimate for an embedding input
+// without applying the tokenizer calibration. exact reports that the input was
+// already a token-id array, so no ratio applies.
+func localEmbeddingPromptEstimate(req *model.EmbeddingRequest) (tokens int, exact bool) {
+	if req == nil {
+		return 0, false
 	}
 	if inputs := req.GetInputStrings(); len(inputs) > 0 {
 		chars := 0
 		for _, input := range inputs {
 			chars += len(input)
 		}
-		return estimateTokens(chars), usageSourceEstimated
+		return estimateTokens(chars), false
 	}
 	// Token-id form: one array element is one token.
 	if ids, ok := req.Input.([]any); ok && len(ids) > 0 {
-		return len(ids), usageSourceEstimated
+		return len(ids), true
 	}
-	return 0, usageSourceUpstream
+	return 0, false
 }
 
 // resolveRerankTokens approximates prompt tokens for a rerank request (query plus
 // every candidate document) when the upstream returned no usage.
+//
+// C-04: same calibration contract as embedding and chat — estimate, learn from a
+// real upstream count, otherwise apply the learned ratio.
 func resolveRerankTokens(req *model.RerankRequest, usage model.RerankUsage) (int, string) {
-	if usage.TotalTokens > 0 {
-		return usage.TotalTokens, usageSourceUpstream
-	}
 	if req == nil {
+		if usage.TotalTokens > 0 {
+			return usage.TotalTokens, usageSourceUpstream
+		}
 		return 0, usageSourceUpstream
 	}
-	chars := len(req.Query)
-	for _, doc := range req.GetDocumentTexts() {
-		chars += len(doc)
+	// One estimator for the API layer and the router: the model package owns it so
+	// the two cannot drift apart.
+	local := req.EstimatedPromptTokens()
+	if usage.TotalTokens > 0 {
+		observePromptEstimate(req.Model, local, usage.TotalTokens)
+		return usage.TotalTokens, usageSourceUpstream
 	}
-	return estimateTokens(chars), usageSourceEstimated
+	if local <= 0 {
+		return 0, usageSourceUpstream
+	}
+	return calibratedPromptEstimate(req.Model, local), usageSourceEstimated
 }
 
 // estimateCanonicalPromptTokens approximates prompt tokens from the canonical
-// request when the upstream did not report usage. Only used for audit display.
+// request when the upstream did not report usage.
+//
+// It delegates to the model package's estimator so the API layer and the router
+// (which bills canceled requests from the same request object) cannot drift
+// apart. Multimodal parts are priced by a fixed per-part budget there: an inline
+// base64 image is image data billed per tile, never text (BUG-MULTIMODAL-TOKEN-
+// ESTIMATE).
 func estimateCanonicalPromptTokens(req *model.ChatCompletionRequest) int {
-	if req == nil {
-		return 0
-	}
-	chars := 0
-	for _, m := range req.Messages {
-		chars += len(m.GetContentString())
-	}
-	for _, t := range req.Tools {
-		if b, err := json.Marshal(t); err == nil {
-			chars += len(b)
-		}
-	}
-	return estimateTokens(chars)
+	return req.EstimatedPromptTokens()
 }
 
 // Credential patterns scrubbed from upstream error bodies before they are
@@ -681,6 +905,10 @@ func sanitizeErrorMessage(err error) string {
 // resolveUpstreamFailureStatus extracts the authentic underlying status code, error types,
 // and failing channel from an upstream dispatch error, preventing misleading 502 masks.
 func resolveUpstreamFailureStatus(err error) (statusCode int, errType string, errCode string, channel string) {
+	var unsupported *provider.UnsupportedTranslationError
+	if errors.As(err, &unsupported) {
+		return http.StatusBadRequest, "invalid_request_error", "unsupported_translation", channelFromError(err)
+	}
 	statusCode = http.StatusBadGateway
 	errType = "gateway_error"
 	errCode = "upstream_failure"
@@ -688,6 +916,13 @@ func resolveUpstreamFailureStatus(err error) (statusCode int, errType string, er
 
 	if err == nil {
 		return statusCode, errType, errCode, channel
+	}
+
+	// The gateway's own total budget ran out. This is a gateway-side deadline,
+	// but reporting it as a plain upstream_timeout hides that no single provider
+	// failed: every candidate was simply still running when we stopped waiting.
+	if errors.Is(err, router.ErrRequestBudgetExceeded) {
+		return http.StatusGatewayTimeout, "gateway_error", "request_budget_exceeded", channel
 	}
 
 	// The request context being canceled means the *downstream* went away (browser
@@ -718,6 +953,8 @@ func resolveUpstreamFailureStatus(err error) (statusCode int, errType string, er
 		}
 		if ue.Status > 0 {
 			switch ue.Status {
+			case http.StatusPaymentRequired:
+				return http.StatusPaymentRequired, "billing_error", "upstream_payment_required", channel
 			case http.StatusNotFound:
 				return http.StatusNotFound, "invalid_request_error", "model_not_found", channel
 			case http.StatusTooManyRequests:
@@ -774,14 +1011,37 @@ func ceilMillis(d time.Duration) int64 {
 	return ms
 }
 
-// The wallet ledger settles only CNY. Reject a legacy foreign rate before work starts.
+// normalizeUnbillableCurrency zeroes a computed charge whose pricing snapshot
+// cannot settle in the wallet currency. The settlement path rejects such a
+// record (and zeroes its audit row); the response header must agree with it.
+func normalizeUnbillableCurrency(cost, savedCost float64, snapshot *storage.UsagePricingSnapshot) (float64, float64, bool) {
+	if snapshot == nil {
+		return cost, savedCost, false
+	}
+	currency := strings.TrimSpace(snapshot.Currency)
+	if currency == "" || strings.EqualFold(currency, "CNY") {
+		return cost, savedCost, false
+	}
+	return 0, 0, true
+}
+
+// The wallet settles only CNY. Reject a legacy foreign rate before work starts.
+//
+// C-14: the gate covers every model settlement may price, not only the requested
+// one. When a channel maps the alias to a served model that has its own rate card,
+// billing charges that rate card (see billingModelFor), so a non-CNY legacy row
+// there would sail past a requested-model-only check and only surface as a zeroed
+// charge after the upstream work was already paid for.
 func validateModelCurrency(c *gin.Context, modelName string) bool {
 	if billing.GlobalEngine == nil {
 		return true
 	}
-	if err := storage.ValidatePriceCurrency(billing.GlobalEngine.GetPriceWithGroup(modelName, getKeyGroup(c))); err != nil {
-		RespondOpenAIError(c, http.StatusUnprocessableEntity, err.Error(), "invalid_request_error", "unsupported_pricing_currency")
-		return false
+	keyGroup := getKeyGroup(c)
+	for _, candidate := range currencyModelsForBilling(modelName, keyGroup) {
+		if err := storage.ValidatePriceCurrency(billing.GlobalEngine.GetPriceWithGroup(candidate, keyGroup)); err != nil {
+			RespondOpenAIError(c, http.StatusUnprocessableEntity, err.Error(), "invalid_request_error", "unsupported_pricing_currency")
+			return false
+		}
 	}
 	return true
 }

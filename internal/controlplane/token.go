@@ -115,17 +115,17 @@ func VerifyAdminToken(token string) (*AdminClaims, error) {
 	expectedSig := hex.EncodeToString(mac.Sum(nil))
 
 	if !hmac.Equal([]byte(sigHex), []byte(expectedSig)) {
-		return nil, errors.New("Token 签名验证失败")
+		return nil, errors.New("token 签名验证失败")
 	}
 
 	data, err := base64.RawURLEncoding.DecodeString(payloadB64)
 	if err != nil {
-		return nil, errors.New("Token 载荷损坏")
+		return nil, errors.New("token 载荷损坏")
 	}
 
 	var claims AdminClaims
 	if err := json.Unmarshal(data, &claims); err != nil {
-		return nil, errors.New("Token 格式解析错误")
+		return nil, errors.New("token 格式解析错误")
 	}
 
 	if time.Now().Unix() > claims.ExpiresAt {

@@ -20,10 +20,10 @@ func TestLatencyP99ReportsBeyondTheLastBucket(t *testing.T) {
 	// 190 fast requests plus 10 very slow ones: the p99 rank then falls inside
 	// the tail, which is exactly the case the old 60s ceiling could not express.
 	for i := 0; i < 190; i++ {
-		m.RecordRequest(true, 100*time.Millisecond, 0, 0)
+		m.RecordRequestWithModel("", true, 100*time.Millisecond, 0, 0)
 	}
 	for i := 0; i < 10; i++ {
-		m.RecordRequest(true, 113*time.Second, 0, 0)
+		m.RecordRequestWithModel("", true, 113*time.Second, 0, 0)
 	}
 
 	_, _, p99 := m.GetLatencyPercentiles()
@@ -40,7 +40,7 @@ func TestLatencyP99ReportsBeyondTheLastBucket(t *testing.T) {
 func TestLatencyPercentilesFallBackToObservedMax(t *testing.T) {
 	m := newLatencyTestMetrics()
 	for i := 0; i < 10; i++ {
-		m.RecordRequest(true, 700*time.Second, 0, 0)
+		m.RecordRequestWithModel("", true, 700*time.Second, 0, 0)
 	}
 	p50, p90, p99 := m.GetLatencyPercentiles()
 	for _, got := range []float64{p50, p90, p99} {

@@ -3,7 +3,9 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Columns3, RotateCcw } from 'lucide-rea
 
 /**
  * Sortable table header cell. Non-sortable columns render as plain text.
- * `aria-sort` is set so the state is announced by screen readers.
+ * `aria-sort` is set so the state is announced by screen readers; an optional
+ * `column.tooltip` becomes the cell's `title` (used where the label alone does
+ * not explain what the value may be used for).
  */
 export function SortableTh({ column, sort, onSort, className = '' }) {
   const active = sort?.key === column.key;
@@ -11,14 +13,14 @@ export function SortableTh({ column, sort, onSort, className = '' }) {
 
   if (column.sortable === false) {
     return (
-      <th scope="col" className={`ui-th ${className}`}>
+      <th scope="col" className={`ui-th ${className}`} title={column.tooltip}>
         {column.label}
       </th>
     );
   }
 
   return (
-    <th scope="col" className={`ui-th ${className}`} aria-sort={ariaSort}>
+    <th scope="col" className={`ui-th ${className}`} aria-sort={ariaSort} title={column.tooltip}>
       <button
         type="button"
         onClick={() => onSort(column.key)}

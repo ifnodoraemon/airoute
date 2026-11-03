@@ -5,17 +5,6 @@ import (
 	"time"
 )
 
-// VerificationCodeRecord stores temporary email verification codes.
-type VerificationCodeRecord struct {
-	ID        int64     `json:"id"`
-	Email     string    `json:"email"`
-	Code      string    `json:"code"`
-	Purpose   string    `json:"purpose"`
-	ExpiresAt time.Time `json:"expires_at"`
-	Used      bool      `json:"used"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
 // SaveVerificationCode stores a verification code with an expiration window.
 //
 // Expired codes used to accumulate forever: nothing in the gateway ever deleted a
@@ -24,8 +13,11 @@ type VerificationCodeRecord struct {
 // most once per hour (see retention_maintenance.go).
 func (r *Repository) SaveVerificationCode(email, code, purpose string, duration time.Duration) error {
 	expiresAt := time.Now().Add(duration)
+	// expires_at is TIMESTAMPTZ on PostgreSQL: binding UTC text there would be
+	// parsed in the session time zone, so the code would expire (and be pruned)
+	// at a different instant than VerifyCode's NOW() comparison expects.
 	_, err := r.db.Exec(`INSERT INTO verification_codes (email, code, purpose, expires_at, used) VALUES (?, ?, ?, ?, 0)`,
-		strings.ToLower(strings.TrimSpace(email)), strings.TrimSpace(code), purpose, expiresAt.UTC().Format("2006-01-02 15:04:05"))
+		strings.ToLower(strings.TrimSpace(email)), strings.TrimSpace(code), purpose, r.dialectTime(expiresAt))
 	if err != nil {
 		return err
 	}

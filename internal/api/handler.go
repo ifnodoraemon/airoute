@@ -52,7 +52,8 @@ func respondRequestTooLarge(c *gin.Context, err error) bool {
 func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	CaptureRequestSnapshot(c)
 	var req model.ChatCompletionRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	native, err := bindNativeJSON(c, &req, model.NativeChat)
+	if err != nil {
 		if respondRequestTooLarge(c, err) {
 			return
 		}
@@ -65,6 +66,7 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 		})
 		return
 	}
+	req.Native = native
 
 	if req.Model == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -95,7 +97,7 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 	// Protocol format and content validation per-model rules and optional per-key overrides
 	valRes := validator.ValidateOpenAIRequest(&req, getAPIKeyConfig(c))
 	if !valRes.Valid && valRes.Error != nil {
-		valRes.Error.WriteGinResponse(c)
+		rejectInvalidRequest(c, valRes.Error)
 		return
 	}
 	if len(valRes.Warnings) > 0 {
@@ -129,6 +131,7 @@ func (h *Handler) HandleChatCompletions(c *gin.Context) {
 }
 
 func (h *Handler) handleChatUnary(c *gin.Context, reqCtx context.Context, req *model.ChatCompletionRequest, sessionID string, start time.Time) {
+	topUpQuotaForRequest(c, req)
 	resp, err := h.dispatcher.Dispatch(reqCtx, req)
 	if err != nil {
 		respondUpstreamDispatchError(c, sessionID, req.Model, time.Since(start), err)
@@ -163,5 +166,10 @@ func (h *Handler) handleChatUnary(c *gin.Context, reqCtx context.Context, req *m
 		StatusCode:       http.StatusOK,
 		UsageSource:      usageSource,
 	})
+	RecordSuccessTrace(c, req.Model, resp.Channel, dur, resp)
+	if len(resp.NativeResponse) > 0 {
+		c.Data(http.StatusOK, "application/json", resp.NativeResponse)
+		return
+	}
 	c.JSON(http.StatusOK, resp)
 }

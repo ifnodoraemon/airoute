@@ -3,21 +3,16 @@ package router
 import (
 	"context"
 	"hash/fnv"
-	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/distributed"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
-// ChannelSelectorStrategy defines the strategy interface for ordering candidate channels within a priority tier.
-type ChannelSelectorStrategy interface {
-	Select(ctx context.Context, group []*model.ChannelConfig, modelName, sessionID string) []*model.ChannelConfig
-}
-
-// SessionAffinitySelector routes requests using sticky session affinity (Redis cache pin or Consistent Hashing).
+// SessionAffinitySelector routes requests using sticky session affinity (Redis cache pin or rendezvous hashing).
 type SessionAffinitySelector struct {
-	cb *CircuitBreaker
+	cb   *CircuitBreaker
+	pins *sessionPins
 }
 
 // Select implements ChannelSelectorStrategy with session affinity.
@@ -29,54 +24,35 @@ func (s *SessionAffinitySelector) Select(ctx context.Context, group []*model.Cha
 	var chosen *model.ChannelConfig
 	chosenIdx := -1
 
-	// Check Distributed Redis cache pin first
+	pinnedName := s.pins.get(modelName, sessionID)
+	// Prefer the cluster's last successful channel; use the local pin when
+	// Redis is unavailable. Candidate selection never creates a pin.
 	if client := distributed.GetClient(); client != nil && client.IsActive() {
-		if pinnedName, err := client.GetSessionChannel(ctx, modelName, sessionID); err == nil && pinnedName != "" {
-			for i, ch := range group {
-				if ch.Name == pinnedName {
-					// Verify pinned channel is healthy and not tripped.
-					// Healthy() is read-only: CanExecute would consume a
-					// half-open canary slot just by evaluating candidates.
-					if s.cb == nil || s.cb.Healthy(ch.Name) {
-						chosen = ch
-						chosenIdx = i
-					}
-					break
+		readCtx, cancel := context.WithTimeout(ctx, affinityRedisTimeout)
+		if remote, err := client.GetSessionChannel(readCtx, modelName, sessionID); err == nil {
+			pinnedName = remote
+		}
+		cancel()
+	}
+	if pinnedName != "" {
+		for i, ch := range group {
+			if ch.Name == pinnedName {
+				// Verify pinned channel is healthy and not tripped.
+				// Healthy() is read-only: CanExecute would consume a
+				// half-open canary slot just by evaluating candidates.
+				if s.cb == nil || s.cb.Healthy(ch.Name) {
+					chosen = ch
+					chosenIdx = i
 				}
+				break
 			}
 		}
 	}
 
-	// If not in Redis or pinned channel was tripped, compute Consistent Hash via FNV-1a
+	// If not in Redis or pinned channel was tripped, pick with rendezvous
+	// (highest-random-weight) hashing.
 	if chosen == nil {
-		h := fnv.New32a()
-		_, _ = h.Write([]byte(sessionID))
-		_, _ = h.Write([]byte(":"))
-		_, _ = h.Write([]byte(modelName))
-		startIdx := int(h.Sum32() % uint32(len(group)))
-
-		// Find first healthy channel
-		for i := 0; i < len(group); i++ {
-			idx := (startIdx + i) % len(group)
-			candidate := group[idx]
-			if s.cb == nil || s.cb.Healthy(candidate.Name) {
-				chosen = candidate
-				chosenIdx = idx
-				break
-			}
-		}
-
-		if chosen == nil {
-			chosen = group[startIdx]
-			chosenIdx = startIdx
-		}
-
-		// Persist pin in Redis (30-minute TTL)
-		if client := distributed.GetClient(); client != nil && client.IsActive() {
-			go func(m, s, chName string) {
-				_ = client.SetSessionChannel(context.Background(), m, s, chName, 30*time.Minute)
-			}(modelName, sessionID, chosen.Name)
-		}
+		chosen, chosenIdx = rendezvousPick(group, modelName, sessionID, s.cb)
 	}
 
 	telemetry.ScopedLogger("router").Debug("routed via LLM session affinity",
@@ -144,4 +120,61 @@ func (s *SWRRSelector) Select(ctx context.Context, group []*model.ChannelConfig,
 		}
 	}
 	return result
+}
+
+// rendezvousPick selects one channel with rendezvous (highest-random-weight)
+// hashing: every candidate gets a score derived from (session, model, channel),
+// and the highest score wins.
+//
+// This is what makes the affinity actually sticky under configuration changes.
+// The previous implementation was `hash(session:model) % len(group)`: adding or
+// removing one channel changed the modulus and remapped ~(N-1)/N of all live
+// sessions (measured 74.8% for 3→4), flushing the upstream prompt cache of almost
+// every conversation. Rendezvous hashing only moves the sessions that the new
+// channel wins, i.e. ~1/N (F-06).
+//
+// A healthy candidate always beats an unhealthy one; when every candidate is
+// tripped the highest score is returned so the caller keeps its historical
+// behaviour of still attempting one channel.
+func rendezvousPick(group []*model.ChannelConfig, modelName, sessionID string, cb *CircuitBreaker) (*model.ChannelConfig, int) {
+	bestIdx, bestScore := 0, uint64(0)
+	bestHealthyIdx, bestHealthyScore := -1, uint64(0)
+
+	for i, ch := range group {
+		score := rendezvousScore(sessionID, modelName, ch.Name)
+		if i == 0 || score > bestScore {
+			bestIdx, bestScore = i, score
+		}
+		if cb == nil || cb.Healthy(ch.Name) {
+			if bestHealthyIdx < 0 || score > bestHealthyScore {
+				bestHealthyIdx, bestHealthyScore = i, score
+			}
+		}
+	}
+	if bestHealthyIdx >= 0 {
+		return group[bestHealthyIdx], bestHealthyIdx
+	}
+	return group[bestIdx], bestIdx
+}
+
+// rendezvousScore hashes one (session, model, channel) triple into the weight used
+// by rendezvousPick. The field separator keeps "ab"+"c" from colliding with
+// "a"+"bc"; the splitmix64 finalizer spreads the FNV bits so near-identical inputs
+// still compare as unrelated scores.
+func rendezvousScore(sessionID, modelName, channelName string) uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(sessionID))
+	_, _ = h.Write([]byte{0})
+	_, _ = h.Write([]byte(modelName))
+	_, _ = h.Write([]byte{0})
+	_, _ = h.Write([]byte(channelName))
+	return mixRendezvousBits(h.Sum64())
+}
+
+// mixRendezvousBits is the splitmix64 finalizer.
+func mixRendezvousBits(x uint64) uint64 {
+	x += 0x9e3779b97f4a7c15
+	x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9
+	x = (x ^ (x >> 27)) * 0x94d049bb133111eb
+	return x ^ (x >> 31)
 }

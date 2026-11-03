@@ -157,16 +157,26 @@ describe('executeHarnessTool', () => {
       expect(out.result.channels).toBeUndefined();
     });
 
-    it('reports the performance metrics it was given', async () => {
+    it('reports the performance metrics it was given, in the fields the API really sends', async () => {
+      // storage.StatsOverview has no cache_hit_rate and no USD amount: the rate is
+      // derived from the cached prompt tokens and every amount is CNY.
       const out = await executeHarnessTool('get_cluster_telemetry', {}, context({
-        stats: { total_requests: 500, avg_ttft_ms: 88, cache_hit_rate: '42%', total_cost: 3.5 },
+        stats: {
+          total_requests: 500,
+          avg_ttft_ms: 88,
+          ttft_samples: 12,
+          prompt_tokens: 1000,
+          total_cached_tokens: 420,
+          total_cost: 3.5,
+        },
       }));
 
       const perf = out.result.performance_metrics;
       expect(perf.total_requests).toBe(500);
       expect(perf.avg_ttft_ms).toBe(88);
-      expect(perf.cache_hit_rate).toBe('42%');
-      expect(perf.total_cost_usd).toBe(3.5);
+      expect(perf.cache_hit_rate).toBe('42.0%');
+      expect(perf.total_cost).toBe(3.5);
+      expect(perf.currency).toBe('CNY');
     });
   });
 
@@ -261,12 +271,34 @@ describe('executeHarnessTool', () => {
       expect(Object.keys(out.result)).toEqual(['python']);
     });
 
-    it('uses an active key', async () => {
+    it('uses a placeholder instead of a listed key', async () => {
+      // The list only identifies keys (credentials are stored as digests), so a
+      // generated config must not paste anything from it into the snippet.
       const out = await executeHarnessTool('generate_client_config', { client_type: 'cursor' }, context({
-        keys: [{ key: 'sk-disabled', status: 'disabled' }, { key: 'sk-active', status: 'active' }],
+        keys: [
+          { id: 1, key_id: 'ak_1f0013dea24034ac0001', status: 'disabled' },
+          { id: 2, key_id: 'ak_2f0013dea24034ac0002', status: 'active' },
+        ],
       }));
 
-      expect(out.result.cursor.api_key).toBe('sk-active');
+      expect(out.result.cursor.api_key).toBe('<YOUR_API_KEY>');
+    });
+
+    it('never embeds a listed key ID in any snippet', async () => {
+      const keyId = 'ak_0f0013dea24034ac1234';
+      const out = await executeHarnessTool('generate_client_config', { client_type: 'all' }, context({
+        keys: [{ id: 1, key_id: keyId, status: 'active' }],
+        baseUrl: 'https://gw.example/v1',
+        origin: 'https://gw.example',
+      }));
+
+      const serialized = JSON.stringify(out.result);
+      expect(serialized).not.toContain(keyId);
+      expect(serialized).not.toContain('***');
+      expect(serialized).toContain('<YOUR_API_KEY>');
+      expect(out.result.curl.command).toContain('Authorization: Bearer <YOUR_API_KEY>');
+      expect(out.result.claude_code.bash_env).toContain('ANTHROPIC_API_KEY="<YOUR_API_KEY>"');
+      expect(out.result.python.code_snippet).toContain('api_key="<YOUR_API_KEY>"');
     });
 
     it('falls back to a placeholder when no key exists', async () => {

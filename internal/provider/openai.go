@@ -73,17 +73,15 @@ func buildURL(baseURL string) string {
 
 // ChatComplete executes a standard non-streaming chat request.
 func (p *OpenAIProvider) ChatComplete(ctx context.Context, req *model.ChatCompletionRequest, channel *model.ChannelConfig) (*model.ChatCompletionResponse, error) {
-	targetModel := channel.GetUpstreamModel(req.Model)
-
-	// Automatic full-duplex protocol adaptation for text completion upstreams (/v1/completions)
-	if channel.OnlySupportsProtocol("openai_text") || (channel.SupportsProtocol("openai_text") && !channel.SupportsProtocol("openai_chat")) {
-		return p.chatCompleteText(ctx, req, channel, targetModel)
+	if response, done, err := maybeNativeUnary(ctx, p.client, req, channel, model.NativeChat, model.NativeResponses, model.NativeMessages); done {
+		return response, err
 	}
+	targetModel := channel.GetUpstreamModel(req.Model)
 
 	clonedReq := *req
 	clonedReq.Model = targetModel
 	clonedReq.Stream = false
-	stripReasoningContent(clonedReq.Messages)
+	clonedReq.Messages = stripReasoningContent(clonedReq.Messages)
 
 	for attempt := 0; ; attempt++ {
 		payloadBytes, err := json.Marshal(clonedReq)
@@ -129,7 +127,7 @@ func (p *OpenAIProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 					continue
 				}
 			}
-			return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
+			return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes, resp.Header)
 		}
 
 		var chatResp model.ChatCompletionResponse
@@ -144,18 +142,33 @@ func (p *OpenAIProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 	}
 }
 
-// stripReasoningContent removes historical reasoning traces from outbound
-// messages. reasoning_content is a DeepSeek-specific extension; strict
-// OpenAI-compatible endpoints (Azure OpenAI in particular) reject unknown
-// message fields with HTTP 400.
-func stripReasoningContent(messages []model.ChatMessage) {
-	for i := range messages {
-		messages[i].ReasoningContent = ""
+// stripReasoningContent returns a copy of messages with historical reasoning
+// traces removed. reasoning_content is a DeepSeek-specific extension; strict
+// OpenAI-compatible endpoints (Azure OpenAI in particular) reject unknown message
+// fields with HTTP 400.
+//
+// It must copy: the outbound body is a per-channel adaptation, while the request
+// object is shared by every later channel attempt, the cross-model fallback, the
+// prompt-size estimators and the audit/trace hooks. Clearing the caller's slice
+// in place let one channel's sanitising leak into all of them
+// (BUG-REQ-MUTATION).
+func stripReasoningContent(messages []model.ChatMessage) []model.ChatMessage {
+	if len(messages) == 0 {
+		return messages
 	}
+	out := make([]model.ChatMessage, len(messages))
+	copy(out, messages)
+	for i := range out {
+		out[i].ReasoningContent = ""
+	}
+	return out
 }
 
 // ChatCompleteStream executes a streaming chat request.
 func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.ChatCompletionRequest, channel *model.ChannelConfig) (<-chan *model.StreamEvent, error) {
+	if stream, done, err := maybeNativeStream(ctx, p.client, req, channel, model.NativeChat, model.NativeResponses, model.NativeMessages); done {
+		return stream, err
+	}
 	return p.chatCompleteStream(ctx, req, channel, true)
 }
 
@@ -164,16 +177,11 @@ func (p *OpenAIProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 func (p *OpenAIProvider) chatCompleteStream(ctx context.Context, req *model.ChatCompletionRequest, channel *model.ChannelConfig, allowClamp bool) (<-chan *model.StreamEvent, error) {
 	targetModel := channel.GetUpstreamModel(req.Model)
 
-	// Automatic full-duplex streaming protocol adaptation for text completion upstreams (/v1/completions)
-	if channel.OnlySupportsProtocol("openai_text") || (channel.SupportsProtocol("openai_text") && !channel.SupportsProtocol("openai_chat")) {
-		return p.chatCompleteTextStream(ctx, req, channel, targetModel)
-	}
-
 	clonedReq := *req
 	clonedReq.Model = targetModel
 	clonedReq.Stream = true
 	clonedReq.StreamOptions = &model.StreamOptions{IncludeUsage: true}
-	stripReasoningContent(clonedReq.Messages)
+	clonedReq.Messages = stripReasoningContent(clonedReq.Messages)
 
 	payloadBytes, err := json.Marshal(clonedReq)
 	if err != nil {
@@ -216,11 +224,11 @@ func (p *OpenAIProvider) chatCompleteStream(ctx context.Context, req *model.Chat
 				return p.chatCompleteStream(ctx, &retryReq, channel, false)
 			}
 		}
-		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
+		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes, resp.Header)
 	}
 
 	eventChan := make(chan *model.StreamEvent, 64)
-	reasoningAdapter := NewReasoningStreamAdapter()
+	reasoning := newReasoningStreamPipeline()
 
 	go func() {
 		defer resp.Body.Close()
@@ -235,20 +243,13 @@ func (p *OpenAIProvider) chatCompleteStream(ctx context.Context, req *model.Chat
 				return false
 			}
 		}
-
-		var lastChunk *model.ChatCompletionChunk
+		sendChunk := func(chunk *model.ChatCompletionChunk) bool {
+			return sendEvent(&model.StreamEvent{Chunk: chunk})
+		}
 
 		// flushReasoning emits any text still held back by a partial tag.
 		flushReasoning := func() bool {
-			if lastChunk == nil {
-				return true
-			}
-			for _, flushedChunk := range reasoningAdapter.Flush(lastChunk) {
-				if !sendEvent(&model.StreamEvent{Chunk: flushedChunk}) {
-					return false
-				}
-			}
-			return true
+			return reasoning.Flush(sendChunk)
 		}
 
 		for {
@@ -308,8 +309,10 @@ func (p *OpenAIProvider) chatCompleteStream(ctx context.Context, req *model.Chat
 					} `json:"error"`
 				}
 				if json.Unmarshal([]byte(dataContent), &errResp) == nil && errResp.Error.Message != "" {
+					// Carry the status so the router can classify a mid-stream
+					// abort with the same rules as a unary failure (B-02).
 					sendEvent(&model.StreamEvent{
-						Err: fmt.Errorf("upstream stream error [%s]: %s", errResp.Error.Type, errResp.Error.Message),
+						Err: NewUpstreamError(channel.Name, streamErrorStatus(jsonStatusCode(errResp.Error.Code), errResp.Error.Type), []byte(errResp.Error.Message)),
 					})
 					return
 				}
@@ -317,14 +320,8 @@ func (p *OpenAIProvider) chatCompleteStream(ctx context.Context, req *model.Chat
 
 			chunk.Model = req.Model
 
-			processedChunks := reasoningAdapter.ProcessChunk(&chunk)
-			for _, pc := range processedChunks {
-				lastChunk = pc
-				if !sendEvent(&model.StreamEvent{
-					Chunk: pc,
-				}) {
-					return
-				}
+			if !reasoning.Emit(&chunk, sendChunk) {
+				return
 			}
 		}
 	}()

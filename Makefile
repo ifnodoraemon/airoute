@@ -1,6 +1,6 @@
 export PATH := /usr/local/go/bin:$(PATH)
 
-.PHONY: all build build-web run test test-web test-integration test-e2e test-e2e-go tidy clean docker-build docker-rebuild
+.PHONY: all build build-web run test test-web test-integration test-e2e-go tidy clean docker-build docker-rebuild check-deploy-drift
 
 APP_NAME = airoute
 BIN_DIR = bin
@@ -51,6 +51,12 @@ docker-build:
 docker-rebuild:
 	@sh scripts/docker-rebuild.sh
 
+# Read-only: detects postgres/redis/lb containers that predate the compose
+# ulimits/command. Run after an upgrade; it never mutates anything.
+check-deploy-drift:
+	@echo "==> Checking dependency container drift..."
+	@sh scripts/check-deploy-drift.sh
+
 test: web/dist/index.html
 	@echo "==> Running tests..."
 	go test -v -race $$(go list ./... | grep -v '/web/node_modules')
@@ -70,10 +76,6 @@ test-integration:
 	@test -n "$(AIROUTE_TEST_REDIS_URL)" || { echo "AIROUTE_TEST_REDIS_URL is required"; exit 1; }
 	@echo "==> Running integration tests (PostgreSQL + Redis)..."
 	go test -race -tags=integration ./internal/storage/ ./internal/distributed/
-
-test-e2e:
-	@echo "==> Running End-to-End (E2E) integration tests..."
-	@bash scripts/test-e2e.sh
 
 test-e2e-go:
 	@echo "==> Running Go E2E test suite..."

@@ -197,27 +197,23 @@ func TestE2E_SecurityAndAuth(t *testing.T) {
 	})
 }
 
-// TestE2E_MCPEcosystem verifies the 15 built-in MCP servers and toggle functionality.
+// TestE2E_MCPEcosystem verifies the curated built-in MCP servers and toggle
+// functionality. The id list mirrors the curated set in
+// internal/storage/repo_mcp_seed.go — keep the two in sync when the seed changes.
 func TestE2E_MCPEcosystem(t *testing.T) {
 	client := getHTTPClient()
 	token := loginAdmin(t)
 
 	expectedMCPs := []string{
 		"airoute-gateway",
-		"memory-graph",
-		"git-mcp",
+		"modelscope-search",
+		"github-mcp",
+		"postgres-mcp",
+		"browser-fetch-mcp",
 		"filesystem-mcp",
 		"fetch-mcp",
 		"sqlite-mcp",
 		"sentry-mcp",
-		"github-mcp",
-		"postgres-mcp",
-		"browser-fetch-mcp",
-		"sequential-thinking",
-		"brave-search",
-		"modelscope-search",
-		"feishu-lark-mcp",
-		"docker-k8s-mcp",
 	}
 
 	req, _ := http.NewRequest(http.MethodGet, baseURL+"/api/v1/admin/mcp/servers", nil)
@@ -259,13 +255,13 @@ func TestE2E_MCPEcosystem(t *testing.T) {
 
 	// Test Toggle MCP server
 	togglePayload, _ := json.Marshal(map[string]bool{"enabled": true})
-	toggleReq, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/admin/mcp/servers/memory-graph/toggle", bytes.NewReader(togglePayload))
+	toggleReq, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/admin/mcp/servers/airoute-gateway/toggle", bytes.NewReader(togglePayload))
 	toggleReq.Header.Set("Authorization", "Bearer "+token)
 	toggleReq.Header.Set("Content-Type", "application/json")
 
 	toggleResp, err := client.Do(toggleReq)
 	if err != nil {
-		t.Fatalf("POST /api/v1/admin/mcp/servers/memory-graph/toggle failed: %v", err)
+		t.Fatalf("POST /api/v1/admin/mcp/servers/airoute-gateway/toggle failed: %v", err)
 	}
 	defer toggleResp.Body.Close()
 

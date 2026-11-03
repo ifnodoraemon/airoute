@@ -128,7 +128,7 @@ func TestAdminRequestShapesAreStable(t *testing.T) {
 			got:  jsonFieldNames(reflect.TypeOf(ChannelRequest{})),
 			want: []string{
 				"name", "type", "base_url", "api_key", "models", "model_mapping",
-				"protocols", "priority", "weight", "timeout_seconds", "status",
+				"protocols", "priority", "weight", "timeout_seconds", "max_concurrency", "queue_limit", "queue_wait_seconds", "status",
 			},
 		},
 		{
@@ -188,7 +188,9 @@ func TestSavePricingRateRequestAcceptsExactlyTheWritableColumns(t *testing.T) {
 	}
 
 	for _, name := range sortedNames(request) {
-		if !record[name] {
+		// Key is writable but has no JSON representation: it holds the digest and
+		// no response may serialize it (see apiKeyView).
+		if name != "key" && !record[name] {
 			t.Errorf("the request accepts %q, which the stored record does not have", name)
 		}
 		if outputOnly[name] {
@@ -313,9 +315,14 @@ func TestCreateAPIKeyRequestAcceptsExactlyTheWritableColumns(t *testing.T) {
 		"used_cost_units": true,
 		"created_at":      true,
 		"updated_at":      true,
-		// Fingerprint is derived from Key when the row is read or created; it is
-		// never accepted from (or needed in) the creation body.
-		"key_fingerprint": true,
+		// The public identifier is minted by the repository when the row is
+		// created; it is never accepted from the creation body.
+		"key_id": true,
+		// The administrator-revocation flag is decided by the rules
+		// (KeyCreationRules.PlanCreate) from the caller's role and the requested
+		// status, never from the body: a tenant must not be able to create a key
+		// that claims to be operator-revoked, nor clear that flag.
+		"admin_disabled": true,
 	}
 
 	for _, name := range sortedNames(record) {
@@ -328,7 +335,9 @@ func TestCreateAPIKeyRequestAcceptsExactlyTheWritableColumns(t *testing.T) {
 	}
 
 	for _, name := range sortedNames(request) {
-		if !record[name] {
+		// Key is writable but has no JSON representation on the record: it holds the
+		// digest and no response may serialize it (see apiKeyView).
+		if name != "key" && !record[name] {
 			t.Errorf("the request accepts %q, which the stored record does not have", name)
 		}
 		if serverOwned[name] {
@@ -400,7 +409,7 @@ func TestAdminResponseShapesAreStable(t *testing.T) {
 			got:  jsonFieldNames(reflect.TypeOf(storage.ChannelRecord{})),
 			want: []string{
 				"id", "name", "type", "base_url", "api_key", "models", "model_mapping",
-				"protocols", "priority", "weight", "timeout_seconds", "status",
+				"protocols", "priority", "weight", "timeout_seconds", "max_concurrency", "queue_limit", "queue_wait_seconds", "status",
 				"breaker_status", "created_at", "updated_at",
 			},
 		},
@@ -419,10 +428,10 @@ func TestAdminResponseShapesAreStable(t *testing.T) {
 			name: "storage.APIKeyRecord",
 			got:  jsonFieldNames(reflect.TypeOf(storage.APIKeyRecord{})),
 			want: []string{
-				"id", "key", "tenant_id", "allowed_models", "rpm", "tpm", "budget",
+				"id", "key_id", "tenant_id", "allowed_models", "rpm", "tpm", "budget",
 				"used_tokens", "used_cost", "budget_units", "used_cost_units",
-				"group_name", "user_id", "status", "format_validation",
-				"created_at", "updated_at", "key_fingerprint",
+				"group_name", "user_id", "status", "admin_disabled", "format_validation",
+				"created_at", "updated_at",
 			},
 		},
 		{

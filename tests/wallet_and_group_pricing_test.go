@@ -185,23 +185,17 @@ func TestUserWallet_RedemptionAndRecharge(t *testing.T) {
 		t.Errorf("expected balance 35.5, got %f", user.Balance)
 	}
 
-	// 3. User performs sandbox top-up
-	rechargeBody, _ := json.Marshal(map[string]interface{}{
-		"amount": 50.0,
-	})
+	// A normal user cannot mint credit through the removed simulator.
 	w = httptest.NewRecorder()
-	req, _ = http.NewRequest("POST", "/api/v1/user/wallet/recharge/sandbox", bytes.NewReader(rechargeBody))
+	req, _ = http.NewRequest("POST", "/api/v1/user/wallet/recharge/sandbox", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
 	engine.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("sandbox recharge failed: %d %s", w.Code, w.Body.String())
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("removed simulator: %d", w.Code)
 	}
-
 	user, _ = repo.GetUserByUsername("bob")
-	if user.Balance != 85.5 { // 35.5 + 50.0
-		t.Errorf("expected balance 85.5, got %f", user.Balance)
+	if user.Balance != 35.5 {
+		t.Fatalf("removed simulator changed balance: %f", user.Balance)
 	}
 
 	// 4. Verify wallet endpoint
@@ -250,8 +244,8 @@ func TestModelGroupPricing(t *testing.T) {
 	_ = engine.ReloadPrices()
 
 	// Calculate cost for 1,000,000 prompt tokens and 0 completion
-	costDefault, _ := engine.CalculateCostWithGroup("gpt-4o", "default", 1000000, 0, 0)
-	costVIP, _ := engine.CalculateCostWithGroup("gpt-4o", "vip", 1000000, 0, 0)
+	costDefault, _, _, _, _, _ := engine.CalculateCostForUnitsWithCacheCreation("gpt-4o", "default", 1000000, 0, 0, 0, 1, time.Now())
+	costVIP, _, _, _, _, _ := engine.CalculateCostForUnitsWithCacheCreation("gpt-4o", "vip", 1000000, 0, 0, 0, 1, time.Now())
 
 	if costDefault != 18.0 {
 		t.Errorf("expected default cost 18.0, got %f", costDefault)

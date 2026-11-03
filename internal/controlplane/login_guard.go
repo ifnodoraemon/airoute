@@ -253,21 +253,39 @@ func newLoginGuard() *loginGuard {
 	}
 }
 
-// loginBuckets returns the throttle dimensions that apply to this attempt.
-func loginBuckets(client loginClient) []loginBucket {
-	buckets := []loginBucket{{
+// accountBuckets returns the per-account throttle dimension of an attempt.
+//
+// It is separate from the per-IP dimension because the two have different reset
+// rules: a successful login proves the password of *this account* and may clear
+// its own failure counter, while the address budget tracks attempts against many
+// accounts and must only age out.
+func accountBuckets(client loginClient) []loginBucket {
+	return []loginBucket{{
 		kind:    "user",
 		subject: normalizeLoginSubject(client.Username),
 		limit:   maxLoginFailuresPerAccount,
 	}}
-	if client.IPIsForwarded && strings.TrimSpace(client.IP) != "" {
-		buckets = append(buckets, loginBucket{
-			kind:    "ip",
-			subject: strings.TrimSpace(client.IP),
-			limit:   maxLoginFailuresPerIP,
-		})
+}
+
+// ipBuckets returns the per-address throttle dimension, which only applies when
+// the address is attributable (taken from a trusted proxy's forwarding header).
+// Without attribution the peer is the proxy itself, and locking it would let one
+// attacker lock out every user behind that proxy.
+func ipBuckets(client loginClient) []loginBucket {
+	if !client.IPIsForwarded || strings.TrimSpace(client.IP) == "" {
+		return nil
 	}
-	return buckets
+	return []loginBucket{{
+		kind:    "ip",
+		subject: strings.TrimSpace(client.IP),
+		limit:   maxLoginFailuresPerIP,
+	}}
+}
+
+// loginBuckets returns every throttle dimension that applies to this attempt.
+func loginBuckets(client loginClient) []loginBucket {
+	buckets := accountBuckets(client)
+	return append(buckets, ipBuckets(client)...)
 }
 
 func normalizeLoginSubject(username string) string {
@@ -340,8 +358,15 @@ func (g *loginGuard) failure(ctx context.Context, client loginClient) {
 }
 
 // success clears the failure counters after a valid login.
+//
+// Only the account bucket is cleared. The per-IP bucket is a cross-account
+// spraying defence, not a property of the account that just logged in: clearing
+// it here let anyone who owns a single valid account reset the address budget
+// between batches ("19 sprayed attempts, one own-account login, repeat"), turning
+// "20 attempts / 15 min per address" into an unbounded number of attempts. The
+// address budget now only ages out with loginLockoutWindow.
 func (g *loginGuard) success(ctx context.Context, client loginClient) {
-	buckets := loginBuckets(client)
+	buckets := accountBuckets(client)
 	if g.shared != nil {
 		for _, bucket := range buckets {
 			_ = g.shared.reset(ctx, bucket)

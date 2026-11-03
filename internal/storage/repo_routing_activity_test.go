@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -24,7 +25,7 @@ func TestRoutingActivityUsesWholeWindowAndRecordedTrails(t *testing.T) {
 		records = append(records, &UsageLogRecord{Model: "alias", Channel: "primary", StatusCode: 200, CreatedAt: now})
 	}
 	for _, record := range records {
-		if err := repo.RecordUsageLog(record); err != nil {
+		if err := repo.RecordUsageLogContext(context.Background(), record); err != nil {
 			t.Fatal(err)
 		}
 	}

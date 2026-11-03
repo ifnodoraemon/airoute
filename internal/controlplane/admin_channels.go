@@ -40,13 +40,26 @@ func parseChannelID(c *gin.Context) (int64, bool) {
 }
 
 // ListChannels returns all configured channels.
+//
+// The response carries channelView, never the stored row: the row holds the
+// upstream provider credential in cleartext.
 func (h *AdminHandler) ListChannels(c *gin.Context) {
 	channels, err := h.channels.List()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取渠道列表失败: " + err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": channels})
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": channelViews(channels)})
+}
+
+// channelMutationPayload builds the response body for a create/update. It always
+// goes through channelView so no handler can accidentally serialize the stored
+// cleartext credential.
+func channelMutationPayload(rec *storage.ChannelRecord) gin.H {
+	if rec == nil {
+		return nil
+	}
+	return gin.H{"data": channelViewFrom(rec)}
 }
 
 // ChannelRequest is the wire shape of a channel create or update.
@@ -60,34 +73,76 @@ func (h *AdminHandler) ListChannels(c *gin.Context) {
 // TestSavePricingRateRequestAcceptsExactlyTheWritableColumns covers the same
 // property for pricing; TestChannelRequestAcceptsExactlyTheWritableColumns
 // covers this one.
+//
+// Priority, weight and timeout_seconds are pointers so an update can distinguish
+// "omitted" (keep the stored value) from an explicit 0. Their JSON names are
+// unchanged, so the pinned request contract in contract_test.go still holds.
 type ChannelRequest struct {
-	Name           string             `json:"name"`
-	Type           model.ProviderType `json:"type"`
-	BaseURL        string             `json:"base_url"`
-	APIKey         string             `json:"api_key"`
-	Models         []string           `json:"models"`
-	ModelMapping   map[string]string  `json:"model_mapping"`
-	Protocols      []string           `json:"protocols"`
-	Priority       int                `json:"priority"`
-	Weight         int                `json:"weight"`
-	TimeoutSeconds int                `json:"timeout_seconds"`
-	Status         string             `json:"status"`
+	Name             string             `json:"name"`
+	Type             model.ProviderType `json:"type"`
+	BaseURL          string             `json:"base_url"`
+	APIKey           string             `json:"api_key"`
+	Models           []string           `json:"models"`
+	ModelMapping     map[string]string  `json:"model_mapping"`
+	Protocols        []string           `json:"protocols"`
+	Priority         *int               `json:"priority"`
+	Weight           *int               `json:"weight"`
+	TimeoutSeconds   *int               `json:"timeout_seconds"`
+	MaxConcurrency   *int               `json:"max_concurrency"`
+	QueueLimit       *int               `json:"queue_limit"`
+	QueueWaitSeconds *int               `json:"queue_wait_seconds"`
+	Status           string             `json:"status"`
 }
 
-// toRecord converts the request into the row the repository persists.
+// derefInt reads an optional int, using fallback when the client omitted it.
+func derefInt(value *int, fallback int) int {
+	if value == nil {
+		return fallback
+	}
+	return *value
+}
+
+// toRecord converts the request into the row the repository persists. Omitted
+// numeric fields become 0 here, which is the storage layer's "use the default"
+// signal, exactly as before the fields became optional.
 func (r ChannelRequest) toRecord() *storage.ChannelRecord {
 	return &storage.ChannelRecord{
-		Name:           r.Name,
-		Type:           r.Type,
-		BaseURL:        r.BaseURL,
-		APIKey:         r.APIKey,
-		Models:         r.Models,
-		ModelMapping:   r.ModelMapping,
-		Protocols:      r.Protocols,
-		Priority:       r.Priority,
-		Weight:         r.Weight,
-		TimeoutSeconds: r.TimeoutSeconds,
-		Status:         r.Status,
+		Name:             r.Name,
+		Type:             r.Type,
+		BaseURL:          r.BaseURL,
+		APIKey:           r.APIKey,
+		Models:           r.Models,
+		ModelMapping:     r.ModelMapping,
+		Protocols:        r.Protocols,
+		Priority:         derefInt(r.Priority, 0),
+		Weight:           derefInt(r.Weight, 0),
+		TimeoutSeconds:   derefInt(r.TimeoutSeconds, 0),
+		MaxConcurrency:   derefInt(r.MaxConcurrency, 0),
+		QueueLimit:       derefInt(r.QueueLimit, 0),
+		QueueWaitSeconds: derefInt(r.QueueWaitSeconds, 0),
+		Status:           r.Status,
+	}
+}
+
+// toPatch converts the request into the partial update the channel service
+// merges. The numeric pointers are kept as-is so the service can tell an omitted
+// field from an explicit zero.
+func (r ChannelRequest) toPatch() *channelPatch {
+	return &channelPatch{
+		Name:             r.Name,
+		Type:             r.Type,
+		BaseURL:          r.BaseURL,
+		APIKey:           r.APIKey,
+		Models:           r.Models,
+		ModelMapping:     r.ModelMapping,
+		Protocols:        r.Protocols,
+		Priority:         r.Priority,
+		Weight:           r.Weight,
+		TimeoutSeconds:   r.TimeoutSeconds,
+		MaxConcurrency:   r.MaxConcurrency,
+		QueueLimit:       r.QueueLimit,
+		QueueWaitSeconds: r.QueueWaitSeconds,
+		Status:           r.Status,
 	}
 }
 
@@ -101,14 +156,14 @@ func (h *AdminHandler) CreateChannel(c *gin.Context) {
 
 	created, err := h.channels.Create(c.Request.Context(), req.toRecord())
 	if err != nil {
-		if writeHotReloadWarning(c, err, gin.H{"data": created}) {
+		if writeHotReloadWarning(c, err, channelMutationPayload(created)) {
 			return
 		}
 		writeChannelError(c, err, "创建渠道失败")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": created, "message": "渠道已创建并成功同步至数据面内存"})
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": channelViewFrom(created), "message": "渠道已创建并成功同步至数据面内存"})
 }
 
 // UpdateChannel updates an existing channel.
@@ -124,16 +179,16 @@ func (h *AdminHandler) UpdateChannel(c *gin.Context) {
 		return
 	}
 
-	updated, err := h.channels.Update(c.Request.Context(), id, req.toRecord())
+	updated, err := h.channels.Update(c.Request.Context(), id, req.toPatch())
 	if err != nil {
-		if writeHotReloadWarning(c, err, gin.H{"data": updated}) {
+		if writeHotReloadWarning(c, err, channelMutationPayload(updated)) {
 			return
 		}
 		writeChannelError(c, err, "更新渠道失败")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": updated, "message": "渠道配置已成功更新"})
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": channelViewFrom(updated), "message": "渠道配置已成功更新"})
 }
 
 // DeleteChannel removes a channel.

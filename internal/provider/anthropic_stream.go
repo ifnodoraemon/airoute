@@ -16,6 +16,9 @@ import (
 
 // ChatCompleteStream executes a streaming Anthropic request and translates SSE chunks to OpenAI format.
 func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.ChatCompletionRequest, channel *model.ChannelConfig) (<-chan *model.StreamEvent, error) {
+	if stream, done, err := maybeNativeStream(ctx, p.client, req, channel, model.NativeMessages); done {
+		return stream, err
+	}
 	anthropicReq := convertOpenAIToAnthropic(req, channel)
 	anthropicReq.Stream = true
 
@@ -50,7 +53,7 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
+		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes, resp.Header)
 	}
 
 	eventChan := make(chan *model.StreamEvent, 64)
@@ -104,7 +107,11 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 			}
 
 			line, err := reader.ReadBytes('\n')
-			if err != nil {
+			// A complete data frame can arrive without its trailing newline when the
+			// upstream (or a proxy) cuts the connection. Process the buffered line
+			// instead of dropping it: it may be the message_delta carrying
+			// output_tokens or the message_stop terminal frame.
+			if err != nil && !(err == io.EOF && len(line) > 0) {
 				if err != io.EOF {
 					sendEvent(&model.StreamEvent{Err: err})
 					return
@@ -135,7 +142,23 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 				// dropped it, so the downstream client saw a truncated but
 				// "successful" 200 stream.
 				if currentEvent == "error" {
-					sendEvent(&model.StreamEvent{Err: fmt.Errorf("upstream anthropic stream error: %s", dataStr)})
+					// Carry the status so the router classifies a mid-stream abort
+					// with the same rules as a unary failure (B-02).
+					var errFrame struct {
+						Error struct {
+							Type    string `json:"type"`
+							Message string `json:"message"`
+						} `json:"error"`
+					}
+					status := 503
+					message := dataStr
+					if json.Unmarshal([]byte(dataStr), &errFrame) == nil {
+						status = streamErrorStatus(0, errFrame.Error.Type)
+						if errFrame.Error.Message != "" {
+							message = errFrame.Error.Message
+						}
+					}
+					sendEvent(&model.StreamEvent{Err: NewUpstreamError(channel.Name, status, []byte(message))})
 					return
 				}
 				if req.AnthropicOriginal != nil {
@@ -341,12 +364,12 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 							PromptTokens:     inputTokens + cacheReadTokens + cacheCreationTokens,
 							CompletionTokens: outputTokens,
 							TotalTokens:      inputTokens + cacheReadTokens + cacheCreationTokens + outputTokens,
-							PromptTokensDetails: func() *model.PromptTokensDetails {
-								if cacheReadTokens > 0 {
-									return &model.PromptTokensDetails{CachedTokens: cacheReadTokens}
-								}
-								return nil
-							}(),
+							// Both cache buckets must survive the streaming path:
+							// billing prices cache writes at a premium and needs the
+							// count to split promptTokens into its three buckets.
+							// Reporting only the read count billed the write bucket
+							// at the plain input rate (F-05).
+							PromptTokensDetails: cacheTokenDetails(cacheReadTokens, cacheCreationTokens),
 						},
 					}
 					if !sendEvent(&model.StreamEvent{Chunk: chunk}) {

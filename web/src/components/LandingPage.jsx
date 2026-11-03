@@ -19,18 +19,12 @@ import { getGatewayOrigin, copyToClipboard } from '../config';
 
 export default function LandingPage({
   isLoggedIn,
-  adminUser,
   onOpenLogin,
   onEnterConsole,
   onViewDocs,
   onViewStatus,
-  stats,
-  channelsCount,
-  modelsCount,
   lang = 'zh',
-  setLang,
   toggleLang,
-  t
 }) {
   const isZh = lang === 'zh';
   const [copiedSnippet, setCopiedSnippet] = useState('');

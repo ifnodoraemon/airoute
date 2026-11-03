@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
@@ -15,13 +14,16 @@ import (
 
 // Embed executes embedding generation on Google Gemini Developer API.
 func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest, channel *model.ChannelConfig) (*model.EmbeddingResponse, error) {
+	if req.Native != nil && req.Native.Protocol == model.NativeGeminiEmbedding {
+		return p.embedNative(ctx, req, channel)
+	}
 	targetModel := channel.GetUpstreamModel(req.Model)
 	texts := req.GetInputStrings()
 	if len(texts) == 0 {
 		return nil, fmt.Errorf("input text is required for embedding")
 	}
 
-	baseURL := channel.BaseURL
+	baseURL := GeminiBaseURL(channel)
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = "https://generativelanguage.googleapis.com"
 	}
@@ -31,17 +33,19 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 
 	if len(texts) == 1 {
 		// Single embedContent call
-		targetURL := joinAPIURLVersioned(baseURL, GeminiAPIVersion, "/v1beta/models/"+targetModel+":embedContent", url.Values{"key": {channel.APIKey}})
+		targetURL := GeminiActionURL(baseURL, targetModel, "embedContent")
 		type singleReq struct {
-			Model   string `json:"model,omitempty"`
-			Content struct {
+			OutputDimensionality *int   `json:"outputDimensionality,omitempty"`
+			Model                string `json:"model,omitempty"`
+			Content              struct {
 				Parts []struct {
 					Text string `json:"text"`
 				} `json:"parts"`
 			} `json:"content"`
 		}
 		var sReq singleReq
-		sReq.Model = "models/" + strings.TrimPrefix(targetModel, "models/")
+		sReq.OutputDimensionality = req.Dimensions
+		sReq.Model = "models/" + geminiModelPath(targetModel)
 		sReq.Content.Parts = []struct {
 			Text string `json:"text"`
 		}{{Text: texts[0]}}
@@ -52,7 +56,9 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 			return nil, err
 		}
 		httpReq.Header.Set("Content-Type", "application/json")
-		httpReq.Header.Set("x-goog-api-key", channel.APIKey)
+		if err := ConfigureGoogleRequest(ctx, httpReq, channel); err != nil {
+			return nil, err
+		}
 
 		resp, err := p.client.Do(httpReq)
 		if err != nil {
@@ -61,7 +67,7 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != http.StatusOK {
-			return nil, NewUpstreamError(channel.Name, resp.StatusCode, []byte(body))
+			return nil, NewUpstreamError(channel.Name, resp.StatusCode, []byte(body), resp.Header)
 		}
 
 		var parsed struct {
@@ -83,10 +89,11 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 		}
 	} else {
 		// batchEmbedContents call
-		targetURL := joinAPIURLVersioned(baseURL, GeminiAPIVersion, "/v1beta/models/"+targetModel+":batchEmbedContents", url.Values{"key": {channel.APIKey}})
+		targetURL := GeminiActionURL(baseURL, targetModel, "batchEmbedContents")
 		type itemReq struct {
-			Model   string `json:"model"`
-			Content struct {
+			OutputDimensionality *int   `json:"outputDimensionality,omitempty"`
+			Model                string `json:"model"`
+			Content              struct {
 				Parts []struct {
 					Text string `json:"text"`
 				} `json:"parts"`
@@ -96,7 +103,7 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 			Requests []itemReq `json:"requests"`
 		}
 		var bReq batchReq
-		modelPath := "models/" + strings.TrimPrefix(targetModel, "models/")
+		modelPath := "models/" + geminiModelPath(targetModel)
 		for _, t := range texts {
 			toks := model.EstimateTokensFromChars(len(t))
 			if toks == 0 {
@@ -104,7 +111,8 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 			}
 			totalTokens += toks
 			bReq.Requests = append(bReq.Requests, itemReq{
-				Model: modelPath,
+				OutputDimensionality: req.Dimensions,
+				Model:                modelPath,
 				Content: struct {
 					Parts []struct {
 						Text string `json:"text"`
@@ -123,7 +131,9 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 			return nil, err
 		}
 		httpReq.Header.Set("Content-Type", "application/json")
-		httpReq.Header.Set("x-goog-api-key", channel.APIKey)
+		if err := ConfigureGoogleRequest(ctx, httpReq, channel); err != nil {
+			return nil, err
+		}
 
 		resp, err := p.client.Do(httpReq)
 		if err != nil {
@@ -132,7 +142,7 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != http.StatusOK {
-			return nil, NewUpstreamError(channel.Name, resp.StatusCode, []byte(body))
+			return nil, NewUpstreamError(channel.Name, resp.StatusCode, []byte(body), resp.Header)
 		}
 
 		var parsed struct {
@@ -157,6 +167,7 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 		Data:   items,
 		Model:  req.Model,
 		Usage: model.EmbeddingUsage{
+			Estimated:    true,
 			PromptTokens: totalTokens,
 			TotalTokens:  totalTokens,
 		},

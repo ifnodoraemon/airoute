@@ -1,0 +1,62 @@
+{
+  "date": "2026-11-03",
+  "stripe_account_used": false,
+  "deployed": false,
+  "go_race": {
+    "command": "go test -race -p 4 ./... -count=1",
+    "exit_code": 0,
+    "passed_packages": 16,
+    "output": [
+      "ok  \tgithub.com/ifnodoraemon/airoute/cmd/airoute\t10.080s",
+      "ok  \tgithub.com/ifnodoraemon/airoute/internal/adapter\t1.029s",
+      "ok  \tgithub.com/ifnodoraemon/airoute/internal/api\t89.459s",
+      "ok  \tgithub.com/ifnodoraemon/airoute/internal/billing\t15.572s",
+      "ok  \tgithub.com/ifnodoraemon/airoute/internal/config\t1.165s",
+      "ok  \tgithub.com/ifnodoraemon/airoute/internal/controlplane\t174.129s",
+      "ok  \tgithub.com/ifnodoraemon/airoute/internal/distributed\t2.155s",
+      "ok  \tgithub.com/ifnodoraemon/airoute/internal/middleware\t14.083s",
+      "ok  \tgithub.com/ifnodoraemon/airoute/internal/model\t1.043s",
+      "ok  \tgithub.com/ifnodoraemon/airoute/internal/provider\t2.982s",
+      "ok  \tgithub.com/ifnodoraemon/airoute/internal/router\t10.926s",
+      "ok  \tgithub.com/ifnodoraemon/airoute/internal/storage\t161.211s",
+      "ok  \tgithub.com/ifnodoraemon/airoute/internal/telemetry\t1.853s",
+      "ok  \tgithub.com/ifnodoraemon/airoute/internal/validator\t1.022s",
+      "ok  \tgithub.com/ifnodoraemon/airoute/tests\t87.519s",
+      "ok  \tgithub.com/ifnodoraemon/airoute/web\t1.033s"
+    ]
+  },
+  "go_vet": {
+    "command": "go vet ./...",
+    "exit_code": 0
+  },
+  "web": {
+    "test_files": 75,
+    "tests": 746,
+    "lint_exit_code": 0,
+    "build_exit_code": 0
+  },
+  "postgres": {
+    "command": "bash scripts/test-payments-postgres.sh",
+    "exit_code": 0,
+    "scenarios": [
+      "TestPostgresPaymentLifecycle/64_concurrent_completions_credit_once",
+      "TestPostgresPaymentLifecycle/32_orders_preserve_wallet_updates",
+      "TestPostgresPaymentLifecycle/expired_lease_cannot_overwrite_refund",
+      "TestPostgresPaymentLifecycle/missing_wallet_rolls_back_payment",
+      "TestPostgresPaymentLifecycle/idempotency_is_user_scoped_and_parameter_bound",
+      "TestPostgresPaymentLifecycle/event_deduplication_and_environment_binding",
+      "TestPostgresPaymentLifecycle/redemption_concurrency"
+    ],
+    "temporary_container_removed": true
+  },
+  "deployment": {
+    "helm_lint": "passed",
+    "enabled_secret_render": "passed",
+    "missing_secret_rejected": true,
+    "yaml_parse": "passed"
+  },
+  "production_build": {
+    "command": "go build -o /tmp/airoute-payment-verification ./cmd/airoute",
+    "exit_code": 0
+  }
+}

@@ -61,8 +61,15 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
       });
       const data = await res.json();
       if (controller.signal.aborted || probeRef.current !== controller) return;
-      if (data.code === 0 && data.data) {
-        const d = data.data;
+      // A probe can complete its HTTP round-trip and still have reached nothing:
+      // the gateway reports `reachable: false` when every candidate path failed at
+      // the transport level (and answers 400 in that case). Success therefore needs
+      // both a healthy envelope and a reachable upstream — otherwise the form
+      // auto-filled protocols from a service it never talked to.
+      const probeData = data && data.data;
+      const unreachable = Boolean(probeData) && probeData.reachable === false;
+      if (res.ok && data.code === 0 && probeData && !unreachable) {
+        const d = probeData;
         setChannelDraft(prev => {
           const shouldUpdateName = !prev.name || prev.name.includes('upstream') || prev.name.includes('cluster') || prev.name.includes('instance') || prev.name.includes('official') || prev.name.includes('direct');
           const shouldUpdateBaseUrl = d.suggested_base_url && (!prev.base_url.includes('/v1-openai') && !prev.base_url.includes('/v1'));
@@ -91,11 +98,23 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
           isAuthWarning ? 'warning' : 'success'
         );
       } else {
+        // No auto-fill on failure: the discovered models/protocols came from a
+        // probe that never established a connection.
+        const failureText = data.error
+          || (probeData && probeData.message)
+          || (unreachable
+            ? (isZh ? '上游服务不可达：所有探测路径均在传输层失败' : 'Upstream unreachable: every probe path failed at the transport level')
+            : (isZh ? '无法连通指定上游服务，请检查网络连通性或服务端口' : 'Cannot connect to upstream endpoint, please check network or port'));
         setProbeAlert({
           type: 'error',
-          text: `❌ ${isZh ? '探测失败: ' : 'Probe failed: '}${data.error || (isZh ? '无法连通指定上游服务，请检查网络连通性或服务端口' : 'Cannot connect to upstream endpoint, please check network or port')}`,
+          text: `❌ ${isZh ? '探测失败: ' : 'Probe failed: '}${failureText}`,
         });
-        showToast(isZh ? '连通测试失败，请检查服务地址' : 'Connection test failed. Please verify endpoint URL', 'error');
+        showToast(
+          unreachable
+            ? (isZh ? '探测未连通上游服务，协议与模型未自动匹配' : 'Probe did not reach the upstream; protocols and models were not auto-filled')
+            : (isZh ? '连通测试失败，请检查服务地址' : 'Connection test failed. Please verify endpoint URL'),
+          'error'
+        );
       }
     } catch (e) {
       if (controller.signal.aborted || probeRef.current !== controller) return;
@@ -245,16 +264,20 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
       name: ch.name || '',
       type: ch.type || 'openai',
       base_url: ch.base_url || '',
-      // The list endpoint returns the upstream credential in cleartext. Keep it out
-      // of the form (and therefore out of the DOM and the console devtools tree):
-      // an unchanged field must not round-trip the secret. `api_key_configured`
-      // tells the form to say "already set — leave blank to keep it"; the update
-      // handler preserves the stored key when the request omits it.
+      // The list endpoint no longer returns the upstream credential at all: the
+      // response carries only `api_key_configured` and a display mask. Keep
+      // `api_key` empty so an unchanged field cannot round-trip a secret; the
+      // update handler preserves the stored key when the request omits it.
       api_key: '',
-      api_key_configured: Boolean(ch.api_key),
-      priority: ch.priority || 1,
-      weight: ch.weight || 10,
-      timeout_seconds: ch.timeout_seconds || 60,
+      api_key_configured: Boolean(ch.api_key_configured),
+      // `??` rather than `||`: a stored 0 is a value, and turning it into 1/10
+      // here would silently disagree with what the gateway persisted.
+      priority: ch.priority ?? 1,
+      weight: ch.weight ?? 10,
+      timeout_seconds: ch.timeout_seconds ?? 60,
+      max_concurrency: ch.max_concurrency ?? 0,
+      queue_limit: ch.queue_limit ?? 0,
+      queue_wait_seconds: ch.queue_wait_seconds ?? 0,
       models_str: (ch.models || []).join(', '),
       mapping_rules: Object.entries(ch.model_mapping || {}).map(([from, to]) => ({ from, to })),
       protocols: ch.protocols || emptyChannel().protocols,
@@ -352,18 +375,6 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
     }
   }, [selectedChannelIds, isZh, showToast, refresh]);
 
-  const openCreateChannel = useCallback(() => {
-    setEditingChannelId(null);
-    setProbeAlert(null);
-    setNewChannel(emptyChannel());
-    setShowChannelModal(true);
-  }, [setNewChannel]);
-
-  const closeChannelModal = useCallback(() => {
-    cancelProbe();
-    setShowChannelModal(false);
-  }, [cancelProbe]);
-
   // Clear the tenant-scoped parts on logout: the selection and the measured
   // latencies belong to the session that measured them.
   const reset = useCallback(() => {
@@ -407,8 +418,6 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
     handleTestChannel,
     handleBatchDeleteChannels,
     handleBatchStatusChannels,
-    openCreateChannel,
-    closeChannelModal,
     reset,
   };
 }

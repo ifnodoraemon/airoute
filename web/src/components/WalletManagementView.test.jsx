@@ -30,6 +30,7 @@ function setup({ user = { username: 'alice', role: 'user', balance: 100 }, ...pr
 describe('WalletManagementView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
     window.history.replaceState(null, '', '/');
   });
 
@@ -95,6 +96,44 @@ describe('WalletManagementView', () => {
   });
 
   describe('recharge amount', () => {
+    it('reuses the payment intent across errors and a remount', async () => {
+      let view = setup();
+      const pay = () => screen.getByRole('button', { name: /立即支付|Pay Now/ });
+      await waitFor(() => expect(pay()).toBeEnabled());
+      fireEvent.click(pay());
+      await waitFor(() => expect(view.showToast).toHaveBeenCalledTimes(1));
+      fireEvent.click(pay());
+      await waitFor(() => expect(view.showToast).toHaveBeenCalledTimes(2));
+      const requests = view.adminFetch.mock.calls.filter(([url]) => url.includes('recharge/stripe'));
+      const key = requests[0][1].headers['Idempotency-Key'];
+      expect(key).toMatch(/^[A-Za-z0-9_-]{8,128}$/);
+      expect(requests[1][1].headers['Idempotency-Key']).toBe(key);
+      view.unmount();
+      view = setup();
+      await waitFor(() => expect(pay()).toBeEnabled());
+      fireEvent.click(pay());
+      await waitFor(() => expect(view.showToast).toHaveBeenCalledTimes(1));
+      const retry = view.adminFetch.mock.calls.find(([url]) => url.includes('recharge/stripe'));
+      expect(retry[1].headers['Idempotency-Key']).toBe(key);
+      fireEvent.change(screen.getByPlaceholderText(/输入金额|Enter amount/), { target: { value: '60' } });
+      fireEvent.click(pay());
+      await waitFor(() => expect(view.showToast).toHaveBeenCalledTimes(2));
+      const changed = view.adminFetch.mock.calls.filter(([url]) => url.includes('recharge/stripe'))[1];
+      expect(changed[1].headers['Idempotency-Key']).not.toBe(key);
+    });
+
+    it('uses the payment minimum supplied by the server', async () => {
+      const adminFetch = vi.fn(async () => jsonResponse({ code: 0, data: { stripe_enabled: true, stripe_min_amount: 30, orders: [] } }));
+      const showToast = vi.fn();
+      setup({ adminFetch, showToast });
+      const pay = screen.getByRole('button', { name: /立即支付|Pay Now/ });
+      await waitFor(() => expect(pay).toBeEnabled());
+      fireEvent.change(screen.getByPlaceholderText(/输入金额|Enter amount/), { target: { value: '10' } });
+      fireEvent.click(pay);
+      expect(showToast).toHaveBeenCalledWith(expect.stringContaining('30'), 'warning');
+      expect(adminFetch.mock.calls.some(([url]) => url.includes('recharge/stripe'))).toBe(false);
+    });
+
     it('sends the selected preset amount', async () => {
       const { adminFetch } = setup();
 
@@ -180,6 +219,16 @@ describe('WalletManagementView', () => {
   });
 
   describe('payment method', () => {
+    it('shows refund and dispute states in the order history', async () => {
+      const orders = ['refunded', 'partially_refunded', 'refund_pending', 'disputed'].map((status) => ({ order_no: status, amount: 50, channel: 'stripe', status }));
+      const adminFetch = vi.fn(async () => jsonResponse({ code: 0, data: { orders } }));
+      setup({ adminFetch });
+      expect(await screen.findByText('已全额退款')).toBeInTheDocument();
+      expect(screen.getByText('已部分退款')).toBeInTheDocument();
+      expect(screen.getByText('退款处理中（额度预留）')).toBeInTheDocument();
+      expect(screen.getByText('支付争议（额度预留）')).toBeInTheDocument();
+      expect(screen.queryByText('处理中')).not.toBeInTheDocument();
+    });
     it('does not offer simulated sandbox channel to an administrator', () => {
       setup({ user: { username: 'root', role: 'admin', balance: 0 } });
 

@@ -66,14 +66,9 @@ func runServer(args []string) {
 		os.Exit(1)
 	}
 
-	if portEnv := os.Getenv("GATEWAY_PORT"); portEnv != "" {
-		if p, err := strconv.Atoi(portEnv); err == nil && p > 0 {
-			cfg.Server.Port = p
-		}
-	}
-	if hostEnv := os.Getenv("GATEWAY_HOST"); hostEnv != "" {
-		cfg.Server.Host = hostEnv
-	}
+	// Apply the env overrides for the values the config file also carries (see
+	// applyServerEnvOverrides for why the timeout/log-level knobs need one).
+	applyServerEnvOverrides(cfg)
 
 	// Initialize Logger
 	telemetry.InitLogger(cfg.Server.LogLevel)
@@ -102,7 +97,6 @@ func runServer(args []string) {
 	// warn/error), which the shipped Compose/Swarm files never set, so the guard
 	// silently did nothing on the deployments it was written for. Local
 	// development can opt out explicitly with GATEWAY_ALLOW_INSECURE_DEFAULTS.
-	isRelease := os.Getenv("GIN_MODE") == "release" || cfg.Server.LogLevel == "warn" || cfg.Server.LogLevel == "error"
 	if issues := productionSecurityIssues(cfg); len(issues) > 0 {
 		for _, issue := range issues {
 			telemetry.ScopedLogger("system").Warn("SECURITY WARNING: "+issue, "remediation", "set GATEWAY_ADMIN_SECRET and GATEWAY_ADMIN_PASSWORD to strong random values")
@@ -113,9 +107,6 @@ func runServer(args []string) {
 			os.Exit(1)
 		}
 		telemetry.ScopedLogger("system").Warn("starting with insecure default credentials because GATEWAY_ALLOW_INSECURE_DEFAULTS is enabled; never use this in production")
-	}
-	if isRelease && os.Getenv("STRIPE_WEBHOOK_SECRET") == "" {
-		telemetry.ScopedLogger("system").Warn("SECURITY WARNING: STRIPE_WEBHOOK_SECRET is unset in production release mode. Stripe payment webhooks will be rejected.")
 	}
 	// Without a shared secret the HMAC signing key is generated randomly per
 	// process: every restart invalidates all issued tokens, and in a multi-replica
@@ -151,38 +142,20 @@ func runServer(args []string) {
 	// Ensure default admin user account exists
 	controlplane.InitDefaultAdmin(repo, cfg)
 
-	// Seed DB from YAML config if DB is currently empty
-	existingChannels, _ := repo.ListChannels()
-	if len(existingChannels) == 0 && len(cfg.Channels) > 0 {
-		telemetry.ScopedLogger("system").Info("seeding database from initial config file", "channels", len(cfg.Channels))
-		for _, ch := range cfg.Channels {
-			_ = repo.CreateChannel(&storage.ChannelRecord{
-				Name:           ch.Name,
-				Type:           ch.Type,
-				BaseURL:        ch.BaseURL,
-				APIKey:         ch.APIKey,
-				Models:         ch.Models,
-				ModelMapping:   ch.ModelMapping,
-				Protocols:      ch.Protocols,
-				Priority:       ch.Priority,
-				Weight:         ch.Weight,
-				TimeoutSeconds: ch.TimeoutSeconds,
-			})
-		}
+	// Seed DB from YAML config if DB is currently empty.
+	//
+	// Both reads used to discard their error, so a transient database failure at
+	// boot was indistinguishable from "no rows": the seeder then inserted every
+	// configured channel and key a second time. Nothing enforces uniqueness on
+	// channels.name or api_keys.key, so that produced duplicate routing entries
+	// (the same upstream receiving the traffic of two channels) and duplicate rows
+	// for one credential. A failed read now means "do not seed": the operator sees a
+	// warning and the periodic synchroniser installs the real configuration.
+	if err := seedChannelsFromConfig(repo, cfg); err != nil {
+		telemetry.ScopedLogger("system").Warn("skipping channel seeding from the config file", "error", err.Error())
 	}
-
-	existingKeys, _ := repo.ListAPIKeys()
-	if len(existingKeys) == 0 && len(cfg.APIKeys) > 0 {
-		for _, k := range cfg.APIKeys {
-			_ = repo.CreateAPIKey(&storage.APIKeyRecord{
-				Key:           k.Key,
-				TenantID:      k.TenantID,
-				AllowedModels: k.AllowedModels,
-				RPM:           k.RPM,
-				TPM:           k.TPM,
-				Budget:        k.Budget,
-			})
-		}
+	if err := seedAPIKeysFromConfig(repo, cfg); err != nil {
+		telemetry.ScopedLogger("system").Warn("skipping api key seeding from the config file", "error", err.Error())
 	}
 
 	// Initialize Data Plane Dispatcher
@@ -211,16 +184,34 @@ func runServer(args []string) {
 	// Initialize Real-Time Model Pricing & Prompt-Cache Billing Engine
 	billing.InitGlobalEngine(repo)
 
-	// Enable synchronous charge settlement: money moves at request completion and
-	// no longer waits for the audit log to be persisted.
+	// Enable charge settlement: money moves at request completion and no longer
+	// waits for the audit log to be persisted.
 	storage.InitBillingSettlement(repo)
+
+	// Group-commit settlement (P0): concurrent charges are merged into shared
+	// database transactions with a short request-side wait. Measured on the real
+	// settlement path, batching 100 charges per transaction raises throughput
+	// ~6x and removes the 1.5s settlement timeout from the response tail; a
+	// charge whose wait expires is still settled by the audit pipeline.
+	settlementBatcher := storage.InitSettlementBatcher(repo)
+	defer settlementBatcher.Stop()
+	// Release the admission pre-authorisation at the amount actually charged.
+	api.SetSettledCostReporter(middleware.SetSettledCost)
+
+	// SQLite runs on a single writer connection; a WAL checkpoint landing on the
+	// request path stalls every settlement for milliseconds. Disable the
+	// automatic checkpoint and run it from a background ticker instead.
+	if stopCheckpointer := db.StartSQLiteCheckpointer(0); stopCheckpointer != nil {
+		defer stopCheckpointer()
+	}
 
 	// Bill by the model the upstream actually served (channel model mapping),
 	// not by the client-facing alias.
 	api.SetServedModelResolver(dispatcher.ResolveServedModel)
 
-	// Verify the timeout numbers agree with each other and with the edge proxy.
-	reportTimeoutChain(repo, dispatcher)
+	// Verify the timeout numbers agree with each other, with the Go server's write
+	// deadline and with the edge proxy.
+	reportTimeoutChain(repo, dispatcher, serverWriteTimeout(cfg))
 
 	// Token-estimate calibration describes the upstream tokenizers, so it must
 	// survive restarts and be shared by both replicas.
@@ -261,6 +252,13 @@ func runServer(args []string) {
 	billingReconciler := storage.InitBillingReconcile(repo)
 	defer billingReconciler.Stop()
 
+	// Retire settlement-ledger rows whose audit evidence is already gone, so the
+	// ledger does not grow forever. Off by default (a financial ledger is evidence);
+	// GATEWAY_BILLING_LEDGER_RETENTION_DAYS opts in, and the reconciler baseline is
+	// adjusted in the same pass so auditLag does not drift.
+	ledgerRetention := storage.InitBillingLedgerRetention(repo)
+	defer ledgerRetention.Stop()
+
 	// Initialize Control Plane Synchronizer & load state into Data Plane memory.
 	//
 	// The data plane starts fail-closed: until the first snapshot is installed the
@@ -280,41 +278,14 @@ func runServer(args []string) {
 	// price rule: they are billed at the hardcoded fallback rate, which is a guess
 	// in both directions. Runs in the background so a large audit table cannot
 	// delay readiness.
+	//
+	// The two checks are independent on purpose. They were one function whose
+	// `len(unpriced)==0` return also skipped the served-model check, so "the alias
+	// is priced but the upstream model is not" - the case by-served-model billing
+	// exists for - was never reported.
 	go func() {
-		unpriced, err := billing.UnpricedModelsInUse(repo, billing.GlobalEngine, 7*24*time.Hour)
-		if err != nil {
-			telemetry.ScopedLogger("billing").Warn("pricing coverage check failed", "error", err.Error())
-			return
-		}
-		if len(unpriced) == 0 {
-			return
-		}
-		shown := unpriced
-		if len(shown) > 20 {
-			shown = shown[:20]
-		}
-		telemetry.ScopedLogger("billing").Warn("models served without a configured price; the fallback rate card is in use",
-			"count", len(unpriced),
-			"models", strings.Join(shown, ","))
-
-		// Billing aligns with the provider invoice only if the model the provider
-		// actually served is priced. Channel model mappings can turn a priced alias
-		// into an unpriced upstream model.
-		servedUnpriced, servedErr := billing.UnpricedServedModelsInUse(repo, billing.GlobalEngine, 7*24*time.Hour, dispatcher.ResolveServedModel)
-		if servedErr != nil {
-			telemetry.ScopedLogger("billing").Warn("served-model pricing check failed", "error", servedErr.Error())
-			return
-		}
-		if len(servedUnpriced) == 0 {
-			return
-		}
-		servedShown := servedUnpriced
-		if len(servedShown) > 10 {
-			servedShown = servedShown[:10]
-		}
-		telemetry.ScopedLogger("billing").Warn("upstream models served without their own price; charges fall back to the alias rate",
-			"count", len(servedUnpriced),
-			"served_models", strings.Join(servedShown, "; "))
+		warnUnpricedModels(repo, pricingAuditWindow)
+		warnUnpricedServedModels(repo, dispatcher, pricingAuditWindow)
 	}()
 
 	// Subscribe to cluster-wide reload broadcasts via Redis Pub/Sub
@@ -355,9 +326,22 @@ func runServer(args []string) {
 	// Initialize Admin Handler
 	adminHandler := controlplane.NewAdminHandler(repo, synchronizer, dispatcher)
 	adminHandler.SetArtifactStorage(artifactStorage)
+	if err := adminHandler.ValidatePaymentConfiguration(); err != nil {
+		telemetry.ScopedLogger("system").Error("invalid payment configuration; refusing to start", "error", err.Error())
+		os.Exit(1)
+	}
 
 	// Setup HTTP Engine (Data Plane + Control Plane Admin API + Embedded Web UI)
 	engine := api.SetupRouter(dispatcher, adminHandler)
+	jobsCtx, stopJobs := context.WithCancel(context.Background())
+	defer stopJobs()
+	api.StartNativeJobReconciler(jobsCtx, dispatcher)
+	paymentsDone := make(chan struct{})
+	go func() {
+		defer close(paymentsDone)
+		adminHandler.RunPaymentReconciler(jobsCtx)
+	}()
+	defer func() { stopJobs(); <-paymentsDone }()
 
 	// Only configured proxy hops may declare the client address. Gin trusts every
 	// peer by default, so an unset GATEWAY_TRUSTED_PROXIES would let any caller
@@ -382,7 +366,7 @@ func runServer(args []string) {
 		Handler:           engine,
 		ReadTimeout:       time.Duration(cfg.Server.ReadTimeoutSec) * time.Second,
 		ReadHeaderTimeout: 15 * time.Second,
-		WriteTimeout:      time.Duration(cfg.Server.WriteTimeoutSec) * time.Second,
+		WriteTimeout:      serverWriteTimeout(cfg),
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    1 << 20, // 1 MiB of headers is far beyond any legitimate request
 	}
@@ -490,4 +474,88 @@ func printStartupBanner(addr, publicURL string) {
 		fmt.Printf("  • 外部公共端点: %s%s%s\n", colorCyan, publicURL, colorReset)
 	}
 	fmt.Println()
+}
+
+// seedChannelsFromConfig inserts the channels from the YAML config file when the
+// database has none yet.
+//
+// It seeds only a genuinely empty database (the historical behaviour: an operator
+// who deleted a channel must not have it re-created on the next restart) and it
+// never seeds after a failed read, because that turns a database hiccup into
+// duplicated channels. Duplicate names inside the config file itself are collapsed
+// to the first entry.
+func seedChannelsFromConfig(repo *storage.Repository, cfg *config.Config) error {
+	if repo == nil || cfg == nil || len(cfg.Channels) == 0 {
+		return nil
+	}
+	existing, err := repo.ListChannels()
+	if err != nil {
+		return fmt.Errorf("cannot list channels: %w", err)
+	}
+	if len(existing) > 0 {
+		return nil
+	}
+	telemetry.ScopedLogger("system").Info("seeding database from initial config file", "channels", len(cfg.Channels))
+	seen := make(map[string]struct{}, len(cfg.Channels))
+	for _, ch := range cfg.Channels {
+		name := strings.ToLower(strings.TrimSpace(ch.Name))
+		if _, duplicate := seen[name]; duplicate {
+			telemetry.ScopedLogger("system").Warn("ignoring duplicate channel name in the config file", "channel", ch.Name)
+			continue
+		}
+		seen[name] = struct{}{}
+		if err := repo.CreateChannel(&storage.ChannelRecord{
+			Name:             ch.Name,
+			Type:             ch.Type,
+			BaseURL:          ch.BaseURL,
+			APIKey:           ch.APIKey,
+			Models:           ch.Models,
+			ModelMapping:     ch.ModelMapping,
+			Protocols:        ch.Protocols,
+			Priority:         ch.Priority,
+			Weight:           ch.Weight,
+			TimeoutSeconds:   ch.TimeoutSeconds,
+			MaxConcurrency:   ch.MaxConcurrency,
+			QueueLimit:       ch.QueueLimit,
+			QueueWaitSeconds: ch.QueueWaitSeconds,
+		}); err != nil {
+			return fmt.Errorf("cannot create channel %q: %w", ch.Name, err)
+		}
+	}
+	return nil
+}
+
+// seedAPIKeysFromConfig is seedChannelsFromConfig for the YAML api_keys list: it
+// seeds only an empty database and never after a failed read.
+func seedAPIKeysFromConfig(repo *storage.Repository, cfg *config.Config) error {
+	if repo == nil || cfg == nil || len(cfg.APIKeys) == 0 {
+		return nil
+	}
+	existing, err := repo.ListAPIKeys()
+	if err != nil {
+		return fmt.Errorf("cannot list api keys: %w", err)
+	}
+	if len(existing) > 0 {
+		return nil
+	}
+	telemetry.ScopedLogger("system").Info("seeding database api keys from initial config file", "keys", len(cfg.APIKeys))
+	seen := make(map[string]struct{}, len(cfg.APIKeys))
+	for _, k := range cfg.APIKeys {
+		if _, duplicate := seen[k.Key]; duplicate {
+			telemetry.ScopedLogger("system").Warn("ignoring duplicate api key in the config file")
+			continue
+		}
+		seen[k.Key] = struct{}{}
+		if err := repo.CreateAPIKey(&storage.APIKeyRecord{
+			Key:           k.Key,
+			TenantID:      k.TenantID,
+			AllowedModels: k.AllowedModels,
+			RPM:           k.RPM,
+			TPM:           k.TPM,
+			Budget:        k.Budget,
+		}); err != nil {
+			return fmt.Errorf("cannot create api key: %w", err)
+		}
+	}
+	return nil
 }

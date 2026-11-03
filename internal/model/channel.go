@@ -9,6 +9,7 @@ const (
 	ProviderOpenAI    ProviderType = "openai"
 	ProviderAnthropic ProviderType = "anthropic"
 	ProviderGemini    ProviderType = "gemini"
+	ProviderVertex    ProviderType = "vertex"
 	ProviderSub2API   ProviderType = "sub2api"
 	ProviderGPUStack  ProviderType = "gpustack"
 	ProviderCustom    ProviderType = "custom"
@@ -18,27 +19,37 @@ const (
 	ProviderOllama    ProviderType = "ollama"
 )
 
+func IsGeminiProvider(kind ProviderType) bool {
+	return kind == ProviderGemini || kind == ProviderVertex
+}
+
 // ChannelConfig defines an upstream endpoint configuration.
 type ChannelConfig struct {
 	// RouteRules is an immutable runtime snapshot loaded separately from channels.
-	RouteRules     map[string]ModelRouteRule `yaml:"-" json:"-"`
-	ID             int64                     `yaml:"id,omitempty" json:"id,omitempty"`
-	Name           string                    `yaml:"name" json:"name"`
-	Type           ProviderType              `yaml:"type" json:"type"`
-	BaseURL        string                    `yaml:"base_url" json:"base_url"`
-	APIKey         string                    `yaml:"api_key" json:"api_key"`
-	Models         []string                  `yaml:"models" json:"models"`                                   // supported models in this channel
-	ModelMapping   map[string]string         `yaml:"model_mapping,omitempty" json:"model_mapping,omitempty"` // incoming model -> actual upstream model
-	Protocols      []string                  `yaml:"protocols,omitempty" json:"protocols,omitempty"`         // supported protocols: openai_chat, openai_text, anthropic_messages
-	Priority       int                       `yaml:"priority" json:"priority"`                               // lower number means higher priority (e.g. 1 is primary, 2 is fallback)
-	Weight         int                       `yaml:"weight" json:"weight"`                                   // weight for load balancing among same priority
-	TimeoutSeconds int                       `yaml:"timeout_seconds" json:"timeout_seconds"`
-	Status         string                    `yaml:"status,omitempty" json:"status,omitempty"`
+	RouteRules       map[string]ModelRouteRule `yaml:"-" json:"-"`
+	ID               int64                     `yaml:"id,omitempty" json:"id,omitempty"`
+	Name             string                    `yaml:"name" json:"name"`
+	Type             ProviderType              `yaml:"type" json:"type"`
+	BaseURL          string                    `yaml:"base_url" json:"base_url"`
+	APIKey           string                    `yaml:"api_key" json:"api_key"`
+	Models           []string                  `yaml:"models" json:"models"`                                   // supported models in this channel
+	ModelMapping     map[string]string         `yaml:"model_mapping,omitempty" json:"model_mapping,omitempty"` // incoming model -> actual upstream model
+	Protocols        []string                  `yaml:"protocols,omitempty" json:"protocols,omitempty"`         // supported protocols: openai_chat, responses, anthropic_messages
+	Priority         int                       `yaml:"priority" json:"priority"`                               // lower number means higher priority (e.g. 1 is primary, 2 is fallback)
+	Weight           int                       `yaml:"weight" json:"weight"`                                   // weight for load balancing among same priority
+	TimeoutSeconds   int                       `yaml:"timeout_seconds" json:"timeout_seconds"`
+	MaxConcurrency   int                       `yaml:"max_concurrency,omitempty" json:"max_concurrency"`
+	QueueLimit       int                       `yaml:"queue_limit,omitempty" json:"queue_limit"`
+	QueueWaitSeconds int                       `yaml:"queue_wait_seconds,omitempty" json:"queue_wait_seconds"`
+	Status           string                    `yaml:"status,omitempty" json:"status,omitempty"`
 }
 
 // SupportsProtocol checks whether this channel supports the requested inbound/outbound protocol.
 // If Protocols is empty, all protocols are supported by default.
 func (c *ChannelConfig) SupportsProtocol(proto string) bool {
+	if IsRetiredProtocol(proto) {
+		return false
+	}
 	if len(c.Protocols) == 0 {
 		return true
 	}
@@ -54,9 +65,6 @@ func (c *ChannelConfig) SupportsProtocol(proto string) bool {
 		}
 		// Upstream chat providers can seamlessly adapt to openai_response
 		if (p == "chat" || p == "openai_chat") && (proto == "response" || proto == "responses" || proto == "openai_response" || proto == "openai_responses") {
-			return true
-		}
-		if (p == "completion" || p == "openai_text") && (proto == "completion" || proto == "openai_text") {
 			return true
 		}
 		if (p == "messages" || p == "anthropic_messages") && (proto == "messages" || proto == "anthropic_messages") {
@@ -87,45 +95,17 @@ func (c *ChannelConfig) SupportsProtocol(proto string) bool {
 	return false
 }
 
-// OnlySupportsProtocol checks if the channel only supports a single protocol (accounting for standard aliases).
-func (c *ChannelConfig) OnlySupportsProtocol(proto string) bool {
-	if len(c.Protocols) == 0 {
-		return false
-	}
-	for _, p := range c.Protocols {
-		match := false
-		if p == proto {
-			match = true
-		} else if (p == "openai_text" || p == "completion") && (proto == "openai_text" || proto == "completion") {
-			match = true
-		} else if (p == "openai_chat" || p == "chat") && (proto == "openai_chat" || proto == "chat") {
-			match = true
+// SupportsModel checks if this channel can service the requested model (supporting cascading models, wildcards, and prefix stripping).
+func (c *ChannelConfig) SupportsModel(requestedModel string) bool {
+	if len(c.Protocols) > 0 {
+		active := false
+		for _, proto := range c.Protocols {
+			active = active || !IsRetiredProtocol(proto)
 		}
-		if !match {
+		if !active {
 			return false
 		}
 	}
-	return true
-}
-
-// HasExplicitProtocol checks if the channel explicitly lists the given protocol in its Protocols slice.
-func (c *ChannelConfig) HasExplicitProtocol(proto string) bool {
-	for _, p := range c.Protocols {
-		if p == "*" || p == proto {
-			return true
-		}
-		if (p == "messages" || p == "anthropic_messages") && (proto == "messages" || proto == "anthropic_messages") {
-			return true
-		}
-		if (p == "chat" || p == "openai_chat") && (proto == "chat" || proto == "openai_chat") {
-			return true
-		}
-	}
-	return false
-}
-
-// SupportsModel checks if this channel can service the requested model (supporting cascading models, wildcards, and prefix stripping).
-func (c *ChannelConfig) SupportsModel(requestedModel string) bool {
 	if _, allowed, overridden := c.routeProvider(requestedModel); overridden {
 		return allowed
 	}
@@ -239,6 +219,11 @@ func (c *ChannelConfig) GetUpstreamModel(requestedModel string) string {
 
 // APIKeyConfig defines an API key configured on the gateway.
 type APIKeyConfig struct {
+	ID int64 `yaml:"id,omitempty" json:"id,omitempty"`
+	// PublicID is the key's public identifier (ak_…). It names the key in logs,
+	// audit rows and support tickets; it never authenticates a call and carries no
+	// material from the credential.
+	PublicID         string   `yaml:"public_id,omitempty" json:"public_id,omitempty"`
 	Key              string   `yaml:"key" json:"key"` // e.g. "sk-airoute-8f92a1c4b7e3"
 	TenantID         string   `yaml:"tenant_id" json:"tenant_id"`
 	AllowedModels    []string `yaml:"allowed_models" json:"allowed_models"` // empty means all allowed

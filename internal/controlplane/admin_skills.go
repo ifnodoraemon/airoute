@@ -1,20 +1,11 @@
 package controlplane
 
 import (
-	"archive/zip"
-	"bytes"
-	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"strconv"
-	"strings"
-	"time"
-
 	"github.com/gin-gonic/gin"
-	"github.com/ifnodoraemon/airoute/internal/config"
 	"github.com/ifnodoraemon/airoute/internal/storage"
+	"net/http"
+	"strings"
 )
 
 // ListSkills returns all Agent Skills with their current enabled states.
@@ -40,6 +31,11 @@ func (h *AdminHandler) ToggleSkill(c *gin.Context) {
 		return
 	}
 
+	// The enabled flag is part of references/metadata.json, so a toggle changes the
+	// bundle content hash and therefore its object key. Capture the previous row so
+	// the unreachable artifact can be dropped.
+	previous, _ := h.repo.GetSkill(id)
+
 	var req ToggleSkillRequest
 	if err := c.ShouldBindJSON(&req); err == nil && req.Enabled != nil {
 		if err := h.repo.SetSkillEnabled(id, *req.Enabled); err != nil {
@@ -51,6 +47,12 @@ func (h *AdminHandler) ToggleSkill(c *gin.Context) {
 		if err := h.repo.SetSkillEnabled(id, !current); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "切换技能状态失败: " + err.Error()})
 			return
+		}
+	}
+
+	if previous != nil {
+		if previousKey, keyErr := skillArtifactKey(previous); keyErr == nil {
+			_ = h.getStorage().Delete(c.Request.Context(), previousKey)
 		}
 	}
 
@@ -83,8 +85,13 @@ func (h *AdminHandler) SaveSkill(c *gin.Context) {
 		return
 	}
 	if req.ID == "" {
-		req.ID = "skill-" + strconv.FormatInt(time.Now().Unix(), 10)
+		req.ID = "skill-" + storage.NewBillingID()
 	}
+	if err := storage.ValidateEcosystemID(req.ID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": err.Error()})
+		return
+	}
+
 	if req.Category == "" {
 		req.Category = "custom"
 	}
@@ -111,11 +118,22 @@ func (h *AdminHandler) SaveSkill(c *gin.Context) {
 		Enabled:     req.Enabled,
 	}
 
+	// The bundle is content-addressed, so a content edit produces a new object key
+	// even when the version string is unchanged. Drop the previous bundle and the
+	// legacy id-only key so the storage backend does not accumulate artifacts that
+	// no request can ever reach again.
+	previous, _ := h.repo.GetSkill(record.ID)
 	if err := h.repo.SaveSkill(record); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "保存技能失败: " + err.Error()})
 		return
 	}
-	_ = h.getStorage().Delete(c.Request.Context(), storage.FormatSkillKey(record.ID))
+	stor := h.getStorage()
+	_ = stor.Delete(c.Request.Context(), storage.FormatSkillKey(record.ID))
+	if previous != nil {
+		if previousKey, keyErr := skillArtifactKey(previous); keyErr == nil {
+			_ = stor.Delete(c.Request.Context(), previousKey)
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "技能已保存", "data": record})
 }
 
@@ -126,98 +144,17 @@ func (h *AdminHandler) DeleteSkill(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "技能 ID 不能为空"})
 		return
 	}
+	previous, _ := h.repo.GetSkill(id)
 	if err := h.repo.DeleteSkill(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "删除技能失败: " + err.Error()})
 		return
 	}
-	_ = h.getStorage().Delete(c.Request.Context(), storage.FormatSkillKey(id))
-	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "技能已删除"})
-}
-
-// DownloadSkillZip streams a standard .zip archive containing the skill bundle directory:
-// <skill-id>/
-// ├── SKILL.md
-// ├── scripts/
-// │   └── run.sh
-// └── references/
-//
-//	└── metadata.json
-//
-// Supports caching to Local/RustFS/S3 and presigned URL redirection.
-func (h *AdminHandler) DownloadSkillZip(c *gin.Context) {
-	id := c.Param("id")
-	skill, err := h.repo.GetSkill(id)
-	if err != nil || skill == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "未找到指定的技能"})
-		return
-	}
-
 	stor := h.getStorage()
-	key := storage.FormatSkillKey(skill.ID)
-
-	// 1. Ensure artifact is cached/stored in storage backend
-	exists, _ := stor.Exists(c.Request.Context(), key)
-	if !exists {
-		// Pack dynamically in memory
-		var buf bytes.Buffer
-		zw := zip.NewWriter(&buf)
-
-		// Root SKILL.md
-		if wSkill, err := zw.Create(fmt.Sprintf("%s/SKILL.md", skill.ID)); err == nil {
-			_, _ = wSkill.Write([]byte(skill.Manifest))
-		}
-
-		// scripts/run.sh helper
-		if wScript, err := zw.Create(fmt.Sprintf("%s/scripts/run.sh", skill.ID)); err == nil {
-			runScript := fmt.Sprintf("#!/usr/bin/env bash\n# Executable helper script for %s\n# agentskills.io open standard\necho \"[Skill %s] Executing task with tools: %s\"\n", skill.ID, skill.ID, strings.Join(skill.Tools, ", "))
-			_, _ = wScript.Write([]byte(runScript))
-		}
-
-		// references/metadata.json
-		if wRef, err := zw.Create(fmt.Sprintf("%s/references/metadata.json", skill.ID)); err == nil {
-			metaBytes, _ := json.MarshalIndent(skill, "", "  ")
-			_, _ = wRef.Write(metaBytes)
-		}
-
-		_ = zw.Close()
-		zipBytes := buf.Bytes()
-
-		putCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		_ = stor.Put(putCtx, key, bytes.NewReader(zipBytes), int64(len(zipBytes)), "application/zip")
-		cancel()
-	}
-
-	// 2. If an explicit public CDN / external domain prefix is configured, redirect to it.
-	// Otherwise, keep the single public gateway entrypoint to avoid leaking internal hostnames (e.g. storage:9000).
-	cfg := config.GetGlobalConfig().GetStorageConfig()
-	if cfg.Driver == "s3" && cfg.S3.PublicURLPrefix != "" && !strings.Contains(cfg.S3.PublicURLPrefix, "storage:") {
-		if presignedURL, err := stor.GetDownloadURL(c.Request.Context(), key, 30*time.Minute); err == nil && presignedURL != "" {
-			c.Redirect(http.StatusFound, presignedURL)
-			return
+	_ = stor.Delete(c.Request.Context(), storage.FormatSkillKey(id))
+	if previous != nil {
+		if previousKey, keyErr := skillArtifactKey(previous); keyErr == nil {
+			_ = stor.Delete(c.Request.Context(), previousKey)
 		}
 	}
-
-	// 3. Authoritative Gateway Single-Entrypoint Stream with HTTP Caching & Zero-Leakage
-	etag := fmt.Sprintf("\"skill-%s-%s\"", skill.ID, skill.Version)
-	if match := c.GetHeader("If-None-Match"); match != "" && match == etag {
-		c.Status(http.StatusNotModified)
-		return
-	}
-
-	c.Header("Content-Type", "application/zip")
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.zip\"", skill.ID))
-	c.Header("Cache-Control", "public, max-age=86400, stale-while-revalidate=3600")
-	c.Header("ETag", etag)
-
-	rc, size, err := stor.Get(c.Request.Context(), key)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取工件流失败: " + err.Error()})
-		return
-	}
-	defer rc.Close()
-
-	if size > 0 {
-		c.Header("Content-Length", strconv.FormatInt(size, 10))
-	}
-	_, _ = io.Copy(c.Writer, rc)
+	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "技能已删除"})
 }

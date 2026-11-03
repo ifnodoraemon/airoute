@@ -16,17 +16,9 @@ export function useConsoleChrome({ initialTab = 'dashboard' } = {}) {
   // modality instead of the default.
   const [playModality, setPlayModality] = useState('chat');
 
-  const openMobileMenu = useCallback(() => setMobileMenuOpen(true), []);
   const closeMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
   const collapseSidebar = useCallback(() => setSidebarCollapsed(true), []);
   const expandSidebar = useCallback(() => setSidebarCollapsed(false), []);
-
-  // Selecting a tab closes the mobile menu: it is an overlay, and leaving it open
-  // hides the view the user just asked for.
-  const selectTab = useCallback((tab) => {
-    setCurrentTab(tab);
-    setMobileMenuOpen(false);
-  }, []);
 
   return {
     sidebarCollapsed,
@@ -37,10 +29,8 @@ export function useConsoleChrome({ initialTab = 'dashboard' } = {}) {
     setCurrentTab,
     playModality,
     setPlayModality,
-    openMobileMenu,
     closeMobileMenu,
     collapseSidebar,
     expandSidebar,
-    selectTab,
   };
 }

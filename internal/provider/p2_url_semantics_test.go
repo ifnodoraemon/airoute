@@ -30,18 +30,6 @@ func TestP2URLBuildersShareAPIRootSemantics(t *testing.T) {
 		}
 	}
 
-	completionCases := []struct{ base, want string }{
-		{"https://h.invalid", "https://h.invalid/v1/completions"},
-		{"https://h.invalid/v1", "https://h.invalid/v1/completions"},
-		{"https://h.invalid/custom/api", "https://h.invalid/custom/api/completions"},
-		{"https://h.invalid/v1/chat/completions", "https://h.invalid/v1/completions"},
-	}
-	for _, tc := range completionCases {
-		if got := buildCompletionURL(tc.base); got != tc.want {
-			t.Errorf("buildCompletionURL(%q) = %q, want %q", tc.base, got, tc.want)
-		}
-	}
-
 	anthropicCases := []struct{ base, want string }{
 		{"https://api.anthropic.com", "https://api.anthropic.com/v1/messages"},
 		{"https://api.anthropic.com/", "https://api.anthropic.com/v1/messages"},

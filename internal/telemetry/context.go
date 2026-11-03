@@ -8,14 +8,20 @@ import (
 	"time"
 )
 
-// ContextKeyTraceID is the context key under which the HTTP trace middleware
-// stores the request trace id.
-//
-// It is a plain string constant on purpose: low-level packages (router, billing,
-// dispatcher) need to attach the trace id to their log lines, and they must be
-// able to do so without importing the middleware package (which would invert the
-// dependency and risk an import cycle).
+// ContextKeyTraceID is the gin.Context key under which the HTTP trace middleware
+// stores the request trace id. gin only accepts string keys, so the value is a
+// plain constant; readers of a Go context.Context must use WithTraceID instead.
 const ContextKeyTraceID = "trace_id"
+
+// traceIDContextKey is the context.Context key for the trace id. It is a private
+// struct type rather than a string so that a value stored by another package
+// under a "trace_id" string key can never be mistaken for the request trace id.
+type traceIDContextKey struct{}
+
+// WithTraceID returns a child context carrying traceID for trace-aware log lines.
+func WithTraceID(ctx context.Context, traceID string) context.Context {
+	return context.WithValue(ctx, traceIDContextKey{}, traceID)
+}
 
 // TraceIDFromContext returns the request trace id carried by ctx, or "" when the
 // context has none (background jobs, startup paths). Callers pass it as a
@@ -24,12 +30,8 @@ func TraceIDFromContext(ctx context.Context) string {
 	if ctx == nil {
 		return ""
 	}
-	if value := ctx.Value(ContextKeyTraceID); value != nil {
-		if traceID, ok := value.(string); ok {
-			return traceID
-		}
-	}
-	return ""
+	traceID, _ := ctx.Value(traceIDContextKey{}).(string)
+	return traceID
 }
 
 // warnGate remembers, per throttling key, when a warning was last emitted.

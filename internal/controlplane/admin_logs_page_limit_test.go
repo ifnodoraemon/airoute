@@ -1,6 +1,7 @@
 package controlplane
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -28,7 +29,7 @@ func TestListLogsEchoesTheEffectivePageSize(t *testing.T) {
 	for i := 0; i < storage.MaxUsageLogPageSize+10; i++ {
 		rows = append(rows, &storage.UsageLogRecord{APIKey: "page-key", Model: "page-model", StatusCode: 200})
 	}
-	if err := repo.BatchRecordUsageLogs(rows); err != nil {
+	if err := repo.BatchRecordUsageLogsContext(context.Background(), rows); err != nil {
 		t.Fatal(err)
 	}
 
@@ -71,7 +72,7 @@ func TestListLogsCanSkipAggregates(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	repo := storage.NewRepository(db)
-	if err := repo.BatchRecordUsageLogs([]*storage.UsageLogRecord{
+	if err := repo.BatchRecordUsageLogsContext(context.Background(), []*storage.UsageLogRecord{
 		{APIKey: "agg-key", Model: "agg-model", Channel: "agg-channel", StatusCode: 200},
 		{APIKey: "agg-key", Model: "agg-model", Channel: "agg-channel", StatusCode: 200},
 	}); err != nil {

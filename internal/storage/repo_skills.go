@@ -23,7 +23,9 @@ type SkillRecord struct {
 
 // ListSkills returns all registered Agent Skills.
 func (r *Repository) ListSkills() ([]*SkillRecord, error) {
-	_ = r.SeedDefaultSkills()
+	if err := r.SeedDefaultSkills(); err != nil {
+		return nil, err
+	}
 
 	rows, err := r.db.Query(`SELECT id, name, description, category, tools, loading_mode, manifest, author, version, enabled, updated_at FROM system_skills ORDER BY id ASC`)
 	if err != nil {
@@ -53,7 +55,9 @@ func (r *Repository) ListSkills() ([]*SkillRecord, error) {
 
 // GetSkill retrieves a specific skill by ID.
 func (r *Repository) GetSkill(id string) (*SkillRecord, error) {
-	_ = r.SeedDefaultSkills()
+	if err := r.SeedDefaultSkills(); err != nil {
+		return nil, err
+	}
 
 	var s SkillRecord
 	var toolsStr string
@@ -72,7 +76,9 @@ func (r *Repository) GetSkill(id string) (*SkillRecord, error) {
 
 // SetSkillEnabled toggles a skill's enabled state on-demand.
 func (r *Repository) SetSkillEnabled(id string, enabled bool) error {
-	_ = r.SeedDefaultSkills()
+	if err := r.SeedDefaultSkills(); err != nil {
+		return err
+	}
 	enabledInt := 0
 	if enabled {
 		enabledInt = 1
@@ -83,6 +89,9 @@ func (r *Repository) SetSkillEnabled(id string, enabled bool) error {
 
 // SaveSkill creates or updates an Agent Skill.
 func (r *Repository) SaveSkill(s *SkillRecord) error {
+	if err := ValidateEcosystemID(s.ID); err != nil {
+		return err
+	}
 	toolsJSON, _ := json.Marshal(s.Tools)
 	enabledInt := 0
 	if s.Enabled {
@@ -113,7 +122,15 @@ func (r *Repository) SaveSkill(s *SkillRecord) error {
 			enabled = excluded.enabled,
 			updated_at = CURRENT_TIMESTAMP
 	`, s.ID, s.Name, s.Description, s.Category, string(toolsJSON), s.LoadingMode, s.Manifest, s.Author, s.Version, enabledInt)
-	return err
+	if err != nil {
+		return err
+	}
+	// The statement stamps updated_at; echo it back so the save response does not
+	// report an empty timestamp.
+	if s.UpdatedAt == "" {
+		s.UpdatedAt = time.Now().UTC().Format("2006-01-02 15:04:05")
+	}
+	return nil
 }
 
 // DeleteSkill deletes an Agent Skill.

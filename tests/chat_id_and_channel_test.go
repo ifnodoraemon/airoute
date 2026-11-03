@@ -72,7 +72,7 @@ func TestChatIDAndChannelAudit(t *testing.T) {
 		assert.Empty(t, resp.Header().Get("X-Airoute-Chat-ID"))
 
 		// Async logger is not enabled in tests; verify via direct record readback
-		require.NoError(t, repo.RecordUsageLog(&storage.UsageLogRecord{
+		require.NoError(t, repo.RecordUsageLogContext(context.Background(), &storage.UsageLogRecord{
 			TraceID:     "tr-audit-1",
 			ChatID:      upstreamChatID,
 			Channel:     "Mock Primary",
@@ -94,7 +94,7 @@ func TestChatIDAndChannelAudit(t *testing.T) {
 		assert.Len(t, byPrefix, 1)
 
 		// ChatID filter must NOT match unrelated records' trace_id
-		require.NoError(t, repo.RecordUsageLog(&storage.UsageLogRecord{
+		require.NoError(t, repo.RecordUsageLogContext(context.Background(), &storage.UsageLogRecord{
 			TraceID:     "tr-other",
 			ChatID:      "chatcmpl-different-99",
 			Model:       "test-model",
@@ -360,7 +360,7 @@ func TestUsageLogTimeFilterSQLite(t *testing.T) {
 	defer db.Close()
 	repo := storage.NewRepository(db)
 
-	require.NoError(t, repo.RecordUsageLog(&storage.UsageLogRecord{
+	require.NoError(t, repo.RecordUsageLogContext(context.Background(), &storage.UsageLogRecord{
 		TraceID: "tr-time-1", Model: "time-model", StatusCode: http.StatusOK,
 	}))
 
@@ -426,7 +426,7 @@ func TestUsageLogStringClamp(t *testing.T) {
 	longModel := strings.Repeat("m", 200)
 	expected := strings.Repeat("m", 128)
 
-	require.NoError(t, repo.RecordUsageLog(&storage.UsageLogRecord{
+	require.NoError(t, repo.RecordUsageLogContext(context.Background(), &storage.UsageLogRecord{
 		TraceID: "tr-clamp-1", Model: longModel, StatusCode: http.StatusOK,
 	}))
 	logs, err := repo.ListUsageLogsWithFilter(storage.LogFilter{TraceID: "tr-clamp-1"})
@@ -434,7 +434,7 @@ func TestUsageLogStringClamp(t *testing.T) {
 	require.Len(t, logs, 1)
 	assert.Equal(t, expected, logs[0].Model)
 
-	require.NoError(t, repo.BatchRecordUsageLogs([]*storage.UsageLogRecord{
+	require.NoError(t, repo.BatchRecordUsageLogsContext(context.Background(), []*storage.UsageLogRecord{
 		{TraceID: "tr-clamp-2", Model: longModel, StatusCode: http.StatusOK},
 		{TraceID: "tr-clamp-3", Model: longModel, StatusCode: http.StatusOK},
 	}))

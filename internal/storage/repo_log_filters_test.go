@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -26,11 +27,11 @@ func TestLogFiltersFacetsAndOverviewAgree(t *testing.T) {
 		if i == 2 {
 			record.StatusCode = 429
 		}
-		if err := repo.RecordUsageLog(record); err != nil {
+		if err := repo.RecordUsageLogContext(context.Background(), record); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := repo.RecordUsageLog(&UsageLogRecord{APIKey: "other-key", Model: "private-model", Channel: "private-channel", StatusCode: 200}); err != nil {
+	if err := repo.RecordUsageLogContext(context.Background(), &UsageLogRecord{APIKey: "other-key", Model: "private-model", Channel: "private-channel", StatusCode: 200}); err != nil {
 		t.Fatal(err)
 	}
 	page, total, err := repo.ListUsageLogsWithFilterAndCount(LogFilter{Limit: 50, Status: "error"})
@@ -77,7 +78,7 @@ func TestUsageLogPageLimitIsCapped(t *testing.T) {
 	for i := 0; i < MaxUsageLogPageSize+50; i++ {
 		rows = append(rows, &UsageLogRecord{APIKey: "cap-key", Model: "cap-model", Channel: "cap-channel", StatusCode: 200})
 	}
-	if err := repo.BatchRecordUsageLogs(rows); err != nil {
+	if err := repo.BatchRecordUsageLogsContext(context.Background(), rows); err != nil {
 		t.Fatal(err)
 	}
 
@@ -104,7 +105,7 @@ func TestUsageLogKeywordMatchesWildcardsLiterally(t *testing.T) {
 	repo := NewRepository(db)
 
 	for _, model := range []string{"pct-100%", "pct-100x", "und_a_b", "und_axb"} {
-		if err := repo.RecordUsageLog(&UsageLogRecord{APIKey: "kw-key", Model: model, StatusCode: 200}); err != nil {
+		if err := repo.RecordUsageLogContext(context.Background(), &UsageLogRecord{APIKey: "kw-key", Model: model, StatusCode: 200}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -147,7 +148,7 @@ func TestUsageLogTimeFilterIsCorrectAndUsesIndex(t *testing.T) {
 	base := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
 	for i := 0; i < 5; i++ {
 		record := &UsageLogRecord{APIKey: "time-key", Model: "time-model", StatusCode: 200, CreatedAt: base.Add(time.Duration(i) * time.Hour)}
-		if err := repo.RecordUsageLog(record); err != nil {
+		if err := repo.RecordUsageLogContext(context.Background(), record); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -198,7 +199,7 @@ func TestUsageLogFacetsCacheIsScopedAndInvalidated(t *testing.T) {
 
 	seed := func(tenant, model string) {
 		t.Helper()
-		if err := repo.RecordUsageLog(&UsageLogRecord{APIKey: tenant, TenantID: tenant, Model: model, Channel: tenant + "-channel", StatusCode: 200}); err != nil {
+		if err := repo.RecordUsageLogContext(context.Background(), &UsageLogRecord{APIKey: tenant, TenantID: tenant, Model: model, Channel: tenant + "-channel", StatusCode: 200}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -267,7 +268,7 @@ func TestUsageLogQueryIndexesExist(t *testing.T) {
 	base := time.Date(2026, 10, 21, 0, 0, 0, 0, time.UTC)
 	for i := 0; i < 4; i++ {
 		record := &UsageLogRecord{APIKey: "scope-key", TenantID: "tenant-a", Model: "scope-model", Channel: "scope-channel", StatusCode: 200, CreatedAt: base.Add(time.Duration(i) * time.Hour)}
-		if err := repo.RecordUsageLog(record); err != nil {
+		if err := repo.RecordUsageLogContext(context.Background(), record); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -302,7 +303,7 @@ func TestBatchUsageLogInsertSpansChunks(t *testing.T) {
 		logs = append(logs, &UsageLogRecord{APIKey: "chunk-key", Model: "chunk-model", StatusCode: 200, TotalTokens: i})
 		wantTokens += int64(i)
 	}
-	if err := repo.BatchRecordUsageLogs(logs); err != nil {
+	if err := repo.BatchRecordUsageLogsContext(context.Background(), logs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -337,12 +338,12 @@ func TestPurgeUsageLogsBeforeKeepsRecentRows(t *testing.T) {
 
 	old := time.Now().AddDate(-2, 0, 0).UTC()
 	for i := 0; i < 5; i++ {
-		if err := repo.RecordUsageLog(&UsageLogRecord{APIKey: "ret-key", Model: "ret-model", StatusCode: 200, CreatedAt: old.Add(time.Duration(i) * time.Minute)}); err != nil {
+		if err := repo.RecordUsageLogContext(context.Background(), &UsageLogRecord{APIKey: "ret-key", Model: "ret-model", StatusCode: 200, CreatedAt: old.Add(time.Duration(i) * time.Minute)}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	for i := 0; i < 2; i++ {
-		if err := repo.RecordUsageLog(&UsageLogRecord{APIKey: "ret-key", Model: "ret-model", StatusCode: 200, CreatedAt: time.Now()}); err != nil {
+		if err := repo.RecordUsageLogContext(context.Background(), &UsageLogRecord{APIKey: "ret-key", Model: "ret-model", StatusCode: 200, CreatedAt: time.Now()}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -397,10 +398,10 @@ func TestUsageLogRetentionWorkerPrunesExpiredRows(t *testing.T) {
 	defer db.Close()
 	repo := NewRepository(db)
 
-	if err := repo.RecordUsageLog(&UsageLogRecord{APIKey: "w-key", Model: "w-old", StatusCode: 200, CreatedAt: time.Now().AddDate(-2, 0, 0)}); err != nil {
+	if err := repo.RecordUsageLogContext(context.Background(), &UsageLogRecord{APIKey: "w-key", Model: "w-old", StatusCode: 200, CreatedAt: time.Now().AddDate(-2, 0, 0)}); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.RecordUsageLog(&UsageLogRecord{APIKey: "w-key", Model: "w-new", StatusCode: 200}); err != nil {
+	if err := repo.RecordUsageLogContext(context.Background(), &UsageLogRecord{APIKey: "w-key", Model: "w-new", StatusCode: 200}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -440,7 +441,7 @@ func TestUsageLogKeywordUsesSQLiteTrigramIndex(t *testing.T) {
 		{"pct-100%", "pct", ""},
 	}
 	for _, record := range seed {
-		if err := repo.RecordUsageLog(&UsageLogRecord{APIKey: "fts-key", Model: record.model, Channel: record.channel, ErrorMessage: record.errMsg, StatusCode: 200}); err != nil {
+		if err := repo.RecordUsageLogContext(context.Background(), &UsageLogRecord{APIKey: "fts-key", Model: record.model, Channel: record.channel, ErrorMessage: record.errMsg, StatusCode: 200}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -487,7 +488,7 @@ func TestUsageLogsSkipCountOmitsTotal(t *testing.T) {
 	defer db.Close()
 	repo := NewRepository(db)
 	for i := 0; i < 3; i++ {
-		if err := repo.RecordUsageLog(&UsageLogRecord{APIKey: "skip-key", Model: "skip-model", StatusCode: 200}); err != nil {
+		if err := repo.RecordUsageLogContext(context.Background(), &UsageLogRecord{APIKey: "skip-key", Model: "skip-model", StatusCode: 200}); err != nil {
 			t.Fatal(err)
 		}
 	}

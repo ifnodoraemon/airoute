@@ -34,7 +34,15 @@ type ContentPart struct {
 	InputAudio *InputAudioPart `json:"input_audio,omitempty"`
 }
 
-// ParseMessageContent normalizes any message content (string or array of parts) into []ContentPart.
+// ParseMessageContent normalizes any message content (string, array of parts,
+// or typed content parts) into []ContentPart.
+//
+// The typed []ContentPart form must be handled here rather than through the JSON
+// fallback: the protocol adapters build message content this way (see
+// internal/adapter/anthropic.go and internal/adapter/gemini.go), and the fallback
+// serializes the value into ONE text part. That misclassifies a data: URI image as
+// prompt text, which both inflates the token estimate by ~100x and makes the
+// outbound converters send the picture as prose (F-01/LEAD-01).
 func ParseMessageContent(raw any) []ContentPart {
 	if raw == nil {
 		return nil
@@ -50,7 +58,29 @@ func ParseMessageContent(raw any) []ContentPart {
 		}
 	}
 
-	// 2. Slice of parts
+	// 2. Typed content parts: reuse them (normalised) instead of round-tripping
+	// through JSON, which would turn them into a single opaque text part.
+	switch typed := raw.(type) {
+	case []ContentPart:
+		return normalizeContentParts(typed)
+	case ContentPart:
+		return normalizeContentParts([]ContentPart{typed})
+	case *ContentPart:
+		if typed == nil {
+			return nil
+		}
+		return normalizeContentParts([]ContentPart{*typed})
+	case []*ContentPart:
+		parts := make([]ContentPart, 0, len(typed))
+		for _, part := range typed {
+			if part != nil {
+				parts = append(parts, *part)
+			}
+		}
+		return normalizeContentParts(parts)
+	}
+
+	// 3. Slice of parts
 	if slice, ok := raw.([]any); ok {
 		var parts []ContentPart
 		for _, item := range slice {
@@ -96,7 +126,8 @@ func ParseMessageContent(raw any) []ContentPart {
 		return parts
 	}
 
-	// 3. Fallback to JSON text
+	// 4. Fallback to JSON text (unknown representation; see the typed branches
+	// above for the shapes the gateway itself produces).
 	b, _ := json.Marshal(raw)
 	return []ContentPart{
 		{
@@ -104,6 +135,27 @@ func ParseMessageContent(raw any) []ContentPart {
 			Text: string(b),
 		},
 	}
+}
+
+// normalizeContentParts clones typed content parts and fills in a part type that
+// the producer left implicit, so callers can switch on Type alone.
+func normalizeContentParts(parts []ContentPart) []ContentPart {
+	if len(parts) == 0 {
+		return nil
+	}
+	out := make([]ContentPart, 0, len(parts))
+	for _, part := range parts {
+		switch {
+		case part.Type == "" && part.ImageURL != nil:
+			part.Type = ContentPartImageURL
+		case part.Type == "" && part.InputAudio != nil:
+			part.Type = ContentPartInputAudio
+		case part.Type == "":
+			part.Type = ContentPartText
+		}
+		out = append(out, part)
+	}
+	return out
 }
 
 // ParseDataURI splits a data URI (e.g. data:image/png;base64,iVBORw0KGgo...) into mimeType and raw base64.
@@ -116,6 +168,18 @@ func ParseDataURI(uri string) (mimeType string, base64Data string) {
 		return parts[0], parts[1]
 	}
 	return "image/jpeg", uri
+}
+
+// IsRemoteContentURL reports whether a content URL is an http(s) resource instead
+// of inline data.
+//
+// Providers must forward such a value as a URL, never inside a base64 field
+// (Anthropic's source.type=base64 / Gemini's inlineData.data): those fields reject
+// a URL, and ParseDataURI's "remote URL" pass-through made the gateway send
+// exactly that (F-07).
+func IsRemoteContentURL(uri string) bool {
+	lower := strings.ToLower(strings.TrimSpace(uri))
+	return strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://")
 }
 
 // =============================================================================

@@ -21,11 +21,9 @@ import useUrlFilters from '../hooks/useUrlFilters';
 export default function ModelRoutesManager({
   adminFetch,
   showToast,
-  onNavigateToPlayground,
   setCurrentTab,
   lang = 'zh',
-  isAdmin = false,
-  t
+  isAdmin = false
 }) {
   const isZh = lang === 'zh';
   const [modelRoutes, setModelRoutes] = useState([]);
@@ -750,7 +748,6 @@ export default function ModelRoutesManager({
           adminFetch={adminFetch}
           showToast={showToast}
           lang={lang}
-          t={t}
         />
       )}
     </div>

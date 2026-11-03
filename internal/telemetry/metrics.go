@@ -56,10 +56,28 @@ type Metrics struct {
 
 	// UsageLogRecordsSpilled counts billing records written to the local
 	// append-only spill file because no queue accepted them. Any non-zero value
-	// means the pipeline is degraded; the records are replayed on restart.
+	// means the pipeline is degraded; the records are replayed by the periodic
+	// replay loop (and again at the next start if they cannot be persisted).
 	UsageLogRecordsSpilled atomic.Uint64
 	// UsageLogSpillReplayFailures counts unreadable spill lines.
 	UsageLogSpillReplayFailures atomic.Uint64
+	// UsageLogSpillReplays counts records successfully replayed from a spill file.
+	UsageLogSpillReplays atomic.Uint64
+	// UsageLogStreamReadFailures counts failed XREADGROUP calls on the distributed
+	// audit stream. A sustained rate means the consumer cannot read (a lost
+	// consumer group, a Redis outage) — the condition that used to be invisible
+	// while writers kept appending and nothing was ever persisted.
+	UsageLogStreamReadFailures atomic.Uint64
+	// UsageLogGroupRecreated counts successful consumer-group rebuilds after the
+	// group went missing. Non-zero means a Redis state loss was recovered without
+	// a process restart.
+	UsageLogGroupRecreated atomic.Uint64
+	// UsageLogStreamPoisoned counts stream entries that could not be decoded and
+	// were dead-lettered instead of being silently acknowledged and dropped.
+	UsageLogStreamPoisoned atomic.Uint64
+	// BillingLedgerPruneContended counts ledger retention batches that collided
+	// with another replica and had to be retried.
+	BillingLedgerPruneContended atomic.Uint64
 	// BillingLedgerDriftUnits is the absolute per-key difference between
 	// api_keys.used_cost_units and SUM(usage_logs.cost_units), refreshed by the
 	// reconciliation worker.
@@ -82,7 +100,18 @@ type Metrics struct {
 	// estimateBiasByModel holds the per-model bias, keyed by model name, so the
 	// metric can report which model is mis-estimated instead of one blended value.
 	// Guarded by mu (the latency maps' lock) to keep the Metrics struct simple.
+	//
+	// The map is bounded exactly like modelRequests (modelLabelCap entries plus the
+	// modelLabelOverflow bucket): the model name comes from the client's request, so
+	// an unbounded map would be an unbounded memory leak and an unbounded Prometheus
+	// label set.
 	estimateBiasByModel map[string]estimateBiasSample
+	// estimateBiasWeightedPPM and estimateBiasWeights keep the unlabelled
+	// sample-weighted mean incrementally, so publishing one model's bias is O(1)
+	// instead of re-summing the whole map on every upstream usage report (it runs on
+	// the request path).
+	estimateBiasWeightedPPM int64
+	estimateBiasWeights     int64
 	// BillingAuditLagUnits is the absolute difference between the settlement
 	// ledger (money actually moved) and the audit rows. It is expected to be
 	// non-zero briefly while an audit write is retried; a sustained value means
@@ -98,6 +127,35 @@ type Metrics struct {
 	// reconciler uses). A non-zero value means delivered charges lost their audit
 	// row.
 	BillingLedgerUnlinkedUnits atomic.Int64
+
+	// Settlement batching (group commit). Charges are merged into one database
+	// transaction; these counters make the batching observable and let an
+	// operator tell "the writer is saturated" from "requests are waiting".
+	SettlementBatches      atomic.Uint64 // flush transactions executed
+	SettlementBatchRecords atomic.Uint64 // charges applied inside those flushes
+	SettlementQueueDepth   atomic.Int64  // charges waiting for a flush slot
+	// SettlementWaitTimeouts counts charges whose request-side wait expired
+	// before the flush committed. They are not lost: the record still travels
+	// through the audit pipeline and is settled there, but a sustained rate
+	// means the writer cannot keep up with the offered load.
+	SettlementWaitTimeouts atomic.Uint64
+	// SettlementLockTimeouts counts settlement attempts that gave up on a row
+	// lock deadline. Non-zero means a hot account is serialising charges.
+	SettlementLockTimeouts atomic.Uint64
+	// BillingReservedUnits is the amount currently pre-authorised against
+	// wallets (1e-9 units). It is the exposure the admission gate refuses to
+	// exceed; a value that tracks close to the sum of balances means the
+	// reservation is doing the work the balance check alone used to skip.
+	BillingReservedUnits atomic.Int64
+	// BillingWalletTotalUnits is the sum of every wallet's authoritative balance
+	// (1e-9 units), refreshed by the reconciliation worker. It gives the
+	// reserved-units gauge a denominator: pre-authorisation is only meaningful
+	// relative to the money actually held.
+	BillingWalletTotalUnits atomic.Int64
+	// BillingWaivedUnits accumulates money delivered but not collected because a
+	// charge hit the overdraft floor (1e-9 units). The wallet is clamped, so this
+	// is the only place the shortfall is visible at all.
+	BillingWaivedUnits atomic.Int64
 
 	// Latency & TTFT tracking
 	mu             sync.RWMutex
@@ -118,6 +176,16 @@ var (
 	// reported as exactly 60000 while the real maximum was 113128ms.
 	defaultLatencyBuckets = []float64{25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000, 120000, 300000, 600000}
 	defaultTTFTBuckets    = []float64{10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000, 120000}
+)
+
+const (
+	// modelLabelCap bounds the per-model label maps. Model names come from the
+	// client's request, so without a cap a caller could grow the process and the
+	// Prometheus series set without bound (the exact failure mode modelRequests was
+	// already protected against).
+	modelLabelCap = 500
+	// modelLabelOverflow is the bucket every model beyond the cap folds into.
+	modelLabelOverflow = "_unrecognized"
 )
 
 var GlobalMetrics = &Metrics{
@@ -188,8 +256,8 @@ func (m *Metrics) recordRequestStats(modelName, outcome string, dur time.Duratio
 		if m.modelRequests == nil {
 			m.modelRequests = make(map[string]map[string]uint64)
 		}
-		if _, exists := m.modelRequests[cleanModel]; !exists && len(m.modelRequests) >= 500 {
-			cleanModel = "_unrecognized"
+		if _, exists := m.modelRequests[cleanModel]; !exists && len(m.modelRequests) >= modelLabelCap {
+			cleanModel = modelLabelOverflow
 		}
 		statusKey := outcome
 		if m.modelRequests[cleanModel] == nil {
@@ -198,11 +266,6 @@ func (m *Metrics) recordRequestStats(modelName, outcome string, dur time.Duratio
 		m.modelRequests[cleanModel][statusKey]++
 	}
 	m.mu.Unlock()
-}
-
-// RecordRequest records a completed request with its duration and token count.
-func (m *Metrics) RecordRequest(success bool, dur time.Duration, promptTokens, completionTokens int) {
-	m.RecordRequestWithModel("", success, dur, promptTokens, completionTokens)
 }
 
 // GetLatencyPercentiles estimates P50, P90, and P99 latency percentiles in milliseconds.
@@ -282,32 +345,70 @@ type estimateBiasSample struct {
 	samples uint64
 }
 
+// weight is this sample's weight in the fleet-wide mean: the number of upstream
+// reports behind it, or 1 when the count is unknown (a zero-weight sample would be
+// invisible in the mean).
+func (s estimateBiasSample) weight() int64 {
+	if s.samples == 0 {
+		return 1
+	}
+	return int64(s.samples)
+}
+
 // SetEstimateBias publishes the estimator bias for one model.
 //
 // The per-model value is what an operator needs (a single model with a bad
 // tokenizer guess), and the unlabelled total is its sample-weighted mean, so
 // neither number is decided by whichever request happened to be observed last.
+//
+// Two properties the previous implementation lacked:
+//
+//   - the model key is bounded like modelRequests: the name comes from the
+//     client's request, so without modelLabelCap the map (and the Prometheus label
+//     set) grew without bound for the process lifetime;
+//   - the weighted mean is maintained incrementally (subtract the previous value,
+//     add the new one), so this call is O(1) instead of re-summing every model on
+//     each upstream usage report.
 func (m *Metrics) SetEstimateBias(model string, ppm int64, samples uint64) {
+	if model == "" {
+		// An empty label carries no information; the previous implementation also
+		// stored nothing for it, which left the mean untouched.
+		return
+	}
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.estimateBiasByModel == nil {
 		m.estimateBiasByModel = make(map[string]estimateBiasSample)
 	}
-	if model != "" {
-		m.estimateBiasByModel[model] = estimateBiasSample{ppm: ppm, samples: samples}
+
+	key := model
+	if _, known := m.estimateBiasByModel[key]; !known && len(m.estimateBiasByModel) >= modelLabelCap {
+		key = modelLabelOverflow
 	}
-	var signed, total int64
-	for _, sample := range m.estimateBiasByModel {
-		weight := int64(sample.samples)
-		if weight == 0 {
-			weight = 1
+	next := estimateBiasSample{ppm: ppm, samples: samples}
+	if key == modelLabelOverflow {
+		// Several models share this bucket. Keep a merged, sample-weighted view of
+		// them (rather than letting whichever model was observed last overwrite the
+		// bucket), so the bounded label still says "traffic outside the top models is
+		// mis-estimated by about this much".
+		if previous, ok := m.estimateBiasByModel[key]; ok {
+			prevWeight, nextWeight := previous.weight(), next.weight()
+			mergedSamples := previous.samples + samples
+			mergedPPM := (previous.ppm*prevWeight + ppm*nextWeight) / (prevWeight + nextWeight)
+			next = estimateBiasSample{ppm: mergedPPM, samples: mergedSamples}
 		}
-		signed += sample.ppm * weight
-		total += weight
 	}
-	if total > 0 {
-		m.EstimateBiasPPM.Store(signed / total)
+
+	if previous, ok := m.estimateBiasByModel[key]; ok {
+		m.estimateBiasWeightedPPM -= previous.ppm * previous.weight()
+		m.estimateBiasWeights -= previous.weight()
 	}
-	m.mu.Unlock()
+	m.estimateBiasByModel[key] = next
+	m.estimateBiasWeightedPPM += next.ppm * next.weight()
+	m.estimateBiasWeights += next.weight()
+	if m.estimateBiasWeights > 0 {
+		m.EstimateBiasPPM.Store(m.estimateBiasWeightedPPM / m.estimateBiasWeights)
+	}
 }
 
 // EstimateBiasByModel returns a copy of the per-model bias samples.
@@ -317,6 +418,20 @@ func (m *Metrics) EstimateBiasByModel() map[string]int64 {
 	out := make(map[string]int64, len(m.estimateBiasByModel))
 	for model, sample := range m.estimateBiasByModel {
 		out[model] = sample.ppm
+	}
+	return out
+}
+
+// EstimateSamplesByModel returns how many upstream usage reports back each
+// model's learned ratio. The learned ratio is only applied after a minimum number
+// of samples, so the count is what separates "calibration is in effect" from "not
+// enough data yet" - the bias gauge alone cannot express that difference.
+func (m *Metrics) EstimateSamplesByModel() map[string]uint64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make(map[string]uint64, len(m.estimateBiasByModel))
+	for model, sample := range m.estimateBiasByModel {
+		out[model] = sample.samples
 	}
 	return out
 }

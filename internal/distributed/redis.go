@@ -113,16 +113,30 @@ func (c *Client) PublishReload(ctx context.Context, reason string) error {
 		return nil
 	}
 
-	newVer, _ := c.rdb.Incr(ctx, ConfigVersionKey).Result()
+	// The version counter is how peers that missed the pub/sub message heal
+	// themselves (see subscribeReloadOnce). A failed INCR does not stop the
+	// broadcast - the message is still useful - but it must be visible: without the
+	// version bump, a peer that was disconnected during this publish will not
+	// notice the change until the next successful publish.
+	newVer, versionErr := c.rdb.Incr(ctx, ConfigVersionKey).Result()
+	if versionErr != nil {
+		telemetry.ScopedLogger("sync").Warn(
+			"failed to advance the cluster config version; detached peers may not observe this reload until the next one",
+			"error", versionErr.Error(), "reason", reason)
+	}
 
 	evt := ClusterEvent{
 		Event:     "reload",
 		Reason:    reason,
+		NodeID:    telemetry.LiveNodeID(),
 		Timestamp: time.Now().UnixMicro(),
 	}
-	payload, _ := json.Marshal(evt)
+	payload, err := json.Marshal(evt)
+	if err != nil {
+		return err
+	}
 
-	err := c.rdb.Publish(ctx, ReloadChannel, string(payload)).Err()
+	err = c.rdb.Publish(ctx, ReloadChannel, string(payload)).Err()
 	telemetry.ScopedLogger("sync").Info("published cluster reload broadcast", "reason", reason, "version", newVer)
 	return err
 }
@@ -196,6 +210,12 @@ func (c *Client) subscribeReloadOnce(stopChan <-chan struct{}, onReload func(rea
 			}
 			var evt ClusterEvent
 			if err := json.Unmarshal([]byte(msg.Payload), &evt); err == nil {
+				// Skip this node's own broadcast: PublishReload runs after the local
+				// reload that produced it, so acting on it again would reload twice
+				// per write and double the database load for no state change.
+				if evt.NodeID != "" && evt.NodeID == telemetry.LiveNodeID() {
+					continue
+				}
 				telemetry.ScopedLogger("sync").Info("received Redis cluster reload broadcast (<1ms latency)", "reason", evt.Reason)
 				if v, err := c.rdb.Get(context.Background(), ConfigVersionKey).Int64(); err == nil && v > *localVersion {
 					*localVersion = v

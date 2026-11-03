@@ -17,7 +17,7 @@ func (h *MCPHandler) executeOpsTools(ctx context.Context, name string, args map[
 		// A16: channel inventory is gateway-internal. The transport already
 		// rejects non-admin calls; this second check keeps in-process/stdio
 		// invocations from bypassing that gate.
-		if !h.mcpCallerIsAdmin(ctx, args) {
+		if !h.callerIsAdmin(ctx, args) {
 			return "Security violation: cluster status is restricted to gateway administrators", true, true
 		}
 		if h.repo != nil {
@@ -70,7 +70,7 @@ func (h *MCPHandler) executeOpsTools(ctx context.Context, name string, args map[
 
 	case "airoute_model_topology":
 		// A16: the model→provider topology is gateway-internal too.
-		if !h.mcpCallerIsAdmin(ctx, args) {
+		if !h.callerIsAdmin(ctx, args) {
 			return "Security violation: model topology is restricted to gateway administrators", true, true
 		}
 		if h.dispatcher != nil {
@@ -155,6 +155,10 @@ func (h *MCPHandler) executeOpsTools(ctx context.Context, name string, args map[
 		if err != nil {
 			return fmt.Sprintf("Query logs error: %v", err), true, true
 		}
+		// D-03: the audit rows carry the key digest (the ledger joins depend on
+		// it), so the agent-facing projection must name keys the way the console
+		// and the access log do (ak_…), masking a digest that no longer resolves.
+		h.presentMCPLogKeys(logs)
 		b, _ := json.MarshalIndent(logs, "", "  ")
 		return string(b), false, true
 	}

@@ -29,6 +29,7 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 		canonicalReq.StreamOptions.IncludeUsage = true
 	}
 
+	topUpQuotaForRequest(c, canonicalReq)
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, canonicalReq)
 	if err != nil {
 		statusCode, errType, _, _ := resolveUpstreamFailureStatus(err)
@@ -36,6 +37,12 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 		RespondAnthropicError(c, statusCode, sanitizeErrorMessage(err), errType)
 		return
 	}
+	var nativeHandled bool
+	streamChan, nativeHandled = h.useNativeStream(c, reqCtx, canonicalReq, streamChan, sessionID, start)
+	if nativeHandled {
+		return
+	}
+
 	firstEvent, open := <-streamChan
 	if !open || firstEvent == nil {
 		streamErr := errors.New("upstream stream closed before response")
@@ -90,6 +97,20 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 	// upstream mid-stream failure, or downstream client disconnect.
 	var finalCost, finalSaved float64
 	var finalCached int
+	// Settlement is deferred until the terminal frame has been flushed, so a
+	// saturated settlement writer cannot delay [DONE]. Preparation (cost
+	// calculation, headers, audit enqueue) already happened in recordStreamEnd.
+	var finalSettle func()
+	settled := false
+	runFinalSettle := func() {
+		if settled {
+			return
+		}
+		settled = true
+		if finalSettle != nil {
+			finalSettle()
+		}
+	}
 	var recordOnce sync.Once
 	recordStreamEnd := func(statusCode int) {
 		// A client abort still consumed the prompt upstream: the request had been
@@ -112,7 +133,7 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 				usageSource = "estimated"
 			}
 		}
-		finalCost, finalSaved, finalCached = recordUsage(c, AuditRecordParams{
+		finalCost, finalSaved, finalCached, finalSettle = RecordUsageDeferred(c, AuditRecordParams{
 			SessionID:        sessionID,
 			ChatID:           anthropicUpstreamChatID,
 			Channel:          upstreamChannel,
@@ -128,6 +149,7 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 			ErrorMessage:     sanitizeErrorMessage(streamError),
 		})
 	}
+	defer runFinalSettle()
 	defer func() {
 		// Failure or client disconnect: record once with a truthful status.
 		recordOnce.Do(func() {

@@ -103,34 +103,43 @@ func TestEvalSimpleMathBoundsInput(t *testing.T) {
 // TestIsChannelFailureClassification pins which upstream outcomes may trip the
 // circuit breaker. Treating every non-200 as a channel failure meant three
 // malformed client requests could blackhole a perfectly healthy channel.
+//
+// The "client fault" half is split in two, because they call for different
+// actions: IsFatalPayloadError (400/413/422) means the same request would fail on
+// every channel, while IsModelNotFound (404) only means this node does not host
+// the model, so dispatch keeps fanning out.
 func TestIsChannelFailureClassification(t *testing.T) {
 	cases := []struct {
-		status   int
-		channel  bool
-		clientEr bool
+		status        int
+		channel       bool
+		fatalPayload  bool
+		modelNotFound bool
 	}{
-		{400, false, true},
-		{404, false, true},
-		{413, false, true},
-		{422, false, true},
-		{401, true, false},
-		{403, true, false},
-		{408, true, false},
+		{400, false, true, false},
+		{404, false, false, true},
+		{413, false, true, false},
+		{422, false, true, false},
+		{401, true, false, false},
+		{403, true, false, false},
+		{408, true, false, false},
 		// 429 is backpressure from a healthy upstream, not an outage: tripping the
 		// breaker on it replaces the actionable rate-limit response with gateway
 		// 502s for the whole cooldown window.
-		{429, false, false},
-		{500, true, false},
-		{502, true, false},
-		{503, true, false},
+		{429, false, false, false},
+		{500, true, false, false},
+		{502, true, false, false},
+		{503, true, false, false},
 	}
 	for _, tc := range cases {
 		err := provider.NewUpstreamError("ch", tc.status, []byte("boom"))
 		if got := provider.IsChannelFailure(err); got != tc.channel {
 			t.Errorf("status %d: IsChannelFailure=%v, want %v", tc.status, got, tc.channel)
 		}
-		if got := provider.IsClientError(err); got != tc.clientEr {
-			t.Errorf("status %d: IsClientError=%v, want %v", tc.status, got, tc.clientEr)
+		if got := provider.IsFatalPayloadError(err); got != tc.fatalPayload {
+			t.Errorf("status %d: IsFatalPayloadError=%v, want %v", tc.status, got, tc.fatalPayload)
+		}
+		if got := provider.IsModelNotFound(err); got != tc.modelNotFound {
+			t.Errorf("status %d: IsModelNotFound=%v, want %v", tc.status, got, tc.modelNotFound)
 		}
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
 )
 
 const (
@@ -20,6 +21,14 @@ const (
 	SessionTTLSeconds = 7 * 24 * 60 * 60
 )
 
+// cookieSecure decides whether the session cookies may carry the Secure flag.
+//
+// The decision is made from something the *gateway* can trust: TLS on the
+// connection itself, or a forwarded scheme reported by a configured trusted proxy.
+// A client-supplied X-Forwarded-Proto is ignored, because any caller can send one
+// and the shipped nginx forwards the client's own value verbatim - trusting it let
+// a caller have its seven-day session cookie issued without Secure, which a browser
+// will then also send over plain http.
 func cookieSecure(c *gin.Context) bool {
 	if c == nil {
 		return false
@@ -27,7 +36,10 @@ func cookieSecure(c *gin.Context) bool {
 	if c.Request != nil && c.Request.TLS != nil {
 		return true
 	}
-	return strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
+	if proto, ok := middleware.TrustedForwardedProto(c); ok {
+		return strings.EqualFold(proto, "https")
+	}
+	return false
 }
 
 // SetSessionCookies stores the session token in an HttpOnly cookie and issues a

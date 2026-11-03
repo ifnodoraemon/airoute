@@ -3,10 +3,22 @@ import { X, Sparkles, RefreshCw, Search, Eye, EyeOff, Loader2 } from 'lucide-rea
 import ModelChipManager from './ModelChipManager';
 import ModelMappingEditor from './ModelMappingEditor';
 import CapabilitiesSelector from './CapabilitiesSelector';
+import ChannelCapacityFields from './ChannelCapacityFields';
 import useModalA11y from '../hooks/useModalA11y';
 import useFormDirty from '../hooks/useFormDirty';
 import useUnsavedGuard from '../hooks/useUnsavedGuard';
 import DiscardChangesDialog from './DiscardChangesDialog';
+
+// Reads a numeric input without rewriting the value the operator typed.
+//
+// The routing fields used to be `parseInt(...) || 1` / `|| 10`, which turned an
+// explicit 0 into 1/10 in the form before the request was even built: the console
+// silently disagreed with what the operator saw. An empty field maps to 0, which
+// the gateway documents as "use the default".
+function parseIntOrZero(raw) {
+  const parsed = parseInt(raw, 10);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
 
 export default function ChannelModal({
   isOpen,
@@ -22,7 +34,6 @@ export default function ChannelModal({
   onSubmit,
   submitting = false,
   lang = 'zh',
-  t
 }) {
   const [showApiKeyPlain, setShowApiKeyPlain] = useState(false);
 
@@ -107,9 +118,13 @@ export default function ChannelModal({
                   { key: 'zhipu', label: '智谱 GLM', badge: isZh ? '主流' : 'GLM' },
                   { key: 'doubao', label: '火山豆包', badge: isZh ? '多模态' : 'Multimodal' },
                   { key: 'moonshot', label: '月之暗面 Kimi', badge: isZh ? '长文本' : 'Kimi' },
+                  { key: 'aliyun', label: '阿里百炼', badge: isZh ? '通义千问' : 'Qwen' },
+                  { key: 'baidu', label: '百度千帆', badge: isZh ? '文心' : 'ERNIE' },
+                  { key: 'tencent', label: '腾讯混元', badge: isZh ? '混元' : 'Hunyuan' },
                   { key: 'openai', label: 'OpenAI', badge: isZh ? '全协议' : 'Full Suite' },
                   { key: 'anthropic', label: 'Claude', badge: 'Anthropic' },
                   { key: 'gemini', label: 'Google Gemini', badge: isZh ? '多模态' : 'Multimodal' },
+                  { key: 'vertex', label: 'Google Vertex AI', badge: 'ADC' },
                   { key: 'ollama', label: 'Ollama', badge: isZh ? '本地开源' : 'Local' },
                   { key: 'vllm', label: 'vLLM', badge: isZh ? '自建集群' : 'vLLM' },
                 ].map(p => (
@@ -158,15 +173,20 @@ export default function ChannelModal({
                     if (lower.includes('deepseek')) updates.name = 'deepseek-provider';
                     else if (lower.includes('anthropic')) updates.name = 'claude-provider';
                     else if (lower.includes('openai')) updates.name = 'openai-provider';
+                    else if (lower.includes('aiplatform.googleapis.com')) updates.name = 'vertex-provider';
                     else if (lower.includes('gemini') || lower.includes('googleapis')) updates.name = 'gemini-provider';
                     else if (lower.includes('ollama') || lower.includes('11434')) updates.name = 'ollama-local';
                     else if (lower.includes('gpustack')) updates.name = 'gpustack-cluster';
                     else if (lower.includes('zhipu') || lower.includes('bigmodel')) updates.name = 'zhipu-glm';
                     else if (lower.includes('doubao') || lower.includes('volces')) updates.name = 'doubao-provider';
                     else if (lower.includes('moonshot') || lower.includes('kimi')) updates.name = 'kimi-provider';
+                    else if (lower.includes('dashscope') || lower.includes('aliyuncs')) updates.name = 'aliyun-dashscope';
+                    else if (lower.includes('qianfan') || lower.includes('baidubce')) updates.name = 'baidu-qianfan';
+                    else if (lower.includes('hunyuan') || lower.includes('tencentcloudapi')) updates.name = 'tencent-hunyuan';
                   }
                   if (lower.includes('anthropic')) updates.type = 'anthropic';
                   else if (lower.includes('deepseek')) updates.type = 'deepseek';
+                  else if (lower.includes('aiplatform.googleapis.com')) updates.type = 'vertex';
                   else if (lower.includes('gemini') || lower.includes('googleapis')) updates.type = 'gemini';
                   else if (lower.includes('ollama') || lower.includes('11434')) updates.type = 'ollama';
                   else if (lower.includes('gpustack')) updates.type = 'gpustack';
@@ -261,6 +281,7 @@ export default function ChannelModal({
                   <option value="openai">{isZh ? 'OpenAI (及所有兼容服务商)' : 'OpenAI (and compatible)'}</option>
                   <option value="anthropic">Claude / Anthropic</option>
                   <option value="gemini">Gemini</option>
+                  <option value="vertex">Google Vertex AI</option>
                   <option value="vllm">vLLM</option>
                   <option value="sglang">SGLang</option>
                   <option value="ollama">Ollama</option>
@@ -288,7 +309,7 @@ export default function ChannelModal({
                   <input
                     type="number"
                     value={newChannel.priority}
-                    onChange={(e) => setNewChannel({ ...newChannel, priority: parseInt(e.target.value) || 1 })}
+                    onChange={(e) => setNewChannel({ ...newChannel, priority: parseIntOrZero(e.target.value) })}
                     className="ui-field ui-field-sm font-mono"
                   />
                 </div>
@@ -297,7 +318,7 @@ export default function ChannelModal({
                   <input
                     type="number"
                     value={newChannel.weight}
-                    onChange={(e) => setNewChannel({ ...newChannel, weight: parseInt(e.target.value) || 10 })}
+                    onChange={(e) => setNewChannel({ ...newChannel, weight: parseIntOrZero(e.target.value) })}
                     className="ui-field ui-field-sm font-mono"
                   />
                 </div>
@@ -311,6 +332,7 @@ export default function ChannelModal({
                   />
                 </div>
               </div>
+              <ChannelCapacityFields channel={newChannel} onChange={setNewChannel} isZh={isZh} />
             </div>
           </details>
         </div>

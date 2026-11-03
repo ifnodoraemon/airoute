@@ -132,6 +132,26 @@ func (m *Metrics) ToPrometheusFormat() string {
 	sb.WriteString("# TYPE airoute_usage_log_spill_replay_failures_total counter\n")
 	sb.WriteString(fmt.Sprintf("airoute_usage_log_spill_replay_failures_total %d\n", m.UsageLogSpillReplayFailures.Load()))
 
+	sb.WriteString("# HELP airoute_usage_log_spill_replays_total Spill records replayed into the database\n")
+	sb.WriteString("# TYPE airoute_usage_log_spill_replays_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_usage_log_spill_replays_total %d\n", m.UsageLogSpillReplays.Load()))
+
+	sb.WriteString("# HELP airoute_usage_log_stream_read_failures_total Failed audit-stream consumer reads\n")
+	sb.WriteString("# TYPE airoute_usage_log_stream_read_failures_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_usage_log_stream_read_failures_total %d\n", m.UsageLogStreamReadFailures.Load()))
+
+	sb.WriteString("# HELP airoute_usage_log_group_recreated_total Consumer groups re-created after going missing\n")
+	sb.WriteString("# TYPE airoute_usage_log_group_recreated_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_usage_log_group_recreated_total %d\n", m.UsageLogGroupRecreated.Load()))
+
+	sb.WriteString("# HELP airoute_usage_log_stream_poisoned_total Undecodable audit-stream entries dead-lettered\n")
+	sb.WriteString("# TYPE airoute_usage_log_stream_poisoned_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_usage_log_stream_poisoned_total %d\n", m.UsageLogStreamPoisoned.Load()))
+
+	sb.WriteString("# HELP airoute_billing_ledger_prune_contended_total Ledger retention batches retried after a replica collision\n")
+	sb.WriteString("# TYPE airoute_billing_ledger_prune_contended_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_billing_ledger_prune_contended_total %d\n", m.BillingLedgerPruneContended.Load()))
+
 	sb.WriteString("# HELP airoute_billing_ledger_drift_units Absolute key-vs-audit cost drift in 1e-9 units\n")
 	sb.WriteString("# TYPE airoute_billing_ledger_drift_units gauge\n")
 	sb.WriteString(fmt.Sprintf("airoute_billing_ledger_drift_units %d\n", m.BillingLedgerDriftUnits.Load()))
@@ -148,12 +168,27 @@ func (m *Metrics) ToPrometheusFormat() string {
 	sb.WriteString("# TYPE airoute_aborted_drained_completion_tokens_total counter\n")
 	sb.WriteString(fmt.Sprintf("airoute_aborted_drained_completion_tokens_total %d\n", m.AbortedDrainedCompletionTokens.Load()))
 
+	// The per-model series are bounded by modelLabelCap in metrics.go: models past
+	// the cap fold into the "_unrecognized" bucket, so a client-influenced model
+	// string cannot grow the exported series set without bound.
 	sb.WriteString("# HELP airoute_billing_estimate_bias_ppm Local estimate vs upstream tokenizer, parts per million\n")
 	sb.WriteString("# TYPE airoute_billing_estimate_bias_ppm gauge\n")
 	sb.WriteString(fmt.Sprintf("airoute_billing_estimate_bias_ppm %d\n", m.EstimateBiasPPM.Load()))
 	for model, ppm := range m.EstimateBiasByModel() {
 		sb.WriteString(fmt.Sprintf("airoute_billing_estimate_bias_ppm{model=%q} %d\n", escapePrometheusLabel(model), ppm))
 	}
+
+	// A learned ratio is only applied after a minimum number of samples for that
+	// model, so the counts are exported next to the bias: without them a bias value
+	// cannot be told apart from one that is deliberately not in effect yet.
+	sb.WriteString("# HELP airoute_billing_estimate_samples Upstream usage reports behind each model's learned token ratio\n")
+	sb.WriteString("# TYPE airoute_billing_estimate_samples gauge\n")
+	var estimateSamplesTotal uint64
+	for model, samples := range m.EstimateSamplesByModel() {
+		estimateSamplesTotal += samples
+		sb.WriteString(fmt.Sprintf("airoute_billing_estimate_samples{model=%q} %d\n", escapePrometheusLabel(model), samples))
+	}
+	sb.WriteString(fmt.Sprintf("airoute_billing_estimate_samples %d\n", estimateSamplesTotal))
 
 	sb.WriteString("# HELP airoute_billing_audit_lag_units Absolute settlement-vs-audit difference in 1e-9 units\n")
 	sb.WriteString("# TYPE airoute_billing_audit_lag_units gauge\n")
@@ -166,6 +201,41 @@ func (m *Metrics) ToPrometheusFormat() string {
 	sb.WriteString("# HELP airoute_billing_ledger_unlinked_units Settled units with no matching audit row (legacy keys included)\n")
 	sb.WriteString("# TYPE airoute_billing_ledger_unlinked_units gauge\n")
 	sb.WriteString(fmt.Sprintf("airoute_billing_ledger_unlinked_units %d\n", m.BillingLedgerUnlinkedUnits.Load()))
+
+	sb.WriteString("# HELP airoute_settlement_batches_total Settlement flush transactions executed\n")
+	sb.WriteString("# TYPE airoute_settlement_batches_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_settlement_batches_total %d\n", m.SettlementBatches.Load()))
+
+	sb.WriteString("# HELP airoute_settlement_batch_records_total Charges applied inside settlement flushes\n")
+	sb.WriteString("# TYPE airoute_settlement_batch_records_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_settlement_batch_records_total %d\n", m.SettlementBatchRecords.Load()))
+
+	sb.WriteString("# HELP airoute_settlement_queue_depth Charges waiting for a settlement flush\n")
+	sb.WriteString("# TYPE airoute_settlement_queue_depth gauge\n")
+	sb.WriteString(fmt.Sprintf("airoute_settlement_queue_depth %d\n", m.SettlementQueueDepth.Load()))
+
+	sb.WriteString("# HELP airoute_settlement_wait_timeouts_total Charges whose request-side settlement wait expired\n")
+	sb.WriteString("# TYPE airoute_settlement_wait_timeouts_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_settlement_wait_timeouts_total %d\n", m.SettlementWaitTimeouts.Load()))
+
+	sb.WriteString("# HELP airoute_settlement_lock_timeouts_total Settlement attempts that gave up on a row-lock deadline\n")
+	sb.WriteString("# TYPE airoute_settlement_lock_timeouts_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_settlement_lock_timeouts_total %d\n", m.SettlementLockTimeouts.Load()))
+
+	sb.WriteString("# HELP airoute_billing_reserved_units Currently pre-authorised wallet amount in 1e-9 units\n")
+	sb.WriteString("# TYPE airoute_billing_reserved_units gauge\n")
+	sb.WriteString(fmt.Sprintf("airoute_billing_reserved_units %d\n", m.BillingReservedUnits.Load()))
+
+	sb.WriteString("# HELP airoute_billing_wallet_total_units Sum of all wallet balances in 1e-9 units\n")
+	sb.WriteString("# TYPE airoute_billing_wallet_total_units gauge\n")
+	sb.WriteString(fmt.Sprintf("airoute_billing_wallet_total_units %d\n", m.BillingWalletTotalUnits.Load()))
+
+	sb.WriteString("# HELP airoute_billing_waived_units_total Money delivered but not collected at the overdraft floor, 1e-9 units\n")
+	sb.WriteString("# TYPE airoute_billing_waived_units_total counter\n")
+	sb.WriteString(fmt.Sprintf("airoute_billing_waived_units_total %d\n", m.BillingWaivedUnits.Load()))
+
+	SettlementDurationSeconds.WritePrometheus(&sb, "airoute_settlement_duration_seconds", "Settlement transaction duration in seconds")
+	SettlementBatchSize.WritePrometheus(&sb, "airoute_settlement_batch_size", "Number of charges merged into one settlement transaction")
 
 	sb.WriteString("# HELP airoute_ttft_avg_ms Average Time To First Token in milliseconds\n")
 	sb.WriteString("# TYPE airoute_ttft_avg_ms gauge\n")

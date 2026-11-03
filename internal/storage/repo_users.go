@@ -44,8 +44,17 @@ func (u *UserRecord) resolveBalanceUnits() {
 // GetUserByUsername resolves a canonical account identity, never an email alias.
 // Deleted identities remain reserved so old tokens and payment orders cannot
 // become attached to a newly registered account with the same username.
+//
+// The comparison ignores case, because account identity is case-insensitive
+// everywhere else: the login throttle lower-cases the username before building
+// its lockout bucket (controlplane.login_guard), and allowing "Admin" and "admin"
+// to be two accounts let an attacker own the case variant of a victim's name and
+// reset the victim's failure counter by logging in (BUG-CP-02). Migration 44
+// enforces the same rule as a unique index on LOWER(username); ORDER BY id keeps
+// the result deterministic on databases where that index is still deferred
+// because duplicate rows exist.
 func (r *Repository) GetUserByUsername(username string) (*UserRecord, error) {
-	row := r.db.QueryRow(`SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE username = ?`, username)
+	row := r.db.QueryRow(`SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE LOWER(username) = LOWER(?) ORDER BY id ASC LIMIT 1`, strings.TrimSpace(username))
 	var u UserRecord
 	if err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.Balance, &u.BalanceUnits, &u.GroupName, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		return nil, err
@@ -71,11 +80,16 @@ func (r *Repository) GetUserByID(id int64) (*UserRecord, error) {
 }
 
 // GetUserByIDContext is GetUserByID bound to a caller context/deadline.
+//
+// It reads through Reader(): this is the per-request balance/auth source on the
+// data plane, and on SQLite it must not queue behind the single settlement writer.
+// The read pool only ever sees committed transactions, so it cannot observe a
+// half-applied wallet movement.
 func (r *Repository) GetUserByIDContext(ctx context.Context, id int64) (*UserRecord, error) {
 	if r == nil || r.db == nil {
 		return nil, sql.ErrNoRows
 	}
-	row := r.db.QueryRowContext(ctx, `SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE id = ?`, id)
+	row := r.db.Reader().QueryRowContext(ctx, r.db.Rebind(`SELECT id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE id = ?`), id)
 	var u UserRecord
 	if err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &u.Balance, &u.BalanceUnits, &u.GroupName, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		return nil, err
@@ -122,6 +136,12 @@ type userInserter interface {
 // client error instead of a generic failure.
 var ErrEmailAlreadyRegistered = errors.New("email already registered")
 
+// ErrUsernameAlreadyRegistered is returned when creating an account would
+// duplicate an existing username ignoring case. Account identity is
+// case-insensitive (see GetUserByUsername and migration 44), so "Alice" cannot be
+// created next to "alice".
+var ErrUsernameAlreadyRegistered = errors.New("username already registered")
+
 // isEmailConflictError reports whether err is the unique violation raised by
 // usersEmailUniqueIndex. Both drivers put the index name in the error text;
 // PostgreSQL additionally reports the SQLSTATE code.
@@ -134,6 +154,19 @@ func isEmailConflictError(err error) bool {
 		return strings.Contains(strings.ToLower(pqErr.Constraint), usersEmailUniqueIndex)
 	}
 	return strings.Contains(strings.ToLower(err.Error()), usersEmailUniqueIndex)
+}
+
+// isUsernameConflictError reports whether err is the unique violation raised by
+// usersUsernameUniqueIndex (the case-insensitive index on username).
+func isUsernameConflictError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) && string(pqErr.Code) == "23505" {
+		return strings.Contains(strings.ToLower(pqErr.Constraint), usersUsernameUniqueIndex)
+	}
+	return strings.Contains(strings.ToLower(err.Error()), usersUsernameUniqueIndex)
 }
 
 func insertUser(db userInserter, u *UserRecord) error {
@@ -160,11 +193,26 @@ func insertUser(db userInserter, u *UserRecord) error {
 			return ErrEmailAlreadyRegistered
 		}
 	}
+	// Same for the username, which is unique ignoring case (migration 44). The
+	// pre-check keeps the common sequential path a clean client error even on a
+	// database where the index is still deferred due to legacy duplicates.
+	if username := strings.TrimSpace(u.Username); username != "" {
+		var taken int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM users WHERE LOWER(username) = LOWER(?)`, username).Scan(&taken); err != nil {
+			return err
+		}
+		if taken > 0 {
+			return ErrUsernameAlreadyRegistered
+		}
+	}
 	id, err := db.InsertGetID(`INSERT INTO users (username, email, password_hash, role, status, balance, balance_units, group_name, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 		u.Username, u.Email, u.PasswordHash, u.Role, u.Status, u.Balance, ToUnits(u.Balance), u.GroupName)
 	if err != nil {
 		if isEmailConflictError(err) {
 			return ErrEmailAlreadyRegistered
+		}
+		if isUsernameConflictError(err) {
+			return ErrUsernameAlreadyRegistered
 		}
 		return err
 	}
@@ -233,23 +281,48 @@ func requireUserUpdated(result sql.Result, err error) error {
 }
 
 // UpdateUserBalance adjusts a user's wallet balance by a delta amount.
+//
+// The update is atomic: it must not read the balance, compute a new value and
+// write it back, or a concurrent settlement deduction would be lost. RETURNING
+// gives the ledger the resulting balance without a second read.
 func (r *Repository) UpdateUserBalance(username string, delta float64) error {
 	if !validUserBalance(delta) {
 		return ErrBalanceOutOfRange
 	}
 	units := ToUnits(delta)
 	limit := ToUnits(MaxUserBalance)
-	err := requireUserUpdated(r.db.Exec(`UPDATE users SET balance = balance + ?, balance_units = COALESCE(balance_units, 0) + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ? AND status <> 'deleted' AND COALESCE(balance_units, 0) BETWEEN ? AND ?`, delta, units, username, -limit-units, limit-units))
-	if errors.Is(err, sql.ErrNoRows) {
-		user, lookupErr := r.GetUserByUsername(username)
-		if lookupErr != nil {
-			return lookupErr
-		}
-		if user.Status != "deleted" {
-			return ErrBalanceOutOfRange
-		}
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
 	}
-	return err
+	defer func() { _ = tx.Rollback() }()
+
+	var userID int64
+	var status string
+	if err := tx.QueryRow(`SELECT id, COALESCE(status, 'active') FROM users WHERE username = ?`, username).Scan(&userID, &status); err != nil {
+		return err
+	}
+	if status == "deleted" {
+		return ErrBalanceOutOfRange
+	}
+
+	var newUnits int64
+	err = tx.QueryRow(`UPDATE users SET
+			balance_units = COALESCE(balance_units, 0) + ?,
+			balance = (COALESCE(balance_units, 0) + ?) * 1.0 / 1000000000.0,
+			updated_at = CURRENT_TIMESTAMP
+		WHERE id = ? AND status <> 'deleted'
+			AND COALESCE(balance_units, 0) + ? BETWEEN ? AND ?
+		RETURNING balance_units`,
+		units, units, userID, units, -limit, limit).Scan(&newUnits)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrBalanceOutOfRange
+	}
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // SetUserBalance sets an exact wallet balance for a user.
@@ -257,7 +330,35 @@ func (r *Repository) SetUserBalance(username string, balance float64) error {
 	if !validUserBalance(balance) {
 		return ErrBalanceOutOfRange
 	}
-	return requireUserUpdated(r.db.Exec(`UPDATE users SET balance = ?, balance_units = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ? AND status <> 'deleted'`, balance, ToUnits(balance), username))
+	newUnits := ToUnits(balance)
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var userID int64
+	var status string
+	// The old code ran a separate SELECT ... FOR UPDATE (lockWalletUserRows) before
+	// this absolute set. Folding the row lock into the lookup that was already being
+	// issued keeps the same ordering guarantee in one round trip instead of two: a
+	// settlement that already holds the wallet row must commit before this absolute
+	// value overwrites it, and a concurrent settle waits until the admin write
+	// commits. SQLite has no FOR UPDATE; its single writer serialises the UPDATE.
+	lookup := `SELECT id, COALESCE(status, 'active') FROM users WHERE username = ?`
+	if r.db.Dialect() == "postgres" {
+		lookup += ` FOR UPDATE`
+	}
+	if err := tx.QueryRow(lookup, username).Scan(&userID, &status); err != nil {
+		return err
+	}
+	if status == "deleted" {
+		return sql.ErrNoRows
+	}
+	if err := requireUserUpdated(tx.Exec(`UPDATE users SET balance = ?, balance_units = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status <> 'deleted'`, balance, newUnits, userID)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // UpdateUserGroup updates a user's pricing group.
@@ -274,15 +375,6 @@ func (r *Repository) UpdateUserRole(username, role string) error {
 		role = "user"
 	}
 	return requireUserUpdated(r.db.Exec(`UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ? AND status <> 'deleted'`, role, username))
-}
-
-// DeductUserBalance deducts quota/cost from user wallet. Admins are exempt.
-func (r *Repository) DeductUserBalance(userID int64, cost float64) error {
-	if userID <= 0 || cost <= 0 {
-		return nil
-	}
-	_, err := r.db.Exec(`UPDATE users SET balance = balance - ?, balance_units = COALESCE(balance_units, 0) - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND role != 'admin'`, cost, ToUnits(cost), userID)
-	return err
 }
 
 // ListUsers returns all registered users without password hashes.

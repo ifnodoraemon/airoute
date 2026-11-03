@@ -4,6 +4,7 @@ package distributed
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"testing"
 	"time"
@@ -98,15 +99,38 @@ func TestRedisClusterReloadAndSessionAffinity(t *testing.T) {
 	// publish races with SUBSCRIBE and can be missed; keep publishing until the
 	// subscriber reacts. The 6s window is deliberately far below the 15s
 	// reconciliation ticker, so a delivery can only have come from the broadcast.
+	//
+	// The publisher impersonates a *peer* node: a node's own broadcast is ignored by
+	// its own subscriber (it has already reloaded before publishing), so publishing
+	// through PublishReload here would never be delivered to this subscriber.
 	deadline := time.After(6 * time.Second)
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 
+	publishAsPeer := func() {
+		// A real peer advances the shared version before publishing (PublishReload
+		// does the same); the version is what heals subscribers that missed a
+		// message, and the assertions below check that it moved.
+		if err := client.GetRDB().Incr(ctx, ConfigVersionKey).Err(); err != nil {
+			t.Fatalf("advance config version: %v", err)
+		}
+		payload, err := json.Marshal(ClusterEvent{
+			Event:     "reload",
+			Reason:    publishReason,
+			NodeID:    "integration-test-peer-node",
+			Timestamp: time.Now().UnixMicro(),
+		})
+		if err != nil {
+			t.Fatalf("marshal cluster event: %v", err)
+		}
+		if err := client.GetRDB().Publish(ctx, ReloadChannel, string(payload)).Err(); err != nil {
+			t.Fatalf("publish peer reload: %v", err)
+		}
+	}
+
 	var gotReason string
 	for gotReason == "" {
-		if err := client.PublishReload(ctx, publishReason); err != nil {
-			t.Fatalf("PublishReload: %v", err)
-		}
+		publishAsPeer()
 		select {
 		case gotReason = <-reloads:
 		case <-ticker.C:
@@ -124,6 +148,30 @@ func TestRedisClusterReloadAndSessionAffinity(t *testing.T) {
 	}
 	if after <= before {
 		t.Fatalf("config version did not advance: before=%d after=%d", before, after)
+	}
+
+	// A node's own broadcast must be ignored by its own subscriber: it already
+	// reloaded before publishing, and acting on the message again would double the
+	// database load per write. The 15s reconciliation ticker cannot interfere with
+	// this 700ms window.
+	whileDraining := time.NewTimer(200 * time.Millisecond)
+	<-whileDraining.C
+	for {
+		select {
+		case <-reloads:
+			continue
+		default:
+		}
+		break
+	}
+	if ownErr := client.PublishReload(ctx, "own-node-broadcast"); ownErr != nil {
+		t.Fatalf("PublishReload: %v", ownErr)
+	}
+	select {
+	case reason := <-reloads:
+		t.Fatalf("own broadcast %q was delivered back to the publishing node", reason)
+	case <-time.After(700 * time.Millisecond):
+		// Expected: ignored.
 	}
 }
 

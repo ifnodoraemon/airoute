@@ -16,7 +16,7 @@ func (r *Repository) DistinctRecentModels(since time.Time, limit int) ([]string,
 		limit = 200
 	}
 	query := r.db.Rebind(`SELECT DISTINCT model FROM usage_logs WHERE created_at >= ? AND COALESCE(model, '') <> '' ORDER BY model LIMIT ?`)
-	rows, err := r.db.Query(query, since.UTC().Format(sqliteTimestampLayout), limit)
+	rows, err := r.db.Query(query, r.dialectTimePrecise(since), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func (r *Repository) DistinctRecentModelChannels(since time.Time, limit int) ([]
 	query := r.db.Rebind(`SELECT DISTINCT COALESCE(model, ''), COALESCE(channel, '') FROM usage_logs
 		WHERE created_at >= ? AND COALESCE(model, '') <> ''
 		ORDER BY 1, 2 LIMIT ?`)
-	rows, err := r.db.Query(query, since.UTC().Format(sqliteTimestampLayout), limit)
+	rows, err := r.db.Query(query, r.dialectTimePrecise(since), limit)
 	if err != nil {
 		return nil, err
 	}

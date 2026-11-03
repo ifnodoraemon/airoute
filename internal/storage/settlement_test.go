@@ -126,6 +126,15 @@ func TestSettleChargeNowRequiresInitialization(t *testing.T) {
 // audit-lag gauge has to surface.
 func TestReconcilerReportsAuditLagForUnwrittenRows(t *testing.T) {
 	r, key, u := settlementTestRepo(t)
+	// The gauge compares both sides at a watermark that trails the wall clock (see
+	// billingAuditLagOverlapWindow). This test is about the missing-audit-row state
+	// itself, so it pins the overlap to zero; with the shipped 5-minute window the
+	// same charge surfaces on the next pass instead of immediately, which is what
+	// keeps a charge whose audit row is still in flight from looking like lag.
+	previousOverlap := billingAuditLagOverlapWindow
+	billingAuditLagOverlapWindow = 0
+	t.Cleanup(func() { billingAuditLagOverlapWindow = previousOverlap })
+
 	if err := r.SettleUsageCharge(context.Background(), billingRecord(key, u.Username, "tr-lag", "bill-lag", 3.00)); err != nil {
 		t.Fatalf("settle: %v", err)
 	}

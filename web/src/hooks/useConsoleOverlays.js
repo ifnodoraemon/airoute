@@ -18,13 +18,6 @@ export function useConsoleOverlays() {
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [accountModalTab, setAccountModalTab] = useState('profile');
 
-  // Open the copilot with a question already staged. Used by the views that hand a
-  // problem over to the assistant.
-  const openCopilotWith = useCallback((query) => {
-    setCopilotInitialQuery(query || '');
-    setShowAiCopilot(true);
-  }, []);
-
   // Every overlay closes on logout, so the next session does not inherit a dialog
   // opened by the previous one.
   const reset = useCallback(() => {
@@ -55,7 +48,6 @@ export function useConsoleOverlays() {
     setShowAccountModal,
     accountModalTab,
     setAccountModalTab,
-    openCopilotWith,
     reset,
   };
 }

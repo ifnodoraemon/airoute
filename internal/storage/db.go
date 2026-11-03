@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
@@ -21,6 +22,22 @@ import (
 type DB struct {
 	*sql.DB
 	dialect string // "sqlite" or "postgres"
+
+	// readDB is a second pool for hot read-only queries in SQLite mode. The write
+	// pool is pinned to a single connection (SQLite serialises writers anyway), so
+	// without this the per-request auth lookup and the pricing reload queue behind
+	// the settlement writer. WAL lets readers run concurrently with the single
+	// writer, so a separate read pool is safe; reads only ever see committed data.
+	// PostgreSQL does not need it: its main pool is already multi-connection.
+	// nil means "use the main pool" (always the case for PostgreSQL and :memory:).
+	// It is written only during OpenDB and never reassigned, so Reader() can read it
+	// without a lock even while Close runs.
+	readDB *sql.DB
+
+	// closeOnce keeps Close idempotent without mutating readDB, so a concurrent
+	// Reader() never races with shutdown.
+	closeOnce sync.Once
+	closeErr  error
 }
 
 // Dialect returns the active database engine dialect ("sqlite" or "postgres").
@@ -29,6 +46,42 @@ func (db *DB) Dialect() string {
 		return "sqlite"
 	}
 	return db.dialect
+}
+
+// Reader returns the pool that read-only queries should use: the SQLite read
+// pool when one was opened, otherwise the main pool (PostgreSQL, :memory: and
+// zero-value test DBs). Callers must still pass the query through Rebind: the
+// read pool is a raw *sql.DB, so on PostgreSQL the '?' placeholders would
+// otherwise reach lib/pq verbatim.
+func (db *DB) Reader() *sql.DB {
+	if db == nil {
+		return nil
+	}
+	if db.readDB != nil {
+		return db.readDB
+	}
+	return db.DB
+}
+
+// Close closes the read pool (when present) and the main pool. The embedded
+// *sql.DB would otherwise only close the writer, leaving the SQLite read
+// connections and their WAL read marks alive until the process exits. It is
+// idempotent and safe to call concurrently with reads.
+func (db *DB) Close() error {
+	if db == nil {
+		return nil
+	}
+	db.closeOnce.Do(func() {
+		if db.readDB != nil {
+			db.closeErr = db.readDB.Close()
+		}
+		if db.DB != nil {
+			if err := db.DB.Close(); err != nil && db.closeErr == nil {
+				db.closeErr = err
+			}
+		}
+	})
+	return db.closeErr
 }
 
 // Rebind adapts ANSI SQL queries containing '?' parameters to target engine syntax ($1, $2 for Postgres).
@@ -220,6 +273,16 @@ func (db *DB) BeginTx(ctx context.Context) (*Tx, error) {
 // including ones that never had a deadline.
 const PostgresStatementTimeoutMS = 30000
 
+// PostgresLockTimeoutMS bounds how long a statement may wait for a row/table
+// lock before the server aborts it with 55P03 (lock_not_available).
+//
+// Settlement is a short write transaction on a hot wallet row: when two flushes
+// contend, waiting the full statement_timeout pins the goroutine (and its
+// connection) for 30s while the request-side wait expires anyway. Failing fast
+// at 500ms instead turns a serialisation delay into a retryable error, which
+// settleCharges retries with jitter.
+const PostgresLockTimeoutMS = 500
+
 // ApplyPostgresStatementTimeouts injects statement_timeout (and an idle
 // transaction timeout) into a libpq DSN unless the operator already configured
 // `options` themselves. Both the URL form and the keyword/value form are
@@ -228,8 +291,8 @@ func ApplyPostgresStatementTimeouts(dsn string) string {
 	if strings.TrimSpace(dsn) == "" {
 		return dsn
 	}
-	opts := fmt.Sprintf("-c statement_timeout=%d -c idle_in_transaction_session_timeout=%d",
-		PostgresStatementTimeoutMS, PostgresStatementTimeoutMS)
+	opts := fmt.Sprintf("-c statement_timeout=%d -c lock_timeout=%d -c idle_in_transaction_session_timeout=%d",
+		PostgresStatementTimeoutMS, PostgresLockTimeoutMS, PostgresStatementTimeoutMS)
 
 	lower := strings.ToLower(dsn)
 	if strings.HasPrefix(lower, "postgres://") || strings.HasPrefix(lower, "postgresql://") {
@@ -319,6 +382,12 @@ func OpenDB(dataSourceName string) (*DB, error) {
 	// Connection-level PRAGMAs must live in the DSN: database/sql recycles
 	// connections, and a recycled connection would silently lose busy_timeout /
 	// synchronous (the classic "works for an hour then randomly fails" bug).
+	//
+	// wal_autocheckpoint(0) disables the automatic checkpoint that otherwise fires
+	// on the writer every ~1000 pages: on a group-commit settlement path it is a
+	// hidden fsync inside a request's transaction. A low-frequency background
+	// checkpointer (StartSQLiteCheckpointer) does the work instead, outside the
+	// write critical section.
 	dsn := dataSourceName
 	if dataSourceName != ":memory:" && !strings.Contains(dataSourceName, "_pragma=") {
 		sep := "?"
@@ -326,7 +395,7 @@ func OpenDB(dataSourceName string) (*DB, error) {
 			sep = "&"
 		}
 		dsn = dataSourceName + sep +
-			"_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)"
+			"_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=wal_autocheckpoint(0)"
 	}
 
 	db, err := sql.Open("sqlite", dsn)
@@ -362,7 +431,93 @@ func OpenDB(dataSourceName string) (*DB, error) {
 		return nil, fmt.Errorf("migrate sqlite db schema error: %w", err)
 	}
 
+	// Open the read pool after the migrations: they run on the write connection and
+	// would otherwise contend with idle readers holding WAL read marks during DDL.
+	// A read pool is impossible for :memory: (a second connection would open a
+	// *different* empty database), so those callers fall back to the write pool.
+	if sqliteReadPoolEligible(dataSourceName) {
+		readDB, rerr := sql.Open("sqlite", dsn)
+		if rerr != nil {
+			telemetry.ScopedLogger("system").Warn(
+				"sqlite read pool could not be opened; reads stay on the single write connection",
+				"error", rerr.Error())
+		} else {
+			readDB.SetMaxOpenConns(4)
+			readDB.SetMaxIdleConns(4)
+			readDB.SetConnMaxLifetime(time.Hour)
+			readDB.SetConnMaxIdleTime(30 * time.Minute)
+			if perr := readDB.Ping(); perr != nil {
+				_ = readDB.Close()
+				telemetry.ScopedLogger("system").Warn(
+					"sqlite read pool ping failed; reads stay on the single write connection",
+					"error", perr.Error())
+			} else {
+				wrapper.readDB = readDB
+				telemetry.ScopedLogger("system").Info("sqlite read pool configured", "max_open", 4)
+			}
+		}
+	}
+
 	return wrapper, nil
+}
+
+// sqliteReadPoolEligible reports whether a second pool can read the same SQLite
+// database. In-memory databases cannot: every connection to ":memory:" (or a
+// "file:...?mode=memory" DSN) creates its own private database, so a read pool
+// would see an empty schema.
+func sqliteReadPoolEligible(dataSourceName string) bool {
+	lower := strings.ToLower(dataSourceName)
+	return !strings.Contains(lower, ":memory:") && !strings.Contains(lower, "mode=memory")
+}
+
+// defaultSQLiteCheckpointInterval is how often StartSQLiteCheckpointer truncates
+// the WAL when the caller asks for the default cadence.
+const defaultSQLiteCheckpointInterval = 2 * time.Minute
+
+// StartSQLiteCheckpointer starts the low-frequency WAL checkpoint that replaces
+// SQLite's per-connection auto-checkpoint (disabled via wal_autocheckpoint(0)).
+//
+// The auto-checkpoint used to run inside whichever write transaction happened to
+// push the WAL past its page threshold, charging an fsync to an unlucky settle
+// call. A background ticker keeps the WAL bounded without putting that work on
+// the settlement critical path. The returned stop function is idempotent and the
+// caller (server.go) should invoke it on shutdown.
+//
+// It is a no-op for PostgreSQL and for a zero-value DB (tests), so callers do not
+// need to branch on the dialect.
+func (db *DB) StartSQLiteCheckpointer(interval time.Duration) (stop func()) {
+	if interval <= 0 {
+		interval = defaultSQLiteCheckpointInterval
+	}
+	if db == nil || db.DB == nil || db.Dialect() != "sqlite" {
+		return func() {}
+	}
+
+	done := make(chan struct{})
+	var stopOnce sync.Once
+	stop = func() {
+		stopOnce.Do(func() { close(done) })
+	}
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				// TRUNCATE resets the WAL to zero bytes; it blocks until readers
+				// release their marks, which is acceptable at this cadence.
+				if _, err := db.DB.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
+					telemetry.WarnLogger(telemetry.ScopedLogger("system"), "sqlite-wal-checkpoint-failed",
+						time.Minute, "background WAL checkpoint failed; the WAL will keep growing until it succeeds",
+						"error", err.Error())
+				}
+			}
+		}
+	}()
+	return stop
 }
 
 // keywordDSNPasswordPattern matches the credential keys of a libpq keyword/value

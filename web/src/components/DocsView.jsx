@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { getGatewayOrigin, copyToClipboard as crossOriginCopy } from '../config';
 
-export default function DocsView({ showToast, lang = 'zh', t }) {
+export default function DocsView({ showToast, lang = 'zh' }) {
   const isZh = lang === 'zh';
   const [docsSection, setDocsSection] = useState('architecture');
   const [copiedKey, setCopiedKey] = useState('');

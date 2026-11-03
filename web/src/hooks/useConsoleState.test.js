@@ -196,24 +196,14 @@ describe('useConsoleOverlays', () => {
     expect(result.current.accountModalTab).toBe('profile');
   });
 
-  it('opens the copilot with a staged question', () => {
-    const { result } = renderHook(() => useConsoleOverlays());
-
-    act(() => {
-      result.current.openCopilotWith('why is channel 3 failing?');
-    });
-
-    expect(result.current.showAiCopilot).toBe(true);
-    expect(result.current.copilotInitialQuery).toBe('why is channel 3 failing?');
-  });
-
   it('clears every overlay on reset so the next session starts clean', () => {
     const { result } = renderHook(() => useConsoleOverlays());
     act(() => {
       result.current.setShowCommandPalette(true);
       result.current.setShowOnboardingModal(true);
       result.current.setShowTopologyModal(true);
-      result.current.openCopilotWith('staged');
+      result.current.setCopilotInitialQuery('staged');
+      result.current.setShowAiCopilot(true);
       result.current.setShowLoginModal(true);
       result.current.setShowAccountModal(true);
       result.current.setAccountModalTab('security');
@@ -293,28 +283,13 @@ describe('useConsoleChrome', () => {
     const { result } = renderHook(() => useConsoleChrome());
 
     act(() => {
-      result.current.openMobileMenu();
+      result.current.setMobileMenuOpen(true);
     });
     expect(result.current.mobileMenuOpen).toBe(true);
 
     act(() => {
       result.current.closeMobileMenu();
     });
-    expect(result.current.mobileMenuOpen).toBe(false);
-  });
-
-  it('closes the mobile menu when a tab is selected', () => {
-    // The menu is an overlay: leaving it open hides the view just asked for.
-    const { result } = renderHook(() => useConsoleChrome());
-
-    act(() => {
-      result.current.openMobileMenu();
-    });
-    act(() => {
-      result.current.selectTab('pricing');
-    });
-
-    expect(result.current.currentTab).toBe('pricing');
     expect(result.current.mobileMenuOpen).toBe(false);
   });
 

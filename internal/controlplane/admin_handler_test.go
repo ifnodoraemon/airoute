@@ -60,14 +60,19 @@ func TestBatchBindingAndAuth(t *testing.T) {
 			t.Fatalf("expected disabled with ID 10, got %+v", req)
 		}
 
-		// Invalid status should fallback to active
+		// An unrecognised status must be refused, not silently turned into
+		// "active": the batch endpoint is a bulk revocation tool, and a typo used to
+		// enable exactly what the operator meant to disable (BUG-CP-03).
 		w2 := httptest.NewRecorder()
 		c2, _ := gin.CreateTestContext(w2)
 		c2.Request, _ = http.NewRequest("POST", "/batch", bytes.NewBufferString(`{"ids": [10], "status": "unknown"}`))
 
 		req2, ok2 := handler.bindBatchStatus(c2)
-		if !ok2 || req2.Status != "active" {
-			t.Fatalf("expected active fallback for invalid status, got %+v", req2)
+		if ok2 || req2 != nil {
+			t.Fatalf("expected refusal for invalid status, got %+v", req2)
+		}
+		if w2.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 for invalid status, got %d", w2.Code)
 		}
 	})
 

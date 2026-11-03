@@ -56,7 +56,6 @@ describe('useConsoleSession', () => {
 
       expect(result.current.viewMode).toBe('console');
       expect(result.current.adminToken).toBe('sk-real');
-      expect(result.current.credentialToken).toBe('sk-real');
       expect(result.current.adminUser).toEqual({ username: 'root', role: 'admin' });
       expect(result.current.authTab).toBe('dashboard');
       expect(onEntered).toHaveBeenCalledTimes(1);
@@ -70,8 +69,6 @@ describe('useConsoleSession', () => {
       });
 
       expect(result.current.adminToken).toBe(SESSION_MARKER);
-      // The marker must never be sent as a bearer token.
-      expect(result.current.credentialToken).toBe('');
     });
 
     it('persists the profile but never the credential', () => {
@@ -86,16 +83,6 @@ describe('useConsoleSession', () => {
       expect(localStorage.getItem('airoute_admin_token')).toBeNull();
     });
 
-    it('reports the admin role', () => {
-      const { result } = setup();
-
-      act(() => {
-        result.current.signIn({ username: 'root', role: 'admin' });
-      });
-
-      expect(result.current.isAdmin).toBe(true);
-      expect(result.current.isAuthenticated).toBe(true);
-    });
   });
 
   describe('restoreSession', () => {
@@ -209,43 +196,6 @@ describe('useConsoleSession', () => {
   });
 
   describe('profile updates', () => {
-    it('does not revive an ended session or replace a different signed-in user', () => {
-      const { result } = setup();
-      act(() => result.current.signIn({ username: 'old-user', role: 'admin' }));
-      act(() => result.current.signOutLocal());
-      act(() => result.current.refreshUser({ username: 'old-user', role: 'admin' }));
-      expect(result.current.adminUser).toBeNull();
-      act(() => result.current.signIn({ username: 'new-user', role: 'user' }));
-      act(() => result.current.refreshUser({ username: 'old-user', role: 'admin' }));
-      expect(result.current.adminUser.username).toBe('new-user');
-    });
-    it('refreshes the profile without touching the credential', () => {
-      const { result } = setup();
-      act(() => {
-        result.current.signIn({ username: 'root', role: 'admin' }, { token: 'sk-real' });
-      });
-
-      act(() => {
-        result.current.refreshUser({ username: 'root', role: 'admin', balance: 42 });
-      });
-
-      expect(result.current.adminUser.balance).toBe(42);
-      expect(result.current.adminToken).toBe('sk-real');
-    });
-
-    it('ignores an empty refresh', () => {
-      const { result } = setup();
-      act(() => {
-        result.current.signIn({ username: 'root', role: 'admin' });
-      });
-
-      act(() => {
-        result.current.refreshUser(null);
-      });
-
-      expect(result.current.adminUser).toEqual({ username: 'root', role: 'admin' });
-    });
-
     it('merges a partial patch and persists it', () => {
       const { result } = setup();
       act(() => {

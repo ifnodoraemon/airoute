@@ -29,7 +29,7 @@ func seedRouteChannel(t *testing.T, repo *Repository, name string) *ChannelRecor
 func TestApplyModelRouteBundleIsAtomic(t *testing.T) {
 	repo := newIndependentRouteRepo(t)
 	ch := seedRouteChannel(t, repo, "atomic")
-	before, err := repo.GetChannel(ch.ID)
+	before, err := findChannel(t, repo, ch.ID)
 	require.NoError(t, err)
 	err = repo.ApplyModelRouteBundle(context.Background(), &ModelRouteBundle{
 		Model: "model-a", FallbackModel: "model-b",
@@ -37,7 +37,7 @@ func TestApplyModelRouteBundleIsAtomic(t *testing.T) {
 		Providers: []ModelRouteProvider{{ChannelID: ch.ID, Weight: 20}, {ChannelID: ch.ID + 100000}},
 	})
 	require.Error(t, err)
-	_, err = repo.GetModelPrice("model-a")
+	_, err = repo.GetModelPriceWithGroup("model-a", "default")
 	require.Error(t, err)
 	rules, err := repo.ListModelRouteRules()
 	require.NoError(t, err)
@@ -45,7 +45,7 @@ func TestApplyModelRouteBundleIsAtomic(t *testing.T) {
 	fallbacks, err := repo.GetModelFallbacks()
 	require.NoError(t, err)
 	require.Empty(t, fallbacks)
-	after, err := repo.GetChannel(ch.ID)
+	after, err := findChannel(t, repo, ch.ID)
 	require.NoError(t, err)
 	require.Equal(t, before, after)
 }
@@ -94,14 +94,14 @@ func verifyIndependentRoutePolicies(t *testing.T, repo *Repository, suffix strin
 	t.Helper()
 	ctx := context.Background()
 	ch := seedRouteChannel(t, repo, "independent-"+suffix)
-	before, err := repo.GetChannel(ch.ID)
+	before, err := findChannel(t, repo, ch.ID)
 	require.NoError(t, err)
 	for _, name := range []string{"public-a-" + suffix, "public-b-" + suffix} {
 		require.NoError(t, repo.ApplyModelRouteBundle(ctx, &ModelRouteBundle{
 			Model: name, Providers: []ModelRouteProvider{{ChannelID: ch.ID, Priority: 3, Weight: 27, MappedModel: "model-a"}},
 		}))
 	}
-	after, err := repo.GetChannel(ch.ID)
+	after, err := findChannel(t, repo, ch.ID)
 	require.NoError(t, err)
 	require.Equal(t, before, after, "route saves must never rewrite channel records")
 	channels, err := repo.ToModelChannels()
@@ -124,7 +124,7 @@ func verifyIndependentRoutePolicies(t *testing.T, repo *Repository, suffix strin
 		require.False(t, runtime.SupportsModel("public-a-"+suffix), "wildcards must not bypass a deleted route")
 		require.False(t, runtime.SupportsModel("model-a"))
 	}
-	after, err = repo.GetChannel(ch.ID)
+	after, err = findChannel(t, repo, ch.ID)
 	require.NoError(t, err)
 	require.Equal(t, before, after, "deletions must retain channel capabilities, mappings and defaults")
 	// Saving the channel again must not resurrect explicitly deleted routes.
@@ -192,7 +192,7 @@ func TestRoutePricingUpdatePreservesBindings(t *testing.T) {
 
 func TestBatchRouteDeletionRollsBackOnFailure(t *testing.T) {
 	repo := newIndependentRouteRepo(t)
-	require.NoError(t, repo.SetModelFallback("model-a", "model-b", true))
+	require.NoError(t, repo.SetModelFallbacks(map[string]string{"model-a": "model-b"}))
 	_, err := repo.db.Exec(`CREATE TRIGGER reject_route_delete BEFORE INSERT ON model_routes
   WHEN NEW.model='reject' BEGIN SELECT RAISE(ABORT, 'test rejection'); END`)
 	require.NoError(t, err)

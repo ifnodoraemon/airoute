@@ -2,9 +2,7 @@ package api
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,20 +18,8 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
-func videoOwner(c *gin.Context) string {
-	key := getAPIKeyConfig(c)
-	if key == nil || key.Key == "" {
-		return ""
-	}
-	if key.UserID > 0 {
-		return "user:" + strconv.FormatInt(key.UserID, 10)
-	}
-	digest := sha256.Sum256([]byte(key.Key))
-	return "key:" + hex.EncodeToString(digest[:])
-}
-
 func (h *MultimodalHandler) requireVideoOwner(c *gin.Context) (string, bool) {
-	owner := videoOwner(c)
+	owner := callerOwner(c)
 	if owner == "" {
 		RespondOpenAIError(c, http.StatusUnauthorized, "Video tasks require an API key", "authentication_error", "api_key_required")
 		return "", false
@@ -85,7 +71,7 @@ func (h *MultimodalHandler) HandleVideoGenerations(c *gin.Context) {
 			}
 			replaceVideoResponseID(payload, task.ID)
 		}
-		return writeVideoResponse(resp, payload)
+		return writeVideoResponse(resp, payload, req.Model)
 	})
 }
 
@@ -121,7 +107,7 @@ func (h *MultimodalHandler) HandleVideoTask(c *gin.Context) {
 			return err
 		}
 		replaceVideoResponseID(payload, task.ID)
-		return writeVideoResponse(resp, payload)
+		return writeVideoResponse(resp, payload, task.Model)
 	})
 }
 
@@ -169,11 +155,16 @@ func replaceVideoResponseID(payload map[string]any, id string) {
 		}
 	}
 }
-func writeVideoResponse(resp *router.UpstreamResponse, payload map[string]any) error {
+func writeVideoResponse(resp *router.UpstreamResponse, payload map[string]any, requestedModel string) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
+	// B-08: video providers answer with their own task envelope, which may carry
+	// the upstream model name instead of the one the client requested. Repairing
+	// it here keeps the CLI/SDK-visible model stable; the shared multimodal path
+	// re-checks the same field (a no-op once it matches).
+	body = restoreResponseModelJSON(body, requestedModel)
 	resp.Stream = io.NopCloser(bytes.NewReader(body))
 	resp.Headers = resp.Headers.Clone()
 	resp.Headers.Del("Content-Encoding")

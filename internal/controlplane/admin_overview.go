@@ -15,14 +15,36 @@ import (
 
 // GetStatsOverview returns dashboard overview metrics. Super-admins see the
 // whole cluster; regular users only see aggregates for their own API keys.
-// When query param "key" is supplied, metrics are scoped to that specific key.
+// When query param "key_id" is supplied, metrics are scoped to that specific key.
 func (h *AdminHandler) GetStatsOverview(c *gin.Context) {
-	keyParam := strings.TrimSpace(c.Query("key"))
+	keyParam, _, paramOK := h.statsKeyFilter(c)
+	if !paramOK {
+		return
+	}
+	keyRecord, hasKeyID, ok := h.statsKeyIDFilter(c)
+	if !ok {
+		return
+	}
 	claims, ok := GetClaimsFromContext(c)
 	if ok && claims.Role != "admin" {
 		user, err := h.repo.GetUserByUsername(claims.Username)
 		if err != nil || user == nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "账户不存在或暂时无法验证，请重新登录"})
+			return
+		}
+		if hasKeyID {
+			// Ownership is decided on the resolved row, not on a client-supplied
+			// key string, so another tenant's id is refused exactly like their key.
+			if keyRecord.UserID != user.ID {
+				c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "无权查看该密钥指标"})
+				return
+			}
+			stats, err := h.repo.GetStatsOverviewForKeys([]string{keyRecord.Key})
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"code": 0, "data": stats})
 			return
 		}
 		keys, err := h.repo.ListHistoricalAPIKeysByUser(user.ID)
@@ -53,6 +75,15 @@ func (h *AdminHandler) GetStatsOverview(c *gin.Context) {
 	}
 
 	// Super-admin path
+	if hasKeyID {
+		stats, err := h.repo.GetStatsOverviewForKeys([]string{keyRecord.Key})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"code": 0, "data": stats})
+		return
+	}
 	if keyParam != "" {
 		stats, err := h.repo.GetStatsOverviewForKeys([]string{keyParam})
 		if err != nil {
@@ -72,13 +103,20 @@ func (h *AdminHandler) GetStatsOverview(c *gin.Context) {
 }
 
 // GetStatsTimeSeries returns bucketed time series metrics and true latency percentiles across the cluster.
-// Supports drill-down to a single key via "key" query param.
+// Supports drill-down to a single key via the "key_id" query param.
 func (h *AdminHandler) GetStatsTimeSeries(c *gin.Context) {
 	timeframe := c.DefaultQuery("timeframe", "24h")
 	if timeframe != "1h" && timeframe != "24h" && timeframe != "7d" {
 		timeframe = "24h"
 	}
-	keyParam := strings.TrimSpace(c.Query("key"))
+	keyParam, _, paramOK := h.statsKeyFilter(c)
+	if !paramOK {
+		return
+	}
+	keyRecord, hasKeyID, ok := h.statsKeyIDFilter(c)
+	if !ok {
+		return
+	}
 
 	var keyNames []string
 	claims, ok := GetClaimsFromContext(c)
@@ -88,30 +126,40 @@ func (h *AdminHandler) GetStatsTimeSeries(c *gin.Context) {
 			c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "账户不存在或暂时无法验证，请重新登录"})
 			return
 		}
-		keys, err := h.repo.ListHistoricalAPIKeysByUser(user.ID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		if len(keys) == 0 {
-			// Fail-closed: user owns no keys, return empty time series without exposing cluster logs
-			c.JSON(http.StatusOK, gin.H{"code": 0, "data": storage.NewEmptyTimeSeriesData(timeframe)})
-			return
-		}
-		ownedMap := make(map[string]bool, len(keys))
-		for _, k := range keys {
-			ownedMap[k.Key] = true
-			keyNames = append(keyNames, k.Key)
-		}
-		if keyParam != "" {
-			if !ownedMap[keyParam] {
+		if hasKeyID {
+			if keyRecord.UserID != user.ID {
 				c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "无权查看该密钥时序数据"})
 				return
 			}
-			keyNames = []string{keyParam}
+			keyNames = []string{keyRecord.Key}
+		} else {
+			keys, err := h.repo.ListHistoricalAPIKeysByUser(user.ID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			if len(keys) == 0 {
+				// Fail-closed: user owns no keys, return empty time series without exposing cluster logs
+				c.JSON(http.StatusOK, gin.H{"code": 0, "data": storage.NewEmptyTimeSeriesData(timeframe)})
+				return
+			}
+			ownedMap := make(map[string]bool, len(keys))
+			for _, k := range keys {
+				ownedMap[k.Key] = true
+				keyNames = append(keyNames, k.Key)
+			}
+			if keyParam != "" {
+				if !ownedMap[keyParam] {
+					c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": "无权查看该密钥时序数据"})
+					return
+				}
+				keyNames = []string{keyParam}
+			}
 		}
-	} else if keyParam != "" {
+	} else if hasKeyID {
 		// Super-admin drilling down into a specific key
+		keyNames = []string{keyRecord.Key}
+	} else if keyParam != "" {
 		keyNames = []string{keyParam}
 	}
 
@@ -135,6 +183,12 @@ type MiddlewareComponentStatus struct {
 }
 
 // GetSystemMiddlewares returns real-time health and topology for all underlying infrastructure and middlewares.
+//
+// It is reserved for ROADMAP B-07's console self-check page (which would also use
+// /health/ready). The console has no view for it yet, so the endpoint currently
+// has no front-end consumer: it is served for the planned page and for scripted
+// diagnostics, not because a shipped screen needs it. If B-07 is dropped, this
+// handler and its route should go with it.
 func (h *AdminHandler) GetSystemMiddlewares(c *gin.Context) {
 	var list []MiddlewareComponentStatus
 

@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -16,14 +15,28 @@ import (
 
 // ChatCompleteStream executes a streaming Gemini call and converts SSE events to OpenAI format.
 func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.ChatCompletionRequest, channel *model.ChannelConfig) (<-chan *model.StreamEvent, error) {
+	if stream, done, err := maybeNativeStream(ctx, p.client, req, channel, model.NativeGemini); done {
+		return stream, err
+	}
+	var historyErr error
+	req, historyErr = restoreGeminiHistory(ctx, req, channel)
+	if historyErr != nil {
+		return nil, historyErr
+	}
+	if err := validateGeminiChatOptions(req); err != nil {
+		return nil, err
+	}
 	geminiReq := convertOpenAIToGemini(req)
+	targetModel := channel.GetUpstreamModel(req.Model)
+	if err := applyGeminiThinking(geminiReq.GenerationConfig, req, targetModel); err != nil {
+		return nil, err
+	}
 	payloadBytes, err := json.Marshal(geminiReq)
 	if err != nil {
 		return nil, fmt.Errorf("marshal gemini request error: %w", err)
 	}
 
-	targetModel := channel.GetUpstreamModel(req.Model)
-	targetURL := buildGeminiURL(channel.BaseURL, targetModel, true)
+	targetURL := buildGeminiURL(GeminiBaseURL(channel), targetModel, true)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(payloadBytes))
 	if err != nil {
@@ -32,7 +45,9 @@ func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
-	httpReq.Header.Set("x-goog-api-key", channel.APIKey)
+	if err := ConfigureGoogleRequest(ctx, httpReq, channel); err != nil {
+		return nil, err
+	}
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
@@ -42,7 +57,7 @@ func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes)
+		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes, resp.Header)
 	}
 
 	eventChan := make(chan *model.StreamEvent, 64)
@@ -51,9 +66,11 @@ func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 		defer resp.Body.Close()
 		defer close(eventChan)
 
-		reader := bufio.NewReader(resp.Body)
+		reader := newSSEDataReader(resp.Body)
 		msgID := fmt.Sprintf("chatcmpl-gemini-%d", time.Now().UnixMicro())
 		created := time.Now().Unix()
+		choices := &geminiStreamChoices{}
+		history := make(map[int]*geminiStreamHistory)
 
 		sendEvent := func(ev *model.StreamEvent) bool {
 			select {
@@ -72,7 +89,13 @@ func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 			default:
 			}
 
-			line, err := reader.ReadBytes('\n')
+			line, err := reader.next()
+			// An upstream (or an intermediary proxy) can close the connection right
+			// after a complete data frame that lacks its trailing newline. Dropping
+			// that buffered line lost the terminal frame — and with it the
+			// finishReason, which the router reads as "upstream truncated the
+			// stream" and charges to the channel. Process it, exactly like the
+			// OpenAI reader already do.
 			if err != nil {
 				if err != io.EOF {
 					sendEvent(&model.StreamEvent{Err: err})
@@ -85,11 +108,7 @@ func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 				continue
 			}
 
-			if !strings.HasPrefix(lineStr, "data:") {
-				continue
-			}
-
-			dataContent := strings.TrimSpace(strings.TrimPrefix(lineStr, "data:"))
+			dataContent := lineStr
 			if dataContent == "[DONE]" {
 				sendEvent(&model.StreamEvent{IsDone: true})
 				return
@@ -97,51 +116,21 @@ func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 
 			var geminiChunk GeminiResponse
 			if err := json.Unmarshal([]byte(dataContent), &geminiChunk); err != nil {
-				continue
+				sendEvent(&model.StreamEvent{Err: fmt.Errorf("invalid Gemini SSE event: %w", err)})
+				return
 			}
 			// Gemini reports some failures (overload, quota, model errors) as an
 			// error object inside a 200 SSE stream. Without this the frame became an
 			// empty normal chunk and the client saw a truncated but "successful"
 			// completion.
 			if geminiChunk.Error != nil {
-				sendEvent(&model.StreamEvent{Err: fmt.Errorf("upstream gemini stream error (code %d, status %s): %s",
-					geminiChunk.Error.Code, geminiChunk.Error.Status, geminiChunk.Error.Message)})
+				// Carry the status so the router classifies a mid-stream abort
+				// with the same rules as a unary failure (B-02). Gemini's embedded
+				// code is the unary HTTP equivalent; the status string is the
+				// fallback for proxies that omit it.
+				status := streamErrorStatus(geminiChunk.Error.Code, geminiChunk.Error.Status)
+				sendEvent(&model.StreamEvent{Err: NewUpstreamError(channel.Name, status, []byte(geminiChunk.Error.Message))})
 				return
-			}
-
-			textDelta := ""
-			var toolCalls []model.ToolCall
-			var finishReason *string
-			if len(geminiChunk.Candidates) > 0 {
-				cand := geminiChunk.Candidates[0]
-				for _, part := range cand.Content.Parts {
-					if part.Text != "" {
-						textDelta += part.Text
-					}
-					if part.FunctionCall != nil {
-						argsBytes, _ := json.Marshal(part.FunctionCall.Args)
-						toolCalls = append(toolCalls, model.ToolCall{
-							ID:   fmt.Sprintf("call_%d_%s", time.Now().UnixMicro(), part.FunctionCall.Name),
-							Type: "function",
-							Function: model.FunctionCall{
-								Name:      part.FunctionCall.Name,
-								Arguments: string(argsBytes),
-							},
-						})
-					}
-				}
-				if len(toolCalls) > 0 {
-					r := "tool_calls"
-					finishReason = &r
-				} else if cand.FinishReason != "" {
-					r := strings.ToLower(cand.FinishReason)
-					if r == "max_tokens" {
-						r = "length"
-					} else {
-						r = "stop"
-					}
-					finishReason = &r
-				}
 			}
 
 			var usage *model.Usage
@@ -149,22 +138,18 @@ func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 				usage = geminiUsageToModel(geminiChunk.UsageMetadata)
 			}
 
+			converted := choices.convert(&geminiChunk)
+			if err := preserveGeminiStream(ctx, channel, req.Model, &geminiChunk, converted, history); err != nil {
+				sendEvent(&model.StreamEvent{Err: err})
+				return
+			}
 			chunk := &model.ChatCompletionChunk{
 				ID:      msgID,
 				Object:  "chat.completion.chunk",
 				Created: created,
 				Model:   req.Model,
-				Choices: []model.ChunkChoice{
-					{
-						Index: 0,
-						Delta: model.ChunkDelta{
-							Content:   textDelta,
-							ToolCalls: toolCalls,
-						},
-						FinishReason: finishReason,
-					},
-				},
-				Usage: usage,
+				Choices: converted,
+				Usage:   usage,
 			}
 
 			if !sendEvent(&model.StreamEvent{Chunk: chunk}) {

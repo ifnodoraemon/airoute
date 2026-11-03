@@ -31,8 +31,7 @@ func (h *AdminHandler) ListAPIKeys(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		maskKeysForDisplay(keys)
-		c.JSON(http.StatusOK, gin.H{"code": 0, "data": keys})
+		c.JSON(http.StatusOK, gin.H{"code": 0, "data": apiKeyViews(keys)})
 		return
 	}
 
@@ -59,17 +58,7 @@ func (h *AdminHandler) ListAPIKeys(c *gin.Context) {
 		}
 	}
 
-	maskKeysForDisplay(keys)
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": keys})
-}
-
-// maskKeysForDisplay replaces stored key digests with a display mask. The
-// plaintext credential is unrecoverable by design, so a list response must not
-// present the digest as if it were a usable key.
-func maskKeysForDisplay(keys []*storage.APIKeyRecord) {
-	for _, k := range keys {
-		k.MaskForDisplay()
-	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": apiKeyViews(keys)})
 }
 
 // CreateAPIKeyRequest is the wire shape of an API key creation.
@@ -125,6 +114,15 @@ func (h *AdminHandler) CreateAPIKey(c *gin.Context) {
 		return
 	}
 
+	// Reject an unknown level instead of storing a value the data plane will never
+	// match: an accepted-but-ignored field is what made this setting a no-op.
+	formatValidation, err := normalizeFormatValidation(req.FormatValidation)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	req.FormatValidation = formatValidation
+
 	claims, ok := GetClaimsFromContext(c)
 	if !ok {
 		claims = nil
@@ -146,9 +144,9 @@ func (h *AdminHandler) CreateAPIKey(c *gin.Context) {
 
 	h.syncDataPlane("api_key_created")
 
-	created := *outcome.Record
-	created.Key = plaintextKey
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": &created, "key_returned_once": true, "message": "API 密钥已成功创建并同步"})
+	view := apiKeyViewFrom(outcome.Record)
+	view.Key = plaintextKey
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": &view, "key_returned_once": true, "message": "API 密钥已成功创建并同步"})
 }
 
 // writeKeyCreationDenial renders a key creation refusal. Every branch keeps the
@@ -161,6 +159,8 @@ func writeKeyCreationDenial(c *gin.Context, outcome KeyCreationOutcome) {
 		c.JSON(http.StatusForbidden, gin.H{"error": outcome.Message})
 	case KeyCreationEntropyUnavailable:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "安全随机源不可用，无法生成密钥"})
+	case KeyCreationInvalidValue:
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": outcome.Message})
 	default:
 		c.JSON(http.StatusForbidden, gin.H{"error": "无法创建密钥"})
 	}
@@ -196,6 +196,10 @@ func writeKeyUpdateDenial(c *gin.Context, outcome KeyUpdateOutcome) {
 	switch outcome.Denial {
 	case KeyUpdateGroupForbidden:
 		c.JSON(http.StatusForbidden, gin.H{"error": outcome.Message})
+	case KeyUpdateInvalidValue:
+		c.JSON(http.StatusBadRequest, gin.H{"error": outcome.Message})
+	case KeyUpdateAdminRevoked:
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "error": outcome.Message})
 	default:
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权修改该密钥"})
 	}
@@ -259,7 +263,11 @@ func (h *AdminHandler) UpdateAPIKey(c *gin.Context) {
 
 	h.syncDataPlane("api_key_updated")
 
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": outcome.Record, "message": "API 密钥已成功更新"})
+	// Return the same projection create/list use. Handing out the storage row made
+	// this endpoint's payload a function of storage's JSON tags rather than of the
+	// API contract (see apiKeyView).
+	view := apiKeyViewFrom(outcome.Record)
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": &view, "message": "API 密钥已成功更新"})
 }
 
 // DeleteAPIKey removes an API key.

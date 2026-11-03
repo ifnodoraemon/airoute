@@ -132,19 +132,19 @@ func TestLiveMetricsStreamGauge(t *testing.T) {
 
 	m.BeginStream()
 	m.BeginStream()
-	if got := m.ActiveStreams(); got != 2 {
+	if got := m.Snapshot().ActiveStreams; got != 2 {
 		t.Fatalf("expected 2 active streams, got %d", got)
 	}
 
 	m.EndStream()
-	if got := m.ActiveStreams(); got != 1 {
+	if got := m.Snapshot().ActiveStreams; got != 1 {
 		t.Fatalf("expected 1 active stream after one end, got %d", got)
 	}
 
 	// An unbalanced end must clamp at zero rather than go negative.
 	m.EndStream()
 	m.EndStream()
-	if got := m.ActiveStreams(); got != 0 {
+	if got := m.Snapshot().ActiveStreams; got != 0 {
 		t.Fatalf("expected 0 active streams, got %d", got)
 	}
 }
@@ -206,7 +206,7 @@ func TestLiveMetricsConcurrentAccess(t *testing.T) {
 	}
 	wg.Wait()
 
-	if got := m.ActiveStreams(); got != 0 {
+	if got := m.Snapshot().ActiveStreams; got != 0 {
 		t.Fatalf("expected all streams to be closed, got %d", got)
 	}
 	if got := m.Snapshot().TokensLast60s; got <= 0 {

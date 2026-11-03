@@ -20,9 +20,13 @@ import (
 // could reach the admin API by simply not sending the special Host header.
 //
 // The guard below is enforced inside the gateway (behind every proxy) and is
-// fail-closed by default: only loopback and private-network clients reach the
-// control plane. Public clients are rejected unless the operator explicitly
-// configures an allowlist (or opts into public access, which logs a warning).
+// fail-closed by default: loopback clients, and private clients that a trusted
+// proxy actually forwarded, reach the control plane. Both the "who is the client"
+// question and the "is that client private" question are answered through
+// ClientIdentity (see decide), so an unconfigured proxy hop is a denial rather
+// than an implicit LAN pass. Public clients are rejected unless the operator
+// explicitly configures an allowlist (or opts into public access, which logs a
+// warning).
 const (
 	adminAllowedIPsEnv   = "GATEWAY_ADMIN_ALLOWED_IPS"
 	adminAllowedHostsEnv = "GATEWAY_ADMIN_ALLOWED_HOSTS"
@@ -47,8 +51,19 @@ type adminAccessPolicy struct {
 	err          error
 }
 
-// AdminAccessGuard restricts control-plane paths (/api/v1/admin and the embedded
-// console under /app) to trusted clients.
+// AdminAccessGuard restricts control-plane paths (/api/v1/admin and the console
+// shell under /app) to trusted clients.
+//
+// What is deliberately NOT the control plane, so the predicate below does not
+// grow back into "all of the console surface":
+//   - GET / renders the public landing page / login screen (web/src/App.jsx picks
+//     viewMode=landing for a bare "/"), so guarding it would make the public
+//     entrance unreachable;
+//   - /assets only serves the content-hashed JS/CSS/font bundles of that shell
+//     (web/web.go mounts dist/assets; no API data lives there);
+//   - /api/v1/auth/* is the CLI's remote-login path (cmd/airoute/cli.go);
+//   - /api/v1/user/* is the tenant self-service API (wallet, usage) that ordinary
+//     customers must keep reaching.
 //
 // It must run after the trace/access-log middleware so denials are auditable, and
 // before the static/console routes are registered.
@@ -75,6 +90,10 @@ func AdminAccessGuard() gin.HandlerFunc {
 }
 
 // isControlPlanePath reports whether path belongs to the management surface.
+//
+// The console shell is reachable as a client-side route on "/", but that route is
+// the public landing/auth page; the managed surface is what the SPA calls after
+// login, i.e. the admin API and the /app entry point.
 func isControlPlanePath(path string) bool {
 	switch {
 	case path == "/api/v1/admin", strings.HasPrefix(path, "/api/v1/admin/"):
@@ -140,7 +159,22 @@ func (e *adminPolicyError) Error() string {
 	return "invalid entry in " + adminAllowedIPsEnv + ": " + e.entry
 }
 
+// untrustedClientReason explains the fail-closed branch: the request arrived from
+// a peer the gateway cannot attribute to a client, which in a proxied deployment
+// means GATEWAY_TRUSTED_PROXIES was not configured. The message is actionable on
+// purpose - this is the error an operator sees when the control plane locks itself
+// out after enabling a reverse proxy.
+const untrustedClientReason = "control-plane access denied: cannot attribute the request to a client address because it did not arrive through a trusted proxy; set GATEWAY_TRUSTED_PROXIES to the reverse proxy CIDRs, or connect from loopback"
+
 // decide returns a non-empty reason (and the HTTP status) when access is refused.
+//
+// It decides on ClientIdentity rather than the bare client IP. Behind a reverse
+// proxy the TCP peer is the proxy itself, so "the peer is a private address" does
+// not mean "a private client sent this": in the shipped Compose topology the
+// gateway only exposes port 8080 and nginx forwards everything, which made the old
+// private-peer rule admit every public request. Forwarded==true means the address
+// came from a trusted proxy's header and is attributable; a non-loopback peer
+// without forwarding information is not attributable and fails closed.
 func (p adminAccessPolicy) decide(c *gin.Context) (string, int) {
 	if p.err != nil {
 		// A misconfigured allowlist must fail closed for the control plane.
@@ -155,21 +189,36 @@ func (p adminAccessPolicy) decide(c *gin.Context) (string, int) {
 		return "", 0
 	}
 
-	raw := ResolveClientIP(c)
-	ip := net.ParseIP(raw)
+	identity := ResolveClientIdentity(c)
+	ip := net.ParseIP(identity.IP)
 	if ip == nil {
 		return "control-plane access could not determine the client address", http.StatusForbidden
 	}
 	if p.explicitIPs {
-		if !ipInNetworks(ip, p.allowedIPs) {
-			return "control-plane access is restricted to the configured allowlist", http.StatusForbidden
+		// The allowlist is matched against the best-known client address. An
+		// un-attributable peer only passes when it is itself allowlisted (for
+		// example a loopback console bound to this host).
+		if ipInNetworks(ip, p.allowedIPs) {
+			return "", 0
 		}
+		if !identity.Forwarded {
+			return untrustedClientReason, http.StatusForbidden
+		}
+		return "control-plane access is restricted to the configured allowlist", http.StatusForbidden
+	}
+	if identity.Forwarded {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() {
+			return "", 0
+		}
+		return "control-plane access is restricted to loopback and private networks", http.StatusForbidden
+	}
+	// No trusted proxy hop, so identity.IP is the TCP peer. Only loopback (a client
+	// on this host: local development, a loopback-bound port) is attributable;
+	// a private non-loopback peer may be an unconfigured proxy and is rejected.
+	if ip.IsLoopback() {
 		return "", 0
 	}
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() {
-		return "", 0
-	}
-	return "control-plane access is restricted to loopback and private networks", http.StatusForbidden
+	return untrustedClientReason, http.StatusForbidden
 }
 
 // hostMatches compares the request host (port stripped, lower-cased) against an
