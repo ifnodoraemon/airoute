@@ -97,7 +97,7 @@ func (h *Handler) validateLiveSetup(c *gin.Context, wire []byte) (string, string
 	}
 	name := strings.TrimPrefix(message.Setup.Model, "models/")
 	if !h.googleModelAllowed(c, name) {
-		return "", "", fmt.Errorf("Live model is not allowed")
+		return "", "", fmt.Errorf("live model is not allowed")
 	}
 	// Once upgraded, policy errors use a WebSocket close instead of HTTP JSON.
 	if billing.GlobalEngine != nil {
@@ -112,7 +112,7 @@ func (h *Handler) validateLiveSetup(c *gin.Context, wire []byte) (string, string
 	if handle := message.Setup.Resume.Handle; handle != "" {
 		state, err := nativestate.Load(c.Request.Context(), "gemini-live", handle, callerOwner(c))
 		if err != nil || state.Model != name {
-			return "", "", fmt.Errorf("Live resume handle is not available for this caller or model")
+			return "", "", fmt.Errorf("live resume handle is not available for this caller or model")
 		}
 		identity = state.Identity
 	}

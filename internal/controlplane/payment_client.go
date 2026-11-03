@@ -82,7 +82,7 @@ func (cfg stripeConfig) request(ctx context.Context, method, path string, form u
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("Stripe request failed: %w", err)
+		return fmt.Errorf("stripe request failed: %w", err)
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024+1))
@@ -90,7 +90,7 @@ func (cfg stripeConfig) request(ctx context.Context, method, path string, form u
 		return err
 	}
 	if len(data) > 2*1024*1024 {
-		return fmt.Errorf("Stripe response exceeds size limit")
+		return fmt.Errorf("stripe response exceeds size limit")
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		var envelope struct {
@@ -156,7 +156,7 @@ func (cfg stripeConfig) recoverSession(ctx context.Context, o *storage.RechargeO
 		}
 		cursor = list.Data[len(list.Data)-1].ID
 	}
-	return found, false, fmt.Errorf("Stripe session recovery exceeded page limit")
+	return found, false, fmt.Errorf("stripe session recovery exceeded page limit")
 }
 
 func (cfg stripeConfig) adjustments(ctx context.Context, pi string) ([]storage.PaymentAdjustment, error) {

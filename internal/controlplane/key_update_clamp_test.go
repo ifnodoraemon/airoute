@@ -2,8 +2,6 @@ package controlplane
 
 import (
 	"testing"
-
-	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
 // ApplyKeyUpdate must enforce the same quota policy as key creation.
@@ -91,18 +89,4 @@ func TestApplyKeyUpdateClampsSelfServiceQuotas(t *testing.T) {
 			t.Errorf("admin quotas were clamped to %d/%d", big.Record.RPM, big.Record.TPM)
 		}
 	})
-}
-
-// The clamp policy lives in one helper, so the self-service creation path must
-// apply exactly the same bounds.
-func TestPlanUserKeySharesTheQuotaClamp(t *testing.T) {
-	user := &storage.UserRecord{ID: 7, Username: "alice", GroupName: "default"}
-
-	got := PlanUserKey(user, CreateUserKeyRequest{RPM: -10, TPM: MaxSelfServiceKeyTPM + 1}, "sk-test")
-	if got.RPM != DefaultUserKeyRPM {
-		t.Errorf("PlanUserKey RPM = %d, want %d", got.RPM, DefaultUserKeyRPM)
-	}
-	if got.TPM != MaxSelfServiceKeyTPM {
-		t.Errorf("PlanUserKey TPM = %d, want the cap %d", got.TPM, MaxSelfServiceKeyTPM)
-	}
 }

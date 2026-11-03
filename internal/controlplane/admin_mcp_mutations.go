@@ -101,21 +101,13 @@ func (h *AdminHandler) ToggleMCPServer(c *gin.Context) {
 	}
 
 	var req ToggleSkillRequest
-	if err := c.ShouldBindJSON(&req); err == nil && req.Enabled != nil {
-		if err := h.repo.SetMCPServerEnabled(id, *req.Enabled); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "更新状态失败: " + err.Error()})
-			return
-		}
-	} else {
-		srv, err := h.repo.GetMCPServer(id)
-		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"code": 404, "error": "未找到该 MCP 服务"})
-			return
-		}
-		if err := h.repo.SetMCPServerEnabled(id, !srv.Enabled); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "切换状态失败: " + err.Error()})
-			return
-		}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Enabled == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "请提供布尔值 enabled"})
+		return
+	}
+	if err := h.repo.SetMCPServerEnabled(id, *req.Enabled); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": "更新状态失败: " + err.Error()})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "MCP 服务状态更新成功"})

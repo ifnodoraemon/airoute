@@ -3,11 +3,12 @@ set -eu
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_dir"
-base_version=$(sed -n 's/^[[:space:]]*"version": "\([^"]*\)",*$/\1/p' web/package.json)
+base_version=$(cat VERSION)
 test -n "$base_version"
+web_base_version=$(sed -n 's/^[[:space:]]*"version": "\([^"]*\)",*$/\1/p' web/package.json)
 go_base_version=$(sed -n 's/^const BaseVersion = "\([^"]*\)"$/\1/p' internal/buildinfo/version.go)
-if [ "$base_version" != "$go_base_version" ]; then
-    echo "Go and frontend base versions disagree" >&2
+if [ "$base_version" != "$go_base_version" ] || [ "$base_version" != "$web_base_version" ]; then
+    echo "Version metadata disagrees with VERSION" >&2
     exit 1
 fi
 

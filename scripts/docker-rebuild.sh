@@ -18,9 +18,24 @@ VERSION="$version" docker compose build
 # container when its config actually changed, so steady-state rebuilds stay a
 # no-op. A dependency recreate can briefly interrupt requests; that is the price
 # of applying a changed capacity setting, so keep such edits deliberate.
-echo "==> Reconciling dependency containers (postgres, redis, storage)..."
-VERSION="$version" docker compose up -d --no-deps postgres redis storage
-for container in airoute-postgres airoute-redis airoute-storage; do
+storage_driver=$(docker compose config --format json | awk -F '"' '/"STORAGE_DRIVER":/ && !seen {print $4; seen=1}')
+storage_endpoint=$(docker compose config --format json | awk -F '"' '/"STORAGE_S3_ENDPOINT":/ && !seen {print $4; seen=1}')
+dependencies="postgres redis"
+case "$storage_driver" in
+    local) ;;
+    s3|rustfs)
+        case "$storage_endpoint" in
+            http://storage|http://storage:*|http://storage/*|https://storage|https://storage:*|https://storage/*)
+                dependencies="$dependencies storage" ;;
+        esac
+        ;;
+    *) echo "Cannot resolve the configured storage driver" >&2; exit 1 ;;
+esac
+echo "==> Reconciling dependency containers ($dependencies)..."
+# The service list is built exclusively from the fixed names above.
+VERSION="$version" docker compose up -d --no-deps $dependencies
+for service in $dependencies; do
+    container="airoute-$service"
     status=
     for _ in $(seq 1 30); do
         status=$(docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null || printf missing)
@@ -65,6 +80,9 @@ done
 # the previous content even though `nginx -s reload` reports success. Compare
 # content hashes and recreate the edge when they drift.
 echo "==> Reconciling load balancer..."
+# Reconcile port mappings, limits and networks even when the nginx file did not
+# change. Reload alone only applies nginx's own configuration.
+VERSION="$version" docker compose up -d --no-deps lb
 edge_config_hash=$(md5sum deploy/nginx-compose.conf | cut -d' ' -f1)
 edge_running_hash=$(docker exec airoute-lb md5sum /etc/nginx/conf.d/default.conf 2>/dev/null | cut -d' ' -f1 || true)
 if [ "$edge_config_hash" != "$edge_running_hash" ]; then

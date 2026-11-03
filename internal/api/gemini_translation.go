@@ -83,7 +83,7 @@ func geminiToolTranslation(raw, config []byte) error {
 	for _, tool := range tools {
 		for key := range tool {
 			if key != "functionDeclarations" {
-				return fmt.Errorf("Gemini tool %q requires a native Gemini upstream", key)
+				return fmt.Errorf("gemini tool %q requires a native Gemini upstream", key)
 			}
 		}
 		var declarations []json.RawMessage

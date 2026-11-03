@@ -1,12 +1,15 @@
 export function createGeminiOutput() {
-  return { text: '', reasoning: '', media: [], tools: [], usage: null, rawParts: [] };
+  return { text: '', reasoning: '', media: [], tools: [], usage: null, rawParts: [], feedback: null, finishReason: '', safetyRatings: [] };
 }
 
 export function applyGeminiOutput(state, frame) {
   if (frame.error) throw new Error(frame.error.message || 'Gemini request failed');
   if (frame.usageMetadata) state.usage = frame.usageMetadata;
+  if (frame.promptFeedback) state.feedback = frame.promptFeedback;
   for (const candidate of frame.candidates || []) {
     if ((candidate.index || 0) !== 0) continue;
+    if (candidate.finishReason) state.finishReason = candidate.finishReason;
+    if (candidate.safetyRatings) state.safetyRatings = candidate.safetyRatings;
     for (const part of candidate.content?.parts || []) {
       state.rawParts.push(part);
       if (part.text) state[part.thought ? 'reasoning' : 'text'] += part.text;
@@ -24,6 +27,23 @@ export function applyGeminiOutput(state, frame) {
     }
   }
   return { ...state, media: state.media.map(item => ({ ...item })), tools: [...state.tools] };
+}
+
+export function geminiOutputNotice(state, isZh) {
+  const blocked = state.feedback?.blockReason;
+  if (blocked && blocked !== 'BLOCK_REASON_UNSPECIFIED') return isZh
+    ? `请求被拦截（${blocked}），请调整输入后重试。`
+    : `Request blocked (${blocked}). Revise your input and retry.`;
+  if (state.finishReason === 'MAX_TOKENS') return isZh
+    ? '已达到输出长度上限（MAX_TOKENS），可增加输出上限后重试。'
+    : 'Output limit reached (MAX_TOKENS). Increase the output limit to retry.';
+  if (state.finishReason && !['STOP', 'FINISH_REASON_UNSPECIFIED'].includes(state.finishReason)) return isZh
+    ? `生成已结束（${state.finishReason}），请检查请求和安全评估。`
+    : `Generation ended (${state.finishReason}). Check your request and safety ratings.`;
+  if (!state.text && !state.reasoning && !state.media.length && !state.tools.length) return isZh
+    ? '请求已结束，未返回内容。请调整输入或检查模型配置后重试。'
+    : 'Request completed without content. Revise your input or check the model configuration.';
+  return '';
 }
 
 export async function readGeminiSSE(response, onFrame) {

@@ -132,7 +132,7 @@ func (p *GeminiProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 		}
 	}
 	if len(choices) == 0 {
-		return nil, fmt.Errorf("Gemini response contains neither candidates nor prompt feedback")
+		return nil, fmt.Errorf("gemini response contains neither candidates nor prompt feedback")
 	}
 
 	var usage *model.Usage

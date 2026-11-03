@@ -38,10 +38,10 @@ func loadStripeConfig() (stripeConfig, error) {
 		return c, nil
 	}
 	if c.Key == "" || c.Secret == "" {
-		return c, fmt.Errorf("Stripe API key and webhook signing secret must both be configured")
+		return c, fmt.Errorf("stripe API key and webhook signing secret must both be configured")
 	}
 	if (!strings.HasPrefix(c.Key, "sk_"+c.Mode+"_") && !strings.HasPrefix(c.Key, "rk_"+c.Mode+"_")) || !strings.HasPrefix(c.Secret, "whsec_") {
-		return c, fmt.Errorf("Stripe credentials do not match STRIPE_MODE")
+		return c, fmt.Errorf("stripe credentials do not match STRIPE_MODE")
 	}
 	if raw := strings.TrimSpace(os.Getenv("STRIPE_API_BASE")); raw != "" {
 		u, err := url.Parse(raw)
@@ -60,7 +60,7 @@ func loadStripeConfig() (stripeConfig, error) {
 	}
 	u, err := url.Parse(c.PublicURL)
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Scheme != "https" && !(c.Mode == "test" && u.Scheme == "http" && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" || u.Hostname() == "::1"))) {
-		return c, fmt.Errorf("Stripe requires a configured HTTPS PUBLIC_URL (loopback HTTP is allowed in test mode)")
+		return c, fmt.Errorf("stripe requires a configured HTTPS PUBLIC_URL (loopback HTTP is allowed in test mode)")
 	}
 	c.PublicURL = strings.TrimRight(c.PublicURL, "/")
 	c.SuccessURL = strings.TrimSpace(os.Getenv("STRIPE_SUCCESS_URL"))

@@ -109,7 +109,6 @@ func respondGeminiEmbedParseError(c *gin.Context, err error) {
 			"status":  "INVALID_ARGUMENT",
 		},
 	})
-	return
 }
 
 func renderGeminiEmbedding(c *gin.Context, resp *model.EmbeddingResponse) {

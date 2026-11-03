@@ -187,7 +187,6 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 			// consumer, so it was removed rather than left to drift.
 			userGroup.GET("/wallet/orders/:order_no", adminHandler.GetUserRechargeOrder)
 			userGroup.GET("/keys", adminHandler.ListUserKeys)
-			userGroup.POST("/keys", adminHandler.CreateUserKey)
 			userGroup.POST("/password", adminHandler.ChangePassword)
 		}
 

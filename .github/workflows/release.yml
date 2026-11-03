@@ -88,6 +88,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
+          name: Airoute ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          make_latest: ${{ !contains(github.ref_name, '-') }}
+          overwrite_files: false
+          generate_release_notes: true
+          body_path: ${{ hashFiles(format('docs/releases/{0}.md', steps.version.outputs.value)) != '' && format('docs/releases/{0}.md', steps.version.outputs.value) || '' }}
           files: |
             dist/*.tar.gz
             dist/*.zip

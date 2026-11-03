@@ -30,6 +30,11 @@ describe('MyUsageView', () => {
     expect(screen.getByText('ak_1f0013dea24034ac0001')).toBeTruthy();
     expect(screen.getByText('¥2.5000')).toBeTruthy();
     expect(screen.getByText('¥5.0000')).toBeTruthy();
+    expect(screen.getByText('累计 Tokens')).toBeInTheDocument();
+    expect(screen.getByText('TPM 上限')).toBeInTheDocument();
+    expect(screen.getByText('1,000')).toBeInTheDocument();
+    expect(screen.getByText('100,000')).toBeInTheDocument();
+    expect(screen.queryByText('1,000 / 100,000')).not.toBeInTheDocument();
     expect(adminFetch).toHaveBeenCalledWith('/api/v1/admin/stats/overview');
     expect(adminFetch).toHaveBeenCalledWith('/api/v1/user/wallet');
     expect(adminFetch).toHaveBeenCalledWith('/api/v1/user/keys');

@@ -605,7 +605,7 @@ func createUsersUsernameUniqueLowerIndex(db *DB) error {
 			conflicts = append(conflicts, strings.Join(names, " / "))
 		}
 		return fmt.Errorf("%w: users.username must be unique ignoring case, but these accounts differ only by case: %s. "+
-			"Rename or delete all but one of each group (the console user list shows them), then restart. No data was modified.",
+			"Rename or delete all but one of each group (the console user list shows them), then restart. No data was modified",
 			errMigrationDeferred, strings.Join(conflicts, "; "))
 	}
 

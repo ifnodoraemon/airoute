@@ -427,6 +427,7 @@ These were registered historically but had no consumer and are intentionally gon
 | Removed | Replacement |
 | :--- | :--- |
 | `GET /api/v1/user/me` | `GET /api/v1/auth/me` |
+| `POST /api/v1/user/keys` | `POST /api/v1/admin/keys` (owner and self-service quota checks apply to regular callers) |
 | `DELETE /api/v1/user/keys/{id}` | `DELETE /api/v1/admin/keys/{id}` (same owner check for regular callers) |
 | `GET /api/v1/user/wallet/orders` (list) | `GET /api/v1/user/wallet/orders/{order_no}` (single order) |
 | `GET /api/v1/admin/skills/{id}/download` | `GET /api/v1/skills/{id}/download` (public bundle download) |

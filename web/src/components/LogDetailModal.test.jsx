@@ -26,6 +26,13 @@ function log(over = {}) {
 }
 
 describe('LogDetailModal', () => {
+  it('passes the inspected model to the playground navigation', () => {
+    const onNavigate = vi.fn();
+    render(<LogDetailModal log={log({ model: 'audit-omega' })} onClose={vi.fn()} onCopy={vi.fn()} onNavigate={onNavigate} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Playground 演练' }));
+    expect(onNavigate).toHaveBeenCalledWith('playground', 'audit-omega');
+  });
+
   it('renders a failover channel chain as an ordered sequence', () => {
     render(<LogDetailModal log={log()} onClose={vi.fn()} onCopy={vi.fn()} lang="zh" />);
 

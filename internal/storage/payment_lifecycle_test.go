@@ -41,7 +41,8 @@ func paymentStorageSuite(t *testing.T, db *DB) {
 	}
 	apply := func(o *RechargeOrderRecord, s PaymentSnapshot) error {
 		var claimed *RechargeOrderRecord
-		deadline := time.Now().Add(10 * time.Second)
+		deadline := time.Now().Add(30 * time.Second)
+		backoff := 2 * time.Millisecond
 		for {
 			var err error
 			claimed, err = r.ClaimRecharge(o.OrderNo, "test", true)
@@ -54,13 +55,17 @@ func paymentStorageSuite(t *testing.T, db *DB) {
 			if time.Now().After(deadline) {
 				return err
 			}
-			time.Sleep(time.Millisecond)
+			time.Sleep(backoff)
+			if backoff < 100*time.Millisecond {
+				backoff *= 2
+			}
 		}
 		defer r.ReleaseRecharge(o.OrderNo, claimed.SyncVersion, 0, "")
 		_, err := r.ApplyPaymentSnapshot(o.OrderNo, claimed.SyncVersion, s)
 		return err
 	}
-	parallel := func(n int, fn func(int) error) {
+	parallel := func(t *testing.T, n int, fn func(int) error) {
+		t.Helper()
 		var wg sync.WaitGroup
 		errs := make(chan error, n)
 		start := make(chan struct{})
@@ -79,7 +84,7 @@ func paymentStorageSuite(t *testing.T, db *DB) {
 	t.Run("64_concurrent_completions_credit_once", func(t *testing.T) {
 		user := newUser("duplicate")
 		o := newOrder("duplicate", user, 50)
-		parallel(64, func(int) error { return apply(o, snapshot(o)) })
+		parallel(t, 64, func(int) error { return apply(o, snapshot(o)) })
 		require.Equal(t, ToUnits(50), balance(user))
 	})
 	t.Run("32_orders_preserve_wallet_updates", func(t *testing.T) {
@@ -88,7 +93,7 @@ func paymentStorageSuite(t *testing.T, db *DB) {
 		for i := range orders {
 			orders[i] = newOrder(fmt.Sprintf("independent-%d", i), user, 1.23)
 		}
-		parallel(32, func(i int) error { return apply(orders[i], snapshot(orders[i])) })
+		parallel(t, 32, func(i int) error { return apply(orders[i], snapshot(orders[i])) })
 		require.Equal(t, ToUnits(39.36), balance(user))
 	})
 	t.Run("expired_lease_cannot_overwrite_refund", func(t *testing.T) {
@@ -161,7 +166,7 @@ func paymentStorageSuite(t *testing.T, db *DB) {
 		require.NoError(t, r.CreateRedemptionCodes([]*RedemptionCodeRecord{{Code: code, Amount: 1.23}}))
 		var mu sync.Mutex
 		successes := 0
-		parallel(32, func(int) error {
+		parallel(t, 32, func(int) error {
 			_, err := r.RedeemCode(code, user)
 			if err == nil {
 				mu.Lock()

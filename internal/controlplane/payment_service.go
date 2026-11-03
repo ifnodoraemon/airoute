@@ -165,7 +165,7 @@ func (h *AdminHandler) processStripeEvent(ctx context.Context, e storage.StripeE
 			}
 		}
 		if object.PaymentIntent == "" {
-			return fmt.Errorf("Stripe object has no payment intent")
+			return fmt.Errorf("stripe object has no payment intent")
 		}
 		o, err := h.repo.FindRechargeByPaymentIntent(string(object.PaymentIntent))
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
