@@ -63,3 +63,12 @@ func TestThinkingCapabilityDiscoveryDoesNotApplyDefaultOutputLimit(t *testing.T)
 	require.Equal(t, 24577, capability.MinimumOutputTokens["high"])
 	require.Equal(t, 8193, capability.MinimumOutputTokens["medium"])
 }
+
+func TestThinkingBudgetIncludesLaterCandidatesWithDifferentDefaults(t *testing.T) {
+	d := NewDispatcher([]model.ChannelConfig{
+		{Name: "standard", Type: model.ProviderDeepSeek, Models: []string{"alias"}, ModelCapabilities: map[string]model.ModelCapabilityConfig{"alias": {Thinking: &model.ThinkingConfig{Profile: "deepseek"}}}},
+		{Name: "budget", Type: model.ProviderAnthropic, Models: []string{"alias"}, ModelCapabilities: map[string]model.ModelCapabilityConfig{"alias": {Thinking: &model.ThinkingConfig{Profile: "claude-budget", Efforts: []string{"high"}}}}},
+	})
+	capability := d.GetThinkingCapabilities([]string{"alias"})["alias"]
+	require.Equal(t, 24577, capability.MinimumOutputTokens["default"])
+}

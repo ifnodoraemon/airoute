@@ -82,8 +82,12 @@ func (d *Dispatcher) GetThinkingCapabilities(names []string) map[string]Thinking
 					}
 					return err == nil
 				}
-				choices.On = choices.On || eligible(model.ThinkingControl{Mode: "on"})
-				choices.Off = choices.Off || eligible(model.ThinkingControl{Mode: "off"})
+				// Resolve every candidate: output budgets may differ even when
+				// a previous provider already supports the same mode.
+				canEnable := eligible(model.ThinkingControl{Mode: "on"})
+				canDisable := eligible(model.ThinkingControl{Mode: "off"})
+				choices.On = choices.On || canEnable
+				choices.Off = choices.Off || canDisable
 				for _, effort := range profile.Efforts {
 					if eligible(model.ThinkingControl{Mode: "on", Effort: effort}) && !slices.Contains(choices.Efforts, effort) {
 						choices.Efforts = append(choices.Efforts, effort)
