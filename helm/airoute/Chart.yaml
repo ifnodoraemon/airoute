@@ -2,8 +2,8 @@ apiVersion: v2
 name: airoute
 description: Production-grade, high-performance, HA LLM Gateway with Any-to-Any protocol matrix and zero-latency routing.
 type: application
-version: 2.0.0
-appVersion: "2.0.0"
+version: 2.0.1
+appVersion: "2.0.1"
 keywords:
   - llm
   - gateway

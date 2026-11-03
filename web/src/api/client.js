@@ -45,7 +45,7 @@ export function resetApiClient() {
  * headers keep working.
  */
 export async function apiFetch(url, options = {}) {
-  const { token, headers: optionHeaders, ...rest } = options;
+  const { token, headers: optionHeaders, sessionAuthErrorsOnly = false, ...rest } = options;
   const headers = { ...(optionHeaders || {}) };
   const effectiveToken = token || tokenProvider();
   const generation = sessionProvider();
@@ -62,7 +62,11 @@ export async function apiFetch(url, options = {}) {
   }
 
   const res = await fetch(url, { ...rest, headers, credentials: 'same-origin' });
-  if (res.status === 401 && generation === sessionProvider()) {
+  let sessionRejected = res.status === 401;
+  if (sessionRejected && sessionAuthErrorsOnly) {
+    try { sessionRejected = (await res.clone().json())?.code === 401; } catch { sessionRejected = false; }
+  }
+  if (sessionRejected && generation === sessionProvider()) {
     unauthorizedHandler({ response: res, token: effectiveToken });
   }
   return res;

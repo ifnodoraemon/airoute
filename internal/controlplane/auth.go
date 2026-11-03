@@ -21,6 +21,15 @@ func GetClaimsFromContext(c *gin.Context) (*AdminClaims, bool) {
 	return claims, ok && claims != nil
 }
 
+// GetSessionUserID returns the durable user ID established by session validation.
+// It is never taken from a browser header or an unverified token field.
+func GetSessionUserID(c *gin.Context) int64 {
+	if c == nil {
+		return 0
+	}
+	return c.GetInt64("session_user_id")
+}
+
 // RequireAuthClaims validates that the request has an authenticated session, writing a 401 response if absent.
 func RequireAuthClaims(c *gin.Context) (*AdminClaims, bool) {
 	claims, ok := GetClaimsFromContext(c)
@@ -117,6 +126,7 @@ func (h *AdminHandler) AdminAuthMiddleware() gin.HandlerFunc {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 401, "error": "账户权限已变更，请重新登录"})
 				return
 			}
+			c.Set("session_user_id", user.ID)
 		}
 
 		c.Set("admin_claims", claims)

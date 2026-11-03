@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   MessageSquare,
   Image as ImageIcon,
@@ -28,14 +28,9 @@ import GeminiPlayground from './GeminiPlayground';
 import { assistantContent, textContent } from '../lib/assistantContent';
 import { inferClientModality } from '../lib/modelModality';
 import { availableKeyModels } from '../lib/keyModels';
-import {
-  API_KEY_PLACEHOLDER,
-  UNAUTHENTICATED_KEY,
-  credentialProblem,
-  credentialProblemHint,
-  isUsableAPIKey,
-  keyDisplayRef
-} from '../lib/apiKey';
+import { API_KEY_PLACEHOLDER, keyDisplayRef } from '../lib/apiKey';
+import { consoleFetch } from '../api/console';
+import { useConsoleKeySelection } from '../hooks/useConsoleKeySelection';
 
 export default function PlaygroundView({
   keys = [],
@@ -46,6 +41,7 @@ export default function PlaygroundView({
   initialModel = '',
   initialModality = 'chat',
   initialScenario = null,
+  onCreateKey,
   lang = 'zh',
   t
 }) {
@@ -53,53 +49,17 @@ export default function PlaygroundView({
   const [playModality, setPlayModality] = useState(initialModality || 'chat');
 
   const [playMode, setPlayMode] = useState('single'); // 'single' | 'arena'
-  // Two different things are selected here, and conflating them was the bug:
-  //   * `selectedKeyId` picks a row from the key list for its *context*
-  //     (tenant + allowed models). It exposes a key ID, never a credential.
-  //   * `sessionApiKey` is the plaintext credential the operator pastes for this
-  //     session; it signs the actual request and lives only in component memory.
-  const activeKeys = useMemo(() => keys.filter(key => !key.status || key.status === 'active'), [keys]);
-  // Only rows with an id can scope the request; the selector keys off it.
-  const contextKeys = useMemo(() => activeKeys.filter(key => key.id != null), [activeKeys]);
-  const [selectedKeyId, setSelectedKeyId] = useState(() => (
-    contextKeys[0] ? String(contextKeys[0].id) : UNAUTHENTICATED_KEY
-  ));
-  const [sessionApiKey, setSessionApiKey] = useState('');
-  const keySelectionTouched = useRef(false);
-
-  // Auto-select the first key for entitlement context, keyed off its id. A console
-  // with no keys configured keeps its historical public-gateway behaviour, but as
-  // an explicit unauthenticated choice rather than an empty credential.
-  useEffect(() => {
-    if (selectedKeyId === UNAUTHENTICATED_KEY) {
-      // Keys can arrive after the view mounts (for example just after account
-      // creation). An implicit empty-list default must not remain a public call;
-      // an explicitly chosen public context still belongs to the user.
-      if (!keySelectionTouched.current && contextKeys[0]) setSelectedKeyId(String(contextKeys[0].id));
-      return;
+  const { availableKeys: contextKeys, selectedKey: selectedKeyObj, keyId: selectedKeyId, setKeyId: setSelectedKeyId } = useConsoleKeySelection(keys);
+  const resolveCallCredentials = (modality, requestModels = []) => {
+    if (!selectedKeyId) {
+      showToast?.(isZh ? '请先创建并选择一把可用的 API 访问密钥。' : 'Create and select an active API key first.', 'warning');
+      return null;
     }
-    if (!contextKeys.some(key => String(key.id) === selectedKeyId)) {
-      setSelectedKeyId(contextKeys[0] ? String(contextKeys[0].id) : UNAUTHENTICATED_KEY);
+    if (modality && requestModels.some(name => !name || !getPlaygroundModels(modality).includes(name))) {
+      showToast?.(isZh ? '所选密钥暂无可用模型，请切换密钥或配置模型权限。' : 'No available model for this key. Select another key or update its model access.', 'warning');
+      return null;
     }
-  }, [contextKeys, selectedKeyId]);
-
-  const selectedKeyObj = useMemo(
-    () => keys.find(k => String(k.id) === selectedKeyId),
-    [keys, selectedKeyId]
-  );
-
-  // Resolves the credential for an outbound call. `null` means the call must be
-  // refused: a listed key was chosen but its plaintext was never pasted, and
-  // sending the listed key ID would fail authentication while looking like a gateway
-  // fault. The explicit "unauthenticated" choice returns an empty key (no header).
-  const resolveCallCredentials = () => {
-    if (selectedKeyId === UNAUTHENTICATED_KEY) return { key: '' };
-    const typed = sessionApiKey.trim();
-    if (isUsableAPIKey(typed)) return { key: typed };
-    // Name the actual defect: a key ID copied from the list and a missing value
-    // need different remedies, and both used to surface as a gateway 401.
-    showToast?.(credentialProblemHint(credentialProblem(typed), isZh), 'warning');
-    return null;
+    return { keyId: selectedKeyId };
   };
 
   const getPlaygroundModels = (modality) => {
@@ -240,29 +200,29 @@ export default function PlaygroundView({
 
   // Sync initial model across chat and multimodal categories
   useEffect(() => {
-    if (chatModels.length > 0 && !chatModels.includes(playModel)) {
-      setPlayModel(chatModels[0]);
+    if (!chatModels.includes(playModel)) {
+      setPlayModel(chatModels[0] || '');
     }
-    if (chatModels.length > 1 && !chatModels.includes(arenaModelB)) {
-      setArenaModelB(chatModels[1]);
+    if (!chatModels.includes(arenaModelB)) {
+      setArenaModelB(chatModels[1] || chatModels[0] || '');
     }
-    if (imgModels.length > 0 && !imgModels.includes(imgModel)) {
-      setImgModel(imgModels[0]);
+    if (!imgModels.includes(imgModel)) {
+      setImgModel(imgModels[0] || '');
     }
-    if (ttsModels.length > 0 && !ttsModels.includes(ttsModel)) {
-      setTtsModel(ttsModels[0]);
+    if (!ttsModels.includes(ttsModel)) {
+      setTtsModel(ttsModels[0] || '');
     }
-    if (sttModels.length > 0 && !sttModels.includes(sttModel)) {
-      setSttModel(sttModels[0]);
+    if (!sttModels.includes(sttModel)) {
+      setSttModel(sttModels[0] || '');
     }
-    if (videoModels.length > 0 && !videoModels.includes(videoModel)) {
-      setVideoModel(videoModels[0]);
+    if (!videoModels.includes(videoModel)) {
+      setVideoModel(videoModels[0] || '');
     }
-    if (embedModels.length > 0 && !embedModels.includes(embedModel)) {
-      setEmbedModel(embedModels[0]);
+    if (!embedModels.includes(embedModel)) {
+      setEmbedModel(embedModels[0] || '');
     }
-    if (rerankModels.length > 0 && !rerankModels.includes(rerankModel)) {
-      setRerankModel(rerankModels[0]);
+    if (!rerankModels.includes(rerankModel)) {
+      setRerankModel(rerankModels[0] || '');
     }
   }, [
     chatModels, playModel, arenaModelB,
@@ -344,11 +304,7 @@ Execute the following mission with precision, maintainability, and zero speculat
      Both the fetch handlers below and "Copy cURL" consume these, so the copied
      command can never drift away from what the playground actually sends.
      ------------------------------------------------------------------------- */
-  const buildHeaders = (key) => {
-    const headers = { 'Content-Type': 'application/json' };
-    if (key) headers['Authorization'] = `Bearer ${key}`;
-    return headers;
-  };
+  const buildHeaders = () => ({ 'Content-Type': 'application/json' });
 
   const buildVideoRequest = () => ({
     method: 'POST',
@@ -442,18 +398,13 @@ Execute the following mission with precision, maintainability, and zero speculat
   const shellQuote = (value) => `'${String(value).replace(/'/g, "'\\''")}'`;
 
   const formatCurl = (request, extraFlags) => {
-    const typed = sessionApiKey.trim();
     const lines = [
       `curl -X ${request.method} "${getGatewayOrigin()}${request.path}"`,
       '  -H "Content-Type: application/json"',
     ];
-    // Never echo a listed key ID into a snippet. Use the pasted plaintext when it is
-    // usable, an obvious placeholder when it is not, and no auth header at all
-    // for the explicit unauthenticated mode (which is what the request sends).
-    if (selectedKeyId !== UNAUTHENTICATED_KEY) {
-      const snippetKey = isUsableAPIKey(typed) ? typed : API_KEY_PLACEHOLDER;
-      lines.push(`  -H "Authorization: Bearer ${snippetKey}"`);
-    }
+    // Export the public SDK request with a placeholder; a console login cookie
+    // and the selected key identifier never belong in a shareable command.
+    lines.push(`  -H "Authorization: Bearer ${API_KEY_PLACEHOLDER}"`);
     if (extraFlags) lines.push(`  ${extraFlags}`);
     lines.push(`  -d ${shellQuote(JSON.stringify(request.body))}`);
     return lines.join(' \\\n');
@@ -502,7 +453,7 @@ Execute the following mission with precision, maintainability, and zero speculat
 
   // Run chat invocation
   const handleRunChat = async () => {
-    const credentials = resolveCallCredentials();
+    const credentials = resolveCallCredentials('chat', playMode === 'arena' ? [playModel, arenaModelB] : [playModel]);
     if (!credentials) return;
     const typed = chatInput.trim();
     let newMessages;
@@ -561,9 +512,9 @@ Execute the following mission with precision, maintainability, and zero speculat
       try {
         const request = buildChatRequest(targetModel, payloadMessages);
 
-        const res = await fetch(request.path, {
+        const res = await consoleFetch(request.path, credentials.keyId, {
           method: request.method,
-          headers: buildHeaders(credentials.key),
+          headers: buildHeaders(),
           body: JSON.stringify(request.body),
           signal: controller.signal
         });
@@ -691,7 +642,7 @@ Execute the following mission with precision, maintainability, and zero speculat
 
   // Image generation
   const handleGenerateImage = async () => {
-    const credentials = resolveCallCredentials();
+    const credentials = resolveCallCredentials('images', [imgModel]);
     if (!credentials) return;
     setPlayLoading(true);
     setPlayStopped(false);
@@ -701,9 +652,9 @@ Execute the following mission with precision, maintainability, and zero speculat
     const start = Date.now();
     try {
       const request = buildImageRequest();
-      const res = await fetch(request.path, {
+      const res = await consoleFetch(request.path, credentials.keyId, {
         method: request.method,
-        headers: buildHeaders(credentials.key),
+        headers: buildHeaders(),
         body: JSON.stringify(request.body),
         signal: controller.signal
       });
@@ -724,7 +675,7 @@ Execute the following mission with precision, maintainability, and zero speculat
 
   // Audio Speech (TTS)
   const handleGenerateTTS = async () => {
-    const credentials = resolveCallCredentials();
+    const credentials = resolveCallCredentials('audio_speech', [ttsModel]);
     if (!credentials) return;
     setPlayLoading(true);
     setPlayStopped(false);
@@ -734,9 +685,9 @@ Execute the following mission with precision, maintainability, and zero speculat
     const start = Date.now();
     try {
       const request = buildTtsRequest();
-      const res = await fetch(request.path, {
+      const res = await consoleFetch(request.path, credentials.keyId, {
         method: request.method,
-        headers: buildHeaders(credentials.key),
+        headers: buildHeaders(),
         body: JSON.stringify(request.body),
         signal: controller.signal
       });
@@ -768,7 +719,7 @@ Execute the following mission with precision, maintainability, and zero speculat
       if (showToast) showToast(isZh ? '请先选择音频文件' : 'Please choose an audio file first', 'warning');
       return;
     }
-    const credentials = resolveCallCredentials();
+    const credentials = resolveCallCredentials('audio_transcription', [sttModel]);
     if (!credentials) return;
     setPlayLoading(true);
     setPlayStopped(false);
@@ -781,10 +732,10 @@ Execute the following mission with precision, maintainability, and zero speculat
       form.append('file', sttFile);
       form.append('model', sttModel);
       if (sttLanguage.trim()) form.append('language', sttLanguage.trim());
-      const res = await fetch('/v1/audio/transcriptions', {
+      const res = await consoleFetch('/v1/audio/transcriptions', credentials.keyId, {
         method: 'POST',
         // No Content-Type header: the browser must set the multipart boundary.
-        headers: credentials.key ? { Authorization: `Bearer ${credentials.key}` } : {},
+        headers: {},
         body: form,
         signal: controller.signal
       });
@@ -806,7 +757,7 @@ Execute the following mission with precision, maintainability, and zero speculat
   // Video generation. The gateway returns either a finished asset or an async
   // task id that must be polled through /v1/videos/tasks/{id}.
   const handleGenerateVideo = async () => {
-    const credentials = resolveCallCredentials();
+    const credentials = resolveCallCredentials('videos', [videoModel]);
     if (!credentials) return;
     setPlayLoading(true);
     setPlayStopped(false);
@@ -817,9 +768,9 @@ Execute the following mission with precision, maintainability, and zero speculat
     const start = Date.now();
     try {
       const request = buildVideoRequest();
-      const res = await fetch(request.path, {
+      const res = await consoleFetch(request.path, credentials.keyId, {
         method: request.method,
-        headers: buildHeaders(credentials.key),
+        headers: buildHeaders(),
         body: JSON.stringify(request.body),
         signal: controller.signal
       });
@@ -832,7 +783,7 @@ Execute the following mission with precision, maintainability, and zero speculat
       const taskId = data.id || data.task_id || data.data?.id || data.data?.task_id;
       if (taskId) {
         setVideoTaskId(taskId);
-        await pollVideoTask(taskId, request.body.model, controller.signal, credentials.key);
+        await pollVideoTask(taskId, request.body.model, controller.signal, credentials.keyId);
       } else {
         setVideoResult(data);
       }
@@ -844,7 +795,7 @@ Execute the following mission with precision, maintainability, and zero speculat
     }
   };
 
-  const pollVideoTask = async (taskId, taskModel, signal, callKey) => {
+  const pollVideoTask = async (taskId, taskModel, signal, callKeyId) => {
     for (let attempt = 0; attempt < 40; attempt += 1) {
       await new Promise((resolve, reject) => {
         const abort = () => { clearTimeout(timer); reject(new DOMException('Stopped', 'AbortError')); };
@@ -853,8 +804,8 @@ Execute the following mission with precision, maintainability, and zero speculat
         signal.addEventListener('abort', abort, { once: true });
       });
       signal.throwIfAborted();
-      const res = await fetch(`/v1/videos/tasks/${encodeURIComponent(taskId)}?model=${encodeURIComponent(taskModel)}`, {
-        headers: buildHeaders(callKey), signal,
+      const res = await consoleFetch(`/v1/videos/tasks/${encodeURIComponent(taskId)}?model=${encodeURIComponent(taskModel)}`, callKeyId, {
+        headers: buildHeaders(), signal,
       });
       const data = await res.json();
       signal.throwIfAborted();
@@ -869,7 +820,7 @@ Execute the following mission with precision, maintainability, and zero speculat
 
   // Embeddings
   const handleEmbed = async () => {
-    const credentials = resolveCallCredentials();
+    const credentials = resolveCallCredentials('embeddings', [embedModel]);
     if (!credentials) return;
     setPlayLoading(true);
     setPlayStopped(false);
@@ -879,9 +830,9 @@ Execute the following mission with precision, maintainability, and zero speculat
     const start = Date.now();
     try {
       const request = buildEmbeddingRequest();
-      const res = await fetch(request.path, {
+      const res = await consoleFetch(request.path, credentials.keyId, {
         method: request.method,
-        headers: buildHeaders(credentials.key),
+        headers: buildHeaders(),
         body: JSON.stringify(request.body),
         signal: controller.signal
       });
@@ -899,7 +850,7 @@ Execute the following mission with precision, maintainability, and zero speculat
 
   // Rerank
   const handleRerank = async () => {
-    const credentials = resolveCallCredentials();
+    const credentials = resolveCallCredentials('rerank', [rerankModel]);
     if (!credentials) return;
     setPlayLoading(true);
     setPlayStopped(false);
@@ -909,9 +860,9 @@ Execute the following mission with precision, maintainability, and zero speculat
     const start = Date.now();
     try {
       const request = buildRerankRequest();
-      const res = await fetch(request.path, {
+      const res = await consoleFetch(request.path, credentials.keyId, {
         method: request.method,
-        headers: buildHeaders(credentials.key),
+        headers: buildHeaders(),
         body: JSON.stringify(request.body),
         signal: controller.signal
       });
@@ -996,6 +947,23 @@ Execute the following mission with precision, maintainability, and zero speculat
       </div>
 
       {/* 2. Main Playground Grid Layout */}
+      <div className="space-y-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#191B1F] p-4">
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1 mb-1" htmlFor="playground-key">
+              <Key className="w-3.5 h-3.5 text-indigo-500" />
+              {isZh ? 'API 访问密钥' : 'API Key'}
+            </label>
+            <select id="playground-key" value={selectedKeyId} onChange={e => setSelectedKeyId(e.target.value)}
+              disabled={!contextKeys.length || playLoading} className="ui-field font-mono max-w-xl"
+              aria-label={isZh ? '选择 API 访问密钥' : 'Select API key'}>
+              {!contextKeys.length && <option value="">{isZh ? '暂无可用密钥' : 'No active keys'}</option>}
+              {contextKeys.map(k => <option key={k.id} value={String(k.id)}>{k.tenant_id ? `${k.tenant_id} - ` : ''}{keyDisplayRef(k)}</option>)}
+            </select>
+            <p className="ui-meta">{selectedKeyId
+              ? (isZh ? '直接使用所选密钥的模型权限、额度和计费分组。' : 'Uses the selected key’s model access, quota and billing group.')
+              : (isZh ? '创建访问密钥后即可开始调试。' : 'Create an API key to start testing.')}</p>
+            {!selectedKeyId && onCreateKey && <button type="button" className="ui-btn-secondary" onClick={onCreateKey}>{isZh ? '创建访问密钥' : 'Create API key'}</button>}
+          </div>
+
       {playModality === 'gemini' && <GeminiPlayground models={availableKeyModels(selectedKeyObj, models)} resolveCredentials={resolveCallCredentials} lang={lang} showToast={showToast} />}
       <div className={`grid grid-cols-1 lg:grid-cols-3 gap-6 ${playModality === 'gemini' ? 'hidden' : ''}`}>
         {/* Left Column: Parameter Controls */}
@@ -1005,57 +973,6 @@ Execute the following mission with precision, maintainability, and zero speculat
               <Sparkles className="w-4 h-4 text-[#355CFF] dark:text-[#91A7FF]" />
               <span>{isZh ? '参数配置' : 'Hyperparameters'}</span>
             </h3>
-          </div>
-
-          {/* Key context + session credential */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between mb-1">
-              <span className="flex items-center space-x-1">
-                <Key className="w-3.5 h-3.5 text-indigo-500" />
-                <span>{isZh ? 'API 访问密钥' : 'API Key'}</span>
-              </span>
-              {selectedKeyObj?.key_id && (
-                <span className="ui-meta font-mono normal-case">{selectedKeyObj.key_id}</span>
-              )}
-            </label>
-
-            {/* The list is only entitlement context; it carries no credential. */}
-            <select
-              value={selectedKeyId}
-              onChange={(e) => { keySelectionTouched.current = true; setSelectedKeyId(e.target.value); }}
-              className="ui-field font-mono"
-              aria-label={isZh ? '密钥上下文（租户与模型范围）' : 'Key context (tenant and model scope)'}
-            >
-              {contextKeys.map((k) => (
-                <option key={String(k.id)} value={String(k.id)}>
-                  {k.tenant_id ? `${k.tenant_id} - ` : ''}{keyDisplayRef(k)}
-                </option>
-              ))}
-              <option value={UNAUTHENTICATED_KEY}>{isZh ? '免密直通 (不带 API Key)' : 'Public / Unauthenticated'}</option>
-            </select>
-
-            {selectedKeyId === UNAUTHENTICATED_KEY ? (
-              <p className="ui-meta">
-                {isZh ? '将以无凭证方式调用（仅适用于开启了公开访问的网关）。' : 'Calls will be sent without a credential (only valid on a gateway with public access enabled).'}
-              </p>
-            ) : (
-              <>
-                <input
-                  type="password"
-                  autoComplete="off"
-                  value={sessionApiKey}
-                  onChange={(e) => setSessionApiKey(e.target.value)}
-                  placeholder={isZh ? '粘贴本次会话的 API Key 明文' : 'Paste the plaintext API key for this session'}
-                  aria-label={isZh ? '会话 API Key 明文' : 'Session API key'}
-                  className="ui-field font-mono"
-                />
-                <p className="ui-meta">
-                  {isZh
-                    ? '粘贴完整明文（sk-airoute-…）。列表里的 ak_… 是密钥 ID，只用于识别，不能用于调用；明文仅在创建密钥时显示一次，遗失请新建一把。本页输入仅保存在内存中，不写入浏览器存储。'
-                    : 'Paste the full plaintext (sk-airoute-…). An ak_… value in the list is a key ID: it identifies the key but cannot be used to call it. The plaintext is shown once at creation — create a new key if it was lost. This page keeps it in memory only and never writes it to browser storage.'}
-                </p>
-              </>
-            )}
           </div>
 
           {/* Chat Modality Controls */}

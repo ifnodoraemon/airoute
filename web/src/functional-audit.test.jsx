@@ -51,7 +51,7 @@ describe('Role journey audit: desired outcomes', () => {
     // The listed row is only an identifier: the wizard keys off its id and never
     // renders the stored value (the API exposes a key ID instead).
     expect(screen.queryByText(key.key_id)).not.toBeInTheDocument();
-    expect(screen.getByLabelText('密钥上下文（租户与模型范围）')).toHaveValue('77');
+    expect(screen.getByLabelText('选择 API 访问密钥')).toHaveValue('77');
     // The "loaded credential" that matters is the entitlement: the model catalog
     // is filtered by the key that arrived after the initial empty mount.
     fireEvent.click(screen.getByRole('button', { name: /下一步：选择/ }));

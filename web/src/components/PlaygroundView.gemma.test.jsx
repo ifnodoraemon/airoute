@@ -26,7 +26,6 @@ describe('Gemma content in the playground', () => {
       }),
     })));
     const { container } = render(<PlaygroundView {...props} />);
-    fireEvent.change(screen.getByLabelText('会话 API Key 明文'), { target: { value: 'sk-airoute-gemma-test' } });
     const toggle = screen.getByLabelText('开启 SSE 流式输出 (Streaming)');
     if (toggle.checked !== stream) fireEvent.click(toggle);
     fireEvent.change(screen.getByPlaceholderText(/输入对话 Prompt/), { target: { value: 'What is two plus two?' } });

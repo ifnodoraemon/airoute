@@ -305,6 +305,9 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 	}
 
 	mmHandler := NewMultimodalHandler(dispatcher, repo)
+	if adminHandler != nil {
+		registerConsolePlaygroundRoutes(r, adminHandler, handler, mmHandler)
+	}
 
 	// OpenAI & Anthropic v1 Data Plane API group
 	v1 := r.Group("/v1")

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
+import { consoleFetch } from '../api/console';
 import { geminiDownloadPath, geminiMediaBlob, safeMediaURI } from '../lib/geminiPlayground';
 
-export default function GeminiMediaOutput({ item, index, lang = 'zh', apiKey = '' }) {
+export default function GeminiMediaOutput({ item, index, lang = 'zh', keyId = '' }) {
   const { data, mime, uri, chunks } = item;
   const [source, setSource] = useState('');
   const [error, setError] = useState('');
@@ -15,7 +16,7 @@ export default function GeminiMediaOutput({ item, index, lang = 'zh', apiKey = '
         if (uri && !path) { setSource(safeMediaURI(uri)); return; }
         let blob;
         if (path) {
-          const response = await fetch(path, { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {}, signal: abort.signal });
+          const response = await consoleFetch(path, keyId, { signal: abort.signal });
           if (!response.ok) throw new Error(`Media download: HTTP ${response.status}`);
           blob = await response.blob();
         } else blob = geminiMediaBlob({ data, mime, chunks });
@@ -24,7 +25,7 @@ export default function GeminiMediaOutput({ item, index, lang = 'zh', apiKey = '
     };
     load();
     return () => { abort.abort(); if (objectURL) URL.revokeObjectURL(objectURL); };
-  }, [data, mime, uri, chunks, apiKey]);
+  }, [data, mime, uri, chunks, keyId]);
   const label = `${lang === 'zh' ? '生成内容' : 'Generated media'} ${index + 1}`;
   if (!source) return error || uri ? <p className="text-xs break-all">{error || uri}</p> : null;
   return (

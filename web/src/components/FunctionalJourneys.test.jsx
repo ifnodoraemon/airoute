@@ -59,12 +59,8 @@ describe('functional journey regressions', () => {
     ['Claude Messages','/v1/messages','x-api-key',{ content:[{text:'hello'}] }],
     ['Google Gemini','/v1beta/models/chat-b:generateContent','x-goog-api-key',{ candidates:[{content:{parts:[{text:'hello'}]}}] }],
   ])('tests the selected %s protocol using an allowed model', async (label,path,header,body) => {
-    // The list only carries a key ID now, so the probe can only work with the
-    // plaintext the operator pastes for the session.
-    const sessionKey = 'sk-airoute-onboarding-0123456789';
     const fetchMock=vi.fn(async()=>({ok:true,json:async()=>body}));vi.stubGlobal('fetch',fetchMock);
     render(<OnboardingModal isOpen keys={[key]} models={['chat-a','chat-b']} onClose={vi.fn()} showToast={vi.fn()} />);
-    fireEvent.change(screen.getByLabelText('会话 API Key 明文'), { target: { value: sessionKey } });
     fireEvent.click(screen.getByRole('button',{name:/下一步：选择/}));
     expect(screen.getByRole('combobox')).toHaveValue('chat-b');
     expect(screen.queryByRole('option',{name:'chat-a'})).not.toBeInTheDocument();
@@ -73,9 +69,9 @@ describe('functional journey regressions', () => {
     fireEvent.click(screen.getByRole('button',{name:'立即测试握手'}));
     await waitFor(()=>expect(fetchMock).toHaveBeenCalledOnce());
     expect(fetchMock.mock.calls[0][0]).toContain(path);
-    // The probe authenticates with the pasted plaintext, never the listed key ID.
-    expect(fetchMock.mock.calls[0][1].headers[header]).toBe(sessionKey);
-    expect(fetchMock.mock.calls[0][1].headers[header]).not.toBe(key.key_id);
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/playground' + path);
+    expect(fetchMock.mock.calls[0][1].headers['X-Airoute-Key-ID']).toBe(String(key.id));
+    expect(fetchMock.mock.calls[0][1].headers[header]).toBeUndefined();
     expect(JSON.stringify(fetchMock.mock.calls[0][1].headers)).not.toContain('***');
     expect(await screen.findByText('hello')).toBeInTheDocument();
   });
