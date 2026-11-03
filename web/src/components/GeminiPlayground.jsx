@@ -3,6 +3,8 @@ import { applyGeminiOutput, createGeminiOutput, geminiOutputNotice, readGeminiSS
 import { assistantContent } from '../lib/assistantContent';
 import MarkdownRenderer from './MarkdownRenderer';
 import GeminiMediaOutput from './GeminiMediaOutput';
+import { consoleFetch } from '../api/console';
+import { extractErrorMessage } from '../api/client';
 
 const example = JSON.stringify({ contents: [{ role: 'user', parts: [{ text: '你好，请介绍一下你自己。' }] }], generationConfig: {} }, null, 2);
 
@@ -15,7 +17,7 @@ export default function GeminiPlayground({ models = [], resolveCredentials, lang
   const [result, setResult] = useState(createGeminiOutput);
   const [error, setError] = useState('');
   const [outcome, setOutcome] = useState('idle');
-  const [mediaKey, setMediaKey] = useState('');
+  const [mediaKeyId, setMediaKeyId] = useState('');
   const controller = useRef(null);
   useEffect(() => () => controller.current?.abort(), []);
   const activeModel = models.includes(model) ? model : models[0] || '';
@@ -43,15 +45,15 @@ export default function GeminiPlayground({ models = [], resolveCredentials, lang
     let request;
     try { request = JSON.parse(body); } catch { setError(isZh ? '请求 JSON 格式不正确' : 'Invalid request JSON'); return; }
     const abort = new AbortController(); controller.current = abort;
-    setLoading(true); setError(''); setOutcome('idle'); setResult(createGeminiOutput()); setMediaKey(credentials.key || '');
+    setLoading(true); setError(''); setOutcome('idle'); setResult(createGeminiOutput()); setMediaKeyId(credentials.keyId);
     const output = createGeminiOutput();
     try {
       const action = stream ? 'streamGenerateContent?alt=sse' : 'generateContent';
-      const response = await fetch(`/v1beta/models/${encodeURIComponent(activeModel)}:${action}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', ...(credentials.key ? { Authorization: `Bearer ${credentials.key}` } : {}) },
+      const response = await consoleFetch(`/v1beta/models/${encodeURIComponent(activeModel)}:${action}`, credentials.keyId, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request), signal: abort.signal,
       });
-      if (!response.ok) { const failure = await response.json(); throw new Error(failure.error?.message || response.statusText); }
+      if (!response.ok) { const failure = await response.json(); throw new Error(extractErrorMessage(failure, response.statusText)); }
       const accept = frame => setResult(applyGeminiOutput(output, frame));
       if (stream && response.body) await readGeminiSSE(response, accept); else accept(await response.json());
     } catch (failure) {
@@ -92,7 +94,7 @@ export default function GeminiPlayground({ models = [], resolveCredentials, lang
         {(result.feedback?.safetyRatings || result.safetyRatings.length > 0) && <details><summary>{isZh ? '安全评估' : 'Safety ratings'}</summary><pre className="text-xs whitespace-pre-wrap">{JSON.stringify(result.feedback?.safetyRatings || result.safetyRatings, null, 2)}</pre></details>}
         {display.reasoning && <details open><summary>{isZh ? '思考内容' : 'Reasoning'}</summary><pre className="whitespace-pre-wrap text-xs">{display.reasoning}</pre></details>}
         {display.content && <MarkdownRenderer content={display.content} lang={lang} />}
-        {result.media.map((item, index) => <GeminiMediaOutput key={index} item={item} index={index} lang={lang} apiKey={mediaKey} />)}
+        {result.media.map((item, index) => <GeminiMediaOutput key={index} item={item} index={index} lang={lang} keyId={mediaKeyId} />)}
         {result.tools.length > 0 && <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(result.tools, null, 2)}</pre>}
         {result.usage && <pre className="text-xs whitespace-pre-wrap text-slate-500">{JSON.stringify(result.usage, null, 2)}</pre>}
         {!loading && outcome === 'complete' && !notice && !error && result.rawParts.length > 0 && <button className="ui-btn-secondary" onClick={appendHistory}>{isZh ? '将完整回复加入下一轮' : 'Append complete response to history'}</button>}

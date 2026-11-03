@@ -29,23 +29,15 @@ import { getGatewayOrigin, copyToClipboard as crossOriginCopy } from '../config'
 import { extractErrorMessage } from '../api/client';
 import MarkdownRenderer from './MarkdownRenderer';
 import { inferClientModality } from '../lib/modelModality';
-import {
-  apiKeyHeaders,
-  credentialProblem,
-  credentialProblemHint,
-  credentialProblemLabel,
-  keyDisplayRef,
-  UNAUTHENTICATED_KEY
-} from '../lib/apiKey';
+import { keyDisplayRef } from '../lib/apiKey';
+import { consoleFetch } from '../api/console';
+import { useConsoleKeySelection } from '../hooks/useConsoleKeySelection';
 import { availableKeyModels } from '../lib/keyModels';
 import {
   COPILOT_HARNESS_TOOLS,
   HARNESS_BENCHMARKS,
   executeHarnessTool
 } from './copilotHarness';
-
-// Sentinel for "paste a credential that has no row in this account's key list".
-const CUSTOM_KEY_ID = '__custom__';
 
 export default function AiCopilot({
   isOpen,
@@ -65,7 +57,8 @@ export default function AiCopilot({
   showToast,
   adminFetch,
   initialQuery = '',
-  onClearInitialQuery
+  onClearInitialQuery,
+  onCreateKey
 }) {
   const isZh = lang === 'zh';
   const [messages, setMessages] = useState([]);
@@ -286,59 +279,7 @@ export default function AiCopilot({
   const origin = getGatewayOrigin();
   const baseUrl = origin ? `${origin}/v1` : '/v1';
 
-  // Two different things are chosen below, and conflating them was the original
-  // defect: the key *row* only scopes the tenant and the allowed models (the list
-  // carries a key ID, never a credential), while the *plaintext* pasted for
-  // this session is what signs the request. The copilot therefore offers the same
-  // selection as Playground, plus an explicit open-gateway mode and a free-form
-  // entry for a credential without a row in this account's list.
-  const activeKeys = useMemo(
-    () => (keys || []).filter(key => !key.status || key.status === 'active'),
-    [keys]
-  );
-  const contextKeys = useMemo(() => activeKeys.filter(key => key.id != null), [activeKeys]);
-  const [selectedKeyId, setSelectedKeyId] = useState(
-    () => (contextKeys[0] ? String(contextKeys[0].id) : UNAUTHENTICATED_KEY)
-  );
-  // Distinguishes "open-gateway mode because no key existed yet" from "the
-  // operator deliberately chose to call without a credential": the former should
-  // adopt the first key once the list loads, the latter must be preserved.
-  const [keyChoiceExplicit, setKeyChoiceExplicit] = useState(false);
-  const selectKeyContext = (value) => {
-    setKeyChoiceExplicit(true);
-    setSelectedKeyId(value);
-  };
-  // The pasted plaintext is kept per selected context: switching to another key
-  // row must not silently keep signing requests with the previous key's
-  // credential, and switching back should not force a second paste.
-  const [plaintextByContext, setPlaintextByContext] = useState({});
-  const sessionApiKey = plaintextByContext[selectedKeyId] || '';
-  const setSessionApiKey = (value) => {
-    setPlaintextByContext(prev => ({ ...prev, [selectedKeyId]: value }));
-  };
-  const selectedKeyObj = useMemo(
-    () => activeKeys.find(key => String(key.id) === selectedKeyId) || null,
-    [activeKeys, selectedKeyId]
-  );
-  const requiresCredential = selectedKeyId !== UNAUTHENTICATED_KEY;
-  // One classification drives the chip, the hint and the send guard, so the panel
-  // cannot claim "ready" for a value the guard would refuse.
-  const sessionKeyProblem = requiresCredential ? credentialProblem(sessionApiKey) : null;
-
-  // Keep the selection valid when the list reloads or the account changes. The
-  // key list loads asynchronously after the console mounts, so an implicit
-  // open-gateway default is upgraded to the first real key once one appears.
-  useEffect(() => {
-    if (selectedKeyId === CUSTOM_KEY_ID) return;
-    if (contextKeys.some(key => String(key.id) === selectedKeyId)) return;
-    if (selectedKeyId === UNAUTHENTICATED_KEY) {
-      if (!keyChoiceExplicit && contextKeys.length > 0) {
-        setSelectedKeyId(String(contextKeys[0].id));
-      }
-      return;
-    }
-    setSelectedKeyId(contextKeys[0] ? String(contextKeys[0].id) : UNAUTHENTICATED_KEY);
-  }, [contextKeys, selectedKeyId, keyChoiceExplicit]);
+  const { availableKeys: contextKeys, selectedKey: selectedKeyObj, keyId: selectedKeyId, setKeyId: setSelectedKeyId } = useConsoleKeySelection(keys);
 
   const candidateModels = useMemo(() => {
     let list = [];
@@ -361,7 +302,7 @@ export default function AiCopilot({
 
   // Keep the driving model inside the (possibly narrowed) candidate list.
   useEffect(() => {
-    if (candidateModels.length === 0) return;
+    if (candidateModels.length === 0) { setSelectedModel(''); return; }
     if (selectedModel && candidateModels.includes(selectedModel)) return;
     const preferred = candidateModels.find(m => m.includes('flash') || m.includes('deepseek') || m.includes('glm')) || candidateModels[0];
     setSelectedModel(preferred);
@@ -639,33 +580,16 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
     const text = (queryText || '').trim();
     if (!text || isLoading) return;
 
-    // Refuse before touching the network: sending the list's key ID would fail
-    // auth in a way that looks like a gateway bug, and sending nothing would look
-    // like an auth outage. The bubble states exactly what to do. Open-gateway mode
-    // is the one deliberate exception: the operator chose to call without a key.
-    //
-    // The reason is spelled out per case: the key list's copy button yields a key
-    // ID (`ak_…`), which is long enough to look like a credential but can never
-    // authenticate, so "paste the plaintext" alone was not enough to diagnose the
-    // 401 it produced.
-    const plaintextKey = sessionApiKey.trim();
-    const keyProblem = requiresCredential ? credentialProblem(plaintextKey) : null;
-    if (keyProblem) {
-      const openModeHint = isZh
-        ? '若网关未启用鉴权，可选择“免密直通”。'
-        : 'Pick the open-gateway mode instead if no key is registered.';
-      const guidance = [credentialProblemHint(keyProblem, isZh), openModeHint].join(isZh ? '' : ' ');
-      if (showToast) showToast(guidance, 'warning');
-      setMessages(prev => [...prev, {
-        id: `nokey_${Date.now()}`,
-        role: 'assistant',
-        content: guidance,
-        isError: true,
-        errorMessage: guidance,
-        harnessTrace: []
-      }]);
+    if (!selectedKeyId) {
+      const guidance = isZh ? '请先创建并选择一把可用的 API 访问密钥。' : 'Create and select an active API key first.';
+      showToast?.(guidance, 'warning');
       return;
     }
+    if (!candidateModels.includes(selectedModel)) {
+      showToast?.(isZh ? '所选密钥暂无可用的对话模型，请切换密钥或配置模型权限。' : 'No chat model is available for this key. Select another key or update model access.', 'warning');
+      return;
+    }
+    const callKeyId = selectedKeyId;
 
     const userMsgId = `u_${Date.now()}`;
     const assistantMsgId = `a_${Date.now()}`;
@@ -691,13 +615,13 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
       }
     ]);
 
-    const targetModel = selectedModel || candidateModels[0] || 'deepseek-v4-flash';
+    const targetModel = selectedModel;
     let fullContent = '';
     let fullReasoning = '';
     const accumulatedTrace = [];
 
     try {
-      const headers = { 'Content-Type': 'application/json', ...apiKeyHeaders(requiresCredential ? plaintextKey : '') };
+      const headers = { 'Content-Type': 'application/json' };
 
       // Build conversation history for payload
       const systemPrompt = buildHarnessSystemPrompt();
@@ -721,7 +645,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
       while (shouldContinue && iteration < MAX_ITERATIONS) {
         iteration++;
 
-        const response = await fetch('/v1/chat/completions', {
+        const response = await consoleFetch('/v1/chat/completions', callKeyId, {
           method: 'POST',
           headers,
           signal: controller.signal,
@@ -922,32 +846,11 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
       // matching /stream error/i, so quota/auth/5xx failures left an empty bubble
       // with no explanation.
       //
-      // An authentication refusal gets a targeted remedy: the gateway can only say
-      // "Incorrect or unauthorized API key", which leaves the operator guessing.
-      // The usual causes are a key ID pasted from the key list and a key that
-      // was deleted or disabled after it was copied. A revoked key is its own
-      // case: the gateway now names it, so say what to do instead of echoing it.
       let failureMessage = (err && err.message) || (isZh ? '请求失败' : 'Request failed');
-      if (err?.gatewayCode === 'api_key_revoked') {
+      if (err?.gatewayCode === 'api_key_revoked' || err?.gatewayCode === 'key_access_denied') {
         failureMessage = isZh
-          ? '这把密钥已被删除或禁用（revoked or disabled），网关拒绝调用。请到「API 密钥」页确认状态，或新建一把并粘贴新明文。'
-          : 'This key has been deleted or disabled (revoked or disabled), so the gateway refused the call. Check its status on the API Keys page, or create a new key and paste its plaintext.';
-      } else {
-        const authRefused = err?.gatewayCode === 'invalid_api_key'
-          || err?.gatewayCode === 'authentication_error'
-          || /incorrect or unauthorized api key|invalid_api_key/i.test(failureMessage);
-        if (authRefused) {
-          const refusalProblem = credentialProblem(plaintextKey);
-          if (refusalProblem) {
-            failureMessage = isZh
-              ? `网关不认可这把密钥：${credentialProblemHint(refusalProblem, true)}`
-              : `The gateway rejected this credential: ${credentialProblemHint(refusalProblem, false)}`;
-          } else {
-            failureMessage = isZh
-              ? '网关不认可这把密钥（Incorrect or unauthorized API key）。粘贴内容看起来是完整明文，因此请依次确认：① 若这把密钥是刚创建的，先重试一次（新密钥需要同步到所有网关副本）；② 是否已被删除或禁用；③ 是否属于当前网关。到「API 密钥」页确认状态，必要时新建一把再粘贴。'
-              : 'The gateway rejected this credential (Incorrect or unauthorized API key). The pasted value looks like a complete plaintext, so check in order: (1) if the key was just created, retry once — a new key needs to reach every gateway replica; (2) whether it was deleted or disabled; (3) whether it belongs to this gateway. Confirm its status on the API Keys page, and create a new key if needed.';
-          }
-        }
+          ? '所选密钥已被删除、禁用或不可访问。请在「API 密钥」页确认状态，然后选择一把可用密钥。'
+          : 'The selected key was deleted or disabled, or is no longer accessible. Check the API Keys page and select an active key.';
       }
       if (showToast) showToast(failureMessage, 'error');
 
@@ -1388,62 +1291,24 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
         ))}
       </div>
 
-      {/* 会话密钥：列表只能选择租户/模型范围（回显密钥 ID），发调用仍需粘贴明文 */}
       <div className="px-3 py-1.5 border-t border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] space-y-1.5">
         <div className="flex items-center gap-2">
-          <Key className={`w-3 h-3 shrink-0 ${!sessionKeyProblem ? 'text-emerald-500' : sessionKeyProblem === 'missing' ? 'text-[#9AA0A6]' : 'text-rose-500'}`} />
-          <select
-            value={selectedKeyId}
-            onChange={(e) => selectKeyContext(e.target.value)}
-            aria-label={isZh ? '密钥上下文（租户与模型范围）' : 'Key context (tenant and model scope)'}
-            className="min-w-0 max-w-[185px] bg-[#F7F7F5] dark:bg-[#22252B] border border-[#E4E6E9] dark:border-[#2C3038] rounded-lg px-2 py-1 text-xs font-mono text-[#202124] dark:text-[#F1F2F4] focus:outline-none focus:ring-1 focus:ring-[#355CFF] cursor-pointer truncate"
-            title={isZh ? '选择密钥记录以限定租户与可用模型；真正鉴权使用下方粘贴的明文' : 'Pick a key row to scope tenant and allowed models; the pasted plaintext signs the call'}
-          >
-            {contextKeys.map((k) => (
-              <option key={String(k.id)} value={String(k.id)}>
-                {k.tenant_id ? `${k.tenant_id} - ` : ''}{keyDisplayRef(k)}
-              </option>
-            ))}
-            <option value={CUSTOM_KEY_ID}>{isZh ? '手动输入密钥（不在列表）' : 'Paste a key not in the list'}</option>
-            <option value={UNAUTHENTICATED_KEY}>{isZh ? '免密直通（仅开放网关）' : 'Public / unauthenticated'}</option>
+          <Key className={`w-3 h-3 shrink-0 ${selectedKeyId ? 'text-emerald-500' : 'text-[#9AA0A6]'}`} />
+          <select value={selectedKeyId} onChange={e => setSelectedKeyId(e.target.value)}
+            disabled={!contextKeys.length || isLoading}
+            aria-label={isZh ? '选择 API 访问密钥' : 'Select API key'}
+            className="min-w-0 max-w-[240px] bg-[#F7F7F5] dark:bg-[#22252B] border border-[#E4E6E9] dark:border-[#2C3038] rounded-lg px-2 py-1 text-xs font-mono text-[#202124] dark:text-[#F1F2F4] focus:outline-none focus:ring-1 focus:ring-[#355CFF] cursor-pointer truncate">
+            {!contextKeys.length && <option value="">{isZh ? '暂无可用密钥' : 'No active keys'}</option>}
+            {contextKeys.map(k => <option key={k.id} value={String(k.id)}>{k.tenant_id ? `${k.tenant_id} - ` : ''}{keyDisplayRef(k)}</option>)}
           </select>
-          <span className={`text-[11px] font-mono shrink-0 ${!sessionKeyProblem ? 'text-emerald-600 dark:text-emerald-400' : sessionKeyProblem === 'missing' ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'}`}>
-            {!requiresCredential
-              ? (isZh ? '免密' : 'no key')
-              : credentialProblemLabel(sessionKeyProblem, isZh)}
-          </span>
+          {selectedKeyId && <span className="text-[11px] text-emerald-600 dark:text-emerald-400">{isZh ? '已就绪' : 'Ready'}</span>}
         </div>
-
-        {requiresCredential ? (
-          <>
-            <input
-              type="password"
-              autoComplete="off"
-              value={sessionApiKey}
-              onChange={(e) => setSessionApiKey(e.target.value)}
-              placeholder={isZh ? '粘贴本次会话的 API Key 明文 (仅内存，不落盘)' : 'Paste the plaintext API key for this session (memory only)'}
-              aria-label={isZh ? '会话 API Key 明文' : 'Session API key'}
-              className={`w-full min-w-0 bg-[#F7F7F5] dark:bg-[#22252B] border rounded-lg px-2.5 py-1 text-xs font-mono text-[#202124] dark:text-[#F1F2F4] placeholder-[#656B75] dark:placeholder-[#A1A7B0] focus:outline-none focus:ring-1 ${
-                sessionKeyProblem && sessionKeyProblem !== 'missing'
-                  ? 'border-rose-400/70 focus:ring-rose-400'
-                  : 'border-[#E4E6E9] dark:border-[#2C3038] focus:ring-[#355CFF]'
-              }`}
-            />
-            <p className={`text-[11px] leading-relaxed ${sessionKeyProblem && sessionKeyProblem !== 'missing' ? 'text-rose-600 dark:text-rose-400' : 'text-[#656B75] dark:text-[#A1A7B0]'}`}>
-              {sessionKeyProblem && sessionKeyProblem !== 'missing'
-                ? credentialProblemHint(sessionKeyProblem, isZh)
-                : (isZh
-                  ? '粘贴完整明文（sk-airoute-…）。列表里的 ak_… 是密钥 ID，只用于识别，不能用于调用；明文仅在创建密钥时显示一次，遗失请新建一把。'
-                  : 'Paste the full plaintext (sk-airoute-…). An ak_… value in the list is a key ID: it identifies the key but cannot be used to call it. The plaintext is shown once at creation — create a new key if it was lost.')}
-            </p>
-          </>
-        ) : (
-          <p className="text-[11px] leading-relaxed text-[#656B75] dark:text-[#A1A7B0]">
-            {isZh
-              ? '将以无凭证方式调用：仅当网关尚未注册任何密钥（开放模式）时可用。'
-              : 'Calls will be sent without a credential: only valid while the gateway has no registered keys (open mode).'}
-          </p>
-        )}
+        {!selectedKeyId && <div className="flex items-center justify-between gap-2 text-[11px] text-[#656B75] dark:text-[#A1A7B0]">
+          <span>{isZh ? '创建访问密钥后即可使用副驾驶。' : 'Create an API key to use Copilot.'}</span>
+          <button type="button" className="text-indigo-600 hover:underline" onClick={() => {
+            setViewMode?.('console'); setCurrentTab?.('keys'); onCreateKey?.();
+          }}>{isZh ? '创建访问密钥' : 'Create API key'}</button>
+        </div>}
       </div>
 
       {/* 底部输入栏 */}

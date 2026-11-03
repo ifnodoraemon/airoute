@@ -51,9 +51,8 @@ describe('Functional details regressions', () => {
       .mockResolvedValueOnce({ done: true }) };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body: { getReader: () => reader } }));
     const showToast = vi.fn();
-    // No listed key row: the request is sent without a credential, so this test
-    // exercises stream-error surfacing rather than the credential guard.
-    render(<PlaygroundView keys={[]} models={['gpt-audit']} initialModel="gpt-audit" showToast={showToast} />);
+    // An active selected key authorizes the console request under the session.
+    render(<PlaygroundView keys={[{id: 1, status: 'active'}]} models={['gpt-audit']} initialModel="gpt-audit" showToast={showToast} />);
     fireEvent.change(screen.getByPlaceholderText('输入对话 Prompt，Enter 发送 / Shift+Enter 换行...'), { target: { value: 'hello' } });
     fireEvent.click(screen.getByRole('button', { name: '发送请求' }));
     await waitFor(() => expect(screen.getByRole('button', { name: '发送请求' })).toBeEnabled());
@@ -97,7 +96,7 @@ describe('Functional details regressions', () => {
     const fetch = vi.fn().mockResolvedValueOnce(response({ id: 'video-task', status: 'processing' }))
       .mockResolvedValue(response({ id: 'video-task', status: 'succeeded' }));
     vi.stubGlobal('fetch', fetch);
-    render(<PlaygroundView initialModality="videos" initialModel="sora-audit" models={['sora-audit']} modelRoutes={[{model:'sora-audit',modality:'videos'}]} showToast={vi.fn()} />);
+    render(<PlaygroundView keys={[{id: 1, status: 'active'}]} initialModality="videos" initialModel="sora-audit" models={['sora-audit']} modelRoutes={[{model:'sora-audit',modality:'videos'}]} showToast={vi.fn()} />);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: '生成视频' })); });
     await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
     const pollURL = new URL(fetch.mock.calls[1][0], 'https://audit.invalid');
@@ -109,7 +108,7 @@ describe('Functional details regressions', () => {
     const fetch = vi.fn().mockResolvedValueOnce(response({ id: 'video-task', status: 'processing' }))
       .mockResolvedValue(response({ id: 'video-task', status: 'succeeded' }));
     vi.stubGlobal('fetch', fetch);
-    render(<PlaygroundView initialModality="videos" initialModel="sora-audit" models={['sora-audit']} modelRoutes={[{model:'sora-audit',modality:'videos'}]} showToast={vi.fn()} />);
+    render(<PlaygroundView keys={[{id: 1, status: 'active'}]} initialModality="videos" initialModel="sora-audit" models={['sora-audit']} modelRoutes={[{model:'sora-audit',modality:'videos'}]} showToast={vi.fn()} />);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: '生成视频' })); });
     fireEvent.click(screen.getByRole('button', { name: '停止生成' }));
     await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
@@ -162,7 +161,7 @@ it('does not poll again after a video query HTTP error', async () => {
     .mockResolvedValue(response({error:{message:'task unavailable'}},404));
   vi.stubGlobal('fetch',fetch);
   const showToast=vi.fn();
-  render(<PlaygroundView initialModality="videos" initialModel="sora-audit" models={['sora-audit']} modelRoutes={[{model:'sora-audit',modality:'videos'}]} showToast={showToast} />);
+  render(<PlaygroundView keys={[{id: 1, status: 'active'}]} initialModality="videos" initialModel="sora-audit" models={['sora-audit']} modelRoutes={[{model:'sora-audit',modality:'videos'}]} showToast={showToast} />);
   await act(async () => {fireEvent.click(screen.getByRole('button',{name:'生成视频'}));});
   await act(async () => {await vi.advanceTimersByTimeAsync(12000);});
   expect(fetch).toHaveBeenCalledTimes(2);
@@ -174,7 +173,7 @@ it('cancels pending video polling when the view unmounts', async () => {
   vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});
   const fetch=vi.fn().mockResolvedValue(response({id:'task',status:'processing'}));
   vi.stubGlobal('fetch',fetch);
-  const view=render(<PlaygroundView initialModality="videos" initialModel="sora-audit" models={['sora-audit']} modelRoutes={[{model:'sora-audit',modality:'videos'}]} showToast={vi.fn()} />);
+  const view=render(<PlaygroundView keys={[{id: 1, status: 'active'}]} initialModality="videos" initialModel="sora-audit" models={['sora-audit']} modelRoutes={[{model:'sora-audit',modality:'videos'}]} showToast={vi.fn()} />);
   await act(async () => {fireEvent.click(screen.getByRole('button',{name:'生成视频'}));});
   view.unmount();
   await act(async () => {await vi.advanceTimersByTimeAsync(6000);});

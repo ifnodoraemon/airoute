@@ -2,10 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import PlaygroundView from './PlaygroundView';
 
-// The key list only returns a public key ID (credentials are stored as digests),
-// so the playground must never use a listed key as a credential. The plaintext a
-// caller pastes for the session is what actually signs the request; everything
-// below pins that boundary.
+// Console calls use the login session and a selected non-secret key record.
 vi.mock('../utils/clipboard', () => ({ copyToClipboard: vi.fn(async () => true) }));
 
 // Regression guard for a crash that reached the browser:
@@ -61,159 +58,74 @@ describe('PlaygroundView', () => {
 });
 
 
-// ---------------------------------------------------------------------------
-// Identifier / mask boundary
-// ---------------------------------------------------------------------------
-
-const MASK = '3a4b5c6d***9f8e';
-const PLAINTEXT = 'sk-airoute-0123456789abcdef';
-
-const maskedKeyProps = {
-  keys: [{ id: 11, key_id: 'ak_11f0013dea24034ac011', tenant_id: 'acme', allowed_models: ['*'], status: 'active' }],
-  models: ['gpt-4o'],
-  modelRoutes: [],
-  prices: [],
-  lang: 'zh',
-};
-
-function renderMasked(props = {}) {
-  const showToast = vi.fn();
-  const utils = render(<PlaygroundView {...maskedKeyProps} showToast={showToast} {...props} />);
-  return { ...utils, showToast };
-}
+const listedKeys = [
+  { id: 11, key_id: 'ak_11f0013dea24034ac011', tenant_id: 'acme', allowed_models: ['gpt-4o'], status: 'active' },
+  { id: 12, key_id: 'ak_12f0013dea24034ac012', tenant_id: 'beta', allowed_models: ['claude-3-5-sonnet'], status: 'active' },
+];
 
 function typeChatMessage(text = 'hello') {
   fireEvent.change(screen.getByPlaceholderText(/输入对话 Prompt/), { target: { value: text } });
 }
 
-describe('PlaygroundView masked API keys', () => {
+describe('PlaygroundView session-based key selection', () => {
   beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: false,
-      status: 401,
-      json: async () => ({ error: { message: 'invalid api key' } }),
-    })));
+    document.cookie = 'airoute_csrf=console-csrf; path=/';
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'answer' } }] }) })));
   });
-
   afterEach(() => {
     vi.unstubAllGlobals();
+    document.cookie = 'airoute_csrf=; max-age=0; path=/';
   });
 
-  it('authenticates with the pasted plaintext, never with a listed identifier', async () => {
-    renderMasked();
-
-    fireEvent.change(screen.getByLabelText('会话 API Key 明文'), { target: { value: PLAINTEXT } });
+  it('calls immediately with the selected record and login session, without a key secret', async () => {
+    const { container } = render(<PlaygroundView {...baseProps} keys={listedKeys} />);
+    expect(container.querySelector('input[type="password"]')).toBeNull();
     typeChatMessage();
     fireEvent.click(screen.getByRole('button', { name: /发送请求/ }));
-
-    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
-    const [url, options] = globalThis.fetch.mock.calls[0];
-    expect(url).toBe('/v1/chat/completions');
-    expect(options.headers.Authorization).toBe(`Bearer ${PLAINTEXT}`);
-    expect(JSON.stringify(options.headers)).not.toContain('***');
-    expect(JSON.stringify(options.headers)).not.toContain(MASK);
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe('/api/v1/playground/v1/chat/completions');
+    expect(options.credentials).toBe('same-origin');
+    expect(options.headers).toEqual({ 'Content-Type': 'application/json', 'X-Airoute-Key-ID': '11', 'X-CSRF-Token': 'console-csrf' });
+    expect(JSON.parse(options.body).model).toBe('gpt-4o');
+    expect(JSON.stringify(options)).not.toContain('ak_');
   });
 
-  it('refuses to call without a pasted plaintext key', async () => {
-    const { showToast } = renderMasked();
-
+  it('switches both model scope and the billed key together', async () => {
+    render(<PlaygroundView {...baseProps} keys={listedKeys} />);
+    fireEvent.change(screen.getByLabelText('选择 API 访问密钥'), { target: { value: '12' } });
+    expect(screen.getByDisplayValue('claude-3-5-sonnet')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('gpt-4o')).not.toBeInTheDocument();
     typeChatMessage();
     fireEvent.click(screen.getByRole('button', { name: /发送请求/ }));
-
-    expect(globalThis.fetch).not.toHaveBeenCalled();
-    expect(showToast).toHaveBeenCalledWith(expect.stringContaining('明文'), 'warning');
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    expect(fetch.mock.calls[0][1].headers['X-Airoute-Key-ID']).toBe('12');
+    expect(JSON.parse(fetch.mock.calls[0][1].body).model).toBe('claude-3-5-sonnet');
   });
 
-  it('rejects a pasted key ID and names it', async () => {
-    const { showToast } = renderMasked();
-
-    // The copy button on the list yields this value; it can never authenticate.
-    fireEvent.change(screen.getByLabelText('会话 API Key 明文'), { target: { value: 'ak_11f0013dea24034ac011' } });
-    typeChatMessage();
-    fireEvent.click(screen.getByRole('button', { name: /发送请求/ }));
-
-    expect(globalThis.fetch).not.toHaveBeenCalled();
-    expect(showToast).toHaveBeenCalledWith(expect.stringContaining('密钥 ID'), 'warning');
-  });
-
-  it('rejects a pasted value that is still a mask', async () => {
-    const { showToast } = renderMasked();
-
-    fireEvent.change(screen.getByLabelText('会话 API Key 明文'), { target: { value: MASK } });
-    typeChatMessage();
-    fireEvent.click(screen.getByRole('button', { name: /发送请求/ }));
-
-    expect(globalThis.fetch).not.toHaveBeenCalled();
-    expect(showToast).toHaveBeenCalledWith(expect.any(String), 'warning');
-  });
-
-  it('puts a placeholder, not the mask, in the copied cURL when no plaintext exists', async () => {
+  it('exports an SDK placeholder without leaking session cookies or a selected record as a credential', async () => {
     const { copyToClipboard } = await import('../utils/clipboard');
     copyToClipboard.mockClear();
-    renderMasked();
-
+    render(<PlaygroundView {...baseProps} keys={listedKeys} />);
     fireEvent.click(screen.getByRole('button', { name: /复制 cURL/ }));
-
     await waitFor(() => expect(copyToClipboard).toHaveBeenCalled());
     const snippet = copyToClipboard.mock.calls[0][0];
-    expect(snippet).not.toContain('***');
-    expect(snippet).toContain('<YOUR_API_KEY>');
+    expect(snippet).toContain('/v1/chat/completions');
     expect(snippet).toContain('Authorization: Bearer <YOUR_API_KEY>');
+    expect(snippet).not.toContain('/api/v1/playground');
+    expect(snippet).not.toMatch(/ak_|console-csrf|airoute_session|X-Airoute-Key-ID/);
   });
 
-  it('puts the pasted plaintext in the copied cURL so it matches the request', async () => {
-    const { copyToClipboard } = await import('../utils/clipboard');
-    copyToClipboard.mockClear();
-    renderMasked();
-
-    fireEvent.change(screen.getByLabelText('会话 API Key 明文'), { target: { value: PLAINTEXT } });
-    fireEvent.click(screen.getByRole('button', { name: /复制 cURL/ }));
-
-    await waitFor(() => expect(copyToClipboard).toHaveBeenCalled());
-    const snippet = copyToClipboard.mock.calls[0][0];
-    expect(snippet).toContain(`Authorization: Bearer ${PLAINTEXT}`);
-    expect(snippet).not.toContain('***');
-  });
-
-  it('keys the entitlement context off the row id, not the key ID', () => {
-    // The selected row's allowed_models still filter the model list; only the
-    // credential is pasted separately.
-    renderMasked({
-      keys: [{ id: 11, key_id: 'ak_11f0013dea24034ac011', allowed_models: ['gpt-4o'], status: 'active' }],
-      models: ['gpt-4o', 'claude-3-5-sonnet'],
-    });
-
-    expect(screen.getByDisplayValue('gpt-4o')).toBeInTheDocument();
-    expect(screen.queryByDisplayValue('claude-3-5-sonnet')).not.toBeInTheDocument();
-  });
-});
-
-describe('PlaygroundView unauthenticated mode', () => {
-  beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: false,
-      status: 401,
-      json: async () => ({ error: { message: 'invalid api key' } }),
-    })));
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it('keeps the public gateway usable when no key is configured', async () => {
-    render(<PlaygroundView {...baseProps} keys={[]} showToast={vi.fn()} />);
-
-    // With no listed key the only choice is to call without a credential.
-    const select = screen.getByLabelText(/密钥上下文/);
-    expect(Array.from(select.options).map(o => o.value)).toEqual(['__none__']);
-
-    fireEvent.change(screen.getByPlaceholderText(/输入对话 Prompt/), { target: { value: 'hi' } });
+  it('requires an active key and links directly to key creation', () => {
+    const showToast = vi.fn(), onCreateKey = vi.fn();
+    render(<PlaygroundView {...baseProps} keys={listedKeys.map(k => ({ ...k, status: 'disabled' }))} showToast={showToast} onCreateKey={onCreateKey} />);
+    expect(screen.getByLabelText('选择 API 访问密钥')).toBeDisabled();
+    expect(screen.queryByRole('option', { name: /免密|手动/ })).not.toBeInTheDocument();
+    typeChatMessage();
     fireEvent.click(screen.getByRole('button', { name: /发送请求/ }));
-
-    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
-    const [, options] = globalThis.fetch.mock.calls[0];
-    expect(options.headers.Authorization).toBeUndefined();
-    expect(JSON.stringify(options.headers)).not.toContain('***');
+    expect(fetch).not.toHaveBeenCalled();
+    expect(showToast).toHaveBeenCalledWith(expect.stringContaining('创建并选择'), 'warning');
+    fireEvent.click(screen.getByRole('button', { name: '创建访问密钥' }));
+    expect(onCreateKey).toHaveBeenCalledOnce();
   });
 });

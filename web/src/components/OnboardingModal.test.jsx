@@ -7,7 +7,6 @@ import OnboardingModal from './OnboardingModal';
 // These cases pin that boundary for every snippet format and for the probe.
 
 const MASK = '3a4b5c6d***9f8e';
-const PLAINTEXT = 'sk-airoute-0123456789abcdef';
 
 const keys = [
   { id: 7, key_id: 'ak_7f0013dea24034ac0007', tenant_id: 'acme', allowed_models: ['*'], rpm: 60, status: 'active' },
@@ -55,7 +54,7 @@ describe('OnboardingModal listed identifiers', () => {
   it('keys the entitlement select off the row id, not the key ID', () => {
     setup();
 
-    const select = screen.getByLabelText('密钥上下文（租户与模型范围）');
+    const select = screen.getByLabelText('选择 API 访问密钥');
     expect(select.value).toBe('7');
     // The mask is not offered as a selectable credential value.
     expect(Array.from(select.options).map(o => o.value)).toEqual(['7']);
@@ -82,22 +81,14 @@ describe('OnboardingModal listed identifiers', () => {
     expect(snippetText()).not.toContain('***');
   });
 
-  it('disables the live probe until a usable plaintext is pasted', () => {
-    setup();
+  it('enables the live probe immediately after selecting an active key', () => {
+    const { container } = setup();
     goToStep3();
-
-    const probe = screen.getByRole('button', { name: /立即测试握手/ });
-    expect(probe).toBeDisabled();
-
-    fireEvent.change(screen.getByLabelText('会话 API Key 明文'), { target: { value: MASK } });
-    // A pasted mask is still not a credential.
-    expect(probe).toBeDisabled();
-
-    fireEvent.change(screen.getByLabelText('会话 API Key 明文'), { target: { value: PLAINTEXT } });
-    expect(probe).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: /立即测试握手/ })).not.toBeDisabled();
+    expect(container.querySelector('input[type="password"]')).toBeNull();
   });
 
-  it('sends the pasted plaintext in the probe and never the mask', async () => {
+  it('uses the login session and selected key for the probe', async () => {
     globalThis.fetch.mockResolvedValue({
       ok: true,
       json: async () => ({ choices: [{ message: { content: 'pong' } }] }),
@@ -105,13 +96,14 @@ describe('OnboardingModal listed identifiers', () => {
     setup();
     goToStep3();
 
-    fireEvent.change(screen.getByLabelText('会话 API Key 明文'), { target: { value: PLAINTEXT } });
     fireEvent.click(screen.getByRole('button', { name: /立即测试握手/ }));
 
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
     const [url, options] = globalThis.fetch.mock.calls[0];
-    expect(String(url)).toContain('/v1/chat/completions');
-    expect(options.headers.Authorization).toBe(`Bearer ${PLAINTEXT}`);
+    expect(url).toBe('/api/v1/playground/v1/chat/completions');
+    expect(options.headers.Authorization).toBeUndefined();
+    expect(options.headers['X-Airoute-Key-ID']).toBe('7');
+    expect(options.credentials).toBe('same-origin');
     expect(JSON.stringify(options.headers)).not.toContain('***');
   });
 

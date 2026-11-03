@@ -18,13 +18,10 @@ import useUnsavedGuard from '../hooks/useUnsavedGuard';
 import DiscardChangesDialog from './DiscardChangesDialog';
 import { availableKeyModels } from '../lib/keyModels';
 import { inferClientModality } from '../lib/modelModality';
-import {
-  API_KEY_PLACEHOLDER,
-  credentialProblem,
-  credentialProblemHint,
-  isUsableAPIKey,
-  keyDisplayRef
-} from '../lib/apiKey';
+import { API_KEY_PLACEHOLDER, keyDisplayRef } from '../lib/apiKey';
+import { useConsoleKeySelection } from '../hooks/useConsoleKeySelection';
+import { consoleFetch } from '../api/console';
+import { extractErrorMessage } from '../api/client';
 
 export default function OnboardingModal({
   isOpen,
@@ -38,29 +35,14 @@ export default function OnboardingModal({
 }) {
   const isZh = lang === 'zh';
   const [step, setStep] = useState(1);
-  const activeKeys = useMemo(() => keys.filter(key => !key.status || key.status === 'active'), [keys]);
-  // Only rows with an id can scope the request; the selector keys off it.
-  const contextKeys = useMemo(() => activeKeys.filter(key => key.id != null), [activeKeys]);
-  // The wizard keeps two separate selections. `selectedKeyId` picks a listed row
-  // for its tenant/model scope only — it exposes a key ID, never a credential.
-  // `sessionApiKey` is the plaintext the operator pastes for the live probe and
-  // is kept in memory for the lifetime of the modal.
-  const [selectedKeyId, setSelectedKeyId] = useState(() => (contextKeys[0] ? String(contextKeys[0].id) : ''));
-  const [sessionApiKey, setSessionApiKey] = useState('');
+  const { availableKeys: contextKeys, selectedKey: selectedKeyObj, keyId: selectedKeyId, setKeyId: setSelectedKeyId } = useConsoleKeySelection(keys);
   const [selectedProtocol, setSelectedProtocol] = useState('openai');
   const [selectedModel, setSelectedModel] = useState('');
-  const selectedKeyObj = useMemo(() => activeKeys.find(key => String(key.id) === selectedKeyId), [activeKeys, selectedKeyId]);
   const allowedModels = useMemo(() => availableKeyModels(selectedKeyObj, models).filter(name => inferClientModality(name) === 'chat'), [selectedKeyObj, models]);
   const [snippetTab, setSnippetTab] = useState('python');
   const [copiedKey, setCopiedKey] = useState('');
   const [testingPing, setTestingPing] = useState(false);
   const [testResult, setTestResult] = useState(null);
-
-  useEffect(() => {
-    if (!contextKeys.some(k => String(k.id) === selectedKeyId)) {
-      setSelectedKeyId(contextKeys[0] ? String(contextKeys[0].id) : '');
-    }
-  }, [contextKeys, selectedKeyId]);
 
   useEffect(() => {
     if (!allowedModels.includes(selectedModel)) {
@@ -91,8 +73,7 @@ export default function OnboardingModal({
 
   const origin = getGatewayOrigin();
   const probeText = isZh ? 'Ping: 首次接入握手测试' : 'Ping: First handshake probe';
-  // The credential is a parameter, never a closed-over list value: the snippets
-  // get the placeholder, only the live probe gets the pasted plaintext.
+  // SDK samples use placeholders; interactive probes use the login session.
   const buildProbe = (apiKey) => (selectedProtocol === 'claude' ? {
     path: '/v1/messages',
     headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
@@ -129,23 +110,17 @@ export default function OnboardingModal({
   };
 
   const handleTestProbe = async () => {
-    if (!isUsableAPIKey(sessionApiKey)) {
-      if (showToast) {
-        showToast(credentialProblemHint(credentialProblem(sessionApiKey), isZh), 'warning');
-      }
-      return;
-    }
-    if (!allowedModels.includes(selectedModel)) return;
-    const probe = buildProbe(sessionApiKey.trim());
+    if (!selectedKeyId || !allowedModels.includes(selectedModel)) return;
+    const probe = buildProbe(API_KEY_PLACEHOLDER);
     setTestingPing(true);
     setTestResult(null);
     const start = Date.now();
     try {
-      const res = await fetch(`${origin}${probe.path}`, {
+      const res = await consoleFetch(probe.path, selectedKeyId, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...probe.headers,
+          ...(selectedProtocol === 'claude' ? { 'anthropic-version': '2023-06-01' } : {}),
         },
         body: JSON.stringify(probe.body),
       });
@@ -166,7 +141,7 @@ export default function OnboardingModal({
         setTestResult({
           success: false,
           latency: duration,
-          error: data.error?.message || `HTTP ${res.status}: ${res.statusText}`,
+          error: extractErrorMessage(data, `HTTP ${res.status}: ${res.statusText}`),
         });
       }
     } catch (e) {
@@ -180,9 +155,8 @@ export default function OnboardingModal({
     }
   };
 
-  // A stored credential is never rendered: the console shows the plaintext exactly
-  // once, in the creation dialog. Every copyable sample carries a placeholder; the
-  // live "test ping" button uses the plaintext the operator pasted for this session.
+  // Copyable samples contain only placeholders. The live probe never needs the
+  // API-key secret: the server resolves the selected ID under the login session.
   const KEY_PLACEHOLDER = API_KEY_PLACEHOLDER;
 
   const pythonCode = `from openai import OpenAI
@@ -357,7 +331,7 @@ print(message.content[0].text)
                     value={selectedKeyId}
                     onChange={(e) => setSelectedKeyId(e.target.value)}
                     className="ui-field font-mono"
-                    aria-label={isZh ? '密钥上下文（租户与模型范围）' : 'Key context (tenant and model scope)'}
+                    aria-label={isZh ? '选择 API 访问密钥' : 'Select API key'}
                   >
                     {contextKeys.map((k) => (
                       <option key={String(k.id)} value={String(k.id)}>
@@ -379,27 +353,7 @@ print(message.content[0].text)
                 </div>
               )}
 
-              {/* The key ID in the list cannot authenticate anything, so the wizard
-                  asks for the plaintext it will actually send. */}
-              <div className="mt-3 space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  {isZh ? '本次会话 API Key 明文 (仅保存在内存)' : 'Session API key (memory only)'}
-                </label>
-                <input
-                  type="password"
-                  autoComplete="off"
-                  value={sessionApiKey}
-                  onChange={(e) => setSessionApiKey(e.target.value)}
-                  placeholder={isZh ? '粘贴用于握手探测的明文密钥' : 'Paste the plaintext key used by the live probe'}
-                  aria-label={isZh ? '会话 API Key 明文' : 'Session API key'}
-                  className="ui-field font-mono"
-                />
-                <p className="ui-meta">
-                  {isZh
-                    ? '密钥列表只显示密钥 ID（ak_…），它不能用于鉴权；请粘贴创建时保存的一次性明文，明文仅用于握手探测，不写入浏览器存储。'
-                    : 'The key list only shows key IDs (ak_…), which cannot authenticate. Paste the one-time plaintext you saved at creation; it is used by the live probe only and is never written to browser storage.'}
-                </p>
-              </div>
+
             </div>
 
             <div className="flex justify-end pt-2">
@@ -569,27 +523,12 @@ print(message.content[0].text)
                 <button
                   type="button"
                   onClick={handleTestProbe}
-                  disabled={testingPing || !isUsableAPIKey(sessionApiKey) || !allowedModels.includes(selectedModel)}
+                  disabled={testingPing || !selectedKeyId || !allowedModels.includes(selectedModel)}
                   className="px-3.5 py-1.5 bg-[#355CFF] hover:bg-[#2849E6] text-white rounded-lg text-xs font-medium transition flex items-center space-x-1.5 shrink-0 shadow-sm cursor-pointer"
                 >
                   {testingPing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
                   <span>{testingPing ? (isZh ? '探测中...' : 'Probing...') : (isZh ? '立即测试握手' : 'Test Handshake')}</span>
                 </button>
-              </div>
-
-              {/* The probe is where the credential is needed, so it is editable
-                  here too (same in-memory state as step 1). */}
-              <div className="flex items-center gap-2">
-                <Key className="w-3.5 h-3.5 text-[#355CFF] dark:text-[#91A7FF] shrink-0" />
-                <input
-                  type="password"
-                  autoComplete="off"
-                  value={sessionApiKey}
-                  onChange={(e) => setSessionApiKey(e.target.value)}
-                  placeholder={isZh ? '粘贴明文 API Key 后才能握手 (仅内存)' : 'Paste the plaintext API key to enable the probe (memory only)'}
-                  aria-label={isZh ? '会话 API Key 明文' : 'Session API key'}
-                  className="ui-field font-mono text-xs flex-1"
-                />
               </div>
 
               {testResult && (

@@ -1440,6 +1440,7 @@ export default function App() {
             {/* 5. MULTIMODAL PLAYGROUND TAB */}
             {currentTab === 'playground' && (
               <PlaygroundView
+                onCreateKey={() => { setCurrentTab('keys'); handleOpenCreateKey(); }}
                 keys={keys}
                 models={models}
                 modelRoutes={modelRoutes}
@@ -1614,6 +1615,7 @@ export default function App() {
 
         {/* Airoute AI Copilot (Cmd+J / Floating Omnibar) */}
         <AiCopilot
+          onCreateKey={handleOpenCreateKey}
           isOpen={showAiCopilot}
           onClose={() => setShowAiCopilot(false)}
           onToggle={() => setShowAiCopilot(prev => !prev)}

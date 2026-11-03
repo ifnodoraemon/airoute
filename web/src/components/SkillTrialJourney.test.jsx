@@ -15,7 +15,7 @@ describe('skill trial journey', () => {
     vi.stubGlobal('fetch', fetch);
     function Journey() {
       const [scenario, setScenario] = useState(null);
-      return scenario ? <PlaygroundView models={['chat-trial']} initialScenario={scenario} /> : <SkillHubView adminFetch={adminFetch} onTrial={setScenario} />;
+      return scenario ? <PlaygroundView keys={[{ id: 1, status: 'active' }]} models={['chat-trial']} initialScenario={scenario} /> : <SkillHubView adminFetch={adminFetch} onTrial={setScenario} />;
     }
     render(<Journey />);
     fireEvent.click(await screen.findByRole('button', { name: '模型实测' }));

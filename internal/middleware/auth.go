@@ -326,11 +326,24 @@ func DataPlaneUnreadyDenial() *AccessDenial {
 
 // AuthMiddleware authenticates incoming requests via Bearer API keys.
 func AuthMiddleware() gin.HandlerFunc {
+	return authMiddleware(nil)
+}
+
+// SessionKeyAuthMiddleware shares the data-plane admission/billing context with
+// bearer clients. The resolver must authenticate the console session and verify
+// access to the selected key; no client-supplied identifier is a credential.
+// An absent selection always fails closed, even when the gateway is in open mode.
+func SessionKeyAuthMiddleware(resolve func(*gin.Context) (*model.APIKeyConfig, *AccessDenial)) gin.HandlerFunc {
+	if resolve == nil {
+		resolve = func(*gin.Context) (*model.APIKeyConfig, *AccessDenial) { return nil, nil }
+	}
+	return authMiddleware(resolve)
+}
+
+func authMiddleware(resolve func(*gin.Context) (*model.APIKeyConfig, *AccessDenial)) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cfg := config.GetGlobalConfig()
 
-		// Fail closed until the first successful configuration load. The open-mode
-		// check below must never be reached with a snapshot that was never read.
 		if !DataPlaneReady() {
 			denial := DataPlaneUnreadyDenial()
 			auditAuthFailure(c, "", denial.StatusCode, denial.LogMessage)
@@ -341,86 +354,100 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// If no API keys configured in system and no keys ever created, allow all requests in open dev mode.
-		// If keys have been registered in the gateway (even if currently disabled/revoked), strictly enforce auth!
-		// Both fields are rewritten by the periodic hot reload, so they must be
-		// read through the locked accessors (see config.ActiveAPIKeyCount).
-		if cfg.ActiveAPIKeyCount() == 0 && !cfg.HasRegisteredAPIKeys() {
-			c.Next()
-			return
-		}
-
-		var rawKey string
-
-		authHeader := c.GetHeader("Authorization")
-		if authHeader != "" {
-			parts := strings.SplitN(authHeader, " ", 2)
-			if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
-				rawKey = strings.TrimSpace(parts[1])
-			}
-		}
-
-		// Also support Anthropic SDK's x-api-key header
-		if rawKey == "" {
-			rawKey = strings.TrimSpace(c.GetHeader("x-api-key"))
-		}
-
-		// Also support Google Gemini SDK's query param 'key' and header 'x-goog-api-key'
-		if rawKey == "" {
-			rawKey = strings.TrimSpace(c.Query("key"))
-		}
-		if rawKey == "" {
-			rawKey = strings.TrimSpace(c.GetHeader("x-goog-api-key"))
-		}
-
-		if rawKey == "" {
-			auditAuthFailure(c, "", http.StatusUnauthorized, "Missing authentication key")
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": gin.H{
-					"message": "Missing authentication key. Please provide 'Authorization: Bearer <key>', 'x-api-key: <key>', 'x-goog-api-key: <key>', or query parameter '?key=<key>'",
-					"type":    "invalid_request_error",
-					"code":    "missing_api_key",
-				},
-			})
-			return
-		}
-		// The snapshot is keyed by the stored digest (api_keys.key holds
-		// HashAPIKey(credential)), so the presented credential is hashed before
-		// the lookup. Hashing is deterministic, which keeps every existing
-		// credential authenticating after the migration.
-		keyHash := storage.HashAPIKey(rawKey)
-		matchedKey := lookupSnapshotKey(cfg, rawKey, keyHash)
-
-		// The snapshot is a cache with a synchronisation lag, so a miss is not proof
-		// that the credential is invalid: a key created on another replica, or one
-		// revoked since the last reload, exists only in durable storage at this
-		// instant. Ask storage once before rejecting, and when it does know the
-		// credential report its real state (revoked/disabled) instead of the generic
-		// invalid-key message.
 		var effectiveKey model.APIKeyConfig
 		resolvedFromStorage := false
-		if matchedKey != nil {
-			effectiveKey = *matchedKey
+		if resolve != nil {
+			key, denial := resolve(c)
+			if denial != nil {
+				AbortWithDenial(c, denial)
+				return
+			}
+			if key == nil || key.Key == "" {
+				AbortWithDenial(c, &AccessDenial{StatusCode: http.StatusForbidden, Message: "Select an accessible API key.", Type: "permission_error", Code: "key_access_denied"})
+				return
+			}
+			effectiveKey = *key
+			resolvedFromStorage = true
 		} else {
-			keyRec := lookupStorageCredential(c, rawKey, keyHash)
-			if keyRec == nil {
-				auditAuthFailure(c, rawKey, http.StatusUnauthorized, "Incorrect or unauthorized API key provided")
+			// If no API keys configured in system and no keys ever created, allow all requests in open dev mode.
+			// If keys have been registered in the gateway (even if currently disabled/revoked), strictly enforce auth!
+			// Both fields are rewritten by the periodic hot reload, so they must be
+			// read through the locked accessors (see config.ActiveAPIKeyCount).
+			if cfg.ActiveAPIKeyCount() == 0 && !cfg.HasRegisteredAPIKeys() {
+				c.Next()
+				return
+			}
+
+			var rawKey string
+
+			authHeader := c.GetHeader("Authorization")
+			if authHeader != "" {
+				parts := strings.SplitN(authHeader, " ", 2)
+				if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+					rawKey = strings.TrimSpace(parts[1])
+				}
+			}
+
+			// Also support Anthropic SDK's x-api-key header
+			if rawKey == "" {
+				rawKey = strings.TrimSpace(c.GetHeader("x-api-key"))
+			}
+
+			// Also support Google Gemini SDK's query param 'key' and header 'x-goog-api-key'
+			if rawKey == "" {
+				rawKey = strings.TrimSpace(c.Query("key"))
+			}
+			if rawKey == "" {
+				rawKey = strings.TrimSpace(c.GetHeader("x-goog-api-key"))
+			}
+
+			if rawKey == "" {
+				auditAuthFailure(c, "", http.StatusUnauthorized, "Missing authentication key")
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 					"error": gin.H{
-						"message": "Incorrect or unauthorized API key provided.",
-						"type":    "authentication_error",
-						"code":    "invalid_api_key",
+						"message": "Missing authentication key. Please provide 'Authorization: Bearer <key>', 'x-api-key: <key>', 'x-goog-api-key: <key>', or query parameter '?key=<key>'",
+						"type":    "invalid_request_error",
+						"code":    "missing_api_key",
 					},
 				})
 				return
 			}
-			if denial := KeyStatusDenial(keyRec.Status); denial != nil {
-				auditAuthFailure(c, rawKey, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
-				AbortWithDenial(c, denial)
-				return
+			// The snapshot is keyed by the stored digest (api_keys.key holds
+			// HashAPIKey(credential)), so the presented credential is hashed before
+			// the lookup. Hashing is deterministic, which keeps every existing
+			// credential authenticating after the migration.
+			keyHash := storage.HashAPIKey(rawKey)
+			matchedKey := lookupSnapshotKey(cfg, rawKey, keyHash)
+
+			// The snapshot is a cache with a synchronisation lag, so a miss is not proof
+			// that the credential is invalid: a key created on another replica, or one
+			// revoked since the last reload, exists only in durable storage at this
+			// instant. Ask storage once before rejecting, and when it does know the
+			// credential report its real state (revoked/disabled) instead of the generic
+			// invalid-key message.
+			if matchedKey != nil {
+				effectiveKey = *matchedKey
+			} else {
+				keyRec := lookupStorageCredential(c, rawKey, keyHash)
+				if keyRec == nil {
+					auditAuthFailure(c, rawKey, http.StatusUnauthorized, "Incorrect or unauthorized API key provided")
+					c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+						"error": gin.H{
+							"message": "Incorrect or unauthorized API key provided.",
+							"type":    "authentication_error",
+							"code":    "invalid_api_key",
+						},
+					})
+					return
+				}
+				if denial := KeyStatusDenial(keyRec.Status); denial != nil {
+					auditAuthFailure(c, rawKey, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
+					AbortWithDenial(c, denial)
+					return
+				}
+				effectiveKey = keyRec.ToConfig()
+				resolvedFromStorage = true
 			}
-			effectiveKey = keyRec.ToConfig()
-			resolvedFromStorage = true
 		}
 
 		// A GET video-task query is a read of a job that was already billed when
@@ -431,7 +458,7 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		// 1. Key status check (pure in-memory)
 		if denial := KeyStatusDenial(effectiveKey.Status); denial != nil {
-			auditAuthFailure(c, rawKey, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
+			auditResolvedKeyFailure(c, effectiveKey.Key, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
 			AbortWithDenial(c, denial)
 			return
 		}
@@ -441,7 +468,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		// drift across the budget boundary.
 		if !freeRead {
 			if denial := KeyBudgetDenial(effectiveKey.BudgetUnits, effectiveKey.UsedCostUnits, effectiveKey.Budget, effectiveKey.UsedCost); denial != nil {
-				auditAuthFailure(c, rawKey, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
+				auditResolvedKeyFailure(c, effectiveKey.Key, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
 				AbortWithDenial(c, denial)
 				return
 			}
@@ -462,7 +489,7 @@ func AuthMiddleware() gin.HandlerFunc {
 			cancel()
 			if keyRec != nil {
 				if denial := KeyStatusDenial(keyRec.Status); denial != nil {
-					auditAuthFailure(c, rawKey, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
+					auditResolvedKeyFailure(c, effectiveKey.Key, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
 					AbortWithDenial(c, denial)
 					return
 				}
@@ -475,7 +502,7 @@ func AuthMiddleware() gin.HandlerFunc {
 					budgetUnits = effectiveKey.BudgetUnits
 				}
 				if denial := KeyBudgetDenial(budgetUnits, keyRec.UsedCostUnits, effectiveBudget, keyRec.UsedCost); denial != nil && !freeRead {
-					auditAuthFailure(c, rawKey, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
+					auditResolvedKeyFailure(c, effectiveKey.Key, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
 					AbortWithDenial(c, denial)
 					return
 				}
@@ -522,7 +549,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		// not protect any money.
 		if shouldFailClosedOnUnknownAccount(freeRead, userStatus, userID) {
 			denial := BalanceUnknownDenial()
-			auditAuthFailure(c, rawKey, denial.StatusCode, denial.LogMessage)
+			auditResolvedKeyFailure(c, effectiveKey.Key, denial.StatusCode, denial.LogMessage)
 			AbortWithDenial(c, denial)
 			return
 		}
@@ -531,12 +558,12 @@ func AuthMiddleware() gin.HandlerFunc {
 			// Locked/deleted accounts stay blocked; only the wallet balance gate
 			// is waived for a read that never bills.
 			if denial := AccountLockedDenial(userStatus); denial != nil {
-				auditAuthFailure(c, rawKey, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
+				auditResolvedKeyFailure(c, effectiveKey.Key, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
 				AbortWithDenial(c, denial)
 				return
 			}
 		} else if denial := AccountDenial(userStatus, userRole, userBalance); denial != nil {
-			auditAuthFailure(c, rawKey, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
+			auditResolvedKeyFailure(c, effectiveKey.Key, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
 			AbortWithDenial(c, denial)
 			return
 		}
@@ -555,7 +582,7 @@ func AuthMiddleware() gin.HandlerFunc {
 					Type:       "insufficient_quota",
 					Code:       "insufficient_quota",
 				}
-				auditAuthFailure(c, rawKey, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
+				auditResolvedKeyFailure(c, effectiveKey.Key, denial.StatusCode, strings.TrimSuffix(denial.Message, "."))
 				AbortWithDenial(c, denial)
 				return
 			}
@@ -589,6 +616,14 @@ func AuthMiddleware() gin.HandlerFunc {
 		c.Set(ContextKeyAPIKeyID, effectiveKey.PublicID)
 		c.Set(ContextKeyAPIKeyConfig, &effectiveKey)
 		c.Next()
+	}
+}
+
+// The resolved digest is already the ledger join key. Never hash it again or
+// make it replayable as a public bearer credential.
+func auditResolvedKeyFailure(c *gin.Context, digest string, statusCode int, message string) {
+	if statusCode != http.StatusUnauthorized {
+		recordAdmissionRejection(c, digest, statusCode, message)
 	}
 }
 

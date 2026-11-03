@@ -32,7 +32,7 @@ function renderCopilot(isOpen) {
       setViewMode={() => {}}
       models={['gpt-x']}
       channels={[]}
-      keys={[]}
+      keys={[{ id: 1, status: 'active' }]}
       logs={[]}
       modelRoutes={[]}
       prices={[]}
@@ -83,7 +83,7 @@ describe('AiCopilot close cancels the generation', () => {
         setViewMode={() => {}}
         models={['gpt-x']}
         channels={[]}
-        keys={[]}
+        keys={[{ id: 1, status: 'active' }]}
         logs={[]}
         modelRoutes={[]}
         prices={[]}
