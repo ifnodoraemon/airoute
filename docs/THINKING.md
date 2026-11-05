@@ -45,7 +45,11 @@
 }
 ```
 
-省略或 `null` 的允许列表表示不限；显式空列表表示不允许任何值。默认模式必须在允许范围内；限制强度时需明确默认开关，避免上游未知默认值绕过限制。保存新的渠道绑定时，默认设置必须至少有一个渠道能满足。路由可以缩小可用范围，不能增加上游能力。
+省略或 `null` 的允许列表表示不限；显式空列表表示不允许任何值。默认模式必须在允许范围内；限制强度时需明确默认开关，避免上游未知默认值绕过限制。保存时，默认设置及允许列表中的每个档位都必须至少有一个已启用的绑定渠道支持。仅更新思考策略、仅修改渠道绑定时，也会结合已保存配置校验。路由可以缩小可用范围，不能增加上游能力。
+
+`minimal / low / medium / high / xhigh / max` 是统一词表，每个实际上游只支持自己的子集。路由编辑器、演练和副驾驶都按后端解析的能力显示选项，不会为了凑齐六档而推测支持。可选强度是“已启用绑定渠道的支持档位合集”与“路由允许范围”的交集。编辑器标明每档有几个渠道支持；选定该档后，只有这些渠道可以参与调用和切换。没有任何渠道支持的档位会被拒绝，不会静默替换为其他强度。
+
+只支持开启思考但未确认可调档位的模型使用上游默认强度，不显示虚构档位。能力未知的渠道不贡献开关或档位选项；映射改动后先按上游默认保存，再查看后端解析结果。已有设置失效时保留原值并提示修正，不能静默降档。强度限制的空列表会阻止显式开启思考；要使用模型默认强度，应取消强度限制。
 
 ## 调用与调度
 
@@ -88,6 +92,8 @@ SDK 未携带扩展且路由没有思考策略时保持原有透传行为。原�
 
 不以一次 HTTP 200 判定参数有效：代理可能接收并忽略未知字段。`/models` 通常也不会完整描述思考参数。当前不会定时发起付费探测；显式配置与官方能力表配合实际调用证据，推断结果标记为 `catalog`，管理员配置标记为 `configured`。滚动别名可先使用只请求摘要的约定，确认实际版本后再配置强度。
 
+同时声明 OpenAI 与 `anthropic_native` 的代理渠道按请求选择线协议：OpenAI 对话及 Responses 使用 OpenAI 端点，Anthropic 入站保留原生 Messages。`anthropic_native` 不应将所有对话强制改为 Messages，否则会丢失 GLM 等模型的 OpenAI 思考参数。仅提供 Messages 的上游不能承接不兼容的思考约定；无法转换的原生思考参数会明确拒绝。
+
 Claude 的签名思考块、Gemini 的原生会话状态以及 DeepSeek 工具循环所需的 `reasoning_content` 会随会话保留，不能从展示文本重新拼造签名。
 
 ## 返回、界面与审计
@@ -97,5 +103,7 @@ Chat 响应及流式帧的 `airoute_thinking` 包含最终生效模式、强度�
 前端分别呈现上游返回的思考内容 / 摘要和思考 token。没有摘要不代表模型没思考；没有计数字段也不解释为 0。达到输出上限会提示思考可能占用答案预算，Claude 手动预算必须小于输出上限。能力查询不会按某次请求的默认输出上限隐藏已支持档位；演练提示所需最小上限，副驾驶自动为手动思考预算保留答案空间。
 
 2026-11-03 的现有真实渠道验证发现：Gemini 未开启摘要请求时，思考用量与摘要并不会一起显示；GPUStack DeepSeek 的官方 `thinking.type=disabled` 被忽略，模板开关才生效；兼容代理上的 DeepSeek 忽略了测试的关闭参数，因此不能加入要求关闭思考的候选。GLM 5.3、Gemma 和 Gemini 的配置分别按实际能力处理。未配置的 OpenAI、Claude、Ollama 渠道的实现按官方约定及转换回归测试验证，没有宣称在本环境完成真实调用。
+
+2026-11-05 通过罗总真实上游复核：发现并修复多协议渠道强制使用 Messages、丢弃 GLM 强度的问题。修复后确认实际 OpenAI 请求分别携带 `low / high / max`，三档均成功返回；流式 `high` 也携带原值并返回结果。统一控制的 `medium` 在分发前拒绝，原生透传的 `medium` 由真实上游拒绝。仅支持默认思考的代理模型按模型默认调用，未开放未经确认的强度。GPUStack 停机模型未参与此次调用验证。
 
 官方依据：[Google ThinkingConfig](https://ai.google.dev/api/generate-content#thinkingconfig)、[Gemma API](https://ai.google.dev/gemma/docs/core/gemma_on_gemini_api)、[DeepSeek](https://api-docs.deepseek.com/guides/thinking_mode/)、[vLLM DeepSeek V4.1](https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4.1-Flash)、[GLM](https://www.alibabacloud.com/help/en/model-studio/glm)、[OpenAI](https://developers.openai.com/api/docs/guides/reasoning)、[Claude](https://platform.claude.com/docs/en/build-with-claude/extended-thinking)、[Qwen](https://help.aliyun.com/zh/model-studio/deep-thinking)、[Ollama](https://docs.ollama.com/capabilities/thinking)。

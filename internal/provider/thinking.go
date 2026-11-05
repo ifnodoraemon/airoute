@@ -46,7 +46,7 @@ func PrepareThinkingRequest(req *model.ChatCompletionRequest, channel *model.Cha
 		return nil, &UnsupportedTranslationError{Reason: err.Error()}
 	}
 	profile, source := model.ResolveThinkingProfile(channel, req.Model)
-	if !model.ThinkingProfileCompatible(channel.Type, profile) {
+	if !model.ThinkingProfileCompatible(model.ChatProviderType(channel, req), profile) {
 		return nil, &UnsupportedTranslationError{Reason: "thinking profile is incompatible with channel protocol"}
 	}
 	allowedEffort := func(effort string) bool {
@@ -86,9 +86,6 @@ func PrepareThinkingRequest(req *model.ChatCompletionRequest, channel *model.Cha
 	}
 	if profile.ToolsRequireResponses && control.Mode != "off" && len(req.Tools) > 0 && (req.Native == nil || req.Native.Protocol != model.NativeResponses) {
 		return nil, &UnsupportedTranslationError{Reason: "this model requires the Responses API for thinking with tools"}
-	}
-	if (profile.Wire == "claude-budget" || profile.Wire == "claude-adaptive") && channel.Type != model.ProviderAnthropic {
-		return nil, &UnsupportedTranslationError{Reason: "Claude thinking profile requires an Anthropic Messages channel"}
 	}
 	copy := *req
 	copy.Native = nil

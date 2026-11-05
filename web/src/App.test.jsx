@@ -67,7 +67,8 @@ describe('App integration', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('row', { name: /audit-omega/ }, { timeout: 8000 }));
     fireEvent.click(await screen.findByRole('button', { name: 'Playground 演练' }));
-    await waitFor(() => expect(screen.getByRole('option', { name: 'audit-omega', exact: true }).parentElement).toHaveValue('audit-omega'));
+    // The first Playground visit loads its lazy chunk; use the console boot budget.
+    await waitFor(() => expect(screen.getByRole('option', { name: 'audit-omega', exact: true }).parentElement).toHaveValue('audit-omega'), { timeout: 8000 });
   }, 15000);
 
   beforeEach(() => {

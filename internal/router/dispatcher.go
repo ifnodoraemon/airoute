@@ -178,16 +178,13 @@ func isAnthropicWireChannel(ch *model.ChannelConfig) bool {
 // channel's upstream. The native Anthropic provider is used only for channels
 // whose upstream actually speaks Anthropic; OpenAI/Gemini channels translate.
 func (d *Dispatcher) getProviderForChannel(ch *model.ChannelConfig) (provider.Provider, bool) {
+	return d.getProviderForRequest(ch, nil)
+}
+
+func (d *Dispatcher) getProviderForRequest(ch *model.ChannelConfig, req *model.ChatCompletionRequest) (provider.Provider, bool) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
-
-	if isAnthropicWireChannel(ch) {
-		if prov, ok := d.providers[model.ProviderAnthropic]; ok {
-			return prov, true
-		}
-	}
-
-	prov, exists := d.providers[ch.Type]
+	prov, exists := d.providers[model.ChatProviderType(ch, req)]
 	return prov, exists
 }
 
@@ -277,7 +274,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 			continue
 		}
 
-		prov, exists := d.getProviderForChannel(ch)
+		prov, exists := d.getProviderForRequest(ch, callReq)
 
 		if !exists {
 			lastErr = fmt.Errorf("unsupported provider type '%s' on channel %s", ch.Type, ch.Name)

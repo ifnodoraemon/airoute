@@ -59,6 +59,9 @@ func (p *AnthropicProvider) ChatComplete(ctx context.Context, req *model.ChatCom
 	if response, done, err := maybeNativeUnary(ctx, p.client, req, channel, model.NativeMessages); done {
 		return response, err
 	}
+	if err := validateAnthropicThinkingTranslation(req); err != nil {
+		return nil, err
+	}
 	anthropicReq := convertOpenAIToAnthropic(req, channel)
 	anthropicReq.Stream = false
 

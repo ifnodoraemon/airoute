@@ -77,6 +77,8 @@ Native generation, streaming, embeddings, counting, model lookup and Live use th
   或显式带有 `anthropic_native` 标记时，网关才会把 Anthropic JSON 原样发往上游
   `<base>/v1/messages`。
 
+同时声明 OpenAI 对话/Responses 与 `anthropic_native` 的聚合渠道，会按请求保留对应线协议：OpenAI 调用走 OpenAI 端点，Anthropic 入站走 Messages。原生标记不再强制改写所有对话；否则 `reasoning_effort` 等模型参数会在不兼容的转译中丢失。无法保真转换的思考参数明确拒绝，不以模型默认值代替。
+
 请求若携带无法跨协议保真的语义（`thinking`、`top_k`、`metadata`、`cache_control`、
 签名的 thinking 块等），只会路由到原生 Anthropic 渠道；若唯一可用渠道没有该标记，
 请求会因为没有可用渠道而失败。因此：

@@ -1,5 +1,5 @@
-import ThinkingCapabilitySummary from './ThinkingCapabilitySummary';
-import { effortName, thinkingPolicyText } from '../lib/modelPresentation';
+import RouteThinkingPolicyEditor from './RouteThinkingPolicyEditor';
+import { routeThinkingAvailability, routeThinkingError } from '../lib/routeThinking';
 import React, { useState } from 'react';
 import {
   X,
@@ -98,6 +98,8 @@ export default function ModelRouteModal({
   const [customModeMap, setCustomModeMap] = useState({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const thinkingAvailability = routeThinkingAvailability(providers, allChannels, modelName);
+  const thinkingError = routeThinkingError(thinkingPolicy, thinkingAvailability, isZh);
 
   const isDirty = useFormDirty(isOpen, { modelName, fallbackModel, promptPrice, completionPrice, cacheReadPrice, fixedPrice, currency, offPeakEnabled, providers, thinkingPolicy });
   const { confirming, requestClose, keepEditing, discard } = useUnsavedGuard({ isOpen, isDirty, onClose });
@@ -226,6 +228,7 @@ export default function ModelRouteModal({
       return;
     }
 
+    if (thinkingError) { setError(thinkingError); return; }
     setSaving(true);
     try {
       const payload = {
@@ -600,23 +603,7 @@ export default function ModelRouteModal({
             )}
           </div>
 
-          <fieldset className="border-t pt-3 space-y-3">
-            <legend className="font-semibold">{isZh ? '路由思考策略' : 'Route thinking policy'}</legend>
-            <p className="text-slate-500">{isZh ? '此处设置默认值和限制。实际能力取自各渠道映射后的上游模型；不能通过路由增加上游不支持的能力。' : 'Defaults and restrictions only. Capabilities come from each channel and mapped upstream model.'}</p>
-            <p className="text-xs font-medium">{thinkingPolicyText(thinkingPolicy, isZh)}</p>
-            <div className="grid gap-2 sm:grid-cols-2">{providers.map(item => <div key={item.channel_id} className="rounded-lg border p-3 space-y-2"><p className="text-xs font-mono break-all">{item.channel_name} → {item.mapped_model || modelName}</p><ThinkingCapabilitySummary capability={item.thinking || allChannels.find(channel => channel.id === item.channel_id)?.thinking_capabilities?.[item.mapped_model || modelName]} lang={lang} /></div>)}</div>
-            <label className="block">{isZh ? '路由默认思考模式' : 'Default thinking mode'}<select aria-label={isZh ? '路由默认思考模式' : 'Default thinking mode'} className="ui-field mt-1" value={thinkingPolicy.default_mode || 'auto'} onChange={event => setThinkingPolicy(prev => ({...prev,default_mode:event.target.value,allowed_modes:prev.allowed_modes ? [event.target.value] : null,default_effort:event.target.value==='on' ? prev.default_effort : ''}))}>
-              <option value="auto">{isZh ? '上游默认' : 'Upstream default'}</option><option value="on">{isZh ? '开启' : 'On'}</option><option value="off">{isZh ? '关闭' : 'Off'}</option>
-            </select></label>
-            {thinkingPolicy.default_mode==='on' && <label className="block">{isZh ? '默认强度' : 'Default effort'}<select aria-label={isZh ? '默认思考强度' : 'Default thinking effort'} className="ui-field mt-1" value={thinkingPolicy.default_effort || ''} onChange={event => setThinkingPolicy(prev => ({...prev,default_effort:event.target.value}))}><option value="">{isZh ? '模型默认' : 'Model default'}</option>{['minimal','low','medium','high','xhigh','max'].map(effort => <option key={effort} value={effort}>{effortName(effort, isZh)}</option>)}</select></label>}
-            <label className="flex gap-2 items-center"><input type="checkbox" checked={thinkingPolicy.allowed_modes!=null} onChange={event => setThinkingPolicy(prev => ({...prev,allowed_modes:event.target.checked ? [prev.default_mode || 'auto'] : null}))} />{isZh ? '只允许默认模式（禁止用户切换）' : 'Allow only the default mode'}</label>
-            <div className="space-y-2">
-              <label className="flex gap-2 items-center"><input type="checkbox" aria-label={isZh ? '限制可选思考强度' : 'Restrict available thinking efforts'} checked={thinkingPolicy.allowed_efforts != null} onChange={event => setThinkingPolicy(prev => ({ ...prev, allowed_efforts: event.target.checked ? ['minimal','low','medium','high','xhigh','max'] : null }))} />{isZh ? '限制用户可选的思考强度' : 'Restrict user-selectable thinking effort'}</label>
-              {thinkingPolicy.allowed_efforts != null && <div className="flex flex-wrap gap-3">{['minimal','low','medium','high','xhigh','max'].map(effort => <label key={effort} className="flex items-center gap-1"><input type="checkbox" aria-label={`${isZh ? '允许强度' : 'Allow effort'} ${effort}`} checked={thinkingPolicy.allowed_efforts.includes(effort)} onChange={event => setThinkingPolicy(prev => ({ ...prev, allowed_efforts: event.target.checked ? [...prev.allowed_efforts, effort] : prev.allowed_efforts.filter(value => value !== effort) }))} />{effortName(effort, isZh)}</label>)}</div>}
-              <p className="text-[11px] text-slate-500">{isZh ? '不限制时，用户可选渠道实际支持的强度；启用限制但不勾选档位时，仅允许模型默认强度。' : 'Without a restriction, users can choose supported upstream levels. A restriction with no checked levels allows only the model default effort.'}</p>
-            </div>
-            <p className="text-slate-500">{isZh ? '渠道能力请在“服务商 → 编辑 → 渠道模型的思考能力”维护；修改会对引用该上游模型的所有路由生效。' : 'Manage shared capabilities in Providers → Edit → Thinking capability per upstream model.'}</p>
-          </fieldset>
+          <RouteThinkingPolicyEditor policy={thinkingPolicy} onChange={setThinkingPolicy} availability={thinkingAvailability} error={thinkingError} lang={lang} />
           {/* Field 3: Fallback & Pricing (Clean and Compact) */}
           <div className="border-t border-slate-100 dark:border-slate-800 pt-3 space-y-3">
             {/* Fallback Model */}
@@ -730,7 +717,7 @@ export default function ModelRouteModal({
             </button>
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || !!thinkingError}
               className="ui-btn-primary"
             >
               {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}

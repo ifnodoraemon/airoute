@@ -19,6 +19,9 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 	if stream, done, err := maybeNativeStream(ctx, p.client, req, channel, model.NativeMessages); done {
 		return stream, err
 	}
+	if err := validateAnthropicThinkingTranslation(req); err != nil {
+		return nil, err
+	}
 	anthropicReq := convertOpenAIToAnthropic(req, channel)
 	anthropicReq.Stream = true
 

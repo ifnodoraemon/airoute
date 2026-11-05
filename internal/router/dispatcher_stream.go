@@ -94,7 +94,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			continue
 		}
 
-		prov, exists := d.getProviderForChannel(ch)
+		prov, exists := d.getProviderForRequest(ch, callReq)
 
 		if !exists {
 			lastErr = fmt.Errorf("unsupported provider type '%s' on channel %s", ch.Type, ch.Name)

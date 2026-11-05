@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
@@ -13,6 +14,7 @@ import (
 type fakeRouteStore struct {
 	prices   map[string]*storage.ModelPriceRecord
 	channels []*storage.ChannelRecord
+	routes   map[string]model.ModelRouteRule
 
 	lastBundle     *storage.ModelRouteBundle
 	lastPriceModel string
@@ -45,6 +47,10 @@ func (f *fakeRouteStore) ListChannels() ([]*storage.ChannelRecord, error) {
 		return nil, f.listErr
 	}
 	return f.channels, nil
+}
+
+func (f *fakeRouteStore) ListModelRouteRules() (map[string]model.ModelRouteRule, error) {
+	return f.routes, nil
 }
 
 func (f *fakeRouteStore) ApplyModelRouteBundle(_ context.Context, b *storage.ModelRouteBundle) error {
