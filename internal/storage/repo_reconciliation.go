@@ -112,8 +112,8 @@ func (r *Repository) GetSupplierReconciliation(f ChannelReconciliationFilter) (*
 		args = append(args, f.EndTime)
 	}
 	if f.Channel != "" {
-		whereClause += ` AND (channel = ? OR channel LIKE ?)`
-		args = append(args, f.Channel, "%"+f.Channel+"%")
+		whereClause += ` AND channel = ?`
+		args = append(args, f.Channel)
 	}
 	if f.Model != "" {
 		whereClause += ` AND model = ?`

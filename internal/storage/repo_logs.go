@@ -144,6 +144,7 @@ type UsageLogRecord struct {
 	TenantID         string                     `json:"tenant_id"`
 	Model            string                     `json:"model"`
 	Channel          string                     `json:"channel"`
+	ChannelTrail     string                     `json:"channel_trail,omitempty"`
 	PromptTokens     int                        `json:"prompt_tokens"`
 	CompletionTokens int                        `json:"completion_tokens"`
 	CachedTokens     int                        `json:"cached_tokens"`
@@ -284,16 +285,16 @@ func (r *Repository) buildUsageLogWhere(f LogFilter) (string, []interface{}) {
 		// Free-text search must run in SQL: filtering only the loaded page
 		// silently misses every match living on another page.
 		like := "%" + escapeLikePattern(f.Keyword) + "%"
-		likeClause := ` AND (trace_id LIKE ? ESCAPE '\' OR COALESCE(chat_id,'') LIKE ? ESCAPE '\' OR COALESCE(session_id,'') LIKE ? ESCAPE '\' OR COALESCE(model,'') LIKE ? ESCAPE '\' OR COALESCE(channel,'') LIKE ? ESCAPE '\' OR COALESCE(error_message,'') LIKE ? ESCAPE '\')`
+		likeClause := ` AND (trace_id LIKE ? ESCAPE '\' OR COALESCE(chat_id,'') LIKE ? ESCAPE '\' OR COALESCE(session_id,'') LIKE ? ESCAPE '\' OR COALESCE(model,'') LIKE ? ESCAPE '\' OR COALESCE(channel,'') LIKE ? ESCAPE '\' OR COALESCE(error_message,'') LIKE ? ESCAPE '\' OR channel_trail LIKE ? ESCAPE '\')`
 		// The trigram tokenizer cannot answer queries shorter than three
 		// characters, so those keep the LIKE scan; everything else goes through
-		// the FTS5 index instead of scanning six columns.
+		// the FTS5 index instead of scanning every searchable field.
 		if r.db.Dialect() == "sqlite" && utf8.RuneCountInString(f.Keyword) >= 3 && r.sqliteUsageLogFTSAvailable() {
 			where += ` AND id IN (SELECT rowid FROM usage_logs_fts WHERE usage_logs_fts MATCH ?)`
 			args = append(args, ftsPhrase(f.Keyword))
 		} else {
 			where += likeClause
-			args = append(args, like, like, like, like, like, like)
+			args = append(args, like, like, like, like, like, like, like)
 		}
 	}
 	return where, args
@@ -339,7 +340,7 @@ func (r *Repository) ListUsageLogsWithFilterAndCount(f LogFilter) ([]*UsageLogRe
 		}
 	}
 
-	query := `SELECT id, trace_id, COALESCE(chat_id, ''), COALESCE(session_id, ''), COALESCE(api_key, ''), COALESCE(tenant_id, ''), COALESCE(model, ''), COALESCE(channel, ''), prompt_tokens, completion_tokens, COALESCE(cached_tokens, 0), total_tokens, COALESCE(cost, 0.0), COALESCE(is_off_peak, 0), COALESCE(off_peak_discount, 1.0), duration_ms, ttft_ms, status_code, COALESCE(usage_source, 'upstream'), COALESCE(error_message, ''), COALESCE(pricing_snapshot, ''), created_at, COALESCE(thinking, '') FROM usage_logs WHERE 1=1` + where + ` ORDER BY id DESC LIMIT ? OFFSET ?`
+	query := `SELECT id, trace_id, COALESCE(chat_id, ''), COALESCE(session_id, ''), COALESCE(api_key, ''), COALESCE(tenant_id, ''), COALESCE(model, ''), COALESCE(channel, ''), prompt_tokens, completion_tokens, COALESCE(cached_tokens, 0), total_tokens, COALESCE(cost, 0.0), COALESCE(is_off_peak, 0), COALESCE(off_peak_discount, 1.0), duration_ms, ttft_ms, status_code, COALESCE(usage_source, 'upstream'), COALESCE(error_message, ''), COALESCE(pricing_snapshot, ''), created_at, COALESCE(thinking, ''), COALESCE(channel_trail, '') FROM usage_logs WHERE 1=1` + where + ` ORDER BY id DESC LIMIT ? OFFSET ?`
 	args := append(append([]interface{}{}, whereArgs...), f.Limit, f.Offset)
 
 	rows, err := r.db.Query(query, args...)
@@ -354,7 +355,7 @@ func (r *Repository) ListUsageLogsWithFilterAndCount(f LogFilter) ([]*UsageLogRe
 		var isOff int
 		var createdAt time.Time
 		var pricingJSON, thinkingJSON string
-		if err := rows.Scan(&l.ID, &l.TraceID, &l.ChatID, &l.SessionID, &l.APIKey, &l.TenantID, &l.Model, &l.Channel, &l.PromptTokens, &l.CompletionTokens, &l.CachedTokens, &l.TotalTokens, &l.Cost, &isOff, &l.OffPeakDiscount, &l.DurationMs, &l.TTFTMs, &l.StatusCode, &l.UsageSource, &l.ErrorMessage, &pricingJSON, &createdAt, &thinkingJSON); err != nil {
+		if err := rows.Scan(&l.ID, &l.TraceID, &l.ChatID, &l.SessionID, &l.APIKey, &l.TenantID, &l.Model, &l.Channel, &l.PromptTokens, &l.CompletionTokens, &l.CachedTokens, &l.TotalTokens, &l.Cost, &isOff, &l.OffPeakDiscount, &l.DurationMs, &l.TTFTMs, &l.StatusCode, &l.UsageSource, &l.ErrorMessage, &pricingJSON, &createdAt, &thinkingJSON, &l.ChannelTrail); err != nil {
 			return nil, 0, err
 		}
 		if pricingJSON != "" {

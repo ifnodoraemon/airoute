@@ -266,6 +266,7 @@ export default function LogsView({
       '对话 ID',
       '请求模型',
       '命中渠道',
+      '路由轨迹',
       '租户/密钥',
       '未缓存输入Token',
       '输出Token',
@@ -284,6 +285,7 @@ export default function LogsView({
       'Chat ID',
       'Model',
       'Channel Provider',
+      'Route Path',
       'Tenant/Key',
       'Uncached Prompt Tokens',
       'Completion Tokens',
@@ -304,6 +306,7 @@ export default function LogsView({
       l.chat_id || '',
       l.model || '',
       l.channel || '',
+      l.channel_trail || '',
       l.tenant_id || '',
       getUncachedPrompt(l),
       l.completion_tokens || 0,
@@ -985,6 +988,7 @@ export default function LogsView({
                           {isZh ? '渠道:' : 'Provider:'} {log.channel}
                         </div>
                       )}
+                      {log.channel_trail && <p className="mt-1 text-[11px] text-indigo-600" title={log.channel_trail}>{isZh ? '含重试 / 切换轨迹' : 'Retry / failover path recorded'}</p>}
                     </td>
 
                     {/* 5. Uncached Prompt */}

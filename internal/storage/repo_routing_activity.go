@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"strings"
 	"time"
 )
 
@@ -14,12 +13,13 @@ type RoutingChannelActivity struct {
 }
 
 type RoutingEvent struct {
-	ID         int64     `json:"id"`
-	TraceID    string    `json:"trace_id"`
-	Channel    string    `json:"channel"`
-	StatusCode int       `json:"status_code"`
-	Error      string    `json:"error"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID           int64     `json:"id"`
+	TraceID      string    `json:"trace_id"`
+	Channel      string    `json:"channel"`
+	ChannelTrail string    `json:"channel_trail,omitempty"`
+	StatusCode   int       `json:"status_code"`
+	Error        string    `json:"error"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 type RoutingActivity struct {
@@ -36,19 +36,22 @@ type RoutingActivity struct {
 func (r *Repository) GetRoutingActivity(modelName string, since time.Time) (*RoutingActivity, error) {
 	result := &RoutingActivity{Since: since, Channels: map[string]*RoutingChannelActivity{}, Recent: []RoutingEvent{}}
 	where, args := r.buildUsageLogWhere(LogFilter{Model: modelName, StartTime: since.UTC().Format(time.RFC3339)})
-	rows, err := r.db.Query(`SELECT COALESCE(channel,''), COUNT(*), SUM(CASE WHEN `+usageLogErrorSQL+` THEN 1 ELSE 0 END), SUM(CASE WHEN channel LIKE '%→%' THEN 1 ELSE 0 END), COALESCE(SUM(duration_ms),0) FROM usage_logs WHERE 1=1`+where+` GROUP BY channel`, args...)
+	rows, err := r.db.Query(`SELECT COALESCE(channel,''), COALESCE(channel_trail,''), COUNT(*), SUM(CASE WHEN `+usageLogErrorSQL+` THEN 1 ELSE 0 END), COALESCE(SUM(duration_ms),0) FROM usage_logs WHERE 1=1`+where+` GROUP BY channel, channel_trail`, args...)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
-		var trail string
-		var count, failures, failovers, duration int64
-		if err := rows.Scan(&trail, &count, &failures, &failovers, &duration); err != nil {
+		var channel, trail string
+		var count, failures, duration int64
+		if err := rows.Scan(&channel, &trail, &count, &failures, &duration); err != nil {
 			rows.Close()
 			return nil, err
 		}
-		parts := strings.Split(trail, "→")
-		name := parts[len(parts)-1]
+		name, trail := channelIdentity(channel, trail)
+		var failovers int64
+		if hasChannelFailover(trail) {
+			failovers = count
+		}
 		entry := result.Channels[name]
 		if entry == nil {
 			entry = &RoutingChannelActivity{Name: name}
@@ -72,7 +75,7 @@ func (r *Repository) GetRoutingActivity(modelName string, since time.Time) (*Rou
 }
 
 func (r *Repository) recentRoutingEvents(where string, args []interface{}) ([]RoutingEvent, error) {
-	rows, err := r.db.Query(`SELECT id, COALESCE(trace_id,''), COALESCE(channel,''), status_code, COALESCE(error_message,''), created_at FROM usage_logs WHERE (`+usageLogErrorSQL+` OR channel LIKE '%→%')`+where+` ORDER BY id DESC LIMIT 8`, args...)
+	rows, err := r.db.Query(`SELECT id, COALESCE(trace_id,''), COALESCE(channel,''), status_code, COALESCE(error_message,''), created_at, COALESCE(channel_trail,'') FROM usage_logs WHERE (`+usageLogErrorSQL+` OR channel_trail <> '' OR channel LIKE '%→%')`+where+` ORDER BY id DESC LIMIT 8`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +83,7 @@ func (r *Repository) recentRoutingEvents(where string, args []interface{}) ([]Ro
 	result := []RoutingEvent{}
 	for rows.Next() {
 		var event RoutingEvent
-		if err := rows.Scan(&event.ID, &event.TraceID, &event.Channel, &event.StatusCode, &event.Error, &event.CreatedAt); err != nil {
+		if err := rows.Scan(&event.ID, &event.TraceID, &event.Channel, &event.StatusCode, &event.Error, &event.CreatedAt, &event.ChannelTrail); err != nil {
 			return nil, err
 		}
 		result = append(result, event)

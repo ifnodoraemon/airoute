@@ -1,54 +1,68 @@
 package storage
 
-import "github.com/ifnodoraemon/airoute/internal/telemetry"
+import (
+	"fmt"
+	"strings"
 
-// addUsageLogFTSIndex adds a SQLite FTS5 trigram index for keyword search.
-//
-// SQLite cannot use a B-tree for `LIKE '%q%'`, so every keyword search scanned
-// six columns. FTS5's trigram tokenizer indexes exactly those substrings, and its
-// external-content table keeps the audit rows as the single source of truth.
-//
-// PostgreSQL already covers this with the pg_trgm GIN indexes from v19.
+	"github.com/ifnodoraemon/airoute/internal/telemetry"
+)
+
+// addUsageLogFTSIndex maintains SQLite's external-content trigram index and all
+// three write triggers. The path is a separate searchable field after v52.
 func addUsageLogFTSIndex(db *DB) error {
 	if db.Dialect() != "sqlite" {
 		return nil
 	}
-	log := telemetry.ScopedLogger("system")
-
+	columns := []string{"trace_id", "chat_id", "session_id", "model", "channel", "error_message"}
+	trailColumn := tableHasColumn(db, "usage_logs", "channel_trail")
+	if trailColumn {
+		columns = append(columns, "channel_trail")
+	}
 	var existing int
-	if err := db.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'usage_logs_fts'`).Scan(&existing); err != nil {
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='usage_logs_fts'`).Scan(&existing); err != nil {
 		return err
 	}
+	if existing > 0 && trailColumn {
+		var schema string
+		if err := db.QueryRow(`SELECT sql FROM sqlite_master WHERE name='usage_logs_fts'`).Scan(&schema); err != nil {
+			return err
+		}
+		if !strings.Contains(schema, "channel_trail") {
+			for _, trigger := range []string{"ai", "ad", "au"} {
+				if _, err := db.Exec(`DROP TRIGGER IF EXISTS usage_logs_fts_` + trigger); err != nil {
+					return err
+				}
+			}
+			if _, err := db.Exec(`DROP TABLE usage_logs_fts`); err != nil {
+				return err
+			}
+			existing = 0
+		}
+	}
+	names := strings.Join(columns, ", ")
 	if existing == 0 {
-		if _, err := db.DB.Exec(`CREATE VIRTUAL TABLE usage_logs_fts USING fts5(
-			trace_id, chat_id, session_id, model, channel, error_message,
-			content='usage_logs', content_rowid='id', tokenize='trigram'
-		)`); err != nil {
-			// Older SQLite builds may lack FTS5 or the trigram tokenizer. Search
-			// keeps working through the LIKE scan; do not block startup.
-			log.Warn("SQLite FTS5 trigram index unavailable; audit keyword search keeps the LIKE scan", "error", err.Error())
+		if _, err := db.Exec(`CREATE VIRTUAL TABLE usage_logs_fts USING fts5(` + names + `, content='usage_logs', content_rowid='id', tokenize='trigram')`); err != nil {
+			telemetry.ScopedLogger("system").Warn("SQLite FTS5 trigram index unavailable; audit keyword search keeps the LIKE scan", "error", err.Error())
 			return nil
 		}
 	}
-
+	oldValues, newValues := []string{"old.id"}, []string{"new.id"}
+	for _, column := range columns {
+		oldValues = append(oldValues, "old."+column)
+		newValues = append(newValues, "new."+column)
+	}
+	insert := `INSERT INTO usage_logs_fts(rowid, ` + names + `) VALUES (` + strings.Join(newValues, ", ") + `);`
+	remove := `INSERT INTO usage_logs_fts(usage_logs_fts, rowid, ` + names + `) VALUES ('delete', ` + strings.Join(oldValues, ", ") + `);`
 	statements := []string{
-		// usage_logs rows are append-only, so insert and purge are the only events
-		// the index has to follow.
-		`CREATE TRIGGER IF NOT EXISTS usage_logs_fts_ai AFTER INSERT ON usage_logs BEGIN
-			INSERT INTO usage_logs_fts(rowid, trace_id, chat_id, session_id, model, channel, error_message)
-			VALUES (new.id, new.trace_id, new.chat_id, new.session_id, new.model, new.channel, new.error_message);
-		END`,
-		`CREATE TRIGGER IF NOT EXISTS usage_logs_fts_ad AFTER DELETE ON usage_logs BEGIN
-			INSERT INTO usage_logs_fts(usage_logs_fts, rowid, trace_id, chat_id, session_id, model, channel, error_message)
-			VALUES ('delete', old.id, old.trace_id, old.chat_id, old.session_id, old.model, old.channel, old.error_message);
-		END`,
-		// Backfill rows that predate the index; 'rebuild' reads the content table.
+		`DROP TRIGGER IF EXISTS usage_logs_fts_ai`, `DROP TRIGGER IF EXISTS usage_logs_fts_ad`, `DROP TRIGGER IF EXISTS usage_logs_fts_au`,
+		`CREATE TRIGGER usage_logs_fts_ai AFTER INSERT ON usage_logs BEGIN ` + insert + ` END`,
+		`CREATE TRIGGER usage_logs_fts_ad AFTER DELETE ON usage_logs BEGIN ` + remove + ` END`,
+		`CREATE TRIGGER usage_logs_fts_au AFTER UPDATE OF ` + names + ` ON usage_logs BEGIN ` + remove + insert + ` END`,
 		`INSERT INTO usage_logs_fts(usage_logs_fts) VALUES('rebuild')`,
 	}
 	for _, statement := range statements {
-		if _, err := db.DB.Exec(statement); err != nil {
-			log.Warn("failed to prepare the SQLite FTS5 audit index; keyword search keeps the LIKE scan", "error", err.Error())
-			return nil
+		if _, err := db.Exec(statement); err != nil {
+			return fmt.Errorf("prepare SQLite audit search index: %w", err)
 		}
 	}
 	return nil

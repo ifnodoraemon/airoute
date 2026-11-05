@@ -65,7 +65,7 @@ export default function VisualTopologyModal({ isOpen, onClose, adminFetch, onVie
               <h3 className="font-semibold text-sm">{isZh ? '最近异常与真实切换记录（24h）' : 'Recent failures and recorded failovers (24h)'}</h3>
               {!activity ? <p className="ui-meta">{isZh ? '调用统计不可用。' : 'Audit activity unavailable.'}</p> : activity.recent.length === 0 ? <p className="ui-meta">{isZh ? '没有已落盘的异常或渠道切换记录；尚不能据此确认备用渠道已经成功接管。' : 'No recorded failures or failovers. Backup takeover has not been demonstrated.'}</p> : <ul className="divide-y divide-slate-100 dark:divide-slate-800">
                 {activity.recent.map(event => <li key={event.id} className="py-2 text-xs flex flex-wrap items-center justify-between gap-2">
-                  <div className="min-w-0"><span className="font-mono break-all">{event.channel || '—'}</span><span className="ml-2">HTTP {event.status_code}</span><p className="ui-meta mt-1">{time(event.created_at)}{event.error && ` · ${event.error}`}</p></div>
+                  <div className="min-w-0"><span className="font-mono break-all">{event.channel_trail || event.channel || '—'}</span><span className="ml-2">HTTP {event.status_code}</span><p className="ui-meta mt-1">{time(event.created_at)}{event.error && ` · ${event.error}`}</p></div>
                   {onViewLogs && <button className="ui-btn-ghost ui-btn-sm" onClick={() => openLogs(event.trace_id)}>{isZh ? '查看记录' : 'Inspect'}</button>}
                 </li>)}
               </ul>}

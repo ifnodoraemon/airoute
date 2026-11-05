@@ -67,7 +67,7 @@ x-gateway-build: &gateway-build
   context: .
   dockerfile: Dockerfile
   args:
-    VERSION: ${VERSION:-2.2.0-dev}
+    VERSION: ${VERSION:-2.2.1-dev}
 
 # Streamed inference holds one descriptor for the downstream client and one for
 # the upstream provider, plus TLS sockets, the Redis pool and the log file.

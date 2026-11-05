@@ -9,7 +9,8 @@ function log(over = {}) {
     chat_id: '',
     session_id: '',
     model: 'deepseek-v4.1-flash',
-    channel: '罗总→gpustack-cluster',
+    channel: 'gpustack-cluster',
+    channel_trail: '罗总→gpustack-cluster',
     status_code: 503,
     prompt_tokens: 10,
     completion_tokens: 5,
@@ -38,7 +39,9 @@ describe('LogDetailModal', () => {
 
     // Both hops are shown separately instead of one opaque "A→B" string.
     expect(screen.getAllByText('罗总').length).toBeGreaterThan(0);
-    expect(screen.getByText('gpustack-cluster')).toBeInTheDocument();
+    expect(screen.getAllByText('gpustack-cluster')).toHaveLength(2);
+    expect(screen.getByText('最终渠道')).toBeInTheDocument();
+    expect(screen.getByText('路由轨迹 · 跨渠道切换')).toBeInTheDocument();
   });
 
   it('copies the raw upstream error text', () => {
@@ -173,4 +176,10 @@ describe('LogDetailModal', () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/Shift traffic weight/)).not.toBeInTheDocument();
   });
+});
+
+it('distinguishes a same-channel retry from channel failover', () => {
+  render(<LogDetailModal log={log({channel:'proxy',channel_trail:'proxy→proxy'})} onClose={vi.fn()} onCopy={vi.fn()} lang="zh" />);
+  expect(screen.getByText('路由轨迹 · 同渠道重试')).toBeInTheDocument();
+  expect(screen.queryByText('路由轨迹 · 跨渠道切换')).not.toBeInTheDocument();
 });

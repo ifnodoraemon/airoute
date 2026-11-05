@@ -93,7 +93,8 @@ func TestOperationalClosureAccountToBillingAndRevocation(t *testing.T) {
 	require.NoError(t, json.Unmarshal(logs.Body.Bytes(), &logEnvelope))
 	require.Len(t, logEnvelope.Data, 2)
 	for _, record := range logEnvelope.Data {
-		require.Equal(t, "closure-primary→closure-backup", record.Channel)
+		require.Equal(t, "closure-backup", record.Channel)
+		require.Equal(t, "closure-primary→closure-backup", record.ChannelTrail)
 		require.InDelta(t, 0.004, record.Cost, 1e-9)
 		require.NotNil(t, record.PricingSnapshot)
 	}

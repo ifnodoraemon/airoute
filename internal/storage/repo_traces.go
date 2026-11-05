@@ -17,6 +17,7 @@ type RequestTraceRecord struct {
 	TenantID        string    `json:"tenant_id,omitempty"`
 	Model           string    `json:"model,omitempty"`
 	Channel         string    `json:"channel,omitempty"`
+	ChannelTrail    string    `json:"channel_trail,omitempty"`
 	StatusCode      int       `json:"status_code"`
 	ErrorMessage    string    `json:"error_message,omitempty"`
 	RequestSnippet  string    `json:"request_snippet,omitempty"`
@@ -43,11 +44,12 @@ func (r *Repository) RecordRequestTrace(rec *RequestTraceRecord) error {
 	if rec.Limit0() {
 		return nil
 	}
+	rec.Channel, rec.ChannelTrail = channelIdentity(rec.Channel, rec.ChannelTrail)
 	_, err := r.db.Exec(`INSERT INTO request_traces
-		(trace_id, chat_id, session_id, api_key, tenant_id, model, channel, status_code, error_message, request_snippet, response_snippet, duration_ms)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		(trace_id, chat_id, session_id, api_key, tenant_id, model, channel, status_code, error_message, request_snippet, response_snippet, duration_ms, channel_trail)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		rec.TraceID, rec.ChatID, rec.SessionID, rec.APIKey, rec.TenantID, rec.Model, rec.Channel,
-		rec.StatusCode, rec.ErrorMessage, rec.RequestSnippet, rec.ResponseSnippet, rec.DurationMs)
+		rec.StatusCode, rec.ErrorMessage, rec.RequestSnippet, rec.ResponseSnippet, rec.DurationMs, rec.ChannelTrail)
 	return err
 }
 
@@ -63,7 +65,7 @@ func (r *Repository) ListRequestTraces(f TraceFilter) ([]*RequestTraceRecord, er
 	}
 	query := `SELECT id, trace_id, COALESCE(chat_id,''), COALESCE(session_id,''), COALESCE(api_key,''), COALESCE(tenant_id,''),
 		COALESCE(model,''), COALESCE(channel,''), status_code, COALESCE(error_message,''),
-		COALESCE(request_snippet,''), COALESCE(response_snippet,''), duration_ms, created_at
+		COALESCE(request_snippet,''), COALESCE(response_snippet,''), duration_ms, created_at, COALESCE(channel_trail,'')
 		FROM request_traces WHERE 1=1`
 	args := make([]any, 0, 5)
 	if f.TraceID != "" {
@@ -105,7 +107,7 @@ func (r *Repository) ListRequestTraces(f TraceFilter) ([]*RequestTraceRecord, er
 		var t RequestTraceRecord
 		if err := rows.Scan(&t.ID, &t.TraceID, &t.ChatID, &t.SessionID, &t.APIKey, &t.TenantID,
 			&t.Model, &t.Channel, &t.StatusCode, &t.ErrorMessage, &t.RequestSnippet,
-			&t.ResponseSnippet, &t.DurationMs, &t.CreatedAt); err != nil {
+			&t.ResponseSnippet, &t.DurationMs, &t.CreatedAt, &t.ChannelTrail); err != nil {
 			return nil, err
 		}
 		out = append(out, &t)

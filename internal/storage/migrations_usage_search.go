@@ -22,7 +22,11 @@ func addUsageLogSearchIndexes(db *DB) error {
 		log.Warn("pg_trgm is unavailable; audit keyword search will fall back to a table scan", "error", err.Error())
 		return nil
 	}
-	for _, column := range []string{"trace_id", "chat_id", "session_id", "model", "channel", "error_message"} {
+	columns := []string{"trace_id", "chat_id", "session_id", "model", "channel", "error_message"}
+	if tableHasColumn(db, "usage_logs", "channel_trail") {
+		columns = append(columns, "channel_trail")
+	}
+	for _, column := range columns {
 		query := `CREATE INDEX IF NOT EXISTS idx_usage_trgm_` + column + ` ON usage_logs USING GIN (` + column + ` gin_trgm_ops)`
 		if _, err := db.DB.Exec(query); err != nil {
 			log.Warn("failed to create audit trigram index", "column", column, "error", err.Error())

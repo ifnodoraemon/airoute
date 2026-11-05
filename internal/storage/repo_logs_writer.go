@@ -151,7 +151,9 @@ func normalizeUsageLog(log *UsageLogRecord) {
 		return
 	}
 	log.Model = clampRunes(log.Model, 128)
+	log.Channel, log.ChannelTrail = channelIdentity(log.Channel, log.ChannelTrail)
 	log.Channel = clampRunes(log.Channel, 128)
+	log.ChannelTrail = clampRunes(log.ChannelTrail, 128)
 	log.TenantID = clampRunes(log.TenantID, 128)
 	log.APIKey = NormalizeStoredAPIKeyReference(log.APIKey)
 	log.APIKey = clampRunes(log.APIKey, 255)
@@ -284,8 +286,8 @@ func (r *Repository) insertUsageLogsContext(ctx context.Context, logs []*UsageLo
 	}
 
 	const (
-		insertColumns  = `trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, cost_units, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, usage_source, error_message, pricing_snapshot, created_at, billing_id, thinking`
-		insertColumnsN = 24
+		insertColumns  = `trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, cost_units, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, usage_source, error_message, pricing_snapshot, created_at, billing_id, thinking, channel_trail`
+		insertColumnsN = 25
 		insertChunk    = 25
 	)
 
@@ -321,7 +323,7 @@ func (r *Repository) insertUsageLogsContext(ctx context.Context, logs []*UsageLo
 			log.PromptTokens, log.CompletionTokens, log.CachedTokens, log.TotalTokens, log.Cost, ToUnits(log.Cost),
 			isOff, discount, log.DurationMs, log.TTFTMs, log.StatusCode, normalizeUsageSource(log.UsageSource),
 			truncateError(log.ErrorMessage), encodePricingSnapshot(log.PricingSnapshot),
-			r.dialectTimePrecise(createdAt), log.BillingID, encodeThinkingObservation(log.Thinking),
+			r.dialectTimePrecise(createdAt), log.BillingID, encodeThinkingObservation(log.Thinking), log.ChannelTrail,
 		)
 	}
 

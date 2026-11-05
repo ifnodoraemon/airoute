@@ -71,12 +71,14 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
   // inside it is invisible to the JSX.
   const errorMessage = (log && log.error_message ? String(log.error_message) : '').trim();
   const hasUpstreamDetail = errorMessage.length > 0;
-  // A channel value such as "罗总→gpustack-cluster" is a failover chain, not a
-  // single name; render it as an ordered sequence so the path is legible.
-  const channelChain = (log && log.channel ? String(log.channel) : '')
+  // New records store the terminal channel separately. The fallback keeps
+  // details readable while a legacy response is still in the browser.
+  const channelChain = String(log?.channel_trail || log?.channel || '')
     .split('→')
     .map((name) => name.trim())
     .filter(Boolean);
+  const finalChannel = String(log?.channel || '').includes('→') ? channelChain.at(-1) : log?.channel;
+  const changedChannel = new Set(channelChain).size > 1;
   const isErrorLog = !!log && ((log.status_code || 200) >= 400 || hasUpstreamDetail);
   // 499 ("client closed request") is synthesized by the gateway itself when it
   // notices the downstream caller hung up; no upstream provider ever returns
@@ -282,11 +284,13 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
               </span>
             </div>
             <div className="p-3.5 rounded-xl bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038]">
-              <span className="ui-meta block font-medium">{isZh ? '路由渠道' : 'Channel'}</span>
-              {channelChain.length > 1 ? (
+              <span className="ui-meta block font-medium">{isZh ? '最终渠道' : 'Final channel'}</span>
+              <span className="text-xs font-medium font-mono block mt-1">{finalChannel || (isZh ? '未调用上游' : 'No upstream called')}</span>
+              {channelChain.length > 1 && (
+                <details className="mt-2 text-xs"><summary className="text-indigo-600 cursor-pointer">{isZh ? (changedChannel ? '路由轨迹 · 跨渠道切换' : '路由轨迹 · 同渠道重试') : (changedChannel ? 'Route path · channel failover' : 'Route path · same-channel retry')}</summary>
                 <span
                   className="flex flex-wrap items-center gap-1 mt-1 font-mono text-[11px] text-[#202124] dark:text-[#F1F2F4]"
-                  title={isZh ? '降级链：从左到右依次尝试' : 'Failover chain: tried left to right'}
+                  title={isZh ? '按实际尝试顺序排列，重复名称表示重试' : 'Actual attempt order; repeated names indicate retries'}
                 >
                   {channelChain.map((name, index) => (
                     <span key={`${name}-${index}`} className="inline-flex items-center gap-1">
@@ -296,11 +300,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
                       </span>
                     </span>
                   ))}
-                </span>
-              ) : (
-                <span className="text-xs font-medium text-[#202124] dark:text-[#F1F2F4] truncate block mt-1 font-mono">
-                  {log.channel || (isZh ? '直通/多源' : 'Direct / Multi')}
-                </span>
+                </span></details>
               )}
             </div>
             <div className="p-3.5 rounded-xl bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 border border-[#E4E6E9] dark:border-[#2C3038]">

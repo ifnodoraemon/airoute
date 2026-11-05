@@ -136,6 +136,7 @@ export default function TraceSnapshotModal({ isOpen, traceId, initialQueryField 
                   HTTP {row.status_code}
                 </span>
                 <span className="font-mono text-slate-600 dark:text-slate-300">{row.model}</span>
+                {row.channel_trail && <span className="text-slate-500 dark:text-slate-400 break-all">{isZh ? '路由轨迹：' : 'Route path: '}{row.channel_trail}</span>}
                 {row.channel && <span className="text-slate-500 dark:text-slate-400">@ {row.channel}</span>}
                 <span className="text-slate-500 dark:text-slate-400">{row.duration_ms}ms</span>
                 <span className="ml-auto text-slate-500 dark:text-slate-400">{row.created_at}</span>

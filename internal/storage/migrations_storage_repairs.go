@@ -116,25 +116,7 @@ func repairUsageLogFTSTriggers(db *DB) error {
 		// the LIKE fallback, so there is no index to maintain.
 		return nil
 	}
-	statements := []string{
-		`CREATE TRIGGER IF NOT EXISTS usage_logs_fts_au AFTER UPDATE OF trace_id, chat_id, session_id, model, channel, error_message ON usage_logs BEGIN
-			INSERT INTO usage_logs_fts(usage_logs_fts, rowid, trace_id, chat_id, session_id, model, channel, error_message)
-			VALUES ('delete', old.id, old.trace_id, old.chat_id, old.session_id, old.model, old.channel, old.error_message);
-			INSERT INTO usage_logs_fts(rowid, trace_id, chat_id, session_id, model, channel, error_message)
-			VALUES (new.id, new.trace_id, new.chat_id, new.session_id, new.model, new.channel, new.error_message);
-		END`,
-		`INSERT INTO usage_logs_fts(usage_logs_fts) VALUES('rebuild')`,
-	}
-	for _, statement := range statements {
-		if _, err := db.DB.Exec(statement); err != nil {
-			// The FTS index is a search accelerator, not a correctness
-			// requirement; report and keep going rather than block startup.
-			telemetry.ScopedLogger("system").Warn("could not repair the SQLite FTS audit index; keyword search keeps the LIKE scan",
-				"error", err.Error())
-			return nil
-		}
-	}
-	return nil
+	return addUsageLogFTSIndex(db)
 }
 
 // skipSQLiteTablePartitioning records version 43 on SQLite, where the
