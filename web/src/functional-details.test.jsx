@@ -53,7 +53,7 @@ describe('Functional details regressions', () => {
     const showToast = vi.fn();
     // An active selected key authorizes the console request under the session.
     render(<PlaygroundView keys={[{id: 1, status: 'active'}]} models={['gpt-audit']} initialModel="gpt-audit" showToast={showToast} />);
-    fireEvent.change(screen.getByPlaceholderText('输入对话 Prompt，Enter 发送 / Shift+Enter 换行...'), { target: { value: 'hello' } });
+    fireEvent.change(screen.getByPlaceholderText('输入消息，Enter 发送'), { target: { value: 'hello' } });
     fireEvent.click(screen.getByRole('button', { name: '发送请求' }));
     await waitFor(() => expect(screen.getByRole('button', { name: '发送请求' })).toBeEnabled());
     expect(showToast).toHaveBeenCalledWith('upstream overloaded', 'error');

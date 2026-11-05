@@ -1,7 +1,7 @@
 package buildinfo
 
 // BaseVersion mirrors the canonical VERSION file via scripts/version.mjs.
-const BaseVersion = "2.2.2"
+const BaseVersion = "2.2.3"
 
 // Builds without linker metadata are development builds, never release artifacts.
 const DefaultVersion = BaseVersion + "-dev"

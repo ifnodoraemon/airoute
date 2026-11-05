@@ -283,7 +283,7 @@ Execute the following mission with precision, maintainability, and zero speculat
 
     setSystemPrompt(optimized);
     setShowSystemPrompt(true);
-    if (showToast) showToast(isZh ? '系统人设已完成 AI 结构化工程增强！' : 'System Prompt enhanced with AI prompt engineering!', 'success');
+    if (showToast) showToast(isZh ? '提示词已优化' : 'System Prompt enhanced with AI prompt engineering!', 'success');
   };
 
   const handleOptimizeChatInput = () => {
@@ -977,7 +977,7 @@ Execute the following mission with precision, maintainability, and zero speculat
               {contextKeys.map(k => <option key={k.id} value={String(k.id)}>{k.tenant_id ? `${k.tenant_id} - ` : ''}{keyDisplayRef(k)}</option>)}
             </select>
             <p className="ui-meta">{selectedKeyId
-              ? (isZh ? '直接使用所选密钥的模型权限、额度和计费分组。' : 'Uses the selected key’s model access, quota and billing group.')
+              ? (isZh ? '权限、额度和计费组跟随所选密钥。' : 'Uses the selected key’s model access, quota and billing group.')
               : (isZh ? '创建访问密钥后即可开始调试。' : 'Create an API key to start testing.')}</p>
             {!selectedKeyId && onCreateKey && <button type="button" className="ui-btn-secondary" onClick={onCreateKey}>{isZh ? '创建访问密钥' : 'Create API key'}</button>}
           </div>
@@ -1038,7 +1038,7 @@ Execute the following mission with precision, maintainability, and zero speculat
                     onClick={() => setShowSystemPrompt(!showSystemPrompt)}
                     className="flex-1 flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer mr-2"
                   >
-                    <span>{isZh ? '系统人设 (System Prompt)' : 'System Prompt'}</span>
+                    <span>{isZh ? '系统提示词' : 'System Prompt'}</span>
                     {showSystemPrompt ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                   </button>
                   <button
@@ -1067,7 +1067,7 @@ Execute the following mission with precision, maintainability, and zero speculat
               <div className="space-y-3 pt-2 border-t border-[#E4E6E9] dark:border-[#2C3038]">
                 <div>
                   <div className="flex justify-between text-xs font-semibold text-[#656B75] dark:text-[#A1A7B0] mb-1">
-                    <span>{isZh ? '温度 (Temperature)' : 'Temperature'}</span>
+                    <span>{isZh ? '温度' : 'Temperature'}</span>
                     <span className="font-mono text-[#355CFF] dark:text-[#91A7FF]">{temperature}</span>
                   </div>
                   <input
@@ -1083,7 +1083,7 @@ Execute the following mission with precision, maintainability, and zero speculat
 
                 <div>
                   <div className="flex items-center justify-between text-xs font-semibold text-[#656B75] dark:text-[#A1A7B0] mb-1.5">
-                    <span>{isZh ? '最大生成 Token (Max Tokens)' : 'Max Tokens'}</span>
+                    <span>{isZh ? '输出上限' : 'Max Tokens'}</span>
                     <div className="flex items-center space-x-1.5">
                       <input
                         type="number"
@@ -1162,7 +1162,7 @@ Execute the following mission with precision, maintainability, and zero speculat
                     className="rounded-sm border-[#E4E6E9] dark:border-[#2C3038] text-[#355CFF] focus:ring-0 cursor-pointer"
                   />
                   <label htmlFor="streamCheck" className="text-xs font-semibold text-[#202124] dark:text-[#F1F2F4] cursor-pointer">
-                    {isZh ? '开启 SSE 流式输出 (Streaming)' : 'Enable SSE Streaming'}
+                    {isZh ? '流式输出' : 'Enable SSE Streaming'}
                   </label>
                 </div>
               </div>
@@ -1411,7 +1411,7 @@ Execute the following mission with precision, maintainability, and zero speculat
               <Terminal className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
               <span className="font-bold text-slate-800 dark:text-slate-200">
                 {playModality === 'chat'
-                  ? (playMode === 'arena' ? (isZh ? '双模型横向比对评测竞技场 (Arena)' : 'Model Arena Side-by-Side Comparison') : (isZh ? '连续多轮对话调试' : 'Conversational Testing Stream'))
+                  ? (playMode === 'arena' ? (isZh ? '双模型对比' : 'Model Arena Side-by-Side Comparison') : (isZh ? '对话' : 'Chat'))
                   : (isZh ? '多模态结果呈现' : 'Multimodal Output Stream')}
               </span>
             </div>
@@ -1673,8 +1673,8 @@ Execute the following mission with precision, maintainability, and zero speculat
                     if (!playLoading) handleRunChat();
                   }}
                   placeholder={playMode === 'arena'
-                    ? (isZh ? '输入统一 Prompt，同时对两款模型展开并发比对 (Enter 发送 / Shift+Enter 换行)...' : 'Prompt to benchmark both models at once (Enter to send / Shift+Enter for newline)...')
-                    : (isZh ? '输入对话 Prompt，Enter 发送 / Shift+Enter 换行...' : 'Enter prompt — Enter to send, Shift+Enter for a newline...')}
+                    ? (isZh ? '输入消息，对比两个模型' : 'Prompt to benchmark both models at once (Enter to send / Shift+Enter for newline)...')
+                    : (isZh ? '输入消息，Enter 发送' : 'Enter a message')}
                   className="ui-field flex-1 min-w-0 resize-none overflow-y-auto"
                 />
                 <button

@@ -313,7 +313,7 @@ export default function AiCopilot({
     setSelectedModel(preferred);
   }, [candidateModels, selectedModel]);
 
-  // Welcome message with Harness context
+  // Seed a concise welcome for a new conversation.
   useEffect(() => {
     if (messages.length === 0) {
       setMessages([
@@ -321,8 +321,8 @@ export default function AiCopilot({
           id: 'welcome',
           role: 'assistant',
           content: isZh
-            ? `👋 你好！我是 **Airoute AI 智能副驾驶**（标准 Agent Harness 架构）。\n\n我已装载标准的 **OpenAI Function Calling (Tools v1)** 契约规范与网关沙箱环境，支持 **ReAct 自主思考与工具循环调用**：\n\n- 🔧 **集群遥测沙箱** (\`get_cluster_telemetry\`)：实时洞察通道状态、活跃度与熔断隔离\n- 💡 **拓扑 SPOF 审计** (\`audit_routing_spof\`)：扫描全量模型路由单点脆弱性，推荐主备容灾拓扑\n- ⚠️ **报错根因剖析** (\`diagnose_recent_errors\`)：聚合 429 速率限制与 5xx 故障，输出 RCA 诊断\n- 🧭 **控制台联动巡航** (\`navigate_console_view\`)：支持根据指令自主切换通道、路由与日志页面\n- 🚀 **智能体开箱配置** (\`generate_client_config\`)：秒级生成 Cursor、Claude Code 与 Python 接入套件\n\n请点击下方预设的 **Harness 巡检基准任务**，或直接输入你的提问！`
-            : `👋 Hello! I am the **Airoute AI Copilot** (Standard Agent Harness Architecture).\n\nEquipped with **OpenAI Function Calling (Tools v1)** protocol and the Airoute Console Sandbox, I operate via autonomous **ReAct multi-turn tool loops**:\n\n- 🔧 **Cluster Telemetry** (\`get_cluster_telemetry\`): Real-time channel availability & breaker isolation\n- 💡 **SPOF Audit** (\`audit_routing_spof\`): Single Point of Failure detection & failover advisory\n- ⚠️ **RCA Diagnostics** (\`diagnose_recent_errors\`): Aggregated root cause analysis for 429 & 5xx errors\n- 🧭 **Console Navigation** (\`navigate_console_view\`): Autonomous UI tab switching across console modules\n- 🚀 **Client Configs** (\`generate_client_config\`): Instant setups for Cursor, Claude Code & Python SDK\n\nClick any **Harness Benchmark Task** below or ask in natural language!`,
+            ? '选择一个任务，或直接提问。'
+            : 'Choose a task or ask a question.',
           harnessTrace: []
         }
       ]);
@@ -955,14 +955,15 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
         className={`fixed z-40 flex items-center space-x-2 px-3.5 py-2.5 rounded-full bg-[#355CFF] hover:bg-[#2849E6] text-white shadow-xl shadow-[#355CFF]/25 hover:shadow-[#355CFF]/35 border border-white/20 select-none touch-none ${
           isBtnDragging ? 'cursor-grabbing scale-105 opacity-90 shadow-2xl' : 'cursor-grab hover:scale-[1.02] transition-transform transition-shadow duration-200'
         }`}
-        title={isZh ? 'Airoute AI 智能副驾驶 (按住可拖动位置，点击打开，快捷键 Cmd+J)' : 'Airoute AI Copilot (Drag to move, click to open, Cmd+J)'}
+        aria-label={isZh ? 'AI 智能副驾驶' : 'AI Copilot'}
+        title={isZh ? '副驾驶 · Cmd+J · 可拖动' : 'Copilot · Cmd+J · Drag to move'}
       >
         <GripVertical className="w-3.5 h-3.5 text-white/50 -ml-1 mr-0.5 shrink-0" />
         <div className="relative">
           <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
         </div>
         <span className="text-xs font-bold tracking-tight">
-          {isZh ? 'AI 智能副驾驶' : 'AI Copilot'}
+          {isZh ? '副驾驶' : 'Copilot'}
         </span>
         <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono font-semibold bg-white/20 text-white/90 rounded-sm border border-white/20">
           ⌘J
@@ -996,11 +997,8 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
           <div className="min-w-0">
             <div className="flex items-center space-x-2">
               <h3 className="font-semibold text-sm text-[#202124] dark:text-[#F1F2F4] truncate">
-                {isZh ? 'Airoute 智能副驾驶' : 'Airoute AI Copilot'}
+                {isZh ? '副驾驶' : 'Copilot'}
               </h3>
-              <span className="px-1.5 py-0.2 rounded-full text-xs font-mono font-semibold bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] border border-[#355CFF]/20 dark:border-[#91A7FF]/30 shrink-0">
-                Harness
-              </span>
             </div>
 
             {/* 模型与工具契约展示 */}
@@ -1032,7 +1030,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                 type="button"
                 onClick={() => setShowToolsModal(!showToolsModal)}
                 className="inline-flex items-center gap-1 text-xs text-[#355CFF] dark:text-[#91A7FF] hover:underline cursor-pointer"
-                title={isZh ? '查看装载的标准工具契约' : 'View Registered Harness Tools'}
+                title={isZh ? '查看工具' : 'View tools'}
               >
                 <Wrench className="w-2.5 h-2.5" />
                 <span>{COPILOT_HARNESS_TOOLS.length} 工具就绪</span>
@@ -1072,7 +1070,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
           <div className="flex items-center justify-between mb-1.5">
             <div className="flex items-center gap-1.5 font-semibold text-[#202124] dark:text-[#F1F2F4] text-xs">
               <Layers className="w-3.5 h-3.5 text-[#355CFF] dark:text-[#91A7FF]" />
-              <span>{isZh ? 'Harness 契约工具库 (OpenAI Tools v1)' : 'Harness Tool Registry'}</span>
+              <span>{isZh ? '可用工具' : 'Available tools'}</span>
             </div>
             <button
               onClick={() => setShowToolsModal(false)}
@@ -1187,7 +1185,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
                     >
                       <div className="flex items-center space-x-1.5">
                         <Terminal className="w-3 h-3 text-[#355CFF] dark:text-[#91A7FF]" />
-                        <span>{isZh ? `Harness 执行轨迹 (${traceSteps.length} 步工具调用)` : `Harness Trace (${traceSteps.length} tools)`}</span>
+                        <span>{isZh ? `工具调用 (${traceSteps.length})` : `Tool calls (${traceSteps.length})`}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs font-mono text-[#355CFF] dark:text-[#91A7FF]">
@@ -1290,7 +1288,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
         {isLoading && (
           <div className="flex items-center space-x-2 text-xs text-[#656B75] dark:text-[#A1A7B0] py-2 px-1">
             <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#355CFF] dark:text-[#91A7FF]" />
-            <span>{isZh ? 'Harness 正在调度工具与推理生成中...' : 'Harness is executing tools and reasoning...'}</span>
+            <span>{isZh ? '处理中…' : 'Working…'}</span>
           </div>
         )}
         <div ref={messagesEndRef} />
@@ -1356,7 +1354,7 @@ You have direct access to gateway telemetry and operations via OpenAI Function C
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={isZh ? '向 Harness 发出运维巡检、排错或架构指令...' : 'Issue an SRE audit or ops instruction to Harness...'}
+          placeholder={isZh ? '输入问题或操作指令' : 'Ask a question or describe a task'}
           className="flex-1 bg-[#F7F7F5] dark:bg-[#22252B] border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl px-3.5 py-2 text-xs text-[#202124] dark:text-[#F1F2F4] placeholder-[#656B75] dark:placeholder-[#A1A7B0] focus:outline-none focus:ring-1 focus:ring-[#355CFF] shadow-2xs"
         />
 

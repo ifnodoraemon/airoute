@@ -76,9 +76,6 @@ export default function ChannelModal({
             <h3 className="font-semibold text-base text-[#202124] dark:text-[#F1F2F4] tracking-tight">
               {editingChannelId ? (isZh ? '编辑服务商' : 'Edit Upstream Provider') : (isZh ? '接入服务商' : 'Connect New Provider')}
             </h3>
-            <p className="text-xs text-[#656B75] dark:text-[#A1A7B0] mt-0.5">
-              {isZh ? '配置上游模型服务商端点、鉴权密钥与协议映射' : 'Configure upstream endpoint, authentication credentials, and protocol mappings'}
-            </p>
           </div>
           <button
             type="button"
@@ -90,7 +87,7 @@ export default function ChannelModal({
         </div>
 
         {/* Scrollable Body */}
-        <div className="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+        <div className="p-6 space-y-6 overflow-y-auto flex-1 text-xs">
           {/* Probe Notification */}
           {probeAlert && (
             <div

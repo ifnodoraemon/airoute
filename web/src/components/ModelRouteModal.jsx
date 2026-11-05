@@ -318,7 +318,7 @@ export default function ModelRouteModal({
         )}
 
         {/* Form Body */}
-        <form onSubmit={handleSave} className="space-y-4 overflow-y-auto pr-1 flex-1 text-xs">
+        <form onSubmit={handleSave} className="space-y-6 overflow-y-auto pr-1 flex-1 text-xs">
           {/* Field 1: Model Identifier */}
           <div>
             <label className="block font-semibold text-slate-800 dark:text-slate-200 mb-1">

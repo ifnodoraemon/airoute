@@ -64,7 +64,7 @@ const listedKeys = [
 ];
 
 function typeChatMessage(text = 'hello') {
-  fireEvent.change(screen.getByPlaceholderText(/输入对话 Prompt/), { target: { value: text } });
+  fireEvent.change(screen.getByPlaceholderText(/输入消息/), { target: { value: text } });
 }
 
 describe('PlaygroundView session-based key selection', () => {

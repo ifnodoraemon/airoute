@@ -7,6 +7,29 @@ export function thinkingChoices(capability, tools = false) {
   return tools ? (capability?.tools || {}) : (capability || {});
 }
 
+export function thinkingSelection(value) {
+  return value?.mode === 'on' && value.effort ? value.effort : value?.mode || 'auto';
+}
+
+export function thinkingFromSelection(value) {
+  return ['auto', 'on', 'off'].includes(value)
+    ? { mode: value, effort: '' }
+    : { mode: 'on', effort: value };
+}
+
+export function thinkingOptions(capability, value) {
+  const efforts = capability?.efforts || [];
+  return ['auto', ...(capability?.off ? ['off'] : []),
+    ...(capability?.on && (!efforts.length || (value?.mode === 'on' && !value.effort)) ? ['on'] : []), ...efforts];
+}
+
+export function thinkingOptionLabel(value, isZh = true) {
+  const labels = isZh
+    ? { auto: '默认', on: '开启', off: '关闭', native: '原生', minimal: '极少', low: '低', medium: '中', high: '高', xhigh: '很高', max: '最高' }
+    : { auto: 'Default', on: 'On', off: 'Off', native: 'Native' };
+  return labels[value] || value;
+}
+
 export function thinkingControl(capability, value) {
   const mode = value?.mode || 'auto';
   // Retain explicit requirements after a hot reload. The UI marks unavailable

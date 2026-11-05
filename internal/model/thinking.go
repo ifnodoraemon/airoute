@@ -31,18 +31,20 @@ type ModelCapabilityConfig struct {
 	Thinking *ThinkingConfig `json:"thinking,omitempty" yaml:"thinking,omitempty"`
 }
 type ThinkingConfig struct {
-	Profile string   `json:"profile" yaml:"profile"`
-	Efforts []string `json:"efforts" yaml:"efforts,omitempty"`
+	Profile    string   `json:"profile,omitempty" yaml:"profile,omitempty"`
+	CanDisable *bool    `json:"can_disable,omitempty" yaml:"can_disable,omitempty"`
+	Efforts    []string `json:"efforts" yaml:"efforts,omitempty"`
 }
 
 type ThinkingCapability struct {
-	Known   bool     `json:"known"`
-	On      bool     `json:"on"`
-	Off     bool     `json:"off"`
-	Efforts []string `json:"efforts"`
-	Output  string   `json:"output"`
-	Source  string   `json:"source"`
-	Profile string   `json:"profile,omitempty"`
+	Automatic *ThinkingCapability `json:"automatic,omitempty"`
+	Known     bool                `json:"known"`
+	On        bool                `json:"on"`
+	Off       bool                `json:"off"`
+	Efforts   []string            `json:"efforts"`
+	Output    string              `json:"output"`
+	Source    string              `json:"source"`
+	Profile   string              `json:"profile,omitempty"`
 }
 
 // ThinkingPolicy sets route defaults and restrictions, independently of facts.
@@ -117,14 +119,11 @@ func ValidateModelCapabilities(config map[string]ModelCapabilityConfig) error {
 			continue
 		}
 		profile, ok := FindThinkingProfile(value.Thinking.Profile)
-		if !ok {
+		if value.Thinking.Profile != "" && !ok {
 			return fmt.Errorf("model %q: unknown thinking profile %q", name, value.Thinking.Profile)
 		}
-		if value.Thinking.Efforts != nil && len(value.Thinking.Efforts) == 0 && len(profile.Efforts) > 0 {
-			return fmt.Errorf("model %q: keep at least one supported effort level", name)
-		}
 		for _, effort := range value.Thinking.Efforts {
-			if !slices.Contains(profile.Efforts, effort) {
+			if !slices.Contains([]string{"minimal", "low", "medium", "high", "xhigh", "max"}, effort) || (ok && !slices.Contains(profile.Efforts, effort)) {
 				return fmt.Errorf("model %q: profile does not support effort %q", name, effort)
 			}
 		}
@@ -216,27 +215,26 @@ func ResolveUpstreamThinkingProfile(channel *ChannelConfig, name string) (Thinki
 	if !configured {
 		config, configured = channel.ModelCapabilities["*"]
 	}
-	if configured && config.Thinking != nil {
+	if configured && config.Thinking != nil && config.Thinking.Profile != "" {
 		profile, ok := FindThinkingProfile(config.Thinking.Profile)
 		if !ok {
 			return ThinkingProfile{}, "invalid_configuration"
 		}
-		if config.Thinking.Efforts != nil {
-			profile.Efforts = slices.Clone(config.Thinking.Efforts)
-			if !slices.Contains(profile.Efforts, profile.DefaultEffort) {
-				profile.DefaultEffort = ""
-				if len(profile.Efforts) > 0 {
-					profile.DefaultEffort = profile.Efforts[0]
-				}
-			}
-		}
-		return profile, "configured"
+		return applyThinkingFacts(profile, config.Thinking, "configured")
 	}
+	profile, source := catalogThinkingProfile(channel.Type, name)
+	if configured && config.Thinking != nil {
+		return applyThinkingFacts(profile, config.Thinking, source)
+	}
+	return profile, source
+}
+
+func catalogThinkingProfile(kind ProviderType, name string) (ThinkingProfile, string) {
 	if strings.Contains(strings.ToLower(name), "gpt-") && strings.Contains(strings.ToLower(name), "-pro") {
 		return ThinkingProfile{}, "unknown"
 	}
 	for _, rule := range thinkingCatalog.Rules {
-		if rule.Provider != "" && !strings.Contains("|"+rule.Provider+"|", "|"+string(channel.Type)+"|") {
+		if rule.Provider != "" && !strings.Contains("|"+rule.Provider+"|", "|"+string(kind)+"|") {
 			continue
 		}
 		if rule.compiled.MatchString(strings.ToLower(name)) {
@@ -291,9 +289,15 @@ func ValidateChannelThinking(kind ProviderType, config map[string]ModelCapabilit
 	}
 	for name, value := range config {
 		if value.Thinking != nil {
-			profile, _ := FindThinkingProfile(value.Thinking.Profile)
+			profile, _ := catalogThinkingProfile(kind, name)
+			if value.Thinking.Profile != "" {
+				profile, _ = FindThinkingProfile(value.Thinking.Profile)
+			}
 			if !ThinkingProfileCompatible(kind, profile) {
 				return fmt.Errorf("model %q: thinking profile %q is incompatible with channel protocol %s", name, profile.ID, kind)
+			}
+			if err := validateThinkingFacts(profile, value.Thinking); err != nil {
+				return fmt.Errorf("model %q: %w", name, err)
 			}
 		}
 	}

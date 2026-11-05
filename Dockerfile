@@ -33,7 +33,7 @@ FROM ${GO_IMAGE} AS go-builder
 # Injected so the binary reports the same version as the image tag it is
 # published under (see .github/workflows/docker.yml). The default keeps a plain
 # `docker build .` working without build arguments.
-ARG VERSION=2.2.2-dev
+ARG VERSION=2.2.3-dev
 ARG GOPROXY=https://goproxy.cn,https://proxy.golang.org,direct
 ENV GOPROXY=${GOPROXY}
 

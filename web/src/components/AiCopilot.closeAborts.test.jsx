@@ -64,7 +64,7 @@ describe('AiCopilot close cancels the generation', () => {
 
     const { rerender } = renderCopilot(true);
 
-    const input = screen.getByPlaceholderText('向 Harness 发出运维巡检、排错或架构指令...');
+    const input = screen.getByPlaceholderText('输入问题或操作指令');
     fireEvent.change(input, { target: { value: '帮我看一下最近的运行情况' } });
     await act(async () => {
       fireEvent.submit(input.closest('form'));

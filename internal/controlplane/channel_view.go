@@ -77,10 +77,16 @@ func channelViewFrom(rec *storage.ChannelRecord) channelView {
 	}
 	upstream := make([]string, 0, len(names))
 	capabilities := make(map[string]model.ThinkingCapability, len(names))
+	automatic := *cfg
+	automatic.ModelCapabilities = nil
 	for name := range names {
 		upstream = append(upstream, name)
 		profile, source := model.ResolveUpstreamThinkingProfile(cfg, name)
-		capabilities[name] = profile.Capability(source)
+		capability := profile.Capability(source)
+		base, baseSource := model.ResolveUpstreamThinkingProfile(&automatic, name)
+		baseCapability := base.Capability(baseSource)
+		capability.Automatic = &baseCapability
+		capabilities[name] = capability
 	}
 	sort.Strings(upstream)
 	return channelView{

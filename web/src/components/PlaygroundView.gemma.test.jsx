@@ -26,9 +26,9 @@ describe('Gemma content in the playground', () => {
       }),
     })));
     const { container } = render(<PlaygroundView {...props} />);
-    const toggle = screen.getByLabelText('开启 SSE 流式输出 (Streaming)');
+    const toggle = screen.getByLabelText('流式输出');
     if (toggle.checked !== stream) fireEvent.click(toggle);
-    fireEvent.change(screen.getByPlaceholderText(/输入对话 Prompt/), { target: { value: 'What is two plus two?' } });
+    fireEvent.change(screen.getByPlaceholderText(/输入消息/), { target: { value: 'What is two plus two?' } });
     fireEvent.click(screen.getByRole('button', { name: /发送请求/ }));
     await waitFor(() => expect(screen.getByText('four')).toBeInTheDocument());
     expect(screen.getByText('Check the calculation.')).toBeInTheDocument();

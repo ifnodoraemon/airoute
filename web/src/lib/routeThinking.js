@@ -35,11 +35,11 @@ export function routeThinkingError(policy, availability, isZh = true) {
     (mode === 'on' && !availability.on.length) || (mode === 'off' && !availability.off.length);
   if (unavailable)
     return isZh
-      ? '当前没有已启用渠道支持所选默认思考模式。'
+      ? '所选设置无可用渠道。'
       : 'No enabled channel supports the default thinking mode.';
   if (policy.allowed_modes != null && !policy.allowed_modes.includes(mode))
     return isZh
-      ? '默认模式必须在路由允许的范围内。'
+      ? '默认设置超出路由允许范围。'
       : 'The default mode must be allowed by the route.';
   const invalidMode = policy.allowed_modes?.some(
     (value) =>
@@ -47,11 +47,11 @@ export function routeThinkingError(policy, availability, isZh = true) {
   );
   if (invalidMode)
     return isZh
-      ? '模式限制包含当前上游不支持的选项，请取消或调整模式限制。'
+      ? '请移除不支持的模式限制。'
       : 'The mode restriction contains an unsupported option. Clear or adjust it.';
   if (allowed != null && mode === 'auto')
     return isZh
-      ? '请先选择默认思考模式，再限制强度范围。'
+      ? '请先选择默认档位或关闭思考。'
       : 'Choose a default thinking mode before restricting effort.';
   if (
     policy.default_effort &&
@@ -59,15 +59,15 @@ export function routeThinkingError(policy, availability, isZh = true) {
       (allowed != null && !allowed.includes(policy.default_effort)))
   )
     return isZh
-      ? '默认强度当前不可用，请选择上游支持且路由允许的档位。'
+      ? '默认档位不可用，请重新选择。'
       : 'Choose a supported and allowed default effort.';
   if (allowed?.some((value) => !availability.efforts.includes(value)))
     return isZh
-      ? '允许范围中有当前上游不支持的档位，请取消这些选项。'
+      ? '请移除不支持的档位。'
       : 'Remove unsupported efforts from the allowed range.';
   if (mode === 'on' && allowed?.length === 0)
     return isZh
-      ? '开启思考需要至少一个允许的档位，或取消强度限制以使用模型默认。'
+      ? '请保留至少一个档位，或取消限制。'
       : 'Allow at least one effort, or clear the restriction to use the model default.';
   return '';
 }

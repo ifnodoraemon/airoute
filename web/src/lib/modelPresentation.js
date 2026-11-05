@@ -11,45 +11,14 @@ export function effortName(value, isZh = true) {
   return isZh ? EFFORT_NAMES[value] || value : value;
 }
 
-export function thinkingCapabilityText(capability, isZh = true) {
-  if (!capability?.known) return isZh ? '思考能力待确认' : 'Thinking capability unconfirmed';
-  if (capability.on && capability.off) return isZh ? '支持开启 / 关闭' : 'Can enable / disable';
-  if (capability.on) return isZh ? '支持思考，不能关闭' : 'Thinking supported; cannot disable';
-  if (capability.off) return isZh ? '不支持思考模式' : 'No thinking mode';
-  return isZh ? '开关能力待确认' : 'Toggle support unconfirmed';
-}
-
 export function thinkingPolicyText(policy, isZh = true) {
   const mode = policy?.default_mode || 'auto';
-  let text =
-    mode === 'auto'
-      ? isZh
-        ? '默认由上游决定'
-        : 'Default follows upstream'
-      : mode === 'off'
-        ? isZh
-          ? '默认关闭思考'
-          : 'Thinking off by default'
-        : isZh
-          ? `默认开启${policy.default_effort ? ` · ${effortName(policy.default_effort)}强度` : ' · 使用模型默认强度'}`
-          : `Thinking on · ${policy.default_effort || 'model default effort'}`;
-  if (policy?.allowed_modes != null) {
-    const labels = {
-      auto: isZh ? '上游默认' : 'upstream default',
-      on: isZh ? '开启' : 'on',
-      off: isZh ? '关闭' : 'off',
-    };
-    text +=
-      (isZh ? '；允许：' : '; allowed: ') +
-      (policy.allowed_modes.map((value) => labels[value] || value).join(' / ') ||
-        (isZh ? '无' : 'none'));
-  }
-  if (policy?.allowed_efforts != null)
-    text +=
-      (isZh ? '；强度范围：' : '; effort range: ') +
-      (policy.allowed_efforts.map((value) => effortName(value, isZh)).join(' / ') ||
-        (isZh ? '仅模型默认' : 'model default only'));
-  return text;
+  const labels = [];
+  if (mode === 'off') labels.push(isZh ? '思考关闭' : 'Thinking off');
+  if (mode === 'on') labels.push(isZh ? `思考 · ${effortName(policy.default_effort || '默认')}` : `Thinking · ${policy.default_effort || 'default'}`);
+  if (policy?.allowed_modes != null) labels.push(isZh ? '开关受限' : 'Mode restricted');
+  if (policy?.allowed_efforts != null) labels.push(isZh ? '档位受限' : 'Levels restricted');
+  return labels.join(' · ');
 }
 
 export function supplierQuoteKey(channel, model) {

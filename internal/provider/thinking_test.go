@@ -18,6 +18,9 @@ func TestThinkingUsesDifferentWireContractsForSameUpstreamModel(t *testing.T) {
 		{"vllm-deepseek41", "on", "xhigh", "chat_template_kwargs", `{"thinking":true,"reasoning_effort":75}`},
 		{"qwen-toggle", "off", "", "enable_thinking", `false`},
 		{"glm53", "on", "low", "reasoning_effort", `"low"`},
+		{"ollama-toggle", "off", "", "reasoning_effort", `"none"`},
+		{"ollama-toggle", "on", "", "reasoning_effort", `"medium"`},
+		{"ollama-levels", "on", "high", "reasoning_effort", `"high"`},
 	} {
 		t.Run(test.profile+test.mode, func(t *testing.T) {
 			ch := &model.ChannelConfig{Type: model.ProviderOpenAI, ModelMapping: map[string]string{"alias": "real-model"}, ModelCapabilities: map[string]model.ModelCapabilityConfig{"real-model": {Thinking: &model.ThinkingConfig{Profile: test.profile}}}}

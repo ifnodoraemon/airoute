@@ -515,6 +515,7 @@ export default function ModelRoutesManager({
                   const isExpanded = expandedModel === route.model;
                   const price = defaultRetailPrice(pricingRates, route.model) || route.retail_price;
                   const probes = probeResults[route.model] || [];
+                  const thinkingLabel = thinkingPolicyText(route.thinking_policy, isZh);
 
                   return (
                     <React.Fragment key={route.model}>
@@ -551,7 +552,7 @@ export default function ModelRoutesManager({
                               {badge.label}
                             </span>
                           </div>
-                          <p className="mt-1.5 text-[11px] font-normal text-slate-500">{thinkingPolicyText(route.thinking_policy, isZh)}</p>
+                          {thinkingLabel && <p className="mt-1.5 text-[11px] font-normal text-slate-500">{thinkingLabel}</p>}
                         </td>
 
                         {/* Providers & Weights */}
@@ -694,7 +695,6 @@ export default function ModelRoutesManager({
                               </button>
                             </div>
 
-                            <p className="text-xs text-slate-500">{isZh ? '路由策略：' : 'Route policy: '}{thinkingPolicyText(route.thinking_policy, isZh)}{isZh ? '。下方是各渠道模型的实际能力与采购报价。' : '. Upstream capabilities and purchase quotes are listed below.'}</p>
                             <div className="border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl overflow-x-auto bg-white dark:bg-[#191B1F] text-xs">
                               <table className="w-full text-left">
                                 <thead className="bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 text-[#656B75] dark:text-[#A1A7B0] text-xs border-b border-[#E4E6E9] dark:border-[#2C3038]">

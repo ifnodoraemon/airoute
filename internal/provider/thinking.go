@@ -168,11 +168,15 @@ func PrepareThinkingRequest(req *model.ChatCompletionRequest, channel *model.Cha
 		}
 	case "ollama":
 		if on || off {
-			set("think", on)
+			value := "medium"
+			if off {
+				value = "none"
+			}
+			set("reasoning_effort", value)
 		}
 	case "ollama-level":
 		if on {
-			set("think", effort)
+			set("reasoning_effort", effort)
 		}
 	case "template":
 		if on || off {

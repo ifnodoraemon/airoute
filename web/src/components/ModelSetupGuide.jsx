@@ -1,53 +1,30 @@
 export default function ModelSetupGuide({ lang = 'zh' }) {
   const isZh = lang === 'zh';
-  const steps = isZh
+  const rows = isZh
     ? [
-        [
-          '渠道模型：我们买入',
-          '登记实际上游模型、思考能力和采购报价。同一个渠道模型可以被多条路由共用。',
-        ],
-        [
-          '模型路由：我们对外提供',
-          '把公开模型名称绑定到渠道模型，设置对外售价、默认思考方式和允许范围。',
-        ],
-        [
-          '本次调用：用户怎么用',
-          '用户可在允许范围内临时选择。系统只调用满足要求的渠道，切换渠道也保留要求。',
-        ],
+        ['渠道模型', '思考能力、采购价'],
+        ['模型路由', '上游绑定、默认思考、对外售价'],
+        ['本次调用', '选择思考档位'],
       ]
     : [
-        [
-          'Channel model: what we buy',
-          'Actual upstream model, thinking capability and purchase quote. Shared across routes.',
-        ],
-        [
-          'Public route: what we offer',
-          'Public model name, upstream bindings, customer price, thinking defaults and restrictions.',
-        ],
-        [
-          'Request: what the user chooses',
-          'One-call preferences within the allowed range. Failover preserves the requirements.',
-        ],
+        ['Channel model', 'Capabilities and purchase prices'],
+        ['Model route', 'Bindings, defaults and customer prices'],
+        ['Request', 'Thinking selection'],
       ];
   return (
-    <section
+    <details
+      className="text-xs text-slate-500 py-2"
       aria-label={isZh ? '渠道、路由与调用的关系' : 'Channel, route and request relationship'}
-      className="grid gap-3 md:grid-cols-3"
     >
-      {steps.map(([title, description], index) => (
-        <div
-          key={title}
-          className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#191B1F] p-4"
-        >
-          <div className="flex items-center gap-2 text-xs font-semibold">
-            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300">
-              {index + 1}
-            </span>
-            {title}
+      <summary className="cursor-pointer w-fit">{isZh ? '配置说明' : 'Setup guide'}</summary>
+      <dl className="grid gap-y-3 gap-x-6 sm:grid-cols-[auto_1fr] pt-4 pb-2">
+        {rows.map(([title, description]) => (
+          <div key={title} className="contents">
+            <dt className="font-medium">{title}</dt>
+            <dd>{description}</dd>
           </div>
-          <p className="mt-2 text-xs leading-relaxed text-slate-500">{description}</p>
-        </div>
-      ))}
-    </section>
+        ))}
+      </dl>
+    </details>
   );
 }
