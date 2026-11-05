@@ -203,7 +203,15 @@ func ResolveThinkingProfile(channel *ChannelConfig, publicModel string) (Thinkin
 	if channel == nil {
 		return ThinkingProfile{}, "unknown"
 	}
-	name := channel.GetUpstreamModel(publicModel)
+	return ResolveUpstreamThinkingProfile(channel, channel.GetUpstreamModel(publicModel))
+}
+
+// ResolveUpstreamThinkingProfile resolves an already mapped physical model.
+// Admin catalogs use this to avoid applying a public alias mapping twice.
+func ResolveUpstreamThinkingProfile(channel *ChannelConfig, name string) (ThinkingProfile, string) {
+	if channel == nil {
+		return ThinkingProfile{}, "unknown"
+	}
 	config, configured := channel.ModelCapabilities[name]
 	if !configured {
 		config, configured = channel.ModelCapabilities["*"]

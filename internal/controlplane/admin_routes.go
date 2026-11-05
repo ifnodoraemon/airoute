@@ -2,10 +2,13 @@ package controlplane
 
 import (
 	"errors"
-	"github.com/ifnodoraemon/airoute/internal/model"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/billing"
+	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/router"
+	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
 // UpdateModelRouteRequest specifies model-level distribution, mapping, and fallback settings.
@@ -40,10 +43,22 @@ type ModelProviderUpdate struct {
 	MappedModel string `json:"mapped_model"`
 }
 
-// GetModelRoutes returns enriched model-centric routing topology, weights, and fallback rules.
+// modelRouteView joins routing topology with the billing engine's resolved reference rate.
+type modelRouteView struct {
+	*router.ModelRouteDetail
+	RetailPrice       *storage.ModelPriceRecord `json:"retail_price,omitempty"`
+	RetailPriceSource string                    `json:"retail_price_source"`
+}
+
+// GetModelRoutes returns model topology and the default selling price actually used by billing.
 func (h *AdminHandler) GetModelRoutes(c *gin.Context) {
 	routes := h.dispatcher.GetModelRoutes()
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": routes})
+	views := make([]modelRouteView, 0, len(routes))
+	for _, route := range routes {
+		price, source := billing.GlobalEngine.ResolvePriceReference(route.Model)
+		views = append(views, modelRouteView{ModelRouteDetail: route, RetailPrice: price, RetailPriceSource: source})
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": views})
 }
 
 // UpdateModelRoute updates provider weights, priorities, mapped models, and cross-model fallback.

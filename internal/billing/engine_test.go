@@ -293,3 +293,28 @@ func TestBillingEngine_ZeroDiscountIsNoDiscount(t *testing.T) {
 		t.Fatalf("isOff=%v discount=%.2f, want true/1.0", isOff, discount)
 	}
 }
+
+func TestPriceReferenceUsesBillingWildcardPrecedence(t *testing.T) {
+	exact := &storage.ModelPriceRecord{Model: "gemini-special", PromptPrice: 5, Currency: "USD"}
+	wildcard := &storage.ModelPriceRecord{Model: "gemini-*", PromptPrice: 3, Currency: "USD"}
+	e := NewEngine(nil)
+	e.prices["default:gemini-special"] = exact
+	e.wildcard = []wildcardRule{{pattern: "gemini-*", group: "default", price: wildcard}}
+	for _, tc := range []struct {
+		name, source string
+		price        *storage.ModelPriceRecord
+	}{
+		{"gemini-special", PriceSourceExact, exact},
+		{"GEMINI-PUBLIC", PriceSourceWildcard, wildcard},
+		{"unconfigured", PriceSourceDefault, e.deflt},
+	} {
+		price, source := e.ResolvePriceReference(tc.name)
+		if price != tc.price || source != tc.source {
+			t.Fatalf("reference for %s: %+v / %s", tc.name, price, source)
+		}
+	}
+	var absent *BillingEngine
+	if price, source := absent.ResolvePriceReference("m"); price != nil || source != PriceSourceDefault {
+		t.Fatalf("nil engine reference=%v %s", price, source)
+	}
+}

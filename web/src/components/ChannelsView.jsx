@@ -90,6 +90,7 @@ export default function ChannelsView({
   handleEditChannel,
   handleDeleteChannel,
   onNavigateToReconciliation,
+  onNavigateToProcurement,
   lang = 'zh',
 }) {
   const isZh = lang === 'zh';
@@ -284,6 +285,7 @@ export default function ChannelsView({
         </div>
 
         <div className="flex items-center space-x-2.5">
+          {onNavigateToProcurement && <button type="button" className="ui-btn-secondary ui-btn-sm" onClick={() => onNavigateToProcurement()}><Coins className="w-3.5 h-3.5" />{isZh ? '渠道采购报价' : 'Purchase quotes'}</button>}
           {onNavigateToReconciliation && (
             <button
               onClick={onNavigateToReconciliation}
@@ -514,6 +516,7 @@ export default function ChannelsView({
                           >
                             {ch.name}
                           </span>
+                          {onNavigateToProcurement && <button type="button" className="mt-1 text-[11px] text-indigo-600 hover:underline" onClick={() => onNavigateToProcurement(ch.name)}>{isZh ? '模型采购报价' : 'Model purchase quotes'}</button>}
                         </td>
                       )}
                       {isVisible('type') && (

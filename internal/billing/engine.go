@@ -252,6 +252,15 @@ func (e *BillingEngine) GetPriceWithGroup(modelName, groupName string) *storage.
 	return price
 }
 
+// ResolvePriceReference returns the same default-group rule and source used by
+// billing, so the console does not reimplement wildcard precedence.
+func (e *BillingEngine) ResolvePriceReference(modelName string) (*storage.ModelPriceRecord, string) {
+	if e == nil {
+		return nil, PriceSourceDefault
+	}
+	return e.resolvePriceWithSource(modelName, "default")
+}
+
 // ResolvePriceSource reports how a model's rate was resolved: an exact rule, a
 // wildcard rule, or the hardcoded default fallback. Operators use it to find
 // models that are being served (and billed) at an unconfigured price.

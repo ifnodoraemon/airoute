@@ -1,3 +1,4 @@
+import { openProcurement } from './lib/supplierQuotes';
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import {
   Zap,
@@ -1266,6 +1267,7 @@ export default function App() {
                 isAdmin={adminUser?.role === 'admin'}
                 lang={lang}
                 modelRoutes={modelRoutes}
+                channels={channels}
                 setCurrentTab={setCurrentTab}
                 groupMultipliers={groupMultipliers}
                 onUpdateGroupMultipliers={fetchData}
@@ -1293,6 +1295,7 @@ export default function App() {
                 handleEditChannel={handleEditChannel}
                 handleDeleteChannel={handleDeleteChannel}
                 onNavigateToReconciliation={() => setCurrentTab('reconciliation')}
+                onNavigateToProcurement={(channel = '') => openProcurement(setCurrentTab, channel)}
                 lang={lang}
               />
             )}
@@ -1470,6 +1473,8 @@ export default function App() {
         {/* Modal: New Provider with Smart Auto-Probe */}
         <ChannelModal
           thinkingProfiles={thinkingProfiles}
+          resolvedCapabilities={channels.find(channel => channel.id === editingChannelId && channel.type === newChannel.type)?.thinking_capabilities || {}}
+          upstreamModels={channels.find(channel => channel.id === editingChannelId)?.upstream_models || []}
           isOpen={showChannelModal}
           onClose={() => setShowChannelModal(false)}
           editingChannelId={editingChannelId}

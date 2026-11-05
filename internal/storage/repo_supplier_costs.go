@@ -9,16 +9,22 @@ import (
 )
 
 // SupplierCostRecord is the contracted cost of one model on one channel. Rates
-// are stored as 1e-9 CNY per one million tokens so arithmetic stays integer.
+// are stored as 1e-9 units of Currency per million tokens or per request.
+// A nil optional rate is unknown; an explicit zero is free.
 type SupplierCostRecord struct {
-	ID                        int64     `json:"id"`
-	Channel                   string    `json:"channel"`
-	Model                     string    `json:"model"`
-	InputCostUnitsPerMillion  int64     `json:"input_cost_units_per_million"`
-	OutputCostUnitsPerMillion int64     `json:"output_cost_units_per_million"`
-	Status                    string    `json:"status"`
-	CreatedAt                 time.Time `json:"created_at"`
-	UpdatedAt                 time.Time `json:"updated_at"`
+	Currency                      string    `json:"currency"`
+	BillingMode                   string    `json:"billing_mode"`
+	CacheReadCostUnitsPerMillion  *int64    `json:"cache_read_cost_units_per_million,omitempty"`
+	CacheWriteCostUnitsPerMillion *int64    `json:"cache_write_cost_units_per_million,omitempty"`
+	FixedCostUnits                *int64    `json:"fixed_cost_units,omitempty"`
+	ID                            int64     `json:"id"`
+	Channel                       string    `json:"channel"`
+	Model                         string    `json:"model"`
+	InputCostUnitsPerMillion      int64     `json:"input_cost_units_per_million"`
+	OutputCostUnitsPerMillion     int64     `json:"output_cost_units_per_million"`
+	Status                        string    `json:"status"`
+	CreatedAt                     time.Time `json:"created_at"`
+	UpdatedAt                     time.Time `json:"updated_at"`
 }
 
 func normalizeSupplierCost(rec *SupplierCostRecord) error {
@@ -28,6 +34,39 @@ func normalizeSupplierCost(rec *SupplierCostRecord) error {
 	rec.Channel = strings.TrimSpace(rec.Channel)
 	rec.Model = strings.TrimSpace(rec.Model)
 	rec.Status = strings.ToLower(strings.TrimSpace(rec.Status))
+	rec.Currency = strings.ToUpper(strings.TrimSpace(rec.Currency))
+	if rec.Currency == "" {
+		rec.Currency = "CNY"
+	}
+	if len(rec.Currency) != 3 {
+		return fmt.Errorf("currency must be a three-letter code")
+	}
+	for _, letter := range rec.Currency {
+		if letter < 'A' || letter > 'Z' {
+			return fmt.Errorf("currency must be a three-letter code")
+		}
+	}
+	rec.BillingMode = strings.ToLower(strings.TrimSpace(rec.BillingMode))
+	if rec.BillingMode == "" {
+		rec.BillingMode = "token"
+	}
+	if rec.BillingMode != "token" && rec.BillingMode != "request" {
+		return fmt.Errorf("billing mode must be token or request")
+	}
+	for _, value := range []*int64{rec.CacheReadCostUnitsPerMillion, rec.CacheWriteCostUnitsPerMillion, rec.FixedCostUnits} {
+		if value != nil && *value < 0 {
+			return fmt.Errorf("supplier prices must not be negative")
+		}
+	}
+	if rec.BillingMode == "request" {
+		if rec.FixedCostUnits == nil {
+			return fmt.Errorf("per-request purchase price is required")
+		}
+		rec.InputCostUnitsPerMillion, rec.OutputCostUnitsPerMillion = 0, 0
+		rec.CacheReadCostUnitsPerMillion, rec.CacheWriteCostUnitsPerMillion = nil, nil
+	} else {
+		rec.FixedCostUnits = nil
+	}
 	if rec.Channel == "" {
 		return fmt.Errorf("supplier cost channel is required")
 	}
@@ -46,12 +85,12 @@ func normalizeSupplierCost(rec *SupplierCostRecord) error {
 	return nil
 }
 
-const supplierCostColumns = `id, channel, model, input_cost_units_per_million, output_cost_units_per_million, status, created_at, updated_at`
+const supplierCostColumns = `id, channel, model, input_cost_units_per_million, output_cost_units_per_million, status, created_at, updated_at, currency, billing_mode, cache_read_cost_units_per_million, cache_write_cost_units_per_million, fixed_cost_units`
 
 func scanSupplierCost(row interface{ Scan(...any) error }) (*SupplierCostRecord, error) {
 	var rec SupplierCostRecord
 	if err := row.Scan(&rec.ID, &rec.Channel, &rec.Model, &rec.InputCostUnitsPerMillion,
-		&rec.OutputCostUnitsPerMillion, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+		&rec.OutputCostUnitsPerMillion, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt, &rec.Currency, &rec.BillingMode, &rec.CacheReadCostUnitsPerMillion, &rec.CacheWriteCostUnitsPerMillion, &rec.FixedCostUnits); err != nil {
 		return nil, err
 	}
 	return &rec, nil
@@ -100,14 +139,19 @@ type supplierCostWriter interface {
 
 func upsertSupplierCost(db supplierCostWriter, rec *SupplierCostRecord) error {
 	_, err := db.Exec(`INSERT INTO supplier_costs
-		(channel, model, input_cost_units_per_million, output_cost_units_per_million, status, updated_at)
-		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		(channel, model, input_cost_units_per_million, output_cost_units_per_million, status, currency, billing_mode, cache_read_cost_units_per_million, cache_write_cost_units_per_million, fixed_cost_units, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT (channel, model) DO UPDATE SET
 			input_cost_units_per_million = excluded.input_cost_units_per_million,
 			output_cost_units_per_million = excluded.output_cost_units_per_million,
 			status = excluded.status,
+			currency = excluded.currency,
+			billing_mode = excluded.billing_mode,
+			cache_read_cost_units_per_million = excluded.cache_read_cost_units_per_million,
+			cache_write_cost_units_per_million = excluded.cache_write_cost_units_per_million,
+			fixed_cost_units = excluded.fixed_cost_units,
 			updated_at = CURRENT_TIMESTAMP`,
-		rec.Channel, rec.Model, rec.InputCostUnitsPerMillion, rec.OutputCostUnitsPerMillion, rec.Status)
+		rec.Channel, rec.Model, rec.InputCostUnitsPerMillion, rec.OutputCostUnitsPerMillion, rec.Status, rec.Currency, rec.BillingMode, rec.CacheReadCostUnitsPerMillion, rec.CacheWriteCostUnitsPerMillion, rec.FixedCostUnits)
 	return err
 }
 

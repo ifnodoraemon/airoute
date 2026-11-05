@@ -21,6 +21,8 @@ import useFormDirty from '../hooks/useFormDirty';
 import useUnsavedGuard from '../hooks/useUnsavedGuard';
 import DiscardChangesDialog from './DiscardChangesDialog';
 import SupplierCostPanel from './SupplierCostPanel';
+import ModelSetupGuide from './ModelSetupGuide';
+import useUrlFilters from '../hooks/useUrlFilters';
 
 function formatDaysLabel(days, isZh = true) {
   if (!days || days.length === 0 || days.length === 7) return '';
@@ -137,12 +139,15 @@ export default function PricingManager({
   isAdmin = true,
   lang = 'zh',
   modelRoutes = [],
+  channels = [],
   setCurrentTab,
   groupMultipliers,
   onUpdateGroupMultipliers
 }) {
   const isZh = lang === 'zh';
-  const [pricingSubTab, setPricingSubTab] = useState('models'); // 'models' | 'groups' | 'suppliers'
+  const [pricingFilters, setPricingFilters] = useUrlFilters('pricing', { view: 'models', channel: '', model: '' });
+  const pricingSubTab = ['models', 'groups', ...(isAdmin ? ['suppliers'] : [])].includes(pricingFilters.view) ? pricingFilters.view : 'models';
+  const setPricingSubTab = view => setPricingFilters({ view });
   const [localGroupMultipliers, setLocalGroupMultipliers] = useState(groupMultipliers || { default: 1.0, vip: 0.8, enterprise: 1.5 });
   const [savingGroups, setSavingGroups] = useState(false);
   const [showAddGroupModal, setShowAddGroupModal] = useState(false);
@@ -263,7 +268,7 @@ export default function PricingManager({
         if (data.data) {
           setLocalGroupMultipliers(data.data);
         }
-        showToast(isZh ? '分组折扣定价已保存并全网实时生效' : 'Group discount tiers saved and active in real-time', 'success');
+        showToast(isZh ? '客户分组已保存并全网实时生效' : 'Group discount tiers saved and active in real-time', 'success');
         if (onUpdateGroupMultipliers) onUpdateGroupMultipliers();
       } else {
         showToast((isZh ? '保存分组倍率失败: ' : 'Failed to save group multipliers: ') + (data.error || '未知错误'), 'error');
@@ -679,8 +684,8 @@ export default function PricingManager({
           </h1>
           <p className="ui-page-subtitle">
             {isZh
-              ? '配置官方参考基准定价、业务分组折扣倍率，并排对照供应商单价'
-              : 'Configure baseline token pricing and tier multipliers, and compare supplier prices side by side'}
+              ? (isAdmin ? '管理对外售价、客户分组折扣与渠道采购报价' : '查看对外费率和客户分组折扣')
+              : 'Manage customer prices, group discounts and channel purchase quotes'}
           </p>
         </div>
 
@@ -705,8 +710,10 @@ export default function PricingManager({
         </div>
       </div>
 
+      {isAdmin && <ModelSetupGuide lang={lang} />}
+
       {/* 1.5 Sub Navigation: Model Baseline Pricing vs Group Discount Tiers vs Supplier Prices */}
-      <div className="flex items-center space-x-2 border-b border-[#E4E6E9] dark:border-[#2C3038] pb-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-[#E4E6E9] dark:border-[#2C3038] pb-2">
         <button
           type="button"
           onClick={() => setPricingSubTab('models')}
@@ -717,7 +724,7 @@ export default function PricingManager({
           }`}
         >
           <Layers className="w-4 h-4" />
-          <span>{isZh ? '模型官方基准定价' : 'Model Base Rates'}</span>
+          <span>{isZh ? '对外售价' : 'Customer prices'}</span>
           <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${pricingSubTab === 'models' ? 'bg-white/20 text-white' : 'bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0]'}`}>
             {prices.length}
           </span>
@@ -733,7 +740,7 @@ export default function PricingManager({
           }`}
         >
           <Percent className="w-4 h-4" />
-          <span>{isZh ? '分组折扣定价' : 'Group Discount Tiers'}</span>
+          <span>{isZh ? '客户分组' : 'Group Discount Tiers'}</span>
           <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${pricingSubTab === 'groups' ? 'bg-white/20 text-white' : 'bg-[#F0F1F2] dark:bg-[#22252B] text-[#656B75] dark:text-[#A1A7B0]'}`}>
             {Object.keys(localGroupMultipliers).length}
           </span>
@@ -741,7 +748,7 @@ export default function PricingManager({
 
         {/* Supplier prices sit next to our selling prices: the two lists are
             stored separately, so this tab only pairs them and shows the spread. */}
-        <button
+        {isAdmin && <button
           type="button"
           onClick={() => setPricingSubTab('suppliers')}
           className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
@@ -751,8 +758,8 @@ export default function PricingManager({
           }`}
         >
           <Coins className="w-4 h-4" />
-          <span>{isZh ? '供应商单价' : 'Supplier Prices'}</span>
-        </button>
+          <span>{isZh ? '渠道采购报价' : 'Supplier Prices'}</span>
+        </button>}
       </div>
 
       {/* Batch Action Bar (Admin only) */}
@@ -1176,11 +1183,11 @@ export default function PricingManager({
               <div className="space-y-1">
                 <div className="flex items-center space-x-2 text-[#202124] dark:text-[#F1F2F4] font-semibold text-sm">
                   <Sliders className="w-4 h-4 text-[#355CFF] dark:text-[#91A7FF] shrink-0" />
-                  <span>{isZh ? '业务分组折扣定价体系' : 'Group Discount & Tier Pricing'}</span>
+                  <span>{isZh ? '业务客户分组体系' : 'Group Discount & Tier Pricing'}</span>
                 </div>
                 <div className="text-xs text-[#656B75] dark:text-[#A1A7B0] font-mono">
                   {isZh
-                    ? '扣费公式: 实际调用单价 = 官方模型基准单价 × 密钥所属分组倍率 (× 闲时时段折扣)'
+                    ? '扣费公式: 实际调用单价 = 默认对外单价 × 密钥所属分组倍率 (× 闲时时段折扣)'
                     : 'Charge Formula: Base Model Rate * Group Multiplier (* Off-Peak Discount)'}
                 </div>
               </div>
@@ -1234,7 +1241,7 @@ export default function PricingManager({
                         </div>
                         <div className="text-[11px] text-[#656B75] dark:text-[#A1A7B0] mt-1">
                           {isDefault
-                            ? (isZh ? '官方基准参考价 (100% 基线)' : 'Official Baseline (100%)')
+                            ? (isZh ? '默认对外售价 (100% 基线)' : 'Default retail rate (100%)')
                             : isVip
                             ? (isZh ? 'VIP专享优惠，全模型适用' : 'VIP Discount Tier')
                             : isEnterprise
@@ -1290,7 +1297,7 @@ export default function PricingManager({
                         </span>
                         <span className={`font-semibold ${mult < 1.0 ? 'text-emerald-600 dark:text-emerald-400' : mult > 1.0 ? 'text-amber-600 dark:text-amber-400' : 'text-[#656B75] dark:text-[#A1A7B0]'}`}>
                           {mult === 1.0
-                            ? (isZh ? '官方基准 (100%)' : 'Standard 100%')
+                            ? (isZh ? '默认对外售价 (100%)' : 'Standard 100%')
                             : mult < 1.0
                             ? (isZh ? `${Math.round(mult * 10)}折优惠 (-${discountPercent}%)` : `${discountPercent}% Discount`)
                             : (isZh ? `${Math.round(mult * 100)}% 上浮 (+${Math.round((mult - 1) * 100)}%)` : `+${Math.round((mult - 1) * 100)}% Surcharge`)}
@@ -1380,7 +1387,7 @@ export default function PricingManager({
                       <span className="font-mono text-[#656B75] dark:text-[#A1A7B0]">x</span>
                     </div>
                     <div className="ui-meta mt-1">
-                      {isZh ? '0.8 为 8折，1.5 为 1.5倍。该分组密钥将按此倍率乘以官方基准单价扣费。' : 'Base model prices will be multiplied by this factor.'}
+                      {isZh ? '0.8 为 8折，1.5 为 1.5倍。该分组密钥将按此倍率乘以默认对外单价扣费。' : 'Base model prices will be multiplied by this factor.'}
                     </div>
                   </div>
 
@@ -1409,12 +1416,17 @@ export default function PricingManager({
       {/* 2.6 Supplier Prices View: our selling price next to the supplier price.
           Both lists are loaded and edited independently; the table only pairs them
           by model so the spread (ours - supplier) is readable in one place. */}
-      {pricingSubTab === 'suppliers' && (
+      {isAdmin && pricingSubTab === 'suppliers' && (
         <SupplierCostPanel
           adminFetch={adminFetch}
           showToast={showToast}
           lang={lang}
           prices={prices}
+          channels={channels}
+          modelRoutes={modelRoutes}
+          focusChannel={pricingFilters.channel}
+          focusModel={pricingFilters.model}
+          onClearTarget={() => setPricingFilters({ channel: '', model: '' })}
         />
       )}
 
@@ -1518,7 +1530,7 @@ export default function PricingManager({
                 </label>
                 <div className="ui-meta mb-1.5 text-[#656B75] dark:text-[#A1A7B0]">
                   {isZh
-                    ? '推荐保留为 [默认官方基准 (default)]。所有业务分组（如 VIP 8折、企业组 1.5倍）自动按倍率继承此单价；仅当此模型在某分组需特殊单独议价覆盖时才选择特定组。'
+                    ? '推荐保留为 [默认对外售价 (default)]。所有业务分组（如 VIP 8折、企业组 1.5倍）自动按倍率继承此单价；仅当此模型在某分组需特殊单独议价覆盖时才选择特定组。'
                     : 'Recommended: Default (default). All groups automatically inherit via their multiplier.'}
                 </div>
                 {editingPrice ? (

@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import PricingManager from './PricingManager';
+beforeEach(() => window.history.replaceState(null, '', window.location.pathname));
 
 // The regression this file exists for: the gateway used to send
 // `is_current_off_peak` / `effective_discount` while this component read
@@ -201,19 +202,19 @@ describe('PricingManager off-peak display', () => {
     await waitFor(() => expect(screen.getByText('gpt-y')).toBeInTheDocument());
 
     // Click on the Group Discount Tiers sub-tab
-    const groupTabBtn = screen.getByRole('button', { name: /分组折扣定价/ });
+    const groupTabBtn = screen.getByRole('button', { name: /客户分组/ });
     expect(groupTabBtn).toBeInTheDocument();
     fireEvent.click(groupTabBtn);
 
     // Should render the group discount header and group cards
-    await waitFor(() => expect(screen.getByText('业务分组折扣定价体系')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('业务客户分组体系')).toBeInTheDocument());
     expect(screen.getByText('DEFAULT')).toBeInTheDocument();
     expect(screen.getByText('VIP')).toBeInTheDocument();
     expect(screen.getByText('ENTERPRISE')).toBeInTheDocument();
     expect(screen.getByText(/8折优惠/)).toBeInTheDocument();
 
     // Switch back to model rates
-    const modelTabBtn = screen.getByRole('button', { name: /模型官方基准定价/ });
+    const modelTabBtn = screen.getByRole('button', { name: /对外售价/ });
     fireEvent.click(modelTabBtn);
     await waitFor(() => expect(screen.getByText('gpt-y')).toBeInTheDocument());
   });
@@ -309,9 +310,9 @@ describe('PricingManager add/edit modal unsaved-changes guard', () => {
 // only derived value: the two price lists stay separate, nothing is written back.
 describe('PricingManager supplier prices sub-tab', () => {
   const supplierRows = [
-    { id: 1, channel: 'ch-a', model: 'gpt-x', input_cost: 12.5, output_cost: 25, status: 'active' },
+    { id: 1, channel: 'ch-a', model: 'physical-x', input_cost: 12.5, output_cost: 25, status: 'active' },
     { id: 2, channel: 'ch-b', model: 'gpt-unpriced', input_cost: 1, output_cost: 2, status: 'active' },
-    { id: 3, channel: 'ch-c', model: 'gpt-x', input_cost: 25, output_cost: 40, status: 'active' },
+    { id: 3, channel: 'ch-c', model: 'physical-x', input_cost: 25, output_cost: 40, status: 'active' },
   ];
 
   function supplierPricingResponse() {
@@ -334,9 +335,12 @@ describe('PricingManager supplier prices sub-tab', () => {
         { model: 'gpt-x', group_name: 'default', prompt_price: 20, completion_price: 40, currency: 'CNY' },
       ]);
     });
-    render(<PricingManager adminFetch={adminFetch} showToast={showToast} isAdmin lang="zh" />);
+    render(<PricingManager adminFetch={adminFetch} showToast={showToast} isAdmin lang="zh" modelRoutes={[
+      {model:'gpt-x', providers:[{channel_id:1,channel_name:'ch-a',mapped_model:'physical-x'},{channel_id:3,channel_name:'ch-c',mapped_model:'physical-x'}]},
+      {model:'gpt-unpriced', providers:[{channel_id:2,channel_name:'ch-b',mapped_model:'gpt-unpriced'}]},
+    ]} />);
     await screen.findAllByText('gpt-x');
-    fireEvent.click(screen.getByRole('button', { name: /供应商单价/ }));
+    fireEvent.click(screen.getByRole('button', { name: /渠道采购报价/ }));
     await screen.findByText('ch-a');
     return { adminFetch, showToast };
   }
@@ -365,7 +369,7 @@ describe('PricingManager supplier prices sub-tab', () => {
   it('marks a model without a selling price as unpriced instead of assuming zero', async () => {
     await openSupplierTab();
 
-    expect(supplierRowText('ch-b')).toContain('未定价');
+    expect(supplierRowText('ch-b')).toContain('未配置默认售价');
   });
 
   it('renders a negative spread in red', async () => {
@@ -379,15 +383,18 @@ describe('PricingManager supplier prices sub-tab', () => {
   it('keeps the supplier price add form posting and reloading', async () => {
     const { adminFetch, showToast } = await openSupplierTab();
 
-    fireEvent.change(screen.getByLabelText('通道名'), { target: { value: 'ch-new' } });
-    fireEvent.change(screen.getByLabelText('模型'), { target: { value: 'gpt-z' } });
-    fireEvent.change(screen.getByLabelText('供应商输入价'), { target: { value: '3' } });
-    fireEvent.change(screen.getByLabelText('供应商输出价'), { target: { value: '6' } });
-    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    fireEvent.click(screen.getByRole('button', { name: '新增采购报价' }));
+    fireEvent.change(screen.getByLabelText('报价渠道'), { target: { value: 'ch-new' } });
+    fireEvent.change(screen.getByLabelText('实际上游模型'), { target: { value: 'gpt-z' } });
+    fireEvent.change(screen.getByLabelText('输入采购价'), { target: { value: '3' } });
+    fireEvent.change(screen.getByLabelText('输出采购价'), { target: { value: '6' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存采购报价' }));
 
-    await waitFor(() => expect(showToast).toHaveBeenCalledWith('供应商单价已保存', 'success'));
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('采购报价已保存', 'success'));
     const post = adminFetch.mock.calls.find(([, options]) => options?.method === 'POST');
     expect(JSON.parse(post[1].body)).toEqual({
+      currency: 'CNY',
+      billing_mode: 'token',
       channel: 'ch-new',
       model: 'gpt-z',
       input_cost: 3,

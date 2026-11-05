@@ -12,24 +12,36 @@ import (
 )
 
 type supplierCostRequest struct {
-	Channel    string  `json:"channel"`
-	Model      string  `json:"model"`
-	InputCost  float64 `json:"input_cost"`  // CNY per 1M prompt tokens
-	OutputCost float64 `json:"output_cost"` // CNY per 1M completion tokens
-	Status     string  `json:"status"`
+	Currency       string   `json:"currency"`
+	BillingMode    string   `json:"billing_mode"`
+	CacheReadCost  *float64 `json:"cache_read_cost"`
+	CacheWriteCost *float64 `json:"cache_write_cost"`
+	FixedCost      *float64 `json:"fixed_cost"`
+	Channel        string   `json:"channel"`
+	Model          string   `json:"model"`
+	InputCost      *float64 `json:"input_cost"`  // Currency per 1M prompt tokens
+	OutputCost     *float64 `json:"output_cost"` // Currency per 1M completion tokens
+	Status         string   `json:"status"`
 }
 
 type supplierCostView struct {
-	ID         int64   `json:"id"`
-	Channel    string  `json:"channel"`
-	Model      string  `json:"model"`
-	InputCost  float64 `json:"input_cost"`
-	OutputCost float64 `json:"output_cost"`
-	Status     string  `json:"status"`
+	Currency       string   `json:"currency"`
+	BillingMode    string   `json:"billing_mode"`
+	CacheReadCost  *float64 `json:"cache_read_cost,omitempty"`
+	CacheWriteCost *float64 `json:"cache_write_cost,omitempty"`
+	FixedCost      *float64 `json:"fixed_cost,omitempty"`
+	ID             int64    `json:"id"`
+	Channel        string   `json:"channel"`
+	Model          string   `json:"model"`
+	InputCost      float64  `json:"input_cost"`
+	OutputCost     float64  `json:"output_cost"`
+	Status         string   `json:"status"`
 }
 
 func toSupplierCostView(rec *storage.SupplierCostRecord) supplierCostView {
 	return supplierCostView{
+		Currency: rec.Currency, BillingMode: rec.BillingMode,
+		CacheReadCost: supplierRateValue(rec.CacheReadCostUnitsPerMillion), CacheWriteCost: supplierRateValue(rec.CacheWriteCostUnitsPerMillion), FixedCost: supplierRateValue(rec.FixedCostUnits),
 		ID: rec.ID, Channel: rec.Channel, Model: rec.Model,
 		InputCost:  storage.FromUnits(rec.InputCostUnitsPerMillion),
 		OutputCost: storage.FromUnits(rec.OutputCostUnitsPerMillion),
@@ -58,15 +70,27 @@ func (h *AdminHandler) SaveSupplierCost(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "无效的成本请求: " + err.Error()})
 		return
 	}
-	if !validSupplierRate(req.InputCost) || !validSupplierRate(req.OutputCost) {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "成本单价必须在 0 至 1000000000 之间"})
+	for _, value := range []*float64{req.InputCost, req.OutputCost, req.CacheReadCost, req.CacheWriteCost, req.FixedCost} {
+		if value != nil && !validSupplierRate(*value) {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "采购报价必须在 0 至 1000000000 之间"})
+			return
+		}
+	}
+	mode := strings.ToLower(strings.TrimSpace(req.BillingMode))
+	if mode == "" {
+		mode = "token"
+	}
+	if (mode == "token" && (req.InputCost == nil || req.OutputCost == nil)) || (mode == "request" && req.FixedCost == nil) {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "请填写对应计费方式的采购报价；未知报价不能自动记为 0"})
 		return
 	}
 	rec := &storage.SupplierCostRecord{
+		Currency: req.Currency, BillingMode: mode,
+		CacheReadCostUnitsPerMillion: supplierRateUnits(req.CacheReadCost), CacheWriteCostUnitsPerMillion: supplierRateUnits(req.CacheWriteCost), FixedCostUnits: supplierRateUnits(req.FixedCost),
 		Channel:                   strings.TrimSpace(req.Channel),
 		Model:                     strings.TrimSpace(req.Model),
-		InputCostUnitsPerMillion:  storage.ToUnits(req.InputCost),
-		OutputCostUnitsPerMillion: storage.ToUnits(req.OutputCost),
+		InputCostUnitsPerMillion:  supplierRequiredRateUnits(req.InputCost),
+		OutputCostUnitsPerMillion: supplierRequiredRateUnits(req.OutputCost),
 		Status:                    strings.TrimSpace(req.Status),
 	}
 	if err := h.repo.UpsertSupplierCost(rec); err != nil {
@@ -92,4 +116,25 @@ func (h *AdminHandler) DeleteSupplierCost(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": gin.H{"id": id}})
+}
+
+func supplierRateUnits(value *float64) *int64 {
+	if value == nil {
+		return nil
+	}
+	units := storage.ToUnits(*value)
+	return &units
+}
+func supplierRateValue(value *int64) *float64 {
+	if value == nil {
+		return nil
+	}
+	rate := storage.FromUnits(*value)
+	return &rate
+}
+func supplierRequiredRateUnits(value *float64) int64 {
+	if value == nil {
+		return 0
+	}
+	return storage.ToUnits(*value)
 }

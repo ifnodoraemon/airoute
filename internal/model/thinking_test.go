@@ -52,3 +52,12 @@ func TestThinkingProtocolAndPrefixPolicyCannotBeGuessedFromAlias(t *testing.T) {
 	require.Empty(t, unknown.ID)
 	require.Error(t, unknown.Validate(ThinkingControl{Mode: "on"}))
 }
+
+func TestResolveAlreadyMappedThinkingModelDoesNotRemap(t *testing.T) {
+	ch := &ChannelConfig{Type: ProviderCustom, ModelMapping: map[string]string{"public": "actual", "actual": "other"}, ModelCapabilities: map[string]ModelCapabilityConfig{"actual": {Thinking: &ThinkingConfig{Profile: "reasoning-only"}}, "other": {Thinking: &ThinkingConfig{Profile: "unsupported"}}}}
+	profile, _ := ResolveThinkingProfile(ch, "public")
+	actual, _ := ResolveUpstreamThinkingProfile(ch, "actual")
+	if profile.ID != "reasoning-only" || actual.ID != profile.ID {
+		t.Fatalf("actual model was remapped: %s / %s", profile.ID, actual.ID)
+	}
+}

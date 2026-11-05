@@ -17,6 +17,11 @@ import {
 import ModelRouteModal, { getChannelModels } from './ModelRouteModal';
 import { copyToClipboard as crossOriginCopy } from '../config';
 import useUrlFilters from '../hooks/useUrlFilters';
+import ModelSetupGuide from './ModelSetupGuide';
+import ThinkingCapabilitySummary from './ThinkingCapabilitySummary';
+import SupplierQuoteSummary from './SupplierQuoteSummary';
+import { defaultRetailPrice, thinkingPolicyText } from '../lib/modelPresentation';
+import { openProcurement } from '../lib/supplierQuotes';
 
 export default function ModelRoutesManager({
   adminFetch,
@@ -42,6 +47,8 @@ export default function ModelRoutesManager({
 
   const [allChannels, setAllChannels] = useState([]);
   const [pricingRates, setPricingRates] = useState([]);
+  const [supplierQuotes, setSupplierQuotes] = useState([]);
+  const [quotesAvailable, setQuotesAvailable] = useState(false);
   const [selectedModels, setSelectedModels] = useState([]);
 
   const handleBatchDeleteRoutes = async () => {
@@ -80,10 +87,11 @@ export default function ModelRoutesManager({
     setPermissionDenied(false);
     setLoading(true);
     try {
-      const [routesRes, channelsRes, pricesRes] = await Promise.all([
+      const [routesRes, channelsRes, pricesRes, quotesRes] = await Promise.all([
         adminFetch('/api/v1/admin/models/routes'),
         adminFetch('/api/v1/admin/channels'),
-        adminFetch('/api/v1/admin/pricing')
+        adminFetch('/api/v1/admin/pricing'),
+        adminFetch('/api/v1/admin/supplier-costs').catch(() => null)
       ]);
       const data = await routesRes.json();
       if (routesRes.ok && data.code === 0) {
@@ -94,6 +102,11 @@ export default function ModelRoutesManager({
       if (channelsRes.ok) {
         const cData = await channelsRes.json();
         setAllChannels(cData.data || []);
+      }
+      setQuotesAvailable(false);
+      if (quotesRes?.ok) {
+        const quoteData = await quotesRes.json();
+        if (quoteData.code === 0 && Array.isArray(quoteData.data)) { setSupplierQuotes(quoteData.data); setQuotesAvailable(true); }
       }
       if (pricesRes.ok) {
         const pData = await pricesRes.json();
@@ -320,6 +333,8 @@ export default function ModelRoutesManager({
         </div>
       </div>
 
+      <ModelSetupGuide lang={lang} />
+
       {/* Search & Modality Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
         <div className="inline-flex bg-[#F0F1F2] dark:bg-[#22252B] p-0.5 rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] overflow-x-auto max-w-full">
@@ -490,7 +505,7 @@ export default function ModelRoutesManager({
                   <th className="ui-th">{isZh ? '模型标识' : 'Model ID'}</th>
                   <th className="ui-th">{isZh ? '上游服务商 (权重)' : 'Upstream Channels (Weight)'}</th>
                   <th className="ui-th">{isZh ? '容灾降级' : 'Failover Target'}</th>
-                  <th className="ui-th">{isZh ? '费率 (输入/输出)' : 'Rates (Prompt/Comp)'}</th>
+                  <th className="ui-th">{isZh ? '对外售价 (输入/输出)' : 'Retail rates (Input/Output)'}</th>
                   <th className="ui-th text-right">{isZh ? '操作' : 'Actions'}</th>
                 </tr>
               </thead>
@@ -498,7 +513,7 @@ export default function ModelRoutesManager({
                 {filteredRoutes.map((route) => {
                   const badge = getModalityBadge(route.modality);
                   const isExpanded = expandedModel === route.model;
-                  const price = pricingRates.find(p => p.model === route.model);
+                  const price = defaultRetailPrice(pricingRates, route.model) || route.retail_price;
                   const probes = probeResults[route.model] || [];
 
                   return (
@@ -536,6 +551,7 @@ export default function ModelRoutesManager({
                               {badge.label}
                             </span>
                           </div>
+                          <p className="mt-1.5 text-[11px] font-normal text-slate-500">{thinkingPolicyText(route.thinking_policy, isZh)}</p>
                         </td>
 
                         {/* Providers & Weights */}
@@ -594,6 +610,8 @@ export default function ModelRoutesManager({
 
                         {/* Pricing */}
                         <td className="ui-td text-xs">
+                          {route.retail_price_source === 'wildcard' && <p className="mb-1 text-slate-500">{isZh ? '继承规则：' : 'Inherited rule: '}{route.retail_price?.model}</p>}
+                          {route.retail_price_source === 'default' && <p className="mb-1 text-amber-700">{isZh ? '系统兜底价，尚未配置售价' : 'System fallback; retail rate unconfigured'}</p>}
                           {price ? (
                             <button
                               type="button"
@@ -676,7 +694,8 @@ export default function ModelRoutesManager({
                               </button>
                             </div>
 
-                            <div className="border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl overflow-hidden bg-white dark:bg-[#191B1F] text-xs">
+                            <p className="text-xs text-slate-500">{isZh ? '路由策略：' : 'Route policy: '}{thinkingPolicyText(route.thinking_policy, isZh)}{isZh ? '。下方是各渠道模型的实际能力与采购报价。' : '. Upstream capabilities and purchase quotes are listed below.'}</p>
+                            <div className="border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl overflow-x-auto bg-white dark:bg-[#191B1F] text-xs">
                               <table className="w-full text-left">
                                 <thead className="bg-[#F0F1F2]/60 dark:bg-[#22252B]/60 text-[#656B75] dark:text-[#A1A7B0] text-xs border-b border-[#E4E6E9] dark:border-[#2C3038]">
                                   <tr>
@@ -684,12 +703,15 @@ export default function ModelRoutesManager({
                                     <th className="ui-th">{isZh ? '服务引擎' : 'Engine'}</th>
                                     <th className="ui-th">{isZh ? '分流权重' : 'Weight'}</th>
                                     <th className="ui-th">{isZh ? '远端模型映射' : 'Remote Model'}</th>
+                                    <th className="ui-th">{isZh ? '渠道模型思考能力' : 'Upstream thinking capability'}</th>
+                                    <th className="ui-th">{isZh ? '渠道采购报价' : 'Purchase quote'}</th>
                                     <th className="ui-th text-right">{isZh ? '健康状态 / 探测延迟' : 'Health / Latency'}</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-[#E4E6E9]/60 dark:divide-[#2C3038]/60 font-mono text-xs">
                                   {(route.providers || []).map((p) => {
                                     const probe = probes.find(pr => pr.channel_id === p.channel_id);
+                                    const quote = supplierQuotes.find(row => row.channel === p.channel_name && row.model === (p.mapped_model || route.model));
                                     return (
                                       <tr key={p.channel_id} className="ui-tr-hover">
                                         <td className="ui-td font-sans font-medium text-[#202124] dark:text-[#F1F2F4]">
@@ -704,6 +726,8 @@ export default function ModelRoutesManager({
                                         <td className="ui-td text-[#656B75] dark:text-[#A1A7B0]">
                                           {p.mapped_model || route.model}
                                         </td>
+                                        <td className="ui-td min-w-44"><ThinkingCapabilitySummary capability={p.thinking} lang={lang} /></td>
+                                        <td className="ui-td min-w-48">{quotesAvailable ? <SupplierQuoteSummary quote={quote} lang={lang} /> : <p className="text-amber-700">{isZh ? '采购报价加载失败，请刷新' : 'Could not load quotes; refresh to retry'}</p>}<button type="button" className="mt-2 text-indigo-600 hover:underline font-sans" onClick={() => openProcurement(setCurrentTab, p.channel_name, p.mapped_model || route.model)}>{isZh ? (quote ? '编辑采购报价' : '配置采购报价') : (quote ? 'Edit purchase quote' : 'Set purchase quote')}</button></td>
                                         <td className="ui-td text-right font-sans">
                                           {probe ? (
                                             <span className={`font-mono tabular-nums font-semibold ${probe.status === 'healthy' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>

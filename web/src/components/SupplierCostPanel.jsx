@@ -1,120 +1,99 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Download, Plus, RefreshCw, Trash2, Pencil } from 'lucide-react';
+import { Download, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import SupplierCSVImport from './SupplierCSVImport';
+import SupplierQuoteForm from './SupplierQuoteForm';
+import SupplierQuoteSummary from './SupplierQuoteSummary';
+import { compareQuote, procurementRows, quoteCurrency, quoteMoney } from '../lib/supplierQuotes';
 
-function money(value) {
-  return `¥${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 9, useGrouping: false })}`;
-}
-
-// A spread is our selling price minus the supplier price. Negative means we sell
-// below what the channel charges us, so it is the one value that must stand out.
-function spreadClass(value) {
-  return value < 0 ? 'text-rose-600 dark:text-rose-400 font-semibold' : '';
-}
-
-const EMPTY = { channel: '', model: '', input_cost: '', output_cost: '', status: 'active' };
-
-// SupplierCostPanel manages the contracted per-million-token supplier prices and
-// shows them next to our own selling prices. This is a pure price-list
-// comparison: our price (loaded from /api/v1/admin/pricing) and the supplier
-// price are stored and edited separately, so the panel no longer writes any cost
-// field onto usage rows — it no longer derives cost_basis_units, it only pairs
-// the two price lists and shows the spread (ours - supplier) per model.
-export default function SupplierCostPanel({ adminFetch, showToast, lang = 'zh', prices = [] }) {
+export default function SupplierCostPanel({
+  adminFetch,
+  showToast,
+  lang = 'zh',
+  prices = [],
+  channels = [],
+  modelRoutes = [],
+  focusChannel = '',
+  focusModel = '',
+  onClearTarget,
+}) {
   const isZh = lang === 'zh';
-  const [rows, setRows] = useState([]);
-  const [form, setForm] = useState(EMPTY);
-  const [loading, setLoading] = useState(false);
+  const [quotes, setQuotes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [busy, setBusy] = useState(false);
-
-  const notify = useCallback((message, type = 'success') => {
-    if (showToast) showToast(message, type);
-  }, [showToast]);
-
-  // Our selling prices indexed by model. A model may carry several group tiers;
-  // the default tier is the reference price, and only when it is absent does the
-  // first row for that model stand in for it.
-  const ourPrices = useMemo(() => {
-    const byModel = new Map();
-    for (const price of prices || []) {
-      if (!price || !price.model) continue;
-      const current = byModel.get(price.model);
-      const isDefault = (price.group_name || 'default') === 'default';
-      if (!current || (isDefault && (current.group_name || 'default') !== 'default')) {
-        byModel.set(price.model, price);
-      }
-    }
-    return byModel;
-  }, [prices]);
-
+  const [editing, setEditing] = useState(null);
+  const [search, setSearch] = useState('');
   const load = useCallback(async () => {
-    if (!adminFetch) return;
     setLoading(true);
+    setLoadError('');
     try {
       const res = await adminFetch('/api/v1/admin/supplier-costs');
-      const body = await res.json().catch(() => ({}));
+      const body = await res.json();
       if (!res.ok || body.code !== 0) throw new Error(body.error || `HTTP ${res.status}`);
-      setRows(Array.isArray(body.data) ? body.data : []);
+      setQuotes(Array.isArray(body.data) ? body.data : []);
     } catch (err) {
-      notify(err.message, 'error');
+      setLoadError(err.message);
+      showToast?.(err.message, 'error');
     } finally {
       setLoading(false);
     }
-  }, [adminFetch, notify]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const save = async (event) => {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      const res = await adminFetch('/api/v1/admin/supplier-costs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          channel: form.channel.trim(),
-          model: form.model.trim(),
-          input_cost: Number(form.input_cost),
-          output_cost: Number(form.output_cost),
-          status: form.status,
-        }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok || body.code !== 0) throw new Error(body.error || `HTTP ${res.status}`);
-      notify(isZh ? '供应商单价已保存' : 'Supplier price saved');
-      setForm(EMPTY);
-      await load();
-    } catch (err) {
-      notify(err.message, 'error');
-    } finally {
-      setBusy(false);
-    }
+  }, [adminFetch, showToast]);
+  useEffect(() => {
+    load();
+  }, [load]);
+  const catalog = useMemo(
+    () => procurementRows(channels, modelRoutes, quotes),
+    [channels, modelRoutes, quotes]
+  );
+  const visible = catalog.filter(
+    (row) =>
+      (!focusChannel || row.channel === focusChannel) &&
+      `${row.channel} ${row.model} ${row.routes.map((route) => route.model).join(' ')}`
+        .toLowerCase()
+        .includes(search.toLowerCase())
+  );
+  const selected =
+    editing ||
+    (focusModel
+      ? quotes.find((row) => row.channel === focusChannel && row.model === focusModel) || {
+          channel: focusChannel,
+          model: focusModel,
+        }
+      : null);
+  const clear = () => {
+    setEditing(null);
+    onClearTarget?.();
   };
-
   const remove = async (row) => {
+    if (
+      !window.confirm(
+        isZh
+          ? `删除 ${row.channel} / ${row.model} 的采购报价？`
+          : `Delete purchase quote for ${row.channel} / ${row.model}?`
+      )
+    )
+      return;
     setBusy(true);
     try {
-      const res = await adminFetch(`/api/v1/admin/supplier-costs/${row.id}`, { method: 'DELETE' });
-      const body = await res.json().catch(() => ({}));
+      const res = await adminFetch(`/api/v1/admin/supplier-costs/${row.quote.id}`, {
+        method: 'DELETE',
+      });
+      const body = await res.json();
       if (!res.ok || body.code !== 0) throw new Error(body.error || `HTTP ${res.status}`);
-      notify(isZh ? '供应商单价已删除' : 'Supplier price deleted');
+      showToast?.(isZh ? '采购报价已删除' : 'Purchase quote deleted', 'success');
+      clear();
       await load();
     } catch (err) {
-      notify(err.message, 'error');
+      showToast?.(err.message, 'error');
     } finally {
       setBusy(false);
     }
   };
-
   const exportCSV = async () => {
     try {
       const res = await adminFetch('/api/v1/admin/supplier-costs/export');
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || `HTTP ${res.status}`);
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const url = URL.createObjectURL(await res.blob());
       const link = document.createElement('a');
       link.href = url;
       link.download = 'supplier-costs.csv';
@@ -123,122 +102,257 @@ export default function SupplierCostPanel({ adminFetch, showToast, lang = 'zh', 
       link.remove();
       URL.revokeObjectURL(url);
     } catch (err) {
-      notify(err.message, 'error');
+      showToast?.(err.message, 'error');
     }
   };
-
-  const comparisonRows = useMemo(() => {
-    const configured = new Set(rows.map(row => row.model));
-    const missing = [...ourPrices.keys()].filter(model => !configured.has(model) && !model.includes('*'));
-    return [...rows, ...missing.map(model => ({ id: `missing:${model}`, channel: '—', model, unconfigured: true }))];
-  }, [rows, ourPrices]);
-
-  const inputClass = 'w-full px-2.5 py-1.5 rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] text-xs text-[#202124] dark:text-[#F1F2F4]';
-
+  const comparison = (quote, model) =>
+    compareQuote(
+      quote,
+      prices,
+      model,
+      modelRoutes.find((route) => route.model === model)
+    );
+  const spread = (quote, model) => {
+    const result = comparison(quote, model);
+    const reasons = {
+      unpriced: isZh ? '未配置默认售价' : 'No default retail rate',
+      missing: isZh ? '未报价' : 'Not quoted',
+      disabled: isZh ? '报价已停用' : 'Quote disabled',
+      currency: isZh ? '币种不同，不换算' : 'Different currencies; no conversion',
+      basis: isZh ? '计费口径不同' : 'Different billing basis',
+    };
+    if (result.reason) return <span className="text-slate-500">{reasons[result.reason]}</span>;
+    return (result.fixed != null ? [result.fixed] : [result.input, result.output]).map(
+      (value, index) => (
+        <span
+          key={index}
+          className={`block font-mono ${value < 0 ? 'text-rose-600 dark:text-rose-400 font-semibold' : ''}`}
+        >
+          {quoteMoney(value, quoteCurrency(quote))}
+        </span>
+      )
+    );
+  };
   return (
-    <div className="rounded-xl border border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] p-3 space-y-3">
-      <div className="flex items-center justify-between">
+    <section className="ui-card p-4 space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-xs font-semibold text-[#202124] dark:text-[#F1F2F4]">{isZh ? '供应商单价' : 'Supplier prices'}</div>
-          <div className="text-[10px] text-[#656B75] dark:text-[#A1A7B0]">
+          <h2 className="text-sm font-semibold">
+            {isZh ? '渠道采购报价' : 'Channel purchase quotes'}
+          </h2>
+          <p className="mt-1 text-xs text-slate-500">
             {isZh
-              ? '单位：CNY / 百万 tokens；按通道名 + 模型匹配，并与我们的售价分开存储，此处仅作并排对照。'
-              : 'CNY per 1M tokens, keyed by channel name + model. Stored separately from our selling prices; the table only compares the two.'}
-          </div>
+              ? `按渠道 + 实际上游模型登记。${catalog.filter((row) => row.quote).length} 项已报价，${catalog.filter((row) => !row.quote).length} 项未报价。`
+              : `Quotes by channel + actual upstream model. ${catalog.filter((row) => row.quote).length} configured; ${catalog.filter((row) => !row.quote).length} missing.`}
+          </p>
         </div>
-        <div className="flex items-center space-x-1.5">
-          <SupplierCSVImport adminFetch={adminFetch} onImported={load} showToast={showToast} lang={lang} />
-          <button type="button" onClick={exportCSV} className="inline-flex items-center space-x-1 px-2 py-1.5 rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] text-[11px] text-[#656B75] dark:text-[#A1A7B0]">
+        <div className="flex flex-wrap gap-2">
+          <SupplierCSVImport
+            adminFetch={adminFetch}
+            onImported={load}
+            showToast={showToast}
+            lang={lang}
+          />
+          <button className="ui-btn-secondary" onClick={exportCSV}>
             <Download className="w-3.5 h-3.5" />
-            <span>{isZh ? '导出 CSV' : 'Export CSV'}</span>
+            {isZh ? '导出 CSV' : 'Export CSV'}
           </button>
-          <button type="button" onClick={load} disabled={loading} className="p-1.5 rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] text-[#656B75]">
+          <button
+            className="ui-btn-secondary"
+            onClick={load}
+            disabled={loading}
+            aria-label={isZh ? '刷新采购报价' : 'Refresh purchase quotes'}
+          >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
+          <button className="ui-btn-primary" onClick={() => setEditing({ channel: focusChannel })}>
+            <Plus className="w-3.5 h-3.5" />
+            {isZh ? '新增采购报价' : 'Add purchase quote'}
+          </button>
         </div>
       </div>
-
-      <form onSubmit={save} className="grid grid-cols-2 md:grid-cols-6 gap-2">
-        <input value={form.channel} onChange={(e) => setForm((prev) => ({ ...prev, channel: e.target.value }))} className={inputClass} placeholder={isZh ? '通道名' : 'Channel'} aria-label={isZh ? '通道名' : 'Channel'} />
-        <input value={form.model} onChange={(e) => setForm((prev) => ({ ...prev, model: e.target.value }))} className={inputClass} placeholder={isZh ? '模型' : 'Model'} aria-label={isZh ? '模型' : 'Model'} />
-        <input type="number" min="0" step="any" value={form.input_cost} onChange={(e) => setForm((prev) => ({ ...prev, input_cost: e.target.value }))} className={inputClass} placeholder={isZh ? '供应商输入价' : 'Supplier input price'} aria-label={isZh ? '供应商输入价' : 'Supplier input price'} />
-        <input type="number" min="0" step="any" value={form.output_cost} onChange={(e) => setForm((prev) => ({ ...prev, output_cost: e.target.value }))} className={inputClass} placeholder={isZh ? '供应商输出价' : 'Supplier output price'} aria-label={isZh ? '供应商输出价' : 'Supplier output price'} />
-        <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} className={inputClass} aria-label={isZh ? '单价状态' : 'Price status'}>
-          <option value="active">{isZh ? '启用' : 'Active'}</option><option value="disabled">{isZh ? '停用' : 'Disabled'}</option>
-        </select>
-        <button type="submit" disabled={busy || !form.channel.trim() || !form.model.trim() || form.input_cost === '' || form.output_cost === ''} className="inline-flex items-center justify-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-[#355CFF] hover:bg-[#2A4AE0] text-white text-xs font-medium disabled:opacity-50">
-          <Plus className="w-3.5 h-3.5" />
-          <span>{isZh ? '保存' : 'Save'}</span>
-        </button>
-      </form>
-
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="text-left text-[10px] uppercase tracking-wide text-[#656B75] dark:text-[#A1A7B0] border-b border-[#E4E6E9] dark:border-[#2C3038]">
-              <th className="py-2 pr-3">{isZh ? '通道' : 'Channel'}</th>
-              <th className="py-2 pr-3">{isZh ? '模型' : 'Model'}</th>
-              <th className="py-2 pr-3 text-right">{isZh ? '我们售价 (输入/输出)' : 'Our price (in/out)'}</th>
-              <th className="py-2 pr-3 text-right">{isZh ? '供应商单价 (输入/输出)' : 'Supplier price (in/out)'}</th>
-              <th className="py-2 pr-3 text-right">{isZh ? '价差 (我们-供应商)' : 'Spread (ours - supplier)'}</th>
-              <th className="py-2 text-right">{isZh ? '操作' : ''}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {comparisonRows.map((row) => {
-              const ours = ourPrices.get(row.model) || null;
-              const ourInput = ours ? Number(ours.prompt_price || 0) : null;
-              const ourOutput = ours ? Number(ours.completion_price || 0) : null;
-              const supplierInput = Number(row.input_cost || 0);
-              const supplierOutput = Number(row.output_cost || 0);
-              const inputSpread = ours && !row.unconfigured ? ourInput - supplierInput : null;
-              const outputSpread = ours && !row.unconfigured ? ourOutput - supplierOutput : null;
-
-              return (
-                <tr key={row.id} className="border-b border-[#F0F1F2] dark:border-[#22252B]">
-                  <td className="py-2 pr-3">{row.channel}</td>
-                  <td className="py-2 pr-3 font-mono text-[11px]">{row.model}</td>
-                  <td className="py-2 pr-3 text-right font-mono">
-                    {ours ? (
-                      <div className="space-y-0.5">
-                        <div>{money(ourInput)}</div>
-                        <div>{money(ourOutput)}</div>
-                      </div>
+      <p className="text-xs text-slate-500 leading-relaxed">
+        {isZh
+          ? '采购报价是供应商合同的参考单价；对外售价按公开路由配置。下方仅比较同币种、同口径的默认售价与采购价，未计入分组、时段、缓存等折扣，价差不代表实际利润。'
+          : 'Purchase quotes are contracted reference rates. Retail rates belong to public routes. Spreads compare default rates with the same currency and billing basis, before group, schedule or cache discounts; they are not actual profit.'}
+      </p>
+      {selected && !loading && !loadError && (
+        <SupplierQuoteForm
+          key={JSON.stringify([selected.channel, selected.model, selected.id])}
+          initial={selected}
+          channels={channels}
+          catalog={catalog}
+          adminFetch={adminFetch}
+          showToast={showToast}
+          lang={lang}
+          onCancel={clear}
+          onSaved={async () => {
+            clear();
+            await load();
+          }}
+        />
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          className="ui-field sm:max-w-sm"
+          aria-label={isZh ? '搜索采购报价' : 'Search purchase quotes'}
+          placeholder={
+            isZh ? '搜索渠道、上游模型或公开路由' : 'Search channel, upstream model or route'
+          }
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        {focusChannel && (
+          <button className="ui-btn-secondary" onClick={clear}>
+            {focusChannel} · {isZh ? '清除筛选' : 'Clear filter'}
+          </button>
+        )}
+      </div>
+      {loadError ? (
+        <p role="alert" className="text-sm text-rose-600">
+          {loadError}
+        </p>
+      ) : loading ? (
+        <p className="text-sm text-slate-500">
+          {isZh ? '正在加载采购报价…' : 'Loading purchase quotes…'}
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs text-left">
+            <thead>
+              <tr className="border-b dark:border-slate-700 text-slate-500">
+                <th className="ui-th">
+                  {isZh ? '渠道 / 实际上游模型' : 'Channel / actual upstream model'}
+                </th>
+                <th className="ui-th">{isZh ? '采购报价' : 'Purchase quote'}</th>
+                <th className="ui-th">
+                  {isZh ? '公开路由 / 对外默认售价' : 'Public route / default retail price'}
+                </th>
+                <th className="ui-th">
+                  {isZh ? '基准价差（售 − 采）' : 'Baseline spread (retail − purchase)'}
+                </th>
+                <th className="ui-th text-right">{isZh ? '操作' : 'Actions'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((row) => (
+                <tr key={row.key} className="border-b dark:border-slate-800 align-top">
+                  <td className="ui-td">
+                    <p className="font-medium">{row.channel}</p>
+                    <p className="mt-1 font-mono break-all">{row.model}</p>
+                  </td>
+                  <td className="ui-td">
+                    <SupplierQuoteSummary quote={row.quote} lang={lang} />
+                  </td>
+                  <td className="ui-td space-y-3">
+                    {row.routes.length ? (
+                      row.routes.map((binding) => {
+                        const retail = comparison(row.quote, binding.model).retail;
+                        return (
+                          <div key={binding.model}>
+                            <p className="font-mono">{binding.model}</p>
+                            {binding.retail_price_source === 'wildcard' && (
+                              <p className="text-slate-500">
+                                {isZh ? '继承规则：' : 'Inherited rule: '}
+                                {binding.retail_price?.model}
+                              </p>
+                            )}
+                            {binding.retail_price_source === 'default' && (
+                              <p className="text-amber-700">
+                                {isZh
+                                  ? '系统兜底价，尚未配置售价'
+                                  : 'System fallback; retail rate unconfigured'}
+                              </p>
+                            )}
+                            {retail ? (
+                              <>
+                                <p className="text-slate-500">
+                                  {retail.currency || 'CNY'} ·{' '}
+                                  {isZh
+                                    ? '输入 / 输出，每百万 Token'
+                                    : 'Input / output per 1M tokens'}
+                                </p>
+                                <p>
+                                  {quoteMoney(retail.prompt_price, retail.currency)} /{' '}
+                                  {quoteMoney(retail.completion_price, retail.currency)}
+                                </p>
+                                {Number(retail.fixed_price) > 0 && (
+                                  <p>
+                                    {isZh ? '另收固定价：' : 'Additional fixed rate: '}
+                                    {quoteMoney(retail.fixed_price, retail.currency)}
+                                  </p>
+                                )}
+                              </>
+                            ) : (
+                              <p className="text-slate-500">
+                                {isZh ? '未配置默认售价' : 'No default retail rate'}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })
                     ) : (
-                      <span className="text-[#656B75] dark:text-[#A1A7B0]">{isZh ? '未定价' : 'Unpriced'}</span>
+                      <span className="text-slate-500">
+                        {isZh ? '尚未绑定公开路由' : 'No public route binding'}
+                      </span>
                     )}
                   </td>
-                  <td className="py-2 pr-3 text-right font-mono">
-                    {row.unconfigured ? <span>{isZh ? '未配置' : 'Not configured'}</span> : <div className="space-y-0.5">
-                      <div>{money(supplierInput)}</div><div>{money(supplierOutput)}</div>
-                      {row.status === 'disabled' && <span>{isZh ? '已停用' : 'Disabled'}</span>}
-                    </div>}
+                  <td className="ui-td space-y-3">
+                    {row.routes.length
+                      ? row.routes.map((binding) => (
+                          <div key={binding.model}>
+                            <p className="font-mono mb-1">{binding.model}</p>
+                            {spread(row.quote, binding.model)}
+                          </div>
+                        ))
+                      : '—'}
                   </td>
-                  <td className="py-2 pr-3 text-right font-mono">
-                    {ours && !row.unconfigured ? (
-                      <div className="space-y-0.5">
-                        <div className={spreadClass(inputSpread)}>{money(inputSpread)}</div>
-                        <div className={spreadClass(outputSpread)}>{money(outputSpread)}</div>
-                      </div>
-                    ) : (
-                      <span className="text-[#656B75] dark:text-[#A1A7B0]">—</span>
+                  <td className="ui-td text-right">
+                    <button
+                      className="ui-btn-secondary ui-btn-sm"
+                      onClick={() =>
+                        setEditing(row.quote || { channel: row.channel, model: row.model })
+                      }
+                    >
+                      {row.quote
+                        ? isZh
+                          ? '编辑报价'
+                          : 'Edit quote'
+                        : isZh
+                          ? '补充报价'
+                          : 'Add quote'}
+                    </button>
+                    {row.quote && (
+                      <button
+                        className="p-2 text-slate-500 hover:text-rose-600"
+                        aria-label={`${isZh ? '删除报价' : 'Delete quote'} ${row.channel} ${row.model}`}
+                        disabled={busy}
+                        onClick={() => remove(row)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     )}
-                  </td>
-                  <td className="py-2 text-right">
-                    {!row.unconfigured && <><button type="button" onClick={() => setForm({ channel: row.channel, model: row.model, input_cost: String(row.input_cost), output_cost: String(row.output_cost), status: row.status || 'active' })} title={isZh ? '编辑' : 'Edit'} className="p-1"><Pencil className="w-3.5 h-3.5" /></button>
-                    <button type="button" onClick={() => remove(row)} disabled={busy} className="p-1 text-[#656B75] hover:text-red-500" title={isZh ? '删除' : 'Delete'}>
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button></>}
                   </td>
                 </tr>
-              );
-            })}
-            {comparisonRows.length === 0 && (
-              <tr><td colSpan={6} className="py-6 text-center text-[11px] text-[#656B75] dark:text-[#A1A7B0]">{isZh ? '尚未配置供应商单价' : 'No supplier prices yet'}</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+              ))}
+              {visible.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-slate-500">
+                    {isZh
+                      ? '没有匹配的渠道模型；可新增合同报价，或先配置渠道和路由。'
+                      : 'No matching channel models. Add a quote, or configure channels and routes.'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="text-xs text-slate-400">
+        {isZh
+          ? 'CSV 支持 currency、billing_mode（token / request）、cache_read_cost、cache_write_cost、fixed_cost；兼容原有人民币 Token 报价文件。'
+          : 'CSV supports currency, billing_mode (token / request), cache_read_cost, cache_write_cost and fixed_cost. Legacy CNY token files remain supported.'}
+      </p>
+    </section>
   );
 }

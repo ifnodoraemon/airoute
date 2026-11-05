@@ -1,6 +1,8 @@
 package controlplane
 
 import (
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
@@ -21,24 +23,26 @@ import (
 // request carries it) and read by the data plane; it simply never leaves the
 // process again. This mirrors apiKeyView for client credentials.
 type channelView struct {
-	ID                int64                                  `json:"id"`
-	Name              string                                 `json:"name"`
-	Type              model.ProviderType                     `json:"type"`
-	BaseURL           string                                 `json:"base_url"`
-	ModelCapabilities map[string]model.ModelCapabilityConfig `json:"model_capabilities,omitempty"`
-	Models            []string                               `json:"models"`
-	ModelMapping      map[string]string                      `json:"model_mapping"`
-	Protocols         []string                               `json:"protocols,omitempty"`
-	Priority          int                                    `json:"priority"`
-	Weight            int                                    `json:"weight"`
-	TimeoutSeconds    int                                    `json:"timeout_seconds"`
-	MaxConcurrency    int                                    `json:"max_concurrency"`
-	QueueLimit        int                                    `json:"queue_limit"`
-	QueueWaitSeconds  int                                    `json:"queue_wait_seconds"`
-	Status            string                                 `json:"status"`
-	BreakerStatus     string                                 `json:"breaker_status,omitempty"`
-	CreatedAt         time.Time                              `json:"created_at"`
-	UpdatedAt         time.Time                              `json:"updated_at"`
+	UpstreamModels       []string                               `json:"upstream_models"`
+	ThinkingCapabilities map[string]model.ThinkingCapability    `json:"thinking_capabilities"`
+	ID                   int64                                  `json:"id"`
+	Name                 string                                 `json:"name"`
+	Type                 model.ProviderType                     `json:"type"`
+	BaseURL              string                                 `json:"base_url"`
+	ModelCapabilities    map[string]model.ModelCapabilityConfig `json:"model_capabilities,omitempty"`
+	Models               []string                               `json:"models"`
+	ModelMapping         map[string]string                      `json:"model_mapping"`
+	Protocols            []string                               `json:"protocols,omitempty"`
+	Priority             int                                    `json:"priority"`
+	Weight               int                                    `json:"weight"`
+	TimeoutSeconds       int                                    `json:"timeout_seconds"`
+	MaxConcurrency       int                                    `json:"max_concurrency"`
+	QueueLimit           int                                    `json:"queue_limit"`
+	QueueWaitSeconds     int                                    `json:"queue_wait_seconds"`
+	Status               string                                 `json:"status"`
+	BreakerStatus        string                                 `json:"breaker_status,omitempty"`
+	CreatedAt            time.Time                              `json:"created_at"`
+	UpdatedAt            time.Time                              `json:"updated_at"`
 	// APIKeyConfigured replaces the old "the response contains the credential"
 	// contract: the console says "already configured, leave blank to keep it".
 	APIKeyConfigured bool `json:"api_key_configured"`
@@ -52,7 +56,35 @@ func channelViewFrom(rec *storage.ChannelRecord) channelView {
 	if rec == nil {
 		return channelView{}
 	}
+	// Resolve names with the same mapping rules the gateway uses. The browser
+	// receives facts only; it never needs the upstream credential or a second
+	// implementation of capability inference.
+	cfg := &model.ChannelConfig{Name: rec.Name, Type: rec.Type, ModelMapping: rec.ModelMapping, ModelCapabilities: rec.ModelCapabilities}
+	names := map[string]bool{}
+	add := func(name string) {
+		if name != "" && !strings.Contains(name, "*") {
+			names[name] = true
+		}
+	}
+	for _, name := range rec.Models {
+		add(cfg.GetUpstreamModel(name))
+	}
+	for _, name := range rec.ModelMapping {
+		add(name)
+	}
+	for name := range rec.ModelCapabilities {
+		add(name)
+	}
+	upstream := make([]string, 0, len(names))
+	capabilities := make(map[string]model.ThinkingCapability, len(names))
+	for name := range names {
+		upstream = append(upstream, name)
+		profile, source := model.ResolveUpstreamThinkingProfile(cfg, name)
+		capabilities[name] = profile.Capability(source)
+	}
+	sort.Strings(upstream)
 	return channelView{
+		UpstreamModels: upstream, ThinkingCapabilities: capabilities,
 		ID:                rec.ID,
 		Name:              rec.Name,
 		Type:              rec.Type,

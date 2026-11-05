@@ -27,6 +27,8 @@ export default function ChannelModal({
   editingChannelId,
   newChannel,
   thinkingProfiles = [],
+  resolvedCapabilities = {},
+  upstreamModels = [],
   setNewChannel,
   probeAlert,
   probing,
@@ -264,7 +266,7 @@ export default function ChannelModal({
           />
 
           {/* Collapsible Advanced Settings */}
-          <ModelThinkingCapabilities channel={newChannel} profiles={thinkingProfiles} onChange={setNewChannel} isZh={isZh} />
+          <ModelThinkingCapabilities resolvedCapabilities={resolvedCapabilities} upstreamModels={upstreamModels} channel={newChannel} profiles={thinkingProfiles} onChange={setNewChannel} isZh={isZh} />
           <details className="group border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl p-3.5 bg-[#F0F1F2]/40 dark:bg-[#22252B]/40">
             <summary className="font-medium text-[#202124] dark:text-[#F1F2F4] cursor-pointer flex items-center justify-between select-none">
               <span>{isZh ? '高级设置' : 'Advanced Settings'}</span>

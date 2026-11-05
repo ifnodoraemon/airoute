@@ -34,6 +34,9 @@ func addSupplierCosts(db *DB) error {
 	if _, err := db.DB.Exec(table); err != nil {
 		return fmt.Errorf("create supplier_costs: %w", err)
 	}
+	if err := addSupplierQuoteFields(db); err != nil {
+		return err
+	}
 	if _, err := db.DB.Exec(`CREATE INDEX IF NOT EXISTS idx_supplier_costs_lookup ON supplier_costs(channel, model, status)`); err != nil {
 		return err
 	}
