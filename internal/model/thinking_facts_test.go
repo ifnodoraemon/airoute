@@ -78,3 +78,17 @@ func TestThinkingFactsCannotInventUnsupportedControls(t *testing.T) {
 	unknown["custom-name"] = ModelCapabilityConfig{Thinking: &ThinkingConfig{Profile: "vllm-deepseek41", Efforts: []string{"high"}}}
 	require.NoError(t, ValidateChannelThinking(ProviderGPUStack, unknown))
 }
+
+func TestBackendContractRetainsAvailableControlsAfterNarrowing(t *testing.T) {
+	no := false
+	channel := &ChannelConfig{Type: ProviderGPUStack, ModelCapabilities: map[string]ModelCapabilityConfig{
+		"custom-deployment": {Thinking: &ThinkingConfig{Profile: "vllm-deepseek41", CanDisable: &no, Efforts: []string{}}},
+	}}
+	actual, _ := ResolveUpstreamThinkingProfile(channel, "custom-deployment")
+	require.False(t, actual.Off)
+	require.Empty(t, actual.Efforts)
+	available, source := ResolveUpstreamThinkingContract(channel, "custom-deployment")
+	require.Equal(t, "configured", source)
+	require.True(t, available.Off)
+	require.Equal(t, []string{"low", "high", "xhigh", "max"}, available.Efforts)
+}

@@ -3,22 +3,7 @@ import { expect, it } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import ModelThinkingCapabilities from './ModelThinkingCapabilities';
 
-const profiles = [
-  {
-    id: 'gpu',
-    label: 'GPU',
-    on: true,
-    off: true,
-    efforts: ['low', 'high', 'xhigh', 'max'],
-  },
-  {
-    id: 'api',
-    label: 'API',
-    on: true,
-    off: false,
-    efforts: ['low', 'medium', 'high'],
-  },
-];
+const openLevels = ['low', 'high', 'xhigh', 'max'];
 function Harness({ initial = {} }) {
   const [channel, setChannel] = useState({
     models_str: 'open-model,closed-model',
@@ -28,25 +13,20 @@ function Harness({ initial = {} }) {
     <>
       <ModelThinkingCapabilities
         channel={channel}
-        profiles={profiles}
         resolvedCapabilities={{
           'open-model': {
-            source: 'catalog',
-            profile: 'gpu',
-            automatic: {
-              profile: 'gpu',
-              off: true,
-              efforts: profiles[0].efforts,
-            },
+            known: true,
+            off: true,
+            supports_disable: true,
+            efforts: openLevels,
+            supported_efforts: openLevels,
           },
           'closed-model': {
-            source: 'catalog',
-            profile: 'api',
-            automatic: {
-              profile: 'api',
-              off: false,
-              efforts: profiles[1].efforts,
-            },
+            known: true,
+            off: false,
+            supports_disable: false,
+            efforts: ['low', 'medium', 'high'],
+            supported_efforts: ['low', 'medium', 'high'],
           },
         }}
         onChange={setChannel}
@@ -57,52 +37,46 @@ function Harness({ initial = {} }) {
   );
 }
 
-it('edits only two facts for the selected model while keeping automatic transport', () => {
+it('edits two facts without any adapter catalog, picker or advanced entry', () => {
   render(<Harness />);
-  expect(screen.getByLabelText('思考能力模型')).toBeVisible();
-  expect(screen.getByLabelText('思考参数适配')).not.toBeVisible();
-  expect(screen.getByLabelText('支持关闭思考')).toBeChecked();
+  expect(screen.getAllByRole('combobox')).toHaveLength(1);
+  expect(screen.queryByText(/参数适配|高级/)).not.toBeInTheDocument();
   fireEvent.click(screen.getByLabelText('支持关闭思考'));
   fireEvent.click(screen.getByLabelText('支持档位 high'));
   expect(JSON.parse(screen.getByTestId('config').textContent)).toEqual({
-    'open-model': {
-      thinking: { can_disable: false, efforts: ['low', 'xhigh', 'max'] },
-    },
+    'open-model': { thinking: { can_disable: false, efforts: ['low', 'xhigh', 'max'] } },
   });
-  fireEvent.change(screen.getByLabelText('思考能力模型'), {
-    target: { value: 'closed-model' },
-  });
+  fireEvent.change(screen.getByLabelText('思考能力模型'), { target: { value: 'closed-model' } });
   expect(screen.getByLabelText('支持关闭思考')).toBeDisabled();
   expect(screen.getByLabelText('支持档位 medium')).toBeChecked();
   expect(screen.queryByLabelText('支持档位 max')).not.toBeInTheDocument();
 });
 
-it('allows a fixed model default and preserves the empty set explicitly', () => {
+it('preserves an empty level set explicitly', () => {
   render(<Harness />);
-  for (const effort of profiles[0].efforts)
-    fireEvent.click(screen.getByLabelText(`支持档位 ${effort}`));
+  for (const effort of openLevels) fireEvent.click(screen.getByLabelText(`支持档位 ${effort}`));
   expect(
     JSON.parse(screen.getByTestId('config').textContent)['open-model'].thinking.efforts
   ).toEqual([]);
 });
 
-it('restores the actual automatic facts rather than a previous manual adapter', () => {
+it('uses backend available controls without modifying a managed legacy adapter', () => {
   render(
     <Harness
       initial={{
-        'closed-model': {
-          thinking: { profile: 'gpu', can_disable: true, efforts: ['max'] },
+        'open-model': {
+          thinking: { profile: 'backend-managed', can_disable: false, efforts: ['high'] },
         },
       }}
     />
   );
-  fireEvent.change(screen.getByLabelText('思考能力模型'), {
-    target: { value: 'closed-model' },
+  expect(screen.getByLabelText('支持关闭思考')).toBeEnabled();
+  expect(screen.getByLabelText('支持档位 low')).not.toBeChecked();
+  fireEvent.click(screen.getByLabelText('支持关闭思考'));
+  fireEvent.click(screen.getByLabelText('支持档位 max'));
+  expect(JSON.parse(screen.getByTestId('config').textContent)['open-model'].thinking).toEqual({
+    profile: 'backend-managed',
+    can_disable: true,
+    efforts: ['high', 'max'],
   });
-  expect(screen.getByLabelText('支持关闭思考')).toBeChecked();
-  fireEvent.click(screen.getByText('高级'));
-  fireEvent.click(screen.getByRole('button', { name: '恢复自动识别' }));
-  expect(screen.getByLabelText('支持关闭思考')).toBeDisabled();
-  expect(screen.getByLabelText('支持档位 medium')).toBeChecked();
-  expect(screen.queryByLabelText('支持档位 max')).not.toBeInTheDocument();
 });

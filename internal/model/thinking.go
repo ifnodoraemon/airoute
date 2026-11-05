@@ -37,14 +37,16 @@ type ThinkingConfig struct {
 }
 
 type ThinkingCapability struct {
-	Automatic *ThinkingCapability `json:"automatic,omitempty"`
-	Known     bool                `json:"known"`
-	On        bool                `json:"on"`
-	Off       bool                `json:"off"`
-	Efforts   []string            `json:"efforts"`
-	Output    string              `json:"output"`
-	Source    string              `json:"source"`
-	Profile   string              `json:"profile,omitempty"`
+	SupportsDisable  *bool               `json:"supports_disable,omitempty"`
+	SupportedEfforts []string            `json:"supported_efforts,omitempty"`
+	Automatic        *ThinkingCapability `json:"automatic,omitempty"`
+	Known            bool                `json:"known"`
+	On               bool                `json:"on"`
+	Off              bool                `json:"off"`
+	Efforts          []string            `json:"efforts"`
+	Output           string              `json:"output"`
+	Source           string              `json:"source"`
+	Profile          string              `json:"profile,omitempty"`
 }
 
 // ThinkingPolicy sets route defaults and restrictions, independently of facts.
@@ -208,25 +210,41 @@ func ResolveThinkingProfile(channel *ChannelConfig, publicModel string) (Thinkin
 // ResolveUpstreamThinkingProfile resolves an already mapped physical model.
 // Admin catalogs use this to avoid applying a public alias mapping twice.
 func ResolveUpstreamThinkingProfile(channel *ChannelConfig, name string) (ThinkingProfile, string) {
+	profile, source := ResolveUpstreamThinkingContract(channel, name)
+	if source == "invalid_configuration" {
+		return profile, source
+	}
+	if config := upstreamThinkingConfig(channel, name); config != nil {
+		return applyThinkingFacts(profile, config, source)
+	}
+	return profile, source
+}
+
+func upstreamThinkingConfig(channel *ChannelConfig, name string) *ThinkingConfig {
 	if channel == nil {
-		return ThinkingProfile{}, "unknown"
+		return nil
 	}
 	config, configured := channel.ModelCapabilities[name]
 	if !configured {
-		config, configured = channel.ModelCapabilities["*"]
+		config = channel.ModelCapabilities["*"]
 	}
-	if configured && config.Thinking != nil && config.Thinking.Profile != "" {
-		profile, ok := FindThinkingProfile(config.Thinking.Profile)
+	return config.Thinking
+}
+
+// ResolveUpstreamThinkingContract supplies the backend's available controls
+// before operator narrowing. The console does not select wire adapters.
+func ResolveUpstreamThinkingContract(channel *ChannelConfig, name string) (ThinkingProfile, string) {
+	if channel == nil {
+		return ThinkingProfile{}, "unknown"
+	}
+	if config := upstreamThinkingConfig(channel, name); config != nil && config.Profile != "" {
+		profile, ok := FindThinkingProfile(config.Profile)
 		if !ok {
 			return ThinkingProfile{}, "invalid_configuration"
 		}
-		return applyThinkingFacts(profile, config.Thinking, "configured")
+		return profile, "configured"
 	}
-	profile, source := catalogThinkingProfile(channel.Type, name)
-	if configured && config.Thinking != nil {
-		return applyThinkingFacts(profile, config.Thinking, source)
-	}
-	return profile, source
+	return catalogThinkingProfile(channel.Type, name)
 }
 
 func catalogThinkingProfile(kind ProviderType, name string) (ThinkingProfile, string) {

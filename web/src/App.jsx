@@ -475,7 +475,6 @@ export default function App() {
     keys,
     models,
     thinkingCapabilities,
-    thinkingProfiles,
     modelRoutes,
     prices,
     pricingGroups,
@@ -1472,7 +1471,6 @@ export default function App() {
       <Suspense fallback={null}>
         {/* Modal: New Provider with Smart Auto-Probe */}
         <ChannelModal
-          thinkingProfiles={thinkingProfiles}
           resolvedCapabilities={channels.find(channel => channel.id === editingChannelId && channel.type === newChannel.type)?.thinking_capabilities || {}}
           upstreamModels={channels.find(channel => channel.id === editingChannelId)?.upstream_models || []}
           isOpen={showChannelModal}

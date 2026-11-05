@@ -83,6 +83,10 @@ func channelViewFrom(rec *storage.ChannelRecord) channelView {
 		upstream = append(upstream, name)
 		profile, source := model.ResolveUpstreamThinkingProfile(cfg, name)
 		capability := profile.Capability(source)
+		contract, _ := model.ResolveUpstreamThinkingContract(cfg, name)
+		canDisable := contract.Off
+		capability.SupportsDisable = &canDisable
+		capability.SupportedEfforts = contract.Efforts
 		base, baseSource := model.ResolveUpstreamThinkingProfile(&automatic, name)
 		baseCapability := base.Capability(baseSource)
 		capability.Automatic = &baseCapability
