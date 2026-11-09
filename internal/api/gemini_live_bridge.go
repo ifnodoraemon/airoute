@@ -14,11 +14,12 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
 
-func (h *Handler) bridgeGoogleLive(c *gin.Context, ctx context.Context, client, upstream *websocket.Conn, ch *model.ChannelConfig, name string) {
+func (h *Handler) bridgeGoogleLive(c *gin.Context, ctx context.Context, client, upstream *websocket.Conn, ch *model.ChannelConfig, name string, meter *liveQuotaMeter) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	start := time.Now()
 	done := make(chan struct{}, 2)
+	quotaFailure := make(chan error, 2)
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
@@ -27,6 +28,10 @@ func (h *Handler) bridgeGoogleLive(c *gin.Context, ctx context.Context, client, 
 		for {
 			kind, data, err := client.ReadMessage()
 			if err != nil {
+				return
+			}
+			if err := meter.admitInput(ctx, data); err != nil {
+				quotaFailure <- err
 				return
 			}
 			if upstream.WriteMessage(kind, data) != nil {
@@ -45,6 +50,10 @@ func (h *Handler) bridgeGoogleLive(c *gin.Context, ctx context.Context, client, 
 				return
 			}
 			stats.observe(data)
+			if err := meter.observe(ctx, stats); err != nil {
+				quotaFailure <- err
+				return
+			}
 			if !observed && stats.accepted && stats.failure == nil {
 				h.dispatcher.ObserveNativeSession(ctx, ch, name, nil)
 				observed = true
@@ -66,6 +75,11 @@ func (h *Handler) bridgeGoogleLive(c *gin.Context, ctx context.Context, client, 
 	case <-ctx.Done():
 	}
 	cancel()
+	select {
+	case <-quotaFailure:
+		_ = client.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Billing limit reached"), time.Now().Add(time.Second))
+	default:
+	}
 	_ = client.Close()
 	_ = upstream.Close()
 	// Both readers must stop before the stats are read and the handler returns.

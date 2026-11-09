@@ -78,7 +78,7 @@ func TestInboundAnthropic_ToOpenAIUpstream(t *testing.T) {
 		},
 		Channels: channels,
 	}
-	config.SetGlobalConfig(testCfg)
+	useConfigOnlyFixture(t, testCfg)
 
 	dispatcher := router.NewDispatcher(channels)
 	engine := api.SetupRouter(dispatcher, nil)
@@ -187,7 +187,7 @@ func TestInboundAnthropic_Streaming(t *testing.T) {
 		},
 		Channels: channels,
 	}
-	config.SetGlobalConfig(testCfg)
+	useConfigOnlyFixture(t, testCfg)
 
 	dispatcher := router.NewDispatcher(channels)
 	engine := api.SetupRouter(dispatcher, nil)

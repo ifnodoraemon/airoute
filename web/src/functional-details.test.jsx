@@ -73,10 +73,10 @@ describe('Functional details regressions', () => {
   it('prevents editing and saving before the announcement has loaded', async () => {
     let finishLoad;
     const adminFetch = vi.fn(() => new Promise(resolve => { finishLoad = resolve; }));
-    render(<AnnouncementModal isOpen onClose={vi.fn()} showToast={vi.fn()} adminFetch={adminFetch} />);
+    render(<AnnouncementModal isOpen announcementId="ann_edit" onClose={vi.fn()} showToast={vi.fn()} adminFetch={adminFetch} />);
     const title = screen.getByPlaceholderText('例如：双活集群网络升级与维护预告');
     expect(title).toBeDisabled();
-    await act(async () => { finishLoad(response({ code: 0, data: { enabled: true, title: 'Old published title', content: 'Old content' } })); });
+    await act(async () => { finishLoad(response({ code: 0, data: { status: 'published', show_banner: false, level: 'info', title: 'Old published title', content: 'Old content' } })); });
     expect(title).toBeEnabled();
     expect(title).toHaveValue('Old published title');
     fireEvent.change(title, { target: { value: 'My new draft' } });
@@ -147,8 +147,8 @@ it('refreshes the selected key overview on the dashboard timer', async () => {
 
 it('keeps announcement saving disabled after a failed load and supports retry', async () => {
   const adminFetch = vi.fn().mockResolvedValueOnce(response({error:'configuration unavailable'},503))
-    .mockResolvedValueOnce(response({code:0,data:{title:'Recovered',content:'Content',enabled:true}}));
-  render(<AnnouncementModal isOpen onClose={vi.fn()} showToast={vi.fn()} adminFetch={adminFetch} />);
+    .mockResolvedValueOnce(response({code:0,data:{title:'Recovered',content:'Content',status:'published',show_banner:false,level:'info'}}));
+  render(<AnnouncementModal isOpen announcementId="ann_edit" onClose={vi.fn()} showToast={vi.fn()} adminFetch={adminFetch} />);
   await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('configuration unavailable'));
   expect(screen.getByPlaceholderText('例如：双活集群网络升级与维护预告')).toBeDisabled();
   fireEvent.click(screen.getByRole('button',{name:'重试'}));

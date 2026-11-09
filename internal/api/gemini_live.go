@@ -48,6 +48,11 @@ func (h *Handler) HandleGeminiLive(c *gin.Context) {
 		closeGoogleLive(client, err)
 		return
 	}
+	setup, meter, err := prepareLiveQuota(c, name, setup)
+	if err != nil {
+		closeGoogleLive(client, err)
+		return
+	}
 	ch, name, err := h.selectGoogleChannel(c, name, identity)
 	if err != nil {
 		closeGoogleLive(client, err)
@@ -80,7 +85,7 @@ func (h *Handler) HandleGeminiLive(c *gin.Context) {
 		closeGoogleLive(client, err)
 		return
 	}
-	h.bridgeGoogleLive(c, ctx, client, upstream, ch, name)
+	h.bridgeGoogleLive(c, ctx, client, upstream, ch, name, meter)
 }
 
 func (h *Handler) validateLiveSetup(c *gin.Context, wire []byte) (string, string, error) {

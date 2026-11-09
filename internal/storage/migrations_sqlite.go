@@ -542,6 +542,8 @@ func (db *DB) migrate() error {
 		{Version: 50, Name: "thinking_configuration", Up: addThinkingConfiguration},
 		{Version: 51, Name: "supplier_quote_fields", Up: addSupplierQuoteFields},
 		{Version: 52, Name: "separate_channel_trails", Up: separateChannelTrails},
+		{Version: 53, Name: "announcements_and_notifications", Up: createNotifications},
+		{Version: 54, Name: "billing_reservations", Up: createBillingReservations},
 	}
 	return db.runMigrations(migrations)
 }

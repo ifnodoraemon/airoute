@@ -1,7 +1,9 @@
 import { effortName } from '../lib/modelPresentation';
+import { selectableThinkingEfforts } from '../lib/thinking';
 
 export default function ThinkingCapabilitySummary({ capability, lang = 'zh' }) {
   const isZh = lang === 'zh';
+  const efforts = selectableThinkingEfforts(capability?.efforts);
   if (!capability?.known)
     return <span className="text-xs text-slate-400">{isZh ? '待确认' : 'Unconfirmed'}</span>;
   return (
@@ -12,8 +14,8 @@ export default function ThinkingCapabilitySummary({ capability, lang = 'zh' }) {
       </p>
       <p>
         {isZh ? '档位' : 'Levels'}：
-        {capability.efforts?.length
-          ? capability.efforts.map((value) => effortName(value, isZh)).join(' / ')
+        {efforts.length
+          ? efforts.map((value) => effortName(value, isZh)).join(' / ')
           : isZh
             ? '模型默认'
             : 'Model default'}

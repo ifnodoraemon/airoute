@@ -15,21 +15,23 @@ import (
 
 // ProbeRequest contains connection parameters for probing downstream services.
 type ProbeRequest struct {
-	BaseURL string `json:"base_url"`
-	APIKey  string `json:"api_key"`
-	Type    string `json:"type,omitempty"`
+	ChannelID int64  `json:"channel_id,omitempty"`
+	BaseURL   string `json:"base_url"`
+	APIKey    string `json:"api_key"`
+	Type      string `json:"type,omitempty"`
 }
 
 // ProbeResult contains automatically discovered downstream capabilities.
 type ProbeResult struct {
-	Type             model.ProviderType `json:"type"`
-	SuggestedName    string             `json:"suggested_name"`
-	SuggestedBaseURL string             `json:"suggested_base_url,omitempty"`
-	Models           []string           `json:"models"`
-	Protocols        []string           `json:"protocols"`
-	LatencyMs        int64              `json:"latency_ms"`
-	ServerHeader     string             `json:"server_header,omitempty"`
-	Message          string             `json:"message"`
+	ThinkingCapabilities map[string]model.ThinkingCapability `json:"thinking_capabilities"`
+	Type                 model.ProviderType                  `json:"type"`
+	SuggestedName        string                              `json:"suggested_name"`
+	SuggestedBaseURL     string                              `json:"suggested_base_url,omitempty"`
+	Models               []string                            `json:"models"`
+	Protocols            []string                            `json:"protocols"`
+	LatencyMs            int64                               `json:"latency_ms"`
+	ServerHeader         string                              `json:"server_header,omitempty"`
+	Message              string                              `json:"message"`
 }
 
 // DownstreamProber handles automatic probing and discovery of downstream LLM engines.
@@ -46,7 +48,12 @@ func NewDownstreamProber(client *http.Client) *DownstreamProber {
 }
 
 // Probe automatically tests and inspects an upstream service.
-func (p *DownstreamProber) Probe(ctx context.Context, req *ProbeRequest) (*ProbeResult, error) {
+func (p *DownstreamProber) Probe(ctx context.Context, req *ProbeRequest) (result *ProbeResult, probeErr error) {
+	defer func() {
+		if result != nil {
+			completeProbeThinking(result)
+		}
+	}()
 	baseURL := strings.TrimRight(strings.TrimSpace(req.BaseURL), "/")
 	if baseURL == "" {
 		return nil, fmt.Errorf("base_url is required")
@@ -188,9 +195,7 @@ func (p *DownstreamProber) probeOpenAICompatible(ctx context.Context, baseURL, a
 
 		if resp.StatusCode == http.StatusOK {
 			var parsed struct {
-				Data []struct {
-					ID string `json:"id"`
-				} `json:"data"`
+				Data []thinkingModelMetadata `json:"data"`
 			}
 			if err := json.Unmarshal(body, &parsed); err == nil && len(parsed.Data) > 0 {
 				var modelIDs []string
@@ -227,13 +232,14 @@ func (p *DownstreamProber) probeOpenAICompatible(ctx context.Context, baseURL, a
 				suggestedName := suggestProviderName(detectedType, baseURL, serverHeader)
 
 				return &ProbeResult{
-					Type:          detectedType,
-					SuggestedName: suggestedName,
-					Models:        modelIDs,
-					Protocols:     protocols,
-					LatencyMs:     dur,
-					ServerHeader:  serverHeader,
-					Message:       fmt.Sprintf("成功检测到 %d 个下游模型", len(modelIDs)),
+					ThinkingCapabilities: metadataThinkingCapabilities(detectedType, parsed.Data),
+					Type:                 detectedType,
+					SuggestedName:        suggestedName,
+					Models:               modelIDs,
+					Protocols:            protocols,
+					LatencyMs:            dur,
+					ServerHeader:         serverHeader,
+					Message:              fmt.Sprintf("成功检测到 %d 个下游模型", len(modelIDs)),
 				}, nil
 			}
 		} else if resp.StatusCode == http.StatusUnauthorized {

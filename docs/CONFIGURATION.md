@@ -162,7 +162,6 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `GATEWAY_VERIFICATION_RETENTION_DAYS` | `7` | Retention for e-mail verification codes; `0` keeps every row |
 | `GATEWAY_VIDEO_TASK_RETENTION_DAYS` | `30` | Retention for video task records; `0` keeps every row |
 | `GATEWAY_TIMESERIES_TTFT_SAMPLE` | `5000` | Row cap for TTFT percentile sampling in the dashboard time series |
-| `GATEWAY_MAX_OVERDRAFT_CNY` | `1.0` | Maximum wallet overdraft in CNY; `0` forbids negative balances |
 | `GATEWAY_USAGE_SPILL_DIR` | `data` | Disk fallback for billing records when Redis/DB fail (`-` disables, not recommended) |
 | `GATEWAY_USAGE_SPILL_MAX_MB` | `256` | Disk fallback size ceiling |
 | `GATEWAY_USAGE_SPILL_CLAIM_GRACE_SEC` | `600` | Grace period before another replica may claim a spilled record (shared spill directory) |
@@ -353,11 +352,30 @@ api_keys:
 
 ### Rate limiting and sessions
 
-- **Key quota budget** (`budget`, CNY) is a *pre-dispatch* ceiling: the check compares the usage already
-  settled against the limit. Requests that are already in flight when the budget is crossed still complete
-  and are charged, so a burst can overshoot by up to (in-flight requests × per-request cost); afterwards the
-  key answers `402 key_budget_exceeded`. The ledger itself stays exact — `used_cost_units` always equals the
-  sum of `usage_logs.cost_units` for that key, verified under concurrent cross-replica load.
+- **Wallet and Key budget reservations**: admission locks the authoritative database key and wallet rows,
+  then checks the available balance and Key budget including all outstanding request reservations. The full
+  dispatch estimate must fit; insufficient wallet funds return `402 insufficient_quota`, and insufficient
+  Key budget returns `402 key_budget_exceeded`. Database failures return `503 billing_unavailable`; Redis
+  failures never fall back to process-local money limits. `GATEWAY_INFLIGHT_RESERVE_CNY` (default `0.05`)
+  controls the initial reservation and `GATEWAY_MAX_INFLIGHT_PER_USER` (default `64`, `0` disables the count
+  cap) also counts pending charges and background jobs.
+- **Output and modality estimates**: prepaid chat calls without an explicit output cap use 4096 tokens on
+  the actual upstream request. Explicit protocol output limits are retained. Estimates include output
+  counts, cache-write premiums, mapped model prices and fixed-price units. MCP `airoute_chat` accepts the
+  optional `max_tokens` argument. File-backed native batches cannot be pre-authorized and return `422`;
+  use inline requests. Prepaid native agent interactions require fixed-price-only rates because model
+  output limits do not bound an agent's internal work. Live sessions reserve additional funds before
+  forwarding input and as reported usage grows.
+- **Settlement and recovery**: request IDs identify reservations. Money movement and release of that
+  reservation commit together. A 300ms request-side settlement timeout keeps the money reserved, and the
+  database usage journal retries settlement/audit persistence every five seconds if the queues fail.
+  Asynchronous native jobs retain their reservation until terminal accounting. Reading a paid result or
+  cancelling an existing job does not require a second reservation. Pending money has no TTL; an unknown
+  outcome after a process crash remains held for investigation instead of becoming spendable credit.
+- **Actual cost**: delivered usage is charged in full. A provider-reported overrun can make the wallet
+  negative; subsequent paid requests are refused until funds cover them. The former
+  `GATEWAY_MAX_OVERDRAFT_CNY` clamp has been removed: it silently forgave delivered work. Estimates are
+  pre-authorizations, while the provider's actual usage determines the final charge.
 - **Multi-replica config propagation**: with `REDIS_URL` set, channel/pricing/key changes are broadcast to
   peers immediately. Without Redis each replica reloads its data-plane snapshot from the database every 10s,
   so a freshly created channel can stay unroutable on a peer for up to ~10s (those requests fail with
@@ -366,3 +384,10 @@ api_keys:
 - **TPM** is enforced with a per-key, one-minute sliding window and reports `X-RateLimit-Limit-Tokens` / `X-RateLimit-Remaining-Tokens`; over-budget requests get `429` with `Retry-After: 60`.
 - **Sessions** are cookie-based: login sets an HttpOnly `airoute_session` cookie plus a readable `airoute_csrf` cookie. State-changing requests authenticated by cookie must echo the CSRF value in `X-CSRF-Token`. API clients keep using `Authorization: Bearer`.
 - **Login throttling** locks an account/IP pair for 15 minutes after 5 consecutive failures (HTTP 429).
+
+Migration 54 adds `billing_reservations` and `billing_usage_journal`. When upgrading from the former
+Redis-reservation implementation, drain paid requests, pending charges and provider jobs, then switch
+all gateway replicas together before admitting new paid traffic. Mixing old Redis reservations with new
+database reservations would split the authority. These tables contain money-bearing recovery state;
+do not clear them as cache data. A retained reservation without recoverable usage evidence needs operator
+review against the provider before it can be released.

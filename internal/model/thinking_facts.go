@@ -20,14 +20,15 @@ func (config ThinkingConfig) MarshalYAML() (any, error) {
 	return fields, nil
 }
 
-// Operator-facing facts narrow a model's transport contract. The wire adapter
-// stays automatic unless an operator explicitly sets an advanced profile.
+// Operator declarations may extend catalog facts, but every selected control
+// must have a wire representation. Budget adapters require an explicit mapping.
 func validateThinkingFacts(profile ThinkingProfile, config *ThinkingConfig) error {
-	if config.CanDisable != nil && *config.CanDisable && !profile.Off {
+	transport := ThinkingTransportProfile(profile)
+	if config.CanDisable != nil && *config.CanDisable && !transport.Off {
 		return fmt.Errorf("the model's parameter adapter does not support disabling thinking")
 	}
 	for _, effort := range config.Efforts {
-		if !slices.Contains(profile.Efforts, effort) {
+		if !slices.Contains(transport.Efforts, effort) && !(passthroughThinkingEffort(profile) && ValidThinkingEffort(effort)) {
 			return fmt.Errorf("the model's parameter adapter does not support effort %q", effort)
 		}
 	}
@@ -48,6 +49,9 @@ func applyThinkingFacts(profile ThinkingProfile, config *ThinkingConfig, source 
 		if len(profile.Efforts) > 0 && !slices.Contains(profile.Efforts, profile.DefaultEffort) {
 			profile.DefaultEffort = profile.Efforts[0]
 		}
+	}
+	if len(profile.Efforts) > 0 {
+		profile.On = true
 	}
 	if config.Profile != "" || config.CanDisable != nil || config.Efforts != nil {
 		source = "configured"

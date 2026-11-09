@@ -30,7 +30,10 @@ func (h *Handler) handleGeminiBatchAction(c *gin.Context, name, action string) {
 	if !validateModelCurrency(c, name) {
 		return
 	}
-	topUpQuotaForRequest(c, &model.ChatCompletionRequest{Model: name, Messages: []model.ChatMessage{{Role: "user", Content: string(body)}}})
+	if !reserveGoogleBatch(c, name, action, &body) {
+		return
+	}
+
 	r := &googleResource{namespace: "gemini-batch", collection: "batches", model: name, body: body, action: action}
 	h.forwardGoogleResource(c, r)
 }

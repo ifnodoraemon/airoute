@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/nativestate"
 	"github.com/ifnodoraemon/airoute/internal/provider"
@@ -52,8 +53,17 @@ func (h *Handler) handleGeminiInteraction(c *gin.Context, r *googleResource) {
 	if !validateModelCurrency(c, r.model) {
 		return
 	}
-	request := &model.ChatCompletionRequest{Model: r.model, Native: &model.NativeRequest{Protocol: model.NativeGeminiInteractions}, Messages: []model.ChatMessage{{Role: "user", Content: input.Input}}}
-	topUpQuotaForRequest(c, request)
+	request := &model.ChatCompletionRequest{Model: r.model, Native: &model.NativeRequest{Protocol: model.NativeGeminiInteractions, Body: r.body}, Messages: []model.ChatMessage{{Role: "user", Content: input.Input}}}
+	if input.Agent != "" && input.Model == "" && middleware.RequestQuotaFrom(c) != nil {
+		if !requireFlatFeeAgentQuota(c, r.model) {
+			return
+		}
+	} else {
+		if !topUpQuotaForRequest(c, request) {
+			return
+		}
+	}
+	r.body = request.Native.Body
 	response, err := h.googleResourceCall(c, r)
 	if err != nil {
 		status, _, _, _ := resolveUpstreamFailureStatus(err)
@@ -142,10 +152,13 @@ func recordGoogleUsageSource(c *gin.Context, r *googleResource, id string, usage
 	if usage == nil {
 		return
 	}
-	RecordUsage(c, AuditRecordParams{ChatID: id, Model: r.model, Channel: r.channel.Name, SessionID: resolveGenericSessionID(c, "google"),
-		BillingID:    nativeBillingID(r.namespace, id, callerOwner(c)),
-		PromptTokens: usage.PromptTokens, CompletionTokens: usage.CompletionTokens, CachedTokens: usage.GetCachedTokens(), TotalTokens: usage.TotalTokens,
-		Duration: duration, TTFT: duration, StatusCode: http.StatusOK, UsageSource: source})
+	params := googleUsageParams(c, r)
+	params.ChatID, params.Model, params.Channel = id, r.model, r.channel.Name
+	params.SessionID = resolveGenericSessionID(c, "google")
+	params.BillingID = nativeBillingID(r.namespace, id, callerOwner(c))
+	params.PromptTokens, params.CompletionTokens, params.CachedTokens, params.TotalTokens = usage.PromptTokens, usage.CompletionTokens, usage.GetCachedTokens(), usage.TotalTokens
+	params.Duration, params.TTFT, params.StatusCode, params.UsageSource = duration, duration, http.StatusOK, source
+	RecordUsage(c, params)
 }
 
 func (h *Handler) forwardInteractionResponse(c *gin.Context, r *googleResource, response *router.UpstreamResponse, start time.Time) {
@@ -165,9 +178,18 @@ func (h *Handler) forwardInteractionResponse(c *gin.Context, r *googleResource, 
 			RespondGeminiError(c, 503, "Cannot retain interaction ownership", "UNAVAILABLE")
 			return
 		}
-		if interaction.Status == "completed" || interaction.Status == "requires_action" {
+		failed := interaction.Status == "failed" || interaction.Status == "cancelled" || interaction.Status == "canceled" || interaction.Status == "expired"
+		if interaction.Status == "completed" || interaction.Status == "requires_action" || failed {
 			if claimGoogleUsage(c, r, interaction.ID) {
-				recordGoogleUsage(c, r, interaction.ID, provider.GeminiInteractionUsage(interaction.Usage), time.Since(start))
+				usage := provider.GeminiInteractionUsage(interaction.Usage)
+				if failed && (usage == nil || usage.TotalTokens == 0) {
+					params := googleUsageParams(c, r)
+					params.BillingID, params.ChatID, params.Model, params.Channel = nativeBillingID(r.namespace, interaction.ID, callerOwner(c)), interaction.ID, r.model, r.channel.Name
+					params.StatusCode, params.SkipBilling = 200, true
+					RecordUsage(c, params)
+				} else {
+					recordGoogleUsage(c, r, interaction.ID, usage, time.Since(start))
+				}
 				completeGoogleUsage(c, r, interaction.ID)
 			}
 		}

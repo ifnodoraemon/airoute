@@ -124,6 +124,21 @@ func TestAdminRequestShapesAreStable(t *testing.T) {
 			want: []string{"ids"},
 		},
 		{
+			name: "AnnouncementRequest",
+			got:  jsonFieldNames(reflect.TypeOf(AnnouncementRequest{})),
+			want: []string{"request_id", "title", "content", "level", "status", "show_banner"},
+		},
+		{
+			name: "SendNotificationRequest",
+			got:  jsonFieldNames(reflect.TypeOf(SendNotificationRequest{})),
+			want: []string{"request_id", "recipient_username", "title", "content", "level"},
+		},
+		{
+			name: "MarkAllNotificationsReadRequest",
+			got:  jsonFieldNames(reflect.TypeOf(MarkAllNotificationsReadRequest{})),
+			want: []string{"through_sequence", "kind"},
+		},
+		{
 			name: "ChannelRequest",
 			got:  jsonFieldNames(reflect.TypeOf(ChannelRequest{})),
 			want: []string{

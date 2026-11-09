@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { assistantHistory, reasoningTokens, thinkingRequest, thinkingResult, thinkingOutputLimit } from './thinking';
+import { assistantHistory, reasoningTokens, thinkingRequest, thinkingResult, thinkingOutputLimit, thinkingOptions, validThinkingEffort } from './thinking';
 
 describe('thinking contracts', () => {
+  it('excludes minimal from supplied capabilities and custom levels', () => {
+    expect(thinkingOptions({ on: true, off: true, efforts: ['minimal', 'low', 'ultra'] })).toEqual(['auto', 'off', 'low', 'ultra']);
+    expect(validThinkingEffort('minimal')).toBe(false);
+    expect(validThinkingEffort('extended')).toBe(true);
+  });
   it('keeps missing reasoning usage distinct from a reported zero across provider schemas', () => {
     expect(reasoningTokens({completion_tokens:10})).toBeNull();
     expect(reasoningTokens({reasoning_tokens:0})).toBe(0);

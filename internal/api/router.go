@@ -168,7 +168,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 		r.GET("/api/v1/skills/:id/download", adminHandler.DownloadSkillZip)
 
 		// Public Announcement endpoint
-		r.GET("/api/v1/announcement", adminHandler.GetAnnouncement)
+		r.GET("/api/v1/announcements/banner", adminHandler.GetAnnouncementBanner)
 
 		// Regular User Self-Service APIs
 		userGroup := r.Group("/api/v1/user")
@@ -188,6 +188,10 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 			userGroup.GET("/wallet/orders/:order_no", adminHandler.GetUserRechargeOrder)
 			userGroup.GET("/keys", adminHandler.ListUserKeys)
 			userGroup.POST("/password", adminHandler.ChangePassword)
+			userGroup.GET("/notifications", adminHandler.ListNotifications)
+			userGroup.GET("/notifications/unread-count", adminHandler.GetNotificationUnreadCount)
+			userGroup.POST("/notifications/read-all", adminHandler.MarkAllNotificationsRead)
+			userGroup.POST("/notifications/:id/read", adminHandler.MarkNotificationRead)
 		}
 
 		admin := r.Group("/api/v1/admin")
@@ -217,7 +221,6 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 				// duplicate served no caller and is removed.
 				protected.GET("/mcp/settings", adminHandler.GetMCPSettings)
 				protected.GET("/logs", adminHandler.ListLogs)
-				protected.GET("/announcement", adminHandler.GetAnnouncement)
 
 				// Protected super-admin operations
 				adminOnly := protected.Group("")
@@ -265,6 +268,7 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 					adminOnly.DELETE("/channels/:id", adminHandler.DeleteChannel)
 					adminOnly.POST("/channels/:id/test", adminHandler.TestChannel)
 					adminOnly.POST("/channels/probe", adminHandler.ProbeChannel)
+					adminOnly.POST("/channels/thinking/probe", adminHandler.ProbeChannelThinking)
 					adminOnly.POST("/channels/batch-delete", adminHandler.BatchDeleteChannels)
 					adminOnly.POST("/channels/batch-status", adminHandler.BatchStatusChannels)
 
@@ -297,8 +301,12 @@ func SetupRouter(dispatcher *router.Dispatcher, adminHandler *controlplane.Admin
 					adminOnly.POST("/logs/batch-delete", adminHandler.BatchDeleteLogs)
 					adminOnly.POST("/logs/clear", adminHandler.ClearLogs)
 
-					adminOnly.GET("/announcement/config", adminHandler.GetAdminAnnouncement)
-					adminOnly.POST("/announcement", adminHandler.SaveAnnouncement)
+					adminOnly.GET("/announcements", adminHandler.ListAnnouncements)
+					adminOnly.GET("/announcements/:id", adminHandler.GetAnnouncement)
+					adminOnly.POST("/announcements", adminHandler.CreateAnnouncement)
+					adminOnly.PUT("/announcements/:id", adminHandler.UpdateAnnouncement)
+					adminOnly.DELETE("/announcements/:id", adminHandler.DeleteAnnouncement)
+					adminOnly.POST("/notifications", adminHandler.SendNotification)
 				}
 			}
 		}

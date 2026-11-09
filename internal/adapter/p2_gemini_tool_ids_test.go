@@ -1,7 +1,6 @@
 package adapter
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -23,7 +22,7 @@ func TestP2GeminiFunctionResponseKeepsToolCallID(t *testing.T) {
 			}}}},
 		},
 	}
-	canonical, err := NewGeminiAdapter().ToCanonical(context.Background(), req)
+	canonical, err := GeminiToCanonical(req)
 	if err != nil {
 		t.Fatalf("ToCanonical: %v", err)
 	}
@@ -67,7 +66,7 @@ func TestP2GeminiRepeatedToolCallsKeepDistinctIDs(t *testing.T) {
 			}},
 		},
 	}
-	canonical, err := NewGeminiAdapter().ToCanonical(context.Background(), req)
+	canonical, err := GeminiToCanonical(req)
 	if err != nil {
 		t.Fatalf("ToCanonical: %v", err)
 	}

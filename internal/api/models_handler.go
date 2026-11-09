@@ -39,36 +39,18 @@ func (h *Handler) HandleModels(c *gin.Context) {
 func (h *Handler) HandleModelDetail(c *gin.Context) {
 	modelID := strings.TrimPrefix(c.Param("model"), "/")
 	if modelID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"message": "Model ID is required",
-				"type":    "invalid_request_error",
-				"code":    "missing_model_id",
-			},
-		})
+		RespondOpenAIError(c, http.StatusBadRequest, "Model ID is required", "invalid_request_error", "missing_model_id")
 		return
 	}
 
 	if !middleware.ValidateModelAllowed(c, modelID) {
-		c.JSON(http.StatusForbidden, gin.H{
-			"error": gin.H{
-				"message": fmt.Sprintf("Your API key does not have access to model '%s'.", modelID),
-				"type":    "invalid_request_error",
-				"code":    "model_not_allowed",
-			},
-		})
+		RespondOpenAIError(c, http.StatusForbidden, fmt.Sprintf("Your API key does not have access to model '%s'.", modelID), "invalid_request_error", "model_not_allowed")
 		return
 	}
 
 	channels := h.dispatcher.ListChannelsForModel(modelID, "")
 	if len(channels) == 0 {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": gin.H{
-				"message": fmt.Sprintf("The model '%s' does not exist or is not available.", modelID),
-				"type":    "invalid_request_error",
-				"code":    "model_not_found",
-			},
-		})
+		RespondOpenAIError(c, http.StatusNotFound, fmt.Sprintf("The model '%s' does not exist or is not available.", modelID), "invalid_request_error", "model_not_found")
 		return
 	}
 

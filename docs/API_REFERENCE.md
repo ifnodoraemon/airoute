@@ -354,10 +354,12 @@ All Admin APIs are under `/api/v1/admin`:
 | `POST` | `/api/v1/admin/channels` | Create a new provider and immediately hot-reload in memory |
 | `PUT` | `/api/v1/admin/channels/:id` | Update an existing provider configuration and hot-reload in memory |
 | `POST` | `/api/v1/admin/channels/probe` | **Deep Auto-Probe**: Automatically normalize URL, probe live models, fingerprint upstream engine (GPUStack, vLLM, SGLang, Ollama, DeepSeek, Gemini, Anthropic, Sub2API), infer protocols (`chat`, `completion`, `messages`, `embeddings`, `rerank`, etc.) |
+| `POST` | `/api/v1/admin/channels/thinking/probe` | 探测实际模型的关闭能力及思考档位，返回逐项确认状态；不自动保存渠道 |
 | `POST` | `/api/v1/admin/channels/:id/test` | Ping downstream provider for latency & response verification |
 | `DELETE`| `/api/v1/admin/channels/:id` | Delete provider and remove from routing |
 | `GET` | `/api/v1/admin/keys` | List all client API keys with rate limits & spend caps |
-| `POST` | `/api/v1/admin/keys` | Create client API key |
+| `POST` | `/api/v1/admin/keys` | Create client API key; `group_name` must select an existing pricing group |
+| `PUT` | `/api/v1/admin/keys/:id` | Update client API key; an explicit `group_name` must select an existing pricing group |
 | `DELETE`| `/api/v1/admin/keys/:id` | Revoke client API key |
 | `GET` | `/api/v1/admin/logs?limit=50` | Query real-time audit logs with TTFT, tokens, latency, status code |
 | `GET` | `/api/v1/admin/logs?limit=50&count=0&facets=0` | Rows only: skips the filtered COUNT and facet DISTINCT (dashboard poll / CSV export) |
@@ -368,6 +370,12 @@ All Admin APIs are under `/api/v1/admin`:
 | `DELETE`| `/api/v1/admin/supplier-costs/:id` | Delete one supplier price row |
 | `GET` | `/api/v1/admin/supplier-costs/export` | Export supplier prices as CSV |
 | `POST` | `/api/v1/admin/supplier-costs/import` | Import supplier prices from CSV; `?dry_run=1` validates every row and reports errors without writing |
+
+创建或调整 Key 的 `group_name` 仅可选择定价管理中已配置倍率或模型费率的分组，留空使用默认组（普通用户创建时沿用账号分组）。未知分组返回 `400`，不会随 Key 写入而创建分组；普通用户仍只能选择默认组或其账号已获授权的分组。
+
+付费请求按完整预估金额占用钱包余额和 Key 预算，补差不足时在请求上游之前返回 `402`；预留存储不可用时返回可重试的 `503 billing_unavailable`。缺省输出上限为 4096 token，可用对应协议的输出上限字段显式调整（MCP 使用 `max_tokens`）。请求侧结算等待超时不会归还待扣额度；最终扣款和该请求预留的释放在同一事务提交。异步任务的预留随任务持久保存，已付费结果读取与任务取消不要求再次预留。
+
+实际用量异常超出预估时完整记入消费和钱包欠款，后续付费请求会因余额或预算不足而拒绝。文件输入的原生批任务返回 `422`，需改为内联输入；付费原生 Agent 调用需配置纯固定费用。预授权和集群升级要求见 [配置说明](CONFIGURATION.md#rate-limiting-and-sessions)。
 
 ### Supplier unit prices vs. our sell price
 
@@ -391,6 +399,36 @@ List responses contain neither the credential nor its digest.
 Note the two different uses of the name: the `key_id` **field** in a key object is the public `ak_…` identifier, while the `key_id` **query parameter** accepted by `/api/v1/admin/logs` and `/api/v1/admin/stats/overview` is the numeric row `id` used for drill-down.
 
 ---
+
+### Announcements and private notifications
+
+The console's **Announcements & messages** page (`#/notifications`) separates a platform announcement timeline from a personal inbox. Administrators also have a drafts tab. All signed-in accounts can read published posts; each private message is visible only to its recipient, including when the caller is an administrator.
+
+| Method | Endpoint | Access / behavior |
+| :--- | :--- | :--- |
+| `GET` | `/api/v1/announcements/banner` | Public: latest published post with banner enabled, or `data: null` |
+| `GET` | `/api/v1/admin/announcements` | Administrator: paginated posts, optionally `status=draft\|published` |
+| `GET` | `/api/v1/admin/announcements/{id}` | Administrator: one editable announcement record |
+| `POST` | `/api/v1/admin/announcements` | Administrator: create an independent draft or published post |
+| `PUT` | `/api/v1/admin/announcements/{id}` | Administrator: edit, publish, or withdraw a post to draft |
+| `DELETE` | `/api/v1/admin/announcements/{id}` | Administrator: delete the post, delivery and its read markers |
+| `GET` | `/api/v1/user/notifications` | Session: announcement timeline and own private messages |
+| `GET` | `/api/v1/user/notifications/unread-count` | Session: total, announcement and personal unread counts |
+| `POST` | `/api/v1/user/notifications/{id}/read` | Session: idempotently mark a visible item read; foreign private messages return 404 |
+| `POST` | `/api/v1/user/notifications/read-all` | Session: mark one category read through a received snapshot |
+| `POST` | `/api/v1/admin/notifications` | Administrator: deliver a private message to one account |
+
+Announcement writes use `title`, `content`, `level` (`info`, `warning`, `critical`), `status` (`draft`, `published`) and `show_banner`. Creates also require a unique `request_id`; a retry with identical content returns the same record, while conflicting content returns 409. Banner display is optional and defaults to false. Drafts are administrator-only. Editing published content replaces its delivery and marks the corrected post unread. Changing only banner display preserves read state. Withdrawal removes the active delivery and banner; deletion removes the record and read state. Other announcement records remain intact.
+
+Migration 53 creates the announcement, delivery and read tables and deletes the obsolete `system_announcement` setting. The singleton JSON configuration and its singular API routes have been removed; there is no import, fallback or alias.
+
+Notification lists accept `kind=announcement|message|all`, `unread=true|false`, `page` (default 1) and `page_size` (default 20, maximum 100). The `data` object contains `items`, `total`, `page`, `page_size`, `latest_sequence`, `unread_count`, `announcement_unread_count` and `message_unread_count`. Each item contains `id`, `kind`, `title`, `content`, `level`, `created_at` and nullable `read_at`; announcement deliveries also expose `announcement_id`. Read state is stored per durable account ID across devices.
+
+For **Mark this tab as read**, send `{"kind":"message","through_sequence":18}` using `latest_sequence` from the displayed response. Later deliveries, including drafts published after that snapshot, stay unread. Announcement and personal read state remain separate.
+
+Private message writes accept `request_id`, `recipient_username`, `title`, `content` and `level`. Request IDs contain 1–128 letters, digits, underscores or hyphens, starting with a letter or digit. Repeating the same ID and payload returns the same delivery; changing its payload returns 409. Titles are limited to 120 characters and content to 10000; blank published text and invalid priority are rejected. Text paragraphs are preserved without executing HTML.
+
+Run `bash scripts/test-notifications-postgres.sh` to verify the schema, account isolation, post lifecycle, read snapshots and concurrent publishers against disposable PostgreSQL.
 
 ## 5. Observability Endpoints
 
@@ -431,3 +469,11 @@ These were registered historically but had no consumer and are intentionally gon
 | `DELETE /api/v1/user/keys/{id}` | `DELETE /api/v1/admin/keys/{id}` (same owner check for regular callers) |
 | `GET /api/v1/user/wallet/orders` (list) | `GET /api/v1/user/wallet/orders/{order_no}` (single order) |
 | `GET /api/v1/admin/skills/{id}/download` | `GET /api/v1/skills/{id}/download` (public bundle download) |
+
+### 渠道模型思考能力探测
+
+`POST /api/v1/admin/channels/thinking/probe` 接收 `base_url`、`type`、实际 `model`，以及可选的 `api_key`、`channel_id`、`protocols`、`thinking`（当前能力声明）。编辑已保存渠道时可省略密钥，服务端仅在目标地址与已保存地址一致时复用凭证。
+
+返回 `{code:0,data:{model,capability,checks,thinking,message}}`：`checks` 按 `off` 和各档位返回 `status`（`supported / unsupported / unknown`）及 `reason`；`thinking` 只包含本次能确认的结果，全部待确认时省略。固定、无思考或未知预设同样按渠道协议进行实际探测，不因名称或旧配置跳过请求。命名档位协议试探全部六档及已声明的自定义档位；确认新能力需要变更参数约定时，`thinking.profile` 返回可保存的约定，未确认结果不会自动改写已有配置。探测使用有限数量的短请求，不返回上游凭证、模型正文或错误正文，不写数据库。控制台合并确认结果并保留待确认的已有配置，用户保存后生效。
+
+渠道连通探测的 `data.thinking_capabilities` 同时返回每个实际模型的自动能力。优先采用上游 `capabilities.reasoning_effort` 明确声明的枚举，缺失时采用名称能力表。支持 `ultra` 及有效的自定义命名档位，不代表所有模型均支持内置全部档位。

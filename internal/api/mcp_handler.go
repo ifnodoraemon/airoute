@@ -95,21 +95,6 @@ func isMCPNotificationMethod(method string) bool {
 	return strings.HasPrefix(method, "notifications/")
 }
 
-// authenticateCaller verifies that the caller has a valid active API key once
-// any key has been registered. Open mode is only for a deployment that has
-// never created a key: otherwise disabling every key would silently reopen MCP
-// to anonymous callers (and with it tools/list, skills and remote MCP servers).
-func (h *MCPHandler) authenticateCaller(key string) (*storage.APIKeyRecord, error) {
-	if h.repo == nil || h.repo.CountAPIKeys() == 0 {
-		return nil, nil // Open mode only when no key has ever been created
-	}
-	if key == "" {
-		return nil, fmt.Errorf("API key required for MCP access")
-	}
-	// A presented credential is cleartext; compare in digest space.
-	return h.authenticateCallerDigest(storage.HashAPIKey(key))
-}
-
 // authenticateCallerDigest resolves a caller whose key is already the stored
 // digest (the SSE session path stores caller.Key, which is the digest).
 func (h *MCPHandler) authenticateCallerDigest(keyDigest string) (*storage.APIKeyRecord, error) {

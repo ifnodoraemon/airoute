@@ -335,7 +335,7 @@ func TestForwardJSONRPCToolCallFallsBackToLegacySSE(t *testing.T) {
 	legacyServer := httptest.NewServer(mux)
 	t.Cleanup(legacyServer.Close)
 
-	text, isErr := forwardJSONRPCToolCall(context.Background(), legacyServer.URL, "echo", nil)
+	text, isErr := forwardHTTPMCPToolCall(context.Background(), "", legacyServer.URL, "echo", nil)
 	if isErr {
 		t.Fatalf("fallback failed: %s", text)
 	}

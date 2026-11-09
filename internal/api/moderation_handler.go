@@ -89,6 +89,9 @@ func (h *Handler) HandleModerations(c *gin.Context) {
 		if !validateModelCurrency(c, modModel) {
 			return
 		}
+		if !requireQuotaEstimate(c, modModel, 0, 0, 1) {
+			return
+		}
 		payloadBytes, _ := json.Marshal(req)
 		// Moderation is a provider call with a real cost. Keep it detached from the
 		// downstream request for the same reason as chat, and audit it: before

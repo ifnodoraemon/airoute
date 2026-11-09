@@ -1,4 +1,6 @@
-const ORDER = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+import { THINKING_EFFORTS, selectableThinkingEfforts } from './thinking';
+
+const ORDER = THINKING_EFFORTS;
 
 // Read only server-resolved facts. Public aliases never supply capability facts.
 export function routeThinkingAvailability(providers, channels, publicModel) {
@@ -14,8 +16,8 @@ export function routeThinkingAvailability(providers, channels, publicModel) {
   const enabled = bindings.filter((item) => item.enabled);
   const on = enabled.filter((item) => item.thinking?.known && item.thinking.on);
   const off = enabled.filter((item) => item.thinking?.known && item.thinking.off);
-  const efforts = [...new Set(on.flatMap((item) => item.thinking.efforts || []))].sort(
-    (a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)
+  const efforts = [...new Set(on.flatMap((item) => selectableThinkingEfforts(item.thinking.efforts)))].sort(
+    (a, b) => (ORDER.includes(a) ? ORDER.indexOf(a) : ORDER.length) - (ORDER.includes(b) ? ORDER.indexOf(b) : ORDER.length) || a.localeCompare(b)
   );
   return {
     bindings,
@@ -24,7 +26,7 @@ export function routeThinkingAvailability(providers, channels, publicModel) {
     off,
     efforts,
     unknown: enabled.filter((item) => !item.thinking?.known).length,
-    supporting: (effort) => on.filter((item) => item.thinking.efforts?.includes(effort)),
+    supporting: (effort) => effort === 'off' ? off : effort === 'on' ? on : on.filter((item) => item.thinking.efforts?.includes(effort)),
   };
 }
 

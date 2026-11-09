@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ifnodoraemon/airoute/internal/billing"
 	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/router"
@@ -225,6 +226,9 @@ func TestFixMCPChatSessionAffinityTenantScoped(t *testing.T) {
 	defer srvB.Close()
 
 	repo := newMCPRegressionRepo(t)
+	previousEngine := billing.GlobalEngine
+	billing.GlobalEngine = billing.NewEngine(repo)
+	t.Cleanup(func() { billing.GlobalEngine = previousEngine })
 	dispatcher := router.NewDispatcher([]model.ChannelConfig{
 		{Name: "chan-a", Type: model.ProviderOpenAI, BaseURL: srvA.URL, Models: []string{modelName}, Protocols: []string{"openai_chat"}, Status: "active", Weight: 1, Priority: 1},
 		{Name: "chan-b", Type: model.ProviderOpenAI, BaseURL: srvB.URL, Models: []string{modelName}, Protocols: []string{"openai_chat"}, Status: "active", Weight: 1, Priority: 1},

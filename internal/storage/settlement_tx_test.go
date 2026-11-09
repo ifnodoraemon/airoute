@@ -117,11 +117,8 @@ func TestSortedMapKeysIsAscending(t *testing.T) {
 	}
 }
 
-// A wallet that has been clamped to the overdraft floor could not absorb the
-// charge, and the waived-units counter is the only place that shortfall is
-// visible. The second charge starts from the floor, so it is entirely waived.
-func TestWalletDeductionCountsWaivedUnitsAtFloor(t *testing.T) {
-	t.Setenv("GATEWAY_MAX_OVERDRAFT_CNY", "1")
+// Actual delivered cost stays collectible as debt instead of being waived.
+func TestWalletDeductionNeverWaivesUnfundedUsage(t *testing.T) {
 	r := accountWalletRepo(t)
 	ctx := context.Background()
 
@@ -140,33 +137,31 @@ func TestWalletDeductionCountsWaivedUnitsAtFloor(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("settle 1: %v", err)
 	}
-	if got, want := telemetry.GlobalMetrics.BillingWaivedUnits.Load()-before, ToUnits(5.0); got != want {
-		t.Fatalf("waived units after the clamped charge = %d, want %d", got, want)
+	if got, want := telemetry.GlobalMetrics.BillingWaivedUnits.Load()-before, int64(0); got != want {
+		t.Fatalf("waived units after the first charge = %d, want %d", got, want)
 	}
 	user, err := r.GetUserByID(u.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := -ToUnits(1.0); user.BalanceUnits != want {
-		t.Fatalf("balance_units = %d, want the %d floor", user.BalanceUnits, want)
+	if want := ToUnits(-4.99); user.BalanceUnits != want {
+		t.Fatalf("balance_units = %d, want %d", user.BalanceUnits, want)
 	}
 
-	// The wallet is already at the floor: the whole second charge is forgiven.
+	// A second delivered charge remains debt and is never forgiven.
 	before = telemetry.GlobalMetrics.BillingWaivedUnits.Load()
 	if err := r.settleCharges(ctx, []*UsageLogRecord{
 		billingRecord(key, u.Username, "tr-waived-2", "bill-waived-2", 2.0),
 	}); err != nil {
 		t.Fatalf("settle 2: %v", err)
 	}
-	if got, want := telemetry.GlobalMetrics.BillingWaivedUnits.Load()-before, ToUnits(2.0); got != want {
-		t.Fatalf("waived units after the floor charge = %d, want %d", got, want)
+	if got, want := telemetry.GlobalMetrics.BillingWaivedUnits.Load()-before, int64(0); got != want {
+		t.Fatalf("waived units after the second charge = %d, want %d", got, want)
 	}
 }
 
-// A charge the wallet can afford is not waived. Counting every clamped UPDATE as
-// waived would make the metric useless as a credit signal.
-func TestWalletDeductionDoesNotCountWaivedUnitsAboveFloor(t *testing.T) {
-	t.Setenv("GATEWAY_MAX_OVERDRAFT_CNY", "1")
+// A funded charge never increments the waiver counter either.
+func TestWalletDeductionDoesNotWaiveFundedUsage(t *testing.T) {
 	r := accountWalletRepo(t)
 	ctx := context.Background()
 
@@ -187,11 +182,8 @@ func TestWalletDeductionDoesNotCountWaivedUnitsAboveFloor(t *testing.T) {
 	}
 }
 
-// With overdraft disabled the wallet stops at exactly zero (floor == 0). The
-// balance never goes negative, so the overdraft warning cannot fire, but the
-// charge is still waived and must be counted.
-func TestWalletDeductionCountsWaivedUnitsAtZeroFloor(t *testing.T) {
-	t.Setenv("GATEWAY_MAX_OVERDRAFT_CNY", "0")
+// Spending the exact balance is a fully collected charge, not a waiver.
+func TestWalletDeductionExactBalanceIsNotWaived(t *testing.T) {
 	r := accountWalletRepo(t)
 	ctx := context.Background()
 
@@ -218,7 +210,7 @@ func TestWalletDeductionCountsWaivedUnitsAtZeroFloor(t *testing.T) {
 	if user.BalanceUnits != 0 {
 		t.Fatalf("balance_units = %d, want 0", user.BalanceUnits)
 	}
-	if got, want := telemetry.GlobalMetrics.BillingWaivedUnits.Load()-waivedBefore, ToUnits(1.0); got != want {
+	if got, want := telemetry.GlobalMetrics.BillingWaivedUnits.Load()-waivedBefore, int64(0); got != want {
 		t.Fatalf("waived units = %d, want %d", got, want)
 	}
 	if got := telemetry.GlobalMetrics.BillingOverdrafts.Load() - overdraftsBefore; got != 0 {

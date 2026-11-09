@@ -100,6 +100,7 @@ func getBuiltinMCPTools() []gin.H {
 			gin.H{
 				"model":      prop("string", "Model identifier, e.g. deepseek-chat, gpt-4o, claude-3-5-sonnet"),
 				"message":    prop("string", "User message / prompt"),
+				"max_tokens": prop("integer", "Maximum output tokens; prepaid calls default to 4096"),
 				"session_id": prop("string", "Optional session ID for multi-turn conversational memory and prefix cache affinity"),
 			},
 			[]string{"model", "message"}),

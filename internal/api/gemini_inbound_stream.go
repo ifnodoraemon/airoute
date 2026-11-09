@@ -19,7 +19,11 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 	telemetry.GlobalLiveMetrics.BeginStream()
 	defer telemetry.GlobalLiveMetrics.EndStream()
 
-	topUpQuotaForRequest(c, canonicalReq)
+	if !topUpQuotaForRequest(c, canonicalReq) {
+
+		return
+
+	}
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, canonicalReq)
 	if err != nil {
 		statusCode, _, _, _ := resolveUpstreamFailureStatus(err)

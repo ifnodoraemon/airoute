@@ -101,15 +101,14 @@ it('does not include disabled channel capabilities or unconfirmed models', () =>
 it('enables restrictions with only supported levels and posts that same subset', async () => {
   const { adminFetch } = setup([google]);
   choose('high');
-  fireEvent.click(screen.getByText('高级'));
-  fireEvent.click(screen.getByLabelText('限制可选思考强度'));
-  expect(screen.queryByLabelText('允许强度 max')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText('允许强度 medium'));
+  expect(screen.getByLabelText('允许强度 max')).toBeDisabled();
   fireEvent.click(saveButton());
   await waitFor(() => expect(adminFetch).toHaveBeenCalled());
   expect(JSON.parse(adminFetch.mock.calls[0][1].body).thinking_policy).toMatchObject({
     default_mode: 'on',
     default_effort: 'high',
-    allowed_efforts: ['low', 'medium', 'high'],
+    allowed_efforts: ['low', 'high'],
   });
 });
 
@@ -142,6 +141,34 @@ it('requires unsupported legacy restrictions to be explicitly removed', () => {
   fireEvent.click(screen.getByText('高级'));
   expect(screen.getByLabelText('允许强度 max')).toBeChecked();
   fireEvent.click(screen.getByLabelText('允许强度 max'));
-  expect(screen.queryByLabelText('允许强度 max')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('允许强度 max')).not.toBeChecked();
   expect(saveButton()).toBeEnabled();
+});
+
+it('configures public off independently and preserves the selected level', async () => {
+  const { adminFetch } = setup([capability(['low', 'high', 'ultra'], { off: true })]);
+  choose('ultra');
+  fireEvent.click(screen.getByLabelText('对外支持关闭思考'));
+  expect(options()).not.toContain('off');
+  expect(screen.getByLabelText('默认思考')).toHaveValue('ultra');
+  fireEvent.click(saveButton());
+  await waitFor(() => expect(adminFetch).toHaveBeenCalled());
+  expect(JSON.parse(adminFetch.mock.calls[0][1].body).thinking_policy).toMatchObject({
+    default_mode: 'on', default_effort: 'ultra', allowed_modes: ['auto', 'on'],
+  });
+});
+
+it('selects a valid default when narrowing the public levels from automatic', () => {
+  setup([capability(['low', 'high', 'ultra'], { off: true })]);
+  fireEvent.click(screen.getByLabelText('允许强度 high'));
+  expect(screen.getByLabelText('默认思考')).toHaveValue('low');
+  expect(saveButton()).toBeEnabled();
+  expect(options()).toEqual(['auto', 'off', 'low', 'ultra']);
+});
+
+it('preserves other stale levels when one restriction is removed', () => {
+  setup([google], { policy: { default_mode: 'on', default_effort: 'high', allowed_modes: null, allowed_efforts: ['high', 'max', 'ultra'] } });
+  fireEvent.click(screen.getByLabelText('允许强度 max'));
+  expect(screen.getByLabelText('允许强度 ultra')).toBeChecked();
+  expect(saveButton()).toBeDisabled();
 });

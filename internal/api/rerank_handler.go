@@ -49,6 +49,10 @@ func (h *Handler) HandleRerank(c *gin.Context) {
 	start := time.Now()
 	sessionID := resolveGenericSessionID(c, "rrk")
 
+	if !requireQuotaEstimate(c, req.Model, req.EstimatedPromptTokens(), 0, 1) {
+		return
+	}
+
 	resp, err := h.dispatcher.DispatchRerank(c.Request.Context(), &req)
 	if err != nil {
 		statusCode, errType, errCode, _ := resolveUpstreamFailureStatus(err)

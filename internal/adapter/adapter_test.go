@@ -1,8 +1,6 @@
 package adapter
 
 import (
-	"context"
-	"errors"
 	"testing"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
@@ -12,12 +10,8 @@ import (
 // The Anthropic adapter is inbound-only: Messages responses are rendered by
 // internal/api/inbound_anthropic.go (a canonical response must never be turned
 // into an unsigned {"type":"thinking"} block). This test pins the inbound
-// conversion and the outbound refusal (B-05).
+// conversion; outbound Messages rendering belongs to internal/api.
 func TestAnthropicAdapter_InboundOnly(t *testing.T) {
-	ad := NewAnthropicAdapter()
-	if ad.Protocol() != "anthropic" {
-		t.Fatalf("expected protocol 'anthropic', got '%s'", ad.Protocol())
-	}
 
 	maxTokens := 2048
 	inbound := &model.AnthropicInboundRequest{
@@ -30,7 +24,7 @@ func TestAnthropicAdapter_InboundOnly(t *testing.T) {
 	}
 
 	// 1. ToCanonical
-	canonical, err := ad.ToCanonical(context.Background(), inbound)
+	canonical, err := AnthropicToCanonical(inbound)
 	if err != nil {
 		t.Fatalf("ToCanonical failed: %v", err)
 	}
@@ -41,21 +35,9 @@ func TestAnthropicAdapter_InboundOnly(t *testing.T) {
 		t.Fatalf("unexpected message roles: %+v", canonical.Messages)
 	}
 
-	// 2. FromCanonical must refuse: the live implementation lives in internal/api.
-	if _, err := ad.FromCanonical(context.Background(), &model.ChatCompletionResponse{}); !errors.Is(err, ErrAnthropicOutboundUnsupported) {
-		t.Fatalf("FromCanonical error = %v, want ErrAnthropicOutboundUnsupported", err)
-	}
-	// 3. The anthropic adapter is not registered for outbound conversion.
-	if _, ok := Get("anthropic"); ok {
-		t.Fatal("anthropic must not be registered as a bidirectional protocol adapter")
-	}
 }
 
 func TestGeminiAdapter_Bidirectional(t *testing.T) {
-	ad := NewGeminiAdapter()
-	if ad.Protocol() != "gemini" {
-		t.Fatalf("expected protocol 'gemini', got '%s'", ad.Protocol())
-	}
 
 	temp := 0.7
 	inbound := &provider.GeminiRequest{
@@ -74,7 +56,7 @@ func TestGeminiAdapter_Bidirectional(t *testing.T) {
 	}
 
 	// 1. ToCanonical
-	canonical, err := ad.ToCanonical(context.Background(), inbound)
+	canonical, err := GeminiToCanonical(inbound)
 	if err != nil {
 		t.Fatalf("ToCanonical failed: %v", err)
 	}
@@ -100,7 +82,7 @@ func TestGeminiAdapter_Bidirectional(t *testing.T) {
 		},
 	}
 
-	geminiOut, err := ad.FromCanonical(context.Background(), canonResp)
+	geminiOut, err := GeminiFromCanonical(canonResp)
 	if err != nil {
 		t.Fatalf("FromCanonical failed: %v", err)
 	}
@@ -118,7 +100,6 @@ func TestGeminiAdapter_Bidirectional(t *testing.T) {
 }
 
 func TestAnthropicAdapter_ToolResultWithText(t *testing.T) {
-	ad := NewAnthropicAdapter()
 	inbound := &model.AnthropicInboundRequest{
 		Model: "claude-3-5-sonnet",
 		Messages: []model.AnthropicInboundMessage{
@@ -139,7 +120,7 @@ func TestAnthropicAdapter_ToolResultWithText(t *testing.T) {
 		},
 	}
 
-	canonical, err := ad.ToCanonical(context.Background(), inbound)
+	canonical, err := AnthropicToCanonical(inbound)
 	if err != nil {
 		t.Fatalf("ToCanonical failed: %v", err)
 	}
@@ -155,7 +136,6 @@ func TestAnthropicAdapter_ToolResultWithText(t *testing.T) {
 }
 
 func TestGeminiAdapter_ToolCalls(t *testing.T) {
-	ad := NewGeminiAdapter()
 	inbound := &provider.GeminiRequest{
 		Contents: []provider.GeminiContent{
 			{
@@ -172,7 +152,7 @@ func TestGeminiAdapter_ToolCalls(t *testing.T) {
 		},
 	}
 
-	canonical, err := ad.ToCanonical(context.Background(), inbound)
+	canonical, err := GeminiToCanonical(inbound)
 	if err != nil {
 		t.Fatalf("ToCanonical failed: %v", err)
 	}
@@ -216,7 +196,7 @@ func TestGeminiAdapter_ToolCalls(t *testing.T) {
 		},
 	}
 
-	geminiOut, err := ad.FromCanonical(context.Background(), canonResp)
+	geminiOut, err := GeminiFromCanonical(canonResp)
 	if err != nil {
 		t.Fatalf("FromCanonical failed: %v", err)
 	}
@@ -232,7 +212,6 @@ func TestGeminiAdapter_ToolCalls(t *testing.T) {
 }
 
 func TestAnthropicAdapter_ArraySystemAndToolChoice(t *testing.T) {
-	ad := NewAnthropicAdapter()
 
 	// Array system with cache_control blocks, stop sequences and tool_choice.
 	inbound := &model.AnthropicInboundRequest{
@@ -255,7 +234,7 @@ func TestAnthropicAdapter_ArraySystemAndToolChoice(t *testing.T) {
 		},
 	}
 
-	canonical, err := ad.ToCanonical(context.Background(), inbound)
+	canonical, err := AnthropicToCanonical(inbound)
 	if err != nil {
 		t.Fatalf("ToCanonical failed: %v", err)
 	}

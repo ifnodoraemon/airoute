@@ -2,9 +2,10 @@ package provider
 
 import (
 	"encoding/json"
+	"testing"
+
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func controlledThinkingRequest(mode, effort string) *model.ChatCompletionRequest {

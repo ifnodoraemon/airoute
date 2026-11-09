@@ -22,6 +22,13 @@ func (h *AdminHandler) ProbeChannel(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if req.ChannelID != 0 && req.APIKey == "" {
+		var ok bool
+		req.APIKey, ok = h.storedProbeCredential(c, req.ChannelID, strings.TrimSpace(req.BaseURL))
+		if !ok {
+			return
+		}
+	}
 
 	telemetry.ScopedLogger("prober").Info("handling downstream channel probe request",
 		"base_url", req.BaseURL,

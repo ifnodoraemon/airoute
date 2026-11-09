@@ -137,9 +137,6 @@ export function useConsoleData({ adminUser }) {
         pricingRes.data.forEach((p) => {
           if (p.group_name) grpSet.add(p.group_name.trim().toLowerCase());
         });
-        if (currentUser?.group_name) {
-          grpSet.add(currentUser.group_name.trim().toLowerCase());
-        }
         setPricingGroups(Array.from(grpSet));
       }
       if (routesRes.code === 0) setModelRoutes(routesRes.data || []);

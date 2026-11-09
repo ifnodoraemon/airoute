@@ -110,7 +110,7 @@ func TestPostgresUsageLogRedeliveryIsBilledOnce(t *testing.T) {
 // The clamped deduction uses UPDATE ... RETURNING plus a portable CASE
 // expression and numeric division for the float mirror. PostgreSQL differs from
 // SQLite in all three, so exercise it against a real server.
-func TestPostgresWalletDeductionClampsAtOverdraftFloor(t *testing.T) {
+func TestPostgresWalletDeductionRecordsFullActualCost(t *testing.T) {
 	db, err := OpenDB(testPostgresURL(t))
 	if err != nil {
 		t.Fatalf("open postgres: %v", err)
@@ -138,11 +138,11 @@ func TestPostgresWalletDeductionClampsAtOverdraftFloor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetUserByID: %v", err)
 	}
-	if want := -ToUnits(defaultMaxOverdraftCNY); got.BalanceUnits != want {
+	if want := ToUnits(-8.99); got.BalanceUnits != want {
 		t.Fatalf("balance_units = %d, want the %d floor", got.BalanceUnits, want)
 	}
-	if got.Balance < -defaultMaxOverdraftCNY-1e-9 || got.Balance > -defaultMaxOverdraftCNY+1e-9 {
-		t.Fatalf("balance = %v, want the float mirror at %v", got.Balance, -defaultMaxOverdraftCNY)
+	if got.Balance < -8.99-1e-9 || got.Balance > -8.99+1e-9 {
+		t.Fatalf("balance = %v, want the float mirror at %v", got.Balance, -8.99)
 	}
 }
 

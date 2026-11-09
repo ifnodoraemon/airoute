@@ -27,7 +27,11 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 		req.StreamOptions.IncludeUsage = true
 	}
 
-	topUpQuotaForRequest(c, req)
+	if !topUpQuotaForRequest(c, req) {
+
+		return
+
+	}
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, req)
 	if err != nil {
 		respondUpstreamDispatchError(c, sessionID, req.Model, time.Since(start), err)

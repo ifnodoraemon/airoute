@@ -1,10 +1,10 @@
 const EFFORT_NAMES = {
-  minimal: '极少',
   low: '低',
   medium: '中',
   high: '高',
   xhigh: '很高',
   max: '最高',
+  ultra: '超高（ultra）',
 };
 
 export function effortName(value, isZh = true) {

@@ -25,7 +25,7 @@
 // JSX, no icon imports) and can be tested without a DOM.
 
 export const ADMIN_NAV_GROUPS = [
-  { id: 'monitoring', zh: '监控与分析', en: 'Monitoring', tabs: ['dashboard', 'logs'] },
+  { id: 'monitoring', zh: '监控与分析', en: 'Monitoring', tabs: ['dashboard', 'logs', 'notifications'] },
   { id: 'gateway', zh: '模型网关与调度', en: 'Gateway', tabs: ['models', 'channels'] },
   {
     id: 'billing',
@@ -47,7 +47,7 @@ export const ADMIN_NAV_GROUPS = [
 ];
 
 export const USER_NAV_GROUPS = [
-  { id: 'account', zh: '我的账户', en: 'My Account', tabs: ['dashboard', 'wallet', 'keys'] },
+  { id: 'account', zh: '我的账户', en: 'My Account', tabs: ['dashboard', 'wallet', 'keys', 'notifications'] },
   { id: 'usage', zh: '使用与计费', en: 'Usage & Billing', tabs: ['playground', 'pricing', 'logs'] },
 ];
 

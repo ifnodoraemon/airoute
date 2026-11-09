@@ -37,6 +37,12 @@ Airoute 作为一个企业级、高并发的 AI 路由网关，系统稳定性�
 
 ## 二、 代码组织与文件粒度硬性约束
 
+### 直接演进，不保留旧版兼容层
+
+- 被新模型替代的接口、字段、配置、实现和测试应直接删除或改写，不保留旧接口别名、格式猜测、双读双写或静默回退。
+- 同一次变更必须同步服务端、前端、测试和文档，保证当前实现只有一套明确的契约。
+- 数据库结构和废弃配置通过明确迁移清理；测试夹具缺失当前迁移所需的基础结构时修正夹具，不在业务代码中添加兼容分支。
+
 为了杜绝代码膨胀和难以维护的巨石文件，项目设定了严格的物理代码规模红线：
 
 | 约束项 | 指标要求 | 说明与例外 |
@@ -145,7 +151,7 @@ docker exec airoute-1 /app/airoute skills list
 
 ### 5.1 本地门禁（与 CI 同源）
 
-`.github/workflows/quality-gate.yml` 是"什么算通过"的**唯一定义**，`ci.yml` / `docker.yml` / `release.yml` 都复用它。本地对应命令：
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) 是"什么算通过"的**唯一定义**，`docker.yml` / `release.yml` 复用它。本地对应命令：
 
 ```bash
 # Go 侧：竞态检测 + 全量测试（CI 使用 -race，本地也应如此）
@@ -154,7 +160,7 @@ go test -race -count=1 ./...
 # 真实 PostgreSQL / Redis 集群路径（需要容器，未配置 DSN 时自动跳过）
 make test-integration
 
-# 前端：lint（带告警基线）+ 单元/组件测试 + 构建
+# 前端：lint（零告警）+ 单元/组件测试 + 构建
 cd web && npm run lint && npm run test && npm run build
 ```
 
@@ -198,13 +204,12 @@ sha256sum -c <<< "$(sha256sum file.go)"
 - 前端读取的字段名必须与后端发送的一致。历史上 `PricingManager` 读 `is_currently_off_peak` 而后端发 `is_current_off_peak`，导致离峰折扣列**永远显示原价**且无任何报错。
 - 改名任一侧都必须同时改另一侧，且两侧各有测试守护。
 
-### 5.5 前端告警基线（棘轮，非目标）
+### 5.5 前端 lint 零告警
 
-前端 lint 采用**棘轮**策略：`eslint src --max-warnings N`，N 为当前基线，只允许下降。
+前端 lint 使用 `eslint src --max-warnings 0`，与 `web/package.json` 及 CI 一致。
 
-- 基线只能**收紧**，不得上调。
-- 新增告警会直接使门禁失败——这是刻意设计。
-- 现存告警是**待办清单**，不是可忽略的噪声。清理前先确认它代表的是死代码还是**未接完的功能**；后者应补全而非删除。
+- 新增错误或告警都会使门禁失败，不得放宽限制。
+- 处理未使用标识符前，先确认它代表的是死代码还是尚未接完的功能；后者应补全而非删除。
 
 JSX 中的标识符引用由 `react/jsx-uses-vars` 识别。缺少该规则会让每个仅用于渲染的组件都被误报为未使用变量（曾产生 448 条误报）。
 

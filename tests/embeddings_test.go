@@ -324,7 +324,7 @@ func TestAPI_Embeddings_ForbiddenModel(t *testing.T) {
 			},
 		},
 	}
-	config.SetGlobalConfig(testCfg)
+	useConfigOnlyFixture(t, testCfg)
 
 	dispatcher := router.NewDispatcher(testCfg.Channels)
 	engine := api.SetupRouter(dispatcher, nil)

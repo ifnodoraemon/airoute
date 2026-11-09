@@ -213,7 +213,7 @@ func TestAPI_ChatCompletions_ModelForbidden(t *testing.T) {
 			},
 		},
 	}
-	config.SetGlobalConfig(testCfg)
+	useConfigOnlyFixture(t, testCfg)
 
 	dispatcher := router.NewDispatcher(testCfg.Channels)
 	engine := api.SetupRouter(dispatcher, nil)

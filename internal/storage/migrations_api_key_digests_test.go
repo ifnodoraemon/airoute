@@ -20,6 +20,7 @@ func TestAPIKeyDigestMigrationRewritesHistory(t *testing.T) {
 		t.Fatalf("open raw db: %v", err)
 	}
 	seed := []string{
+		`CREATE TABLE system_settings (key TEXT PRIMARY KEY, value TEXT, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
 		`CREATE TABLE api_keys (
 			id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT UNIQUE NOT NULL, tenant_id TEXT NOT NULL,
 			user_id INTEGER DEFAULT 0, group_name TEXT DEFAULT 'default', allowed_models TEXT,

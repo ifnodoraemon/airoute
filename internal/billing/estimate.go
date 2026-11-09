@@ -43,7 +43,10 @@ func EstimateCostCNY(model, group string, promptTokens, maxCompletionTokens int)
 		maxCompletionTokens = 0
 	}
 
-	tokenCost := float64(promptTokens) * price.PromptPrice
+	// A cache write can cost more than an uncached input token. Reserve the
+	// largest applicable input rate because the provider decides the cache hit.
+	promptRate := max(price.PromptPrice*cacheWritePriceMultiplier, price.CacheReadPrice)
+	tokenCost := float64(promptTokens) * promptRate
 	if maxCompletionTokens > 0 {
 		tokenCost += float64(maxCompletionTokens) * price.CompletionPrice
 	}

@@ -1,3 +1,13 @@
+export const THINKING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
+
+export function validThinkingEffort(value) {
+  return /^[a-z][a-z0-9_-]{0,31}$/.test(value) && !['none', 'auto', 'on', 'off', 'adaptive', 'minimal'].includes(value);
+}
+
+export function selectableThinkingEfforts(efforts) {
+  return (efforts || []).filter(validThinkingEffort);
+}
+
 export function reasoningTokens(usage) {
   const count = usage?.completion_tokens_details?.reasoning_tokens ?? usage?.reasoning_tokens ?? usage?.thoughtsTokenCount;
   return Number.isFinite(count) && count >= 0 ? count : null;
@@ -18,15 +28,15 @@ export function thinkingFromSelection(value) {
 }
 
 export function thinkingOptions(capability, value) {
-  const efforts = capability?.efforts || [];
+  const efforts = selectableThinkingEfforts(capability?.efforts);
   return ['auto', ...(capability?.off ? ['off'] : []),
     ...(capability?.on && (!efforts.length || (value?.mode === 'on' && !value.effort)) ? ['on'] : []), ...efforts];
 }
 
 export function thinkingOptionLabel(value, isZh = true) {
   const labels = isZh
-    ? { auto: '默认', on: '开启', off: '关闭', native: '原生', minimal: '极少', low: '低', medium: '中', high: '高', xhigh: '很高', max: '最高' }
-    : { auto: 'Default', on: 'On', off: 'Off', native: 'Native' };
+    ? { auto: '默认', on: '开启', off: '关闭', native: '上游原生参数', low: '低', medium: '中', high: '高', xhigh: '很高', max: '最高', ultra: '超高（ultra）' }
+    : { auto: 'Default', on: 'On', off: 'Off', native: 'Upstream parameters' };
   return labels[value] || value;
 }
 

@@ -393,14 +393,6 @@ func mcpTransportError(endpoint string, err error) error {
 	return fmt.Errorf("upstream MCP server '%s' connection failed: %w", endpoint, err)
 }
 
-// forwardJSONRPCToolCall calls a tool on an HTTP(S) MCP endpoint, preferring the
-// streamable HTTP transport and falling back to the legacy HTTP/SSE transport
-// when the server signals it does not speak streamable HTTP. It is exported
-// within the package for the historical call site (and tests).
-func forwardJSONRPCToolCall(ctx context.Context, endpoint, toolName string, args map[string]interface{}) (string, bool) {
-	return forwardHTTPMCPToolCall(ctx, "", endpoint, toolName, args)
-}
-
 // forwardHTTPMCPToolCall picks the transport recorded for the server, with a
 // safe cross-transport fallback for setup-level (not tool-level) failures.
 func forwardHTTPMCPToolCall(ctx context.Context, transport, endpoint, toolName string, args map[string]interface{}) (string, bool) {

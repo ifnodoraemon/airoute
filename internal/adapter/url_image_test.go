@@ -1,7 +1,6 @@
 package adapter
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -29,7 +28,7 @@ func TestAnthropicAdapterKeepsURLSourceImage(t *testing.T) {
 		}},
 	}
 
-	canonical, err := NewAnthropicAdapter().ToCanonical(context.Background(), inbound)
+	canonical, err := AnthropicToCanonical(inbound)
 	if err != nil {
 		t.Fatalf("ToCanonical: %v", err)
 	}
@@ -63,7 +62,7 @@ func TestAnthropicAdapterKeepsURLSourceImage(t *testing.T) {
 			},
 		}},
 	}
-	base64Canonical, err := NewAnthropicAdapter().ToCanonical(context.Background(), base64Inbound)
+	base64Canonical, err := AnthropicToCanonical(base64Inbound)
 	if err != nil {
 		t.Fatalf("ToCanonical(base64): %v", err)
 	}
@@ -84,7 +83,7 @@ func TestGeminiAdapterKeepsFileDataURI(t *testing.T) {
 			},
 		}},
 	}
-	canonical, err := NewGeminiAdapter().ToCanonical(context.Background(), req)
+	canonical, err := GeminiToCanonical(req)
 	if err != nil {
 		t.Fatalf("ToCanonical: %v", err)
 	}

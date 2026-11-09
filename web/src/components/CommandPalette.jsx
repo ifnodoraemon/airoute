@@ -1,26 +1,7 @@
+import { paletteNavigation } from '../lib/consoleNavigation';
 import { useState, useEffect, useRef } from 'react';
 import { pushEscapeLayer } from '../lib/escapeLayer';
-import {
-  Search,
-  BarChart3,
-  History,
-  Cpu,
-  Server,
-  DollarSign,
-  Key,
-  ShieldCheck,
-  Wallet,
-  Terminal,
-  Plus,
-  Globe,
-  LogOut,
-  ExternalLink,
-  Zap,
-  CornerDownLeft,
-  X,
-  Sparkles,
-  Coins
-} from 'lucide-react';
+import { Search, Server, Plus, Globe, LogOut, ExternalLink, Zap, CornerDownLeft, X, Sparkles } from 'lucide-react';
 
 export default function CommandPalette({
   isOpen,
@@ -59,22 +40,11 @@ export default function CommandPalette({
   const catModels = isZh ? '挂载模型' : 'Models';
 
   // Build searchable items
-  const navItems = [
-    ...(isAdmin ? [
-      { id: 'nav-dashboard', category: catNav, label: isZh ? '用量与业务概览大盘' : 'Telemetry & SLA Cockpit', icon: BarChart3, action: () => { setCurrentTab('dashboard'); setViewMode('console'); onClose(); } },
-      { id: 'nav-models', category: catNav, label: isZh ? '模型路由与拓扑' : 'Model Routes & Topo', icon: Cpu, action: () => { setCurrentTab('models'); setViewMode('console'); onClose(); } },
-      { id: 'nav-channels', category: catNav, label: isZh ? '上游服务商接入与体检' : 'Upstream Channels & Health', icon: Server, action: () => { setCurrentTab('channels'); setViewMode('console'); onClose(); } },
-      { id: 'nav-reconciliation', category: catNav, label: isZh ? '供应商整体对账与结算' : 'Supplier Reconciliation & Settlement', icon: Coins, action: () => { setCurrentTab('reconciliation'); setViewMode('console'); onClose(); } },
-      { id: 'nav-pricing', category: catNav, label: isZh ? '模型费率与阶梯定价' : 'Model Pricing & Rates', icon: DollarSign, action: () => { setCurrentTab('pricing'); setViewMode('console'); onClose(); } },
-      { id: 'nav-users', category: catNav, label: isZh ? '用户管理' : 'User Management', icon: ShieldCheck, action: () => { setCurrentTab('users'); setViewMode('console'); onClose(); } },
-      { id: 'nav-skills', category: catNav, label: isZh ? 'Skill Hub 智能体技能中心' : 'Skill Hub', icon: Sparkles, action: () => { setCurrentTab('skills'); setViewMode('console'); onClose(); } },
-      { id: 'nav-mcp', category: catNav, label: isZh ? 'MCP 协议广场与连接中心' : 'MCP Plaza & Connectors', icon: Cpu, action: () => { setCurrentTab('mcp'); setViewMode('console'); onClose(); } },
-    ] : []),
-    { id: 'nav-keys', category: catNav, label: isZh ? 'API 访问密钥管理' : 'API Key Management', icon: Key, action: () => { setCurrentTab('keys'); setViewMode('console'); onClose(); } },
-    { id: 'nav-wallet', category: catNav, label: isAdmin ? (isZh ? '卡密生成与充值中心' : 'Card Codes & Billing') : (isZh ? '我的钱包与充值卡密' : 'Wallet & Top-up'), icon: Wallet, action: () => { setCurrentTab('wallet'); setViewMode('console'); onClose(); } },
-    { id: 'nav-logs', category: catNav, label: isZh ? '实时调用日志与对话审计' : 'Audit Logs & Traces', icon: History, action: () => { setCurrentTab('logs'); setViewMode('console'); onClose(); } },
-    { id: 'nav-playground', category: catNav, label: isZh ? '多模态调试演练工作台' : 'Multimodal Playground', icon: Terminal, action: () => { setCurrentTab('playground'); setViewMode('console'); onClose(); } },
-  ];
+  const navItems = paletteNavigation(isZh, isAdmin, catNav, (tab) => {
+    setCurrentTab(tab);
+    setViewMode('console');
+    onClose();
+  });
 
   const quickActionItems = [
     { id: 'act-new-key', category: catAction, label: isZh ? '新建 API 访问密钥' : 'Create API Key', icon: Plus, action: () => { onClose(); setCurrentTab('keys'); onOpenNewKey && onOpenNewKey(); } },

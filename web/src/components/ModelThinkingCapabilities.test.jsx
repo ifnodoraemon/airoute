@@ -47,9 +47,14 @@ it('edits two facts without any adapter catalog, picker or advanced entry', () =
     'open-model': { thinking: { can_disable: false, efforts: ['low', 'xhigh', 'max'] } },
   });
   fireEvent.change(screen.getByLabelText('思考能力模型'), { target: { value: 'closed-model' } });
-  expect(screen.getByLabelText('支持关闭思考')).toBeDisabled();
+  expect(screen.getByLabelText('支持关闭思考')).toBeEnabled();
   expect(screen.getByLabelText('支持档位 medium')).toBeChecked();
-  expect(screen.queryByLabelText('支持档位 max')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('支持档位 max')).not.toBeChecked();
+  fireEvent.click(screen.getByLabelText('支持档位 ultra'));
+  fireEvent.click(screen.getByLabelText('支持关闭思考'));
+  expect(JSON.parse(screen.getByTestId('config').textContent)['closed-model'].thinking).toEqual({
+    can_disable: true, efforts: ['low', 'medium', 'high', 'ultra'],
+  });
 });
 
 it('preserves an empty level set explicitly', () => {
@@ -58,6 +63,15 @@ it('preserves an empty level set explicitly', () => {
   expect(
     JSON.parse(screen.getByTestId('config').textContent)['open-model'].thinking.efforts
   ).toEqual([]);
+});
+
+it('removes minimal from model settings and prevents adding it as a custom level', () => {
+  render(<Harness initial={{ 'open-model': { thinking: { efforts: ['minimal', 'high'] } } }} />);
+  expect(screen.queryByLabelText('支持档位 minimal')).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('自定义思考档位'), { target: { value: 'minimal' } });
+  expect(screen.getByRole('button', { name: '添加' })).toBeDisabled();
+  fireEvent.click(screen.getByLabelText('支持档位 ultra'));
+  expect(JSON.parse(screen.getByTestId('config').textContent)['open-model'].thinking.efforts).toEqual(['high', 'ultra']);
 });
 
 it('uses backend available controls without modifying a managed legacy adapter', () => {

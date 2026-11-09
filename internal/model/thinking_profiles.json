@@ -40,7 +40,6 @@
       "on": true,
       "off": false,
       "efforts": [
-        "minimal",
         "low",
         "medium",
         "high"
@@ -133,12 +132,11 @@
     },
     {
       "id": "gemini-minimal",
-      "label": "Gemini · 支持 minimal",
+      "label": "Gemini Flash · low / medium / high",
       "wire": "gemini-level",
       "on": true,
       "off": false,
       "efforts": [
-        "minimal",
         "low",
         "medium",
         "high"
@@ -203,7 +201,7 @@
     },
     {
       "id": "gemma",
-      "label": "Gemma · high / minimal",
+      "label": "Gemma · high / 可关闭",
       "wire": "gemma",
       "on": true,
       "off": true,
@@ -216,14 +214,17 @@
     },
     {
       "id": "deepseek",
-      "label": "DeepSeek · 开关与强度",
+      "label": "DeepSeek · 开关与强度（部分档位由上游映射）",
       "wire": "deepseek",
       "on": true,
       "off": true,
       "efforts": [
         "low",
+        "medium",
         "high",
-        "max"
+        "xhigh",
+        "max",
+        "ultra"
       ],
       "default_effort": "high",
       "output": "reasoning",
@@ -318,11 +319,13 @@
       "efforts": [
         "low",
         "medium",
-        "high"
+        "high",
+        "xhigh",
+        "max"
       ],
       "default_effort": "high",
       "output": "summary",
-      "source_url": "https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking"
+      "source_url": "https://platform.claude.com/docs/en/build-with-claude/effort"
     },
     {
       "id": "claude-always",
@@ -333,11 +336,13 @@
       "efforts": [
         "low",
         "medium",
-        "high"
+        "high",
+        "xhigh",
+        "max"
       ],
       "default_effort": "high",
       "output": "summary",
-      "source_url": "https://platform.claude.com/docs/en/build-with-claude/thinking-troubleshooting"
+      "source_url": "https://platform.claude.com/docs/en/build-with-claude/effort"
     },
     {
       "id": "gemini-summary",
@@ -444,9 +449,40 @@
       "efforts": [],
       "output": "reasoning",
       "source_url": "https://help.aliyun.com/zh/model-studio/deep-thinking"
+    },
+    {
+      "id": "claude-adaptive-max",
+      "label": "Claude 4.6 · 支持 max",
+      "wire": "claude-adaptive",
+      "on": true,
+      "off": true,
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "max"
+      ],
+      "default_effort": "high",
+      "output": "summary",
+      "source_url": "https://platform.claude.com/docs/en/build-with-claude/effort"
     }
   ],
   "rules": [
+    {
+      "pattern": "(^|/)claude-(opus|sonnet)-5[.-]5",
+      "provider": "anthropic",
+      "profile": "claude-always"
+    },
+    {
+      "pattern": "(^|/)claude-.*4[-.]6",
+      "provider": "anthropic",
+      "profile": "claude-adaptive-max"
+    },
+    {
+      "pattern": "(^|/)claude-haiku-5[.-]5",
+      "provider": "anthropic",
+      "profile": "claude-adaptive"
+    },
     {
       "pattern": "(^|/)deepseek-v4[.-]1",
       "provider": "vllm|gpustack",
@@ -499,7 +535,7 @@
     },
     {
       "pattern": "qwen3",
-      "provider": "vllm|sglang",
+      "provider": "vllm|sglang|gpustack",
       "profile": "vllm-qwen"
     },
     {

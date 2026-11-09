@@ -197,7 +197,7 @@ func TestMCPChatRecordsPricedUsageAndSettles(t *testing.T) {
 		storage.GlobalAsyncLogger = prevLogger
 	}()
 
-	user, keyRec := seedMCPUserKey(t, repo, "sk-mcp-priced", "active", 10, nil, 100, 0)
+	user, keyRec := seedMCPUserKey(t, repo, "sk-mcp-priced", "active", 100, nil, 100, 0)
 
 	ctx := context.WithValue(context.Background(), contextKeyCallerKey, keyRec.Key)
 	out, isErr, handled := h.executeRoutingTools(ctx, "airoute_chat", map[string]interface{}{

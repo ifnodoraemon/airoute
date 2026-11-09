@@ -1,0 +1,2051 @@
+{
+  "verified_at": "2026-11-06T16:14:43.380630+08:00",
+  "baseline": {
+    "commit": "dd61f37",
+    "initial_worktree_entries": 90,
+    "existing_files_in_snapshot": 1288
+  },
+  "completed": [
+    "D01",
+    "D02",
+    "D03",
+    "D04",
+    "D05",
+    "D06",
+    "R01",
+    "R02",
+    "R03",
+    "R04",
+    "R05",
+    "R06"
+  ],
+  "line_changes": {
+    "production": {
+      "files": 236,
+      "before": 26581,
+      "after": 28447,
+      "net": 1866
+    },
+    "tests": {
+      "files": 17,
+      "before": 1417,
+      "after": 1819,
+      "net": 402
+    },
+    "counting": "cmd/, internal/, web/src/; Go/JS/JSX; exclude docs, fixtures, generated assets; compare implementation-start workspace backup"
+  },
+  "hotspots": [
+    {
+      "path": "web/src/App.jsx",
+      "before": 1706,
+      "after": 14
+    },
+    {
+      "path": "web/src/components/DashboardView.jsx",
+      "before": 1875,
+      "after": 141
+    },
+    {
+      "path": "web/src/components/PlaygroundView.jsx",
+      "before": 1859,
+      "after": 163
+    },
+    {
+      "path": "web/src/components/PricingManager.jsx",
+      "before": 1831,
+      "after": 201
+    },
+    {
+      "path": "web/src/components/McpIntegrationView.jsx",
+      "before": 1636,
+      "after": 148
+    },
+    {
+      "path": "web/src/components/AiCopilot.jsx",
+      "before": 1383,
+      "after": 159
+    },
+    {
+      "path": "internal/api/common.go",
+      "before": 1052,
+      "after": 85
+    },
+    {
+      "path": "internal/model/response.go",
+      "before": 747,
+      "after": 160
+    },
+    {
+      "path": "internal/middleware/auth.go",
+      "before": 687,
+      "after": 130
+    },
+    {
+      "path": "internal/provider/thinking.go",
+      "before": 530,
+      "after": 138
+    },
+    {
+      "path": "internal/storage/async_logger.go",
+      "before": 727,
+      "after": 198
+    },
+    {
+      "path": "internal/storage/db.go",
+      "before": 627,
+      "after": 230
+    },
+    {
+      "path": "cmd/airoute/server.go",
+      "before": 561,
+      "after": 58
+    },
+    {
+      "path": "internal/storage/repo_timeseries.go",
+      "before": 432,
+      "after": 136
+    },
+    {
+      "path": "internal/storage/repo_reconciliation.go",
+      "before": 417,
+      "after": 37
+    }
+  ],
+  "source_changes": [
+    {
+      "path": "cmd/airoute/server.go",
+      "before": 561,
+      "after": 58,
+      "test": false
+    },
+    {
+      "path": "cmd/airoute/server_config.go",
+      "before": 0,
+      "after": 120,
+      "test": false
+    },
+    {
+      "path": "cmd/airoute/server_http.go",
+      "before": 0,
+      "after": 162,
+      "test": false
+    },
+    {
+      "path": "cmd/airoute/server_seed.go",
+      "before": 0,
+      "after": 117,
+      "test": false
+    },
+    {
+      "path": "cmd/airoute/server_services.go",
+      "before": 0,
+      "after": 136,
+      "test": false
+    },
+    {
+      "path": "cmd/airoute/server_shutdown.go",
+      "before": 0,
+      "after": 43,
+      "test": false
+    },
+    {
+      "path": "internal/adapter/adapter.go",
+      "before": 52,
+      "after": 0,
+      "test": false
+    },
+    {
+      "path": "internal/adapter/adapter_test.go",
+      "before": 280,
+      "after": 259,
+      "test": true
+    },
+    {
+      "path": "internal/adapter/anthropic.go",
+      "before": 296,
+      "after": 59,
+      "test": false
+    },
+    {
+      "path": "internal/adapter/anthropic_content.go",
+      "before": 0,
+      "after": 141,
+      "test": false
+    },
+    {
+      "path": "internal/adapter/anthropic_tools.go",
+      "before": 0,
+      "after": 85,
+      "test": false
+    },
+    {
+      "path": "internal/adapter/gemini.go",
+      "before": 280,
+      "after": 75,
+      "test": false
+    },
+    {
+      "path": "internal/adapter/gemini_content.go",
+      "before": 0,
+      "after": 146,
+      "test": false
+    },
+    {
+      "path": "internal/adapter/gemini_output.go",
+      "before": 0,
+      "after": 89,
+      "test": false
+    },
+    {
+      "path": "internal/adapter/gemini_protocol_test.go",
+      "before": 38,
+      "after": 37,
+      "test": true
+    },
+    {
+      "path": "internal/adapter/p2_gemini_tool_ids_test.go",
+      "before": 88,
+      "after": 87,
+      "test": true
+    },
+    {
+      "path": "internal/adapter/url_image_test.go",
+      "before": 103,
+      "after": 102,
+      "test": true
+    },
+    {
+      "path": "internal/api/audit_status.go",
+      "before": 0,
+      "after": 63,
+      "test": false
+    },
+    {
+      "path": "internal/api/common.go",
+      "before": 1052,
+      "after": 85,
+      "test": false
+    },
+    {
+      "path": "internal/api/gemini_inbound.go",
+      "before": 222,
+      "after": 214,
+      "test": false
+    },
+    {
+      "path": "internal/api/handler.go",
+      "before": 175,
+      "after": 157,
+      "test": false
+    },
+    {
+      "path": "internal/api/inbound_anthropic.go",
+      "before": 426,
+      "after": 422,
+      "test": false
+    },
+    {
+      "path": "internal/api/mcp_auth_test.go",
+      "before": 114,
+      "after": 114,
+      "test": true
+    },
+    {
+      "path": "internal/api/mcp_client.go",
+      "before": 441,
+      "after": 433,
+      "test": false
+    },
+    {
+      "path": "internal/api/mcp_client_http_test.go",
+      "before": 414,
+      "after": 414,
+      "test": true
+    },
+    {
+      "path": "internal/api/mcp_handler.go",
+      "before": 419,
+      "after": 404,
+      "test": false
+    },
+    {
+      "path": "internal/api/models_handler.go",
+      "before": 81,
+      "after": 63,
+      "test": false
+    },
+    {
+      "path": "internal/api/ops_handler.go",
+      "before": 251,
+      "after": 243,
+      "test": false
+    },
+    {
+      "path": "internal/api/readiness_test.go",
+      "before": 136,
+      "after": 144,
+      "test": true
+    },
+    {
+      "path": "internal/api/request_identity.go",
+      "before": 0,
+      "after": 66,
+      "test": false
+    },
+    {
+      "path": "internal/api/responses_handler.go",
+      "before": 266,
+      "after": 242,
+      "test": false
+    },
+    {
+      "path": "internal/api/upstream_errors.go",
+      "before": 0,
+      "after": 233,
+      "test": false
+    },
+    {
+      "path": "internal/api/usage_currency.go",
+      "before": 0,
+      "after": 45,
+      "test": false
+    },
+    {
+      "path": "internal/api/usage_observation.go",
+      "before": 0,
+      "after": 88,
+      "test": false
+    },
+    {
+      "path": "internal/api/usage_prepare.go",
+      "before": 0,
+      "after": 105,
+      "test": false
+    },
+    {
+      "path": "internal/api/usage_pricing.go",
+      "before": 0,
+      "after": 76,
+      "test": false
+    },
+    {
+      "path": "internal/api/usage_record.go",
+      "before": 0,
+      "after": 141,
+      "test": false
+    },
+    {
+      "path": "internal/api/usage_record_types.go",
+      "before": 0,
+      "after": 46,
+      "test": false
+    },
+    {
+      "path": "internal/api/usage_resolution.go",
+      "before": 0,
+      "after": 103,
+      "test": false
+    },
+    {
+      "path": "internal/api/usage_tokens.go",
+      "before": 0,
+      "after": 121,
+      "test": false
+    },
+    {
+      "path": "internal/middleware/auth.go",
+      "before": 687,
+      "after": 130,
+      "test": false
+    },
+    {
+      "path": "internal/middleware/auth_account.go",
+      "before": 0,
+      "after": 83,
+      "test": false
+    },
+    {
+      "path": "internal/middleware/auth_audit.go",
+      "before": 0,
+      "after": 83,
+      "test": false
+    },
+    {
+      "path": "internal/middleware/auth_key.go",
+      "before": 0,
+      "after": 140,
+      "test": false
+    },
+    {
+      "path": "internal/middleware/auth_key_refresh.go",
+      "before": 0,
+      "after": 52,
+      "test": false
+    },
+    {
+      "path": "internal/middleware/auth_quota.go",
+      "before": 0,
+      "after": 177,
+      "test": false
+    },
+    {
+      "path": "internal/middleware/auth_readiness.go",
+      "before": 0,
+      "after": 53,
+      "test": false
+    },
+    {
+      "path": "internal/model/response.go",
+      "before": 747,
+      "after": 160,
+      "test": false
+    },
+    {
+      "path": "internal/model/response_content.go",
+      "before": 0,
+      "after": 132,
+      "test": false
+    },
+    {
+      "path": "internal/model/response_history.go",
+      "before": 0,
+      "after": 74,
+      "test": false
+    },
+    {
+      "path": "internal/model/response_input.go",
+      "before": 0,
+      "after": 191,
+      "test": false
+    },
+    {
+      "path": "internal/model/response_output.go",
+      "before": 0,
+      "after": 118,
+      "test": false
+    },
+    {
+      "path": "internal/model/response_tools_conversion.go",
+      "before": 0,
+      "after": 116,
+      "test": false
+    },
+    {
+      "path": "internal/provider/thinking.go",
+      "before": 530,
+      "after": 138,
+      "test": false
+    },
+    {
+      "path": "internal/provider/thinking_anthropic.go",
+      "before": 0,
+      "after": 32,
+      "test": false
+    },
+    {
+      "path": "internal/provider/thinking_gemini.go",
+      "before": 0,
+      "after": 64,
+      "test": false
+    },
+    {
+      "path": "internal/provider/thinking_intent.go",
+      "before": 0,
+      "after": 120,
+      "test": false
+    },
+    {
+      "path": "internal/provider/thinking_native.go",
+      "before": 0,
+      "after": 110,
+      "test": false
+    },
+    {
+      "path": "internal/provider/thinking_test.go",
+      "before": 103,
+      "after": 104,
+      "test": true
+    },
+    {
+      "path": "internal/provider/thinking_wire.go",
+      "before": 0,
+      "after": 141,
+      "test": false
+    },
+    {
+      "path": "internal/provider/thinking_wire_native.go",
+      "before": 0,
+      "after": 64,
+      "test": false
+    },
+    {
+      "path": "internal/provider/thinking_wire_template.go",
+      "before": 0,
+      "after": 54,
+      "test": false
+    },
+    {
+      "path": "internal/router/dispatcher_modality_unary.go",
+      "before": 240,
+      "after": 112,
+      "test": false
+    },
+    {
+      "path": "internal/router/dispatcher_unary_attempt.go",
+      "before": 0,
+      "after": 82,
+      "test": false
+    },
+    {
+      "path": "internal/storage/api_key_identity.go",
+      "before": 0,
+      "after": 93,
+      "test": false
+    },
+    {
+      "path": "internal/storage/async_logger.go",
+      "before": 727,
+      "after": 198,
+      "test": false
+    },
+    {
+      "path": "internal/storage/async_logger_local.go",
+      "before": 0,
+      "after": 97,
+      "test": false
+    },
+    {
+      "path": "internal/storage/async_logger_redis.go",
+      "before": 0,
+      "after": 125,
+      "test": false
+    },
+    {
+      "path": "internal/storage/async_logger_spill.go",
+      "before": 0,
+      "after": 112,
+      "test": false
+    },
+    {
+      "path": "internal/storage/async_logger_stream.go",
+      "before": 0,
+      "after": 90,
+      "test": false
+    },
+    {
+      "path": "internal/storage/async_logger_stream_batch.go",
+      "before": 0,
+      "after": 70,
+      "test": false
+    },
+    {
+      "path": "internal/storage/async_logger_stream_recovery.go",
+      "before": 0,
+      "after": 117,
+      "test": false
+    },
+    {
+      "path": "internal/storage/db.go",
+      "before": 627,
+      "after": 230,
+      "test": false
+    },
+    {
+      "path": "internal/storage/db_checkpoint.go",
+      "before": 0,
+      "after": 58,
+      "test": false
+    },
+    {
+      "path": "internal/storage/db_dsn.go",
+      "before": 0,
+      "after": 41,
+      "test": false
+    },
+    {
+      "path": "internal/storage/db_open.go",
+      "before": 0,
+      "after": 207,
+      "test": false
+    },
+    {
+      "path": "internal/storage/db_postgres.go",
+      "before": 0,
+      "after": 59,
+      "test": false
+    },
+    {
+      "path": "internal/storage/db_sql.go",
+      "before": 0,
+      "after": 90,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_channel_reads.go",
+      "before": 0,
+      "after": 120,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_channels.go",
+      "before": 361,
+      "after": 234,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_key_auth.go",
+      "before": 0,
+      "after": 68,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_key_identity.go",
+      "before": 0,
+      "after": 72,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_key_reads.go",
+      "before": 0,
+      "after": 116,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_key_scan.go",
+      "before": 0,
+      "after": 18,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_key_writes.go",
+      "before": 0,
+      "after": 142,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_keys.go",
+      "before": 631,
+      "after": 146,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_price_scan.go",
+      "before": 0,
+      "after": 14,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_pricing.go",
+      "before": 287,
+      "after": 277,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_reconciliation.go",
+      "before": 417,
+      "after": 37,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_reconciliation_channels.go",
+      "before": 0,
+      "after": 51,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_reconciliation_models.go",
+      "before": 0,
+      "after": 51,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_reconciliation_query.go",
+      "before": 0,
+      "after": 83,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_reconciliation_scan.go",
+      "before": 0,
+      "after": 97,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_reconciliation_summary.go",
+      "before": 0,
+      "after": 57,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_reconciliation_types.go",
+      "before": 0,
+      "after": 88,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_scan_contract_test.go",
+      "before": 0,
+      "after": 145,
+      "test": true
+    },
+    {
+      "path": "internal/storage/repo_scan_postgres_integration_test.go",
+      "before": 0,
+      "after": 15,
+      "test": true
+    },
+    {
+      "path": "internal/storage/repo_scanner.go",
+      "before": 0,
+      "after": 4,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_timeseries.go",
+      "before": 432,
+      "after": 136,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_timeseries_buckets.go",
+      "before": 0,
+      "after": 103,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_timeseries_cache.go",
+      "before": 0,
+      "after": 51,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_timeseries_latency.go",
+      "before": 0,
+      "after": 80,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_timeseries_modalities.go",
+      "before": 0,
+      "after": 52,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_timeseries_rates.go",
+      "before": 0,
+      "after": 66,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_user_balance.go",
+      "before": 0,
+      "after": 107,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_user_scan.go",
+      "before": 0,
+      "after": 12,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_user_writes.go",
+      "before": 0,
+      "after": 219,
+      "test": false
+    },
+    {
+      "path": "internal/storage/repo_users.go",
+      "before": 448,
+      "after": 120,
+      "test": false
+    },
+    {
+      "path": "internal/storage/usage_spill_replay_test.go",
+      "before": 141,
+      "after": 151,
+      "test": true
+    },
+    {
+      "path": "internal/telemetry/metrics_prometheus.go",
+      "before": 295,
+      "after": 249,
+      "test": false
+    },
+    {
+      "path": "internal/telemetry/metrics_prometheus_contract_test.go",
+      "before": 0,
+      "after": 70,
+      "test": true
+    },
+    {
+      "path": "web/src/App.jsx",
+      "before": 1706,
+      "after": 14,
+      "test": false
+    },
+    {
+      "path": "web/src/api/mutation.js",
+      "before": 0,
+      "after": 12,
+      "test": false
+    },
+    {
+      "path": "web/src/api/mutation.test.js",
+      "before": 0,
+      "after": 30,
+      "test": true
+    },
+    {
+      "path": "web/src/components/AiCopilot.jsx",
+      "before": 1383,
+      "after": 159,
+      "test": false
+    },
+    {
+      "path": "web/src/components/ChannelFilters.jsx",
+      "before": 0,
+      "after": 89,
+      "test": false
+    },
+    {
+      "path": "web/src/components/ChannelTable.jsx",
+      "before": 0,
+      "after": 296,
+      "test": false
+    },
+    {
+      "path": "web/src/components/ChannelsView.jsx",
+      "before": 721,
+      "after": 201,
+      "test": false
+    },
+    {
+      "path": "web/src/components/CommandPalette.jsx",
+      "before": 271,
+      "after": 239,
+      "test": false
+    },
+    {
+      "path": "web/src/components/CopilotHeader.jsx",
+      "before": 0,
+      "after": 90,
+      "test": false
+    },
+    {
+      "path": "web/src/components/CopilotMessages.jsx",
+      "before": 0,
+      "after": 210,
+      "test": false
+    },
+    {
+      "path": "web/src/components/CopilotWindow.jsx",
+      "before": 0,
+      "after": 156,
+      "test": false
+    },
+    {
+      "path": "web/src/components/DashboardAttention.jsx",
+      "before": 0,
+      "after": 80,
+      "test": false
+    },
+    {
+      "path": "web/src/components/DashboardHeader.jsx",
+      "before": 0,
+      "after": 80,
+      "test": false
+    },
+    {
+      "path": "web/src/components/DashboardKpis.jsx",
+      "before": 0,
+      "after": 72,
+      "test": false
+    },
+    {
+      "path": "web/src/components/DashboardLiveMetrics.jsx",
+      "before": 0,
+      "after": 248,
+      "test": false
+    },
+    {
+      "path": "web/src/components/DashboardTraffic.jsx",
+      "before": 0,
+      "after": 108,
+      "test": false
+    },
+    {
+      "path": "web/src/components/DashboardTrend.jsx",
+      "before": 0,
+      "after": 239,
+      "test": false
+    },
+    {
+      "path": "web/src/components/DashboardUpstreams.jsx",
+      "before": 0,
+      "after": 127,
+      "test": false
+    },
+    {
+      "path": "web/src/components/DashboardView.jsx",
+      "before": 1875,
+      "after": 141,
+      "test": false
+    },
+    {
+      "path": "web/src/components/DashboardWorkloads.jsx",
+      "before": 0,
+      "after": 204,
+      "test": false
+    },
+    {
+      "path": "web/src/components/McpConfigModal.jsx",
+      "before": 0,
+      "after": 143,
+      "test": false
+    },
+    {
+      "path": "web/src/components/McpHeader.jsx",
+      "before": 0,
+      "after": 56,
+      "test": false
+    },
+    {
+      "path": "web/src/components/McpIntegrationView.jsx",
+      "before": 1636,
+      "after": 148,
+      "test": false
+    },
+    {
+      "path": "web/src/components/McpMetrics.jsx",
+      "before": 0,
+      "after": 83,
+      "test": false
+    },
+    {
+      "path": "web/src/components/McpProbeArguments.jsx",
+      "before": 0,
+      "after": 61,
+      "test": false
+    },
+    {
+      "path": "web/src/components/McpProbeModal.jsx",
+      "before": 0,
+      "after": 136,
+      "test": false
+    },
+    {
+      "path": "web/src/components/McpProbeSelection.jsx",
+      "before": 0,
+      "after": 101,
+      "test": false
+    },
+    {
+      "path": "web/src/components/McpProbeTrace.jsx",
+      "before": 0,
+      "after": 105,
+      "test": false
+    },
+    {
+      "path": "web/src/components/McpRegistrationModal.jsx",
+      "before": 0,
+      "after": 165,
+      "test": false
+    },
+    {
+      "path": "web/src/components/McpServerCards.jsx",
+      "before": 0,
+      "after": 120,
+      "test": false
+    },
+    {
+      "path": "web/src/components/PlaygroundChatBody.jsx",
+      "before": 0,
+      "after": 236,
+      "test": false
+    },
+    {
+      "path": "web/src/components/PlaygroundHyperparameters.jsx",
+      "before": 0,
+      "after": 109,
+      "test": false
+    },
+    {
+      "path": "web/src/components/PlaygroundImageControls.jsx",
+      "before": 0,
+      "after": 55,
+      "test": false
+    },
+    {
+      "path": "web/src/components/PlaygroundModalityBar.jsx",
+      "before": 0,
+      "after": 68,
+      "test": false
+    },
+    {
+      "path": "web/src/components/PlaygroundParameters.jsx",
+      "before": 0,
+      "after": 253,
+      "test": false
+    },
+    {
+      "path": "web/src/components/PlaygroundPersistence.test.jsx",
+      "before": 0,
+      "after": 30,
+      "test": true
+    },
+    {
+      "path": "web/src/components/PlaygroundResultHeader.jsx",
+      "before": 0,
+      "after": 75,
+      "test": false
+    },
+    {
+      "path": "web/src/components/PlaygroundResults.jsx",
+      "before": 0,
+      "after": 188,
+      "test": false
+    },
+    {
+      "path": "web/src/components/PlaygroundSpeechControls.jsx",
+      "before": 0,
+      "after": 57,
+      "test": false
+    },
+    {
+      "path": "web/src/components/PlaygroundView.jsx",
+      "before": 1859,
+      "after": 163,
+      "test": false
+    },
+    {
+      "path": "web/src/components/PricingEditor.jsx",
+      "before": 0,
+      "after": 255,
+      "test": false
+    },
+    {
+      "path": "web/src/components/PricingGroupTiers.jsx",
+      "before": 0,
+      "after": 246,
+      "test": false
+    },
+    {
+      "path": "web/src/components/PricingManager.jsx",
+      "before": 1831,
+      "after": 201,
+      "test": false
+    },
+    {
+      "path": "web/src/components/PricingModels.jsx",
+      "before": 0,
+      "after": 171,
+      "test": false
+    },
+    {
+      "path": "web/src/components/PricingNavigation.jsx",
+      "before": 0,
+      "after": 56,
+      "test": false
+    },
+    {
+      "path": "web/src/components/PricingOffPeakFields.jsx",
+      "before": 0,
+      "after": 164,
+      "test": false
+    },
+    {
+      "path": "web/src/components/PricingRateTable.jsx",
+      "before": 0,
+      "after": 241,
+      "test": false
+    },
+    {
+      "path": "web/src/components/SkillCards.jsx",
+      "before": 0,
+      "after": 139,
+      "test": false
+    },
+    {
+      "path": "web/src/components/SkillClientGuide.jsx",
+      "before": 0,
+      "after": 245,
+      "test": false
+    },
+    {
+      "path": "web/src/components/SkillCreateModal.jsx",
+      "before": 0,
+      "after": 153,
+      "test": false
+    },
+    {
+      "path": "web/src/components/SkillHubView.jsx",
+      "before": 1157,
+      "after": 231,
+      "test": false
+    },
+    {
+      "path": "web/src/components/SkillManifestModal.jsx",
+      "before": 0,
+      "after": 259,
+      "test": false
+    },
+    {
+      "path": "web/src/components/UserCreateModal.jsx",
+      "before": 0,
+      "after": 192,
+      "test": false
+    },
+    {
+      "path": "web/src/components/UserFilters.jsx",
+      "before": 0,
+      "after": 66,
+      "test": false
+    },
+    {
+      "path": "web/src/components/UserManagementView.jsx",
+      "before": 1209,
+      "after": 193,
+      "test": false
+    },
+    {
+      "path": "web/src/components/UserPasswordModal.jsx",
+      "before": 0,
+      "after": 135,
+      "test": false
+    },
+    {
+      "path": "web/src/components/UserQuotaModal.jsx",
+      "before": 0,
+      "after": 131,
+      "test": false
+    },
+    {
+      "path": "web/src/components/UserTable.jsx",
+      "before": 0,
+      "after": 199,
+      "test": false
+    },
+    {
+      "path": "web/src/components/WalletGenerateModal.jsx",
+      "before": 0,
+      "after": 98,
+      "test": false
+    },
+    {
+      "path": "web/src/components/WalletManagementView.jsx",
+      "before": 915,
+      "after": 121,
+      "test": false
+    },
+    {
+      "path": "web/src/components/WalletOverview.jsx",
+      "before": 0,
+      "after": 262,
+      "test": false
+    },
+    {
+      "path": "web/src/components/WalletRedemptionCards.jsx",
+      "before": 0,
+      "after": 102,
+      "test": false
+    },
+    {
+      "path": "web/src/console/ConsoleApplication.jsx",
+      "before": 0,
+      "after": 224,
+      "test": false
+    },
+    {
+      "path": "web/src/console/ConsoleContent.jsx",
+      "before": 0,
+      "after": 274,
+      "test": false
+    },
+    {
+      "path": "web/src/console/ConsoleContext.jsx",
+      "before": 0,
+      "after": 7,
+      "test": false
+    },
+    {
+      "path": "web/src/console/ConsoleDashboard.jsx",
+      "before": 0,
+      "after": 43,
+      "test": false
+    },
+    {
+      "path": "web/src/console/ConsoleDialogs.jsx",
+      "before": 0,
+      "after": 190,
+      "test": false
+    },
+    {
+      "path": "web/src/console/ConsoleHeader.jsx",
+      "before": 0,
+      "after": 115,
+      "test": false
+    },
+    {
+      "path": "web/src/console/ConsoleLanding.jsx",
+      "before": 0,
+      "after": 63,
+      "test": false
+    },
+    {
+      "path": "web/src/console/ConsoleSidebar.jsx",
+      "before": 0,
+      "after": 157,
+      "test": false
+    },
+    {
+      "path": "web/src/console/ConsoleStatus.jsx",
+      "before": 0,
+      "after": 61,
+      "test": false
+    },
+    {
+      "path": "web/src/console/consoleComponents.jsx",
+      "before": 0,
+      "after": 78,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useChannelActions.create.test.jsx",
+      "before": 0,
+      "after": 19,
+      "test": true
+    },
+    {
+      "path": "web/src/hooks/useChannelActions.js",
+      "before": 437,
+      "after": 272,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useChannelForm.js",
+      "before": 0,
+      "after": 47,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useChannelProbe.js",
+      "before": 0,
+      "after": 54,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useChannelSave.js",
+      "before": 0,
+      "after": 84,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useChannelTable.js",
+      "before": 0,
+      "after": 156,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useConsoleApiSession.js",
+      "before": 0,
+      "after": 22,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useConsoleIdentity.js",
+      "before": 0,
+      "after": 61,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useConsoleLogFilters.js",
+      "before": 0,
+      "after": 26,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useConsoleLogPolling.js",
+      "before": 0,
+      "after": 102,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useConsoleLogout.js",
+      "before": 0,
+      "after": 18,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useConsoleNavigation.js",
+      "before": 0,
+      "after": 85,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useConsoleSessionEffects.js",
+      "before": 0,
+      "after": 114,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useConsoleWorkspace.js",
+      "before": 0,
+      "after": 40,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useConsoleWorkspaceData.js",
+      "before": 0,
+      "after": 21,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useConsoleWorkspaceReset.js",
+      "before": 0,
+      "after": 38,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useConsoleWorkspaceUi.js",
+      "before": 0,
+      "after": 51,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useCopilotDrag.js",
+      "before": 0,
+      "after": 196,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useCopilotGeneration.js",
+      "before": 0,
+      "after": 88,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useCopilotHarness.js",
+      "before": 0,
+      "after": 163,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useCopilotHistory.js",
+      "before": 0,
+      "after": 36,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useCopilotLifecycle.js",
+      "before": 0,
+      "after": 48,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useCopilotModels.js",
+      "before": 0,
+      "after": 82,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useCopilotState.js",
+      "before": 0,
+      "after": 27,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useDashboardActions.js",
+      "before": 0,
+      "after": 91,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useDashboardData.js",
+      "before": 0,
+      "after": 153,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useDashboardSummary.js",
+      "before": 0,
+      "after": 270,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useDashboardTraffic.js",
+      "before": 0,
+      "after": 151,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useKeyActions.js",
+      "before": 286,
+      "after": 271,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useMcpPresentation.js",
+      "before": 0,
+      "after": 110,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useMcpProbe.js",
+      "before": 0,
+      "after": 161,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useMcpServers.js",
+      "before": 0,
+      "after": 161,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useMcpState.js",
+      "before": 0,
+      "after": 100,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/usePlaygroundCatalog.js",
+      "before": 0,
+      "after": 81,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/usePlaygroundChat.js",
+      "before": 0,
+      "after": 79,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/usePlaygroundMedia.js",
+      "before": 0,
+      "after": 249,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/usePlaygroundPrompts.js",
+      "before": 0,
+      "after": 75,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/usePlaygroundRequests.js",
+      "before": 0,
+      "after": 162,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/usePlaygroundState.js",
+      "before": 0,
+      "after": 138,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/usePricingData.js",
+      "before": 0,
+      "after": 61,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/usePricingEditor.js",
+      "before": 0,
+      "after": 135,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/usePricingGroups.js",
+      "before": 0,
+      "after": 78,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/usePricingModels.js",
+      "before": 0,
+      "after": 104,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/usePricingMutations.js",
+      "before": 0,
+      "after": 127,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/usePricingState.js",
+      "before": 0,
+      "after": 73,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useSkillActions.js",
+      "before": 0,
+      "after": 149,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useSkillState.js",
+      "before": 0,
+      "after": 52,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useUserCreation.js",
+      "before": 0,
+      "after": 72,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useUserCredentials.js",
+      "before": 0,
+      "after": 78,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useUserData.js",
+      "before": 0,
+      "after": 62,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useUserForms.js",
+      "before": 0,
+      "after": 115,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useUserGovernance.js",
+      "before": 0,
+      "after": 110,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useWalletActions.js",
+      "before": 0,
+      "after": 135,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useWalletData.js",
+      "before": 0,
+      "after": 185,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useWalletPresentation.jsx",
+      "before": 0,
+      "after": 44,
+      "test": false
+    },
+    {
+      "path": "web/src/hooks/useWalletState.js",
+      "before": 0,
+      "after": 63,
+      "test": false
+    },
+    {
+      "path": "web/src/lib/channelProbeResult.js",
+      "before": 0,
+      "after": 65,
+      "test": false
+    },
+    {
+      "path": "web/src/lib/consoleNavigation.js",
+      "before": 0,
+      "after": 42,
+      "test": false
+    },
+    {
+      "path": "web/src/lib/consoleRoute.js",
+      "before": 34,
+      "after": 33,
+      "test": false
+    },
+    {
+      "path": "web/src/lib/copilotIteration.js",
+      "before": 0,
+      "after": 37,
+      "test": false
+    },
+    {
+      "path": "web/src/lib/copilotIteration.test.js",
+      "before": 0,
+      "after": 47,
+      "test": true
+    },
+    {
+      "path": "web/src/lib/copilotResponse.js",
+      "before": 0,
+      "after": 38,
+      "test": false
+    },
+    {
+      "path": "web/src/lib/copilotStream.js",
+      "before": 0,
+      "after": 63,
+      "test": false
+    },
+    {
+      "path": "web/src/lib/dashboardAttention.js",
+      "before": 0,
+      "after": 92,
+      "test": false
+    },
+    {
+      "path": "web/src/lib/mcpToolMetadata.js",
+      "before": 0,
+      "after": 185,
+      "test": false
+    },
+    {
+      "path": "web/src/lib/playgroundModelRun.js",
+      "before": 0,
+      "after": 95,
+      "test": false
+    },
+    {
+      "path": "web/src/lib/pricingSlots.js",
+      "before": 0,
+      "after": 110,
+      "test": false
+    },
+    {
+      "path": "web/src/lib/providerPresets.js",
+      "before": 310,
+      "after": 304,
+      "test": false
+    },
+    {
+      "path": "web/src/lib/sseLines.js",
+      "before": 0,
+      "after": 34,
+      "test": false
+    },
+    {
+      "path": "web/src/lib/sseLines.test.js",
+      "before": 0,
+      "after": 51,
+      "test": true
+    }
+  ],
+  "checks": {
+    "frontend": {
+      "node": "22.23.4",
+      "lint_warnings": 0,
+      "test_files": 92,
+      "tests_passed": 804,
+      "production_build": "passed"
+    },
+    "go": {
+      "version": "1.26.1",
+      "race": "passed",
+      "tested_packages": 16,
+      "vet": "passed",
+      "static_gateway_build": "passed",
+      "module_verify": "passed"
+    },
+    "integration": {
+      "postgres": "16-alpine",
+      "redis": "7-alpine",
+      "race": "passed",
+      "postgres_projection_contract": "passed",
+      "environment": "isolated Docker Compose project"
+    },
+    "e2e": {
+      "top_level_suites": 7,
+      "result": "passed",
+      "environment": "compiled Go e2e suite inside isolated gateway container, loopback HTTP, PostgreSQL and Redis",
+      "graceful_shutdown_exit_code": 0
+    },
+    "release_metadata": "passed",
+    "release_script_tests": "passed",
+    "helm_lint": "passed"
+  },
+  "mutations": [
+    {
+      "name": "metrics-uint64-precision",
+      "command": [
+        "go",
+        "test",
+        "-count=1",
+        "./internal/telemetry",
+        "-run",
+        "TestPrometheusOutputContract"
+      ],
+      "sources_before": {
+        "internal/telemetry/metrics_prometheus.go": "78adb3a90da4bd8b608dca731af526028cdba08fedea00efb1eb59c30113daf9"
+      },
+      "exit_code": 1,
+      "caught": true,
+      "restored": true
+    },
+    {
+      "name": "key-money-decoding",
+      "command": [
+        "go",
+        "test",
+        "-count=1",
+        "./internal/storage",
+        "-run",
+        "^TestRepositoryReadProjections$"
+      ],
+      "sources_before": {
+        "internal/storage/repo_key_scan.go": "2d9cd393fc2d827896821b54930df7d80d8520bdffc0c623be6489997ce2af9e"
+      },
+      "exit_code": 1,
+      "caught": true,
+      "restored": true
+    },
+    {
+      "name": "user-money-decoding",
+      "command": [
+        "go",
+        "test",
+        "-count=1",
+        "./internal/storage",
+        "-run",
+        "^TestRepositoryReadProjections$"
+      ],
+      "sources_before": {
+        "internal/storage/repo_user_scan.go": "99edb6e0b7c1b33faf42e581daac780f20e9d5ea78f345ad2e53adf539f17deb"
+      },
+      "exit_code": 1,
+      "caught": true,
+      "restored": true
+    },
+    {
+      "name": "price-boolean-decoding",
+      "command": [
+        "go",
+        "test",
+        "-count=1",
+        "./internal/storage",
+        "-run",
+        "^TestRepositoryReadProjections$"
+      ],
+      "sources_before": {
+        "internal/storage/repo_price_scan.go": "17d280fe083479517ec8e46376b389ddddd2a8e0e5156b5967516004f07e3357"
+      },
+      "exit_code": 1,
+      "caught": true,
+      "restored": true
+    },
+    {
+      "name": "channel-malformed-capabilities",
+      "command": [
+        "go",
+        "test",
+        "-count=1",
+        "./internal/storage",
+        "-run",
+        "^TestRepositoryReadProjections$"
+      ],
+      "sources_before": {
+        "internal/storage/repo_channel_reads.go": "619d4f89f4f1b874a35a61e48772f46adb9898eb4ddaa05d6f820d63f179913b"
+      },
+      "exit_code": 1,
+      "caught": true,
+      "restored": true
+    },
+    {
+      "name": "spill-periodic-discovery",
+      "command": [
+        "go",
+        "test",
+        "-count=1",
+        "./internal/storage",
+        "-run",
+        "^TestUsageSpillReplayPicksUpAnotherProcessFile$"
+      ],
+      "sources_before": {
+        "internal/storage/async_logger_spill.go": "a892b4efe99187ffff52e8f5920b843145a3185e6fd5b57e30e80a3ef30e342c"
+      },
+      "exit_code": 1,
+      "caught": true,
+      "restored": true
+    },
+    {
+      "name": "mcp-auth-fail-open",
+      "command": [
+        "go",
+        "test",
+        "-count=1",
+        "./internal/api",
+        "-run",
+        "^TestMCPAuthOpenOnlyWithoutAnyKeys$"
+      ],
+      "sources_before": {
+        "internal/api/mcp_handler.go": "d0247aee92371dee0222c58a38f954e35fd1b16d4da283514d6d1bd28dc71f4e"
+      },
+      "exit_code": 1,
+      "caught": true,
+      "restored": true
+    },
+    {
+      "name": "readiness-fail-open",
+      "command": [
+        "go",
+        "test",
+        "-count=1",
+        "./internal/api",
+        "-run",
+        "^TestReadinessReportsDependencies$"
+      ],
+      "sources_before": {
+        "internal/api/ops_handler.go": "0e1851399c09a5f8e93852ad03e70bce08deda54c4f94326c0edd6b69c345363"
+      },
+      "exit_code": 1,
+      "caught": true,
+      "restored": true
+    },
+    {
+      "name": "mcp-legacy-fallback",
+      "command": [
+        "go",
+        "test",
+        "-count=1",
+        "./internal/api",
+        "-run",
+        "^TestForwardJSONRPCToolCallFallsBackToLegacySSE$"
+      ],
+      "sources_before": {
+        "internal/api/mcp_client.go": "665c56b47db21913adac581c908b358d1d764979eac9d7f6d4861b03dcdf4d4c"
+      },
+      "exit_code": 1,
+      "caught": true,
+      "restored": true
+    },
+    {
+      "name": "gemini-tool-id-pairing",
+      "command": [
+        "go",
+        "test",
+        "-count=1",
+        "./internal/adapter",
+        "-run",
+        "TestGeminiToolIDsPair|TestP2Gemini"
+      ],
+      "sources_before": {
+        "internal/adapter/gemini_config.go": "8b21abf193f0f6243a1626dac6ef520297be4b081290f17057d74a12d432257c"
+      },
+      "exit_code": 1,
+      "caught": true,
+      "restored": true
+    },
+    {
+      "name": "anthropic-image-source",
+      "command": [
+        "go",
+        "test",
+        "-count=1",
+        "./internal/adapter",
+        "-run",
+        "TestAnthropicAdapterKeepsURLSourceImage"
+      ],
+      "sources_before": {
+        "internal/adapter/anthropic_content.go": "eb1691ef330b070b6daa24f7e9684698ec289dc1e9e8140ad153c9997d7ffb0d"
+      },
+      "exit_code": 1,
+      "caught": true,
+      "restored": true
+    },
+    {
+      "name": "gemini-image-source",
+      "command": [
+        "go",
+        "test",
+        "-count=1",
+        "./internal/adapter",
+        "-run",
+        "TestGeminiAdapterKeepsFileDataURI"
+      ],
+      "sources_before": {
+        "internal/adapter/gemini_content.go": "15e15763c96ade7c0cb6c23e222a183f5bee24208b8c0d3eec3939a192509fbf"
+      },
+      "exit_code": 1,
+      "caught": true,
+      "restored": true
+    },
+    {
+      "name": "adapter-message-role",
+      "command": [
+        "go",
+        "test",
+        "-count=1",
+        "./internal/adapter",
+        "-run",
+        "TestAnthropicAdapter_InboundOnly|TestAnthropicAdapter_ArraySystemAndToolChoice"
+      ],
+      "sources_before": {
+        "internal/adapter/anthropic.go": "077e5d91612d8d62cd1214025479a9ca58cd9e642f96b124027c22adf8ab2e7a"
+      },
+      "exit_code": 1,
+      "caught": true,
+      "restored": true
+    },
+    {
+      "name": "sse-eof",
+      "command": [
+        "/usr/bin/npm",
+        "--prefix",
+        "web",
+        "test",
+        "--",
+        "src/lib/sseLines.test.js",
+        "--maxWorkers=1"
+      ],
+      "sources_before": {
+        "web/src/lib/sseLines.js": "e645b8d93c6a12f76aa0e80f7de7e880b4c7a3b09c751f88bf9507a185a8d1fd"
+      },
+      "exit_code": 1,
+      "caught": true,
+      "restored": true
+    },
+    {
+      "name": "mutation-business-code",
+      "command": [
+        "/usr/bin/npm",
+        "--prefix",
+        "web",
+        "test",
+        "--",
+        "src/api/mutation.test.js",
+        "--maxWorkers=1"
+      ],
+      "sources_before": {
+        "web/src/api/mutation.js": "8b74c0504f491a0891e23a5bf2d59fcfb8cc7ba91cbfaccb91fe3c5bed77b5de"
+      },
+      "exit_code": 1,
+      "caught": true,
+      "restored": true
+    },
+    {
+      "name": "playground-mode-reset",
+      "command": [
+        "/usr/bin/npm",
+        "--prefix",
+        "web",
+        "test",
+        "--",
+        "src/components/PlaygroundPersistence.test.jsx",
+        "--maxWorkers=1"
+      ],
+      "sources_before": {
+        "web/src/components/PlaygroundView.jsx": "ecf9ddc1562d81616897f2cd8d8fba5806a6f0b7e69eb19d293f37ef14a18d95",
+        "web/src/hooks/usePlaygroundState.js": "0fc4110ceecbaea6f13fb1f882ec1fc43ba802bb7a18ade4f69f2017dde17548"
+      },
+      "exit_code": 1,
+      "caught": true,
+      "restored": true
+    },
+    {
+      "name": "copilot-tool-signature",
+      "command": [
+        "/usr/bin/npm",
+        "--prefix",
+        "web",
+        "test",
+        "--",
+        "src/lib/copilotIteration.test.js",
+        "--maxWorkers=1"
+      ],
+      "sources_before": {
+        "web/src/lib/copilotIteration.js": "91280447559bf60c1fc4065ea6a889ae70dc0b71f0f735118d9b2d12cc549c96"
+      },
+      "exit_code": 1,
+      "caught": true,
+      "restored": true
+    },
+    {
+      "name": "channel-create-default",
+      "command": [
+        "/usr/bin/npm",
+        "--prefix",
+        "web",
+        "test",
+        "--",
+        "src/hooks/useChannelActions.create.test.jsx",
+        "--maxWorkers=1"
+      ],
+      "sources_before": {
+        "web/src/hooks/useChannelActions.js": "11b09d912fa0f9559f74d28a12ade68c4adeff43f6b58f5783c42fb1d64deb25"
+      },
+      "exit_code": 1,
+      "caught": true,
+      "restored": true
+    }
+  ],
+  "visual_comparison": [
+    {
+      "tab": "channels",
+      "png_identical": true,
+      "text_identical": true,
+      "before_sha256": "3388cd350a04da269b2bda3864c144143dc85b620fa53a9afa2b29b2cbd07c77",
+      "after_sha256": "3388cd350a04da269b2bda3864c144143dc85b620fa53a9afa2b29b2cbd07c77"
+    },
+    {
+      "tab": "dashboard",
+      "png_identical": true,
+      "text_identical": true,
+      "before_sha256": "46b220f84d57c6f7c5f7c1c0e1431fd110a285791b62daffa57501b44ffe2115",
+      "after_sha256": "46b220f84d57c6f7c5f7c1c0e1431fd110a285791b62daffa57501b44ffe2115"
+    },
+    {
+      "tab": "mcp",
+      "png_identical": true,
+      "text_identical": true,
+      "before_sha256": "28b1e3020509a8920f692599257612feb06240c9a0a4c93504b8fafa4814d0a3",
+      "after_sha256": "28b1e3020509a8920f692599257612feb06240c9a0a4c93504b8fafa4814d0a3"
+    },
+    {
+      "tab": "playground",
+      "png_identical": true,
+      "text_identical": true,
+      "before_sha256": "a8e64496bdfb45d97887e542c0466c32e9b46374d5f3acd9ef4d4029a7759048",
+      "after_sha256": "a8e64496bdfb45d97887e542c0466c32e9b46374d5f3acd9ef4d4029a7759048"
+    },
+    {
+      "tab": "pricing",
+      "png_identical": true,
+      "text_identical": true,
+      "before_sha256": "3c3cd9982d8eeaef3aeecd6b637090872b1ca967121c7b3bb6a498ec067752c4",
+      "after_sha256": "3c3cd9982d8eeaef3aeecd6b637090872b1ca967121c7b3bb6a498ec067752c4"
+    },
+    {
+      "tab": "skills",
+      "png_identical": true,
+      "text_identical": true,
+      "before_sha256": "b1cfbc50029ea0fee82a0231adb4439623112299b3fb7d26c15b9e87f27b3468",
+      "after_sha256": "b1cfbc50029ea0fee82a0231adb4439623112299b3fb7d26c15b9e87f27b3468"
+    },
+    {
+      "tab": "users",
+      "png_identical": true,
+      "text_identical": true,
+      "before_sha256": "a14395382cae3138cf9b03e55cbd90ee9d4111923e7cbe29cf4c0f4a3fd66e69",
+      "after_sha256": "a14395382cae3138cf9b03e55cbd90ee9d4111923e7cbe29cf4c0f4a3fd66e69"
+    },
+    {
+      "tab": "wallet",
+      "png_identical": true,
+      "text_identical": true,
+      "before_sha256": "a42c0b61f8b3ce3d79ac0ca574696cfaa7ab2655eed5ebb06f01ba9819146274",
+      "after_sha256": "a42c0b61f8b3ce3d79ac0ca574696cfaa7ab2655eed5ebb06f01ba9819146274"
+    }
+  ],
+  "bundle": {
+    "before": {
+      "chunks": 49,
+      "bytes": 1340059,
+      "gzip_bytes": 396910
+    },
+    "after": {
+      "chunks": 50,
+      "bytes": 1407525,
+      "gzip_bytes": 415024
+    }
+  }
+}

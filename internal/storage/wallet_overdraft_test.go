@@ -21,15 +21,14 @@ func overdraftTestRepo(t *testing.T, balance float64) (*Repository, *APIKeyRecor
 	return r, key, u
 }
 
-// A single expensive charge (or a burst aggregated in one flush) used to drive a
-// wallet arbitrarily negative with no floor and no signal.
-func TestWalletDeductionClampsAtOverdraftFloor(t *testing.T) {
+// Provider-reported overruns remain real debt; admission blocks further spending.
+func TestWalletDeductionRecordsFullActualCost(t *testing.T) {
 	r, key, u := overdraftTestRepo(t, 0.01)
 	ctx := context.Background()
 
 	before := telemetry.GlobalMetrics.BillingOverdrafts.Load()
 	// Two charges of 3 CNY on the same key: the batch aggregates them into one
-	// deduction, which must stop at the default -1 CNY floor.
+	// deduction, which must preserve all six yuan of delivered usage.
 	records := []*UsageLogRecord{
 		billingRecord(key, u.Username, "tr-od-1", "bill-od-1", 3.0),
 		billingRecord(key, u.Username, "tr-od-2", "bill-od-2", 3.0),
@@ -42,19 +41,18 @@ func TestWalletDeductionClampsAtOverdraftFloor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := -ToUnits(defaultMaxOverdraftCNY); user.BalanceUnits != want {
-		t.Fatalf("balance_units = %d, want the %d floor (clamped)", user.BalanceUnits, want)
+	if want := ToUnits(-5.99); user.BalanceUnits != want {
+		t.Fatalf("balance_units = %d, want %d after full deduction", user.BalanceUnits, want)
 	}
-	if want := -defaultMaxOverdraftCNY; user.Balance < want-1e-9 || user.Balance > want+1e-9 {
-		t.Fatalf("balance = %v, want the float mirror to match the floor %v", user.Balance, want)
+	if want := -5.99; user.Balance < want-1e-9 || user.Balance > want+1e-9 {
+		t.Fatalf("balance = %v, want the float mirror to match %v", user.Balance, want)
 	}
 	if telemetry.GlobalMetrics.BillingOverdrafts.Load() <= before {
-		t.Fatal("clamped overdraft was not counted on /metrics")
+		t.Fatal("overdraft was not counted on /metrics")
 	}
 }
 
-// A charge that merely crosses zero is a real overdraft (charge it, count it) but
-// must not be pushed down to the floor.
+// A charge that crosses zero records the exact debt and counts an overdraft.
 func TestWalletDeductionRecordsSmallOverdraft(t *testing.T) {
 	r, key, u := overdraftTestRepo(t, 0.10)
 	ctx := context.Background()
@@ -75,9 +73,8 @@ func TestWalletDeductionRecordsSmallOverdraft(t *testing.T) {
 	}
 }
 
-// GATEWAY_MAX_OVERDRAFT_CNY=0 means "never below zero".
-func TestWalletDeductionHonoursZeroOverdraftSetting(t *testing.T) {
-	t.Setenv("GATEWAY_MAX_OVERDRAFT_CNY", "0")
+// Completed work is never forgiven even when it exhausts the wallet.
+func TestWalletDeductionNeverForgivesDeliveredUsage(t *testing.T) {
 	r, key, u := overdraftTestRepo(t, 0.10)
 	ctx := context.Background()
 
@@ -88,16 +85,16 @@ func TestWalletDeductionHonoursZeroOverdraftSetting(t *testing.T) {
 	}
 
 	user, _ := r.GetUserByID(u.ID)
-	if user.BalanceUnits != 0 {
-		t.Fatalf("balance_units = %d, want 0 with overdraft disabled", user.BalanceUnits)
+	if user.BalanceUnits != ToUnits(-4.9) {
+		t.Fatalf("balance_units = %d, want %d", user.BalanceUnits, ToUnits(-4.9))
 	}
-	if user.Balance != 0 {
-		t.Fatalf("balance = %v, want 0 with overdraft disabled", user.Balance)
+	if user.Balance != -4.9 {
+		t.Fatalf("balance = %v, want -4.9", user.Balance)
 	}
 }
 
-// The tenant/username fallback path uses the same clamp.
-func TestTenantFallbackDeductionClamps(t *testing.T) {
+// The tenant/username fallback preserves the same full cost.
+func TestTenantFallbackDeductionRecordsFullActualCost(t *testing.T) {
 	r, _, u := overdraftTestRepo(t, 0.01)
 	ctx := context.Background()
 
@@ -107,7 +104,7 @@ func TestTenantFallbackDeductionClamps(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 	user, _ := r.GetUserByID(u.ID)
-	if want := -ToUnits(defaultMaxOverdraftCNY); user.BalanceUnits != want {
+	if want := ToUnits(-7.99); user.BalanceUnits != want {
 		t.Fatalf("tenant fallback balance_units = %d, want %d", user.BalanceUnits, want)
 	}
 }

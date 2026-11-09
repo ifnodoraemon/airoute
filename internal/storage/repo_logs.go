@@ -164,7 +164,8 @@ type UsageLogRecord struct {
 	// (X-Request-ID / traceparent) and one reused value already spans dozens of
 	// genuine requests, so a unique index on it would break billing. A retried
 	// Redis stream delivery carries the same BillingID and is applied once.
-	BillingID string `json:"billing_id,omitempty"`
+	BillingID     string `json:"billing_id,omitempty"`
+	ReservationID string `json:"reservation_id,omitempty"`
 	// Settled marks a record whose wallet movement has already been applied
 	// synchronously. The async writer skips the settlement for those rows; the
 	// settlement ledger's unique key is the actual guarantee, this is only an

@@ -129,7 +129,7 @@ describe('useConsoleData', () => {
     expect(outcome).toBe(false);
   });
 
-  it('derives the pricing groups from the prices and the account group', async () => {
+  it('derives pricing groups from configured rates and multipliers, excluding an unconfigured account group', async () => {
     stubGateway({
       '/admin/pricing': () => jsonResponse({
         code: 0,
@@ -138,6 +138,7 @@ describe('useConsoleData', () => {
           { model: 'b', group_name: 'default' },
           { model: 'c' },
         ],
+        group_multipliers: { default: 1, enterprise: 1.5 },
       }),
     });
     const { result } = renderHook(() => useConsoleData({ adminUser: { role: 'admin', group_name: 'Team' } }));
@@ -148,7 +149,8 @@ describe('useConsoleData', () => {
 
     expect(result.current.pricingGroups).toContain('default');
     expect(result.current.pricingGroups).toContain('vip');
-    expect(result.current.pricingGroups).toContain('team');
+    expect(result.current.pricingGroups).toContain('enterprise');
+    expect(result.current.pricingGroups).not.toContain('team');
   });
 
   it('selects a chat model for the playground from the route table', async () => {

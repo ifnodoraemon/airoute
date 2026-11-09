@@ -2,9 +2,6 @@ package storage
 
 import (
 	"context"
-	"os"
-	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -35,16 +32,15 @@ import (
 //
 // The batcher never invents a different money path: it calls the same
 // settleCharges transaction the synchronous and async paths use, so all of the
-// existing rules (idempotency, admin exemption, overdraft floor, currency
-// validation) still apply.
+// existing rules (idempotency, admin exemption, full actual charges, currency
+// validation) still apply. Reserved usage also has a durable recovery journal.
 const (
 	defaultSettlementBatchSize = 100
 	defaultSettlementLinger    = 2 * time.Millisecond
 	defaultSettlementQueueSize = 8192
 	defaultSettlementWait      = 300 * time.Millisecond
-	// settlementFlushTimeout bounds one merged transaction. It must stay well
-	// below the request-side wait so a stalled database turns into "deferred"
-	// charges instead of wedged request goroutines.
+	// settlementFlushTimeout bounds a merged transaction independently of the
+	// shorter request-side wait. A timed-out caller leaves its hold pending.
 	settlementFlushTimeout = 5 * time.Second
 )
 
@@ -112,22 +108,10 @@ func InitSettlementBatcher(repo *Repository) *SettlementBatcher {
 		stopCh:   make(chan struct{}),
 	}
 	globalSettlementBatcher = b
-	b.wg.Add(1)
+	b.wg.Add(2)
 	go b.run()
+	go b.recoverReservations()
 	return b
-}
-
-// envMilliseconds reads a positive millisecond override as a duration.
-func envMilliseconds(name string, dflt time.Duration) time.Duration {
-	raw := strings.TrimSpace(os.Getenv(name))
-	if raw == "" {
-		return dflt
-	}
-	value, err := strconv.Atoi(raw)
-	if err != nil || value <= 0 {
-		return dflt
-	}
-	return time.Duration(value) * time.Millisecond
 }
 
 // SettlementWaitTimeout exposes the request-side wait so handlers can bound the

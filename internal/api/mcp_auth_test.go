@@ -24,7 +24,7 @@ func newMCPTestRepo(t *testing.T) (*MCPHandler, *storage.Repository) {
 func TestMCPAuthOpenOnlyWithoutAnyKeys(t *testing.T) {
 	h, repo := newMCPTestRepo(t)
 
-	rec, err := h.authenticateCaller("")
+	rec, err := h.authenticateCallerDigest(storage.HashAPIKey(""))
 	if err != nil || rec != nil {
 		t.Fatalf("expected open mode with no keys, got rec=%v err=%v", rec, err)
 	}
@@ -34,10 +34,10 @@ func TestMCPAuthOpenOnlyWithoutAnyKeys(t *testing.T) {
 		t.Fatalf("create disabled key: %v", err)
 	}
 
-	if _, err := h.authenticateCaller(""); err == nil {
+	if _, err := h.authenticateCallerDigest(storage.HashAPIKey("")); err == nil {
 		t.Fatal("expected an auth error when every key is disabled")
 	}
-	if _, err := h.authenticateCaller("sk-disabled-key"); err == nil {
+	if _, err := h.authenticateCallerDigest(storage.HashAPIKey("sk-disabled-key")); err == nil {
 		t.Fatal("expected a disabled key to be rejected")
 	}
 
@@ -45,10 +45,10 @@ func TestMCPAuthOpenOnlyWithoutAnyKeys(t *testing.T) {
 	if err := repo.CreateAPIKey(active); err != nil {
 		t.Fatalf("create active key: %v", err)
 	}
-	if _, err := h.authenticateCaller(""); err == nil {
+	if _, err := h.authenticateCallerDigest(storage.HashAPIKey("")); err == nil {
 		t.Fatal("expected an auth error for an anonymous caller once a key exists")
 	}
-	if rec, err := h.authenticateCaller("sk-active-key"); err != nil || rec == nil {
+	if rec, err := h.authenticateCallerDigest(storage.HashAPIKey("sk-active-key")); err != nil || rec == nil {
 		t.Fatalf("expected the active key to authenticate, got rec=%v err=%v", rec, err)
 	}
 }

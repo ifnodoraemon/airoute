@@ -27,7 +27,7 @@ func TestThinkingFactsBelongToMappedChannelModel(t *testing.T) {
 	require.False(t, profile.On)
 	// Narrowing a channel's levels must not mutate the shared catalog.
 	original, _ := FindThinkingProfile("deepseek")
-	require.Equal(t, []string{"low", "high", "max"}, original.Efforts)
+	require.Equal(t, ThinkingEfforts(), original.Efforts)
 }
 func TestEmptyConfiguredEffortsSurviveSerialization(t *testing.T) {
 	before := ThinkingConfig{Profile: "deepseek", Efforts: []string{}}

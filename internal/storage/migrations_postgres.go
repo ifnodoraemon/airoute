@@ -539,6 +539,8 @@ func (db *DB) migratePostgres() error {
 		Migration{Version: 50, Name: "thinking_configuration", Up: addThinkingConfiguration},
 		Migration{Version: 51, Name: "supplier_quote_fields", Up: addSupplierQuoteFields},
 		Migration{Version: 52, Name: "separate_channel_trails", Up: separateChannelTrails},
+		Migration{Version: 53, Name: "announcements_and_notifications", Up: createNotifications},
+		Migration{Version: 54, Name: "billing_reservations", Up: createBillingReservations},
 	)
 	return db.runMigrations(migrations)
 }

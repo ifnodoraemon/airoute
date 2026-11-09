@@ -1,7 +1,6 @@
 package adapter
 
 import (
-	"context"
 	"testing"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
@@ -19,7 +18,7 @@ func TestGeminiToolIDsPairExplicitOutOfOrderResultsWithRemainingCalls(t *testing
 			{FunctionResponse: &provider.GeminiFunctionResponse{Name: "lookup", Response: map[string]any{"x": 1}}},
 		}},
 	}}
-	canonical, err := NewGeminiAdapter().ToCanonical(context.Background(), request)
+	canonical, err := GeminiToCanonical(request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +26,7 @@ func TestGeminiToolIDsPairExplicitOutOfOrderResultsWithRemainingCalls(t *testing
 		t.Fatalf("tool pairing/signature lost: %+v", canonical.Messages)
 	}
 	response := &model.ChatCompletionResponse{Choices: []model.ChatCompletionChoice{{Message: canonical.Messages[0]}}}
-	converted, err := NewGeminiAdapter().FromCanonical(context.Background(), response)
+	converted, err := GeminiFromCanonical(response)
 	if err != nil {
 		t.Fatal(err)
 	}

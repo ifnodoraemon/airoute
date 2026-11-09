@@ -1,8 +1,7 @@
 import { getStoredToken, getStoredUser } from '../api/session';
 import { allowedTabsFor } from './navGroups';
 
-const CONSOLE_TABS = ['dashboard', 'models', 'pricing', 'channels', 'reconciliation',
-  'keys', 'wallet', 'logs', 'skills', 'mcp', 'users', 'playground', 'docs'];
+const CONSOLE_TABS = allowedTabsFor(true);
 // What a regular user may open comes from lib/navGroups.js — the same source the
 // sidebar and the console's role guard read, so the three can no longer disagree.
 const USER_TABS = allowedTabsFor(false);

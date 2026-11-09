@@ -134,7 +134,7 @@ func (r *Repository) SetModelFallbacks(fallbacks map[string]string) error {
 // and on SQLite it used to queue behind the single settlement writer (one slow
 // flush delayed every price lookup on the request path).
 func (r *Repository) ListModelPrices() ([]*ModelPriceRecord, error) {
-	rows, err := r.db.Reader().Query(r.db.Rebind(`SELECT id, model, COALESCE(group_name, 'default'), prompt_price, completion_price, cache_read_price, fixed_price, currency, COALESCE(off_peak_enabled, 1), COALESCE(off_peak_start, '00:00'), COALESCE(off_peak_end, '08:30'), COALESCE(off_peak_discount, 0.5), COALESCE(off_peak_mode, 'custom'), COALESCE(off_peak_slots, ''), COALESCE(weekend_all_day, 1), created_at, updated_at FROM model_prices ORDER BY id ASC`))
+	rows, err := r.db.Reader().Query(r.db.Rebind(`SELECT ` + modelPriceColumns + ` FROM model_prices ORDER BY id ASC`))
 	if err != nil {
 		return nil, err
 	}
@@ -142,14 +142,11 @@ func (r *Repository) ListModelPrices() ([]*ModelPriceRecord, error) {
 
 	list := make([]*ModelPriceRecord, 0)
 	for rows.Next() {
-		var rec ModelPriceRecord
-		var offEnabled, weekendAllDay int
-		if err := rows.Scan(&rec.ID, &rec.Model, &rec.GroupName, &rec.PromptPrice, &rec.CompletionPrice, &rec.CacheReadPrice, &rec.FixedPrice, &rec.Currency, &offEnabled, &rec.OffPeakStart, &rec.OffPeakEnd, &rec.OffPeakDiscount, &rec.OffPeakMode, &rec.OffPeakSlots, &weekendAllDay, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+		rec, err := scanModelPrice(rows)
+		if err != nil {
 			return nil, err
 		}
-		rec.OffPeakEnabled = offEnabled == 1
-		rec.WeekendAllDay = weekendAllDay == 1
-		list = append(list, &rec)
+		list = append(list, rec)
 	}
 	return list, nil
 }
@@ -159,15 +156,8 @@ func (r *Repository) GetModelPriceExact(modelName, groupName string) (*ModelPric
 	if groupName == "" {
 		groupName = "default"
 	}
-	row := r.db.QueryRow(`SELECT id, model, COALESCE(group_name, 'default'), prompt_price, completion_price, cache_read_price, fixed_price, currency, COALESCE(off_peak_enabled, 1), COALESCE(off_peak_start, '00:00'), COALESCE(off_peak_end, '08:30'), COALESCE(off_peak_discount, 0.5), COALESCE(off_peak_mode, 'custom'), COALESCE(off_peak_slots, ''), COALESCE(weekend_all_day, 1), created_at, updated_at FROM model_prices WHERE model = ? AND group_name = ?`, modelName, groupName)
-	var rec ModelPriceRecord
-	var offEnabled, weekendAllDay int
-	if err := row.Scan(&rec.ID, &rec.Model, &rec.GroupName, &rec.PromptPrice, &rec.CompletionPrice, &rec.CacheReadPrice, &rec.FixedPrice, &rec.Currency, &offEnabled, &rec.OffPeakStart, &rec.OffPeakEnd, &rec.OffPeakDiscount, &rec.OffPeakMode, &rec.OffPeakSlots, &weekendAllDay, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
-		return nil, err
-	}
-	rec.OffPeakEnabled = offEnabled == 1
-	rec.WeekendAllDay = weekendAllDay == 1
-	return &rec, nil
+	row := r.db.QueryRow(`SELECT `+modelPriceColumns+` FROM model_prices WHERE model = ? AND group_name = ?`, modelName, groupName)
+	return scanModelPrice(row)
 }
 
 // GetModelPriceWithGroup returns pricing rates for a specific model and group (with fallback to default group).

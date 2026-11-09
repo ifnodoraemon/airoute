@@ -38,24 +38,12 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 		if respondRequestTooLarge(c, err) {
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"message": fmt.Sprintf("Invalid JSON request body: %v", err),
-				"type":    "invalid_request_error",
-				"code":    "invalid_payload",
-			},
-		})
+		RespondOpenAIError(c, http.StatusBadRequest, fmt.Sprintf("Invalid JSON request body: %v", err), "invalid_request_error", "invalid_payload")
 		return
 	}
 
 	if req.Model == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"message": "Missing 'model' in request",
-				"type":    "invalid_request_error",
-				"code":    "missing_model",
-			},
-		})
+		RespondOpenAIError(c, http.StatusBadRequest, "Missing 'model' in request", "invalid_request_error", "missing_model")
 		return
 	}
 
@@ -63,13 +51,7 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 		return
 	}
 	if !middleware.ValidateModelAllowed(c, req.Model) {
-		c.JSON(http.StatusForbidden, gin.H{
-			"error": gin.H{
-				"message": fmt.Sprintf("Model '%s' not allowed for this key", req.Model),
-				"type":    "forbidden",
-				"code":    "model_not_allowed",
-			},
-		})
+		RespondOpenAIError(c, http.StatusForbidden, fmt.Sprintf("Model '%s' not allowed for this key", req.Model), "forbidden", "model_not_allowed")
 		return
 	}
 
@@ -82,13 +64,7 @@ func (h *Handler) HandleResponses(c *gin.Context) {
 			chatReq = &model.ChatCompletionRequest{Model: req.Model, Stream: req.Stream, Protocol: responsesProtocol}
 			native.TranslationError = err
 		} else {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": gin.H{
-					"message": err.Error(),
-					"type":    "invalid_request_error",
-					"code":    "invalid_input",
-				},
-			})
+			RespondOpenAIError(c, http.StatusBadRequest, err.Error(), "invalid_request_error", "invalid_input")
 			return
 		}
 	}
@@ -151,7 +127,9 @@ func (h *Handler) handleResponsesNonStreaming(
 	sessionID string,
 	start time.Time,
 ) {
-	topUpQuotaForRequest(c, chatReq)
+	if !topUpQuotaForRequest(c, chatReq) {
+		return
+	}
 	resp, err := h.dispatcher.Dispatch(reqCtx, chatReq)
 	if err != nil {
 		respondUpstreamDispatchError(c, sessionID, req.Model, time.Since(start), err)

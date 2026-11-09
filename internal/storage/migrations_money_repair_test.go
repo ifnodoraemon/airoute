@@ -28,6 +28,7 @@ func TestMoneyUnitsRepairMigration(t *testing.T) {
 		t.Fatalf("open raw sqlite: %v", err)
 	}
 	legacy := []string{
+		`CREATE TABLE system_settings (key TEXT PRIMARY KEY, value TEXT, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
 		`CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP);`,
 		`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, email TEXT DEFAULT '',
 			password_hash TEXT NOT NULL, role TEXT DEFAULT 'user', status TEXT DEFAULT 'active',

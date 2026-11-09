@@ -1,3 +1,4 @@
+import { apiMutation } from '../api/mutation';
 // The API key domain: the create form, the per-row operations, the batch
 // operations, and the copy feedback.
 //
@@ -102,13 +103,9 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
 
     setSubmittingKey(true);
     try {
-      const res = await apiFetch('/api/v1/admin/keys', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (res.ok && data.code === 0) {
+      const { data, ok: requestSucceeded } = await apiMutation('/api/v1/admin/keys', 'POST', payload, apiFetch);
+
+      if (requestSucceeded) {
         const created = data.data || {};
         showToast(isZh ? 'API 访问密钥创建成功' : 'API access key created successfully', 'success');
         // Keep the dialog open: the plaintext credential exists only in this
@@ -140,13 +137,9 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
   // Handle Key Group Update
   const handleUpdateKeyGroup = useCallback(async (keyId, newGroup) => {
     try {
-      const res = await apiFetch(`/api/v1/admin/keys/${keyId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ group_name: newGroup }),
-      });
-      const data = await res.json();
-      if (res.ok && data.code === 0) {
+      const { data, ok: requestSucceeded } = await apiMutation(`/api/v1/admin/keys/${keyId}`, 'PUT', { group_name: newGroup }, apiFetch);
+
+      if (requestSucceeded) {
         showToast(isZh ? `密钥计费分组已成功调整为 [${newGroup}]` : `Key billing group updated to [${newGroup}]`, 'success');
         refresh();
       } else {
@@ -197,13 +190,9 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
     if (selectedKeyIds.length === 0) return;
     if (!window.confirm(isZh ? `确认批量注销选中的 ${selectedKeyIds.length} 个 API 密钥？` : `Confirm revoke selected ${selectedKeyIds.length} API keys?`)) return;
     try {
-      const res = await apiFetch('/api/v1/admin/keys/batch-delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: selectedKeyIds })
-      });
-      const data = await res.json();
-      if (res.ok && data.code === 0) {
+      const { data, ok: requestSucceeded } = await apiMutation('/api/v1/admin/keys/batch-delete', 'POST', { ids: selectedKeyIds }, apiFetch);
+
+      if (requestSucceeded) {
         showToast(data.message || (isZh ? '已批量注销密钥' : 'Selected keys revoked'), 'success');
         setSelectedKeyIds([]);
         refresh();
@@ -218,13 +207,9 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
   const handleBatchStatusKeys = useCallback(async (status) => {
     if (selectedKeyIds.length === 0) return;
     try {
-      const res = await apiFetch('/api/v1/admin/keys/batch-status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: selectedKeyIds, status })
-      });
-      const data = await res.json();
-      if (res.ok && data.code === 0) {
+      const { data, ok: requestSucceeded } = await apiMutation('/api/v1/admin/keys/batch-status', 'POST', { ids: selectedKeyIds, status }, apiFetch);
+
+      if (requestSucceeded) {
         showToast(data.message || (isZh ? '批量状态更新成功' : 'Batch status update successful'), 'success');
         setSelectedKeyIds([]);
         refresh();

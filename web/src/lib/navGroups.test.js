@@ -12,13 +12,13 @@ import {
 // than silently dropping a button from the sidebar. `docs` is the standalone
 // bottom item and is intentionally not part of any group.
 const ADMIN_TABS = [
-  'dashboard', 'logs',
+  'dashboard', 'logs', 'notifications',
   'models', 'channels',
   'pricing', 'reconciliation', 'wallet',
   'keys', 'users',
   'playground', 'skills', 'mcp',
 ];
-const USER_TABS = ['dashboard', 'wallet', 'keys', 'playground', 'pricing', 'logs'];
+const USER_TABS = ['dashboard', 'wallet', 'keys', 'notifications', 'playground', 'pricing', 'logs'];
 const DOCS_TAB = 'docs';
 
 function flatten(groups) {
@@ -53,14 +53,14 @@ describe('navGroups', () => {
     // Responsibilities that used to share the grab-bag 「安全与资产 / Security」
     // now sit in the group that owns them.
     expect(ADMIN_NAV_GROUPS.map(({ id, tabs }) => ({ id, tabs }))).toEqual([
-      { id: 'monitoring', tabs: ['dashboard', 'logs'] },
+      { id: 'monitoring', tabs: ['dashboard', 'logs', 'notifications'] },
       { id: 'gateway', tabs: ['models', 'channels'] },
       { id: 'billing', tabs: ['pricing', 'reconciliation', 'wallet'] },
       { id: 'identity', tabs: ['keys', 'users'] },
       { id: 'ecosystem', tabs: ['playground', 'skills', 'mcp'] },
     ]);
     expect(USER_NAV_GROUPS.map(({ id, tabs }) => ({ id, tabs }))).toEqual([
-      { id: 'account', tabs: ['dashboard', 'wallet', 'keys'] },
+      { id: 'account', tabs: ['dashboard', 'wallet', 'keys', 'notifications'] },
       { id: 'usage', tabs: ['playground', 'pricing', 'logs'] },
     ]);
   });

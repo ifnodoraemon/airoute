@@ -80,6 +80,9 @@ func TestChannelModelCatalogUsesActualNamesAndSharedCapabilities(t *testing.T) {
 	if !cap.Known || !cap.On || cap.Off || cap.Source != "configured" {
 		t.Fatalf("capability=%+v", cap)
 	}
+	if cap.SupportsDisable == nil || !*cap.SupportsDisable || strings.Join(cap.SupportedEfforts, ",") != strings.Join(model.ThinkingEfforts(), ",") {
+		t.Fatalf("fixed preset locked manual controls: %+v", cap)
+	}
 }
 
 func TestSupplierCSVRetainsNineDecimalsAtLargeRates(t *testing.T) {

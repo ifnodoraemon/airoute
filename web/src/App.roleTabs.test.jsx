@@ -28,9 +28,7 @@ function stubGateway(overrides = {}) {
     '/api/v1/admin/pricing': () => jsonResponse({ code: 0, data: [] }),
     '/api/v1/admin/channels': () => jsonResponse({ code: 0, data: [] }),
     '/api/v1/admin/logs': () => jsonResponse({ code: 0, data: [], total: 0 }),
-    '/api/v1/admin/announcement/config': () =>
-      jsonResponse({ code: 0, data: { enabled: true, title: '维护通知', content: '今晚 22:00 维护', level: 'info' } }),
-    '/api/v1/announcement': () => jsonResponse({ code: 0, data: null }),
+    '/api/v1/announcements/banner': () => jsonResponse({ code: 0, data: null }),
     '/api/v1/user/wallet': () => jsonResponse({ code: 0, data: { balance: 12, orders: [] } }),
     '/api/v1/user/keys': () => jsonResponse({ code: 0, data: [] }),
     '/api/v1/auth/login': () =>
@@ -70,6 +68,25 @@ describe('role-based tab routing', () => {
     vi.unstubAllGlobals();
     localStorage.clear();
     window.history.replaceState(null, '', '/');
+  });
+
+  it('opens the timeline deep link for a user and routes the bell to their personal messages', async () => {
+    signIn('user', 'alice');
+    window.history.replaceState(null, '', '/#/notifications');
+    const base = { total: 0, items: [], latest_sequence: 7, page: 1, page_size: 20, unread_count: 1, announcement_unread_count: 0, message_unread_count: 1 };
+    stubGateway({
+      '/api/v1/auth/me': () => jsonResponse({ code: 0, data: { user: { id: 2, username: 'alice', role: 'user' } } }),
+      '/api/v1/user/notifications/unread-count': () => jsonResponse({ code: 0, data: base }),
+      '/api/v1/user/notifications?kind=announcement': () => jsonResponse({ code: 0, data: base }),
+      '/api/v1/user/notifications?kind=message': () => jsonResponse({ code: 0, data: { ...base, total: 1, items: [{ id: 'msg_alice', title: 'Alice 的个人通知', content: '仅当前账号可见', level: 'info', kind: 'message', created_at: '2026-11-01T00:00:00Z', read_at: null }] } }),
+    });
+    render(<App />);
+    expect(await screen.findByRole('tab', { name: /全站公告/ }, { timeout: 8000 })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(await screen.findByRole('button', { name: '消息中心，1 条未读' }));
+    expect(await screen.findByRole('button', { name: /Alice 的个人通知/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /我的消息/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('button', { name: '发送个人消息' })).not.toBeInTheDocument();
+    expect(window.location.hash).toBe('#/notifications');
   });
 
   it('keeps an administrator on #/dashboard', async () => {
@@ -185,14 +202,14 @@ describe('workspace teardown on logout', () => {
     }, { timeout: 8000 });
     expect(await screen.findByText(/密钥实时速率遥测/, {}, { timeout: 8000 })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTitle('发布或编辑系统级全员公告'));
-    expect(await screen.findByText('发布公告并置顶', {}, { timeout: 8000 })).toBeInTheDocument();
+    fireEvent.click(screen.getByTitle('发布全站公告'));
+    expect(await screen.findByRole('button', { name: '发布全站公告' }, { timeout: 8000 })).toBeInTheDocument();
 
     // Log out. The teardown must drop both pieces of shell state (the dialog covers
     // the header in a browser; the state reset must not depend on that).
     const beforeLogout = requestedUrls().length;
     fireEvent.click(screen.getByTitle('退出登录'));
-    await waitFor(() => expect(screen.queryByText('发布公告并置顶')).toBeNull(), { timeout: 8000 });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '发布全站公告' })).toBeNull(), { timeout: 8000 });
 
     // Sign back in through the auth page.
     window.history.replaceState(null, '', '/#/login');
@@ -210,6 +227,6 @@ describe('workspace teardown on logout', () => {
     // dialog does not re-open by itself.
     expect(requestedUrls().slice(beforeLogout).some((u) => u.includes('/stats/overview?key_id='))).toBe(false);
     expect(screen.queryByText(/密钥实时速率遥测/)).toBeNull();
-    expect(screen.queryByText('发布公告并置顶')).toBeNull();
+    expect(screen.queryByRole('dialog', { name: '发布全站公告' })).toBeNull();
   }, 30000);
 });

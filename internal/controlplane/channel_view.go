@@ -84,6 +84,10 @@ func channelViewFrom(rec *storage.ChannelRecord) channelView {
 		profile, source := model.ResolveUpstreamThinkingProfile(cfg, name)
 		capability := profile.Capability(source)
 		contract, _ := model.ResolveUpstreamThinkingContract(cfg, name)
+		if contract.ID == "" || contract.Wire == "none" || contract.Wire == "unknown" {
+			contract = model.ThinkingParameterProfile(cfg.Type, name)
+		}
+		contract = model.ThinkingTransportProfile(contract)
 		canDisable := contract.Off
 		capability.SupportsDisable = &canDisable
 		capability.SupportedEfforts = contract.Efforts

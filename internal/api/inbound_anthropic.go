@@ -29,11 +29,7 @@ type AnthropicInboundRequest = model.AnthropicInboundRequest
 
 // ConvertAnthropicToCanonical converts an Anthropic request to the canonical OpenAI request format via Adapter Pattern.
 func ConvertAnthropicToCanonical(req *AnthropicInboundRequest) *model.ChatCompletionRequest {
-	ad, ok := adapter.Get("anthropic")
-	if !ok {
-		ad = adapter.NewAnthropicAdapter()
-	}
-	res, err := ad.ToCanonical(context.Background(), req)
+	res, err := adapter.AnthropicToCanonical(req)
 	if err != nil {
 		return &model.ChatCompletionRequest{Model: req.Model}
 	}
@@ -104,7 +100,9 @@ func (h *Handler) HandleAnthropicMessages(c *gin.Context) {
 }
 
 func (h *Handler) handleAnthropicUnary(c *gin.Context, reqCtx context.Context, req *AnthropicInboundRequest, canonicalReq *model.ChatCompletionRequest, sessionID string, start time.Time) {
-	topUpQuotaForRequest(c, canonicalReq)
+	if !topUpQuotaForRequest(c, canonicalReq) {
+		return
+	}
 	resp, err := h.dispatcher.Dispatch(reqCtx, canonicalReq)
 	if err != nil {
 		statusCode, errType, _, _ := resolveUpstreamFailureStatus(err)

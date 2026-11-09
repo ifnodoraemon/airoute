@@ -134,3 +134,11 @@ func TestReadinessRespectsDeadline(t *testing.T) {
 		t.Fatalf("status = %d for a dependency that outlives the probe deadline, want 503", rec.Code)
 	}
 }
+
+// ResetReadinessChecks removes every registered probe. Tests use it to isolate
+// cases; production code registers once at startup.
+func ResetReadinessChecks() {
+	readinessMu.Lock()
+	defer readinessMu.Unlock()
+	readinessChecks = nil
+}

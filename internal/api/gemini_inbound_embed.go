@@ -67,6 +67,9 @@ func (h *Handler) handleGeminiEmbedContent(c *gin.Context, modelName string) {
 	start := time.Now()
 	sessionID := resolveGenericSessionID(c, "emb")
 
+	if !requireQuotaEstimate(c, modelName, embReq.EstimatedPromptTokens(), 0, 1) {
+		return
+	}
 	resp, err := h.dispatcher.DispatchEmbedding(c.Request.Context(), embReq)
 	if err != nil {
 		statusCode, _, _, _ := resolveUpstreamFailureStatus(err)

@@ -133,7 +133,9 @@ func (h *Handler) HandleGeminiAction(c *gin.Context) {
 }
 
 func (h *Handler) handleGeminiUnary(c *gin.Context, reqCtx context.Context, canonicalReq *model.ChatCompletionRequest, modelName, sessionID string, start time.Time) {
-	topUpQuotaForRequest(c, canonicalReq)
+	if !topUpQuotaForRequest(c, canonicalReq) {
+		return
+	}
 	resp, err := h.dispatcher.Dispatch(reqCtx, canonicalReq)
 	if err != nil {
 		statusCode, _, _, _ := resolveUpstreamFailureStatus(err)
@@ -170,11 +172,7 @@ func (h *Handler) handleGeminiUnary(c *gin.Context, reqCtx context.Context, cano
 }
 
 func convertInboundGeminiToCanonical(modelName string, geminiReq *provider.GeminiRequest, stream bool) *model.ChatCompletionRequest {
-	ad, ok := adapter.Get("gemini")
-	if !ok {
-		ad = adapter.NewGeminiAdapter()
-	}
-	req, err := ad.ToCanonical(context.Background(), geminiReq)
+	req, err := adapter.GeminiToCanonical(geminiReq)
 	if err != nil {
 		return &model.ChatCompletionRequest{Model: modelName, Stream: stream}
 	}
@@ -184,11 +182,7 @@ func convertInboundGeminiToCanonical(modelName string, geminiReq *provider.Gemin
 }
 
 func convertCanonicalToGeminiResponse(resp *model.ChatCompletionResponse) any {
-	ad, ok := adapter.Get("gemini")
-	if !ok {
-		ad = adapter.NewGeminiAdapter()
-	}
-	out, err := ad.FromCanonical(context.Background(), resp)
+	out, err := adapter.GeminiFromCanonical(resp)
 	if err != nil {
 		return gin.H{
 			"candidates": []gin.H{},

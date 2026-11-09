@@ -1,10 +1,6 @@
 import { X, Loader2 } from 'lucide-react';
-import {
-  SELF_SERVICE_DEFAULT_RPM,
-  SELF_SERVICE_MAX_RPM,
-  SELF_SERVICE_DEFAULT_TPM,
-  SELF_SERVICE_MAX_TPM,
-} from '../hooks/useKeyActions';
+import KeyPricingGroup from './KeyPricingGroup';
+import KeyQuotaFields from './KeyQuotaFields';
 import useModalA11y from '../hooks/useModalA11y';
 import useFormDirty from '../hooks/useFormDirty';
 import useUnsavedGuard from '../hooks/useUnsavedGuard';
@@ -185,91 +181,8 @@ export default function KeyModal({
             </div>
           )}
 
-          <div>
-            <label className="ui-label text-xs">
-              {isZh ? '计费分组 (Pricing Group)' : 'Pricing Group'}
-            </label>
-            {adminUser?.role === 'admin' ? (
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {pricingGroups.map(g => (
-                    <button
-                      key={g}
-                      type="button"
-                      onClick={() => setNewKey({ ...newKey, group_name: g })}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
-                        (newKey.group_name || 'default') === g
-                          ? 'bg-[#355CFF] text-white border-[#355CFF] font-semibold shadow-xs'
-                          : 'bg-white dark:bg-[#191B1F] border-[#E4E6E9] dark:border-[#2C3038] text-[#202124] dark:text-[#F1F2F4] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B]'
-                      }`}
-                    >
-                      {(() => {
-                        const mult = groupMultipliers?.[g] ?? (g === 'vip' ? 0.8 : g === 'enterprise' ? 1.5 : 1.0);
-                        if (g === 'default') return isZh ? `默认组 (1.0x 官方基准)` : `Default (1.0x)`;
-                        if (g === 'vip') return isZh ? `VIP组 (${mult}x · ${Math.round(mult * 10)}折)` : `VIP (${mult}x)`;
-                        if (g === 'enterprise') return isZh ? `企业组 (${mult}x 保障)` : `Enterprise (${mult}x)`;
-                        return `${g} (${mult}x)`;
-                      })()}
-                    </button>
-                  ))}
-                </div>
-                <input
-                  type="text"
-                  placeholder={isZh ? '或输入自定义计费分组标识' : 'or enter custom pricing group ID'}
-                  value={newKey.group_name || ''}
-                  onChange={(e) => setNewKey({ ...newKey, group_name: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '') })}
-                  className="ui-field ui-field-sm font-mono"
-                />
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {adminUser?.group_name && adminUser.group_name !== 'default' ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setNewKey({ ...newKey, group_name: 'default' })}
-                      className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
-                        (newKey.group_name || 'default') === 'default'
-                          ? 'bg-[#EEF2FF] dark:bg-[#242D48] border-[#355CFF] text-[#202124] dark:text-[#F1F2F4] ring-1 ring-[#355CFF]'
-                          : 'bg-white dark:bg-[#191B1F] border-[#E4E6E9] dark:border-[#2C3038] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B]'
-                      }`}
-                    >
-                      <div className="text-xs font-bold">{isZh ? '默认基础组 (default)' : 'Default Group (default)'}</div>
-                      <div className="ui-meta mt-0.5">
-                        {isZh ? '标准定价，适合常规调用或测试环境' : 'Standard rate, ideal for general dev and testing'}
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNewKey({ ...newKey, group_name: adminUser.group_name })}
-                      className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
-                        newKey.group_name === adminUser.group_name
-                          ? 'bg-amber-50/70 dark:bg-amber-950/40 border-amber-500 text-amber-950 dark:text-amber-200 ring-1 ring-amber-500'
-                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
-                      }`}
-                    >
-                      <div className="text-xs font-bold text-amber-600 dark:text-amber-400">
-                        {adminUser.group_name.toUpperCase()} {isZh ? `专属保障组 (${groupMultipliers?.[adminUser.group_name] ?? 0.8}x)` : `Tier Group (${groupMultipliers?.[adminUser.group_name] ?? 0.8}x)`}
-                      </div>
-                      <div className="ui-meta mt-0.5">
-                        {isZh ? '享受您账号签约的特权与优惠费率' : 'Enjoy your account negotiated discount rates'}
-                      </div>
-                    </button>
-                  </div>
-                ) : (
-                  <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                    <div>
-                      <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">{isZh ? '默认计费组 (Standard)' : 'Default Group (Standard)'}</div>
-                      <div className="ui-meta mt-0.5">{isZh ? '该密钥调用将按通用标准费率结算扣费' : 'Usage will be billed under general standard rates'}</div>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-lg text-xs font-semibold bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] border border-[#355CFF]/20 dark:border-[#91A7FF]/30">
-                      {isZh ? '标准费率' : 'Standard'}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <KeyPricingGroup newKey={newKey} setNewKey={setNewKey} pricingGroups={pricingGroups}
+            groupMultipliers={groupMultipliers} adminUser={adminUser} isZh={isZh} />
 
           {isAdmin ? (
             <div>
@@ -322,122 +235,7 @@ export default function KeyModal({
             </div>
           )}
 
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="font-semibold text-[#202124] dark:text-[#F1F2F4]">
-                {isZh ? '额度限制 (CNY, 0 为不限)' : 'Quota Limit (CNY, 0 for unlimited)'}
-              </label>
-              <div className="flex items-center space-x-1.5 text-xs">
-                {[
-                  { label: isZh ? '不限' : 'Unlimited', val: 0 },
-                  { label: '¥10', val: 10 },
-                  { label: '¥50', val: 50 },
-                  { label: '¥100', val: 100 },
-                ].map(p => (
-                  <button
-                    key={p.label}
-                    type="button"
-                    onClick={() => setNewKey(prev => ({ ...prev, budget: p.val }))}
-                    className="text-[#355CFF] dark:text-[#91A7FF] hover:underline px-1 cursor-pointer"
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={newKey.budget ?? 0}
-              onChange={(e) => setNewKey({ ...newKey, budget: parseFloat(e.target.value) || 0 })}
-              className="ui-field font-mono"
-            />
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="font-semibold text-[#202124] dark:text-[#F1F2F4]">
-                {isAdmin
-                  ? (t?.keyRpmLabel || (isZh ? '速率上限 (RPM)' : 'Rate limit (RPM)'))
-                  : `${t?.keyRpmLabel || (isZh ? '速率上限 (RPM)' : 'Rate limit (RPM)')} (${SELF_SERVICE_DEFAULT_RPM}–${SELF_SERVICE_MAX_RPM})`}
-              </label>
-              <div className="flex items-center space-x-1.5 text-xs">
-                {(isAdmin
-                  ? [{ label: isZh ? '不限' : 'Unlimited', val: 0 }, { label: '60', val: 60 }, { label: '120', val: 120 }, { label: '600', val: 600 }]
-                  // Self-service keys cannot be unlimited: 0 would silently become
-                  // the default, so the presets only offer real allowances.
-                  : [{ label: '60', val: 60 }, { label: '120', val: 120 }, { label: '600', val: 600 }, { label: '6000', val: 6000 }]
-                ).map(p => (
-                  <button
-                    key={p.label}
-                    type="button"
-                    onClick={() => setNewKey(prev => ({ ...prev, rpm: p.val }))}
-                    className="text-[#355CFF] dark:text-[#91A7FF] hover:underline px-1 cursor-pointer"
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <input
-              type="number"
-              min={isAdmin ? 0 : 1}
-              max={isAdmin ? undefined : SELF_SERVICE_MAX_RPM}
-              step="1"
-              value={newKey.rpm ?? 0}
-              onChange={(e) => setNewKey(prev => ({ ...prev, rpm: parseInt(e.target.value, 10) || 0 }))}
-              className="ui-field font-mono"
-            />
-            <p className="ui-meta-sm mt-1">
-              {isAdmin
-                ? (t?.keyRpmAdminHint || (isZh ? '0 表示不限速（仅管理员可创建不限速密钥）。' : '0 means unlimited — only an administrator can create an unlimited key.'))
-                : (t?.keyRpmSelfServiceHint || (isZh
-                  ? '默认 60 RPM，自助创建最高 6000 RPM；如需不限速请联系管理员。'
-                  : 'Defaults to 60 RPM; self-service keys cap at 6000 RPM. Contact an administrator for unlimited.'))}
-            </p>
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="font-semibold text-[#202124] dark:text-[#F1F2F4]">
-                {isAdmin
-                  ? (t?.keyTpmLabel || (isZh ? 'Token 上限 (TPM)' : 'Token limit (TPM)'))
-                  : `${t?.keyTpmLabel || (isZh ? 'Token 上限 (TPM)' : 'Token limit (TPM)')} (${SELF_SERVICE_DEFAULT_TPM}–${SELF_SERVICE_MAX_TPM})`}
-              </label>
-              <div className="flex items-center space-x-1.5 text-xs">
-                {(isAdmin
-                  ? [{ label: isZh ? '不限' : 'Unlimited', val: 0 }, { label: '100K', val: 100000 }, { label: '1M', val: 1000000 }]
-                  : [{ label: '100K', val: 100000 }, { label: '1M', val: 1000000 }, { label: '10M', val: SELF_SERVICE_MAX_TPM }]
-                ).map(p => (
-                  <button
-                    key={p.label}
-                    type="button"
-                    onClick={() => setNewKey(prev => ({ ...prev, tpm: p.val }))}
-                    className="text-[#355CFF] dark:text-[#91A7FF] hover:underline px-1 cursor-pointer"
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <input
-              type="number"
-              min={isAdmin ? 0 : 1}
-              max={isAdmin ? undefined : SELF_SERVICE_MAX_TPM}
-              step="1"
-              value={newKey.tpm ?? 0}
-              onChange={(e) => setNewKey(prev => ({ ...prev, tpm: parseInt(e.target.value, 10) || 0 }))}
-              className="ui-field font-mono"
-            />
-            <p className="ui-meta-sm mt-1">
-              {isAdmin
-                ? (t?.keyTpmAdminHint || (isZh ? '0 表示不限量（仅管理员可创建不限量密钥）。' : '0 means unlimited — only an administrator can create an unlimited key.'))
-                : (t?.keyTpmSelfServiceHint || (isZh
-                  ? '默认 100,000 TPM，自助创建最高 10,000,000 TPM；如需更高请联系管理员。'
-                  : 'Defaults to 100,000 TPM; self-service keys cap at 10,000,000 TPM. Contact an administrator for more.'))}
-            </p>
-          </div>
+          <KeyQuotaFields newKey={newKey} setNewKey={setNewKey} isAdmin={isAdmin} isZh={isZh} t={t} />
         </div>
 
         <div className="flex items-center justify-between gap-3 pt-4 border-t border-[#E4E6E9] dark:border-[#2C3038]">

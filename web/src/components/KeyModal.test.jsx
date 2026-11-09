@@ -42,6 +42,42 @@ function setup({ adminUser = { username: 'alice', role: 'user', group_name: 'def
   return { ...utils, ...handlers };
 }
 
+describe('KeyModal pricing group selection', () => {
+  it('only lets an administrator select an existing pricing group', () => {
+    const { setNewKey } = setup({
+      adminUser: { username: 'root', role: 'admin' },
+      pricingGroups: ['default', 'vip', 'team'],
+      groupMultipliers: { default: 1, vip: 0.8, team: 0.9 },
+    });
+    const select = screen.getByRole('combobox', { name: '计费分组 (Pricing Group)' });
+
+    expect([...select.options].map((option) => option.value)).toEqual(['default', 'vip', 'team']);
+    expect(screen.queryByPlaceholderText('或输入自定义计费分组标识')).not.toBeInTheDocument();
+    expect(screen.getByText(/新增或修改分组请前往定价管理/)).toBeInTheDocument();
+    fireEvent.change(select, { target: { value: 'team' } });
+    expect(setNewKey).toHaveBeenCalledWith(expect.objectContaining({ group_name: 'team' }));
+  });
+
+  it('only offers the default and assigned groups to a regular user', () => {
+    setup({
+      adminUser: { username: 'alice', role: 'user', group_name: 'vip' },
+      pricingGroups: ['default', 'vip', 'enterprise'],
+    });
+
+    const select = screen.getByRole('combobox', { name: '计费分组 (Pricing Group)' });
+    expect([...select.options].map((option) => option.value)).toEqual(['default', 'vip']);
+  });
+
+  it('requires a new selection when the draft group no longer exists', () => {
+    setup({ adminUser: { username: 'root', role: 'admin' }, newKey: draft({ group_name: 'removed-group' }) });
+
+    const select = screen.getByRole('combobox', { name: '计费分组 (Pricing Group)' });
+    expect(select.value).toBe('');
+    expect(select).toBeInvalid();
+    expect(screen.getByRole('option', { name: '请选择已有分组' })).toBeDisabled();
+  });
+});
+
 describe('KeyModal tenant ownership', () => {
   it('shows a server-assigned tenant to a self-service user instead of an input', () => {
     setup({ adminUser: { username: 'alice', role: 'user', group_name: 'default' } });

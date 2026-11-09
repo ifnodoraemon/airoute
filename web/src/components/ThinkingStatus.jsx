@@ -32,8 +32,8 @@ export default function ThinkingStatus({
       <p
         title={
           isZh
-            ? '未返回思考内容或用量，不代表没有思考。'
-            : 'Missing reasoning text or usage does not establish an absence of thinking.'
+            ? (observation.mode === 'native' ? '客户端直接传入上游原生思考参数；具体设置由上游解释。' : '未返回思考内容或用量，不代表没有思考。')
+            : (observation.mode === 'native' ? 'The client supplied provider-native thinking parameters, interpreted by the upstream.' : 'Missing reasoning text or usage does not establish an absence of thinking.')
         }
       >
         {text}

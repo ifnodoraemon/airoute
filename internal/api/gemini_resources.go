@@ -167,8 +167,11 @@ func saveGoogleResource(c *gin.Context, r *googleResource, id string, data []byt
 		}
 	}
 	var billing []byte
+	if r.state != nil && r.state.ID == id {
+		billing = r.state.Billing
+	}
 	if r.namespace == "gemini-batch" || r.namespace == "gemini-interaction" {
-		if key := getAPIKeyConfig(c); key != nil {
+		if key := getAPIKeyConfig(c); key != nil && len(billing) == 0 {
 			copy := *key
 			if !storage.IsAPIKeyHash(copy.Key) {
 				copy.Key = storage.HashAPIKey(copy.Key)
@@ -177,11 +180,19 @@ func saveGoogleResource(c *gin.Context, r *googleResource, id string, data []byt
 			var snapshot map[string]json.RawMessage
 			_ = json.Unmarshal(billing, &snapshot)
 			snapshot["_airoute_estimated_prompt_tokens"], _ = json.Marshal(estimateTokens(len(r.body)))
+			if err := retainGoogleQuota(c, r, id, snapshot); err != nil {
+				return err
+			}
 			billing, _ = json.Marshal(snapshot)
 		}
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 2*time.Second)
 	defer cancel()
-	return nativestate.Save(ctx, storage.NativeState{Namespace: r.namespace, ID: id, Owner: callerOwner(c),
-		Identity: model.UpstreamIdentity(r.channel), Model: r.model, Data: data, Billing: billing, ExpiresAt: expires})
+	state := storage.NativeState{Namespace: r.namespace, ID: id, Owner: callerOwner(c),
+		Identity: model.UpstreamIdentity(r.channel), Model: r.model, Data: data, Billing: billing, ExpiresAt: expires}
+	if err := nativestate.Save(ctx, state); err != nil {
+		return err
+	}
+	r.state = &state
+	return nil
 }

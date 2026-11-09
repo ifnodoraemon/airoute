@@ -120,21 +120,31 @@ func TestUsageSpillReplayPicksUpAnotherProcessFile(t *testing.T) {
 	prevLogger := GlobalAsyncLogger
 	defer func() { GlobalAsyncLogger = prevLogger }()
 
+	boot := newUsageSpill()
+	if _, err := boot.append([]*UsageLogRecord{{BillingID: "bill-peer-startup", CreatedAt: time.Now()}}); err != nil {
+		t.Fatalf("append startup marker: %v", err)
+	}
 	al := InitAsyncLogger(repo, 64, 8, 40*time.Millisecond)
 	defer al.Stop()
+	if got := waitForUsageLogCount(t, repo, "bill-peer-startup", 1, 3*time.Second); got != 1 {
+		t.Fatalf("startup marker: rows = %d, want 1", got)
+	}
 
-	// A peer's spill file appears after our startup pass.
+	// Publish an already-quiet peer file after the startup directory scan. With
+	// zero claim grace, exposing append's empty file before its write/fsync lets
+	// replay consume and remove it while the peer is still writing the record.
 	peer := newUsageSpill()
+	readyPath := peer.path
+	peer.path += ".writing"
 	if _, err := peer.append([]*UsageLogRecord{
 		{TraceID: "tr-spill-peer", BillingID: "bill-spill-peer", CreatedAt: time.Now()},
 	}); err != nil {
 		t.Fatalf("append peer spill record: %v", err)
 	}
-	// The replay interval is 1s, but the first pass runs at init (before this file
-	// existed), so the first claimable pass is the second tick. Under `-race` with
-	// every package running in parallel the goroutine can be scheduled late enough
-	// that a 5s bound flakes (observed once); 20s still fails fast on a real
-	// regression while absorbing scheduler noise.
+	if err := os.Rename(peer.path, readyPath); err != nil {
+		t.Fatalf("publish quiet peer spill file: %v", err)
+	}
+	// No replay kick is sent: only the periodic pass can discover this file.
 	if got := waitForUsageLogCount(t, repo, "bill-spill-peer", 1, 20*time.Second); got != 1 {
 		t.Fatalf("peer spill file was not replayed by the periodic pass: rows = %d", got)
 	}

@@ -1,177 +1,94 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import AnnouncementBanner from './AnnouncementBanner';
 import AnnouncementModal from './AnnouncementModal';
+import AnnouncementActions from './AnnouncementActions';
 
-describe('Announcement System', () => {
-  beforeEach(() => {
-    localStorage.clear();
-    vi.clearAllMocks();
-  });
+const announcement = { id: 'notice_123', announcement_id: 'ann_post', kind: 'announcement', title: '集群升级通知', content: '今晚进行升级', level: 'warning' };
+const response = (data, status = 200) => ({ ok: status < 400, status, json: async () => data });
 
-  it('renders announcement banner when enabled', async () => {
-    const mockAdminFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        code: 0,
-        data: {
-          id: 'ann_123',
-          title: '集群升级通知',
-          content: '今晚 24:00 进行网络升级',
-          level: 'warning',
-          enabled: true,
-        }
-      })
-    });
+describe('announcement records', () => {
+  beforeEach(() => { localStorage.clear(); vi.clearAllMocks(); });
 
-    render(<AnnouncementBanner adminFetch={mockAdminFetch} lang="zh" />);
-
-    await waitFor(() => {
-      expect(screen.getByText('重要提醒')).toBeInTheDocument();
-      expect(screen.getByText('集群升级通知:')).toBeInTheDocument();
-      expect(screen.getByText('今晚 24:00 进行网络升级')).toBeInTheDocument();
-    });
-  });
-
-  it('allows dismissing the banner and remembers in localStorage', async () => {
-    const mockAdminFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        code: 0,
-        data: {
-          id: 'ann_123',
-          title: '集群升级通知',
-          content: '今晚 24:00 进行网络升级',
-          level: 'warning',
-          enabled: true,
-        }
-      })
-    });
-
-    render(<AnnouncementBanner adminFetch={mockAdminFetch} lang="zh" />);
-
-    await waitFor(() => {
-      expect(screen.getByText('集群升级通知:')).toBeInTheDocument();
-    });
-
-    const closeBtn = screen.getByTitle('关闭公告（本条不再提示）');
-    fireEvent.click(closeBtn);
-
+  it('loads the banner from the announcement collection and links to the timeline', async () => {
+    const fetcher = vi.fn().mockResolvedValue(response({ code: 0, data: announcement }));
+    const open = vi.fn();
+    render(<AnnouncementBanner adminFetch={fetcher} onOpen={open} />);
+    await screen.findByText('集群升级通知:');
+    expect(fetcher).toHaveBeenCalledWith('/api/v1/announcements/banner', expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    fireEvent.click(screen.getByRole('button', { name: '查看全部公告' }));
+    expect(open).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: '关闭公告（本条不再提示）' }));
     expect(screen.queryByText('集群升级通知:')).not.toBeInTheDocument();
-    expect(localStorage.getItem('airoute_dismissed_announcement')).toBe('ann_123');
+    expect(localStorage.getItem('airoute_dismissed_announcement')).toBe('notice_123');
   });
 
-  it('does not render banner if previously dismissed', async () => {
-    localStorage.setItem('airoute_dismissed_announcement', 'ann_123');
-
-    const mockAdminFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        code: 0,
-        data: {
-          id: 'ann_123',
-          title: '集群升级通知',
-          content: '今晚 24:00 进行网络升级',
-          level: 'warning',
-          enabled: true,
-        }
-      })
-    });
-
-    render(<AnnouncementBanner adminFetch={mockAdminFetch} lang="zh" />);
-
-    // Should not display
+  it('keeps a dismissed delivery hidden', async () => {
+    localStorage.setItem('airoute_dismissed_announcement', announcement.id);
+    const fetcher = vi.fn().mockResolvedValue(response({ code: 0, data: announcement }));
+    render(<AnnouncementBanner adminFetch={fetcher} />);
+    await waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
     expect(screen.queryByText('集群升级通知:')).not.toBeInTheDocument();
   });
 
-  it('submits announcement from modal', async () => {
-    const mockAdminFetch = vi.fn().mockImplementation((url, opts) => {
-      if (url.includes('/config')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({
-            code: 0,
-            data: {
-              id: 'ann_1',
-              title: '原有公告',
-              content: '原有内容',
-              level: 'info',
-              enabled: false
-            }
-          })
-        });
-      }
-      if (opts && opts.method === 'POST') {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ code: 0, message: 'ok' })
-        });
-      }
-      return Promise.resolve({ ok: true, json: async () => ({ code: 0 }) });
-    });
-
-    const onPublished = vi.fn();
-    const onClose = vi.fn();
-
-    render(
-      <AnnouncementModal
-        isOpen={true}
-        onClose={onClose}
-        adminFetch={mockAdminFetch}
-        onPublished={onPublished}
-        lang="zh"
-      />
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText('系统级全员公告发布')).toBeInTheDocument();
-    });
-
-    const submitBtn = screen.getByText('保存草稿并下线');
-    fireEvent.click(submitBtn);
-
-    await waitFor(() => {
-      expect(mockAdminFetch).toHaveBeenCalledWith('/api/v1/admin/announcement', expect.objectContaining({
-        method: 'POST'
-      }));
-      expect(onPublished).toHaveBeenCalled();
-      expect(onClose).toHaveBeenCalled();
-    });
+  it('hides a withdrawn banner after a failed refresh', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(response({ code: 0, data: announcement }))
+      .mockResolvedValue(response({ error: 'unavailable' }, 503));
+    const { rerender } = render(<AnnouncementBanner adminFetch={fetcher} refreshKey={0} />);
+    await screen.findByText('集群升级通知:');
+    rerender(<AnnouncementBanner adminFetch={fetcher} refreshKey={1} />);
+    await waitFor(() => expect(screen.queryByText('集群升级通知:')).not.toBeInTheDocument());
   });
 
-  it('hides a withdrawn notice when the refresh fails', async () => {
-    // A 401/500 used to leave the previous announcement rendered, so an operator
-    // could act on a notice that had already been taken down.
-    const mockAdminFetch = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ code: 0, data: { id: 'ann_1', title: '旧公告', content: '已下线', level: 'info', enabled: true } }),
-      })
-      .mockResolvedValue({ ok: false, status: 500, json: async () => ({ error: 'boom' }) });
-
-    const { rerender } = render(<AnnouncementBanner adminFetch={mockAdminFetch} lang="zh" refreshKey={0} />);
-    await waitFor(() => expect(screen.getByText('旧公告:')).toBeInTheDocument());
-
-    rerender(<AnnouncementBanner adminFetch={mockAdminFetch} lang="zh" refreshKey={1} />);
-
-    await waitFor(() => expect(screen.queryByText('旧公告:')).not.toBeInTheDocument());
+  it('ignores a stale response after the announcement changes', async () => {
+    let finishOld;
+    const fetcher = vi.fn().mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }))
+      .mockResolvedValue(response({ code: 0, data: { ...announcement, id: 'notice_new', title: '最新公告' } }));
+    const { rerender } = render(<AnnouncementBanner adminFetch={fetcher} refreshKey={0} />);
+    rerender(<AnnouncementBanner adminFetch={fetcher} refreshKey={1} />);
+    await screen.findByText('最新公告:');
+    await act(async () => finishOld(response({ code: 0, data: announcement })));
+    expect(screen.queryByText('集群升级通知:')).not.toBeInTheDocument();
   });
 
-  it('refreshes immediately when the console publishes an announcement', async () => {
-    const mockAdminFetch = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ code: 0, data: null }) })
-      .mockResolvedValue({
-        ok: true,
-        json: async () => ({ code: 0, data: { id: 'ann_2', title: '新公告', content: '刚发布', level: 'critical', enabled: true } }),
-      });
+  it('creates an independent draft without fetching a singleton configuration', async () => {
+    const fetcher = vi.fn().mockResolvedValue(response({ code: 0 }));
+    const published = vi.fn(), close = vi.fn();
+    render(<AnnouncementModal isOpen adminFetch={fetcher} onPublished={published} onClose={close} />);
+    expect(fetcher).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('公告标题'), { target: { value: '独立草稿' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
+    await waitFor(() => expect(close).toHaveBeenCalledOnce());
+    const [url, options] = fetcher.mock.calls[0];
+    expect(url).toBe('/api/v1/admin/announcements');
+    expect(options.method).toBe('POST');
+    expect(JSON.parse(options.body)).toMatchObject({ title: '独立草稿', status: 'draft', show_banner: false, request_id: expect.any(String) });
+    expect(JSON.parse(options.body)).not.toHaveProperty('enabled');
+    expect(published).toHaveBeenCalledOnce();
+  });
 
-    const { rerender } = render(<AnnouncementBanner adminFetch={mockAdminFetch} lang="zh" refreshKey={0} />);
-    await waitFor(() => expect(screen.queryByText('新公告:')).not.toBeInTheDocument());
+  it('edits and withdraws the selected published record', async () => {
+    const fetcher = vi.fn().mockImplementation((url, options) => Promise.resolve(response(options?.method
+      ? { code: 0 } : { code: 0, data: { title: '已发布公告', content: '正文', level: 'info', status: 'published', show_banner: false } })));
+    const close = vi.fn();
+    render(<AnnouncementModal isOpen announcementId="ann_post" adminFetch={fetcher} onClose={close} />);
+    await screen.findByDisplayValue('已发布公告');
+    fireEvent.click(screen.getByRole('button', { name: '撤回为草稿' }));
+    await waitFor(() => expect(close).toHaveBeenCalledOnce());
+    const [url, options] = fetcher.mock.calls.at(-1);
+    expect(url).toBe('/api/v1/admin/announcements/ann_post');
+    expect(options.method).toBe('PUT');
+    expect(JSON.parse(options.body).status).toBe('draft');
+  });
 
-    // Publishing bumps the key: the banner must not wait for its 60s poll.
-    rerender(<AnnouncementBanner adminFetch={mockAdminFetch} lang="zh" refreshKey={1} />);
-
-    await waitFor(() => expect(screen.getByText('新公告:')).toBeInTheDocument());
-    expect(mockAdminFetch.mock.calls.length).toBeGreaterThanOrEqual(2);
+  it('deletes only the selected announcement after the in-page confirmation', async () => {
+    const fetcher = vi.fn().mockResolvedValue(response({ code: 0 }));
+    const changed = vi.fn();
+    render(<AnnouncementActions id="ann_post" lang="zh" fetcher={fetcher} onChanged={changed} onEdit={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '删除公告' }));
+    expect(fetcher).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
+    await waitFor(() => expect(changed).toHaveBeenCalledOnce());
+    expect(fetcher).toHaveBeenCalledWith('/api/v1/admin/announcements/ann_post', { method: 'DELETE' });
   });
 });

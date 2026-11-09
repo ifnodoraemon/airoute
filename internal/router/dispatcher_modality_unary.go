@@ -1,240 +1,112 @@
 package router
 
-// The two unary modality paths (embedding and rerank) live here rather than in
-// dispatcher_modality.go, which keeps the generic JSON/HTTP path readable and
-// both files under the repository's file-size guideline. The loops are
-// intentionally parallel: they share the budget check, the breaker admission and
-// the 404-vs-fatal-payload classification, and keeping them side by side makes a
-// divergence visible at review time.
-
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
 	"github.com/ifnodoraemon/airoute/internal/provider"
-	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
-// dispatchEmbeddingOnce routes one embedding request across matching candidate
-// channels. The exported DispatchEmbedding wrapper adds the total request budget
-// and the cross-model fallback.
-func (d *Dispatcher) dispatchEmbeddingOnce(ctx context.Context, req *model.EmbeddingRequest) (*model.EmbeddingResponse, error) {
-	channels := d.ResolveCandidateChannels(ctx, req.Model, "embeddings")
-	if len(channels) == 0 {
-		return nil, newNoRouteError(ctx, req.Model, fmt.Errorf("no upstream provider available for embedding model '%s'", req.Model))
-	}
-
-	var lastErr error
-	var attempted []string // channels actually called and failed
-	var skipped []string   // channels bypassed by the circuit breaker, never called
-	for i, ch := range channels {
-		// Stop at the gateway's total budget instead of paying the next channel
-		// timeout as well (B-01).
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			if requestBudgetExceeded(ctx, ctxErr) {
-				return nil, newRequestBudgetError(req.Model, attempted, lastErr)
-			}
-			return nil, newCanceledError(ctx, attempted, "", 0)
-		}
-		if !d.circuitBreaker.CanExecute(ch.Name) {
-			telemetry.WarnLogger(routerLog(ctx), "breaker-open:"+ch.Name, 30*time.Second,
-				"circuit breaker is OPEN, bypassing dead upstream",
-				"channel", ch.Name, "attempt", i+1)
-			skipped = append(skipped, ch.Name)
-			continue
-		}
-
-		start := time.Now()
-		var resp *model.EmbeddingResponse
-		var err error
-
-		d.mu.RLock()
-		prov, exists := d.providers[ch.Type]
-		d.mu.RUnlock()
-
-		if !exists {
-			lastErr = fmt.Errorf("unsupported provider type '%s' on channel %s", ch.Type, ch.Name)
-			d.circuitBreaker.AbortCanary(ch.Name)
-			continue
-		}
-
-		embedProv, ok := prov.(provider.EmbeddingProvider)
-		if !ok {
-			lastErr = fmt.Errorf("provider '%s' on channel %s does not support embedding", ch.Type, ch.Name)
-			d.circuitBreaker.AbortCanary(ch.Name)
-			continue
-		}
-		callCtx, cancelCall, admissionErr := d.beginChannelCall(ctx, ch, req.Model)
-		if admissionErr != nil {
-			d.circuitBreaker.AbortCanary(ch.Name)
-			if ctx.Err() != nil {
-				return nil, admissionDispatchError(ctx, req.Model, attempted, admissionErr)
-			}
-			lastErr = admissionErr
-			skipped = append(skipped, ch.Name)
-			continue
-		}
-		resp, err = embedProv.Embed(callCtx, req, ch)
-		cancelCall()
-
-		if err != nil {
-			if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
-				d.circuitBreaker.AbortCanary(ch.Name)
-				return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
-			}
-			// A budget expiry arrives as DeadlineExceeded on the attempt context.
-			if ctxErr := ctx.Err(); ctxErr != nil {
-				d.circuitBreaker.AbortCanary(ch.Name)
-				if requestBudgetExceeded(ctx, ctxErr) {
-					return nil, newRequestBudgetError(req.Model, append(attempted, ch.Name), err)
-				}
-				return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
-			}
-			lastErr = err
-			d.observeUpstreamError(ctx, ch, req.Model, err)
-			// 404 is node-specific: the next candidate channel may host the model
-			// (B-03). Only a deterministic payload error ends the fan-out.
-			if provider.IsModelNotFound(err) {
-				d.circuitBreaker.AbortCanary(ch.Name)
-				attempted = append(attempted, ch.Name)
-				continue
-			}
-			if provider.IsFatalPayloadError(err) {
-				d.circuitBreaker.AbortCanary(ch.Name)
-				return nil, err
-			}
-			if !provider.IsChannelFailure(err) {
-				d.circuitBreaker.AbortCanary(ch.Name)
-				attempted = append(attempted, ch.Name)
-				continue
-			}
-			attempted = append(attempted, d.recordChannelFailure(ctx, ch.Name, err, i+1))
-			continue
-		}
-
-		promptTokens := 0
-		if resp.Usage.PromptTokens > 0 {
-			promptTokens = resp.Usage.PromptTokens
-		}
-		d.rememberSessionChannel(ctx, req.Model, ch.Name)
-		resp.Channel = d.recordChannelSuccess(ctx, attempted, ch.Name, time.Since(start), promptTokens, 0)
-		return resp, nil
-	}
-
-	if lastErr == nil {
-		lastErr = skippedOnlyError(req.Model, skipped)
-	}
-	return nil, newExhaustedError(ctx, req.Model, exhaustedTrail(attempted, skipped), fmt.Errorf("all %d providers failed for embedding model '%s'. Last error: %w", len(channels), req.Model, lastErr))
+type unaryProviderCall[T any] func(context.Context, *model.ChannelConfig) (*T, error)
+type unaryModality[T any] struct {
+	protocol, label, capability string
+	bind                        func(provider.Provider) (unaryProviderCall[T], bool)
+	tokens                      func(*T) int
 }
 
-// dispatchRerankOnce routes one rerank request across candidate channels. The
-// exported DispatchRerank wrapper adds the total request budget and the
-// cross-model fallback.
-func (d *Dispatcher) dispatchRerankOnce(ctx context.Context, req *model.RerankRequest) (*model.RerankResponse, error) {
-	channels := d.ResolveCandidateChannels(ctx, req.Model, "rerank")
-	if len(channels) == 0 {
-		return nil, newNoRouteError(ctx, req.Model, fmt.Errorf("no upstream provider available for rerank model '%s'", req.Model))
-	}
-
-	var lastErr error
-	var attempted []string // channels actually called and failed
-	var skipped []string   // channels bypassed by the circuit breaker, never called
-	for i, ch := range channels {
-		// Stop at the gateway's total budget instead of paying the next channel
-		// timeout as well (B-01).
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			if requestBudgetExceeded(ctx, ctxErr) {
-				return nil, newRequestBudgetError(req.Model, attempted, lastErr)
+func (d *Dispatcher) dispatchEmbeddingOnce(ctx context.Context, req *model.EmbeddingRequest) (*model.EmbeddingResponse, error) {
+	resp, channel, err := dispatchUnaryModality(d, ctx, req.Model, req.EstimatedPromptTokens, unaryModality[model.EmbeddingResponse]{
+		protocol: "embeddings", label: "embedding", capability: "embedding",
+		bind: func(p provider.Provider) (unaryProviderCall[model.EmbeddingResponse], bool) {
+			embedding, ok := p.(provider.EmbeddingProvider)
+			if !ok {
+				return nil, false
 			}
-			return nil, newCanceledError(ctx, attempted, "", 0)
+			return func(ctx context.Context, ch *model.ChannelConfig) (*model.EmbeddingResponse, error) {
+				return embedding.Embed(ctx, req, ch)
+			}, true
+		},
+		tokens: func(resp *model.EmbeddingResponse) int { return resp.Usage.PromptTokens },
+	})
+	if err == nil {
+		resp.Channel = channel
+	}
+	return resp, err
+}
+
+func (d *Dispatcher) dispatchRerankOnce(ctx context.Context, req *model.RerankRequest) (*model.RerankResponse, error) {
+	resp, channel, err := dispatchUnaryModality(d, ctx, req.Model, req.EstimatedPromptTokens, unaryModality[model.RerankResponse]{
+		protocol: "rerank", label: "rerank", capability: "reranking",
+		bind: func(p provider.Provider) (unaryProviderCall[model.RerankResponse], bool) {
+			rerank, ok := p.(provider.RerankProvider)
+			if !ok {
+				return nil, false
+			}
+			return func(ctx context.Context, ch *model.ChannelConfig) (*model.RerankResponse, error) {
+				return rerank.Rerank(ctx, req, ch)
+			}, true
+		},
+		tokens: func(resp *model.RerankResponse) int { return resp.Usage.TotalTokens },
+	})
+	if err == nil {
+		resp.Channel = channel
+	}
+	return resp, err
+}
+
+// dispatchUnaryModality shares only fully consumed unary responses. Streaming
+// and raw HTTP bodies retain their own ownership and cancellation lifetimes.
+func dispatchUnaryModality[T any](d *Dispatcher, ctx context.Context, name string, estimate func() int, modality unaryModality[T]) (*T, string, error) {
+	channels := d.ResolveCandidateChannels(ctx, name, modality.protocol)
+	if len(channels) == 0 {
+		return nil, "", newNoRouteError(ctx, name, fmt.Errorf("no upstream provider available for %s model '%s'", modality.label, name))
+	}
+	state := unaryAttemptState{dispatcher: d, ctx: ctx, model: name, estimate: estimate}
+	for i, ch := range channels {
+		available, err := state.available(ch, i+1)
+		if err != nil {
+			return nil, "", err
 		}
-		if !d.circuitBreaker.CanExecute(ch.Name) {
-			telemetry.WarnLogger(routerLog(ctx), "breaker-open:"+ch.Name, 30*time.Second,
-				"circuit breaker is OPEN, bypassing dead upstream",
-				"channel", ch.Name, "attempt", i+1)
-			skipped = append(skipped, ch.Name)
+		if !available {
 			continue
 		}
-
 		start := time.Now()
 		d.mu.RLock()
 		prov, exists := d.providers[ch.Type]
 		d.mu.RUnlock()
-
 		if !exists {
-			lastErr = fmt.Errorf("unsupported provider type '%s' on channel %s", ch.Type, ch.Name)
-			d.circuitBreaker.AbortCanary(ch.Name)
+			state.unsupported(ch, fmt.Errorf("unsupported provider type '%s' on channel %s", ch.Type, ch.Name))
 			continue
 		}
-
-		rerankProv, ok := prov.(provider.RerankProvider)
-		if !ok {
-			lastErr = fmt.Errorf("provider '%s' on channel %s does not support reranking", ch.Type, ch.Name)
-			d.circuitBreaker.AbortCanary(ch.Name)
+		call, supported := modality.bind(prov)
+		if !supported {
+			state.unsupported(ch, fmt.Errorf("provider '%s' on channel %s does not support %s", ch.Type, ch.Name, modality.capability))
 			continue
 		}
-
-		callCtx, cancelCall, admissionErr := d.beginChannelCall(ctx, ch, req.Model)
-		if admissionErr != nil {
-			d.circuitBreaker.AbortCanary(ch.Name)
-			if ctx.Err() != nil {
-				return nil, admissionDispatchError(ctx, req.Model, attempted, admissionErr)
+		callCtx, cancelCall, err := d.beginChannelCall(ctx, ch, name)
+		if err != nil {
+			if fatal := state.admissionFailure(ch, err); fatal != nil {
+				return nil, "", fatal
 			}
-			lastErr = admissionErr
-			skipped = append(skipped, ch.Name)
 			continue
 		}
-		resp, err := rerankProv.Rerank(callCtx, req, ch)
+		resp, err := call(callCtx, ch)
 		cancelCall()
 		if err != nil {
-			if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
-				d.circuitBreaker.AbortCanary(ch.Name)
-				return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
+			if fatal := state.failure(ch, err, i+1); fatal != nil {
+				return nil, "", fatal
 			}
-			// A budget expiry arrives as DeadlineExceeded on the attempt context.
-			if ctxErr := ctx.Err(); ctxErr != nil {
-				d.circuitBreaker.AbortCanary(ch.Name)
-				if requestBudgetExceeded(ctx, ctxErr) {
-					return nil, newRequestBudgetError(req.Model, append(attempted, ch.Name), err)
-				}
-				return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
-			}
-			lastErr = err
-			d.observeUpstreamError(ctx, ch, req.Model, err)
-			// 404 is node-specific: the next candidate channel may host the model
-			// (B-03). Only a deterministic payload error ends the fan-out.
-			if provider.IsModelNotFound(err) {
-				d.circuitBreaker.AbortCanary(ch.Name)
-				attempted = append(attempted, ch.Name)
-				continue
-			}
-			if provider.IsFatalPayloadError(err) {
-				d.circuitBreaker.AbortCanary(ch.Name)
-				return nil, err
-			}
-			if !provider.IsChannelFailure(err) {
-				d.circuitBreaker.AbortCanary(ch.Name)
-				attempted = append(attempted, ch.Name)
-				continue
-			}
-			attempted = append(attempted, d.recordChannelFailure(ctx, ch.Name, err, i+1))
 			continue
 		}
-
-		totalTokens := 0
-		if resp.Usage.TotalTokens > 0 {
-			totalTokens = resp.Usage.TotalTokens
-		}
-		d.rememberSessionChannel(ctx, req.Model, ch.Name)
-		resp.Channel = d.recordChannelSuccess(ctx, attempted, ch.Name, time.Since(start), totalTokens, 0)
-		return resp, nil
+		d.rememberSessionChannel(ctx, name, ch.Name)
+		channel := d.recordChannelSuccess(ctx, state.attempted, ch.Name, time.Since(start), max(0, modality.tokens(resp)), 0)
+		return resp, channel, nil
 	}
-
-	if lastErr == nil {
-		lastErr = skippedOnlyError(req.Model, skipped)
+	if state.lastErr == nil {
+		state.lastErr = skippedOnlyError(name, state.skipped)
 	}
-	return nil, newExhaustedError(ctx, req.Model, exhaustedTrail(attempted, skipped), fmt.Errorf("all %d providers failed for rerank model '%s'. Last error: %w", len(channels), req.Model, lastErr))
+	err := fmt.Errorf("all %d providers failed for %s model '%s'. Last error: %w", len(channels), modality.label, name, state.lastErr)
+	return nil, "", newExhaustedError(ctx, name, exhaustedTrail(state.attempted, state.skipped), err)
 }

@@ -1,54 +1,60 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { AlertTriangle, AlertCircle, Info, X } from 'lucide-react';
 import { apiFetch } from '../api/client';
 
-export default function AnnouncementBanner({ lang = 'zh', adminFetch, refreshKey = 0 }) {
+export default function AnnouncementBanner({ lang = 'zh', adminFetch, refreshKey = 0, onOpen }) {
   const isZh = lang === 'zh';
   const [announcement, setAnnouncement] = useState(null);
   const [dismissed, setDismissed] = useState(false);
 
-  const fetchAnnouncement = useCallback(async () => {
-    try {
-      const fetcher = adminFetch || apiFetch;
-      const res = await fetcher('/api/v1/announcement');
-      // A failed refresh must not leave a withdrawn notice on screen: hide it and
-      // let the next successful poll bring it back if it is still active.
-      if (!res || !res.ok) {
-        setAnnouncement(null);
-        return;
-      }
-      const json = await res.json();
-      if (json && json.code === 0 && json.data && json.data.enabled) {
-        const ann = json.data;
-        setAnnouncement(ann);
-        // Check if previously dismissed
-        try {
-          const savedDismissedId = localStorage.getItem('airoute_dismissed_announcement');
-          if (savedDismissedId === ann.id) {
-            setDismissed(true);
-          } else {
+  useEffect(() => {
+    let controller;
+    let disposed = false;
+    const fetchAnnouncement = async () => {
+      controller?.abort();
+      const request = new AbortController();
+      controller = request;
+      try {
+        const fetcher = adminFetch || apiFetch;
+        const res = await fetcher('/api/v1/announcements/banner', { signal: request.signal });
+        if (disposed || request.signal.aborted) return;
+        // A failed refresh must not leave a withdrawn notice on screen: hide it and
+        // let the next successful poll bring it back if it is still active.
+        if (!res || !res.ok) {
+          setAnnouncement(null);
+          return;
+        }
+        const json = await res.json();
+        if (disposed || request.signal.aborted) return;
+        if (json?.code === 0 && json.data?.kind === 'announcement') {
+          const ann = json.data;
+          setAnnouncement(ann);
+          // Check if previously dismissed
+          try {
+            const savedDismissedId = localStorage.getItem('airoute_dismissed_announcement');
+            if (savedDismissedId === ann.id) {
+              setDismissed(true);
+            } else {
+              setDismissed(false);
+            }
+          } catch {
             setDismissed(false);
           }
-        } catch {
-          setDismissed(false);
+        } else {
+          setAnnouncement(null);
         }
-      } else {
-        setAnnouncement(null);
+      } catch {
+        // The request itself failed: treat it like any other failed refresh.
+        if (!disposed && !request.signal.aborted) setAnnouncement(null);
       }
-    } catch {
-      // The request itself failed: treat it like any other failed refresh.
-      setAnnouncement(null);
-    }
-  }, [adminFetch]);
-
-  useEffect(() => {
+    };
     fetchAnnouncement();
     // Poll every 60s for new announcements. `refreshKey` lets the console publish a
     // change and have the banner reflect it immediately instead of up to a minute
     // later.
     const timer = setInterval(fetchAnnouncement, 60000);
-    return () => clearInterval(timer);
-  }, [fetchAnnouncement, refreshKey]);
+    return () => { disposed = true; controller?.abort(); clearInterval(timer); };
+  }, [adminFetch, refreshKey]);
 
   const handleDismiss = () => {
     if (announcement) {
@@ -59,7 +65,7 @@ export default function AnnouncementBanner({ lang = 'zh', adminFetch, refreshKey
     }
   };
 
-  if (!announcement || dismissed || !announcement.enabled) {
+  if (!announcement || dismissed) {
     return null;
   }
 
@@ -100,7 +106,7 @@ export default function AnnouncementBanner({ lang = 'zh', adminFetch, refreshKey
           </span>
           <div className="flex items-baseline gap-2 truncate">
             {announcement.title && (
-              <span className="font-semibold shrink-0">
+              <span className="font-semibold truncate max-w-48 sm:max-w-80">
                 {announcement.title}:
               </span>
             )}
@@ -110,10 +116,12 @@ export default function AnnouncementBanner({ lang = 'zh', adminFetch, refreshKey
           </div>
         </div>
 
+        {onOpen && <button type="button" onClick={onOpen} className="text-[11px] font-medium shrink-0 underline underline-offset-2 cursor-pointer">{isZh ? '查看全部公告' : 'All announcements'}</button>}
         <button
           onClick={handleDismiss}
           className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-black/5 dark:hover:bg-white/5 transition shrink-0 cursor-pointer"
           title={isZh ? '关闭公告（本条不再提示）' : 'Dismiss announcement'}
+          aria-label={isZh ? '关闭公告（本条不再提示）' : 'Dismiss announcement'}
         >
           <X className="w-3.5 h-3.5" />
         </button>

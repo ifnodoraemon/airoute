@@ -61,6 +61,9 @@ func (h *MultimodalHandler) dispatchAndTransform(c *gin.Context, upReq *router.U
 			return
 		}
 	}
+	if upReq.Method != http.MethodGet && !requireQuotaEstimate(c, upReq.Model, 0, 0, max(1, upReq.BillableUnits)) {
+		return
+	}
 	start := time.Now()
 	// The provider call is detached from the downstream request (and bounded by
 	// the drain timeout) exactly like the chat handlers: a customer that hangs up

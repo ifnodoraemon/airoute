@@ -37,7 +37,7 @@ function stubGateway() {
     '/api/v1/admin/pricing': () => jsonResponse({ code: 0, data: [] }),
     '/api/v1/admin/channels': () => jsonResponse({ code: 0, data: [] }),
     '/api/v1/admin/logs': () => jsonResponse({ code: 0, data: [], total: 0 }),
-    '/api/v1/announcement': () => jsonResponse({ code: 0, data: null }),
+    '/api/v1/announcements/banner': () => jsonResponse({ code: 0, data: null }),
   };
   globalThis.fetch.mockImplementation(async (url) => {
     const path = String(url);

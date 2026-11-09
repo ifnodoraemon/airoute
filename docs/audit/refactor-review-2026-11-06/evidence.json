@@ -1,0 +1,515 @@
+{
+  "date": "2026-11-06",
+  "baseline": {
+    "head": "dd61f3705e77088aac742e9773fa69ff2ed51662",
+    "included_uncommitted_work": true,
+    "initial_git_status_entries": 90,
+    "snapshotted_existing_files": 1208,
+    "changed_existing_snapshotted_files": []
+  },
+  "scope": {
+    "rules": "Go, JS and JSX in cmd, internal and web/src; excludes *_test.go, *.test.*, web/src/test; includes comments and blank lines; excludes generated assets, dependencies, CSS and JSON",
+    "inventory": {
+      "go": {
+        "files": 376,
+        "physical_lines": 64702,
+        "over_300_lines": 52
+      },
+      "web": {
+        "files": 114,
+        "physical_lines": 33666,
+        "over_300_lines": 33
+      }
+    },
+    "total_files": 490,
+    "total_physical_lines": 98368,
+    "files_over_300_lines": 85
+  },
+  "static_analysis": {
+    "go_named_functions_with_body": 1905,
+    "go_functions_over_60_lines": 140,
+    "includes_static_or_migration_function_exceptions": true,
+    "frontend_production_modules": 114,
+    "frontend_modules_reachable_from_main": 114,
+    "frontend_orphan_modules": [],
+    "unused_destructured_frontend_parameters": [
+      {
+        "file": "web/src/components/AiCopilot.jsx",
+        "function": "AiCopilot",
+        "param": "t",
+        "line": 60
+      },
+      {
+        "file": "web/src/components/DashboardView.jsx",
+        "function": "DashboardView",
+        "param": "t",
+        "line": 55
+      },
+      {
+        "file": "web/src/components/McpIntegrationView.jsx",
+        "function": "McpIntegrationView",
+        "param": "t",
+        "line": 216
+      },
+      {
+        "file": "web/src/components/PlaygroundView.jsx",
+        "function": "PlaygroundView",
+        "param": "t",
+        "line": 50
+      },
+      {
+        "file": "web/src/components/SkillHubView.jsx",
+        "function": "SkillHubView",
+        "param": "t",
+        "line": 34
+      }
+    ],
+    "unused_keepEndpoint_metadata_entries": 6,
+    "prometheus_simple_scalar_triplets": 46
+  },
+  "runtime": {
+    "go": "go1.26.1 linux/amd64",
+    "node_for_reported_web_checks": "v22.23.4",
+    "npm_for_reported_web_checks": "10.9.9",
+    "earlier_exploratory_node24_checks_not_used_as_formal_baseline": true
+  },
+  "checks": {
+    "web_lint": {
+      "command": "npm --prefix web run lint",
+      "result": "passed; zero warnings",
+      "local_log": "/tmp/airoute-refactor-web-node22-lint-20261106.log",
+      "log_sha256": "c3867a96a318bda1c7678fbb722041bdf55ed6b95c9e3521e10e199cd859b88a"
+    },
+    "web_tests": {
+      "command": "npm --prefix web test -- --maxWorkers=2",
+      "result": "passed",
+      "files": 87,
+      "tests": 790,
+      "local_log": "/tmp/airoute-refactor-web-node22-test-20261106.log",
+      "log_sha256": "60d048430b64dd35a5ecb4833895326242a615b34d7023858cae6bb04de78105"
+    },
+    "web_build": {
+      "command": "npm --prefix web run build",
+      "result": "passed",
+      "local_log": "/tmp/airoute-refactor-web-build-20261106.log",
+      "log_sha256": "8434bdc6bc504816fd55c9e29f64f1e183756587fdc0e60c7a616d8a739714e7"
+    },
+    "go_vet": {
+      "command": "go vet $(go list ./... | rg -v '/web/node_modules/')",
+      "result": "passed",
+      "local_log": "/tmp/airoute-refactor-vet-20261106.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "go_build": {
+      "command": "go build -o /tmp/airoute-refactor-gateway-20261106 ./cmd/airoute",
+      "result": "passed; binary was not started",
+      "local_log": "/tmp/airoute-refactor-go-build-20261106.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "go_race_all": {
+      "command": "go test -race -count=1 $(go list ./... | rg -v '/web/node_modules/')",
+      "result": "failed",
+      "passed_packages_with_tests": 15,
+      "failed_package": "internal/storage",
+      "failed_test": "TestUsageSpillReplayPicksUpAnotherProcessFile",
+      "failure": "peer spill file was not replayed by the periodic pass: rows = 0",
+      "data_race_reported": false,
+      "local_log": "/tmp/airoute-refactor-go-test-20261106.log",
+      "log_sha256": "a6af1f0e41afd66b62388521ab40a649d4feca53fb33691be2fe25d49891b29b"
+    },
+    "spill_race_repeat": {
+      "command": "go test -race -count=3 -run '^TestUsageSpillReplayPicksUpAnotherProcessFile$' ./internal/storage",
+      "result": "passed",
+      "runs": 3,
+      "duration_seconds": 5.1,
+      "local_log": "/tmp/airoute-refactor-spill-recheck-20261106.log",
+      "log_sha256": "665ecd39dbaed1c8874e02c8f87fed6edc0d29bbb9d7de7aebd669d07f667b47"
+    },
+    "storage_race_recheck": {
+      "command": "go test -race -count=1 ./internal/storage",
+      "result": "passed",
+      "duration_seconds": 200.458,
+      "local_log": "/tmp/airoute-refactor-storage-recheck-20261106.log",
+      "log_sha256": "f8deab4fc64530d85be258ea7c18325e7e8f0f368e44b49dca6882573b980756"
+    },
+    "deadcode_production": {
+      "command": "go run golang.org/x/tools/cmd/deadcode@v0.52.0 ./cmd/airoute",
+      "result": "completed",
+      "unreachable_functions": 4,
+      "functions": [
+        "api.forwardJSONRPCToolCall",
+        "api.(*MCPHandler).authenticateCaller",
+        "api.ResetReadinessChecks",
+        "telemetry.ResetWarnGate"
+      ],
+      "local_log": "/tmp/airoute-refactor-deadcode-production-20261106.log",
+      "log_sha256": "a4a75bdbb9c61b4f66ab8bfbd1df3ac77f5385e3ee6274c2e8eff7897034f00e"
+    },
+    "deadcode_with_tests": {
+      "command": "go run golang.org/x/tools/cmd/deadcode@v0.52.0 -test $(go list ./... | rg -v '/web/node_modules/')",
+      "result": "completed",
+      "unreachable_functions": 0,
+      "local_log": "/tmp/airoute-refactor-deadcode-20261106.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "not_run": [
+    "PostgreSQL integration",
+    "Redis integration",
+    "live-cluster e2e",
+    "real upstream supplier calls",
+    "browser interaction checks"
+  ],
+  "implementation": {
+    "business_code_changed": false,
+    "tests_changed": false,
+    "deployment_changed": false,
+    "estimated_first_batch_net_reduction_physical_lines": [
+      150,
+      300
+    ],
+    "estimate_is_not_a_tested_patch_result": true
+  },
+  "oversized_files": [
+    {
+      "path": "web/src/components/DashboardView.jsx",
+      "physical_lines": 1875
+    },
+    {
+      "path": "web/src/components/PlaygroundView.jsx",
+      "physical_lines": 1859
+    },
+    {
+      "path": "web/src/components/PricingManager.jsx",
+      "physical_lines": 1831
+    },
+    {
+      "path": "web/src/App.jsx",
+      "physical_lines": 1706
+    },
+    {
+      "path": "web/src/components/McpIntegrationView.jsx",
+      "physical_lines": 1636
+    },
+    {
+      "path": "web/src/components/AiCopilot.jsx",
+      "physical_lines": 1383
+    },
+    {
+      "path": "web/src/components/UserManagementView.jsx",
+      "physical_lines": 1209
+    },
+    {
+      "path": "web/src/components/LogsView.jsx",
+      "physical_lines": 1208
+    },
+    {
+      "path": "web/src/components/SkillHubView.jsx",
+      "physical_lines": 1157
+    },
+    {
+      "path": "internal/api/common.go",
+      "physical_lines": 1052
+    },
+    {
+      "path": "web/src/components/WalletManagementView.jsx",
+      "physical_lines": 915
+    },
+    {
+      "path": "web/src/components/SupplierReconciliationView.jsx",
+      "physical_lines": 875
+    },
+    {
+      "path": "web/src/components/ModelRoutesManager.jsx",
+      "physical_lines": 779
+    },
+    {
+      "path": "web/src/components/LogDetailModal.jsx",
+      "physical_lines": 778
+    },
+    {
+      "path": "internal/storage/migrations_partition.go",
+      "physical_lines": 757
+    },
+    {
+      "path": "internal/model/response.go",
+      "physical_lines": 747
+    },
+    {
+      "path": "web/src/components/ModelRouteModal.jsx",
+      "physical_lines": 732
+    },
+    {
+      "path": "web/src/components/LandingPage.jsx",
+      "physical_lines": 731
+    },
+    {
+      "path": "internal/storage/async_logger.go",
+      "physical_lines": 727
+    },
+    {
+      "path": "web/src/components/ChannelsView.jsx",
+      "physical_lines": 721
+    },
+    {
+      "path": "web/src/components/ServiceStatus.jsx",
+      "physical_lines": 699
+    },
+    {
+      "path": "internal/middleware/auth.go",
+      "physical_lines": 687
+    },
+    {
+      "path": "internal/storage/migrations_sqlite.go",
+      "physical_lines": 665
+    },
+    {
+      "path": "internal/storage/billing_reconcile_job.go",
+      "physical_lines": 657
+    },
+    {
+      "path": "web/src/components/DocsView.jsx",
+      "physical_lines": 652
+    },
+    {
+      "path": "web/src/components/SystemLogConsole.jsx",
+      "physical_lines": 651
+    },
+    {
+      "path": "internal/storage/repo_logs.go",
+      "physical_lines": 639
+    },
+    {
+      "path": "web/src/components/KeysView.jsx",
+      "physical_lines": 633
+    },
+    {
+      "path": "internal/storage/repo_keys.go",
+      "physical_lines": 631
+    },
+    {
+      "path": "internal/storage/settlement.go",
+      "physical_lines": 628
+    },
+    {
+      "path": "internal/storage/db.go",
+      "physical_lines": 627
+    },
+    {
+      "path": "web/src/components/MarkdownRenderer.jsx",
+      "physical_lines": 618
+    },
+    {
+      "path": "web/src/components/OnboardingModal.jsx",
+      "physical_lines": 603
+    },
+    {
+      "path": "cmd/airoute/server.go",
+      "physical_lines": 561
+    },
+    {
+      "path": "internal/api/inbound_anthropic_stream.go",
+      "physical_lines": 555
+    },
+    {
+      "path": "internal/storage/billing_ledger_retention.go",
+      "physical_lines": 551
+    },
+    {
+      "path": "internal/storage/migrations_postgres.go",
+      "physical_lines": 545
+    },
+    {
+      "path": "internal/provider/thinking.go",
+      "physical_lines": 530
+    },
+    {
+      "path": "internal/middleware/authz.go",
+      "physical_lines": 524
+    },
+    {
+      "path": "internal/billing/engine.go",
+      "physical_lines": 511
+    },
+    {
+      "path": "web/src/components/copilotHarness.js",
+      "physical_lines": 508
+    },
+    {
+      "path": "web/src/components/KeyModal.jsx",
+      "physical_lines": 482
+    },
+    {
+      "path": "internal/router/dispatcher.go",
+      "physical_lines": 464
+    },
+    {
+      "path": "internal/storage/repo_users.go",
+      "physical_lines": 448
+    },
+    {
+      "path": "internal/distributed/redis_quota.go",
+      "physical_lines": 445
+    },
+    {
+      "path": "internal/api/mcp_client.go",
+      "physical_lines": 441
+    },
+    {
+      "path": "internal/telemetry/metrics.go",
+      "physical_lines": 437
+    },
+    {
+      "path": "web/src/hooks/useChannelActions.js",
+      "physical_lines": 437
+    },
+    {
+      "path": "internal/storage/repo_timeseries.go",
+      "physical_lines": 432
+    },
+    {
+      "path": "internal/api/mcp_tools.go",
+      "physical_lines": 428
+    },
+    {
+      "path": "internal/api/inbound_anthropic.go",
+      "physical_lines": 426
+    },
+    {
+      "path": "internal/api/mcp_handler.go",
+      "physical_lines": 419
+    },
+    {
+      "path": "internal/storage/repo_reconciliation.go",
+      "physical_lines": 417
+    },
+    {
+      "path": "internal/controlplane/oauth_handler.go",
+      "physical_lines": 412
+    },
+    {
+      "path": "internal/storage/repo_payments.go",
+      "physical_lines": 404
+    },
+    {
+      "path": "internal/storage/repo_logs_writer.go",
+      "physical_lines": 397
+    },
+    {
+      "path": "internal/controlplane/sync.go",
+      "physical_lines": 394
+    },
+    {
+      "path": "internal/provider/anthropic_stream.go",
+      "physical_lines": 393
+    },
+    {
+      "path": "internal/api/mcp_client_http.go",
+      "physical_lines": 385
+    },
+    {
+      "path": "internal/controlplane/login_guard.go",
+      "physical_lines": 384
+    },
+    {
+      "path": "web/src/components/ChannelModal.jsx",
+      "physical_lines": 381
+    },
+    {
+      "path": "web/src/components/AccountManageModal.jsx",
+      "physical_lines": 374
+    },
+    {
+      "path": "internal/middleware/quota_tracker.go",
+      "physical_lines": 372
+    },
+    {
+      "path": "web/src/hooks/useLogsData.js",
+      "physical_lines": 371
+    },
+    {
+      "path": "internal/telemetry/ring_buffer.go",
+      "physical_lines": 366
+    },
+    {
+      "path": "web/src/components/QuickStartModal.jsx",
+      "physical_lines": 365
+    },
+    {
+      "path": "internal/router/circuit_breaker.go",
+      "physical_lines": 364
+    },
+    {
+      "path": "web/src/components/AuthPage.jsx",
+      "physical_lines": 362
+    },
+    {
+      "path": "internal/storage/repo_channels.go",
+      "physical_lines": 361
+    },
+    {
+      "path": "internal/api/router.go",
+      "physical_lines": 359
+    },
+    {
+      "path": "web/src/components/SupplierCostPanel.jsx",
+      "physical_lines": 358
+    },
+    {
+      "path": "internal/controlplane/channel_service.go",
+      "physical_lines": 354
+    },
+    {
+      "path": "web/src/components/LoginModal.jsx",
+      "physical_lines": 351
+    },
+    {
+      "path": "internal/controlplane/prober_adapters.go",
+      "physical_lines": 348
+    },
+    {
+      "path": "internal/provider/openai.go",
+      "physical_lines": 338
+    },
+    {
+      "path": "internal/storage/usage_spill.go",
+      "physical_lines": 333
+    },
+    {
+      "path": "internal/api/mcp_tools_routing.go",
+      "physical_lines": 331
+    },
+    {
+      "path": "internal/controlplane/admin_overview.go",
+      "physical_lines": 331
+    },
+    {
+      "path": "internal/controlplane/route_service.go",
+      "physical_lines": 323
+    },
+    {
+      "path": "internal/controlplane/admin_keys.go",
+      "physical_lines": 313
+    },
+    {
+      "path": "web/src/lib/providerPresets.js",
+      "physical_lines": 310
+    },
+    {
+      "path": "internal/controlplane/user_admin_handler.go",
+      "physical_lines": 307
+    },
+    {
+      "path": "internal/controlplane/pricing_service.go",
+      "physical_lines": 306
+    },
+    {
+      "path": "internal/storage/settlement_batcher.go",
+      "physical_lines": 306
+    },
+    {
+      "path": "internal/api/responses_stream_events.go",
+      "physical_lines": 303
+    }
+  ]
+}

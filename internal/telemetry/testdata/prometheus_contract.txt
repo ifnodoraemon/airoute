@@ -1,0 +1,220 @@
+# HELP airoute_requests_total Total number of HTTP requests
+# TYPE airoute_requests_total counter
+airoute_requests_total 18446744073709551615
+# HELP airoute_requests_success_total Total successful requests
+# TYPE airoute_requests_success_total counter
+airoute_requests_success_total 18446744073709551614
+# HELP airoute_requests_failed_total Total failed requests
+# TYPE airoute_requests_failed_total counter
+airoute_requests_failed_total 18446744073709551613
+# HELP airoute_requests_client_canceled_total Requests abandoned by the downstream
+# TYPE airoute_requests_client_canceled_total counter
+airoute_requests_client_canceled_total 18446744073709551611
+# HELP airoute_fallback_total Total channel fallback events
+# TYPE airoute_fallback_total counter
+airoute_fallback_total 18446744073709551612
+# HELP airoute_active_connections Current active connections
+# TYPE airoute_active_connections gauge
+airoute_active_connections -995
+# HELP airoute_prompt_tokens_total Total prompt tokens processed
+# TYPE airoute_prompt_tokens_total counter
+airoute_prompt_tokens_total 18446744073709551609
+# HELP airoute_completion_tokens_total Total completion tokens generated
+# TYPE airoute_completion_tokens_total counter
+airoute_completion_tokens_total 18446744073709551608
+# HELP airoute_usage_log_records_flushed_total Usage log rows persisted successfully
+# TYPE airoute_usage_log_records_flushed_total counter
+airoute_usage_log_records_flushed_total 18446744073709551607
+# HELP airoute_usage_log_records_dropped_total Usage log rows dropped before persistence
+# TYPE airoute_usage_log_records_dropped_total counter
+airoute_usage_log_records_dropped_total 18446744073709551606
+# HELP airoute_usage_log_flush_failures_total Failed usage log batch writes
+# TYPE airoute_usage_log_flush_failures_total counter
+airoute_usage_log_flush_failures_total 18446744073709551605
+# HELP airoute_usage_log_queue_depth Usage log rows waiting in the local buffer
+# TYPE airoute_usage_log_queue_depth gauge
+airoute_usage_log_queue_depth -989
+# HELP airoute_billing_duplicates_skipped_total At-least-once deliveries rejected by the billing idempotency key
+# TYPE airoute_billing_duplicates_skipped_total counter
+airoute_billing_duplicates_skipped_total 18446744073709551603
+# HELP airoute_billing_overdrafts_total Wallet charges that left a negative balance
+# TYPE airoute_billing_overdrafts_total counter
+airoute_billing_overdrafts_total 18446744073709551602
+# HELP airoute_billing_settled_synchronously_total Charges applied before the audit row was written
+# TYPE airoute_billing_settled_synchronously_total counter
+airoute_billing_settled_synchronously_total 18446744073709551601
+# HELP airoute_billing_settlements_deferred_total Charges deferred to the async pipeline
+# TYPE airoute_billing_settlements_deferred_total counter
+airoute_billing_settlements_deferred_total 18446744073709551600
+# HELP airoute_billing_charges_rejected_total Charges closed out without billing because the price is not in CNY
+# TYPE airoute_billing_charges_rejected_total counter
+airoute_billing_charges_rejected_total 18446744073709551599
+# HELP airoute_billing_unattributed_total Charges settled with no wallet to bill (uncollected)
+# TYPE airoute_billing_unattributed_total counter
+airoute_billing_unattributed_total 18446744073709551598
+# HELP airoute_usage_log_records_spilled_total Billing records written to the local spill file
+# TYPE airoute_usage_log_records_spilled_total counter
+airoute_usage_log_records_spilled_total 18446744073709551597
+# HELP airoute_usage_log_spill_replay_failures_total Unreadable spill records
+# TYPE airoute_usage_log_spill_replay_failures_total counter
+airoute_usage_log_spill_replay_failures_total 18446744073709551596
+# HELP airoute_usage_log_spill_replays_total Spill records replayed into the database
+# TYPE airoute_usage_log_spill_replays_total counter
+airoute_usage_log_spill_replays_total 18446744073709551595
+# HELP airoute_usage_log_stream_read_failures_total Failed audit-stream consumer reads
+# TYPE airoute_usage_log_stream_read_failures_total counter
+airoute_usage_log_stream_read_failures_total 18446744073709551594
+# HELP airoute_usage_log_group_recreated_total Consumer groups re-created after going missing
+# TYPE airoute_usage_log_group_recreated_total counter
+airoute_usage_log_group_recreated_total 18446744073709551593
+# HELP airoute_usage_log_stream_poisoned_total Undecodable audit-stream entries dead-lettered
+# TYPE airoute_usage_log_stream_poisoned_total counter
+airoute_usage_log_stream_poisoned_total 18446744073709551592
+# HELP airoute_billing_ledger_prune_contended_total Ledger retention batches retried after a replica collision
+# TYPE airoute_billing_ledger_prune_contended_total counter
+airoute_billing_ledger_prune_contended_total 18446744073709551591
+# HELP airoute_billing_ledger_drift_units Absolute key-vs-audit cost drift in 1e-9 units
+# TYPE airoute_billing_ledger_drift_units gauge
+airoute_billing_ledger_drift_units -975
+# HELP airoute_billing_wallet_drift_units Absolute balance-mirror drift in 1e-9 units
+# TYPE airoute_billing_wallet_drift_units gauge
+airoute_billing_wallet_drift_units -974
+# HELP airoute_aborted_drained_requests_total Aborted requests whose upstream was drained for exact usage
+# TYPE airoute_aborted_drained_requests_total counter
+airoute_aborted_drained_requests_total 18446744073709551588
+# HELP airoute_aborted_drained_completion_tokens_total Completion tokens paid for and discarded by abort draining
+# TYPE airoute_aborted_drained_completion_tokens_total counter
+airoute_aborted_drained_completion_tokens_total 18446744073709551587
+# HELP airoute_billing_estimate_bias_ppm Local estimate vs upstream tokenizer, parts per million
+# TYPE airoute_billing_estimate_bias_ppm gauge
+airoute_billing_estimate_bias_ppm -971
+airoute_billing_estimate_bias_ppm{model="model-B"} 200003
+airoute_billing_estimate_bias_ppm{model="model\\\"\\\\\\nA"} -100001
+# HELP airoute_billing_estimate_samples Upstream usage reports behind each model's learned token ratio
+# TYPE airoute_billing_estimate_samples gauge
+airoute_billing_estimate_samples{model="model-B"} 3
+airoute_billing_estimate_samples{model="model\\\"\\\\\\nA"} 7
+airoute_billing_estimate_samples 10
+# HELP airoute_billing_audit_lag_units Absolute settlement-vs-audit difference in 1e-9 units
+# TYPE airoute_billing_audit_lag_units gauge
+airoute_billing_audit_lag_units -967
+# HELP airoute_billing_audit_pruned_units Charge units whose audit row was deliberately removed (retention/admin)
+# TYPE airoute_billing_audit_pruned_units gauge
+airoute_billing_audit_pruned_units -966
+# HELP airoute_billing_ledger_unlinked_units Settled units with no matching audit row (legacy keys included)
+# TYPE airoute_billing_ledger_unlinked_units gauge
+airoute_billing_ledger_unlinked_units -965
+# HELP airoute_settlement_batches_total Settlement flush transactions executed
+# TYPE airoute_settlement_batches_total counter
+airoute_settlement_batches_total 18446744073709551579
+# HELP airoute_settlement_batch_records_total Charges applied inside settlement flushes
+# TYPE airoute_settlement_batch_records_total counter
+airoute_settlement_batch_records_total 18446744073709551578
+# HELP airoute_settlement_queue_depth Charges waiting for a settlement flush
+# TYPE airoute_settlement_queue_depth gauge
+airoute_settlement_queue_depth -962
+# HELP airoute_settlement_wait_timeouts_total Charges whose request-side settlement wait expired
+# TYPE airoute_settlement_wait_timeouts_total counter
+airoute_settlement_wait_timeouts_total 18446744073709551576
+# HELP airoute_settlement_lock_timeouts_total Settlement attempts that gave up on a row-lock deadline
+# TYPE airoute_settlement_lock_timeouts_total counter
+airoute_settlement_lock_timeouts_total 18446744073709551575
+# HELP airoute_billing_reserved_units Currently pre-authorised wallet amount in 1e-9 units
+# TYPE airoute_billing_reserved_units gauge
+airoute_billing_reserved_units -959
+# HELP airoute_billing_wallet_total_units Sum of all wallet balances in 1e-9 units
+# TYPE airoute_billing_wallet_total_units gauge
+airoute_billing_wallet_total_units -958
+# HELP airoute_billing_waived_units_total Money delivered but not collected at the overdraft floor, 1e-9 units
+# TYPE airoute_billing_waived_units_total counter
+airoute_billing_waived_units_total -957
+# HELP airoute_settlement_duration_seconds Settlement transaction duration in seconds
+# TYPE airoute_settlement_duration_seconds histogram
+airoute_settlement_duration_seconds_bucket{le="0.0005"} 0
+airoute_settlement_duration_seconds_bucket{le="0.001"} 0
+airoute_settlement_duration_seconds_bucket{le="0.002"} 0
+airoute_settlement_duration_seconds_bucket{le="0.005"} 0
+airoute_settlement_duration_seconds_bucket{le="0.01"} 0
+airoute_settlement_duration_seconds_bucket{le="0.025"} 0
+airoute_settlement_duration_seconds_bucket{le="0.05"} 0
+airoute_settlement_duration_seconds_bucket{le="0.1"} 0
+airoute_settlement_duration_seconds_bucket{le="0.25"} 0
+airoute_settlement_duration_seconds_bucket{le="0.5"} 0
+airoute_settlement_duration_seconds_bucket{le="1"} 0
+airoute_settlement_duration_seconds_bucket{le="2.5"} 0
+airoute_settlement_duration_seconds_bucket{le="5"} 0
+airoute_settlement_duration_seconds_bucket{le="+Inf"} 0
+airoute_settlement_duration_seconds_sum 0
+airoute_settlement_duration_seconds_count 0
+# HELP airoute_settlement_batch_size Number of charges merged into one settlement transaction
+# TYPE airoute_settlement_batch_size histogram
+airoute_settlement_batch_size_bucket{le="1"} 0
+airoute_settlement_batch_size_bucket{le="2"} 0
+airoute_settlement_batch_size_bucket{le="5"} 0
+airoute_settlement_batch_size_bucket{le="10"} 0
+airoute_settlement_batch_size_bucket{le="25"} 0
+airoute_settlement_batch_size_bucket{le="50"} 0
+airoute_settlement_batch_size_bucket{le="100"} 0
+airoute_settlement_batch_size_bucket{le="250"} 0
+airoute_settlement_batch_size_bucket{le="500"} 0
+airoute_settlement_batch_size_bucket{le="1000"} 0
+airoute_settlement_batch_size_bucket{le="+Inf"} 0
+airoute_settlement_batch_size_sum 0
+airoute_settlement_batch_size_count 0
+# HELP airoute_ttft_avg_ms Average Time To First Token in milliseconds
+# TYPE airoute_ttft_avg_ms gauge
+airoute_ttft_avg_ms 67518.00
+# HELP airoute_latency_avg_ms Average request latency in milliseconds
+# TYPE airoute_latency_avg_ms gauge
+airoute_latency_avg_ms 233842.00
+# HELP airoute_latency_p50_ms Estimated P50 latency in milliseconds
+# TYPE airoute_latency_p50_ms gauge
+airoute_latency_p50_ms 1750.00
+# HELP airoute_latency_p90_ms Estimated P90 latency in milliseconds
+# TYPE airoute_latency_p90_ms gauge
+airoute_latency_p90_ms 700001.00
+# HELP airoute_latency_p99_ms Estimated P99 latency in milliseconds
+# TYPE airoute_latency_p99_ms gauge
+airoute_latency_p99_ms 700001.00
+# HELP airoute_model_requests_total Total number of requests partitioned by model and status
+# TYPE airoute_model_requests_total counter
+airoute_model_requests_total{model="model-B",status="canceled"} 1
+airoute_model_requests_total{model="model-B",status="failed"} 1
+airoute_model_requests_total{model="model\"\\\nA",status="success"} 1
+# HELP airoute_request_duration_ms Request latency duration histogram in milliseconds
+# TYPE airoute_request_duration_ms histogram
+airoute_request_duration_ms_bucket{le="25"} 0
+airoute_request_duration_ms_bucket{le="50"} 0
+airoute_request_duration_ms_bucket{le="100"} 0
+airoute_request_duration_ms_bucket{le="250"} 1
+airoute_request_duration_ms_bucket{le="500"} 1
+airoute_request_duration_ms_bucket{le="1000"} 1
+airoute_request_duration_ms_bucket{le="2500"} 2
+airoute_request_duration_ms_bucket{le="5000"} 2
+airoute_request_duration_ms_bucket{le="10000"} 2
+airoute_request_duration_ms_bucket{le="30000"} 2
+airoute_request_duration_ms_bucket{le="60000"} 2
+airoute_request_duration_ms_bucket{le="120000"} 2
+airoute_request_duration_ms_bucket{le="300000"} 2
+airoute_request_duration_ms_bucket{le="600000"} 2
+airoute_request_duration_ms_bucket{le="+Inf"} 3
+airoute_request_duration_ms_sum 701526.00
+airoute_request_duration_ms_count 3
+# HELP airoute_ttft_duration_ms Time To First Token histogram in milliseconds
+# TYPE airoute_ttft_duration_ms histogram
+airoute_ttft_duration_ms_bucket{le="10"} 0
+airoute_ttft_duration_ms_bucket{le="25"} 0
+airoute_ttft_duration_ms_bucket{le="50"} 1
+airoute_ttft_duration_ms_bucket{le="100"} 1
+airoute_ttft_duration_ms_bucket{le="250"} 1
+airoute_ttft_duration_ms_bucket{le="500"} 1
+airoute_ttft_duration_ms_bucket{le="1000"} 1
+airoute_ttft_duration_ms_bucket{le="2500"} 1
+airoute_ttft_duration_ms_bucket{le="5000"} 1
+airoute_ttft_duration_ms_bucket{le="10000"} 1
+airoute_ttft_duration_ms_bucket{le="30000"} 1
+airoute_ttft_duration_ms_bucket{le="60000"} 1
+airoute_ttft_duration_ms_bucket{le="120000"} 1
+airoute_ttft_duration_ms_bucket{le="+Inf"} 2
+airoute_ttft_duration_ms_sum 135036.00
+airoute_ttft_duration_ms_count 2

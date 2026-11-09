@@ -18,3 +18,12 @@ it('reads the actual model after a mapping change and prefers current server fac
   );
   expect(changed.efforts).toEqual(['high']);
 });
+
+it('does not advertise minimal returned by an upstream', () => {
+  const result = routeThinkingAvailability(
+    [{ channel_id: 1, mapped_model: 'actual', thinking: { known: true, on: true, efforts: ['minimal', 'low', 'ultra'] } }],
+    [{ id: 1, status: 'active' }],
+    'public'
+  );
+  expect(result.efforts).toEqual(['low', 'ultra']);
+});

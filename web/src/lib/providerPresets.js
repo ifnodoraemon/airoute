@@ -57,7 +57,6 @@ export const PROVIDER_PRESETS = {
     },
     zh: '已载入 GPUStack 企业私有算力模板，点击探测或填入 API Key 即可拉取模型',
     en: 'Loaded GPUStack enterprise template. Click Probe or enter API Key to sync models.',
-    keepEndpoint: true,
     keepModels: true,
   },
   deepseek: {
@@ -221,7 +220,6 @@ export const PROVIDER_PRESETS = {
     },
     zh: '已载入 Vertex 模板，请填写包含项目和区域的 Base URL，使用 ADC 或服务账号 JSON 认证',
     en: 'Loaded Vertex template. Enter a project/location Base URL and use ADC or service-account JSON.',
-    keepEndpoint: true,
     keepModels: true,
   },
   ollama: {
@@ -238,7 +236,6 @@ export const PROVIDER_PRESETS = {
     },
     zh: '已载入 Ollama 模型列表模板，请输入您的端点地址',
     en: 'Loaded Ollama template. Please enter your endpoint URL',
-    keepEndpoint: true,
   },
   vllm: {
     patch: {
@@ -254,7 +251,6 @@ export const PROVIDER_PRESETS = {
     },
     zh: '已载入 vLLM 模型列表模板，请输入您的端点地址',
     en: 'Loaded vLLM template. Please enter your endpoint URL',
-    keepEndpoint: true,
   },
   sub2api: {
     patch: {
@@ -269,7 +265,6 @@ export const PROVIDER_PRESETS = {
     },
     zh: '已载入 Sub2API 聚合模板',
     en: 'Loaded Sub2API aggregation template',
-    keepEndpoint: true,
   },
   custom: {
     patch: {
@@ -284,7 +279,6 @@ export const PROVIDER_PRESETS = {
     },
     zh: '已载入自定义下游模板，请输入您的服务端点',
     en: 'Loaded custom downstream template. Please enter endpoint URL',
-    keepEndpoint: true,
   },
 };
 

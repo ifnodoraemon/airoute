@@ -112,82 +112,6 @@ func FindThinkingProfile(id string) (ThinkingProfile, bool) {
 	}
 	return ThinkingProfile{}, false
 }
-func ValidateModelCapabilities(config map[string]ModelCapabilityConfig) error {
-	for name, value := range config {
-		if strings.TrimSpace(name) == "" {
-			return fmt.Errorf("upstream model name cannot be empty")
-		}
-		if value.Thinking == nil {
-			continue
-		}
-		profile, ok := FindThinkingProfile(value.Thinking.Profile)
-		if value.Thinking.Profile != "" && !ok {
-			return fmt.Errorf("model %q: unknown thinking profile %q", name, value.Thinking.Profile)
-		}
-		for _, effort := range value.Thinking.Efforts {
-			if !slices.Contains([]string{"minimal", "low", "medium", "high", "xhigh", "max"}, effort) || (ok && !slices.Contains(profile.Efforts, effort)) {
-				return fmt.Errorf("model %q: profile does not support effort %q", name, effort)
-			}
-		}
-	}
-	return nil
-}
-func (p *ThinkingPolicy) Validate() error {
-	if p == nil {
-		return nil
-	}
-	mode := p.DefaultMode
-	if mode == "" {
-		mode = "auto"
-	}
-	if !slices.Contains([]string{"auto", "on", "off"}, mode) {
-		return fmt.Errorf("invalid default thinking mode %q", mode)
-	}
-	for _, v := range p.AllowedModes {
-		if !slices.Contains([]string{"auto", "on", "off"}, v) {
-			return fmt.Errorf("invalid allowed thinking mode %q", v)
-		}
-	}
-	if p.AllowedModes != nil && !slices.Contains(p.AllowedModes, mode) {
-		return fmt.Errorf("default thinking mode must be allowed by route policy")
-	}
-	if p.AllowedEfforts != nil && mode == "auto" {
-		return fmt.Errorf("set a route default thinking mode when restricting effort levels")
-	}
-	if p.DefaultEffort != "" && mode != "on" {
-		return fmt.Errorf("default effort requires default mode on")
-	}
-	if p.DefaultEffort != "" && p.AllowedEfforts != nil && !slices.Contains(p.AllowedEfforts, p.DefaultEffort) {
-		return fmt.Errorf("default thinking effort is not allowed by route policy")
-	}
-	for _, effort := range p.AllowedEfforts {
-		if !slices.Contains([]string{"minimal", "low", "medium", "high", "xhigh", "max"}, effort) {
-			return fmt.Errorf("invalid thinking effort %q", effort)
-		}
-	}
-	return nil
-}
-func (p *ThinkingPolicy) Resolve(control ThinkingControl) (ThinkingControl, error) {
-	if control.Mode == "" {
-		control.Mode = "auto"
-	}
-	if p == nil {
-		return control, nil
-	}
-	if control.Mode == "auto" && p.DefaultMode != "" {
-		control.Mode = p.DefaultMode
-	}
-	if control.Mode == "on" && control.Effort == "" {
-		control.Effort = p.DefaultEffort
-	}
-	if p.AllowedModes != nil && !slices.Contains(p.AllowedModes, control.Mode) {
-		return control, fmt.Errorf("thinking mode %q is forbidden by route policy", control.Mode)
-	}
-	if control.Effort != "" && p.AllowedEfforts != nil && !slices.Contains(p.AllowedEfforts, control.Effort) {
-		return control, fmt.Errorf("thinking effort %q is forbidden by route policy", control.Effort)
-	}
-	return control, nil
-}
 func (c *ChannelConfig) ThinkingPolicyFor(name string) *ThinkingPolicy {
 	rule, _, ok := c.routeRule(name)
 	if _, exact := c.RouteRules[name]; !exact && strings.HasPrefix(name, c.Name+"/") {
@@ -237,14 +161,24 @@ func ResolveUpstreamThinkingContract(channel *ChannelConfig, name string) (Think
 	if channel == nil {
 		return ThinkingProfile{}, "unknown"
 	}
-	if config := upstreamThinkingConfig(channel, name); config != nil && config.Profile != "" {
-		profile, ok := FindThinkingProfile(config.Profile)
+	config := upstreamThinkingConfig(channel, name)
+	profile, source := catalogThinkingProfile(channel.Type, name)
+	if config != nil && config.Profile != "" {
+		var ok bool
+		profile, ok = FindThinkingProfile(config.Profile)
 		if !ok {
 			return ThinkingProfile{}, "invalid_configuration"
 		}
+		source = "configured"
+	}
+	declared := config != nil && ((config.CanDisable != nil && *config.CanDisable) || len(config.Efforts) > 0)
+	if declared && (profile.ID == "" || profile.Wire == "none" || profile.Wire == "unknown") {
+		previous := profile
+		profile = ThinkingParameterProfile(channel.Type, name)
+		profile.On, profile.Off, profile.Efforts = previous.On, false, slices.Clone(previous.Efforts)
 		return profile, "configured"
 	}
-	return catalogThinkingProfile(channel.Type, name)
+	return profile, source
 }
 
 func catalogThinkingProfile(kind ProviderType, name string) (ThinkingProfile, string) {
@@ -307,10 +241,7 @@ func ValidateChannelThinking(kind ProviderType, config map[string]ModelCapabilit
 	}
 	for name, value := range config {
 		if value.Thinking != nil {
-			profile, _ := catalogThinkingProfile(kind, name)
-			if value.Thinking.Profile != "" {
-				profile, _ = FindThinkingProfile(value.Thinking.Profile)
-			}
+			profile, _ := ResolveUpstreamThinkingContract(&ChannelConfig{Type: kind, ModelCapabilities: config}, name)
 			if !ThinkingProfileCompatible(kind, profile) {
 				return fmt.Errorf("model %q: thinking profile %q is incompatible with channel protocol %s", name, profile.ID, kind)
 			}

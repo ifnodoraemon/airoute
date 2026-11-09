@@ -36,7 +36,7 @@ func TestAPI_FormatValidation_DefaultOff(t *testing.T) {
 			Rules:        []config.ModelValidationRule{},
 		},
 	}
-	config.SetGlobalConfig(testCfg)
+	useConfigOnlyFixture(t, testCfg)
 
 	dispatcher := router.NewDispatcher(testCfg.Channels)
 	engine := api.SetupRouter(dispatcher, nil)
@@ -89,7 +89,7 @@ func TestAPI_FormatValidation_PerModel_OpenAI(t *testing.T) {
 			},
 		},
 	}
-	config.SetGlobalConfig(testCfg)
+	useConfigOnlyFixture(t, testCfg)
 
 	dispatcher := router.NewDispatcher(testCfg.Channels)
 	engine := api.SetupRouter(dispatcher, nil)
@@ -154,7 +154,7 @@ func TestAPI_FormatValidation_PerModel_Anthropic(t *testing.T) {
 			},
 		},
 	}
-	config.SetGlobalConfig(testCfg)
+	useConfigOnlyFixture(t, testCfg)
 
 	dispatcher := router.NewDispatcher(testCfg.Channels)
 	engine := api.SetupRouter(dispatcher, nil)
@@ -217,7 +217,7 @@ func TestAPI_FormatValidation_PerModel_Gemini(t *testing.T) {
 			},
 		},
 	}
-	config.SetGlobalConfig(testCfg)
+	useConfigOnlyFixture(t, testCfg)
 
 	dispatcher := router.NewDispatcher(testCfg.Channels)
 	engine := api.SetupRouter(dispatcher, nil)
@@ -281,7 +281,7 @@ func TestAPI_FormatValidation_PerKey_Enable(t *testing.T) {
 			Rules:        []config.ModelValidationRule{},
 		},
 	}
-	config.SetGlobalConfig(testCfg)
+	useConfigOnlyFixture(t, testCfg)
 
 	dispatcher := router.NewDispatcher(testCfg.Channels)
 	engine := api.SetupRouter(dispatcher, nil)
@@ -333,7 +333,7 @@ func TestAPI_FormatValidation_PerKey_OverrideOff(t *testing.T) {
 			},
 		},
 	}
-	config.SetGlobalConfig(testCfg)
+	useConfigOnlyFixture(t, testCfg)
 
 	dispatcher := router.NewDispatcher(testCfg.Channels)
 	engine := api.SetupRouter(dispatcher, nil)

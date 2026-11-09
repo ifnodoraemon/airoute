@@ -29,7 +29,11 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 		canonicalReq.StreamOptions.IncludeUsage = true
 	}
 
-	topUpQuotaForRequest(c, canonicalReq)
+	if !topUpQuotaForRequest(c, canonicalReq) {
+
+		return
+
+	}
 	streamChan, err := h.dispatcher.DispatchStream(reqCtx, canonicalReq)
 	if err != nil {
 		statusCode, errType, _, _ := resolveUpstreamFailureStatus(err)

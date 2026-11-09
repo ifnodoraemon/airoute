@@ -1,55 +1,12 @@
 package storage
 
 import (
-	"os"
-	"strconv"
-	"strings"
-	"time"
-
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
+	"time"
 )
 
-// defaultMaxOverdraftCNY bounds how far a wallet may go negative on a single
-// charge (and, because the floor is enforced in SQL, across concurrent charges).
-//
-// Prepaid wallets had no floor: `balance = balance - cost` let an expensive
-// request, or a burst admitted inside the 10-second snapshot window, drive a
-// wallet arbitrarily negative with no alert. One yuan is a deliberate, tiny
-// forgiveness budget per account — large enough that a rounding-level overdraft
-// still settles, small enough that an account cannot run up a real debt.
-const defaultMaxOverdraftCNY = 1.0
-
-// maxOverdraftUnits returns the permitted overdraft as a positive number of 1e-9
-// units. Callers negate it to form the floor for a wallet deduction. An
-// unparsable or negative setting means "no overdraft allowed".
-func maxOverdraftUnits() int64 {
-	raw := strings.TrimSpace(os.Getenv("GATEWAY_MAX_OVERDRAFT_CNY"))
-	if raw == "" {
-		return ToUnits(defaultMaxOverdraftCNY)
-	}
-	value, err := strconv.ParseFloat(raw, 64)
-	if err != nil || value < 0 {
-		return 0
-	}
-	return ToUnits(value)
-}
-
-// walletUnitsExpr computes the wallet's new integer balance, clamped at the
-// overdraft floor. It is written as a portable CASE rather than GREATEST/MAX so
-// the same statement works on SQLite and PostgreSQL.
-const walletUnitsExpr = `CASE WHEN COALESCE(balance_units, 0) - ? < ? THEN ? ELSE COALESCE(balance_units, 0) - ? END`
-
-// deductWallet applies one clamped wallet deduction and returns whether a row was
-// updated plus the resulting balance in 1e-9 units.
-//
-// applied=false means no user matched the WHERE clause (an admin-exempt account
-// or an unknown key), which is what the callers' tenant-fallback logic keys on.
-//
-// The float `balance` column is derived from the integer column in the same
-// statement so the two mirrors can never drift, and the floor is applied there
-// too. An overdraft that reaches the floor is counted and logged (rate limited)
-// instead of passing silently — the operator needs to see accounts that are
-// being served on credit.
+// Admission prevents spending unreserved funds. Settlement always records the
+// provider's actual cost; truncating debt would silently forgive delivered work.
 func (r *Repository) deductWallet(tx *Tx, where string, whereArgs []any, cost float64, effects *settlementEffects) (bool, int64, error) {
 	if tx == nil || cost <= 0 {
 		return false, 0, nil
@@ -58,29 +15,17 @@ func (r *Repository) deductWallet(tx *Tx, where string, whereArgs []any, cost fl
 	if units <= 0 {
 		return false, 0, nil
 	}
-	floor := -maxOverdraftUnits()
-
-	query := `UPDATE users SET balance_units = ` + walletUnitsExpr +
-		`, balance = (` + walletUnitsExpr + `) * 1.0 / 1000000000.0, updated_at = CURRENT_TIMESTAMP WHERE ` +
-		where + ` RETURNING balance_units`
-
-	// Eight placeholders: four for the integer assignment, four for the float one.
-	args := make([]any, 0, 8+len(whereArgs))
-	for i := 0; i < 2; i++ {
-		args = append(args, units, floor, floor, units)
-	}
-	args = append(args, whereArgs...)
-
+	query := `UPDATE users SET balance_units = COALESCE(balance_units, 0) - ?, balance = (COALESCE(balance_units, 0) - ?) * 1.0 / 1000000000.0, updated_at = CURRENT_TIMESTAMP WHERE ` + where + ` RETURNING balance_units`
+	args := append([]any{units, units}, whereArgs...)
 	rows, err := tx.Query(query, args...)
 	if err != nil {
 		return false, 0, err
 	}
 	defer rows.Close()
-
 	applied := false
-	var balanceUnits int64
+	var balance int64
 	if rows.Next() {
-		if err := rows.Scan(&balanceUnits); err != nil {
+		if err := rows.Scan(&balance); err != nil {
 			return false, 0, err
 		}
 		applied = true
@@ -88,96 +33,27 @@ func (r *Repository) deductWallet(tx *Tx, where string, whereArgs []any, cost fl
 	if err := rows.Err(); err != nil {
 		return false, 0, err
 	}
-
 	if applied {
-		recordWalletDeductionEffect(cost, units, floor, balanceUnits, effects)
+		recordWalletDeductionEffect(balance, effects)
 	}
-	return applied, balanceUnits, nil
+	return applied, balance, nil
 }
 
-// settlementEffects accumulates the wallet-side counters produced by one
-// settlement attempt. flush is called only after the transaction commits: a
-// retried attempt (PostgreSQL deadlock / lock timeout) rolls back, and counting
-// its metrics directly would double-report the same overdraft.
-type settlementEffects struct {
-	waivedUnits int64
-	overdrafts  int64
-}
+type settlementEffects struct{ overdrafts int64 }
 
-// flush publishes the counters once the money movement is durable.
 func (e *settlementEffects) flush() {
-	if e == nil {
-		return
-	}
-	if e.waivedUnits > 0 {
-		telemetry.GlobalMetrics.BillingWaivedUnits.Add(e.waivedUnits)
-	}
-	if e.overdrafts > 0 {
+	if e != nil && e.overdrafts > 0 {
 		telemetry.GlobalMetrics.BillingOverdrafts.Add(uint64(e.overdrafts))
 	}
 }
 
-// recordWalletDeductionEffect accounts for one applied, clamped deduction: the
-// overdraft counter, the waived-units counter and the rate-limited warnings.
-//
-// It is shared by the portable per-wallet UPDATE (SQLite, tenant fallback) and the
-// PostgreSQL merged key+wallet statement, so the two paths report the same numbers
-// for the same state.
-//
-// Waived units: the clamped update landed exactly on the overdraft floor, so the
-// wallet could not absorb this charge. Counting `units` costs no extra round trip
-// (the new balance is already in the RETURNING clause) and covers both cases the
-// floor exists for: a wallet already at the bottom (the whole charge is forgiven)
-// and a charge clamped down to the floor.
-//
-// The one approximation is the boundary case where a deduction from above the
-// floor happens to land exactly on it: the portion between the old balance and the
-// floor was actually collected, yet the whole charge is counted as waived. That
-// over-counts by at most one overdraft allowance (default 1 CNY) per such charge
-// and is rare; the metric is an operator signal, not a ledger entry, so the
-// authoritative balances are unaffected.
-func recordWalletDeductionEffect(cost float64, units, floor, balanceUnits int64, effects *settlementEffects) {
-	waivedUnits := int64(0)
-	if units > 0 && balanceUnits == floor {
-		waivedUnits = units
+func recordWalletDeductionEffect(balance int64, effects *settlementEffects) {
+	if balance >= 0 {
+		return
 	}
 	if effects != nil {
-		// Accumulate instead of incrementing directly: the caller flushes only
-		// after COMMIT, so a transaction that loses a lock race and is retried
-		// does not count the same overdraft/waiver twice.
-		effects.waivedUnits += waivedUnits
-		if balanceUnits < 0 {
-			effects.overdrafts++
-		}
+		effects.overdrafts++
 	}
-	if balanceUnits < 0 {
-		logger := telemetry.ScopedLogger("billing")
-		if balanceUnits <= floor {
-			telemetry.WarnLogger(logger, "wallet-overdraft-clamped", time.Minute,
-				"wallet charge clamped at the overdraft floor",
-				"cost_cny", cost,
-				"waived_units", waivedUnits,
-				"balance_cny", FromUnits(balanceUnits),
-				"floor_cny", FromUnits(floor),
-			)
-		} else {
-			telemetry.WarnLogger(logger, "wallet-overdraft", time.Minute,
-				"wallet balance went negative after a charge",
-				"cost_cny", cost,
-				"waived_units", waivedUnits,
-				"balance_cny", FromUnits(balanceUnits),
-			)
-		}
-	} else if waivedUnits > 0 {
-		// floor == 0 (overdraft disabled) and the wallet emptied exactly: the balance
-		// never goes negative, so the overdraft warning above cannot fire, but the
-		// whole charge was still delivered for free.
-		telemetry.WarnLogger(telemetry.ScopedLogger("billing"), "wallet-charge-fully-waived", time.Minute,
-			"wallet emptied at the floor: the entire charge was delivered without payment",
-			"cost_cny", cost,
-			"waived_units", waivedUnits,
-			"balance_cny", FromUnits(balanceUnits),
-			"floor_cny", FromUnits(floor),
-		)
-	}
+	telemetry.WarnLogger(telemetry.ScopedLogger("billing"), "wallet-actual-cost-overdraft", time.Minute,
+		"wallet actual cost exceeded available funds", "balance_units", balance)
 }

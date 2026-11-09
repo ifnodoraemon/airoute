@@ -51,14 +51,6 @@ func RegisterReadinessCheck(name string, fn func(context.Context) error) {
 	readinessChecks = append(readinessChecks, readinessCheck{name: name, fn: fn})
 }
 
-// ResetReadinessChecks removes every registered probe. Tests use it to isolate
-// cases; production code registers once at startup.
-func ResetReadinessChecks() {
-	readinessMu.Lock()
-	defer readinessMu.Unlock()
-	readinessChecks = nil
-}
-
 // HandleReadiness handles GET /health/ready. It answers 200 only when the data
 // plane has loaded a configuration snapshot and every registered dependency
 // probe succeeds; otherwise 503 with a per-dependency breakdown.

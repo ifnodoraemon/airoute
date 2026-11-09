@@ -64,19 +64,128 @@ func TestEmptySelectableLevelsRetainFixedAdapterDefault(t *testing.T) {
 	require.Error(t, profile.Validate(ThinkingControl{Mode: "on", Effort: "max"}))
 }
 
-func TestThinkingFactsCannotInventUnsupportedControls(t *testing.T) {
+func TestThinkingDeclarationsCanExtendCatalogForNamedParameters(t *testing.T) {
 	yes := true
-	for _, facts := range []*ThinkingConfig{{CanDisable: &yes}, {Efforts: []string{"medium"}}} {
+	for _, facts := range []*ThinkingConfig{{CanDisable: &yes}, {Efforts: []string{"medium", "ultra", "extended"}}} {
 		config := map[string]ModelCapabilityConfig{"aliyun/glm-5.3": {Thinking: facts}}
-		require.Error(t, ValidateChannelThinking(ProviderOpenAI, config))
+		require.NoError(t, ValidateChannelThinking(ProviderOpenAI, config))
 		profile, source := ResolveUpstreamThinkingProfile(&ChannelConfig{Type: ProviderOpenAI, ModelCapabilities: config}, "aliyun/glm-5.3")
-		require.Empty(t, profile.ID)
-		require.Equal(t, "invalid_configuration", source)
+		require.Equal(t, "glm53", profile.ID)
+		require.Equal(t, "configured", source)
 	}
 	unknown := map[string]ModelCapabilityConfig{"custom-name": {Thinking: &ThinkingConfig{Efforts: []string{"high"}}}}
-	require.Error(t, ValidateChannelThinking(ProviderGPUStack, unknown))
+	require.NoError(t, ValidateChannelThinking(ProviderGPUStack, unknown))
+	profile, _ := ResolveUpstreamThinkingProfile(&ChannelConfig{Type: ProviderGPUStack, ModelCapabilities: unknown}, "custom-name")
+	require.Equal(t, "openai", profile.Wire)
+	require.Equal(t, []string{"high"}, profile.Efforts)
 	unknown["custom-name"] = ModelCapabilityConfig{Thinking: &ThinkingConfig{Profile: "vllm-deepseek41", Efforts: []string{"high"}}}
 	require.NoError(t, ValidateChannelThinking(ProviderGPUStack, unknown))
+}
+
+func TestThinkingDeclarationsRequireEncodableControls(t *testing.T) {
+	for _, profile := range []string{"claude-budget", "vllm-deepseek41", "qwen-toggle"} {
+		config := map[string]ModelCapabilityConfig{"model": {Thinking: &ThinkingConfig{Profile: profile, Efforts: []string{"ultra"}}}}
+		require.Error(t, ValidateChannelThinking(ProviderCustom, config), profile)
+	}
+	for _, effort := range []string{"none", "auto", "off", "adaptive", "minimal", "High", "", "a b", "__invalid__"} {
+		config := map[string]ModelCapabilityConfig{"model": {Thinking: &ThinkingConfig{Efforts: []string{effort}}}}
+		require.Error(t, ValidateChannelThinking(ProviderCustom, config), effort)
+	}
+}
+
+func TestManualThinkingFactsOverrideFixedAndUnknownPresets(t *testing.T) {
+	yes := true
+	for _, preset := range []string{"unknown", "unsupported", "reasoning-only"} {
+		channel := &ChannelConfig{Type: ProviderOpenAI, ModelCapabilities: map[string]ModelCapabilityConfig{
+			"vendor/deepseek-deployment": {Thinking: &ThinkingConfig{Profile: preset, CanDisable: &yes, Efforts: []string{"low", "ultra", "extended"}}},
+		}}
+		require.NoError(t, ValidateChannelThinking(channel.Type, channel.ModelCapabilities), preset)
+		profile, source := ResolveThinkingProfile(channel, "vendor/deepseek-deployment")
+		require.Equal(t, "configured", source)
+		require.Equal(t, "deepseek", profile.Wire)
+		require.True(t, profile.Off)
+		require.Equal(t, []string{"low", "ultra", "extended"}, profile.Efforts)
+	}
+}
+
+func TestManualThinkingFactsDoNotInheritUnconfirmedDialectDefaults(t *testing.T) {
+	yes := true
+	for _, facts := range []*ThinkingConfig{
+		{Profile: "reasoning-only", CanDisable: &yes},
+		{Efforts: []string{"ultra"}},
+	} {
+		channel := &ChannelConfig{Type: ProviderOpenAI, ModelCapabilities: map[string]ModelCapabilityConfig{"custom": {Thinking: facts}}}
+		require.NoError(t, ValidateChannelThinking(channel.Type, channel.ModelCapabilities))
+		profile, _ := ResolveThinkingProfile(channel, "custom")
+		if facts.Efforts == nil {
+			require.Empty(t, profile.Efforts)
+		} else {
+			require.False(t, profile.Off)
+			require.Equal(t, facts.Efforts, profile.Efforts)
+		}
+	}
+}
+
+func TestNamedThinkingAdaptersAllowAllLevelsWithoutChangingCatalogFacts(t *testing.T) {
+	for _, id := range []string{"openai-toggle", "deepseek", "glm53", "claude-adaptive", "gemini-levels", "gemini-summary", "ollama-levels"} {
+		profile, ok := FindThinkingProfile(id)
+		require.True(t, ok, id)
+		original := profile.Capability("catalog")
+		transport := ThinkingTransportProfile(profile)
+		require.Equal(t, ThinkingEfforts(), transport.Efforts, id)
+		for _, effort := range append(ThinkingEfforts(), "extended") {
+			require.NoError(t, validateThinkingFacts(profile, &ThinkingConfig{Efforts: []string{effort}}), id)
+		}
+		require.Equal(t, original, profile.Capability("catalog"))
+	}
+}
+
+func TestManualDisableCanOverrideEveryEncodableModelPreset(t *testing.T) {
+	yes := true
+	for _, profile := range ThinkingProfiles() {
+		if profile.Wire == "none" || profile.Wire == "unknown" {
+			continue
+		}
+		require.True(t, ThinkingTransportProfile(profile).Off, profile.ID)
+		require.NoError(t, validateThinkingFacts(profile, &ThinkingConfig{CanDisable: &yes}), profile.ID)
+	}
+}
+
+func TestThinkingCatalogExcludesRemovedMinimalEffort(t *testing.T) {
+	require.NotContains(t, ThinkingEfforts(), "minimal")
+	for _, profile := range ThinkingProfiles() {
+		require.NotContains(t, profile.Efforts, "minimal", profile.ID)
+		require.NotContains(t, ThinkingTransportProfile(profile).Efforts, "minimal", profile.ID)
+	}
+	for _, policy := range []*ThinkingPolicy{
+		{DefaultMode: "on", DefaultEffort: "minimal"},
+		{DefaultMode: "on", AllowedEfforts: []string{"low", "minimal"}},
+	} {
+		require.Error(t, policy.Validate())
+	}
+}
+
+func TestClaudeCatalogIncludesFullDocumentedEfforts(t *testing.T) {
+	for _, name := range []string{"claude-opus-4-7", "claude-sonnet-5", "claude-mythos-5-1"} {
+		profile, _ := ResolveThinkingProfile(&ChannelConfig{Type: ProviderAnthropic}, name)
+		require.Equal(t, []string{"low", "medium", "high", "xhigh", "max"}, profile.Efforts)
+	}
+}
+
+func TestGeminiRollingAliasAllowsConfirmedDeclarations(t *testing.T) {
+	yes := true
+	channel := &ChannelConfig{Type: ProviderGemini, ModelCapabilities: map[string]ModelCapabilityConfig{"gemini-flash-latest": {Thinking: &ThinkingConfig{CanDisable: &yes, Efforts: []string{"low", "high"}}}}}
+	require.NoError(t, ValidateChannelThinking(channel.Type, channel.ModelCapabilities))
+	profile, source := ResolveThinkingProfile(channel, "gemini-flash-latest")
+	require.True(t, profile.On)
+	require.True(t, profile.Off)
+	require.Equal(t, []string{"low", "high"}, profile.Efforts)
+	require.Equal(t, "configured", source)
+	channel.ModelCapabilities = nil
+	automatic, _ := ResolveThinkingProfile(channel, "gemini-flash-latest")
+	require.False(t, automatic.On)
+	require.False(t, automatic.Off)
+	require.Empty(t, automatic.Efforts)
 }
 
 func TestBackendContractRetainsAvailableControlsAfterNarrowing(t *testing.T) {

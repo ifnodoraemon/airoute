@@ -45,10 +45,10 @@ func useGlobalEngine(t *testing.T, engine *BillingEngine) {
 func TestEstimateCostCNY_PricesPromptAndMaxCompletion(t *testing.T) {
 	useGlobalEngine(t, newEstimateTestEngine(t))
 
-	// (100000 * 2 + 1000 * 8) / 1e6 = 0.208
+	// (100000 * 2.5 + 1000 * 8) / 1e6 = 0.258
 	got := EstimateCostCNY("estimate-base", "default", 100_000, 1_000)
-	if got != 0.208 {
-		t.Fatalf("EstimateCostCNY = %v, want 0.208", got)
+	if got != 0.258 {
+		t.Fatalf("EstimateCostCNY = %v, want 0.258", got)
 	}
 }
 
@@ -57,8 +57,8 @@ func TestEstimateCostCNY_PromptOnlyWhenNoCompletionCap(t *testing.T) {
 
 	for _, maxCompletion := range []int{0, -1} {
 		got := EstimateCostCNY("estimate-base", "default", 100_000, maxCompletion)
-		if got != 0.2 {
-			t.Fatalf("maxCompletionTokens=%d: EstimateCostCNY = %v, want 0.2", maxCompletion, got)
+		if got != 0.25 {
+			t.Fatalf("maxCompletionTokens=%d: EstimateCostCNY = %v, want 0.25", maxCompletion, got)
 		}
 	}
 }
@@ -67,10 +67,10 @@ func TestEstimateCostCNY_AppliesGroupMultiplierToBaseRate(t *testing.T) {
 	useGlobalEngine(t, newEstimateTestEngine(t))
 
 	// No vip-specific rule for estimate-base, so the base rate is resolved and the
-	// vip multiplier (0.8) applies: 0.208 * 0.8 = 0.1664.
+	// vip multiplier (0.8) applies: 0.258 * 0.8 = 0.2064.
 	got := EstimateCostCNY("estimate-base", "vip", 100_000, 1_000)
-	if got != 0.1664 {
-		t.Fatalf("EstimateCostCNY = %v, want 0.1664", got)
+	if got != 0.2064 {
+		t.Fatalf("EstimateCostCNY = %v, want 0.2064", got)
 	}
 }
 
@@ -78,10 +78,10 @@ func TestEstimateCostCNY_GroupOverrideIsNotMultipliedTwice(t *testing.T) {
 	useGlobalEngine(t, newEstimateTestEngine(t))
 
 	// A vip-specific rule already carries the vip price; applying the 0.8
-	// multiplier again would double-discount it. 1000 * 10 / 1e6 = 0.01.
+	// multiplier again would double-discount it. 1000 * 12.5 / 1e6 = 0.0125.
 	got := EstimateCostCNY("estimate-vip", "vip", 1_000, 0)
-	if got != 0.01 {
-		t.Fatalf("EstimateCostCNY = %v, want 0.01", got)
+	if got != 0.0125 {
+		t.Fatalf("EstimateCostCNY = %v, want 0.0125", got)
 	}
 }
 
@@ -92,17 +92,17 @@ func TestEstimateCostCNY_PricesCacheablePromptAtFullRate(t *testing.T) {
 	// conservative bound must charge the whole prompt at the prompt rate (2.0),
 	// not the cache-read rate (0.2).
 	got := EstimateCostCNY("estimate-base", "default", 1_000_000, 0)
-	if got != 2.0 {
-		t.Fatalf("EstimateCostCNY = %v, want 2.0 (cache read rate must not be assumed)", got)
+	if got != 2.5 {
+		t.Fatalf("EstimateCostCNY = %v, want 2.5 (cache read rate must not be assumed)", got)
 	}
 }
 
 func TestEstimateCostCNY_RoundsToEightDecimals(t *testing.T) {
 	useGlobalEngine(t, newEstimateTestEngine(t))
 
-	// 1 * 0.123456789 / 1e6 = 1.23456789e-7, rounded to 1e-8 = 1.2e-7.
+	// 1 * 0.123456789 * 1.25 / 1e6 = 1.54320986e-7, rounded to 1e-8 = 1.5e-7.
 	got := EstimateCostCNY("estimate-fraction", "default", 1, 0)
-	want := 1.2e-7
+	want := 1.5e-7
 	if got != want {
 		t.Fatalf("EstimateCostCNY = %v, want %v", got, want)
 	}
@@ -114,8 +114,8 @@ func TestEstimateCostCNY_UsesFallbackRateForUnpricedModel(t *testing.T) {
 	// Unconfigured models settle at the engine's fallback rate (2/8 per 1M); the
 	// estimate must use the same card so admission and settlement agree.
 	got := EstimateCostCNY("model-that-was-never-priced", "default", 1_000_000, 0)
-	if got != 2.0 {
-		t.Fatalf("EstimateCostCNY = %v, want fallback rate 2.0", got)
+	if got != 2.5 {
+		t.Fatalf("EstimateCostCNY = %v, want fallback rate 2.5", got)
 	}
 }
 
