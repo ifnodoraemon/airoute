@@ -4,14 +4,12 @@ import (
 	"testing"
 )
 
-// TestResolveMoneyPrefersLedger covers the migration window where some rows only
-// have the legacy float columns and others only have the integer mirror.
+// A zero integer ledger must never resurrect stale display amounts.
 func TestResolveMoneyPrefersLedger(t *testing.T) {
-	// Only the float side is populated: the mirror is derived from it.
 	legacy := &APIKeyRecord{Budget: 10, UsedCost: 2.5}
 	legacy.resolveMoney()
-	if legacy.BudgetUnits != ToUnits(10) || legacy.UsedCostUnits != ToUnits(2.5) {
-		t.Fatalf("expected mirrored integer-unit values, got budget=%d used=%d", legacy.BudgetUnits, legacy.UsedCostUnits)
+	if legacy.Budget != 0 || legacy.UsedCost != 0 {
+		t.Fatalf("zero units must override stale decimal amounts: %+v", legacy)
 	}
 
 	// Only the mirror is populated: the float is derived from it.
@@ -48,7 +46,7 @@ func TestUserBalanceResolvesFromLedger(t *testing.T) {
 
 	legacy := &UserRecord{Balance: 3.5}
 	legacy.resolveBalanceUnits()
-	if legacy.BalanceUnits != ToUnits(3.5) {
-		t.Fatalf("balance_units = %d, want %d", legacy.BalanceUnits, ToUnits(3.5))
+	if legacy.Balance != 0 {
+		t.Fatalf("zero units must override stale decimal balance: %+v", legacy)
 	}
 }

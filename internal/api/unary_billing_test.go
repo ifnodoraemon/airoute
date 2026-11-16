@@ -118,7 +118,7 @@ func TestUnaryChatWithoutUpstreamUsageIsStillBilled(t *testing.T) {
 	var source string
 	deadline := time.Now().Add(3 * time.Second)
 	for {
-		err := db.QueryRow(`SELECT prompt_tokens, completion_tokens, cost, COALESCE(usage_source, '') FROM usage_logs ORDER BY id DESC LIMIT 1`).
+		err := db.QueryRow(`SELECT prompt_tokens, completion_tokens, cost_units / 1000000000.0, COALESCE(usage_source, '') FROM usage_logs ORDER BY id DESC LIMIT 1`).
 			Scan(&prompt, &completion, &cost, &source)
 		if err == nil {
 			break

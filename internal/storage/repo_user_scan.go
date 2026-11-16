@@ -1,6 +1,6 @@
 package storage
 
-const userColumns = `id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at`
+const userColumns = `id, username, COALESCE(email, ''), password_hash, COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance_units, 0) / 1000000000.0, COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at`
 
 func scanUser(row rowScanner) (*UserRecord, error) {
 	var u UserRecord

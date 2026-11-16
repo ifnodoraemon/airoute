@@ -30,6 +30,7 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 
 	var items []model.EmbeddingItem
 	totalTokens := 0
+	estimated := true
 
 	if len(texts) == 1 {
 		// Single embedContent call
@@ -74,6 +75,7 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 			Embedding struct {
 				Values []float64 `json:"values"`
 			} `json:"embedding"`
+			UsageMetadata *GeminiUsageMetadata `json:"usageMetadata"`
 		}
 		if err := json.Unmarshal(body, &parsed); err != nil {
 			return nil, err
@@ -83,9 +85,17 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 			Index:     0,
 			Embedding: parsed.Embedding.Values,
 		})
-		totalTokens = model.EstimateTokensFromChars(len(texts[0]))
-		if totalTokens == 0 {
-			totalTokens = 1
+		// Prefer the upstream token count (the same source the native path uses)
+		// so both inbound paths bill identically; estimate only when the upstream
+		// omits usageMetadata.
+		if parsed.UsageMetadata != nil && parsed.UsageMetadata.PromptTokenCount > 0 {
+			totalTokens = parsed.UsageMetadata.PromptTokenCount
+			estimated = false
+		} else {
+			totalTokens = model.EstimateTokensFromChars(len(texts[0]))
+			if totalTokens == 0 {
+				totalTokens = 1
+			}
 		}
 	} else {
 		// batchEmbedContents call
@@ -167,7 +177,7 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *model.EmbeddingRequest,
 		Data:   items,
 		Model:  req.Model,
 		Usage: model.EmbeddingUsage{
-			Estimated:    true,
+			Estimated:    estimated,
 			PromptTokens: totalTokens,
 			TotalTokens:  totalTokens,
 		},

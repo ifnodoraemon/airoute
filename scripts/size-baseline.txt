@@ -1,0 +1,4 @@
+# File-size ratchet baseline (grandfathered violations, must only shrink).
+# Format: <path> <line-count>  |  <path> exempt  (DDL files; see check-size.sh).
+internal/storage/migrations_postgres.go exempt
+internal/storage/migrations_sqlite.go exempt

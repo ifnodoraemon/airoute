@@ -25,6 +25,19 @@ export function useConsoleData({ adminUser }) {
   const [models, setModels] = useState([]);
   const [thinkingCapabilities,setThinkingCapabilities]=useState({});
   const [playModel, setPlayModel] = useState('');
+  // Connection health for the global stale-data banner: the 8s poll already
+  // computes success/failure but used to discard it, leaving operators staring at
+  // silently stale data during an outage.
+  const [connection, setConnection] = useState({ ok: true, lastUpdated: null, offline: false });
+  useEffect(() => {
+    const update = () => setConnection((prev) => ({ ...prev, offline: !navigator.onLine }));
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => {
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+    };
+  }, []);
 
   // refresh can run in the same tick as the session state update, before the new
   // adminUser is visible here — which is why the loader also falls back to the
@@ -160,6 +173,7 @@ export function useConsoleData({ adminUser }) {
       failed = true;
       console.error('Fetch data failed:', e);
     }
+    setConnection({ ok: !failed, lastUpdated: Date.now(), offline: !navigator.onLine });
     return !failed;
   }, []);
 
@@ -176,6 +190,7 @@ export function useConsoleData({ adminUser }) {
     thinkingCapabilities,
     playModel,
     setPlayModel,
+    connection,
     refresh,
     reset,
   };

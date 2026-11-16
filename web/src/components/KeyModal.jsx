@@ -54,9 +54,9 @@ export default function KeyModal({
           if (e.target === e.currentTarget) guardedClose();
         }}
       >
-        <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
+        <div role="dialog" aria-modal="true" aria-labelledby="key-modal-title-1" className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
           <div className="border-b border-[#E4E6E9] dark:border-[#2C3038] pb-3">
-            <h3 className="font-semibold text-base text-[#202124] dark:text-[#F1F2F4] tracking-tight">
+            <h3 id="key-modal-title-1" className="font-semibold text-base text-[#202124] dark:text-[#F1F2F4] tracking-tight">
               {t?.keyCreatedTitle || copy('密钥已创建', 'Key created')}
             </h3>
           </div>
@@ -126,14 +126,14 @@ export default function KeyModal({
         if (e.target === e.currentTarget) guardedClose();
       }}
     >
-      <form
+      <form role="dialog" aria-modal="true" aria-labelledby="key-modal-title-2"
         onSubmit={onSubmit}
         aria-busy={submitting}
         className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-150"
       >
         <div className="flex items-center justify-between border-b border-[#E4E6E9] dark:border-[#2C3038] pb-3">
           <div>
-            <h3 className="font-semibold text-base text-[#202124] dark:text-[#F1F2F4] tracking-tight">
+            <h3 id="key-modal-title-2" className="font-semibold text-base text-[#202124] dark:text-[#F1F2F4] tracking-tight">
               {isZh ? '新建 API 密钥' : 'Create API Key'}
             </h3>
           </div>

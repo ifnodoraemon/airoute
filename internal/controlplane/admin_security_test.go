@@ -73,6 +73,7 @@ func TestSimulatedOAuthCannotTakeOverAdminViaEmail(t *testing.T) {
 // TestSimulatedOAuthStillAllowsFreshDemoUser ensures the hardening did not break
 // the legitimate development flow for brand-new demo identities.
 func TestSimulatedOAuthStillAllowsFreshDemoUser(t *testing.T) {
+	t.Setenv("ALLOW_REGISTRATION", "true")
 	t.Setenv("ENABLE_SIMULATED_OAUTH", "true")
 	t.Setenv("GITHUB_CLIENT_ID", "")
 	t.Setenv("GITHUB_CLIENT_SECRET", "")

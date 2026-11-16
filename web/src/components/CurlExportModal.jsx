@@ -23,7 +23,7 @@ export default function CurlExportModal({ curlCmd, onClose, onCopy, lang = 'zh' 
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-white dark:bg-[#111726] border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+      <div role="dialog" aria-modal="true" aria-labelledby="curl-export-modal-title-1" className="bg-white dark:bg-[#111726] border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
         {/* Header */}
         <div className="p-6 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
           <div className="flex items-center space-x-3">
@@ -31,7 +31,7 @@ export default function CurlExportModal({ curlCmd, onClose, onCopy, lang = 'zh' 
               <Terminal className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 tracking-tight">
+              <h3 id="curl-export-modal-title-1" className="font-bold text-base text-slate-900 dark:text-slate-100 tracking-tight">
                 {isZh ? '导出 cURL 命令' : 'Export cURL Command'}
               </h3>
             </div>

@@ -141,6 +141,14 @@ services:
     container_name: airoute-1
     restart: always
     ulimits: *nofile-ulimits
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+        reservations:
+          cpus: '0.5'
+          memory: 512M
     env_file: [.env]
     environment:
       <<: *gateway-env
@@ -191,6 +199,14 @@ services:
     container_name: airoute-2
     restart: always
     ulimits: *nofile-ulimits
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+        reservations:
+          cpus: '0.5'
+          memory: 512M
     env_file: [.env]
     environment:
       <<: *gateway-env

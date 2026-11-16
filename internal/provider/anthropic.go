@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -93,7 +92,7 @@ func (p *AnthropicProvider) ChatComplete(ctx context.Context, req *model.ChatCom
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := io.ReadAll(resp.Body)
+	bodyBytes, err := readChatBody(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read anthropic body error: %w", err)
 	}
@@ -132,6 +131,8 @@ func (p *AnthropicProvider) ChatComplete(ctx context.Context, req *model.ChatCom
 		finishReason = "tool_calls"
 	} else if anthropicResp.StopReason == "max_tokens" {
 		finishReason = "length"
+	} else if anthropicResp.StopReason == "refusal" {
+		finishReason = "content_filter"
 	}
 
 	openAIResp := &model.ChatCompletionResponse{

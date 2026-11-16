@@ -1,4 +1,4 @@
-import { Server, Key, Terminal, Cpu, Sparkles, History, BarChart3, ShieldCheck, DollarSign, Coins, Wallet, Bell, BookOpen } from 'lucide-react';
+import { Server, Key, Terminal, Cpu, Sparkles, History, BarChart3, ShieldCheck, DollarSign, Coins, Wallet, Bell, BookOpen, Activity } from 'lucide-react';
 
 export const CONSOLE_NAV = {
   dashboard: { paletteLabel: (isZh) => isZh ? '用量与业务概览大盘' : 'Telemetry & SLA Cockpit', paletteAdminOnly: true, icon: BarChart3, label: (t) => t.navDashboard },
@@ -7,6 +7,7 @@ export const CONSOLE_NAV = {
   logs: { paletteLabel: (isZh) => isZh ? '实时调用日志与对话审计' : 'Audit Logs & Traces', paletteAdminOnly: false, icon: History, label: (t) => t.navLogs, count: (d, isAdmin) => (isAdmin ? d.logs : 0) },
   models: { paletteLabel: (isZh) => isZh ? '模型路由与拓扑' : 'Model Routes & Topo', paletteAdminOnly: true, icon: Cpu, label: (t) => t.navModels, count: (d) => d.models },
   channels: { paletteLabel: (isZh) => isZh ? '上游服务商接入与体检' : 'Upstream Channels & Health', paletteAdminOnly: true, icon: Server, label: (t) => t.navChannels, count: (d) => d.channels },
+  infra: { paletteLabel: (isZh) => isZh ? '基础设施组件健康与运行模式' : 'Infrastructure Health & Modes', paletteAdminOnly: true, icon: Activity, label: (t, isZh) => isZh ? '基础设施健康' : 'Infrastructure Health' },
   reconciliation: { title: (t, isZh) => t.navReconciliation || (isZh ? '供应商对账' : 'Reconciliation'), paletteLabel: (isZh) => isZh ? '供应商整体对账与结算' : 'Supplier Reconciliation & Settlement', paletteAdminOnly: true, icon: Coins, label: (t) => t.navReconciliation },
   pricing: { paletteLabel: (isZh) => isZh ? '模型费率与阶梯定价' : 'Model Pricing & Rates', paletteAdminOnly: true, icon: DollarSign, label: (t) => t.navPricing },
   wallet: { paletteLabel: (isZh, isAdmin) => isAdmin ? (isZh ? '卡密生成与充值中心' : 'Card Codes & Billing') : (isZh ? '我的钱包与充值卡密' : 'Wallet & Top-up'), paletteAdminOnly: false,
@@ -27,7 +28,7 @@ export const CONSOLE_NAV = {
   docs: { icon: BookOpen, label: (t) => t.navDocs },
 };
 
-const PALETTE_ORDER = ["notifications","dashboard","models","channels","reconciliation","pricing","users","skills","mcp","keys","wallet","logs","playground"];
+const PALETTE_ORDER = ["notifications","dashboard","models","channels","infra","reconciliation","pricing","users","skills","mcp","keys","wallet","logs","playground"];
 
 export function consoleTabTitle(tab, t, isZh, isAdmin) {
   const item = CONSOLE_NAV[tab];

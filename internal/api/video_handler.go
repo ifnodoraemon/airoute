@@ -56,7 +56,7 @@ func (h *MultimodalHandler) HandleVideoGenerations(c *gin.Context) {
 	}
 	h.dispatchAndTransform(c, &router.UpstreamRequest{
 		Path: "/v1/videos/generations", Method: http.MethodPost, Body: body,
-		ContentType: "application/json", Model: req.Model, Protocol: "videos",
+		ContentType: "application/json", Model: req.Model, Protocol: "videos", NoRetry: true,
 	}, resolveGenericSessionID(c, "vid"), func(resp *router.UpstreamResponse) error {
 		payload, err := readVideoResponse(resp)
 		if err != nil {

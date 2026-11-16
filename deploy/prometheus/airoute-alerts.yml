@@ -89,15 +89,6 @@ groups:
             结算总额与 usage_logs 总额相差 {{ $value }} 个 1e-9 单位并持续 15 分钟。
             短暂差异是正常重试；持续差异说明审计行在丢失而扣费仍在进行。
 
-      - alert: AirouteBillingWalletMirrorDrift
-        expr: airoute_billing_wallet_drift_units > 1000000
-        labels:
-          severity: warning
-          component: billing
-        annotations:
-          summary: "用户余额的浮点镜像与整数账本漂移"
-          description: "balance_units 与 ROUND(balance*1e9) 相差 {{ $value }} 个 1e-9 单位。"
-
   - name: airoute-throughput
     rules:
       - alert: AirouteHighErrorRate
@@ -278,16 +269,16 @@ groups:
             GATEWAY_MAX_INFLIGHT_PER_USER，并对相关账户做风控。
 
       - alert: AirouteBillingLedgerDrift
-        expr: airoute_billing_ledger_drift_units > 0 or airoute_billing_wallet_drift_units > 0
+        expr: airoute_billing_ledger_drift_units > 0
         for: 1h
         labels:
           severity: critical
           component: billing
         annotations:
-          summary: "账本/计数器/余额镜像出现漂移"
+          summary: "结算账本与密钥计数器出现漂移"
           description: >-
-            `airoute_billing_ledger_drift_units` 或 `airoute_billing_wallet_drift_units`
-            非零。对账只报告不修账，需要人工核对 settlement 账本与 api_keys/users 的金额。
+            `airoute_billing_ledger_drift_units` 非零。
+            对账只报告不修账，需要人工核对 settlement 账本与 api_keys 的整数金额。
 
       - alert: AirouteBillingAuditLag
         expr: airoute_billing_audit_lag_units > 0

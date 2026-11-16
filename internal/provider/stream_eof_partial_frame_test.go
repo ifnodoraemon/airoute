@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -150,7 +152,8 @@ func TestGeminiStreamMixedFraming(t *testing.T) {
 
 // TestAnthropicNativeStreamParsesUnterminatedMessageDelta covers the native
 // Anthropic path: the message_delta frame (output_tokens) arrives without a
-// trailing newline and must still be forwarded, with exactly one IsDone.
+// trailing newline and must still be forwarded; the missing message_stop is a
+// truncation and must surface as an error, not a fake successful terminal.
 func TestAnthropicNativeStreamParsesUnterminatedMessageDelta(t *testing.T) {
 	srv := eofSSEServer(t, "event: message_start\n"+`data: {"type":"message_start","message":{"id":"msg_1","usage":{"input_tokens":5}}}`+"\n\n"+
 		"event: message_delta\n"+`data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":9}}`)
@@ -169,12 +172,13 @@ func TestAnthropicNativeStreamParsesUnterminatedMessageDelta(t *testing.T) {
 
 	var nativeTypes []string
 	doneCount := 0
+	var streamErr error
 	for event := range ch {
 		if event == nil {
 			continue
 		}
 		if event.Err != nil {
-			t.Fatalf("stream error: %v", event.Err)
+			streamErr = event.Err
 		}
 		if event.IsDone {
 			doneCount++
@@ -190,7 +194,56 @@ func TestAnthropicNativeStreamParsesUnterminatedMessageDelta(t *testing.T) {
 	if nativeTypes[1] != "message_delta" {
 		t.Fatalf("second event = %q, want message_delta (the unterminated frame was dropped?)", nativeTypes[1])
 	}
-	if doneCount != 1 {
-		t.Fatalf("IsDone emitted %d times, want exactly 1 (no double terminal frame)", doneCount)
+	// The buffered message_delta is forwarded, but the stream ended without
+	// message_stop: a truncation must surface, not a fake successful terminal.
+	if !errors.Is(streamErr, io.ErrUnexpectedEOF) {
+		t.Fatalf("missing message_stop must surface truncation, got err=%v", streamErr)
+	}
+	if doneCount != 0 {
+		t.Fatalf("truncated stream must not fake IsDone, got %d", doneCount)
+	}
+}
+
+// TestAnthropicAdaptedStreamTruncationSurfaces covers the adapted (OpenAI-shaped)
+// path: a stream cut after a text delta but before message_stop must surface a
+// truncation error rather than a successful terminal that would record a 200 and
+// heal a broken channel.
+func TestAnthropicAdaptedStreamTruncationSurfaces(t *testing.T) {
+	srv := eofSSEServer(t, "event: message_start\n"+`data: {"type":"message_start","message":{"id":"msg_1","usage":{"input_tokens":5}}}`+"\n\n"+
+		"event: content_block_start\n"+`data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`+"\n\n"+
+		"event: content_block_delta\n"+`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hi"}}`)
+	prov := NewAnthropicProvider(srv.Client())
+	channel := &model.ChannelConfig{Name: "anthropic", Type: model.ProviderAnthropic, BaseURL: srv.URL, Models: []string{"m"}}
+	ch, err := prov.ChatCompleteStream(context.Background(), &model.ChatCompletionRequest{Model: "m", Stream: true}, channel)
+	if err != nil {
+		t.Fatalf("ChatCompleteStream: %v", err)
+	}
+	var text string
+	done := false
+	var streamErr error
+	for event := range ch {
+		if event == nil {
+			continue
+		}
+		if event.Err != nil {
+			streamErr = event.Err
+		}
+		if event.IsDone {
+			done = true
+		}
+		if event.Chunk != nil {
+			for _, c := range event.Chunk.Choices {
+				text += c.Delta.Content
+			}
+		}
+	}
+	if text != "hi" {
+		t.Fatalf("forwarded text = %q, want hi", text)
+	}
+	if !errors.Is(streamErr, io.ErrUnexpectedEOF) {
+		t.Fatalf("adapted stream cut before message_stop must surface truncation, got err=%v", streamErr)
+	}
+	if done {
+		t.Fatal("truncated adapted stream must not fake IsDone")
 	}
 }

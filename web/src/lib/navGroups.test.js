@@ -13,7 +13,7 @@ import {
 // bottom item and is intentionally not part of any group.
 const ADMIN_TABS = [
   'dashboard', 'logs', 'notifications',
-  'models', 'channels',
+  'models', 'channels', 'infra',
   'pricing', 'reconciliation', 'wallet',
   'keys', 'users',
   'playground', 'skills', 'mcp',
@@ -54,7 +54,7 @@ describe('navGroups', () => {
     // now sit in the group that owns them.
     expect(ADMIN_NAV_GROUPS.map(({ id, tabs }) => ({ id, tabs }))).toEqual([
       { id: 'monitoring', tabs: ['dashboard', 'logs', 'notifications'] },
-      { id: 'gateway', tabs: ['models', 'channels'] },
+      { id: 'gateway', tabs: ['models', 'channels', 'infra'] },
       { id: 'billing', tabs: ['pricing', 'reconciliation', 'wallet'] },
       { id: 'identity', tabs: ['keys', 'users'] },
       { id: 'ecosystem', tabs: ['playground', 'skills', 'mcp'] },

@@ -99,6 +99,7 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `GATEWAY_CONFIG` | `configs/config.yaml` | Path to the YAML config file. **Required**: a missing file aborts startup |
 | `GATEWAY_DB_DSN` / `GATEWAY_DB` | `data/gateway.db` | SQLite path used when `DATABASE_URL` is unset. `GATEWAY_DB` is the **legacy alias**: it is read only when `GATEWAY_DB_DSN` is empty, and the `-db` flag overrides both. Risk: changing the path on an existing deployment silently starts on an *empty* database (fresh admin, no seeded keys), so move the file and change the value together |
 | `DATABASE_URL` | unset | PostgreSQL URL; when set, SQLite is not used |
+| `DB_PASSWORD` | required for Swarm | `docker-stack.yml` database password; export it explicitly before `docker stack config/deploy`. Docker Compose uses `POSTGRES_PASSWORD` instead. Both reject an omitted password |
 | `REDIS_URL` | unset | Redis connection for distributed rate limits, cache invalidation and the log queue |
 | `PUBLIC_URL` / `GATEWAY_PUBLIC_URL` | unset | Externally reachable base URL (used for OAuth redirects and printed endpoints) |
 | `GATEWAY_INGRESS_PORT` | falls back to `GATEWAY_PORT` | Host port the Compose load balancer publishes; also the default port the CLI probes |
@@ -116,7 +117,7 @@ The following environment variables are read by the server. YAML supports `${NAM
 | `GATEWAY_ADMIN_SECRET` | — | HMAC signing secret for admin tokens. Startup is **fail-closed**: an empty value, a value shorter than 32 characters, or one of the placeholder values shipped in sample manifests aborts the process. Use one stable random value (≥ 32 chars) shared by every replica |
 | `GATEWAY_ALLOW_INSECURE_DEFAULTS` | `false` | Escape hatch for throwaway local development: `true` downgrades the credential gate to a warning. Never enable in production |
 | `GATEWAY_ADMIN_RESET` | `false` | One-shot: force the stored admin password back to `GATEWAY_ADMIN_PASSWORD` on the next start, then set it back to `false` |
-| `ALLOW_REGISTRATION` | `false` (shipped config & `.env.example`) | Public self-registration. Off in the shipped `configs/config.yaml`; enable deliberately |
+| `ALLOW_REGISTRATION` | `false` (including omitted configuration) | Public self-registration. Off unless explicitly enabled through configuration or this environment variable |
 | `INITIAL_USER_BALANCE` | `0` | Trial balance granted on registration. Opt-in: no free credit unless the operator configures a positive value |
 | `DEFAULT_TRIAL_BALANCE` | unset | Legacy alias of `INITIAL_USER_BALANCE`, used only when the latter is empty |
 | `REQUIRE_EMAIL_VERIFICATION` | `true` (`.env.example`) | Require the e-mail verification code during registration (needs SMTP) |

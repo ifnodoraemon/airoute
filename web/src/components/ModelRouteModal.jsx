@@ -284,7 +284,7 @@ export default function ModelRouteModal({
         if (e.target === e.currentTarget) dismiss();
       }}
     >
-      <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-6 max-w-xl w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
+      <div role="dialog" aria-modal="true" aria-labelledby="model-route-modal-title-1" className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-6 max-w-xl w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#E4E6E9] dark:border-[#2C3038] pb-3 shrink-0">
           <div className="flex items-center space-x-2.5">
@@ -292,7 +292,7 @@ export default function ModelRouteModal({
               <Cpu className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-semibold text-base text-[#202124] dark:text-[#F1F2F4] tracking-tight">
+              <h3 id="model-route-modal-title-1" className="font-semibold text-base text-[#202124] dark:text-[#F1F2F4] tracking-tight">
                 {isNew ? (isZh ? '新建模型路由' : 'Create Model Route') : (isZh ? '配置模型路由' : 'Configure Model Route')}
               </h3>
               {!isNew && (

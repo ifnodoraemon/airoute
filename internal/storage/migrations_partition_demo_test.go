@@ -34,9 +34,9 @@ func TestPartitionDemoLargeTable(t *testing.T) {
 	seedStart := time.Now()
 	if _, err := plain.Exec(`INSERT INTO usage_logs
 		(trace_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, total_tokens,
-		 cost, cost_units, status_code, created_at, billing_id)
+		 cost_units, status_code, created_at, billing_id)
 		SELECT 'tr-' || g, 'sk-demo-key', 'tenant-demo', 'demo-model', 'demo-channel', 500, 500, 1000,
-		       0.001, 1000000, 200, now() - ((g % 400) || ' days')::interval, 'demo-' || g
+		       1000000, 200, now() - ((g % 400) || ' days')::interval, 'demo-' || g
 		  FROM generate_series(1, ` + fmt.Sprint(totalRows) + `) g`); err != nil {
 		t.Fatalf("seed rows: %v", err)
 	}

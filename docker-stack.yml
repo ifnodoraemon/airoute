@@ -14,7 +14,7 @@ services:
     image: postgres:16-alpine
     environment:
       - POSTGRES_USER=${DB_USER:-airouteuser}
-      - POSTGRES_PASSWORD=${DB_PASSWORD:-airoutepassword}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:?Set DB_PASSWORD in .env}
       - POSTGRES_DB=${DB_NAME:-airoutedb}
       - PGDATA=/var/lib/postgresql/data/pgdata
     volumes:

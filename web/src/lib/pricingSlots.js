@@ -11,6 +11,25 @@ export function formatDaysLabel(days, isZh = true) {
   return sorted.map(d => dayNames[d] || d).join(isZh ? '、' : ', ');
 }
 
+// formatDiscountLabel renders a pay-fraction (0.5 = pay 50%) as a human label.
+// zh uses the 折 convention (5 折), en uses the percent-off convention (50% Off).
+export function formatDiscountLabel(discount, isZh = true) {
+  const fraction = Number(discount);
+  if (!Number.isFinite(fraction) || fraction <= 0 || fraction > 1) return isZh ? '无效折扣' : 'Invalid';
+  const pct = Math.round(fraction * 100);
+  const zhe = Math.round(fraction * 100) / 10;
+  return isZh ? `${zhe} 折 (${pct}%)` : `${100 - pct}% Off (${pct}%)`;
+}
+
+// formatSlotPreview renders one slot as a readable sentence: days + window + discount.
+export function formatSlotPreview(slot, isZh = true) {
+  if (!slot) return '';
+  const days = formatDaysLabel(slot.days, isZh) || (isZh ? '每天' : 'Everyday');
+  const start = slot.start || '--:--';
+  const end = slot.end || '--:--';
+  return `${days} ${start}–${end} · ${formatDiscountLabel(slot.discount, isZh)}`;
+}
+
 export function parseMinutes(t) {
   if (!t) return null;
   const parts = t.trim().split(':');

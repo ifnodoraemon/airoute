@@ -71,6 +71,7 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 	totalPromptTokens := 0
 	totalCompTokens := 0
 	totalCachedTokens := 0
+	totalCacheCreationTokens := 0
 	accumulatedCompChars := 0
 	upstreamUsageSeen := false
 	usageSource := "upstream"
@@ -94,7 +95,11 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 	anthropicUpstreamChatID := "" // upstream response ID, captured from the first chunk
 	currentBlockIndex := 0
 	textBlockOpened := true
-	toolBlockOpened := false
+	// OpenAI may interleave parallel tool_call fragments by index, but Anthropic
+	// content blocks are strictly sequential. Assemble the calls first and emit
+	// them in first-seen order at finalization rather than streaming each fragment
+	// onto whichever block happens to be open.
+	tools := newGeminiStreamToolCalls()
 	stopReason := "end_turn"
 
 	// Audit record: persisted exactly once on every exit path — normal end,
@@ -117,40 +122,18 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 	}
 	var recordOnce sync.Once
 	recordStreamEnd := func(statusCode int) {
-		// A client abort still consumed the prompt upstream: the request had been
-		// dispatched before the disconnect, so bill the estimated prompt instead
-		// of recording zero.
-		if statusCode == http.StatusOK || statusCode == statusClientClosed {
-			// Anthropic wire format requires input_tokens on every message. When
-			// the upstream stream omits usage, approximate the prompt from the
-			// request so the audit log does not show a misleading zero.
-			if totalPromptTokens == 0 {
-				if estimated := streamFallbackPromptTokens(canonicalReq); estimated > 0 {
-					totalPromptTokens = estimated
-					usageSource = "estimated"
-				}
-			} else {
-				observePromptEstimate(canonicalReq.Model, estimateCanonicalPromptTokens(canonicalReq), totalPromptTokens)
-			}
-			if totalCompTokens == 0 && accumulatedCompChars > 0 {
-				totalCompTokens = estimatedStreamCompletionTokens(accumulatedCompChars)
-				usageSource = "estimated"
-			}
-		}
-		finalCost, finalSaved, finalCached, finalSettle = RecordUsageDeferred(c, AuditRecordParams{
-			SessionID:        sessionID,
-			ChatID:           anthropicUpstreamChatID,
-			Channel:          upstreamChannel,
-			Model:            req.Model,
-			PromptTokens:     totalPromptTokens,
-			CompletionTokens: totalCompTokens,
-			CachedTokens:     totalCachedTokens,
-			Duration:         time.Since(start),
-			TTFT:             ttftDuration,
-			StatusCode:       statusCode,
-			UsageSource:      usageSource,
-			LiveTracked:      true, // stream deltas already fed the live token meter
-			ErrorMessage:     sanitizeErrorMessage(streamError),
+		finalCost, finalSaved, finalCached, finalSettle = recordAnthropicStreamEnd(c, statusCode, &totalPromptTokens, &totalCompTokens, &usageSource, accumulatedCompChars, canonicalReq, AuditRecordParams{
+			SessionID:           sessionID,
+			ChatID:              anthropicUpstreamChatID,
+			Channel:             upstreamChannel,
+			Model:               req.Model,
+			CachedTokens:        totalCachedTokens,
+			CacheCreationTokens: totalCacheCreationTokens,
+			Duration:            time.Since(start),
+			TTFT:                ttftDuration,
+			StatusCode:          statusCode,
+			LiveTracked:         true, // stream deltas already fed the live token meter
+			ErrorMessage:        sanitizeErrorMessage(streamError),
 		})
 	}
 	defer runFinalSettle()
@@ -168,38 +151,8 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 		})
 	}()
 
-	// 1. Emit event: message_start
-	startEvent := gin.H{
-		"type": "message_start",
-		"message": gin.H{
-			"id":            msgID,
-			"type":          "message",
-			"role":          "assistant",
-			"content":       []any{},
-			"model":         req.Model,
-			"stop_reason":   nil,
-			"stop_sequence": nil,
-			"usage": gin.H{
-				"input_tokens":  totalPromptTokens,
-				"output_tokens": 1,
-			},
-		},
-	}
-	startBytes, _ := json.Marshal(startEvent)
-	fmt.Fprintf(c.Writer, "event: message_start\ndata: %s\n\n", startBytes)
-
-	// 2. Emit event: content_block_start
-	blockStart := gin.H{
-		"type":  "content_block_start",
-		"index": 0,
-		"content_block": gin.H{
-			"type": "text",
-			"text": "",
-		},
-	}
-	blockStartBytes, _ := json.Marshal(blockStart)
-	fmt.Fprintf(c.Writer, "event: content_block_start\ndata: %s\n\n", blockStartBytes)
-	flusher.Flush()
+	// 1-2. Emit message_start and the initial text content_block_start.
+	emitAnthropicStreamStart(c.Writer, flusher, msgID, req.Model, totalPromptTokens)
 
 	w := c.Writer
 	pending := firstEvent
@@ -240,25 +193,14 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 				if clientGone {
 					return
 				}
-				if textBlockOpened || toolBlockOpened {
+				if textBlockOpened {
 					fmt.Fprintf(w, "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":%d}\n\n", currentBlockIndex)
+					textBlockOpened = false
 				}
+				currentBlockIndex = emitAnthropicToolBlocks(w, flusher, tools, currentBlockIndex)
 
 				// Emit message_delta
-				deltaEvent := gin.H{
-					"type": "message_delta",
-					"delta": gin.H{
-						"stop_reason":   stopReason,
-						"stop_sequence": nil,
-					},
-					"usage": gin.H{
-						"input_tokens":            max(0, totalPromptTokens-totalCachedTokens),
-						"cache_read_input_tokens": totalCachedTokens,
-						"output_tokens":           totalCompTokens,
-					},
-				}
-				deltaBytes, _ := json.Marshal(deltaEvent)
-				fmt.Fprintf(w, "event: message_delta\ndata: %s\n\n", deltaBytes)
+				emitAnthropicMessageDelta(w, flusher, stopReason, totalPromptTokens, totalCachedTokens, totalCompTokens)
 
 				recordOnce.Do(func() { recordStreamEnd(http.StatusOK) })
 				writeStreamUsageTrailer(w, flusher, finalCost, finalSaved, finalCached)
@@ -308,6 +250,8 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 							stopReason = "tool_use"
 						} else if *chunkChoice.FinishReason == "length" {
 							stopReason = "max_tokens"
+						} else if *chunkChoice.FinishReason == "content_filter" {
+							stopReason = "refusal"
 						}
 					}
 
@@ -320,72 +264,14 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 						accumulatedCompChars += len(chunkDelta.Content)
 						// 实时吞吐：流式 delta 到达即计入内存 token 计数。
 						telemetry.GlobalLiveMetrics.AddChars(len(chunkDelta.Content))
-
-						blockDelta := gin.H{
-							"type":  "content_block_delta",
-							"index": 0,
-							"delta": gin.H{
-								"type": "text_delta",
-								"text": chunkDelta.Content,
-							},
-						}
-						deltaBytes, _ := json.Marshal(blockDelta)
-						fmt.Fprintf(w, "event: content_block_delta\ndata: %s\n\n", deltaBytes)
-						flusher.Flush()
+						emitAnthropicTextDelta(w, flusher, chunkDelta.Content, &currentBlockIndex, &textBlockOpened)
 					}
 
 					if len(chunkDelta.ToolCalls) > 0 {
 						for _, tc := range chunkDelta.ToolCalls {
-							if tc.ID != "" && tc.Function.Name != "" {
-								if textBlockOpened {
-									fmt.Fprintf(w, "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":%d}\n\n", currentBlockIndex)
-									textBlockOpened = false
-								}
-								if toolBlockOpened {
-									fmt.Fprintf(w, "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":%d}\n\n", currentBlockIndex)
-								}
-								currentBlockIndex++
-								toolBlockOpened = true
-								stopReason = "tool_use"
-
-								tbStart := gin.H{
-									"type":  "content_block_start",
-									"index": currentBlockIndex,
-									"content_block": gin.H{
-										"type": "tool_use",
-										"id":   tc.ID,
-										"name": tc.Function.Name,
-										// A16: the Anthropic SDKs require tool_use
-										// blocks to carry an (empty) input object on
-										// content_block_start; the arguments then
-										// arrive as input_json_delta fragments.
-										"input": gin.H{},
-									},
-								}
-								tbBytes, _ := json.Marshal(tbStart)
-								fmt.Fprintf(w, "event: content_block_start\ndata: %s\n\n", tbBytes)
-								flusher.Flush()
-							}
-
-							// Argument fragments are only valid inside an open
-							// tool_use block. A frame that carries arguments without
-							// ever opening one must not be written onto the text
-							// block at index 0.
-							if tc.Function.Arguments != "" && toolBlockOpened {
-								stopReason = "tool_use"
-								argDelta := gin.H{
-									"type":  "content_block_delta",
-									"index": currentBlockIndex,
-									"delta": gin.H{
-										"type":         "input_json_delta",
-										"partial_json": tc.Function.Arguments,
-									},
-								}
-								argBytes, _ := json.Marshal(argDelta)
-								fmt.Fprintf(w, "event: content_block_delta\ndata: %s\n\n", argBytes)
-								flusher.Flush()
-							}
+							tools.add(tc)
 						}
+						stopReason = "tool_use"
 					}
 
 				}
@@ -400,160 +286,9 @@ func (h *Handler) handleAnthropicStream(c *gin.Context, reqCtx context.Context, 
 					totalPromptTokens = max(totalPromptTokens, event.Chunk.Usage.PromptTokens)
 					totalCompTokens = max(totalCompTokens, event.Chunk.Usage.CompletionTokens)
 					totalCachedTokens = max(totalCachedTokens, event.Chunk.Usage.GetCachedTokens())
+					totalCacheCreationTokens = max(totalCacheCreationTokens, event.Chunk.Usage.GetCacheCreationTokens())
 				}
 			}
 		}
 	}
-}
-
-// Native Anthropic streams retain signed thinking blocks, block ordering, and
-// provider-specific SSE fields while still flowing through dispatcher fallback.
-func (h *Handler) handleNativeAnthropicStream(c *gin.Context, stream <-chan *model.StreamEvent, first *model.StreamEvent, modelName, sessionID string, start time.Time) {
-	flusher, ok := InitSSEStream(c)
-	if !ok {
-		RespondAnthropicError(c, http.StatusInternalServerError, "Streaming unsupported", "api_error")
-		return
-	}
-	inputTokens, outputTokens := 0, 0
-	cachedReadTokens, cacheCreationTokens := 0, 0
-	// A client can disappear before the closing message_delta that carries
-	// output_tokens, and some providers close the stream without one. Accumulating
-	// the emitted text lets the audit row bill what was generated instead of
-	// recording zero output for a stream the provider charged for.
-	accumulatedOutputChars := 0
-	usageSource := "upstream"
-	var ttftDuration time.Duration
-	var firstContentSeen bool
-	chatID, channel, statusCode := "", first.Channel, http.StatusOK
-	var streamErr error
-	defer func() {
-		// Anthropic input_tokens excludes prompt-cache reads/writes; the audit
-		// record must report the full prompt and surface cache hits separately.
-		totalPrompt := inputTokens + cachedReadTokens + cacheCreationTokens
-		if outputTokens == 0 && accumulatedOutputChars > 0 {
-			outputTokens = estimatedStreamCompletionTokens(accumulatedOutputChars)
-			usageSource = usageSourceEstimated
-		}
-		RecordUsage(c, AuditRecordParams{
-			SessionID:        sessionID,
-			ChatID:           chatID,
-			Channel:          channel,
-			Model:            modelName,
-			PromptTokens:     totalPrompt,
-			CompletionTokens: outputTokens,
-			CachedTokens:     cachedReadTokens,
-			// Cache writes cost a premium over the plain input rate; passing them
-			// separately stops them being billed as ordinary prompt tokens.
-			CacheCreationTokens: cacheCreationTokens,
-			Duration:            time.Since(start),
-			TTFT:                ttftDuration,
-			StatusCode:          statusCode,
-			UsageSource:         usageSource,
-			ErrorMessage:        sanitizeErrorMessage(streamErr),
-			LiveTracked:         true, // stream deltas already fed the live token meter
-		})
-	}()
-	write := func(event *model.StreamEvent) bool {
-		if event == nil {
-			return true
-		}
-		if event.Channel != "" {
-			channel = event.Channel
-		}
-		if event.Err != nil {
-			streamErr = event.Err
-			statusCode = http.StatusBadGateway
-			body, _ := json.Marshal(gin.H{"type": "error", "error": gin.H{"type": "stream_error", "message": sanitizeErrorMessage(event.Err)}})
-			fmt.Fprintf(c.Writer, "event: error\ndata: %s\n\n", body)
-			flusher.Flush()
-			return false
-		}
-		if len(event.NativeAnthropicEvent) == 0 {
-			return true
-		}
-		var payload map[string]any
-		if json.Unmarshal(event.NativeAnthropicEvent, &payload) == nil {
-			if !firstContentSeen && (event.NativeAnthropicType == "content_block_delta" || event.NativeAnthropicType == "content_block_start") {
-				ttftDuration = time.Since(start)
-				telemetry.GlobalMetrics.RecordTTFT(ttftDuration)
-				firstContentSeen = true
-			}
-			if event.NativeAnthropicType == "message_start" {
-				if msg, ok := payload["message"].(map[string]any); ok {
-					chatID, _ = msg["id"].(string)
-					msg["model"] = modelName
-					if usage, ok := msg["usage"].(map[string]any); ok {
-						inputTokens = intFromJSONNumber(usage["input_tokens"])
-						cachedReadTokens = intFromJSONNumber(usage["cache_read_input_tokens"])
-						cacheCreationTokens = intFromJSONNumber(usage["cache_creation_input_tokens"])
-					}
-				}
-			} else if event.NativeAnthropicType == "content_block_delta" {
-				// 实时吞吐：从原生 delta 中取出文本增量计入内存 token 计数。
-				if delta, ok := payload["delta"].(map[string]any); ok {
-					if text, ok := delta["text"].(string); ok && text != "" {
-						telemetry.GlobalLiveMetrics.AddChars(len(text))
-						accumulatedOutputChars += len(text)
-					}
-				}
-			} else if event.NativeAnthropicType == "message_delta" {
-				if usage, ok := payload["usage"].(map[string]any); ok {
-					outputTokens = intFromJSONNumber(usage["output_tokens"])
-					if value, exists := usage["input_tokens"]; exists {
-						inputTokens = intFromJSONNumber(value)
-					}
-					if value, exists := usage["cache_read_input_tokens"]; exists {
-						cachedReadTokens = intFromJSONNumber(value)
-					}
-					if value, exists := usage["cache_creation_input_tokens"]; exists {
-						cacheCreationTokens = intFromJSONNumber(value)
-					}
-				}
-			}
-			event.NativeAnthropicEvent, _ = json.Marshal(payload)
-		}
-		fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", event.NativeAnthropicType, event.NativeAnthropicEvent)
-		flusher.Flush()
-		return true
-	}
-	if !write(first) {
-		return
-	}
-	clientGone := false
-	drainEnabled := upstreamDrainingEnabled()
-	doneCh := c.Request.Context().Done()
-	for {
-		select {
-		case <-doneCh:
-			// 499 matches the other stream handlers: the *client* went away, the
-			// upstream did not time out.
-			statusCode = 499
-			if !drainEnabled {
-				return
-			}
-			// Keep reading so the provider's message_delta usage still arrives.
-			clientGone = true
-			doneCh = nil
-			markAbortedDrain(0)
-		case event, open := <-stream:
-			if !open {
-				if clientGone {
-					markAbortedDrain(outputTokens)
-				}
-				return
-			}
-			// write() also accumulates usage; emitting to a dead client is harmless,
-			// so keep calling it but ignore write failures while draining.
-			if ok := write(event); !ok && !clientGone {
-				return
-			}
-		}
-	}
-}
-
-func intFromJSONNumber(value any) int {
-	if number, ok := value.(float64); ok {
-		return int(number)
-	}
-	return 0
 }

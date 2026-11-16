@@ -47,6 +47,23 @@ export function resetBodyScrollLock() {
   if (typeof document !== 'undefined') document.body.style.overflow = '';
 }
 
+// The topmost open dialog/alertdialog in the DOM. Focus management is scoped to
+// it so a stacked confirmation dialog owns the focus trap, not the modal behind.
+function topDialog() {
+  if (typeof document === 'undefined') return null;
+  const dialogs = document.querySelectorAll('[role="dialog"],[role="alertdialog"]');
+  return dialogs.length ? dialogs[dialogs.length - 1] : null;
+}
+
+function focusableIn(el) {
+  const nodes = el.querySelectorAll(
+    'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'
+  );
+  // getClientRects is empty under jsdom (no layout), so the trap stays inert in
+  // unit tests while working in a real browser.
+  return Array.from(nodes).filter((node) => node.getClientRects().length > 0);
+}
+
 /**
  * Custom hook to handle Modal accessibility & interactions:
  * - Escape closes *this* modal only when no newer layer is open (Jakob Nielsen
@@ -55,6 +72,8 @@ export function resetBodyScrollLock() {
  * - Prevents background page scrolling while any modal is open (reference counted,
  *   so any open/close order leaves the page in the right state).
  * - Restores background page scrolling when the last modal unmounts or closes.
+ * - Traps Tab focus inside the topmost dialog and restores focus to the element
+ *   that opened the modal on close (WCAG 2.4.3 Focus Order).
  *
  * The close callback is read through a ref so callers can pass an inline
  * function (for example an unsaved-changes guard) without re-registering the
@@ -75,9 +94,35 @@ export function useModalA11y(isOpen, onClose) {
     const unregister = pushEscapeLayer(() => closeRef.current?.());
     lockBodyScroll();
 
+    const previouslyFocused = typeof document !== 'undefined' ? document.activeElement : null;
+    const dialog = topDialog();
+    if (dialog) {
+      const focusable = focusableIn(dialog);
+      (focusable[0] || dialog).focus?.();
+    }
+    const onKeyDown = (event) => {
+      if (event.key !== 'Tab' || typeof document === 'undefined') return;
+      const top = topDialog();
+      if (!top) return;
+      const focusable = focusableIn(top);
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    if (typeof document !== 'undefined') document.addEventListener('keydown', onKeyDown);
+
     return () => {
       unregister();
       unlockBodyScroll();
+      if (typeof document !== 'undefined') document.removeEventListener('keydown', onKeyDown);
+      previouslyFocused?.focus?.();
     };
   }, [isOpen]);
 }

@@ -44,21 +44,11 @@ type APIKeyRecord struct {
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
-// resolveMoney reconciles the integer ledger mirrors with the legacy float
-// columns so callers always read a consistent pair.
+// resolveMoney derives the public decimal amounts from the integer ledger.
 func (rec *APIKeyRecord) resolveMoney() {
-	if rec == nil {
-		return
-	}
-	if rec.UsedCostUnits != 0 || rec.UsedCost == 0 {
+	if rec != nil {
 		rec.UsedCost = FromUnits(rec.UsedCostUnits)
-	} else {
-		rec.UsedCostUnits = ToUnits(rec.UsedCost)
-	}
-	if rec.BudgetUnits != 0 || rec.Budget == 0 {
 		rec.Budget = FromUnits(rec.BudgetUnits)
-	} else {
-		rec.BudgetUnits = ToUnits(rec.Budget)
 	}
 }
 

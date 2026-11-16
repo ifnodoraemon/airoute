@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
+	"github.com/ifnodoraemon/airoute/internal/provider"
 )
 
 func (d *Dispatcher) BeginNativeSession(ctx context.Context, ch *model.ChannelConfig, name string) (context.Context, context.CancelFunc, error) {
@@ -24,7 +25,13 @@ func (d *Dispatcher) BeginNativeSession(ctx context.Context, ch *model.ChannelCo
 func (d *Dispatcher) ObserveNativeSession(ctx context.Context, ch *model.ChannelConfig, name string, err error) {
 	if err != nil {
 		d.observeUpstreamError(ctx, ch, name, err)
-		d.circuitBreaker.AbortCanary(ch.Name)
+		// A Live upstream that keeps failing must trip the breaker like any other
+		// channel; aborting the canary alone left a dead upstream CLOSED forever.
+		if provider.IsChannelFailure(err) {
+			d.circuitBreaker.RecordFailure(ch.Name)
+		} else {
+			d.circuitBreaker.AbortCanary(ch.Name)
+		}
 		return
 	}
 	d.circuitBreaker.RecordSuccess(ch.Name)

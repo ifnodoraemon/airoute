@@ -1,4 +1,5 @@
 import { apiMutation } from '../api/mutation';
+import { requestConfirm } from '../lib/confirmBus';
 // The API key domain: the create form, the per-row operations, the batch
 // operations, and the copy feedback.
 //
@@ -152,7 +153,7 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
 
   // Handle Key Deletion
   const handleDeleteKey = useCallback(async (id) => {
-    if (!window.confirm(isZh ? '确认注销该客户端访问密钥？' : 'Are you sure you want to revoke this API key?')) return;
+    if (!(await requestConfirm({ title: isZh ? '注销访问密钥' : 'Revoke API key', description: isZh ? '确认注销该客户端访问密钥？' : 'Are you sure you want to revoke this API key?' }))) return;
     try {
       await apiJSON(`/api/v1/admin/keys/${id}`, { method: 'DELETE' });
       showToast(isZh ? '客户端访问密钥已注销' : 'Client API key revoked', 'info');
@@ -188,7 +189,7 @@ export function useKeyActions({ keys = [], adminUser, showToast, isZh, refresh }
 
   const handleBatchDeleteKeys = useCallback(async () => {
     if (selectedKeyIds.length === 0) return;
-    if (!window.confirm(isZh ? `确认批量注销选中的 ${selectedKeyIds.length} 个 API 密钥？` : `Confirm revoke selected ${selectedKeyIds.length} API keys?`)) return;
+    if (!(await requestConfirm({ title: isZh ? '批量注销密钥' : 'Revoke API keys', description: isZh ? `确认批量注销选中的 ${selectedKeyIds.length} 个 API 密钥？` : `Confirm revoke selected ${selectedKeyIds.length} API keys?` }))) return;
     try {
       const { data, ok: requestSucceeded } = await apiMutation('/api/v1/admin/keys/batch-delete', 'POST', { ids: selectedKeyIds }, apiFetch);
 

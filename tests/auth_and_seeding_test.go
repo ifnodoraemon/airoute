@@ -34,7 +34,7 @@ func TestAuthMiddleware_APIKeyContextAndLogging(t *testing.T) {
 			},
 		},
 	}
-	config.SetGlobalConfig(cfg)
+	useConfigOnlyFixture(t, cfg)
 
 	r := gin.New()
 	r.Use(middleware.AuthMiddleware())
@@ -147,7 +147,7 @@ func TestRateLimitMiddleware_Enforcement(t *testing.T) {
 			},
 		},
 	}
-	config.SetGlobalConfig(cfg)
+	useConfigOnlyFixture(t, cfg)
 
 	r := gin.New()
 	r.Use(middleware.AuthMiddleware())

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"fmt"
 )
 
@@ -134,6 +135,17 @@ func (r *ResponseRequest) ToChatCompletionRequest() (*ChatCompletionRequest, err
 		Tools:             chatTools,
 		ToolChoice:        chatToolChoice,
 		ParallelToolCalls: r.ParallelToolCalls,
+		User:              r.User,
+	}
+	// metadata is whitelisted for native Responses but has no structured chat
+	// field; carry it through Extra so it still reaches upstreams that accept it.
+	if len(r.Metadata) > 0 {
+		if chatReq.Extra == nil {
+			chatReq.Extra = make(ExtraFields)
+		}
+		if encoded, err := json.Marshal(r.Metadata); err == nil {
+			chatReq.Extra["metadata"] = encoded
+		}
 	}
 
 	var messages []ChatMessage

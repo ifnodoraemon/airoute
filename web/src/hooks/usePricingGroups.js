@@ -1,4 +1,5 @@
 import { apiMutation } from '../api/mutation';
+import { requestConfirm } from '../lib/confirmBus';
 
 export default function usePricingGroups({
   adminFetch, isZh, localGroupMultipliers, newGroupInputKey, newGroupInputMultiplier,
@@ -36,12 +37,12 @@ export default function usePricingGroups({
     }));
   };
 
-  const handleDeleteGroupTier = (g) => {
+  const handleDeleteGroupTier = async (g) => {
     if (g === 'default') {
       showToast(isZh ? '默认基准组不可删除' : 'Default tier cannot be deleted', 'warning');
       return;
     }
-    if (!window.confirm(isZh ? `确定删除计费分组 [${g}]？该组下的密钥后续将回退至默认 1.0x 基准价。` : `Delete group tier [${g}]?`)) {
+    if (!(await requestConfirm({ title: isZh ? '删除计费分组' : 'Delete group tier', description: isZh ? `确定删除计费分组 [${g}]？该组下的密钥后续将回退至默认 1.0x 基准价。` : `Delete group tier [${g}]?` }))) {
       return;
     }
     const copy = { ...localGroupMultipliers };

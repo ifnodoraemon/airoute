@@ -54,7 +54,7 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, maxChatErrorBodyBytes))
 		resp.Body.Close()
 		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes, resp.Header)
 	}
@@ -110,7 +110,7 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 			default:
 			}
 
-			line, err := reader.ReadBytes('\n')
+			line, err := readCappedLine(reader)
 			// A complete data frame can arrive without its trailing newline when the
 			// upstream (or a proxy) cuts the connection. Process the buffered line
 			// instead of dropping it: it may be the message_delta carrying
@@ -120,7 +120,11 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 					sendEvent(&model.StreamEvent{Err: err})
 					return
 				}
-				sendEvent(&model.StreamEvent{IsDone: true})
+				// Both terminal paths return on message_stop, so a clean EOF here
+				// means the stream was cut before its terminal frame. Surface a
+				// truncation (like the native reader) instead of faking success,
+				// which would otherwise record a 200 and heal a broken channel.
+				sendEvent(&model.StreamEvent{Err: io.ErrUnexpectedEOF})
 				return
 			}
 
@@ -195,21 +199,7 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 						}
 					}
 					// Emit initial chunk with role assistant
-					chunk := &model.ChatCompletionChunk{
-						ID:      messageID,
-						Object:  "chat.completion.chunk",
-						Created: created,
-						Model:   req.Model,
-						Choices: []model.ChunkChoice{
-							{
-								Index: 0,
-								Delta: model.ChunkDelta{
-									Role: "assistant",
-								},
-							},
-						},
-					}
-					if !sendEvent(&model.StreamEvent{Chunk: chunk}) {
+					if !sendEvent(&model.StreamEvent{Chunk: buildAnthropicRoleChunk(messageID, created, req.Model)}) {
 						return
 					}
 
@@ -219,33 +209,7 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 						blockIdx = int(bi)
 					}
 					if cb, ok := eventMap["content_block"].(map[string]any); ok {
-						if cb["type"] == "tool_use" {
-							toolID, _ := cb["id"].(string)
-							toolName, _ := cb["name"].(string)
-							toolIndex := toolIndexForBlock(blockIdx)
-							chunk := &model.ChatCompletionChunk{
-								ID:      messageID,
-								Object:  "chat.completion.chunk",
-								Created: created,
-								Model:   req.Model,
-								Choices: []model.ChunkChoice{
-									{
-										Index: 0,
-										Delta: model.ChunkDelta{
-											ToolCalls: []model.ToolCall{
-												{
-													Index: &toolIndex,
-													ID:    toolID,
-													Type:  "function",
-													Function: model.FunctionCall{
-														Name: toolName,
-													},
-												},
-											},
-										},
-									},
-								},
-							}
+						if chunk := buildAnthropicToolStartChunk(messageID, created, req.Model, cb, blockIdx, toolIndexForBlock); chunk != nil {
 							if !sendEvent(&model.StreamEvent{Chunk: chunk}) {
 								return
 							}
@@ -258,69 +222,7 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 						blockIdx = int(bi)
 					}
 					if delta, ok := eventMap["delta"].(map[string]any); ok {
-						if text, ok := delta["text"].(string); ok && text != "" {
-							chunk := &model.ChatCompletionChunk{
-								ID:      messageID,
-								Object:  "chat.completion.chunk",
-								Created: created,
-								Model:   req.Model,
-								Choices: []model.ChunkChoice{
-									{
-										Index: 0,
-										Delta: model.ChunkDelta{
-											Content: text,
-										},
-									},
-								},
-							}
-							if !sendEvent(&model.StreamEvent{Chunk: chunk}) {
-								return
-							}
-						} else if thinking, ok := delta["thinking"].(string); ok && thinking != "" {
-							// Extended thinking (thinking_delta) used to fall through and
-							// vanish on the adapted path; keep it as reasoning_content so
-							// OpenAI-shaped clients see the trace the upstream billed for.
-							chunk := &model.ChatCompletionChunk{
-								ID:      messageID,
-								Object:  "chat.completion.chunk",
-								Created: created,
-								Model:   req.Model,
-								Choices: []model.ChunkChoice{
-									{
-										Index: 0,
-										Delta: model.ChunkDelta{
-											ReasoningContent: thinking,
-										},
-									},
-								},
-							}
-							if !sendEvent(&model.StreamEvent{Chunk: chunk}) {
-								return
-							}
-						} else if partial, ok := delta["partial_json"].(string); ok {
-							toolIndex := toolIndexForBlock(blockIdx)
-							chunk := &model.ChatCompletionChunk{
-								ID:      messageID,
-								Object:  "chat.completion.chunk",
-								Created: created,
-								Model:   req.Model,
-								Choices: []model.ChunkChoice{
-									{
-										Index: 0,
-										Delta: model.ChunkDelta{
-											ToolCalls: []model.ToolCall{
-												{
-													Index: &toolIndex,
-													Type:  "function",
-													Function: model.FunctionCall{
-														Arguments: partial,
-													},
-												},
-											},
-										},
-									},
-								},
-							}
+						if chunk := buildAnthropicDeltaChunk(messageID, created, req.Model, delta, blockIdx, toolIndexForBlock); chunk != nil {
 							if !sendEvent(&model.StreamEvent{Chunk: chunk}) {
 								return
 							}
@@ -349,6 +251,8 @@ func (p *AnthropicProvider) ChatCompleteStream(ctx context.Context, req *model.C
 								stopReason = "length"
 							} else if r == "tool_use" {
 								stopReason = "tool_calls"
+							} else if r == "refusal" {
+								stopReason = "content_filter"
 							}
 						}
 					}

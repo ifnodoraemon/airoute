@@ -128,7 +128,7 @@ export default function AccountManageModal({
         if (e.target === e.currentTarget) requestClose();
       }}
     >
-      <div className="relative bg-white dark:bg-[#191B1F] rounded-2xl border border-[#E4E6E9] dark:border-[#2C3038] shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-150">
+      <div role="dialog" aria-modal="true" aria-labelledby="account-manage-modal-title-1" className="relative bg-white dark:bg-[#191B1F] rounded-2xl border border-[#E4E6E9] dark:border-[#2C3038] shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-150">
         {/* Modal Header */}
         <div className="px-6 py-5 border-b border-[#E4E6E9] dark:border-[#2C3038] flex items-center justify-between">
           <div className="flex items-center space-x-3">
@@ -136,7 +136,7 @@ export default function AccountManageModal({
               {adminUser?.username?.charAt(0) || 'U'}
             </div>
             <div>
-              <h3 className="text-base font-bold text-[#202124] dark:text-[#F1F2F4] tracking-tight">{isZh ? '个人账号中心' : 'Account Center'}</h3>
+              <h3 id="account-manage-modal-title-1" className="text-base font-bold text-[#202124] dark:text-[#F1F2F4] tracking-tight">{isZh ? '个人账号中心' : 'Account Center'}</h3>
               <p className="ui-meta">{isZh ? '管理个人资料与 API 接入凭证' : 'Manage profile & API credentials'}</p>
             </div>
           </div>

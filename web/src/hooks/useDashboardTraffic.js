@@ -130,6 +130,7 @@ export default function useDashboardTraffic({
       if (chartMetric === 'tpm' && (b.tpm || 0) > max) max = b.tpm;
       if (chartMetric === 'latency' && b.avgTtft > max) max = b.avgTtft;
       if (chartMetric === 'errors' && b.errors > max) max = b.errors;
+      if (chartMetric === 'cost' && (b.costs || 0) > max) max = b.costs;
     });
     return max;
   }, [timeBuckets, chartMetric]);

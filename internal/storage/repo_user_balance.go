@@ -55,12 +55,11 @@ func (r *Repository) UpdateUserBalance(username string, delta float64) error {
 	var newUnits int64
 	err = tx.QueryRow(`UPDATE users SET
 			balance_units = COALESCE(balance_units, 0) + ?,
-			balance = (COALESCE(balance_units, 0) + ?) * 1.0 / 1000000000.0,
 			updated_at = CURRENT_TIMESTAMP
 		WHERE id = ? AND status <> 'deleted'
 			AND COALESCE(balance_units, 0) + ? BETWEEN ? AND ?
 		RETURNING balance_units`,
-		units, units, userID, units, -limit, limit).Scan(&newUnits)
+		units, userID, units, -limit, limit).Scan(&newUnits)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrBalanceOutOfRange
 	}
@@ -100,7 +99,7 @@ func (r *Repository) SetUserBalance(username string, balance float64) error {
 	if status == "deleted" {
 		return sql.ErrNoRows
 	}
-	if err := requireUserUpdated(tx.Exec(`UPDATE users SET balance = ?, balance_units = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status <> 'deleted'`, balance, newUnits, userID)); err != nil {
+	if err := requireUserUpdated(tx.Exec(`UPDATE users SET balance_units = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status <> 'deleted'`, newUnits, userID)); err != nil {
 		return err
 	}
 	return tx.Commit()

@@ -156,29 +156,6 @@ func (s *PricingService) Overview() (*PricingOverview, error) {
 //
 // Both writers of a price row call this: the pricing screen through SaveRate and
 // the route editor through RouteService, which builds its own record.
-func ValidatePriceRecord(rec *storage.ModelPriceRecord) error {
-	if rec == nil {
-		return nil
-	}
-	if err := storage.ValidatePriceCurrency(rec); err != nil {
-		return &ValidationError{Message: err.Error()}
-	}
-	for _, f := range []struct {
-		name  string
-		value float64
-	}{
-		{"提示价格", rec.PromptPrice},
-		{"补全价格", rec.CompletionPrice},
-		{"缓存读取价格", rec.CacheReadPrice},
-		{"固定价格", rec.FixedPrice},
-	} {
-		if f.value < 0 {
-			return &ValidationError{Message: f.name + "不能为负数"}
-		}
-	}
-	return nil
-}
-
 // SaveRate validates and stores a rate, then refreshes the billing engine and
 // the data plane.
 func (s *PricingService) SaveRate(ctx context.Context, rec *storage.ModelPriceRecord) error {

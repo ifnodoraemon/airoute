@@ -26,7 +26,10 @@ func typedImageChatRequest() *model.ChatCompletionRequest {
 }
 
 func TestConvertGeminiSendsTypedImageAsInlineData(t *testing.T) {
-	geminiReq := convertOpenAIToGemini(typedImageChatRequest())
+	geminiReq, err := convertOpenAIToGemini(typedImageChatRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(geminiReq.Contents) != 1 {
 		t.Fatalf("expected one content turn, got %d", len(geminiReq.Contents))
 	}
@@ -72,7 +75,8 @@ func TestAnthropicToolChoiceMapping(t *testing.T) {
 		{"auto", "auto", map[string]any{"type": "auto"}},
 		{"required", "required", map[string]any{"type": "any"}},
 		{"any", "any", map[string]any{"type": "any"}},
-		{"none", "none", nil},
+		{"none", "none", map[string]any{"type": "none"}},
+		{"none object", map[string]any{"type": "none"}, map[string]any{"type": "none"}},
 		{"function", map[string]any{"type": "function", "function": map[string]any{"name": "get_weather"}}, map[string]any{"type": "tool", "name": "get_weather"}},
 		{"function without name", map[string]any{"type": "function", "function": map[string]any{}}, nil},
 		{"unknown string", "sometimes", nil},
@@ -141,7 +145,11 @@ func TestConvertersForwardToolChoice(t *testing.T) {
 		t.Fatalf("tool declaration not forwarded")
 	}
 
-	encoded, err := json.Marshal(convertOpenAIToGemini(req))
+	converted, err := convertOpenAIToGemini(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(converted)
 	if err != nil {
 		t.Fatalf("marshal gemini: %v", err)
 	}

@@ -213,7 +213,7 @@ for chunk in llm.stream(messages):
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-white dark:bg-[#111726] border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div role="dialog" aria-modal="true" aria-labelledby="quick-start-modal-title-1" className="bg-white dark:bg-[#111726] border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {!chatModels.length && <p role="status" className="p-4 text-sm text-amber-700 dark:text-amber-300">{isZh ? '该密钥暂无可用聊天模型，请先配置模型及访问权限，再替换示例中的模型占位符。' : 'No chat model is available for this key. Configure model access before replacing the model placeholder.'}</p>}
         {/* Modal Header */}
         <div className="p-6 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
@@ -222,7 +222,7 @@ for chunk in llm.stream(messages):
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 tracking-tight">
+              <h3 id="quick-start-modal-title-1" className="font-bold text-base text-slate-900 dark:text-slate-100 tracking-tight">
                 {isZh ? '接入代码示例' : 'Integration Code Examples'}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">

@@ -11,6 +11,7 @@ func TestDropLegacyNanoMoneyColumns(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
+	restoreFloatMoneyTestColumns(t, db)
 
 	// A database created from scratch must never grow the mirrors.
 	for _, m := range legacyNanoMirrors {

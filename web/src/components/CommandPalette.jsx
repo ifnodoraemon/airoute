@@ -1,6 +1,6 @@
 import { paletteNavigation } from '../lib/consoleNavigation';
 import { useState, useEffect, useRef } from 'react';
-import { pushEscapeLayer } from '../lib/escapeLayer';
+import useModalA11y from '../hooks/useModalA11y';
 import { Search, Server, Plus, Globe, LogOut, ExternalLink, Zap, CornerDownLeft, X, Sparkles } from 'lucide-react';
 
 export default function CommandPalette({
@@ -118,15 +118,7 @@ export default function CommandPalette({
     }
   };
 
-  // While open the palette is an Escape layer: one Escape closes the palette only,
-  // leaving a modal opened underneath (and its unsaved draft) alone. The close
-  // callback goes through a ref so re-renders do not re-register the layer.
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-  useEffect(() => {
-    if (!isOpen) return undefined;
-    return pushEscapeLayer(() => onCloseRef.current?.());
-  }, [isOpen]);
+  useModalA11y(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -135,7 +127,7 @@ export default function CommandPalette({
       className="fixed inset-0 z-50 flex items-start justify-center pt-20 px-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-150"
       onClick={onClose}
     >
-      <div
+      <div role="dialog" aria-modal="true" aria-label={isZh ? '全局搜索' : 'Global Search'}
         className="w-full max-w-xl bg-white dark:bg-[#111726] rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[75vh] animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}

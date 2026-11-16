@@ -88,6 +88,9 @@ type SendVerificationCodeRequest struct {
 
 // SendVerificationCode generates and stores a 6-digit email verification code.
 func (h *AdminHandler) SendVerificationCode(c *gin.Context) {
+	if !requireJSONBody(c) || !requireSameOrigin(c) {
+		return
+	}
 	var req SendVerificationCodeRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.Email == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "请提供有效的电子邮箱地址"})

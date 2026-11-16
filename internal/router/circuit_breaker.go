@@ -44,122 +44,11 @@ type BreakerStatus struct {
 	ConsecutiveSuccesses int
 	CanaryInFlight       int
 	LastStateChange      time.Time
-	name                 string
-	handler              circuitStateHandler
-}
-
-func (b *BreakerStatus) toClosed(now time.Time) {
-	b.State = StateClosed
-	b.handler = &closedState{}
-	b.ConsecutiveFailures = 0
-	b.ConsecutiveSuccesses = 0
-	b.CanaryInFlight = 0
-	b.LastStateChange = now
-	telemetry.ScopedLogger("breaker").Info("circuit breaker recovered to closed state", "provider", b.name)
-}
-
-func (b *BreakerStatus) toOpen(now time.Time, cooldown time.Duration) {
-	b.State = StateOpen
-	b.handler = &openState{}
-	b.ConsecutiveSuccesses = 0
-	b.CanaryInFlight = 0
-	b.LastStateChange = now
-	telemetry.ScopedLogger("breaker").Warn("circuit breaker TRIPPED to OPEN state, bypassing provider",
-		"provider", b.name,
-		"consecutive_failures", b.ConsecutiveFailures,
-		"cooldown_sec", cooldown.Seconds(),
-	)
-}
-
-func (b *BreakerStatus) toHalfOpen(now time.Time) {
-	b.State = StateHalfOpen
-	b.handler = &halfOpenState{}
-	b.ConsecutiveSuccesses = 0
-	b.CanaryInFlight = 0
-	b.LastStateChange = now
-	telemetry.ScopedLogger("breaker").Info("circuit breaker entered half-open state, allowing canary probe", "provider", b.name)
-}
-
-// closedState handles requests when circuit is healthy.
-type closedState struct{}
-
-func (s *closedState) State() CircuitState { return StateClosed }
-
-func (s *closedState) CanExecute(b *BreakerStatus, cb *CircuitBreaker, now time.Time) bool {
-	return true
-}
-
-func (s *closedState) RecordSuccess(b *BreakerStatus, cb *CircuitBreaker, now time.Time) {
-	b.ConsecutiveFailures = 0
-}
-
-func (s *closedState) RecordFailure(b *BreakerStatus, cb *CircuitBreaker, now time.Time) {
-	b.ConsecutiveFailures++
-	if b.ConsecutiveFailures >= cb.failureThreshold {
-		b.toOpen(now, cb.cooldownDuration)
-	}
-}
-
-// openState handles requests when circuit is tripped.
-type openState struct{}
-
-func (s *openState) State() CircuitState { return StateOpen }
-
-func (s *openState) CanExecute(b *BreakerStatus, cb *CircuitBreaker, now time.Time) bool {
-	if now.Sub(b.LastStateChange) >= cb.cooldownDuration {
-		b.toHalfOpen(now)
-		return b.handler.CanExecute(b, cb, now)
-	}
-	return false
-}
-
-// RecordSuccess ignores outcomes reported while the breaker is OPEN.
-//
-// Those results belong to requests that were admitted *before* the trip: an
-// upstream that rejects with 429 still completes earlier in-flight calls
-// successfully. Closing on the first such success reset the cooldown timer to
-// zero, so a busy channel produced TRIPPED -> recovered cycles a few
-// milliseconds apart (15 flips in under a second), hammering the rate-limited
-// upstream instead of backing off. Recovery is owned by the cooldown +
-// half-open canary path.
-func (s *openState) RecordSuccess(b *BreakerStatus, cb *CircuitBreaker, now time.Time) {}
-
-// RecordFailure likewise does not extend the cooldown. It used to reset
-// LastStateChange on every late failure, so a continuous trickle of in-flight
-// failures could keep the breaker OPEN forever.
-func (s *openState) RecordFailure(b *BreakerStatus, cb *CircuitBreaker, now time.Time) {}
-
-// halfOpenState handles canary probe testing during recovery.
-type halfOpenState struct{}
-
-func (s *halfOpenState) State() CircuitState { return StateHalfOpen }
-
-func (s *halfOpenState) CanExecute(b *BreakerStatus, cb *CircuitBreaker, now time.Time) bool {
-	// Limit concurrent canary probes to prevent herd stampede
-	if b.CanaryInFlight >= cb.maxCanaryProbes {
-		// If canary in-flight was abandoned for too long (> 2x cooldown), reset it
-		if now.Sub(b.LastStateChange) > 2*cb.cooldownDuration {
-			b.CanaryInFlight = 0
-		} else {
-			return false
-		}
-	}
-	b.CanaryInFlight++
-	return true
-}
-
-func (s *halfOpenState) RecordSuccess(b *BreakerStatus, cb *CircuitBreaker, now time.Time) {
-	if b.CanaryInFlight > 0 {
-		b.CanaryInFlight--
-	}
-	b.ConsecutiveSuccesses++
-	if b.ConsecutiveSuccesses >= cb.successThreshold {
-		b.toClosed(now)
-	}
-}
-
-func (s *halfOpenState) RecordFailure(b *BreakerStatus, cb *CircuitBreaker, now time.Time) {
-	b.toOpen(now, cb.cooldownDuration)
+	// Generation increments on every state transition so a result admitted in an
+	// earlier era can be recognised as stale and excluded from canary accounting.
+	Generation uint64
+	name       string
+	handler    circuitStateHandler
 }
 
 // CircuitBreaker manages failover and auto-recovery for all upstream providers.
@@ -238,14 +127,22 @@ func (cb *CircuitBreaker) getOrCreateStatusLocked(name string) *BreakerStatus {
 // read-only paths (routing introspection, /api/v1/public/status, load balancing);
 // use Healthy for those instead.
 func (cb *CircuitBreaker) CanExecute(name string) bool {
+	ok, _ := cb.CanExecuteGen(name)
+	return ok
+}
+
+// CanExecuteGen admits a call and returns the breaker generation at admission.
+// Callers that record an outcome later pass that generation back so a result
+// from before a state transition is not counted as a half-open canary outcome.
+func (cb *CircuitBreaker) CanExecuteGen(name string) (bool, uint64) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
-	if cb.disabled {
-		return true
-	}
 	status := cb.getOrCreateStatusLocked(name)
-	return status.handler.CanExecute(status, cb, time.Now())
+	if cb.disabled {
+		return true, status.Generation
+	}
+	return status.handler.CanExecute(status, cb, time.Now()), status.Generation
 }
 
 // Healthy reports whether a channel is currently considered usable, without
@@ -278,10 +175,26 @@ func (cb *CircuitBreaker) Healthy(name string) bool {
 // RecordSuccess marks a successful execution, resetting breaker to healthy Closed state.
 func (cb *CircuitBreaker) RecordSuccess(name string) {
 	cb.mu.Lock()
+	var gen uint64
+	if s, ok := cb.breakers[name]; ok {
+		gen = s.Generation
+	}
+	cb.mu.Unlock()
+	cb.RecordSuccessGen(name, gen)
+}
+
+// RecordSuccessGen records a success tagged with the generation captured at
+// admission. A stale result (generation mismatch) is ignored while half-open so
+// a pre-trip success cannot close the breaker without a real canary probe.
+func (cb *CircuitBreaker) RecordSuccessGen(name string, gen uint64) {
+	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
 	status, exists := cb.breakers[name]
 	if !exists {
+		return
+	}
+	if status.State == StateHalfOpen && gen != status.Generation {
 		return
 	}
 	if cb.disabled {
@@ -303,16 +216,28 @@ func (cb *CircuitBreaker) RecordSuccess(name string) {
 // RecordFailure marks a failure, potentially tripping the breaker to Open state.
 func (cb *CircuitBreaker) RecordFailure(name string) {
 	cb.mu.Lock()
+	var gen uint64
+	if s, ok := cb.breakers[name]; ok {
+		gen = s.Generation
+	}
+	cb.mu.Unlock()
+	cb.RecordFailureGen(name, gen)
+}
+
+// RecordFailureGen records a failure tagged with the admission generation; a
+// stale result is ignored while half-open so a pre-trip failure cannot reopen
+// the breaker and reset its cooldown without a real canary probe.
+func (cb *CircuitBreaker) RecordFailureGen(name string, gen uint64) {
+	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
 	status := cb.getOrCreateStatusLocked(name)
+	if status.State == StateHalfOpen && gen != status.Generation {
+		return
+	}
 	if cb.disabled {
 		// Advisory mode (GATEWAY_BREAKER_ENABLED=false): the outcome is recorded for
-		// operators, but the breaker never rejects traffic. Returning before
-		// touching the status (the previous behaviour) left every channel reported
-		// as CLOSED with zero failures, so an upstream outage was invisible in the
-		// console and in /api/v1/public/status even though the docs promise that
-		// advisory mode "records failures but never rejects traffic".
+		// operators, but the breaker never rejects traffic.
 		cb.recordAdvisoryFailureLocked(status, time.Now())
 		return
 	}

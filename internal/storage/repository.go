@@ -10,33 +10,6 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
-// StatsOverview aggregates system stats for the dashboard.
-type StatsOverview struct {
-	TotalRequests     int64   `json:"total_requests"`
-	TotalTokens       int64   `json:"total_tokens"`
-	PromptTokens      int64   `json:"prompt_tokens"`
-	CompletionTokens  int64   `json:"completion_tokens"`
-	TotalCachedTokens int64   `json:"total_cached_tokens"`
-	TotalCost         float64 `json:"total_cost"`
-	SavedCost         float64 `json:"saved_cost"`
-	ActiveChannels    int     `json:"active_channels"`
-	ActiveKeys        int     `json:"active_keys"`
-	AvgTTFTMs         float64 `json:"avg_ttft_ms"`
-	AvgDurationMs     float64 `json:"avg_duration_ms"`
-	CurrentRPM        int64   `json:"current_rpm"` // Real-time requests in the last 60 seconds
-	CurrentTPM        int64   `json:"current_tpm"` // Real-time tokens in the last 60 seconds
-	PeakRPM           int64   `json:"peak_rpm"`    // Peak RPM in recent timeframe
-	PeakTPM           int64   `json:"peak_tpm"`    // Peak TPM in recent timeframe
-	// Status breakdown across ALL usage logs (not just the page the console
-	// happens to have loaded). The dashboard used to compute its SLA and error
-	// figures from the 50-row log page, which made them meaningless.
-	ClientErrorRequests int64 `json:"client_error_requests"` // 4xx
-	ServerErrorRequests int64 `json:"server_error_requests"` // 5xx + other failures
-	SuccessRequests     int64 `json:"success_requests"`
-	// TTFT sample count, so the console can tell "no samples" apart from "0 ms".
-	TTFTSamples int64 `json:"ttft_samples"`
-}
-
 // Repository manages persistence for channels, keys, logs, pricing, users, and plugins.
 type Repository struct {
 	db           *DB
@@ -123,7 +96,7 @@ func (r *Repository) GetStatsOverview() (*StatsOverview, error) {
 
 	stats := &StatsOverview{}
 
-	row := r.db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(total_tokens), 0), COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0), COALESCE(SUM(cached_tokens), 0), COALESCE(SUM(cost), 0.0), COALESCE(AVG(ttft_ms), 0), COALESCE(AVG(duration_ms), 0), ` +
+	row := r.db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(total_tokens), 0), COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0), COALESCE(SUM(cached_tokens), 0), COALESCE(SUM(cost_units), 0) / 1000000000.0, COALESCE(AVG(ttft_ms), 0), COALESCE(AVG(duration_ms), 0), ` +
 		`COALESCE(SUM(CASE WHEN status_code >= 400 AND status_code < 500 THEN 1 ELSE 0 END), 0), ` +
 		`COALESCE(SUM(CASE WHEN ` + usageLogErrorSQL + ` AND (COALESCE(status_code, 0) < 400 OR status_code >= 500) THEN 1 ELSE 0 END), 0), ` +
 		`COALESCE(SUM(CASE WHEN ` + usageLogSuccessSQL + ` THEN 1 ELSE 0 END), 0), ` +
@@ -135,6 +108,9 @@ func (r *Repository) GetStatsOverview() (*StatsOverview, error) {
 		return nil, fmt.Errorf("scan usage stats error: %w", err)
 	}
 
+	if err := r.loadOverviewSpend(stats, nil, time.Now()); err != nil {
+		return nil, err
+	}
 	if stats.TotalCachedTokens > 0 {
 		stats.SavedCost = r.cachedTokenSavings("", nil)
 	}
@@ -209,7 +185,7 @@ func (r *Repository) GetStatsOverviewForKeys(keys []string) (*StatsOverview, err
 	}
 	clause := strings.Join(placeholders, ",")
 
-	query := fmt.Sprintf(`SELECT COUNT(*), COALESCE(SUM(total_tokens), 0), COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0), COALESCE(SUM(cached_tokens), 0), COALESCE(SUM(cost), 0.0), COALESCE(AVG(ttft_ms), 0), COALESCE(AVG(duration_ms), 0), `+
+	query := fmt.Sprintf(`SELECT COUNT(*), COALESCE(SUM(total_tokens), 0), COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0), COALESCE(SUM(cached_tokens), 0), COALESCE(SUM(cost_units), 0) / 1000000000.0, COALESCE(AVG(ttft_ms), 0), COALESCE(AVG(duration_ms), 0), `+
 		`COALESCE(SUM(CASE WHEN status_code >= 400 AND status_code < 500 THEN 1 ELSE 0 END), 0), `+
 		`COALESCE(SUM(CASE WHEN `+usageLogErrorSQL+` AND (COALESCE(status_code, 0) < 400 OR status_code >= 500) THEN 1 ELSE 0 END), 0), `+
 		`COALESCE(SUM(CASE WHEN `+usageLogSuccessSQL+` THEN 1 ELSE 0 END), 0), `+
@@ -217,6 +193,9 @@ func (r *Repository) GetStatsOverviewForKeys(keys []string) (*StatsOverview, err
 		`FROM usage_logs WHERE api_key IN (%s)`, clause)
 	if err := r.db.QueryRow(query, args...).Scan(&stats.TotalRequests, &stats.TotalTokens, &stats.PromptTokens, &stats.CompletionTokens, &stats.TotalCachedTokens, &stats.TotalCost, &stats.AvgTTFTMs, &stats.AvgDurationMs,
 		&stats.ClientErrorRequests, &stats.ServerErrorRequests, &stats.SuccessRequests, &stats.TTFTSamples); err != nil {
+		return nil, err
+	}
+	if err := r.loadOverviewSpend(stats, keys, time.Now()); err != nil {
 		return nil, err
 	}
 	if stats.TotalCachedTokens > 0 {

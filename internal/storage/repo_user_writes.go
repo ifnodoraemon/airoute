@@ -99,8 +99,8 @@ func insertUser(db userInserter, u *UserRecord) error {
 			return ErrUsernameAlreadyRegistered
 		}
 	}
-	id, err := db.InsertGetID(`INSERT INTO users (username, email, password_hash, role, status, balance, balance_units, group_name, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-		u.Username, u.Email, u.PasswordHash, u.Role, u.Status, u.Balance, ToUnits(u.Balance), u.GroupName)
+	id, err := db.InsertGetID(`INSERT INTO users (username, email, password_hash, role, status, balance_units, group_name, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		u.Username, u.Email, u.PasswordHash, u.Role, u.Status, ToUnits(u.Balance), u.GroupName)
 	if err != nil {
 		if isEmailConflictError(err) {
 			return ErrEmailAlreadyRegistered

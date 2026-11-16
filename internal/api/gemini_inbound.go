@@ -140,7 +140,7 @@ func (h *Handler) handleGeminiUnary(c *gin.Context, reqCtx context.Context, cano
 	if err != nil {
 		statusCode, _, _, _ := resolveUpstreamFailureStatus(err)
 		recordFailedRequestWithError(c, sessionID, canonicalReq.Model, time.Since(start), statusCode, err)
-		RespondGeminiError(c, statusCode, sanitizeErrorMessage(err), geminiErrorStatus(statusCode))
+		respondGeminiUpstreamError(c, statusCode, err)
 		return
 	}
 

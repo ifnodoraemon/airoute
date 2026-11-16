@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { requestConfirm } from '../lib/confirmBus';
 import { Tag, Plus, X, Trash2, List, Grid, Search } from 'lucide-react';
 
 export default function ModelChipManager({ models = [], onChange, lang = 'zh' }) {
@@ -53,9 +54,9 @@ export default function ModelChipManager({ models = [], onChange, lang = 'zh' })
     onChange(updated);
   };
 
-  const handleClearAll = () => {
+  const handleClearAll = async () => {
     if (modelList.length === 0) return;
-    if (window.confirm(isZh ? `确定清空已添加的 ${modelList.length} 个模型？` : `Clear all ${modelList.length} configured models?`)) {
+    if (await requestConfirm({ title: isZh ? '清空模型' : 'Clear models', description: isZh ? `确定清空已添加的 ${modelList.length} 个模型？` : `Clear all ${modelList.length} configured models?` })) {
       onChange([]);
     }
   };

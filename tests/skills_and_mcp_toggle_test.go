@@ -233,5 +233,5 @@ func TestSkills_OnDemandTogglingAndMCP(t *testing.T) {
 	reqMCPDisabled := httptest.NewRequest(http.MethodPost, "/mcp/messages", bytes.NewReader(body))
 	wMCPDisabled := httptest.NewRecorder()
 	engine.ServeHTTP(wMCPDisabled, reqMCPDisabled)
-	assert.Contains(t, wMCPDisabled.Body.String(), "MCP 服务在 AI 路由器中已按需关闭")
+	assert.Contains(t, wMCPDisabled.Body.String(), "MCP service is disabled on this gateway")
 }

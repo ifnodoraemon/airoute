@@ -64,7 +64,7 @@ func (r *Repository) applyChargeAggregates(tx *Tx, keyCost map[string]float64, k
 // that folding the counter into the wallet statement would add a version
 // dependency for no gain.
 func (r *Repository) applyPortableChargeUpdates(tx *Tx, keys []string, keyCost map[string]float64, keyTokens map[string]int64, keyTenant map[string]string, orphanTenantCost map[string]float64, effects *settlementEffects) error {
-	updateKeyStmt, err := tx.Prepare(r.db.Rebind(`UPDATE api_keys SET used_cost = used_cost + ?, used_cost_units = COALESCE(used_cost_units, 0) + ?, used_tokens = used_tokens + ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?`))
+	updateKeyStmt, err := tx.Prepare(r.db.Rebind(`UPDATE api_keys SET used_cost_units = COALESCE(used_cost_units, 0) + ?, used_tokens = used_tokens + ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?`))
 	if err != nil {
 		return err
 	}
@@ -74,7 +74,7 @@ func (r *Repository) applyPortableChargeUpdates(tx *Tx, keys []string, keyCost m
 		if cost <= 0 && tokens <= 0 {
 			continue
 		}
-		if _, err := updateKeyStmt.Exec(cost, ToUnits(cost), tokens, key); err != nil {
+		if _, err := updateKeyStmt.Exec(ToUnits(cost), tokens, key); err != nil {
 			return err
 		}
 	}

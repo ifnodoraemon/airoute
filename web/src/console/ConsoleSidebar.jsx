@@ -8,6 +8,14 @@ export default function ConsoleSidebar() {
   adminUser, channels, collapseSidebar, currentTab, expandSidebar, isZh, keys, lang, logs, mobileMenuOpen,
   models, notificationCounts, setCurrentTab, setViewMode, sidebarCollapsed, t
 } = useConsoleContext();
+  const trippedCount = (channels || []).filter(ch => ['OPEN', 'HALF-OPEN'].includes(String(ch.breaker_status || '').toUpperCase())).length;
+  const disabledCount = (channels || []).filter(ch => ch.status && ch.status !== 'active').length;
+  const healthDot = trippedCount > 0 ? 'bg-rose-500' : disabledCount > 0 ? 'bg-amber-500' : 'bg-emerald-500';
+  const healthLabel = trippedCount > 0
+    ? (isZh ? `${trippedCount} 个熔断` : `${trippedCount} tripped`)
+    : disabledCount > 0
+      ? (isZh ? `${disabledCount} 个停用` : `${disabledCount} disabled`)
+      : t.statusOperationalBadge;
   return (
     <aside
       className={`bg-white dark:bg-[#191B1F] border-r border-[#E4E6E9] dark:border-[#2C3038] flex flex-col shrink-0 transition-all duration-200 z-30 ${
@@ -148,8 +156,8 @@ export default function ConsoleSidebar() {
           className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-2'} text-[#656B75] hover:text-[#202124] dark:hover:text-[#F1F2F4] transition-colors cursor-pointer`}
           title={isZh ? '查看公开服务状态' : 'Public Status'}
         >
-          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
-          {!sidebarCollapsed && <span className="text-[11px] font-mono">{t.statusOperationalBadge}</span>}
+          <span className={`w-2 h-2 rounded-full ${healthDot} shrink-0`}></span>
+          {!sidebarCollapsed && <span className="text-[11px] font-mono">{healthLabel}</span>}
         </button>
       </div>
     </aside>

@@ -14,11 +14,11 @@ export default function UserPasswordModal({
         if (e.target === e.currentTarget) requestCloseReset();
       }}
     >
-      <div className="relative bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl p-6 max-w-sm w-full shadow-xl space-y-4 animate-in zoom-in-95 duration-150">
+      <div role="dialog" aria-modal="true" aria-labelledby="user-password-modal-title-1" className="relative bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl p-6 max-w-sm w-full shadow-xl space-y-4 animate-in zoom-in-95 duration-150">
         <div className="flex items-center justify-between border-b border-[#E4E6E9] dark:border-[#2C3038] pb-3">
           <div className="flex items-center space-x-2">
             <Key className="w-5 h-5 text-[#355CFF] dark:text-[#91A7FF]" />
-            <h3 className="font-semibold text-base text-[#202124] dark:text-[#F1F2F4]">{isZh ? '重置用户密码' : 'Reset User Password'}</h3>
+            <h3 id="user-password-modal-title-1" className="font-semibold text-base text-[#202124] dark:text-[#F1F2F4]">{isZh ? '重置用户密码' : 'Reset User Password'}</h3>
           </div>
           <button
             onClick={() => requestCloseReset()}

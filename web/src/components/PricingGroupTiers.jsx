@@ -168,9 +168,9 @@ export default function PricingGroupTiers({
             if (e.target === e.currentTarget) setShowAddGroupModal(false);
           }}
         >
-          <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl p-6 max-w-md w-full shadow-xl space-y-4 animate-in zoom-in-95">
+          <div role="dialog" aria-modal="true" aria-labelledby="pricing-group-tiers-title-1" className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl p-6 max-w-md w-full shadow-xl space-y-4 animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-[#E4E6E9] dark:border-[#2C3038] pb-3">
-              <h3 className="font-semibold text-[#202124] dark:text-[#F1F2F4] text-sm">
+              <h3 id="pricing-group-tiers-title-1" className="font-semibold text-[#202124] dark:text-[#F1F2F4] text-sm">
                 {isZh ? '新建计费分组' : 'New Pricing Group Tier'}
               </h3>
               <button

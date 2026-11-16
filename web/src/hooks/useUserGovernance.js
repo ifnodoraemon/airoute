@@ -1,4 +1,5 @@
 import { apiMutation } from '../api/mutation';
+import { requestConfirm } from '../lib/confirmBus';
 
 export default function useUserGovernance({
   adminFetch, adminUser, fetchUsers, isZh, quotaMode, quotaTargetUser, quotaValue, setAdjustingQuota,
@@ -11,7 +12,7 @@ export default function useUserGovernance({
     }
     const newStatus = user.status === 'locked' ? 'active' : 'locked';
     const actionName = newStatus === 'locked' ? (isZh ? '锁定' : 'lock') : (isZh ? '解锁' : 'unlock');
-    if (!window.confirm(isZh ? `确认要${actionName}用户 [${user.username}] 吗？${newStatus === 'locked' ? '锁定后将无法登录或调用 API。' : ''}` : `Confirm ${actionName} user [${user.username}]?`)) {
+    if (!(await requestConfirm({ title: isZh ? `${actionName}用户` : `${actionName} user`, description: isZh ? `确认要${actionName}用户 [${user.username}] 吗？${newStatus === 'locked' ? '锁定后将无法登录或调用 API。' : ''}` : `Confirm ${actionName} user [${user.username}]?` }))) {
       return;
     }
 
@@ -87,7 +88,7 @@ export default function useUserGovernance({
       return;
     }
     const roleLabel = newRole === 'admin' ? (isZh ? '超级管理员' : 'Administrator') : (isZh ? '普通用户' : 'Regular User');
-    if (!window.confirm(isZh ? `确认将用户 [${user.username}] 的角色更改为【${roleLabel}】吗？` : `Confirm changing user [${user.username}] role to [${roleLabel}]?`)) {
+    if (!(await requestConfirm({ title: isZh ? '更改用户角色' : 'Change user role', description: isZh ? `确认将用户 [${user.username}] 的角色更改为【${roleLabel}】吗？` : `Confirm changing user [${user.username}] role to [${roleLabel}]?` }))) {
       return;
     }
 

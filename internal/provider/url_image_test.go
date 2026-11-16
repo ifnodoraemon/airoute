@@ -2,6 +2,7 @@ package provider
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -46,16 +47,11 @@ func TestAnthropicConvertForwardsRemoteImageAsURLSource(t *testing.T) {
 	}
 }
 
-func TestGeminiConvertForwardsRemoteImageAsFileData(t *testing.T) {
-	encoded, err := json.Marshal(convertOpenAIToGemini(urlImageChatRequest()))
-	if err != nil {
-		t.Fatalf("marshal gemini: %v", err)
-	}
-	if !strings.Contains(string(encoded), `"fileData":{"mimeType":"image/jpeg","fileUri":"https://example.com/photo.png"}`) {
-		t.Fatalf("remote image not forwarded as Gemini fileData: %s", string(encoded))
-	}
-	if strings.Contains(string(encoded), `"inlineData":{"mimeType":"image/jpeg","data":"https://`) {
-		t.Fatalf("remote URL was written into inlineData.data again: %s", string(encoded))
+func TestGeminiConvertRejectsRemoteImageWithoutMIME(t *testing.T) {
+	_, err := convertOpenAIToGemini(urlImageChatRequest())
+	var unsupported *UnsupportedTranslationError
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("remote image without a trustworthy MIME type must reject translation: %v", err)
 	}
 
 	dataURIReq := &model.ChatCompletionRequest{
@@ -64,7 +60,11 @@ func TestGeminiConvertForwardsRemoteImageAsFileData(t *testing.T) {
 			map[string]any{"type": "image_url", "image_url": map[string]any{"url": "data:image/png;base64,iVBORw0KGgo="}},
 		}}},
 	}
-	dataEncoded, err := json.Marshal(convertOpenAIToGemini(dataURIReq))
+	converted, err := convertOpenAIToGemini(dataURIReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dataEncoded, err := json.Marshal(converted)
 	if err != nil {
 		t.Fatalf("marshal data URI: %v", err)
 	}

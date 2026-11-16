@@ -45,7 +45,7 @@ func TestWalletDeductionRecordsFullActualCost(t *testing.T) {
 		t.Fatalf("balance_units = %d, want %d after full deduction", user.BalanceUnits, want)
 	}
 	if want := -5.99; user.Balance < want-1e-9 || user.Balance > want+1e-9 {
-		t.Fatalf("balance = %v, want the float mirror to match %v", user.Balance, want)
+		t.Fatalf("balance = %v, want the display balance to match %v", user.Balance, want)
 	}
 	if telemetry.GlobalMetrics.BillingOverdrafts.Load() <= before {
 		t.Fatal("overdraft was not counted on /metrics")

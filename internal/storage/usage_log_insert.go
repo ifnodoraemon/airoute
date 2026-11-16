@@ -8,7 +8,7 @@ import (
 	"github.com/ifnodoraemon/airoute/internal/telemetry"
 )
 
-const usageInsertColumns = `trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost, cost_units, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, usage_source, error_message, pricing_snapshot, created_at, billing_id, thinking, channel_trail`
+const usageInsertColumns = `trace_id, chat_id, session_id, api_key, tenant_id, model, channel, prompt_tokens, completion_tokens, cached_tokens, total_tokens, cost_units, is_off_peak, off_peak_discount, duration_ms, ttft_ms, status_code, usage_source, error_message, pricing_snapshot, created_at, billing_id, thinking, channel_trail`
 
 func (r *Repository) insertUsageLogsContext(ctx context.Context, logs []*UsageLogRecord) error {
 	filtered := make([]*UsageLogRecord, 0, len(logs))
@@ -50,10 +50,10 @@ func (r *Repository) insertUsageLogsContext(ctx context.Context, logs []*UsageLo
 }
 
 func (r *Repository) insertAuditChunk(ctx context.Context, tx *Tx, logs []*UsageLogRecord, partitioned bool) (int, error) {
-	args := make([]any, 0, len(logs)*25)
+	args := make([]any, 0, len(logs)*24)
 	placeholders := make([]string, len(logs))
 	for i, rec := range logs {
-		placeholders[i] = "(" + strings.TrimSuffix(strings.Repeat("?,", 25), ",") + ")"
+		placeholders[i] = "(" + strings.TrimSuffix(strings.Repeat("?,", 24), ",") + ")"
 		args = append(args, r.usageLogInsertArgs(rec)...)
 	}
 	query := `INSERT INTO usage_logs (` + usageInsertColumns + `) VALUES ` + strings.Join(placeholders, ",")
@@ -92,7 +92,7 @@ func (r *Repository) usageLogInsertArgs(rec *UsageLogRecord) []any {
 	}
 	return []any{
 		rec.TraceID, rec.ChatID, rec.SessionID, rec.APIKey, rec.TenantID, rec.Model, rec.Channel,
-		rec.PromptTokens, rec.CompletionTokens, rec.CachedTokens, rec.TotalTokens, rec.Cost, ToUnits(rec.Cost),
+		rec.PromptTokens, rec.CompletionTokens, rec.CachedTokens, rec.TotalTokens, ToUnits(rec.Cost),
 		isOff, discount, rec.DurationMs, rec.TTFTMs, rec.StatusCode, normalizeUsageSource(rec.UsageSource),
 		truncateError(rec.ErrorMessage), encodePricingSnapshot(rec.PricingSnapshot), r.dialectTimePrecise(created),
 		rec.BillingID, encodeThinkingObservation(rec.Thinking), rec.ChannelTrail,

@@ -48,8 +48,8 @@ func insertAPIKey(db recordInserter, rec *APIKeyRecord) error {
 	// creation response keep their own copy (see the key creation handlers).
 	plaintextKey := rec.Key
 	rec.Key = HashAPIKey(plaintextKey)
-	id, err := db.InsertGetID(`INSERT INTO api_keys (key, public_id, tenant_id, allowed_models, rpm, tpm, budget, budget_units, used_tokens, used_cost, used_cost_units, group_name, user_id, status, admin_disabled, format_validation, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-		rec.Key, rec.PublicID, rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, ToUnits(rec.Budget), rec.UsedTokens, rec.UsedCost, ToUnits(rec.UsedCost), rec.GroupName, rec.UserID, rec.Status, rec.AdminDisabled, rec.FormatValidation)
+	id, err := db.InsertGetID(`INSERT INTO api_keys (key, public_id, tenant_id, allowed_models, rpm, tpm, budget_units, used_tokens, used_cost_units, group_name, user_id, status, admin_disabled, format_validation, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		rec.Key, rec.PublicID, rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, ToUnits(rec.Budget), rec.UsedTokens, ToUnits(rec.UsedCost), rec.GroupName, rec.UserID, rec.Status, rec.AdminDisabled, rec.FormatValidation)
 	if err != nil {
 		rec.Key = plaintextKey
 		return err
@@ -84,8 +84,8 @@ func (r *Repository) UpdateAPIKey(rec *APIKeyRecord) error {
 	if rec.GroupName == "" {
 		rec.GroupName = "default"
 	}
-	_, err := r.db.Exec(`UPDATE api_keys SET tenant_id = ?, allowed_models = ?, rpm = ?, tpm = ?, budget = ?, budget_units = ?, group_name = ?, user_id = ?, status = ?, admin_disabled = ?, format_validation = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status <> 'deleted'`,
-		rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, rec.Budget, ToUnits(rec.Budget), rec.GroupName, rec.UserID, rec.Status, rec.AdminDisabled, rec.FormatValidation, rec.ID)
+	_, err := r.db.Exec(`UPDATE api_keys SET tenant_id = ?, allowed_models = ?, rpm = ?, tpm = ?, budget_units = ?, group_name = ?, user_id = ?, status = ?, admin_disabled = ?, format_validation = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status <> 'deleted'`,
+		rec.TenantID, string(allowedBytes), rec.RPM, rec.TPM, ToUnits(rec.Budget), rec.GroupName, rec.UserID, rec.Status, rec.AdminDisabled, rec.FormatValidation, rec.ID)
 	return err
 }
 

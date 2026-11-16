@@ -1,4 +1,5 @@
 import { useEffect, useCallback } from 'react';
+import { requestConfirm } from '../lib/confirmBus';
 
 export default function useMcpServers({
   adminFetch, isZh, mcpSettings, newServer, savingServer, setAddServerModalOpen, setLoading, setMcpSettings,
@@ -86,7 +87,7 @@ export default function useMcpServers({
 
   const handleDeleteServer = async (serverId) => {
     if (!adminFetch) return;
-    if (!window.confirm(isZh ? `确定要移除自定义 MCP 服务 [${serverId}] 吗？` : `Are you sure you want to remove MCP service [${serverId}]?`)) return;
+    if (!(await requestConfirm({ title: isZh ? '移除 MCP 服务' : 'Remove MCP service', description: isZh ? `确定要移除自定义 MCP 服务 [${serverId}] 吗？` : `Are you sure you want to remove MCP service [${serverId}]?` }))) return;
     try {
       const res = await adminFetch(`/api/v1/admin/mcp/servers/${serverId}`, {
         method: 'DELETE'

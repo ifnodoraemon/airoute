@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { requestConfirm } from '../lib/confirmBus';
 import {
   Cpu,
   Shield,
@@ -53,7 +54,7 @@ export default function ModelRoutesManager({
 
   const handleBatchDeleteRoutes = async () => {
     if (selectedModels.length === 0) return;
-    if (!window.confirm(isZh ? `确定批量删除选中的 ${selectedModels.length} 个模型路由配置？渠道支持的模型配置将保留。` : `Delete selected ${selectedModels.length} model route configs? Channel capabilities will be retained.`)) {
+    if (!(await requestConfirm({ title: isZh ? '批量删除路由' : 'Delete routes', description: isZh ? `确定批量删除选中的 ${selectedModels.length} 个模型路由配置？渠道支持的模型配置将保留。` : `Delete selected ${selectedModels.length} model route configs? Channel capabilities will be retained.` }))) {
       return;
     }
     try {
@@ -120,7 +121,7 @@ export default function ModelRoutesManager({
   }, [isAdmin, adminFetch, showToast, isZh]);
 
   const handleDeleteRoute = async (modelName) => {
-    if (!window.confirm(isZh ? `确定删除模型 [${modelName}] 路由配置？渠道支持的模型配置将保留。` : `Delete route config for [${modelName}]? Channel capabilities will be retained.`)) {
+    if (!(await requestConfirm({ title: isZh ? '删除路由配置' : 'Delete route config', description: isZh ? `确定删除模型 [${modelName}] 路由配置？渠道支持的模型配置将保留。` : `Delete route config for [${modelName}]? Channel capabilities will be retained.` }))) {
       return;
     }
     try {

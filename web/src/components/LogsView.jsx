@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { requestConfirm } from '../lib/confirmBus';
 import {
   History,
   Search,
@@ -1085,12 +1086,12 @@ export default function LogsView({
                       </span>
                       {isAdmin && (
                         <button
-                          onClick={(e) => {
+                          onClick={async (e) => {
                             e.stopPropagation();
                             // The detail modal already asks before deleting; the
                             // row shortcut deleted immediately, so one click
                             // could destroy an audit row.
-                            if (!window.confirm(isZh ? '确认删除这条调用日志？' : 'Delete this request log?')) return;
+                            if (!(await requestConfirm({ title: isZh ? '删除调用日志' : 'Delete request log', description: isZh ? '确认删除这条调用日志？' : 'Delete this request log?' }))) return;
                             handleDeleteSingleLog(log.id);
                           }}
                           className="p-1 text-[#656B75] hover:text-rose-600 transition-colors rounded-md hover:bg-rose-500/10 inline-flex items-center align-middle cursor-pointer"

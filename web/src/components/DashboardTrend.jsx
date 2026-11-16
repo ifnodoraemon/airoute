@@ -55,6 +55,12 @@ export default function DashboardTrend({
             >
               {isZh ? '异常错误' : 'Errors'}
             </button>
+            <button
+              onClick={() => setChartMetric('cost')}
+              className={`px-3 py-1 rounded-md transition-colors ${chartMetric === 'cost' ? 'bg-white dark:bg-[#191B1F] text-[#355CFF] dark:text-[#91A7FF] shadow-2xs font-semibold' : 'text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4]'}`}
+            >
+              {isZh ? '费用' : 'Cost'}
+            </button>
           </div>
 
           {/* Timeframe Selector */}
@@ -167,6 +173,8 @@ export default function DashboardTrend({
               ? (bucket.tpm || 0)
               : chartMetric === 'latency'
               ? bucket.avgTtft
+              : chartMetric === 'cost'
+              ? (bucket.costs || 0)
               : bucket.errors;
 
             const heightPct = Math.max(8, Math.min(100, Math.round((val / maxMetricVal) * 100)));

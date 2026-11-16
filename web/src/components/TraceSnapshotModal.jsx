@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, RefreshCw, AlertTriangle } from 'lucide-react';
+import useModalA11y from '../hooks/useModalA11y';
 
 // TraceSnapshotModal shows the redacted request/response snapshot archived for a
 // trace id, which is usually the fastest way to diagnose a failed call.
 export default function TraceSnapshotModal({ isOpen, traceId, initialQueryField = 'trace_id', onClose, lang = 'zh', adminFetch }) {
   const isZh = lang === 'zh';
+  useModalA11y(isOpen, onClose);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -73,7 +75,7 @@ export default function TraceSnapshotModal({ isOpen, traceId, initialQueryField 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-3xl max-h-[85vh] overflow-hidden rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col">
+      <div role="dialog" aria-modal="true" aria-label={isZh ? '链路快照' : 'Trace Snapshot'} className="w-full max-w-3xl max-h-[85vh] overflow-hidden rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col">
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 dark:border-slate-800">
           <div>
             <div className="text-sm font-bold text-slate-900 dark:text-white">

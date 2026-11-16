@@ -10,6 +10,7 @@ func TestBackfillUsageLogCostUnitsRepairsLegacyRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
+	restoreFloatMoneyTestColumns(t, db)
 
 	// Simulate a legacy row: float cost set, integer mirror still zero. Insert it
 	// after migrations so the repair function is what has to fix it.

@@ -26,7 +26,7 @@
 
 export const ADMIN_NAV_GROUPS = [
   { id: 'monitoring', zh: '监控与分析', en: 'Monitoring', tabs: ['dashboard', 'logs', 'notifications'] },
-  { id: 'gateway', zh: '模型网关与调度', en: 'Gateway', tabs: ['models', 'channels'] },
+  { id: 'gateway', zh: '模型网关与调度', en: 'Gateway', tabs: ['models', 'channels', 'infra'] },
   {
     id: 'billing',
     zh: '计费与财务',

@@ -1,5 +1,6 @@
 import { useEffect, useCallback } from 'react';
 import { copyToClipboard } from '../config';
+import { requestConfirm } from '../lib/confirmBus';
 
 export default function useSkillActions({
   adminFetch, editingSkillId, isZh, newSkill, onCopy, savingSkill, setCopiedKey, setCreateModalOpen,
@@ -116,7 +117,7 @@ export default function useSkillActions({
 
   const handleDeleteSkill = async (skillId) => {
     if (!adminFetch) return;
-    if (!window.confirm(isZh ? `确定要删除技能 [${skillId}] 吗？` : `Confirm delete skill [${skillId}]?`)) return;
+    if (!(await requestConfirm({ title: isZh ? '删除技能' : 'Delete skill', description: isZh ? `确定要删除技能 [${skillId}] 吗？` : `Confirm delete skill [${skillId}]?` }))) return;
     try {
       const res = await adminFetch(`/api/v1/admin/skills/${skillId}`, {
         method: 'DELETE'

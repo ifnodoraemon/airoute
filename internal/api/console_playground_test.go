@@ -257,7 +257,7 @@ func TestConsolePlaygroundEnforcesCurrentKeyPolicy(t *testing.T) {
 				f.key.UsedCost = 1
 				want = 402
 			case "wallet":
-				if _, err := f.repo.GetDB().Exec(`UPDATE users SET balance=0, balance_units=0 WHERE id=?`, f.user.ID); err != nil {
+				if _, err := f.repo.GetDB().Exec(`UPDATE users SET balance_units=0 WHERE id=?`, f.user.ID); err != nil {
 					t.Fatal(err)
 				}
 				want = 402
@@ -280,7 +280,7 @@ func TestConsolePlaygroundEnforcesCurrentKeyPolicy(t *testing.T) {
 				}
 			}
 			if scenario == "budget" {
-				if _, err := f.repo.GetDB().Exec(`UPDATE api_keys SET used_cost=1, used_cost_units=? WHERE id=?`, storage.ToUnits(1), f.key.ID); err != nil {
+				if _, err := f.repo.GetDB().Exec(`UPDATE api_keys SET used_cost_units=? WHERE id=?`, storage.ToUnits(1), f.key.ID); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -312,7 +312,7 @@ func TestConsolePlaygroundNativeAndFreeReadRoutes(t *testing.T) {
 	}
 	// Empty wallet permits an owned, already-paid video task lookup. The handler
 	// reports unknown task (404) rather than blocking admission with 402.
-	if _, err := f.repo.GetDB().Exec(`UPDATE users SET balance=0, balance_units=0 WHERE id=?`, f.user.ID); err != nil {
+	if _, err := f.repo.GetDB().Exec(`UPDATE users SET balance_units=0 WHERE id=?`, f.user.ID); err != nil {
 		t.Fatal(err)
 	}
 	w = f.request("GET", consolePlaygroundPrefix+"/v1/videos/tasks/unknown", f.token, id, "", "")

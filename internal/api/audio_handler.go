@@ -47,6 +47,7 @@ func (h *MultimodalHandler) HandleAudioSpeech(c *gin.Context) {
 		ContentType: "application/json",
 		Model:       req.Model,
 		Protocol:    "audio_speech",
+		NoRetry:     true,
 	}, sessionID, "audio/mpeg")
 }
 
@@ -90,6 +91,7 @@ func (h *MultimodalHandler) handleAudioMultipart(c *gin.Context, path string) {
 		ContentType: contentType,
 		Model:       modelName,
 		Protocol:    "audio_transcription",
+		NoRetry:     true,
 	}, resolveGenericSessionID(c, "stt"))
 }
 

@@ -252,6 +252,7 @@ func TestKeyCreationRecordsAdminDisabledAndExposesIt(t *testing.T) {
 // --- CP-02: account identity is case-insensitive --------------------------
 
 func TestUsernameIdentityIsCaseInsensitive(t *testing.T) {
+	t.Setenv("ALLOW_REGISTRATION", "true")
 	handler, repo := newHardeningHandler(t)
 
 	victim := &storage.UserRecord{

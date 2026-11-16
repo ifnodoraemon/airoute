@@ -71,6 +71,7 @@ func TestRepairDeletedAuditCounterDrift(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
+	restoreFloatMoneyTestColumns(t, db)
 
 	const (
 		matchKey = "sk-f9-match"

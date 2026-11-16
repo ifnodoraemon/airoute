@@ -107,9 +107,8 @@ func TestPostgresUsageLogRedeliveryIsBilledOnce(t *testing.T) {
 	}
 }
 
-// The clamped deduction uses UPDATE ... RETURNING plus a portable CASE
-// expression and numeric division for the float mirror. PostgreSQL differs from
-// SQLite in all three, so exercise it against a real server.
+// Actual-cost deduction uses UPDATE ... RETURNING with integer subtraction.
+// Exercise the PostgreSQL path against a real server, including overdrafts.
 func TestPostgresWalletDeductionRecordsFullActualCost(t *testing.T) {
 	db, err := OpenDB(testPostgresURL(t))
 	if err != nil {
@@ -142,18 +141,19 @@ func TestPostgresWalletDeductionRecordsFullActualCost(t *testing.T) {
 		t.Fatalf("balance_units = %d, want the %d floor", got.BalanceUnits, want)
 	}
 	if got.Balance < -8.99-1e-9 || got.Balance > -8.99+1e-9 {
-		t.Fatalf("balance = %v, want the float mirror at %v", got.Balance, -8.99)
+		t.Fatalf("balance = %v, want the derived display value at %v", got.Balance, -8.99)
 	}
 }
 
 // The legacy-row repair uses a dialect-specific cast; verify it against real
 // PostgreSQL rather than only SQLite.
 func TestPostgresBackfillUsageLogCostUnits(t *testing.T) {
-	db, err := OpenDB(testPostgresURL(t))
+	db, err := OpenDB(partitionScratchDSN(t))
 	if err != nil {
 		t.Fatalf("open postgres: %v", err)
 	}
 	defer db.Close()
+	restoreFloatMoneyTestColumns(t, db)
 	suffix := itSuffix()
 	traceID := "tr-pg-legacy-" + suffix
 

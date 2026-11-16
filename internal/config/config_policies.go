@@ -42,7 +42,7 @@ func (c *Config) IsRegistrationAllowed() bool {
 	if c != nil && c.Auth.AllowRegistration != nil {
 		return *c.Auth.AllowRegistration
 	}
-	return true
+	return false
 }
 
 // IsEmailVerificationRequired checks if email verification code is required during registration.

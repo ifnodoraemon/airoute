@@ -66,6 +66,12 @@ export default function DashboardKpis({
         <div className="ui-meta mt-2 font-mono">
           {isZh ? '缓存减免' : 'Cache Saved'}: ¥{(stats.saved_cost || 0).toFixed(4)}
         </div>
+        {typeof stats.today_cost === 'number' && <div className="ui-meta mt-2 font-mono">
+          {isZh ? '今日 (UTC)' : 'Today (UTC)'}: ¥{stats.today_cost.toFixed(4)} · {isZh ? '本月 (UTC)' : 'Month (UTC)'}: ¥{(stats.month_cost || 0).toFixed(4)}
+        </div>}
+        {stats.previous_cost_24h > 0 && stats.cost_24h >= 1 && stats.cost_24h > 2 * stats.previous_cost_24h && (
+          <p role="status" className="mt-2 text-xs text-amber-700 dark:text-amber-300">{isZh ? '费用增长提醒：近 24 小时消耗超过前 24 小时的 2 倍。' : 'Spend alert: the last 24 hours cost more than twice the previous 24 hours.'}</p>
+        )}
       </div>
     </div>
   );

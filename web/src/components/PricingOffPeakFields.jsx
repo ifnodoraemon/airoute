@@ -1,4 +1,5 @@
 import { Plus, Trash2, Moon } from 'lucide-react';
+import { formatSlotPreview } from '../lib/pricingSlots';
 
 export default function PricingOffPeakFields({
   formData, formatDaysLabel, handleAddSlot, handleRemoveSlot, handleUpdateSlot, isDayActive, isZh,
@@ -60,39 +61,43 @@ export default function PricingOffPeakFields({
 
                   <div className="flex items-center space-x-2">
                     <input
-                      type="text"
-                      placeholder="00:00"
+                      type="time"
                       value={slot.start}
                       onChange={(e) => handleUpdateSlot(slot.id, 'start', e.target.value)}
-                      className="w-18 ui-field font-mono text-center text-xs"
+                      className="w-28 ui-field font-mono text-center text-xs"
                     />
                     <span className="text-[#656B75] dark:text-[#A1A7B0] text-xs">{isZh ? '至' : 'to'}</span>
                     <input
-                      type="text"
-                      placeholder="08:30"
+                      type="time"
                       value={slot.end}
                       onChange={(e) => handleUpdateSlot(slot.id, 'end', e.target.value)}
-                      className="w-18 ui-field font-mono text-center text-xs"
+                      className="w-28 ui-field font-mono text-center text-xs"
                     />
                   </div>
 
                   <div className="flex items-center space-x-2">
-                    <select
+                    <input
+                      type="number"
+                      list={`discount-presets-${slot.id || index}`}
+                      min="0.01"
+                      max="1"
+                      step="any"
                       value={slot.discount}
-                      onChange={(e) => handleUpdateSlot(slot.id, 'discount', parseFloat(e.target.value))}
-                      className="ui-field text-xs font-mono"
-                    >
-                      <option value="0.1">{isZh ? '1 折 (10%)' : '90% Off (10%)'}</option>
-                      <option value="0.2">{isZh ? '2 折 (20%)' : '80% Off (20%)'}</option>
-                      <option value="0.3">{isZh ? '3 折 (30%)' : '70% Off (30%)'}</option>
-                      <option value="0.4">{isZh ? '4 折 (40%)' : '60% Off (40%)'}</option>
-                      <option value="0.5">{isZh ? '5 折 (50%)' : '50% Off (50%)'}</option>
-                      <option value="0.6">{isZh ? '6 折 (60%)' : '40% Off (60%)'}</option>
-                      <option value="0.7">{isZh ? '7 折 (70%)' : '30% Off (70%)'}</option>
-                      <option value="0.8">{isZh ? '8 折 (80%)' : '20% Off (80%)'}</option>
-                      <option value="0.85">{isZh ? '8.5 折 (85%)' : '15% Off (85%)'}</option>
-                      <option value="0.9">{isZh ? '9 折 (90%)' : '10% Off (90%)'}</option>
-                    </select>
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value);
+                        handleUpdateSlot(slot.id, 'discount', Number.isFinite(v) ? v : slot.discount);
+                      }}
+                      className="w-20 ui-field text-xs font-mono"
+                      title={isZh ? '支付比例（0.5 = 5 折），可自定义' : 'Pay fraction (0.5 = 50% off), custom values allowed'}
+                    />
+                    <datalist id={`discount-presets-${slot.id || index}`}>
+                      <option value="0.1" />
+                      <option value="0.3" />
+                      <option value="0.5" />
+                      <option value="0.7" />
+                      <option value="0.8" />
+                      <option value="0.9" />
+                    </datalist>
 
                     {formData.slots.length > 1 && (
                       <button
@@ -105,6 +110,11 @@ export default function PricingOffPeakFields({
                       </button>
                     )}
                   </div>
+                </div>
+
+                {/* Human-readable preview of the configured window */}
+                <div className="text-[11px] text-[#355CFF] dark:text-[#91A7FF] font-medium">
+                  {formatSlotPreview(slot, isZh)}
                 </div>
 
                 {/* Zero-burden Weekday Selector */}

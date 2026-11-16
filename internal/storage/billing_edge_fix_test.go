@@ -57,7 +57,7 @@ func TestForeignCurrencyRecordDoesNotPoisonBatch(t *testing.T) {
 	var cost, promptTokens int64
 	var costFloat float64
 	var snapshot, message string
-	if err := r.db.QueryRow(`SELECT prompt_tokens, cost, cost_units, COALESCE(pricing_snapshot, ''), COALESCE(error_message, '')
+	if err := r.db.QueryRow(`SELECT prompt_tokens, cost_units / 1000000000.0, cost_units, COALESCE(pricing_snapshot, ''), COALESCE(error_message, '')
 		FROM usage_logs WHERE billing_id = 'bill-legacy-usd'`).
 		Scan(&promptTokens, &costFloat, &cost, &snapshot, &message); err != nil {
 		t.Fatal(err)

@@ -2,7 +2,7 @@ package storage
 
 import "encoding/json"
 
-const apiKeyColumns = `id, public_id, key, tenant_id, COALESCE(allowed_models, ''), rpm, tpm, budget, used_tokens, COALESCE(used_cost, 0.0), COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), COALESCE(admin_disabled, FALSE), created_at, updated_at`
+const apiKeyColumns = `id, public_id, key, tenant_id, COALESCE(allowed_models, ''), rpm, tpm, COALESCE(budget_units, 0) / 1000000000.0, used_tokens, COALESCE(used_cost_units, 0) / 1000000000.0, COALESCE(budget_units, 0), COALESCE(used_cost_units, 0), COALESCE(group_name, 'default'), COALESCE(user_id, 0), status, COALESCE(format_validation, ''), COALESCE(admin_disabled, FALSE), created_at, updated_at`
 
 func scanAPIKey(row rowScanner) (*APIKeyRecord, error) {
 	var rec APIKeyRecord

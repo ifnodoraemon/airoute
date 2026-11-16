@@ -54,3 +54,20 @@ func TestShippedConfigHasSafeDefaults(t *testing.T) {
 		t.Fatal("shipped config falls back to repository-published S3 credentials")
 	}
 }
+
+func TestRegistrationRequiresExplicitOptIn(t *testing.T) {
+	t.Setenv("ALLOW_REGISTRATION", "")
+	for _, cfg := range []*Config{nil, {}, DefaultConfig()} {
+		if cfg.IsRegistrationAllowed() {
+			t.Fatal("an unspecified registration policy must stay closed")
+		}
+	}
+	cfg := &Config{Auth: AuthConfig{AllowRegistration: boolPtr(true)}}
+	if !cfg.IsRegistrationAllowed() {
+		t.Fatal("explicit registration opt-in was ignored")
+	}
+	t.Setenv("ALLOW_REGISTRATION", "false")
+	if cfg.IsRegistrationAllowed() {
+		t.Fatal("the environment must be able to disable registration")
+	}
+}

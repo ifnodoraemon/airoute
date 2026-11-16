@@ -16,10 +16,10 @@ export default function PricingEditor({
         if (e.target === e.currentTarget) requestClosePricing();
       }}
     >
-      <div className="relative bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl p-6 sm:p-8 max-w-xl w-full shadow-xl space-y-5 animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" aria-labelledby="pricing-editor-title-1" className="relative bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl p-6 sm:p-8 max-w-xl w-full shadow-xl space-y-5 animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
         <div className="border-b border-[#E4E6E9] dark:border-[#2C3038] pb-3 flex items-center justify-between">
           <div>
-            <h3 className="font-semibold text-[#202124] dark:text-[#F1F2F4] text-base">
+            <h3 id="pricing-editor-title-1" className="font-semibold text-[#202124] dark:text-[#F1F2F4] text-base">
               {editingPrice
                 ? (isZh ? `编辑 [${editingPrice.model}] 定价` : `Edit [${editingPrice.model}] Pricing`)
                 : (isZh ? '新建模型定价与分时规则' : 'New Pricing & Off-Peak Rule')}

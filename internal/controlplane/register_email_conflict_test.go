@@ -56,6 +56,7 @@ func TestRespondRegistrationFailureMapsDuplicateEmailToConflict(t *testing.T) {
 // End-to-end: registering twice with the same address must create exactly one
 // account, and the second attempt must be refused with a conflict.
 func TestRegisterRejectsSecondAccountForSameEmail(t *testing.T) {
+	t.Setenv("ALLOW_REGISTRATION", "true")
 	gin.SetMode(gin.TestMode)
 	h, repo := regressionHandler(t)
 

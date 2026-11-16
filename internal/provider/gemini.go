@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -75,7 +74,10 @@ func (p *GeminiProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 	if err := validateGeminiChatOptions(req); err != nil {
 		return nil, err
 	}
-	geminiReq := convertOpenAIToGemini(req)
+	geminiReq, err := convertOpenAIToGemini(req)
+	if err != nil {
+		return nil, err
+	}
 	targetModel := channel.GetUpstreamModel(req.Model)
 	if err := applyGeminiThinking(geminiReq.GenerationConfig, req, targetModel); err != nil {
 		return nil, err
@@ -103,7 +105,7 @@ func (p *GeminiProvider) ChatComplete(ctx context.Context, req *model.ChatComple
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := io.ReadAll(resp.Body)
+	bodyBytes, err := readChatBody(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read gemini response body error: %w", err)
 	}

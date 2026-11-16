@@ -35,7 +35,7 @@ func PrepareThinkingRequest(req *model.ChatCompletionRequest, channel *model.Cha
 	if err := applyThinkingWire(copy, channel); err != nil {
 		return nil, err
 	}
-	if req.Native != nil && req.Native.Protocol != model.NativeChat {
+	if req.Native != nil {
 		if err := prepareNativeThinking(copy, req.Native); err != nil {
 			return nil, err
 		}
@@ -123,10 +123,7 @@ func validateThinkingCandidate(req *model.ChatCompletionRequest, control model.T
 
 func copyThinkingRequest(req *model.ChatCompletionRequest, channel *model.ChannelConfig, control model.ThinkingControl, profile model.ThinkingProfile, source string) *model.ChatCompletionRequest {
 	copy := *req
-	copy.Native = nil
-	if req.Native != nil && req.Native.Protocol != model.NativeChat {
-		copy.Native = req.Native
-	}
+	copy.Native = req.Native
 	copy.Extra = make(model.ExtraFields, len(req.Extra))
 	for k, v := range req.Extra {
 		if k != "thinking_control" {

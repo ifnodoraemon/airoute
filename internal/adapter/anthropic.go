@@ -40,6 +40,7 @@ func AnthropicToCanonical(req *model.AnthropicInboundRequest) (*model.ChatComple
 		StreamOptions:       streamOptions,
 		Tools:               canonicalTools,
 		ToolChoice:          convertAnthropicToolChoice(req.ToolChoice),
+		ParallelToolCalls:   anthropicParallelToolCalls(req.ToolChoice),
 		Stop:                stop,
 		Protocol:            "anthropic_messages",
 		AnthropicOriginal:   req,

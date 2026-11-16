@@ -21,6 +21,7 @@ import (
 )
 
 func TestUserWallet_RegistrationAndVerification(t *testing.T) {
+	t.Setenv("ALLOW_REGISTRATION", "true")
 	gin.SetMode(gin.TestMode)
 	db, err := storage.OpenDB(":memory:")
 	if err != nil {
@@ -572,7 +573,9 @@ func TestAPIKey_BudgetLimitEnforcement(t *testing.T) {
 
 	// 2. Simulate exceeding key budget: used_cost = 10.5
 	// api_keys.key stores the digest of the credential.
-	_, _ = db.Exec(`UPDATE api_keys SET used_cost = 10.5 WHERE key = ?`, storage.HashAPIKey(vkKey))
+	if _, err := db.Exec(`UPDATE api_keys SET used_cost_units = ? WHERE key = ?`, storage.ToUnits(10.5), storage.HashAPIKey(vkKey)); err != nil {
+		t.Fatal(err)
+	}
 
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest("GET", "/v1/models", nil)

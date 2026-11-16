@@ -194,7 +194,7 @@ func TestRateLimitMiddleware_RedisGracefulDegradation(t *testing.T) {
 			},
 		},
 	}
-	config.SetGlobalConfig(cfg)
+	useConfigOnlyFixture(t, cfg)
 
 	r := gin.New()
 	r.Use(middleware.AuthMiddleware())

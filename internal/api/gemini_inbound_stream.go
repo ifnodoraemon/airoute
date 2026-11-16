@@ -28,7 +28,7 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 	if err != nil {
 		statusCode, _, _, _ := resolveUpstreamFailureStatus(err)
 		recordFailedRequestWithError(c, sessionID, canonicalReq.Model, time.Since(start), statusCode, err)
-		RespondGeminiError(c, statusCode, sanitizeErrorMessage(err), geminiErrorStatus(statusCode))
+		respondGeminiUpstreamError(c, statusCode, err)
 		return
 	}
 
@@ -75,33 +75,16 @@ func (h *Handler) handleGeminiStream(c *gin.Context, reqCtx context.Context, can
 	}
 	var recordOnce sync.Once
 	recordStreamEnd := func(statusCode int) {
-		// A client abort (499) still sent the prompt upstream; estimate it too.
-		if statusCode == http.StatusOK || statusCode == statusClientClosed {
-			canonicalEstimate := estimateCanonicalPromptTokens(canonicalReq)
-			if totalPromptTokens == 0 {
-				totalPromptTokens = streamFallbackPromptTokens(canonicalReq)
-				usageSource = "estimated"
-			} else {
-				observePromptEstimate(canonicalReq.Model, canonicalEstimate, totalPromptTokens)
-			}
-			if totalCompTokens == 0 && accumulatedChars > 0 {
-				totalCompTokens = estimatedStreamCompletionTokens(accumulatedChars)
-				usageSource = "estimated"
-			}
-		}
-		_, _, _, finalSettle = RecordUsageDeferred(c, AuditRecordParams{
+		finalSettle = recordGeminiStreamEnd(c, statusCode, &totalPromptTokens, &totalCompTokens, &usageSource, accumulatedChars, canonicalReq, AuditRecordParams{
 			SessionID:           sessionID,
 			ChatID:              geminiUpstreamChatID,
 			Channel:             upstreamChannel,
 			Model:               modelName,
-			PromptTokens:        totalPromptTokens,
-			CompletionTokens:    totalCompTokens,
 			CachedTokens:        totalCachedTokens,
 			CacheCreationTokens: totalCacheCreationTokens,
 			Duration:            time.Since(start),
 			TTFT:                ttftDuration,
 			StatusCode:          statusCode,
-			UsageSource:         usageSource,
 			LiveTracked:         true, // stream deltas already fed the live token meter
 			ErrorMessage:        sanitizeErrorMessage(streamError),
 		})

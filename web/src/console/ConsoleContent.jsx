@@ -1,6 +1,6 @@
 import ConsoleDashboard from './ConsoleDashboard';
 import { useConsoleContext } from './ConsoleContext';
-import { ChannelsView, DocsView, KeysView, LogsView, McpIntegrationView, ModelRoutesManager, MyUsageView, NotificationCenterView, PlaygroundView, PricingManager, SkillHubView, SupplierReconciliationView, UserManagementView, ViewLoader, WalletManagementView } from './consoleComponents';
+import { ChannelsView, DocsView, InfraHealthPanel, KeysView, LogsView, McpIntegrationView, ModelRoutesManager, MyUsageView, NotificationCenterView, PlaygroundView, PricingManager, SkillHubView, SupplierReconciliationView, UserManagementView, ViewLoader, WalletManagementView } from './consoleComponents';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { Suspense } from 'react';
 import { apiFetch } from '../api/client';
@@ -102,6 +102,11 @@ export default function ConsoleContent() {
           onNavigateToProcurement={(channel = '') => openProcurement(setCurrentTab, channel)}
           lang={lang}
         />
+      )}
+
+      {/* 2.2. INFRASTRUCTURE HEALTH TAB */}
+      {currentTab === 'infra' && adminUser?.role === 'admin' && (
+        <InfraHealthPanel adminFetch={apiFetch} showToast={showToast} lang={lang} />
       )}
 
       {/* 2.5. SUPPLIER RECONCILIATION TAB */}

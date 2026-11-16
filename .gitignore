@@ -21,6 +21,7 @@ data/*.db-shm
 # Environment & local configs
 .env
 *.local
+.qoder/
 
 # Node & Frontend
 node_modules/

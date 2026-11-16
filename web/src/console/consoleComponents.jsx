@@ -40,6 +40,8 @@ export const WalletManagementView = lazy(() => import('../components/WalletManag
 
 export const ChannelsView = lazy(() => import('../components/ChannelsView'));
 
+export const InfraHealthPanel = lazy(() => import('../components/InfraHealthPanel'));
+
 export const SupplierReconciliationView = lazy(() => import('../components/SupplierReconciliationView'));
 
 export const KeysView = lazy(() => import('../components/KeysView'));

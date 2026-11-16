@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, Coins, Key, RefreshCw, Wallet, Zap } from 'lucide-react';
 import { keyDisplayRef } from '../lib/apiKey';
+import MyUsageTrend from './MyUsageTrend';
 
 function formatNumber(value) {
   const number = Number(value || 0);
@@ -68,6 +69,21 @@ export default function MyUsageView({ adminFetch, showToast, lang = 'zh' }) {
     activeKeys: (keys || []).filter((key) => key.status === 'active').length,
   }), [overview, wallet, keys]);
 
+  // Budget-exhaustion alert: surface keys at or near their budget cap so a user
+  // sees the risk without scanning every waterline row.
+  const budgetAlerts = useMemo(() => {
+    const near = [];
+    const over = [];
+    for (const key of keys || []) {
+      const budget = Number(key.budget || 0);
+      if (budget <= 0) continue;
+      const percent = (Number(key.used_cost || 0) / budget) * 100;
+      if (percent >= 100) over.push(key);
+      else if (percent >= 80) near.push(key);
+    }
+    return { near, over };
+  }, [keys]);
+
   const cardClass = 'rounded-xl border border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F] p-4';
 
   return (
@@ -91,6 +107,15 @@ export default function MyUsageView({ adminFetch, showToast, lang = 'zh' }) {
         </div>
       )}
 
+      {(budgetAlerts.over.length > 0 || budgetAlerts.near.length > 0) && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 dark:border-rose-900/40 dark:bg-rose-950/30 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">
+          {isZh
+            ? `预算提醒：${budgetAlerts.over.length} 个密钥已耗尽预算，${budgetAlerts.near.length} 个密钥接近上限（≥80%），请及时调整预算或用量。`
+            : `Budget alert: ${budgetAlerts.over.length} key(s) exhausted, ${budgetAlerts.near.length} key(s) near the cap (≥80%). Adjust budget or usage.`}
+        </div>
+      )}
+
+      <MyUsageTrend adminFetch={adminFetch} balance={totals.balance} dailyCost={overview?.cost_24h} isZh={isZh} />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className={cardClass}>
           <div className="flex items-center space-x-1.5 text-[11px] text-[#656B75] dark:text-[#A1A7B0]"><Activity className="w-3.5 h-3.5" /><span>{isZh ? '请求数' : 'Requests'}</span></div>

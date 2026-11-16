@@ -26,7 +26,10 @@ func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 	if err := validateGeminiChatOptions(req); err != nil {
 		return nil, err
 	}
-	geminiReq := convertOpenAIToGemini(req)
+	geminiReq, err := convertOpenAIToGemini(req)
+	if err != nil {
+		return nil, err
+	}
 	targetModel := channel.GetUpstreamModel(req.Model)
 	if err := applyGeminiThinking(geminiReq.GenerationConfig, req, targetModel); err != nil {
 		return nil, err
@@ -55,7 +58,7 @@ func (p *GeminiProvider) ChatCompleteStream(ctx context.Context, req *model.Chat
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, maxChatErrorBodyBytes))
 		resp.Body.Close()
 		return nil, NewUpstreamError(channel.Name, resp.StatusCode, bodyBytes, resp.Header)
 	}

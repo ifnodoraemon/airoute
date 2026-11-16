@@ -86,6 +86,9 @@ jobs:
         run: |
           go vet $(go list ./... | grep -v '/web/node_modules/')
 
+      - name: Enforce size ratchets (files <=300, functions <=60)
+        run: sh scripts/check-size.sh
+
       - name: Run Unit Tests with Race Detector
         run: |
           go test -v -race -coverprofile=coverage.out -covermode=atomic $(go list ./... | grep -v '/web/node_modules/')

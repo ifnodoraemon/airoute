@@ -75,7 +75,7 @@ func TestNativeAnthropicUnaryBillsCachedTokensAtCacheRate(t *testing.T) {
 	var prompt int
 	deadline := time.Now().Add(3 * time.Second)
 	for {
-		err := db.QueryRow(`SELECT COALESCE(cached_tokens, 0), prompt_tokens, cost FROM usage_logs ORDER BY id DESC LIMIT 1`).
+		err := db.QueryRow(`SELECT COALESCE(cached_tokens, 0), prompt_tokens, cost_units / 1000000000.0 FROM usage_logs ORDER BY id DESC LIMIT 1`).
 			Scan(&cached, &prompt, &cost)
 		if err == nil {
 			break

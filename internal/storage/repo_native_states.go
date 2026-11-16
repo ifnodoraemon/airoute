@@ -92,14 +92,69 @@ func (r *Repository) ListNativeStates(ctx context.Context, namespace, owner stri
 }
 
 func (r *Repository) DeleteNativeState(ctx context.Context, namespace, id, owner string) error {
-	_, err := r.db.ExecContext(ctx, `DELETE FROM native_states WHERE namespace=? AND id=? AND owner=?`, namespace, id, owner)
-	return err
+	tx, err := r.db.BeginTx(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var billing string
+	err = tx.QueryRowContext(ctx, `SELECT billing FROM native_states WHERE namespace=? AND id=? AND owner=?`, namespace, id, owner).Scan(&billing)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if err == nil {
+		if err := releaseBillingHoldTx(ctx, tx, reservationIDFromBilling(billing)); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM native_states WHERE namespace=? AND id=? AND owner=?`, namespace, id, owner); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (r *Repository) PruneNativeStates(ctx context.Context) error {
-	_, err := r.db.ExecContext(ctx, `DELETE FROM native_states WHERE (namespace,id,owner) IN (
-		SELECT namespace,id,owner FROM native_states WHERE expires_at<? LIMIT 500)`, r.dialectTime(time.Now()))
-	return err
+	tx, err := r.db.BeginTx(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, `SELECT namespace, id, owner, billing FROM native_states WHERE expires_at<? LIMIT 500`, r.dialectTime(time.Now()))
+	if err != nil {
+		return err
+	}
+	type statePK struct{ namespace, id, owner string }
+	var victims []statePK
+	var holds []string
+	for rows.Next() {
+		var p statePK
+		var billing string
+		if err := rows.Scan(&p.namespace, &p.id, &p.owner, &billing); err != nil {
+			rows.Close()
+			return err
+		}
+		victims = append(victims, p)
+		if id := reservationIDFromBilling(billing); id != "" {
+			holds = append(holds, id)
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	// Release the holds before removing the states so a failed delete cannot
+	// orphan a pending reservation; an expired state is never settled again.
+	for _, id := range holds {
+		if err := releaseBillingHoldTx(ctx, tx, id); err != nil {
+			return err
+		}
+	}
+	for _, p := range victims {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM native_states WHERE namespace=? AND id=? AND owner=?`, p.namespace, p.id, p.owner); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (r *Repository) ClaimNativeState(ctx context.Context, namespace, id, owner string) (bool, error) {

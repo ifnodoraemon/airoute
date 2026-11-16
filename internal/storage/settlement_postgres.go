@@ -6,7 +6,7 @@ package storage
 //
 // Equivalence with the portable path, piece by piece:
 //   - key_update is exactly the old counter UPDATE (same columns, same expression).
-//   - wallet_update is exactly deductWallet's users UPDATE: the same integer subtraction, the same float mirror derived from the integer column, and the same
+//   - wallet_update is exactly deductWallet's users UPDATE: the same integer subtraction and the same
 //     `role <> 'admin'` exemption. `AND ? > 0` reproduces deductWallet's early
 //     return for a charge that rounds to zero units (it never touched a wallet and
 //     fell through to the tenant fallback).
@@ -26,8 +26,7 @@ package storage
 const postgresChargeMergeSQL = `
 WITH key_update AS (
 	UPDATE api_keys
-	   SET used_cost = used_cost + CAST(? AS DOUBLE PRECISION),
-	       used_cost_units = COALESCE(used_cost_units, 0) + CAST(? AS BIGINT),
+	   SET used_cost_units = COALESCE(used_cost_units, 0) + CAST(? AS BIGINT),
 	       used_tokens = used_tokens + CAST(? AS BIGINT),
 	       updated_at = CURRENT_TIMESTAMP
 	 WHERE key = CAST(? AS TEXT)
@@ -35,7 +34,6 @@ WITH key_update AS (
 ), wallet_update AS (
 	UPDATE users u
 	   SET balance_units = COALESCE(u.balance_units, 0) - CAST(? AS BIGINT),
-	       balance = (COALESCE(u.balance_units, 0) - CAST(? AS BIGINT)) * 1.0 / 1000000000.0,
 	       updated_at = CURRENT_TIMESTAMP
 	  FROM key_update k
 	 WHERE u.id = k.user_id
@@ -65,7 +63,7 @@ func (r *Repository) applyPostgresChargeMerges(tx *Tx, keys []string, keyCost ma
 			continue
 		}
 		units := ToUnits(cost)
-		args := []any{cost, units, tokens, key, units, units, units}
+		args := []any{units, tokens, key, units, units}
 		var keyRows, walletRows, balanceUnits, ownerIsAdmin int64
 		if err := stmt.QueryRow(args...).Scan(&keyRows, &walletRows, &balanceUnits, &ownerIsAdmin); err != nil {
 			return err

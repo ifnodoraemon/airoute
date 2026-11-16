@@ -43,36 +43,39 @@ type responsesStreamEmitter struct {
 	createdAt int64
 	fullText  strings.Builder
 
-	// Tool calls are additional output items after the message item (index 0).
-	// The upstream chat delta identifies them by its own index; the Responses
-	// output_index is allocated in first-seen order.
+	// Output items are allocated an output_index in first-seen order. A reasoning
+	// item (when the upstream thinks) precedes the message item; the message item
+	// is always present (index 0 when there is no reasoning), then function calls.
 	toolStates      map[int]*responsesToolCallState
 	toolOrder       []int
 	nextOutputIndex int
 	toolChars       int
+	reasoningChars  int
+
+	messageOutputIndex int
+	messageItemAdded   bool
+
+	reasoningOutputIndex int
+	reasoningItemID      string
+	reasoningText        strings.Builder
+	reasoningPartAdded   bool
 	// finishReason is the upstream chat finish_reason, used to report a truncated
 	// or filtered answer as an "incomplete" response instead of "completed".
 	finishReason string
 }
 
-type responsesToolCallState struct {
-	outputIndex int
-	itemID      string
-	callID      string
-	name        string
-	arguments   strings.Builder
-}
-
 func newResponsesStreamEmitter(w gin.ResponseWriter, flusher http.Flusher, respID, itemID, modelStr string) *responsesStreamEmitter {
 	return &responsesStreamEmitter{
-		w:               w,
-		flusher:         flusher,
-		respID:          respID,
-		itemID:          itemID,
-		model:           modelStr,
-		createdAt:       time.Now().Unix(),
-		toolStates:      make(map[int]*responsesToolCallState),
-		nextOutputIndex: 1, // 0 is reserved for the message item
+		w:                    w,
+		flusher:              flusher,
+		respID:               respID,
+		itemID:               itemID,
+		model:                modelStr,
+		createdAt:            time.Now().Unix(),
+		toolStates:           make(map[int]*responsesToolCallState),
+		nextOutputIndex:      0,
+		messageOutputIndex:   -1,
+		reasoningOutputIndex: -1,
 	}
 }
 
@@ -133,18 +136,6 @@ func (e *responsesStreamEmitter) contentPart(text string) gin.H {
 	}
 }
 
-// functionCallItem renders a function_call output item.
-func (e *responsesStreamEmitter) functionCallItem(status, itemID, callID, name, arguments string) gin.H {
-	return gin.H{
-		"id":        itemID,
-		"type":      "function_call",
-		"status":    status,
-		"call_id":   callID,
-		"name":      name,
-		"arguments": arguments,
-	}
-}
-
 // created emits response.created and response.in_progress.
 func (e *responsesStreamEmitter) created() {
 	e.emit("response.created", gin.H{
@@ -155,16 +146,24 @@ func (e *responsesStreamEmitter) created() {
 	})
 }
 
-// itemAdded emits response.output_item.added and response.content_part.added for
-// the single text output item this gateway streams.
-func (e *responsesStreamEmitter) itemAdded() {
+// ensureMessageItem lazily announces the assistant message output item on first
+// use (first text delta, first tool call, or completion). Its output_index is
+// allocated in first-seen order, so a reasoning item that arrived earlier holds
+// the lower index; with no reasoning the message item holds index 0 as before.
+func (e *responsesStreamEmitter) ensureMessageItem() {
+	if e.messageItemAdded {
+		return
+	}
+	e.messageItemAdded = true
+	e.messageOutputIndex = e.nextOutputIndex
+	e.nextOutputIndex++
 	e.emit("response.output_item.added", gin.H{
-		"output_index": 0,
+		"output_index": e.messageOutputIndex,
 		"item":         e.messageItem("in_progress", []gin.H{}),
 	})
 	e.emit("response.content_part.added", gin.H{
 		"item_id":       e.itemID,
-		"output_index":  0,
+		"output_index":  e.messageOutputIndex,
 		"content_index": 0,
 		"part":          e.contentPart(""),
 	})
@@ -172,9 +171,10 @@ func (e *responsesStreamEmitter) itemAdded() {
 
 // textDelta emits one response.output_text.delta event.
 func (e *responsesStreamEmitter) textDelta(delta string) {
+	e.ensureMessageItem()
 	e.emit("response.output_text.delta", gin.H{
 		"item_id":       e.itemID,
-		"output_index":  0,
+		"output_index":  e.messageOutputIndex,
 		"content_index": 0,
 		"delta":         delta,
 		"logprobs":      []any{},
@@ -184,44 +184,6 @@ func (e *responsesStreamEmitter) textDelta(delta string) {
 // toolCallDelta appends one upstream tool-call delta and emits the Responses
 // events that describe it: a function_call output item on first sight, then one
 // arguments delta per increment.
-func (e *responsesStreamEmitter) toolCallDelta(toolIndex int, callID, name, arguments string) {
-	state := e.toolStates[toolIndex]
-	if state == nil {
-		state = &responsesToolCallState{
-			outputIndex: e.nextOutputIndex,
-			itemID:      fmt.Sprintf("fc_%s_%d", e.respID, toolIndex),
-			callID:      callID,
-			name:        name,
-		}
-		e.nextOutputIndex++
-		e.toolStates[toolIndex] = state
-		e.toolOrder = append(e.toolOrder, toolIndex)
-		e.emit("response.output_item.added", gin.H{
-			"output_index": state.outputIndex,
-			"item":         e.functionCallItem("in_progress", state.itemID, state.callID, state.name, ""),
-		})
-	}
-	// Some upstreams split the id/name across frames; keep the first non-empty
-	// value (the item was already announced, but the completed item carries the
-	// authoritative values).
-	if state.callID == "" && callID != "" {
-		state.callID = callID
-	}
-	if state.name == "" && name != "" {
-		state.name = name
-	}
-	if arguments == "" {
-		return
-	}
-	state.arguments.WriteString(arguments)
-	e.toolChars += len(arguments)
-	e.emit("response.function_call_arguments.delta", gin.H{
-		"item_id":      state.itemID,
-		"output_index": state.outputIndex,
-		"delta":        arguments,
-	})
-}
-
 // noteFinishReason records the upstream chat finish_reason so the terminal
 // response.completed event can report status "incomplete" (with
 // incomplete_details) instead of claiming a truncated answer completed normally.
@@ -241,24 +203,32 @@ func (e *responsesStreamEmitter) terminalStatus() string {
 // response.completed) that close the stream. Output items are ordered by their
 // output_index: the message item first, then function calls in first-seen order.
 func (e *responsesStreamEmitter) completed(usage gin.H) {
+	e.ensureMessageItem()
 	text := e.fullText.String()
+	output := make([]gin.H, 0, 2+len(e.toolOrder))
+
+	// The reasoning item holds the lowest output_index when present; close it
+	// before the message so the terminal output array stays in index order.
+	if e.reasoningPartAdded {
+		output = append(output, e.closeReasoningItem())
+	}
+
 	e.emit("response.output_text.done", gin.H{
 		"item_id":       e.itemID,
-		"output_index":  0,
+		"output_index":  e.messageOutputIndex,
 		"content_index": 0,
 		"text":          text,
 		"logprobs":      []any{},
 	})
 	e.emit("response.content_part.done", gin.H{
 		"item_id":       e.itemID,
-		"output_index":  0,
+		"output_index":  e.messageOutputIndex,
 		"content_index": 0,
 		"part":          e.contentPart(text),
 	})
-	output := make([]gin.H, 0, 1+len(e.toolOrder))
 	message := e.messageItem("completed", []gin.H{e.contentPart(text)})
 	e.emit("response.output_item.done", gin.H{
-		"output_index": 0,
+		"output_index": e.messageOutputIndex,
 		"item":         message,
 	})
 	output = append(output, message)
@@ -287,17 +257,15 @@ func (e *responsesStreamEmitter) completed(usage gin.H) {
 	})
 }
 
-// failed emits the documented error event. The nested "error" object is kept for
-// clients that predate the documented shape.
+// failed emits the documented response.failed terminal event, matching the
+// native Responses path so official SDKs waiting for a terminal event observe it.
 func (e *responsesStreamEmitter) failed(err error) {
 	message := sanitizeErrorMessage(err)
-	e.emit("error", gin.H{
-		"code":    "upstream_error",
-		"message": message,
-		"param":   nil,
-		"error": gin.H{
-			"message": message,
-			"type":    "stream_error",
+	e.emit("response.failed", gin.H{
+		"response": gin.H{
+			"id":     e.respID,
+			"status": "failed",
+			"error":  gin.H{"message": message, "code": "stream_error"},
 		},
 	})
 }

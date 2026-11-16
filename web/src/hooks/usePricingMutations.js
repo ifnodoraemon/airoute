@@ -1,11 +1,12 @@
 import { apiMutation } from '../api/mutation';
+import { requestConfirm } from '../lib/confirmBus';
 
 export default function usePricingMutations({
   adminFetch, checkSlotsOverlap, fetchPrices, formData, isZh, selectedKeys, setFormError, setSaving,
   setSelectedKeys, setShowModal, showToast
 }) {
   const handleDelete = async (model, groupName = 'default') => {
-    if (!window.confirm(isZh ? `确定删除模型 [${model}] 在 [${groupName}] 分组的定价规则？` : `Are you sure you want to delete pricing rule for model [${model}] in group [${groupName}]?`)) {
+    if (!(await requestConfirm({ title: isZh ? '删除定价规则' : 'Delete pricing rule', description: isZh ? `确定删除模型 [${model}] 在 [${groupName}] 分组的定价规则？` : `Are you sure you want to delete pricing rule for model [${model}] in group [${groupName}]?` }))) {
       return;
     }
     try {
@@ -25,7 +26,7 @@ export default function usePricingMutations({
 
   const handleBatchDelete = async () => {
     if (selectedKeys.length === 0) return;
-    if (!window.confirm(isZh ? `确定批量删除选中的 ${selectedKeys.length} 个模型定价规则？` : `Delete selected ${selectedKeys.length} pricing rules?`)) {
+    if (!(await requestConfirm({ title: isZh ? '批量删除定价规则' : 'Delete pricing rules', description: isZh ? `确定批量删除选中的 ${selectedKeys.length} 个模型定价规则？` : `Delete selected ${selectedKeys.length} pricing rules?` }))) {
       return;
     }
     const items = selectedKeys.map(k => {

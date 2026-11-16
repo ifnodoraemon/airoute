@@ -5,6 +5,8 @@ import { QuickStartModal, LogDetailModal, CurlExportModal, AuthPage, ViewLoader 
 
 import ConsoleSidebar from './ConsoleSidebar';
 import ConsoleHeader from './ConsoleHeader';
+import ConnectionBanner from './ConnectionBanner';
+import ConfirmDialogHost from '../components/ConfirmDialogHost';
 import ConsoleContent from './ConsoleContent';
 import ConsoleDialogs from './ConsoleDialogs';
 import { Suspense } from 'react';
@@ -146,6 +148,9 @@ export default function ConsoleApplication() {
         {/* Top Header */}
         <ConsoleHeader  />
 
+        {/* Global connection / stale-data banner */}
+        <ConnectionBanner />
+
         {/* Global System Announcement Banner */}
         <AnnouncementBanner lang={lang} adminFetch={apiFetch} refreshKey={announcementRefreshKey} onOpen={() => {
           setNotificationKind('announcement');
@@ -217,6 +222,7 @@ export default function ConsoleApplication() {
       </main>
 
       <ConsoleDialogs  />
+      <ConfirmDialogHost />
     </div>
     </I18nContext.Provider>
   );

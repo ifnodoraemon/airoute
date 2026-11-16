@@ -162,6 +162,8 @@ export default function useDashboardSummary({
         ? (b.tpm || 0)
         : chartMetric === 'latency'
         ? b.avgTtft
+        : chartMetric === 'cost'
+        ? (b.costs || 0)
         : b.errors;
       const ratio = maxMetricVal > 0 ? (val / maxMetricVal) : 0;
       const x = Math.round(i * step);

@@ -9,7 +9,10 @@ import (
 )
 
 // convertOpenAIToGemini translates OpenAI canonical request to Gemini structure.
-func convertOpenAIToGemini(req *model.ChatCompletionRequest) *GeminiRequest {
+func convertOpenAIToGemini(req *model.ChatCompletionRequest) (*GeminiRequest, error) {
+	if err := validateGeminiImages(req); err != nil {
+		return nil, err
+	}
 	var contents []GeminiContent
 	var systemParts []GeminiPart
 
@@ -109,19 +112,6 @@ func convertOpenAIToGemini(req *model.ChatCompletionRequest) *GeminiRequest {
 				}
 			case model.ContentPartImageURL:
 				if part.ImageURL != nil && part.ImageURL.URL != "" {
-					if model.IsRemoteContentURL(part.ImageURL.URL) {
-						// Gemini's inlineData.data is base64 only. A remote
-						// resource belongs in fileData.fileUri; putting the URL
-						// in the base64 field made the upstream reject the
-						// request (F-07).
-						geminiParts = append(geminiParts, GeminiPart{
-							FileData: &GeminiFileData{
-								MimeType: "image/jpeg",
-								FileURI:  part.ImageURL.URL,
-							},
-						})
-						continue
-					}
 					mime, b64 := model.ParseDataURI(part.ImageURL.URL)
 					geminiParts = append(geminiParts, GeminiPart{
 						InlineData: &GeminiInlineData{
@@ -195,7 +185,7 @@ func convertOpenAIToGemini(req *model.ChatCompletionRequest) *GeminiRequest {
 		geminiReq.SystemInstruction = &GeminiSystemInstruction{Parts: systemParts}
 	}
 
-	return geminiReq
+	return geminiReq, nil
 }
 
 // geminiToolConfig maps an OpenAI tool_choice value onto Gemini's

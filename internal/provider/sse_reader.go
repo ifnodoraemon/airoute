@@ -34,7 +34,7 @@ func (r *sseDataReader) next() ([]byte, error) {
 		r.pending = nil
 		if line == nil {
 			var err error
-			line, err = r.reader.ReadBytes('\n')
+			line, err = readCappedLine(r.reader)
 			if err != nil {
 				if err != io.EOF {
 					return nil, err

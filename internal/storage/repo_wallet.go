@@ -128,7 +128,7 @@ func (r *Repository) RedeemCode(code, username string) (*RedemptionCodeRecord, e
 	}
 
 	// Credit user balance
-	credited, err := tx.Exec(`UPDATE users SET balance = balance + ?, balance_units = COALESCE(balance_units, 0) + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ? AND status = 'active'`, rec.Amount, ToUnits(rec.Amount), username)
+	credited, err := tx.Exec(`UPDATE users SET balance_units = COALESCE(balance_units, 0) + ?, updated_at = CURRENT_TIMESTAMP WHERE username = ? AND status = 'active'`, ToUnits(rec.Amount), username)
 	if err != nil {
 		return nil, fmt.Errorf("充值到账户余额失败: %w", err)
 	}

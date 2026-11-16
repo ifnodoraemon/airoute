@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { requestConfirm } from '../lib/confirmBus';
 import { Download, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import SupplierCSVImport from './SupplierCSVImport';
 import SupplierQuoteForm from './SupplierQuoteForm';
@@ -65,13 +66,7 @@ export default function SupplierCostPanel({
     onClearTarget?.();
   };
   const remove = async (row) => {
-    if (
-      !window.confirm(
-        isZh
-          ? `删除 ${row.channel} / ${row.model} 的采购报价？`
-          : `Delete purchase quote for ${row.channel} / ${row.model}?`
-      )
-    )
+    if (!(await requestConfirm({ title: isZh ? '删除采购报价' : 'Delete purchase quote', description: isZh ? `删除 ${row.channel} / ${row.model} 的采购报价？` : `Delete purchase quote for ${row.channel} / ${row.model}?` })))
       return;
     setBusy(true);
     try {

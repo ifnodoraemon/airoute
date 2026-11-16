@@ -17,6 +17,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../api/client';
+import { requestConfirm } from '../lib/confirmBus';
 
 // Server-side page size for the audit log table. Exported because the view renders
 // the same number in its pagination control.
@@ -295,7 +296,12 @@ export function useLogsData({ filters, showToast, isZh }) {
   // the table never shows a row that no longer exists.
   const handleBatchDeleteLogs = useCallback(async () => {
     if (selectedLogIds.length === 0) return;
-    if (!window.confirm(isZh ? `确认批量删除选中的 ${selectedLogIds.length} 条调用日志？` : `Confirm delete selected ${selectedLogIds.length} request logs?`)) return;
+    const ok = await requestConfirm({
+      title: isZh ? '批量删除调用日志' : 'Delete selected logs',
+      description: isZh ? `确认删除选中的 ${selectedLogIds.length} 条调用日志？此操作无法撤销。` : `Delete the selected ${selectedLogIds.length} request logs? This cannot be undone.`,
+      confirmLabel: isZh ? '删除' : 'Delete',
+    });
+    if (!ok) return;
     try {
       const res = await apiFetch('/api/v1/admin/logs/batch-delete', {
         method: 'POST',
@@ -316,7 +322,13 @@ export function useLogsData({ filters, showToast, isZh }) {
   }, [selectedLogIds, isZh, showToast, fetchLogs]);
 
   const handleClearLogs = useCallback(async () => {
-    if (!window.confirm(isZh ? '⚠️ 确认清空所有调用日志？此操作无法撤销！' : '⚠️ Confirm clear all request logs? This action cannot be undone!')) return;
+    const ok = await requestConfirm({
+      title: isZh ? '清空所有调用日志' : 'Clear all request logs',
+      description: isZh ? '此操作将永久删除全部调用历史，无法撤销。请输入 CLEAR 以确认。' : 'This permanently deletes all request history and cannot be undone. Type CLEAR to confirm.',
+      confirmLabel: isZh ? '清空全部' : 'Clear all',
+      requireText: 'CLEAR',
+    });
+    if (!ok) return;
     try {
       const res = await apiFetch('/api/v1/admin/logs/clear', { method: 'POST' });
       const data = await res.json();

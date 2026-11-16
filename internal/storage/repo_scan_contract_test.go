@@ -28,7 +28,7 @@ func checkRepositoryReadProjections(t *testing.T, repo *Repository) {
 	suffix := fmt.Sprint(time.Now().UnixNano())
 	user := &UserRecord{Username: "scan-" + suffix, Email: suffix + "@example.test", PasswordHash: "hash-kept-private", Balance: 9, GroupName: "vip"}
 	require.NoError(t, repo.CreateUser(user))
-	_, err := repo.db.Exec(`UPDATE users SET balance = 99, balance_units = ? WHERE id = ?`, int64(1234567891), user.ID)
+	_, err := repo.db.Exec(`UPDATE users SET balance_units = ? WHERE id = ?`, int64(1234567891), user.ID)
 	require.NoError(t, err)
 	checkUserReadProjections(t, repo, user)
 	checkKeyReadProjections(t, repo, user)
@@ -67,7 +67,7 @@ func checkKeyReadProjections(t *testing.T, repo *Repository, user *UserRecord) {
 	t.Helper()
 	key := &APIKeyRecord{Key: "credential-" + user.Username, TenantID: user.Username, UserID: user.ID, AllowedModels: []string{"first", "second"}, RPM: 17, TPM: 203, Budget: 4, FormatValidation: "strict"}
 	require.NoError(t, repo.CreateAPIKey(key))
-	_, err := repo.db.Exec(`UPDATE api_keys SET budget = 99, used_cost = 88, budget_units = ?, used_cost_units = ?, admin_disabled = TRUE WHERE id = ?`, int64(4000000001), int64(1000000003), key.ID)
+	_, err := repo.db.Exec(`UPDATE api_keys SET budget_units = ?, used_cost_units = ?, admin_disabled = TRUE WHERE id = ?`, int64(4000000001), int64(1000000003), key.ID)
 	require.NoError(t, err)
 	byID, err := repo.GetAPIKey(key.ID)
 	require.NoError(t, err)

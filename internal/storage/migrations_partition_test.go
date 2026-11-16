@@ -59,9 +59,9 @@ func partitionScratchDSN(t *testing.T) string {
 func seedPartitionTestUsageLog(t *testing.T, db *DB, billingID string, createdAt time.Time, costUnits int64) {
 	t.Helper()
 	_, err := db.Exec(`INSERT INTO usage_logs
-		(trace_id, model, cost, cost_units, total_tokens, created_at, billing_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		"tr-"+billingID, "partition-test-model", float64(costUnits)/1e9, costUnits, 1000,
+		(trace_id, model, cost_units, total_tokens, created_at, billing_id)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		"tr-"+billingID, "partition-test-model", costUnits, 1000,
 		createdAt.UTC(), billingID)
 	if err != nil {
 		t.Fatalf("seed usage log %s: %v", billingID, err)

@@ -55,10 +55,9 @@ func (h *Handler) handleResponsesStreaming(
 	w := c.Writer
 	emitter := newResponsesStreamEmitter(w, flusher, respID, msgID, req.Model)
 
-	// 1-2. response.created + response.in_progress
+	// 1-2. response.created + response.in_progress. The message output item is
+	// announced lazily (ensureMessageItem) so a reasoning item can precede it.
 	emitter.created()
-	// 3-4. response.output_item.added + response.content_part.added
-	emitter.itemAdded()
 
 	firstTokenRecorded := false
 	var ttftDuration time.Duration
@@ -96,10 +95,11 @@ func (h *Handler) handleResponsesStreaming(
 			} else {
 				observePromptEstimate(chatReq.Model, canonicalEstimate, totalPromptTokens)
 			}
-			// Tool-call arguments are completion tokens too; count them in the
-			// fallback estimate so a tool-only stream is not billed as prompt-only.
-			if totalCompTokens == 0 && emitter.fullText.Len()+emitter.toolChars > 0 {
-				totalCompTokens = estimatedStreamCompletionTokens(emitter.fullText.Len() + emitter.toolChars)
+			// Tool-call arguments and reasoning text are completion output too; count
+			// them in the fallback estimate so a tool-only or reasoning-heavy stream
+			// is not billed as prompt-only.
+			if totalCompTokens == 0 && emitter.fullText.Len()+emitter.toolChars+emitter.reasoningChars > 0 {
+				totalCompTokens = estimatedStreamCompletionTokens(emitter.fullText.Len() + emitter.toolChars + emitter.reasoningChars)
 			}
 		}
 		cost, saved, cached, settle := RecordUsageDeferred(c, AuditRecordParams{
@@ -124,7 +124,30 @@ func (h *Handler) handleResponsesStreaming(
 		return cost, saved, cached
 	}
 
-	for event := range streamChan {
+	clientGone := false
+	drainEnabled := upstreamDrainingEnabled()
+	doneCh := c.Request.Context().Done()
+	for {
+		var event *model.StreamEvent
+		var open bool
+		select {
+		case <-doneCh:
+			if !drainEnabled {
+				recordStreamEnd(statusClientClosed)
+				runFinalSettle()
+				return
+			}
+			// Customer left: keep consuming the provider stream so its usage
+			// report still arrives and the charge matches the invoice.
+			clientGone = true
+			doneCh = nil
+			markAbortedDrain(0)
+			continue
+		case event, open = <-streamChan:
+		}
+		if !open {
+			break
+		}
 		if respUpstreamChannel == "" && event.Channel != "" {
 			respUpstreamChannel = event.Channel
 		}
@@ -179,6 +202,11 @@ func (h *Handler) handleResponsesStreaming(
 					telemetry.GlobalLiveMetrics.AddChars(len(deltaText))
 					emitter.textDelta(deltaText)
 				}
+				if reasoning := choice.Delta.ReasoningContent; reasoning != "" {
+					// 实时吞吐：reasoning 也是生成输出，计入内存 token 计数。
+					telemetry.GlobalLiveMetrics.AddChars(len(reasoning))
+					emitter.reasoningDelta(reasoning)
+				}
 				for _, toolCall := range choice.Delta.ToolCalls {
 					toolIndex := 0
 					if toolCall.Index != nil {
@@ -193,7 +221,18 @@ func (h *Handler) handleResponsesStreaming(
 		}
 	}
 
-	cost, savedCost, cachedTokens := recordStreamEnd(http.StatusOK)
+	finalStatus := http.StatusOK
+	if clientGone {
+		finalStatus = statusClientClosed
+		markAbortedDrain(totalCompTokens)
+	}
+	cost, savedCost, cachedTokens := recordStreamEnd(finalStatus)
+	if clientGone {
+		// The customer is gone; the drained usage is already billed. Do not emit
+		// terminal events or persist a follow-up context nobody will read.
+		runFinalSettle()
+		return
+	}
 
 	// Persist before the terminal event: a client that issues a follow-up with
 	// previous_response_id as soon as it sees response.completed must already

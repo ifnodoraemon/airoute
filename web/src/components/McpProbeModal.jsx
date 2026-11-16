@@ -17,14 +17,14 @@ export default function McpProbeModal({
         if (e.target === e.currentTarget) setProbeModalOpen(false);
       }}
     >
-      <div className="bg-white dark:bg-[#191B1F] rounded-xl shadow-2xl border border-[#E4E6E9] dark:border-[#2C3038] max-w-5xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" aria-labelledby="mcp-probe-modal-title-1" className="bg-white dark:bg-[#191B1F] rounded-xl shadow-2xl border border-[#E4E6E9] dark:border-[#2C3038] max-w-5xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between pb-3 border-b border-[#E4E6E9] dark:border-[#2C3038]">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-[#355CFF] text-white rounded-lg shadow-2xs">
               <Radio className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-[#202124] dark:text-[#F1F2F4] flex items-center gap-2">
+              <h3 id="mcp-probe-modal-title-1" className="text-base font-bold text-[#202124] dark:text-[#F1F2F4] flex items-center gap-2">
                 {isZh ? '在线协议探针控制台' : 'Online Protocol Probe Console'}
                 <span className="text-xs font-mono font-normal text-[#355CFF] dark:text-[#91A7FF]">JSON-RPC 2.0</span>
               </h3>

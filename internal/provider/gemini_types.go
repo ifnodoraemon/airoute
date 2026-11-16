@@ -129,6 +129,7 @@ type GeminiUsageMetadata struct {
 	ThoughtsTokenCount      int `json:"thoughtsTokenCount,omitempty"`
 	TotalTokenCount         int `json:"totalTokenCount"`
 	CachedContentTokenCount int `json:"cachedContentTokenCount,omitempty"`
+	ToolUsePromptTokenCount int `json:"toolUsePromptTokenCount,omitempty"`
 }
 
 // GeminiCandidate represents a candidate generation.

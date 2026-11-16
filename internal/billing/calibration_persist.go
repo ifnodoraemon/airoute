@@ -52,28 +52,29 @@ func SaveCalibration(repo *storage.Repository, calibrator *EstimateCalibrator) e
 		return nil
 	}
 
-	stored, err := persistedCalibrationStates(repo)
-	if err != nil {
-		telemetry.ScopedLogger("billing").Warn(
-			"keeping stored token calibration: persisted ratios are unreadable", "error", err.Error())
-		return err
-	}
-
 	local := calibrator.Snapshot()
-	merged := mergeCalibrationStates(stored, local)
-
-	if len(local) > 0 {
+	var merged map[string]RatioState
+	// The read-merge-write runs under a row lock (MergeSetting) so two replicas
+	// saving at once cannot drop each other's learned models.
+	err := repo.MergeSetting(calibrationSettingKey, func(current string) (string, error) {
+		stored, err := parseCalibrationStates(current)
+		if err != nil {
+			return "", err
+		}
+		merged = mergeCalibrationStates(stored, local)
+		if len(local) == 0 {
+			return current, nil
+		}
 		encoded, err := json.Marshal(merged)
 		if err != nil {
-			telemetry.ScopedLogger("billing").Warn(
-				"keeping stored token calibration: local ratios cannot be encoded", "error", err.Error())
-			return err
+			return "", err
 		}
-		if err := repo.SetSetting(calibrationSettingKey, string(encoded)); err != nil {
-			telemetry.ScopedLogger("billing").Warn(
-				"keeping stored token calibration: write failed", "error", err.Error())
-			return err
-		}
+		return string(encoded), nil
+	})
+	if err != nil {
+		telemetry.ScopedLogger("billing").Warn(
+			"keeping stored token calibration: merge failed", "error", err.Error())
+		return err
 	}
 
 	// Adopt the peer-learned models this replica was missing. Restore keeps any
@@ -82,10 +83,9 @@ func SaveCalibration(repo *storage.Repository, calibrator *EstimateCalibrator) e
 	return nil
 }
 
-// persistedCalibrationStates reads the ratios currently stored, returning an
-// empty map when nothing has been saved yet.
-func persistedCalibrationStates(repo *storage.Repository) (map[string]RatioState, error) {
-	raw := repo.GetSetting(calibrationSettingKey, "")
+// parseCalibrationStates decodes a persisted ratio snapshot, returning an empty
+// map when nothing has been saved yet.
+func parseCalibrationStates(raw string) (map[string]RatioState, error) {
 	if raw == "" {
 		return map[string]RatioState{}, nil
 	}

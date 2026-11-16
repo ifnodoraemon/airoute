@@ -50,6 +50,13 @@ function setup({ isOpen = true, editingChannelId = null, newChannel = draft(), .
 }
 
 describe('ChannelModal', () => {
+  it('exposes a named modal dialog and closes through its Escape layer', () => {
+    const { onClose } = setup();
+    expect(screen.getByRole('dialog', { name: '接入服务商' })).toHaveAttribute('aria-modal', 'true');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('never renders a stored credential and explains how to keep it', () => {
     // The draft must not carry the stored secret, so the input is empty and the form
     // says the key is already configured instead of round-tripping it.

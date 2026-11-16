@@ -35,7 +35,7 @@ func TestUnattributedChargeIsReportedAndStaysConsistent(t *testing.T) {
 		t.Fatalf("settlement rows = %d, want 1", settlements)
 	}
 	var auditCost float64
-	if err := r.db.QueryRow(`SELECT cost FROM usage_logs WHERE billing_id = 'bill-orphan-edge'`).Scan(&auditCost); err != nil {
+	if err := r.db.QueryRow(`SELECT cost_units / 1000000000.0 FROM usage_logs WHERE billing_id = 'bill-orphan-edge'`).Scan(&auditCost); err != nil {
 		t.Fatal(err)
 	}
 	if auditCost != 2.00 {
@@ -72,8 +72,8 @@ func TestLegacySettlementKeysAreRepairedAndLinked(t *testing.T) {
 	// A legacy audit row: billing_id NULL, charged, old enough to pass the repair
 	// grace window, and (like a rolling-deploy row) with no ledger entry yet.
 	created := time.Now().Add(-time.Hour).UTC().Format(sqliteTimestampLayout)
-	res, err := r.db.Exec(`INSERT INTO usage_logs (trace_id, api_key, tenant_id, model, prompt_tokens, total_tokens, cost, cost_units, status_code, created_at, billing_id)
-		VALUES ('tr-legacy-link', 'sk-paid', 'paid-user', 'test-model', 1000000, 1000000, 3, ?, 200, ?, NULL)`,
+	res, err := r.db.Exec(`INSERT INTO usage_logs (trace_id, api_key, tenant_id, model, prompt_tokens, total_tokens, cost_units, status_code, created_at, billing_id)
+		VALUES ('tr-legacy-link', 'sk-paid', 'paid-user', 'test-model', 1000000, 1000000, ?, 200, ?, NULL)`,
 		ToUnits(3), created)
 	if err != nil {
 		t.Fatal(err)

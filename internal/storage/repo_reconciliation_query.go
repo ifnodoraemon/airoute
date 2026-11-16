@@ -44,7 +44,7 @@ func supplierChannelQuery(whereClause string) string {
 		COALESCE(SUM(CASE WHEN prompt_tokens >= cached_tokens THEN prompt_tokens - cached_tokens ELSE prompt_tokens END), 0) as uncached_prm_tok,
 		COALESCE(SUM(completion_tokens), 0) as cmp_tok,
 		COALESCE(SUM(cached_tokens), 0) as cch_tok,
-		COALESCE(SUM(cost), 0.0) as tot_cost,
+		COALESCE(SUM(cost_units), 0) / 1000000000.0 as tot_cost,
 		COALESCE(AVG(duration_ms), 0) as avg_dur,
 		COALESCE(AVG(ttft_ms), 0) as avg_ttft,
 		COALESCE(SUM(completion_tokens) * 1000.0 / NULLIF(SUM(CASE WHEN completion_tokens > 0 THEN (CASE WHEN duration_ms > ttft_ms AND ttft_ms > 0 THEN duration_ms - ttft_ms ELSE duration_ms END) ELSE 0 END), 0), 0) as avg_tps,
@@ -70,7 +70,7 @@ func supplierModelQuery(whereClause string) string {
 		COALESCE(SUM(CASE WHEN prompt_tokens >= cached_tokens THEN prompt_tokens - cached_tokens ELSE prompt_tokens END), 0) as uncached_prm_tok,
 		COALESCE(SUM(completion_tokens), 0) as cmp_tok,
 		COALESCE(SUM(cached_tokens), 0) as cch_tok,
-		COALESCE(SUM(cost), 0.0) as tot_cost,
+		COALESCE(SUM(cost_units), 0) / 1000000000.0 as tot_cost,
 		COALESCE(AVG(duration_ms), 0) as avg_dur,
 		COALESCE(AVG(ttft_ms), 0) as avg_ttft,
 		COALESCE(SUM(completion_tokens) * 1000.0 / NULLIF(SUM(CASE WHEN completion_tokens > 0 THEN (CASE WHEN duration_ms > ttft_ms AND ttft_ms > 0 THEN duration_ms - ttft_ms ELSE duration_ms END) ELSE 0 END), 0), 0) as avg_tps

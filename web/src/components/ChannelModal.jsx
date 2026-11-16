@@ -65,14 +65,14 @@ export default function ChannelModal({
         if (e.target === e.currentTarget) guardedClose();
       }}
     >
-      <form
+      <form role="dialog" aria-modal="true" aria-labelledby="channel-modal-title-1"
         onSubmit={onSubmit}
         aria-busy={submitting}
         className="fixed inset-y-0 right-0 w-full max-w-xl bg-white dark:bg-[#191B1F] border-l border-[#E4E6E9] dark:border-[#2C3038] shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-200"
       >
         <div className="p-6 border-b border-[#E4E6E9] dark:border-[#2C3038] flex items-center justify-between">
           <div>
-            <h3 className="font-semibold text-base text-[#202124] dark:text-[#F1F2F4] tracking-tight">
+            <h3 id="channel-modal-title-1" className="font-semibold text-base text-[#202124] dark:text-[#F1F2F4] tracking-tight">
               {editingChannelId ? (isZh ? '编辑服务商' : 'Edit Upstream Provider') : (isZh ? '接入服务商' : 'Connect New Provider')}
             </h3>
           </div>

@@ -80,7 +80,7 @@ func TestClientAbortDuringDispatchBillsEstimatedPrompt(t *testing.T) {
 	var source, channel string
 	deadline := time.Now().Add(3 * time.Second)
 	for {
-		err := db.QueryRow(`SELECT status_code, prompt_tokens, cost, COALESCE(usage_source,''), COALESCE(channel,'') FROM usage_logs ORDER BY id DESC LIMIT 1`).
+		err := db.QueryRow(`SELECT status_code, prompt_tokens, cost_units / 1000000000.0, COALESCE(usage_source,''), COALESCE(channel,'') FROM usage_logs ORDER BY id DESC LIMIT 1`).
 			Scan(&status, &prompt, &cost, &source, &channel)
 		if err == nil {
 			break

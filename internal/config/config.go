@@ -130,7 +130,7 @@ func DefaultConfig() *Config {
 			Password: "admin123",
 		},
 		Auth: AuthConfig{
-			AllowRegistration:        boolPtr(true),
+			AllowRegistration:        boolPtr(false),
 			RequireEmailVerification: boolPtr(false),
 			// Trial credit is opt-in: a gateway that silently grants free credit to
 			// every new account is a money leak operators did not configure.

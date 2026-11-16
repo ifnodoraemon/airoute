@@ -33,7 +33,8 @@ export default function ModelThinkingCapabilities({
   const canDisable = thinking.can_disable ?? resolved?.off ?? false;
   const efforts = selectableThinkingEfforts(thinking.efforts ?? resolved?.efforts);
   const supported = selectableThinkingEfforts(resolved?.supported_efforts ?? resolved?.efforts);
-  const levels = [...new Set([...THINKING_EFFORTS, ...supported, ...efforts])];
+  const known = Boolean(resolved?.known) || efforts.length > 0;
+  const levels = known ? [...new Set([...THINKING_EFFORTS, ...supported, ...efforts])] : [];
   const update = (patch) =>
     onChange({
       ...channel,

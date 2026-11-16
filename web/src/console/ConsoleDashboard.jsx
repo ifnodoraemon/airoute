@@ -7,7 +7,7 @@ export default function ConsoleDashboard() {
   adminUser, batchTesting, channelLatencies, channels, dashboardSelectedKey, fetchData, fetchRecentLogs,
   handleBatchTest, handleTestChannel, keys, lang, logs, recentLogs, resetOffset, setActiveLogDetail,
   setCurrentTab, setDashboardSelectedKey, setLogFilters, setShowChannelModal, setShowTopologyModal, showToast,
-  stats, testingId
+  stats, testingId, models, setShowOnboardingModal
 } = useConsoleContext();
   return (
     <DashboardView
@@ -33,6 +33,8 @@ export default function ConsoleDashboard() {
       adminUser={adminUser}
       adminFetch={apiFetch}
       keys={keys}
+      models={models}
+      onOpenOnboarding={() => setShowOnboardingModal(true)}
       selectedKey={dashboardSelectedKey}
       onSelectKey={setDashboardSelectedKey}
       onOpenTopology={() => setShowTopologyModal(true)}

@@ -204,12 +204,10 @@ func convertOpenAIToAnthropic(req *model.ChatCompletionRequest, channel *model.C
 }
 
 // anthropicToolChoice maps an OpenAI tool_choice value onto the Anthropic
-// tool_choice schema.
-//
-// Anthropic has no way to express "none" (the caller should omit the tools), so
-// that value and anything unrecognised are dropped with a warning instead of
-// being silently coerced to auto: a client that pinned a function must not get a
-// free choice back without noticing (F-04).
+// tool_choice schema. "none" maps to Anthropic's {"type":"none"} so the model
+// does not call tools; unrecognised values are dropped with a warning rather
+// than silently coerced to auto (a client that pinned a function must not get a
+// free choice back without noticing, F-04).
 func anthropicToolChoice(raw any) any {
 	switch choice := raw.(type) {
 	case nil:
@@ -223,8 +221,7 @@ func anthropicToolChoice(raw any) any {
 		case "required", "any":
 			return map[string]any{"type": "any"}
 		case "none":
-			slog.Warn("openai tool_choice=\"none\" has no Anthropic equivalent; omitting tool_choice")
-			return nil
+			return map[string]any{"type": "none"}
 		}
 		slog.Warn("unsupported openai tool_choice string for Anthropic; omitting tool_choice", "value", choice)
 		return nil
@@ -244,8 +241,7 @@ func anthropicToolChoice(raw any) any {
 		case "any", "required":
 			return map[string]any{"type": "any"}
 		case "none":
-			slog.Warn("openai tool_choice=\"none\" has no Anthropic equivalent; omitting tool_choice")
-			return nil
+			return map[string]any{"type": "none"}
 		}
 	}
 	slog.Warn("unsupported openai tool_choice value for Anthropic; omitting tool_choice", "value", raw)

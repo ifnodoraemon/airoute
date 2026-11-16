@@ -42,9 +42,10 @@ func cacheTokenDetails(cacheReadTokens, cacheCreationTokens int) *model.PromptTo
 }
 
 // geminiUsageToModel converts Gemini usageMetadata into canonical usage.
-// Gemini's promptTokenCount already includes cached content, so it is used as-is.
-// The Gemini API reports no cache-write count, so CacheCreationTokens stays 0
-// rather than being invented.
+// Gemini's promptTokenCount already includes cached content; toolUsePromptTokenCount
+// (Gemini 3 tool / code-execution prompts) is reported separately and added in so
+// that part of the prompt is not under-billed. The Gemini API reports no cache-write
+// count, so CacheCreationTokens stays 0 rather than being invented.
 //
 // Completion tokens are candidatesTokenCount PLUS thoughtsTokenCount: on thinking
 // models the candidates count covers only the visible answer while the upstream
@@ -57,7 +58,7 @@ func geminiUsageToModel(u *GeminiUsageMetadata) *model.Usage {
 		return nil
 	}
 	usage := &model.Usage{
-		PromptTokens:     u.PromptTokenCount,
+		PromptTokens:     u.PromptTokenCount + u.ToolUsePromptTokenCount,
 		CompletionTokens: u.CandidatesTokenCount + u.ThoughtsTokenCount,
 		TotalTokens:      u.TotalTokenCount,
 	}

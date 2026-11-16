@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/config"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"github.com/ifnodoraemon/airoute/internal/router"
 	"github.com/ifnodoraemon/airoute/internal/storage"
 )
@@ -149,20 +150,21 @@ func ResolvePublicBaseURL(c *gin.Context) string {
 	}
 
 	if c != nil && c.Request != nil {
-		proto := c.GetHeader("X-Forwarded-Proto")
-		if proto == "" {
-			if c.Request.TLS != nil {
-				proto = "https"
-			} else {
-				proto = "http"
+		proto := "http"
+		if c.Request.TLS != nil {
+			proto = "https"
+		}
+		host := c.Request.Host
+		// Forwarded headers are authoritative only from a configured trusted
+		// proxy; otherwise a client could spoof the OAuth redirect base URL.
+		if fwdProto, ok := middleware.TrustedForwardedProto(c); ok {
+			if fwdProto != "" {
+				proto = fwdProto
+			}
+			if fwdHost := c.GetHeader("X-Forwarded-Host"); fwdHost != "" {
+				host = fwdHost
 			}
 		}
-
-		host := c.GetHeader("X-Forwarded-Host")
-		if host == "" {
-			host = c.Request.Host
-		}
-
 		if host != "" {
 			return fmt.Sprintf("%s://%s", proto, host)
 		}

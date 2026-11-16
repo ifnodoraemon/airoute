@@ -229,7 +229,7 @@ print(message.content[0].text)
         if (e.target === e.currentTarget) requestClose();
       }}
     >
-      <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl max-w-2xl w-full p-6 sm:p-7 shadow-2xl relative space-y-6">
+      <div role="dialog" aria-modal="true" aria-labelledby="onboarding-modal-title-1" className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl max-w-2xl w-full p-6 sm:p-7 shadow-2xl relative space-y-6">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div className="flex items-center space-x-3">
@@ -237,7 +237,7 @@ print(message.content[0].text)
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-[#202124] dark:text-[#F1F2F4]">
+              <h2 id="onboarding-modal-title-1" className="text-base font-semibold text-[#202124] dark:text-[#F1F2F4]">
                 {isZh ? '开发者极速上手接入向导' : 'Developer Onboarding Wizard'}
               </h2>
               <p className="text-xs text-[#656B75] dark:text-[#A1A7B0] mt-0.5">

@@ -48,7 +48,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
         if (e.target === e.currentTarget) requestClose();
       }}
     >
-      <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
+      <div role="dialog" aria-modal="true" aria-labelledby="login-modal-title-1" className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#E4E6E9] dark:border-[#2C3038] pb-3">
           <div className="flex items-center space-x-2.5">
@@ -56,7 +56,7 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, lang = 'zh
               <Key className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-semibold text-base text-[#202124] dark:text-[#F1F2F4] tracking-tight">
+              <h3 id="login-modal-title-1" className="font-semibold text-base text-[#202124] dark:text-[#F1F2F4] tracking-tight">
                 {isZh ? 'Airoute 统一门户' : 'Airoute Portal'}
               </h3>
               <p className="ui-meta">{isZh ? '统一身份验证与额度管理' : 'Unified Auth & Quota Management'}</p>

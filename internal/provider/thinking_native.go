@@ -16,6 +16,8 @@ func prepareNativeThinking(req *model.ChatCompletionRequest, original *model.Nat
 	delete(body, "thinking_control")
 	var err error
 	switch original.Protocol {
+	case model.NativeChat:
+		err = prepareNativeChatThinking(body, req)
 	case model.NativeGemini:
 		err = prepareNativeGeminiThinking(body, req.PreparedThinking)
 	case model.NativeMessages:
@@ -107,4 +109,52 @@ func prepareNativeResponsesThinking(body map[string]json.RawMessage, prepared *m
 		delete(body, "top_p")
 	}
 	return nil
+}
+
+// prepareNativeChatThinking patches an OpenAI-compatible native chat body with
+// the route's thinking policy so the request keeps passthrough fidelity (signed
+// history, vendor fields) instead of being rebuilt by conversion. applyThinkingWire
+// already computed the wire parameters into req.Extra; only the thinking keys are
+// merged so unrelated native fields keep their original JSON representation.
+func prepareNativeChatThinking(body map[string]json.RawMessage, req *model.ChatCompletionRequest) error {
+	for _, key := range []string{"reasoning_effort", "thinking", "enable_thinking", "thinking_budget", "max_completion_tokens"} {
+		if v, ok := req.Extra[key]; ok {
+			body[key] = v
+		}
+	}
+	if v, ok := req.Extra["chat_template_kwargs"]; ok {
+		body["chat_template_kwargs"] = mergeNativeJSONObject(body["chat_template_kwargs"], v)
+	}
+	// max_tokens and max_completion_tokens are mutually exclusive upstream; the
+	// openai wire moves the limit into max_completion_tokens for reasoning models.
+	if _, ok := body["max_completion_tokens"]; ok {
+		delete(body, "max_tokens")
+	}
+	if req.PreparedThinking.Control.Mode == "on" && req.PreparedThinking.Profile.Wire == "openai" {
+		delete(body, "temperature")
+		delete(body, "top_p")
+		delete(body, "presence_penalty")
+		delete(body, "frequency_penalty")
+	}
+	return nil
+}
+
+// mergeNativeJSONObject overlays patch onto base, preserving base keys the patch
+// does not set. A non-object base is replaced by the patch.
+func mergeNativeJSONObject(base, patch json.RawMessage) json.RawMessage {
+	var baseMap, patchMap map[string]json.RawMessage
+	if json.Unmarshal(patch, &patchMap) != nil {
+		return patch
+	}
+	if json.Unmarshal(base, &baseMap) != nil || baseMap == nil {
+		return patch
+	}
+	for k, v := range patchMap {
+		baseMap[k] = v
+	}
+	out, err := json.Marshal(baseMap)
+	if err != nil {
+		return patch
+	}
+	return out
 }

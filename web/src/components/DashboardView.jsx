@@ -11,6 +11,7 @@ import DashboardTrend from './DashboardTrend';
 import DashboardWorkloads from './DashboardWorkloads';
 import DashboardUpstreams from './DashboardUpstreams';
 import DashboardTraffic from './DashboardTraffic';
+import SetupChecklist from './SetupChecklist';
 
 // The live endpoint is in-memory and cheap; 2s keeps the badge honest during a
 // stream without hammering the gateway.
@@ -24,6 +25,7 @@ export default function DashboardView({
   channels = [],
   logs: overviewLogs = [],
   keys = [],
+  models = [],
   channelLatencies = {},
   testingId,
   batchTesting,
@@ -38,6 +40,7 @@ export default function DashboardView({
   setActiveLogDetail,
   adminUser,
   onOpenTopology,
+  onOpenOnboarding,
   adminFetch,
   selectedKey: propSelectedKey,
   onSelectKey,
@@ -97,6 +100,10 @@ export default function DashboardView({
       }} />
 
       {/* 2. NEEDS ATTENTION — what needs action, shown before the totals */}
+      {adminUser?.role === 'admin' && <SetupChecklist {...{
+        channels, keys, models, stats: overviewStats, attention, isZh, setCurrentTab,
+        setShowChannelModal, onOpenOnboarding, onNavigateToErrors,
+      }} />}
       <DashboardAttention {...{
         attention, attentionItems, attentionTones, channels, dismissedAttentions, handleDismissAttention, isZh
       }} />

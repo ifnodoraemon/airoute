@@ -20,7 +20,7 @@ import (
 // must stop instead of fanning out to the next channel: a client cancellation, or
 // a client payload error that would fail identically everywhere. A node-specific
 // 404 falls through to the next candidate channel, like any other channel failure.
-func (d *Dispatcher) failStreamAttempt(ctx context.Context, req *model.ChatCompletionRequest, ch *model.ChannelConfig, attempted []string, err error, logMsg string) error {
+func (d *Dispatcher) failStreamAttempt(ctx context.Context, req *model.ChatCompletionRequest, ch *model.ChannelConfig, attempted []string, err error, logMsg string, breakerGen uint64) error {
 	if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
 		d.circuitBreaker.AbortCanary(ch.Name)
 		return newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
@@ -33,7 +33,7 @@ func (d *Dispatcher) failStreamAttempt(ctx context.Context, req *model.ChatCompl
 		d.circuitBreaker.AbortCanary(ch.Name)
 		return err
 	} else if provider.IsChannelFailure(err) {
-		d.circuitBreaker.RecordFailure(ch.Name)
+		d.circuitBreaker.RecordFailureGen(ch.Name, breakerGen)
 	} else {
 		d.circuitBreaker.AbortCanary(ch.Name)
 	}
@@ -86,7 +86,8 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			continue
 		}
 
-		if !d.circuitBreaker.CanExecute(ch.Name) {
+		admitted, breakerGen := d.circuitBreaker.CanExecuteGen(ch.Name)
+		if !admitted {
 			telemetry.WarnLogger(routerLog(ctx), "breaker-open-stream:"+ch.Name, 30*time.Second,
 				"circuit breaker is OPEN, bypassing dead upstream stream",
 				"channel", ch.Name, "attempt", i+1)
@@ -126,7 +127,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		streamChan, err := prov.ChatCompleteStream(attemptCtx, callReq, ch)
 		if err != nil {
 			attemptCancel()
-			if stopErr := d.failStreamAttempt(ctx, req, ch, attempted, err, "stream connection failed, trying next channel"); stopErr != nil {
+			if stopErr := d.failStreamAttempt(ctx, req, ch, attempted, err, "stream connection failed, trying next channel", breakerGen); stopErr != nil {
 				return nil, stopErr
 			}
 			lastErr = err
@@ -185,7 +186,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		timer.Stop()
 		if firstErr != nil {
 			attemptCancel()
-			if stopErr := d.failStreamAttempt(ctx, req, ch, attempted, firstErr, "channel failed before first valid token, falling back"); stopErr != nil {
+			if stopErr := d.failStreamAttempt(ctx, req, ch, attempted, firstErr, "channel failed before first valid token, falling back", breakerGen); stopErr != nil {
 				return nil, stopErr
 			}
 			lastErr = firstErr
@@ -193,7 +194,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			continue
 		}
 
-		d.circuitBreaker.RecordSuccess(ch.Name)
+		d.circuitBreaker.RecordSuccessGen(ch.Name, breakerGen)
 		d.rememberSessionChannel(ctx, req.Model, ch.Name)
 		trail := formatChannelTrail(ctx, attempted, ch.Name)
 		outChan := make(chan *model.StreamEvent, 64)

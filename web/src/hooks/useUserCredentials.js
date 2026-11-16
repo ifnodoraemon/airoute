@@ -1,4 +1,5 @@
 import { apiMutation } from '../api/mutation';
+import { requestConfirm } from '../lib/confirmBus';
 
 export default function useUserCredentials({
   adminFetch, adminUser, fetchUsers, isSelfPasswordReset, isZh, resetOldPassword, resetPassword,
@@ -55,7 +56,7 @@ export default function useUserCredentials({
       showToast(isZh ? '无法删除当前正在登录的账号' : 'Cannot delete currently logged in account', 'warning');
       return;
     }
-    if (!window.confirm(isZh ? `确定删除用户 [${targetUsername}] 吗？登录和密钥将立即失效，账务记录会保留，该用户名不能重新注册。` : `Delete user [${targetUsername}]? Login and API keys will be revoked. Billing records and the username will be retained.`)) {
+    if (!(await requestConfirm({ title: isZh ? '删除用户' : 'Delete user', description: isZh ? `确定删除用户 [${targetUsername}] 吗？登录和密钥将立即失效，账务记录会保留，该用户名不能重新注册。请输入用户名以确认。` : `Delete user [${targetUsername}]? Login and API keys will be revoked. Billing records and the username will be retained. Type the username to confirm.`, confirmLabel: isZh ? '删除用户' : 'Delete user', requireText: targetUsername }))) {
       return;
     }
 

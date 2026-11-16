@@ -2,6 +2,7 @@ import useChannelSave from './useChannelSave';
 import useChannelProbe from './useChannelProbe';
 import useChannelForm from './useChannelForm';
 import { apiMutation } from '../api/mutation';
+import { requestConfirm } from '../lib/confirmBus';
 // The channel (provider) domain: the create/edit form, the probe, the per-row and
 // batch operations, and the latency table they fill.
 //
@@ -144,7 +145,7 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
 
   // Handle Channel Deletion
   const handleDeleteChannel = useCallback(async (id) => {
-    if (!window.confirm(isZh ? '确认注销该模型提供商 (Provider)？' : 'Are you sure you want to remove this Provider?')) return;
+    if (!(await requestConfirm({ title: isZh ? '注销模型提供商' : 'Remove provider', description: isZh ? '确认注销该模型提供商 (Provider)？' : 'Are you sure you want to remove this Provider?' }))) return;
     try {
       const result = await apiJSON(`/api/v1/admin/channels/${id}`, { method: 'DELETE' });
       showToast(result.warning || (isZh ? 'Provider 已注销，内存已更新' : 'Provider removed, memory updated'), result.warning ? 'warning' : 'info');
@@ -182,7 +183,7 @@ export function useChannelActions({ channels = [], showToast, isZh, refresh }) {
 
   const handleBatchDeleteChannels = useCallback(async () => {
     if (selectedChannelIds.length === 0) return;
-    if (!window.confirm(isZh ? `确认批量删除选中的 ${selectedChannelIds.length} 个服务商渠道？` : `Confirm delete selected ${selectedChannelIds.length} channels?`)) return;
+    if (!(await requestConfirm({ title: isZh ? '批量删除渠道' : 'Delete channels', description: isZh ? `确认批量删除选中的 ${selectedChannelIds.length} 个服务商渠道？` : `Confirm delete selected ${selectedChannelIds.length} channels?` }))) return;
     try {
       const { data, ok: requestSucceeded } = await apiMutation('/api/v1/admin/channels/batch-delete', 'POST', { ids: selectedChannelIds }, apiFetch);
 

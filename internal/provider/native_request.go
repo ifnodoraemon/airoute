@@ -16,6 +16,26 @@ func nativeMatches(req *model.ChatCompletionRequest, channel *model.ChannelConfi
 	if req.Native == nil || req.Native.TranslateOnly || req.Native.Protocol != protocol {
 		return false
 	}
+	// Messages/Gemini native wires follow the upstream's own protocol, never an
+	// inbound capability token: "anthropic_messages" advertises /v1/messages
+	// service, not an Anthropic-speaking upstream (mirrors ChatProviderType L1
+	// and router.IsAnthropicWireChannel). Deciding these before the empty-list
+	// shortcut also keeps an unknown-protocol OpenAI channel from mis-forwarding
+	// Anthropic JSON to <base>/v1/messages.
+	switch protocol {
+	case model.NativeMessages:
+		if channel.Type == model.ProviderAnthropic {
+			return true
+		}
+		for _, capability := range channel.Protocols {
+			if capability == "anthropic_native" {
+				return true
+			}
+		}
+		return false
+	case model.NativeGemini:
+		return model.IsGeminiProvider(channel.Type)
+	}
 	// An explicit capability list is already evidence that an omitted protocol
 	// is unavailable. An empty list is unknown, so try the native endpoint first.
 	if len(channel.Protocols) == 0 {
@@ -31,12 +51,6 @@ func nativeMatches(req *model.ChatCompletionRequest, channel *model.ChannelConfi
 			if capability == "*" || capability == "response" || capability == "responses" || capability == "openai_response" || capability == "openai_responses" {
 				return true
 			}
-		case model.NativeMessages:
-			if channel.Type == model.ProviderAnthropic || capability == "*" || capability == "messages" || capability == "anthropic_messages" || capability == "anthropic_native" {
-				return true
-			}
-		case model.NativeGemini:
-			return model.IsGeminiProvider(channel.Type)
 		}
 	}
 	return false

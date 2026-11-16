@@ -1,4 +1,5 @@
 import { toCSV } from '../config';
+import ErrorState from './ErrorState';
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   DollarSign,
@@ -29,6 +30,7 @@ export default function SupplierReconciliationView({
   const isZh = lang === 'zh';
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState(null);
+  const [error, setError] = useState('');
   const [timePreset, setTimePreset] = useState('all'); // 'today' | 'yesterday' | '7d' | 'month' | 'all' | 'custom'
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
@@ -97,17 +99,18 @@ export default function SupplierReconciliationView({
       if (!isCurrent()) return;
       if (res.ok && data.code === 0) {
         setReport(data.data);
+        setError('');
       } else {
-        showToast(data.error || (isZh ? '获取对账数据失败' : 'Failed to fetch reconciliation'), 'warning');
+        setError(data.error || (isZh ? '获取对账数据失败' : 'Failed to fetch reconciliation'));
       }
     } catch (err) {
       if (controller.signal.aborted || seq !== requestSeqRef.current) return;
-      showToast((isZh ? '网络请求异常: ' : 'Network error: ') + err.message, 'warning');
+      setError((isZh ? '网络请求异常: ' : 'Network error: ') + err.message);
     } finally {
       if (seq === requestSeqRef.current) setLoading(false);
       if (requestAbortRef.current === controller) requestAbortRef.current = null;
     }
-  }, [adminFetch, showToast, isZh, getTimeRangeDates, timePreset, channelFilter, modelFilter]);
+  }, [adminFetch, isZh, getTimeRangeDates, timePreset, channelFilter, modelFilter]);
 
   useEffect(() => {
     fetchReconciliation();
@@ -287,6 +290,10 @@ export default function SupplierReconciliationView({
           </button>
         </div>
       </div>
+
+      {error && !loading && (
+        <ErrorState message={error} onRetry={fetchReconciliation} isZh={isZh} />
+      )}
 
       {/* 2. Top Metric Cards (6-Card Clean FinOps Grid) */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">

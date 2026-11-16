@@ -201,6 +201,7 @@ func (h *Handler) handleChatStream(c *gin.Context, reqCtx context.Context, req *
 					"error": gin.H{
 						"message": sanitizeErrorMessage(event.Err),
 						"type":    "stream_error",
+						"code":    "stream_error",
 					},
 				})
 				fmt.Fprintf(w, "data: %s\n\n", errJSON)

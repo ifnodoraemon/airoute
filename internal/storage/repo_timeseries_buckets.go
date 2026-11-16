@@ -56,7 +56,7 @@ func (r *Repository) readTimeSeriesBuckets(window timeSeriesWindow, buckets []*T
 	aggQuery := fmt.Sprintf(`SELECT (%d - 1) - ((? - %s) / ?) AS bucket_idx,
 		COUNT(*) AS requests,
 		COALESCE(SUM(total_tokens), 0) AS tokens,
-		COALESCE(SUM(cost), 0.0) AS costs,
+		COALESCE(SUM(cost_units), 0) / 1000000000.0 AS costs,
 		COALESCE(SUM(CASE WHEN COALESCE(status_code, 200) >= 400 OR COALESCE(status_code, 200) < 200 OR COALESCE(error_message, '') <> '' THEN 1 ELSE 0 END), 0) AS errors,
 		COALESCE(SUM(CASE WHEN ttft_ms > 0 THEN 1 ELSE 0 END), 0) AS ttft_samples,
 		COALESCE(SUM(CASE WHEN ttft_ms > 0 THEN ttft_ms ELSE 0 END), 0) AS ttft_sum

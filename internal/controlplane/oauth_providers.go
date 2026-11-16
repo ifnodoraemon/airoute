@@ -68,12 +68,50 @@ func exchangeGitHubOAuth(code, clientID, clientSecret string) (string, string, e
 		return "", "", fmt.Errorf("invalid GitHub identity")
 	}
 	username := fmt.Sprintf("%d", ghUser.ID)
-	email := ghUser.Email
+	// Prefer the primary verified email: the /user public email may be unverified,
+	// which would let an attacker register a victim's address.
+	email := fetchGitHubVerifiedEmail(client, tokenResp.AccessToken)
+	if email == "" {
+		email = ghUser.Email
+	}
 	if email == "" {
 		email = fmt.Sprintf("%s@github.oauth.local", username)
 	}
 
 	return username, email, nil
+}
+
+// fetchGitHubVerifiedEmail returns the account's primary verified email from
+// /user/emails, or "" when none is available (the caller then falls back).
+func fetchGitHubVerifiedEmail(client *http.Client, token string) string {
+	req, err := http.NewRequest("GET", "https://api.github.com/user/emails", nil)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("User-Agent", "Airoute-Gateway")
+	resp, err := client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	var emails []struct {
+		Email    string `json:"email"`
+		Primary  bool   `json:"primary"`
+		Verified bool   `json:"verified"`
+	}
+	if json.NewDecoder(resp.Body).Decode(&emails) != nil {
+		return ""
+	}
+	for _, e := range emails {
+		if e.Primary && e.Verified && e.Email != "" {
+			return e.Email
+		}
+	}
+	return ""
 }
 
 // exchangeGoogleOAuth exchanges an authorization code for Google user profile info.

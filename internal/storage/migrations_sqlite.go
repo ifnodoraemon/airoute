@@ -544,6 +544,7 @@ func (db *DB) migrate() error {
 		{Version: 52, Name: "separate_channel_trails", Up: separateChannelTrails},
 		{Version: 53, Name: "announcements_and_notifications", Up: createNotifications},
 		{Version: 54, Name: "billing_reservations", Up: createBillingReservations},
+		{Version: 55, Name: "drop_float_money_mirrors", Up: dropFloatMoneyColumns},
 	}
 	return db.runMigrations(migrations)
 }

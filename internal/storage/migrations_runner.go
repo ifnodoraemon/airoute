@@ -88,10 +88,11 @@ func (db *DB) runMigrations(migrations []Migration) error {
 				// take its lock).
 				//
 				// The invariant this relies on is therefore: a migration must never
-				// assume an earlier version was applied. Today v43 (opt-in table
-				// partitioning) is the only migration that can defer, and v44/v45 do
-				// not depend on it - keep it that way, or make the dependency explicit
-				// by deferring the dependent migration as well.
+				// assume an earlier version was applied. The migrations that can
+				// defer are v27 (email unique), v34 (drop nano mirrors), v41 (billing
+				// scale), v43 (opt-in table partitioning) and v44 (SQLite); later
+				// migrations must not depend on them - keep it that way, or make the
+				// dependency explicit by deferring the dependent migration as well.
 				continue
 			}
 			return fmt.Errorf("migration %d (%s) failed: %w", m.Version, m.Name, err)

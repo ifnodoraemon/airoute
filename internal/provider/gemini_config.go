@@ -12,6 +12,11 @@ func validateGeminiChatOptions(req *model.ChatCompletionRequest) error {
 	for name := range req.Extra {
 		switch name {
 		case "response_format", "max_completion_tokens", "seed", "reasoning_effort":
+			// Translated into Gemini generationConfig below.
+		case "metadata", "service_tier", "store", "user":
+			// OpenAI tracking/storage hints with no generation semantics: safe to
+			// ignore rather than disqualifying an otherwise-capable Gemini channel
+			// (a Gemini-only model would otherwise 400 on a harmless extra field).
 		default:
 			return &UnsupportedTranslationError{Reason: fmt.Sprintf("Chat option %q has no supported Gemini translation", name)}
 		}

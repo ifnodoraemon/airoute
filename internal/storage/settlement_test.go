@@ -167,7 +167,7 @@ func TestReconcilerRepairsAuditRowsWithoutSettlement(t *testing.T) {
 	if _, err := r.db.Exec(`UPDATE api_keys SET used_cost_units = ? WHERE key = ?`, ToUnits(4), key.Key); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.db.Exec(`UPDATE users SET balance_units = ?, balance = 6 WHERE id = ?`, ToUnits(6), u.ID); err != nil {
+	if _, err := r.db.Exec(`UPDATE users SET balance_units = ? WHERE id = ?`, ToUnits(6), u.ID); err != nil {
 		t.Fatal(err)
 	}
 

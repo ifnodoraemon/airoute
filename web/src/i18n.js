@@ -2,9 +2,11 @@
 // Clean, professional, product-first terminology for both Chinese and English
 
 import { createContext } from 'react';
+import { shared } from './locales/shared';
 
 export const translations = {
   zh: {
+    common: shared.zh,
     // Top Header & User
     langToggle: 'EN',
 
@@ -89,6 +91,7 @@ export const translations = {
   },
 
   en: {
+    common: shared.en,
     // Top Header & User
     langToggle: '中文',
 

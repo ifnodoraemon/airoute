@@ -211,7 +211,11 @@ func publishSession(c *gin.Context, sID string) {
 	// HttpOnly: the value is an affinity key, scripts have no reason to read it.
 	// Secure follows the request scheme so the cookie is not sent in clear text
 	// once the gateway is fronted by TLS.
-	c.SetCookie(llmSessionCookie, sID, 1800, "/", "", c.Request != nil && c.Request.TLS != nil, true)
+	secure := c.Request != nil && c.Request.TLS != nil
+	if proto, ok := middleware.TrustedForwardedProto(c); ok && strings.EqualFold(proto, "https") {
+		secure = true
+	}
+	c.SetCookie(llmSessionCookie, sID, 1800, "/", "", secure, true)
 	// A12: the trace archiver reads the session from the gin context; it was
 	// previously only placed into the dispatch context, so every trace row had an
 	// empty session_id.

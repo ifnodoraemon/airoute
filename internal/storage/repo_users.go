@@ -16,25 +16,18 @@ type UserRecord struct {
 	PasswordHash string    `json:"-"`
 	Role         string    `json:"role"`          // "admin" or "user"
 	Status       string    `json:"status"`        // "active" or "locked"
-	Balance      float64   `json:"balance"`       // Wallet balance in CNY (legacy float mirror)
+	Balance      float64   `json:"balance"`       // Wallet balance in CNY (derived for API display)
 	BalanceUnits int64     `json:"balance_units"` // Wallet balance in 1e-9 CNY (authoritative integer ledger)
 	GroupName    string    `json:"group_name"`    // "default", "vip", "enterprise"
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-// resolveBalanceUnits prefers the integer ledger when it carries a non-zero value, or
-// when the legacy float and the mirror disagree because the mirror was updated
-// more recently.
+// resolveBalanceUnits derives the public balance from the integer ledger.
 func (u *UserRecord) resolveBalanceUnits() {
-	if u == nil {
-		return
-	}
-	if u.BalanceUnits != 0 || u.Balance == 0 {
+	if u != nil {
 		u.Balance = FromUnits(u.BalanceUnits)
-		return
 	}
-	u.BalanceUnits = ToUnits(u.Balance)
 }
 
 // GetUserByUsername resolves a canonical account identity, never an email alias.
@@ -98,7 +91,7 @@ func (r *Repository) GetUserByEmail(email string) (*UserRecord, error) {
 
 // ListUsers returns all registered users without password hashes.
 func (r *Repository) ListUsers() ([]*UserRecord, error) {
-	rows, err := r.db.Query(`SELECT id, username, COALESCE(email, ''), COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance, 0.0), COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE status <> 'deleted' ORDER BY id ASC`)
+	rows, err := r.db.Query(`SELECT id, username, COALESCE(email, ''), COALESCE(role, 'user'), COALESCE(status, 'active'), COALESCE(balance_units, 0) / 1000000000.0, COALESCE(balance_units, 0), COALESCE(group_name, 'default'), created_at, updated_at FROM users WHERE status <> 'deleted' ORDER BY id ASC`)
 	if err != nil {
 		return nil, err
 	}

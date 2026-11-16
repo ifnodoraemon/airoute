@@ -84,7 +84,7 @@ func (h *MultimodalHandler) dispatchAndTransform(c *gin.Context, upReq *router.U
 			return
 		}
 		recordFailedRequestWithError(c, sessionID, upReq.Model, time.Since(start), http.StatusBadGateway, err)
-		c.JSON(http.StatusBadGateway, gin.H{"error": sanitizeErrorMessage(err)})
+		c.JSON(http.StatusBadGateway, gin.H{"error": gin.H{"message": sanitizeErrorMessage(err), "type": "upstream_error", "code": "upstream_error"}})
 		return
 	}
 	defer resp.Stream.Close()
@@ -190,5 +190,8 @@ func (h *MultimodalHandler) HandleImageGenerations(c *gin.Context) {
 		Model:         req.Model,
 		Protocol:      "images",
 		BillableUnits: max(1, req.N),
+		// Generation is non-idempotent and billed: never replay to another channel
+		// after the upstream may have accepted the request (duplicate paid task).
+		NoRetry: true,
 	}, sessionID)
 }

@@ -1,4 +1,5 @@
 import { apiMutation } from '../api/mutation';
+import { requestConfirm } from '../lib/confirmBus';
 import { copyToClipboard } from '../config';
 
 export default function useWalletActions({
@@ -110,7 +111,7 @@ export default function useWalletActions({
   };
 
   const handleDeleteRedemption = async (id) => {
-    if (!window.confirm(isZh ? '确认删除该兑换卡记录吗？已删除后将不可兑换。' : 'Confirm delete this gift card? It cannot be redeemed once deleted.')) return;
+    if (!(await requestConfirm({ title: isZh ? '删除兑换卡' : 'Delete gift card', description: isZh ? '确认删除该兑换卡记录吗？已删除后将不可兑换。' : 'Confirm delete this gift card? It cannot be redeemed once deleted.' }))) return;
     try {
       const { data, ok: requestSucceeded } = await apiMutation(`/api/v1/admin/redemptions/${id}`, 'DELETE', undefined, adminFetch);
 

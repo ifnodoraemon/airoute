@@ -20,11 +20,26 @@ describe('apiMutation', () => {
     expect(fetcher).toHaveBeenCalledWith('/keys/1', { method: 'DELETE' });
   });
 
-  it.each(['network', 'json'])('propagates %s failures for the original caller to handle', async (kind) => {
-    const error = new Error(kind);
-    const fetcher = kind === 'network'
-      ? vi.fn(async () => { throw error; })
-      : vi.fn(async () => ({ json: async () => { throw error; } }));
+  it('propagates network failures for the original caller to handle', async () => {
+    const error = new Error('network');
+    const fetcher = vi.fn(async () => { throw error; });
     await expect(apiMutation('/keys', 'POST', null, fetcher)).rejects.toBe(error);
+  });
+
+  it('falls back to the HTTP status on a non-JSON body instead of throwing', async () => {
+    const response = { ok: false, status: 502, statusText: 'Bad Gateway', json: async () => { throw new Error('json'); } };
+    const fetcher = vi.fn(async () => response);
+    const result = await apiMutation('/keys', 'POST', null, fetcher);
+    expect(result.ok).toBe(false);
+    expect(result.data.code).toBe(502);
+    expect(result.data.message).toBe('Bad Gateway');
+  });
+
+  it('treats an empty success body (204) as a successful mutation', async () => {
+    const response = { ok: true, status: 204, statusText: 'No Content', json: async () => { throw new Error('json'); } };
+    const fetcher = vi.fn(async () => response);
+    const result = await apiMutation('/keys/1', 'DELETE', undefined, fetcher);
+    expect(result.ok).toBe(true);
+    expect(result.data.code).toBe(0);
   });
 });

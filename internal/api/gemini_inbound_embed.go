@@ -74,7 +74,7 @@ func (h *Handler) handleGeminiEmbedContent(c *gin.Context, modelName string) {
 	if err != nil {
 		statusCode, _, _, _ := resolveUpstreamFailureStatus(err)
 		recordFailedRequestWithError(c, sessionID, modelName, time.Since(start), statusCode, err)
-		RespondGeminiError(c, statusCode, sanitizeErrorMessage(err), geminiErrorStatus(statusCode))
+		respondGeminiUpstreamError(c, statusCode, err)
 		return
 	}
 

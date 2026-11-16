@@ -78,8 +78,8 @@ func TestInsertUserClassifiesUniqueViolation(t *testing.T) {
 
 	// Bypass insertUser's pre-check by issuing the insert directly, simulating a
 	// concurrent registration that passed the check before the winner committed.
-	_, err := repo.db.Exec(`INSERT INTO users (username, email, password_hash, role, status, balance, balance_units, group_name, updated_at)
-		VALUES (?, ?, ?, 'user', 'active', 0, 0, 'default', CURRENT_TIMESTAMP)`,
+	_, err := repo.db.Exec(`INSERT INTO users (username, email, password_hash, role, status, balance_units, group_name, updated_at)
+		VALUES (?, ?, ?, 'user', 'active', 0, 'default', CURRENT_TIMESTAMP)`,
 		"bob-race", "BOB@example.com", "x")
 	if !isEmailConflictError(err) {
 		t.Fatalf("expected the unique index to reject the duplicate, got %v", err)

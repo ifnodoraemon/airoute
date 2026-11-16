@@ -14,12 +14,12 @@ func TestBillingReconcilePublishesDrift(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Deliberately break both mirrors: the key claims ¥5 of usage that no audit
-	// row backs, and the wallet's integer column disagrees with its float mirror.
+	// The key claims usage that no ledger entry backs. Wallet funds are read
+	// directly from integer units, without a separate floating-point mirror.
 	if _, err := r.db.Exec(`UPDATE api_keys SET used_cost_units = ? WHERE key = ?`, ToUnits(5), key.Key); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.db.Exec(`UPDATE users SET balance_units = ?, balance = 3 WHERE id = ?`, ToUnits(10), u.ID); err != nil {
+	if _, err := r.db.Exec(`UPDATE users SET balance_units = ? WHERE id = ?`, ToUnits(10), u.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -29,8 +29,8 @@ func TestBillingReconcilePublishesDrift(t *testing.T) {
 	if got, want := telemetry.GlobalMetrics.BillingLedgerDriftUnits.Load(), ToUnits(5); got != want {
 		t.Fatalf("ledger drift = %d units, want %d", got, want)
 	}
-	if got, want := telemetry.GlobalMetrics.BillingWalletDriftUnits.Load(), ToUnits(7); got != want {
-		t.Fatalf("wallet drift = %d units, want %d", got, want)
+	if got, want := telemetry.GlobalMetrics.BillingWalletTotalUnits.Load(), ToUnits(10); got != want {
+		t.Fatalf("wallet total = %d units, want %d", got, want)
 	}
 }
 
@@ -48,9 +48,7 @@ func TestBillingReconcileCleanLedgerHasNoDrift(t *testing.T) {
 	if got := telemetry.GlobalMetrics.BillingLedgerDriftUnits.Load(); got != 0 {
 		t.Fatalf("ledger drift = %d units, want 0 for a balanced ledger", got)
 	}
-	if got := telemetry.GlobalMetrics.BillingWalletDriftUnits.Load(); got != 0 {
-		t.Fatalf("wallet drift = %d units, want 0", got)
-	}
+
 }
 
 func TestBillingReconcileIntervalSetting(t *testing.T) {

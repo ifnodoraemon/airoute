@@ -154,6 +154,7 @@ func TestAuditReviewForeignCurrencyDoesNotDebitCNYAtFaceValue(t *testing.T) {
 }
 
 func TestOAuthStableSubjectAndCrossReplicaCookie(t *testing.T) {
+	t.Setenv("ALLOW_REGISTRATION", "true")
 	t.Setenv("GOOGLE_CLIENT_ID", "synthetic-client")
 	t.Setenv("GOOGLE_CLIENT_SECRET", "synthetic-secret")
 	h, repo := newSecurityTestHandler(t)

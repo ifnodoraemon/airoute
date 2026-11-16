@@ -10,14 +10,14 @@ export default function McpRegistrationModal({
         if (e.target === e.currentTarget) setAddServerModalOpen(false);
       }}
     >
-      <div className="bg-white dark:bg-[#191B1F] rounded-xl shadow-2xl border border-[#E4E6E9] dark:border-[#2C3038] max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" aria-labelledby="mcp-registration-modal-title-1" className="bg-white dark:bg-[#191B1F] rounded-xl shadow-2xl border border-[#E4E6E9] dark:border-[#2C3038] max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between pb-3 border-b border-[#E4E6E9] dark:border-[#2C3038]">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-[#355CFF] text-white rounded-lg shadow-2xs">
               <Plus className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-gray-900 dark:text-white">
+              <h3 id="mcp-registration-modal-title-1" className="text-base font-bold text-gray-900 dark:text-white">
                 {isZh ? '接入新 MCP 服务' : 'Connect New MCP Server'}
               </h3>
               <p className="text-xs text-gray-500 dark:text-gray-400">

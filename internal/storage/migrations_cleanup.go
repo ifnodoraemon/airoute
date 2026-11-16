@@ -4,7 +4,7 @@ import "fmt"
 
 // dropLegacyGovernanceObjects removes every database object that the v1.1
 // operational-governance slice left behind. That slice (organization tree,
-// budgets and alerts, the wallet ledger, supplier-cost margin reporting) was cut
+// budgets and alerts, the wallet ledger, supplier-cost margin analytics) was cut
 // on 2026-10-28: the code is gone, and keeping its tables and columns would leave
 // dead schema behind on upgraded databases, so they are dropped here.
 //
@@ -13,6 +13,10 @@ import "fmt"
 // rollup they had accumulated; an operator who still needs that data must take a
 // backup before upgrading. Fresh databases never create these objects, so for
 // them this migration is a no-op.
+//
+// The supplier quote/cost tables (supplier_costs, supplier_quotes) are NOT part
+// of this cut: they remain in active use by the procurement feature and are only
+// created/managed by their own migration.
 func dropLegacyGovernanceObjects(db *DB) error {
 	// Indexes that cover columns dropped below. Dropping them first keeps SQLite's
 	// ALTER TABLE DROP COLUMN (which refuses to remove an indexed column) working,

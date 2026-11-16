@@ -11,13 +11,13 @@ export default function WalletGenerateModal({
         if (e.target === e.currentTarget) setShowGenModal(false);
       }}
     >
-      <div className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
+      <div role="dialog" aria-modal="true" aria-labelledby="wallet-generate-modal-title-1" className="bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
         <div className="flex items-center justify-between border-b border-[#E4E6E9] dark:border-[#2C3038] pb-3">
           <div className="flex items-center space-x-2">
             <div className="w-8 h-8 rounded-lg bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] flex items-center justify-center">
               <Gift className="w-4 h-4" />
             </div>
-            <h3 className="font-semibold text-sm text-[#202124] dark:text-[#F1F2F4]">{isZh ? '批量生成额度兑换卡' : 'Batch Generate Gift Cards'}</h3>
+            <h3 id="wallet-generate-modal-title-1" className="font-semibold text-sm text-[#202124] dark:text-[#F1F2F4]">{isZh ? '批量生成额度兑换卡' : 'Batch Generate Gift Cards'}</h3>
           </div>
           <button
             onClick={() => setShowGenModal(false)}

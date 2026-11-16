@@ -1,4 +1,5 @@
 import ThinkingStatus from './ThinkingStatus';
+import { requestConfirm } from '../lib/confirmBus';
 import { useState, useMemo } from 'react';
 import {
   X,
@@ -238,7 +239,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="fixed inset-y-0 right-0 w-full max-w-xl bg-white dark:bg-[#191B1F] border-l border-[#E4E6E9] dark:border-[#2C3038] shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-200">
+      <div role="dialog" aria-modal="true" aria-labelledby="log-detail-modal-title-1" className="fixed inset-y-0 right-0 w-full max-w-xl bg-white dark:bg-[#191B1F] border-l border-[#E4E6E9] dark:border-[#2C3038] shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-200">
         {/* Header */}
         <div className="p-6 border-b border-[#E4E6E9] dark:border-[#2C3038] flex items-center justify-between">
           <div className="flex items-center space-x-3">
@@ -250,7 +251,7 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
               <Activity className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-semibold text-base text-[#202124] dark:text-[#F1F2F4] tracking-tight flex items-center space-x-2">
+              <h3 id="log-detail-modal-title-1" className="font-semibold text-base text-[#202124] dark:text-[#F1F2F4] tracking-tight flex items-center space-x-2">
                 <span>{isZh ? '请求审计详情' : 'Audit Log Inspector'}</span>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-mono font-medium ${
                   isSuccess
@@ -752,8 +753,8 @@ export default function LogDetailModal({ log, onClose, onCopy, onFilterBySession
           <div>
             {onDeleteLog && (
               <button
-                onClick={() => {
-                  if (window.confirm(isZh ? '确认删除该条审计调用日志？' : 'Are you sure you want to delete this audit log?')) {
+                onClick={async () => {
+                  if (await requestConfirm({ title: isZh ? '删除审计日志' : 'Delete audit log', description: isZh ? '确认删除该条审计调用日志？' : 'Are you sure you want to delete this audit log?' })) {
                     onDeleteLog(log.id);
                     onClose();
                   }

@@ -20,6 +20,8 @@ If no API keys are configured, the gateway operates in open bypass mode (no auth
 - **Endpoint**: `POST /v1/chat/completions`
 - **Supported Providers**: All (OpenAI, DeepSeek, vLLM, SGLang, GPUStack, Sub2API, Anthropic Claude, Google Gemini).
 
+When translating Chat images to Gemini, use a base64 data URI with an explicit supported image MIME type (`image/png`, `image/jpeg`, `image/webp`, `image/heic`, or `image/heif`). Remote `image_url` values cannot establish the actual MIME type and return `unsupported_translation` for Gemini conversion. The gateway does not download caller-supplied image URLs or guess JPEG. Native Gemini requests retain `fileData` and its caller-provided MIME type; Google's [FileData contract](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/inference#filedata) requires that type even for public HTTP URLs.
+
 #### Request Example:
 ```bash
 curl -X POST http://localhost:8080/v1/chat/completions \
@@ -363,7 +365,7 @@ All Admin APIs are under `/api/v1/admin`:
 | `DELETE`| `/api/v1/admin/keys/:id` | Revoke client API key |
 | `GET` | `/api/v1/admin/logs?limit=50` | Query real-time audit logs with TTFT, tokens, latency, status code |
 | `GET` | `/api/v1/admin/logs?limit=50&count=0&facets=0` | Rows only: skips the filtered COUNT and facet DISTINCT (dashboard poll / CSV export) |
-| `GET` | `/api/v1/admin/stats/overview` | Query aggregated gateway statistics (QPS, TTFT, Tokens) |
+| `GET` | `/api/v1/admin/stats/overview` | Aggregated gateway statistics, including `today_cost` / `month_cost` (UTC calendar windows), `cost_24h` / `previous_cost_24h`; tenant/key scopes apply to all amounts |
 | `GET` | `/api/v1/admin/models` | List all active models across providers |
 | `GET` | `/api/v1/admin/supplier-costs` | List supplier unit prices keyed by channel name + model (reference only; not used for charging) |
 | `POST` | `/api/v1/admin/supplier-costs` | Create or overwrite the supplier price for a channel + model: `channel`, `model`, `input_cost`, `output_cost` (CNY per 1M tokens), `status` (`active`/`disabled`) |

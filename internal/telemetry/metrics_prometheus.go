@@ -138,8 +138,6 @@ func (m *Metrics) writePipelineMetrics(sb *strings.Builder, stats prometheusSnap
 
 	writePrometheusScalar(sb, "airoute_billing_ledger_drift_units", "Absolute key-vs-audit cost drift in 1e-9 units", "gauge", "%d", m.BillingLedgerDriftUnits.Load())
 
-	writePrometheusScalar(sb, "airoute_billing_wallet_drift_units", "Absolute balance-mirror drift in 1e-9 units", "gauge", "%d", m.BillingWalletDriftUnits.Load())
-
 	writePrometheusScalar(sb, "airoute_aborted_drained_requests_total", "Aborted requests whose upstream was drained for exact usage", "counter", "%d", m.AbortedDrainedRequests.Load())
 
 	writePrometheusScalar(sb, "airoute_aborted_drained_completion_tokens_total", "Completion tokens paid for and discarded by abort draining", "counter", "%d", m.AbortedDrainedCompletionTokens.Load())

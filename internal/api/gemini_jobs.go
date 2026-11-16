@@ -65,6 +65,9 @@ func reconcileNativeJobs(ctx context.Context, h *Handler) {
 	}
 	wg.Wait()
 	_ = repo.PruneNativeStates(ctx)
+	if _, err := repo.ReapOrphanBillingHolds(ctx, 5*time.Minute); err != nil {
+		telemetry.ScopedLogger("billing").Warn("failed to reap orphan billing holds", "error", err.Error())
+	}
 }
 
 func pollNativeJob(ctx context.Context, h *Handler, state storage.NativeState) {

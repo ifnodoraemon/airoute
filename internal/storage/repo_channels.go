@@ -143,11 +143,18 @@ func (r *Repository) UpdateChannel(rec *ChannelRecord) error {
 
 // DeleteChannel deletes a channel by ID.
 func (r *Repository) DeleteChannel(id int64) error {
-	_, err := r.db.Exec(`DELETE FROM channels WHERE id=?`, id)
-	if err == nil {
-		r.pruneChannelsFromModelRoutes(id)
+	tx, err := r.db.BeginTx(context.Background())
+	if err != nil {
+		return err
 	}
-	return err
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM channels WHERE id=?`, id); err != nil {
+		return err
+	}
+	if err := r.pruneChannelsFromModelRoutes(tx, id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // BatchDeleteChannels deletes multiple channels by their IDs.
@@ -155,27 +162,44 @@ func (r *Repository) BatchDeleteChannels(ids []int64) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	placeholders, args := inClause[int64](nil, ids)
-	q := fmt.Sprintf(`DELETE FROM channels WHERE id IN (%s)`, placeholders)
-	res, err := r.db.Exec(q, args...)
+	tx, err := r.db.BeginTx(context.Background())
 	if err != nil {
 		return 0, err
 	}
-	r.pruneChannelsFromModelRoutes(ids...)
+	defer tx.Rollback()
+	placeholders, args := inClause[int64](nil, ids)
+	q := fmt.Sprintf(`DELETE FROM channels WHERE id IN (%s)`, placeholders)
+	res, err := tx.Exec(q, args...)
+	if err != nil {
+		return 0, err
+	}
+	if err := r.pruneChannelsFromModelRoutes(tx, ids...); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
 	return res.RowsAffected()
 }
 
-func (r *Repository) pruneChannelsFromModelRoutes(ids ...int64) {
-	if r == nil || r.db == nil || len(ids) == 0 {
-		return
+func (r *Repository) pruneChannelsFromModelRoutes(tx *Tx, ids ...int64) error {
+	if r == nil || tx == nil || len(ids) == 0 {
+		return nil
 	}
 	idSet := make(map[int64]bool, len(ids))
 	for _, id := range ids {
 		idSet[id] = true
 	}
-	rows, err := r.db.Query(`SELECT model, providers FROM model_routes WHERE providers IS NOT NULL AND providers != ''`)
+	// The read-modify-write stays inside the delete transaction and locks the
+	// route rows on PostgreSQL, so a concurrent ApplyModelRouteBundle cannot have
+	// its edit silently rolled back (the old out-of-transaction prune could).
+	query := `SELECT model, providers FROM model_routes WHERE providers IS NOT NULL AND providers != ''`
+	if tx.db != nil && tx.db.Dialect() == "postgres" {
+		query += ` FOR UPDATE`
+	}
+	rows, err := tx.Query(query)
 	if err != nil {
-		return
+		return err
 	}
 	defer rows.Close()
 
@@ -213,10 +237,16 @@ func (r *Repository) pruneChannelsFromModelRoutes(ids ...int64) {
 			updates = append(updates, routeUpdate{model: m, providers: newProv})
 		}
 	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
 
 	for _, u := range updates {
-		_, _ = r.db.Exec(`UPDATE model_routes SET providers = ?, updated_at = CURRENT_TIMESTAMP WHERE model = ?`, u.providers, u.model)
+		if _, err := tx.Exec(`UPDATE model_routes SET providers = ?, updated_at = CURRENT_TIMESTAMP WHERE model = ?`, u.providers, u.model); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // BatchUpdateChannelStatus updates status ('active'/'disabled') for multiple channels.

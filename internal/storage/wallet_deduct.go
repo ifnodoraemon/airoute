@@ -15,8 +15,8 @@ func (r *Repository) deductWallet(tx *Tx, where string, whereArgs []any, cost fl
 	if units <= 0 {
 		return false, 0, nil
 	}
-	query := `UPDATE users SET balance_units = COALESCE(balance_units, 0) - ?, balance = (COALESCE(balance_units, 0) - ?) * 1.0 / 1000000000.0, updated_at = CURRENT_TIMESTAMP WHERE ` + where + ` RETURNING balance_units`
-	args := append([]any{units, units}, whereArgs...)
+	query := `UPDATE users SET balance_units = COALESCE(balance_units, 0) - ?, updated_at = CURRENT_TIMESTAMP WHERE ` + where + ` RETURNING balance_units`
+	args := append([]any{units}, whereArgs...)
 	rows, err := tx.Query(query, args...)
 	if err != nil {
 		return false, 0, err

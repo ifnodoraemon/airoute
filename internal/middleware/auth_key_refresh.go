@@ -2,6 +2,9 @@ package middleware
 
 import (
 	"context"
+	"database/sql"
+	"errors"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ifnodoraemon/airoute/internal/model"
@@ -15,8 +18,24 @@ func refreshAuthKey(c *gin.Context, key *model.APIKeyConfig, repo *storage.Repos
 		return true
 	}
 	lookupCtx, cancel := context.WithTimeout(c.Request.Context(), authStorageTimeout)
-	keyRec, _ := repo.GetAPIKeyByKeyContext(lookupCtx, key.Key)
+	keyRec, lookupErr := repo.GetAPIKeyByKeyContext(lookupCtx, key.Key)
 	cancel()
+	if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
+		// The authoritative refresh failed (DB stall/timeout). The in-memory
+		// snapshot may still list a just-revoked key as active, so fail closed
+		// for billable requests, matching the account admission posture. Free
+		// reads never settle a charge and stay available during a stall.
+		if !freeRead {
+			return abortResolvedKeyDenial(c, key.Key, &AccessDenial{
+				StatusCode: http.StatusServiceUnavailable,
+				Message:    "Key status is temporarily unavailable. Please retry shortly.",
+				Type:       "service_unavailable",
+				Code:       "key_status_unavailable",
+				Headers:    map[string]string{"Retry-After": "2"},
+			})
+		}
+		return true
+	}
 	if keyRec == nil {
 		return true
 	}
