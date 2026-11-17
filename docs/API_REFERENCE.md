@@ -479,3 +479,28 @@ These were registered historically but had no consumer and are intentionally gon
 返回 `{code:0,data:{model,capability,checks,thinking,message}}`：`checks` 按 `off` 和各档位返回 `status`（`supported / unsupported / unknown`）及 `reason`；`thinking` 只包含本次能确认的结果，全部待确认时省略。固定、无思考或未知预设同样按渠道协议进行实际探测，不因名称或旧配置跳过请求。命名档位协议试探全部六档及已声明的自定义档位；确认新能力需要变更参数约定时，`thinking.profile` 返回可保存的约定，未确认结果不会自动改写已有配置。探测使用有限数量的短请求，不返回上游凭证、模型正文或错误正文，不写数据库。控制台合并确认结果并保留待确认的已有配置，用户保存后生效。
 
 渠道连通探测的 `data.thinking_capabilities` 同时返回每个实际模型的自动能力。优先采用上游 `capabilities.reasoning_effort` 明确声明的枚举，缺失时采用名称能力表。支持 `ultra` 及有效的自定义命名档位，不代表所有模型均支持内置全部档位。
+
+### Dashboard attention summary
+
+`GET /api/v1/admin/stats/timeseries?timeframe=1h|24h|7d&key_id=<numeric-id>`
+returns `attention` alongside its buckets. The authorization and key filter also
+apply to every attention count:
+
+```json
+{
+  "attention": {
+    "total_requests": 100,
+    "failed_requests": 3,
+    "rate_limited_requests": 2,
+    "error_count_by_code": {"429": 2, "503": 1}
+  }
+}
+```
+
+These counts cover all persisted logs within the selected window, independently
+of audit pagination. A recorded `error_message` also counts as a failure when its
+HTTP status is 2xx. Administrator responses additionally carry
+`tripped_channels` (OPEN / HALF-OPEN) and `disabled_channels`, read from the
+serving node's current routing state. These channel gauges are platform-wide;
+request counts remain key-scoped. The console uses overview totals or explicitly
+labelled page samples only when the corresponding summary fields are absent.

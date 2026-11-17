@@ -209,9 +209,8 @@ func (c *Client) AckLogs(ctx context.Context, stream, group string, ids ...strin
 }
 
 // TrimStreamBefore drops entries older than minID. Unlike a length cap it can
-// never evict a message that has not been acknowledged yet, because callers pass
-// the last acknowledged id. A MAXLEN cap raced with the pending-entries list and
-// could silently delete billing records that had not been persisted.
+// preserve unacknowledged messages when callers cap minID at both their last
+// acknowledged ID and the group's oldest pending ID.
 func (c *Client) TrimStreamBefore(ctx context.Context, stream, minID string) error {
 	if !c.IsActive() || minID == "" {
 		return nil
@@ -221,8 +220,7 @@ func (c *Client) TrimStreamBefore(ctx context.Context, stream, minID string) err
 
 // MinPendingID returns the smallest id still pending in the consumer group, or ""
 // when the group has no pending entries. In a multi-node cluster each consumer
-// has its own PEL, so trimming by one consumer's acknowledged id is only safe
-// when the whole group has nothing outstanding.
+// has its own PEL, so this ID bounds the acknowledged history safe to trim.
 func (c *Client) MinPendingID(ctx context.Context, stream, group string) (string, error) {
 	if !c.IsActive() {
 		return "", fmt.Errorf("redis client not active")

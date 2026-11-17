@@ -49,6 +49,9 @@ func recordFailedRequestWithError(c *gin.Context, sessionID, modelName string, d
 	if err != nil {
 		msg = err.Error()
 		channel = channelFromError(err)
+		if de, ok := router.AsDispatchError(err); ok && len(de.Skipped) > 0 {
+			msg += " (skipped channels: " + strings.Join(de.Skipped, ", ") + ")"
+		}
 	}
 	params := AuditRecordParams{
 		SessionID:    sessionID,

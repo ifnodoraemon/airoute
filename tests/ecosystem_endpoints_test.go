@@ -31,6 +31,7 @@ func TestModelDetailEndpoint(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
+	engine.Use(unrestrictedTestModels)
 	engine.GET("/v1/models/:model", handler.HandleModelDetail)
 
 	// 1. Success case: model exists
@@ -142,6 +143,7 @@ func TestGeminiInboundProtocol(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
+	engine.Use(unrestrictedTestModels)
 	engine.GET("/v1beta/models", handler.HandleGeminiModels)
 	engine.POST("/v1beta/models/*modelAction", handler.HandleGeminiAction)
 

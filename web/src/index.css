@@ -9,7 +9,19 @@
 /* Tailwind v4 dark mode via the `.dark` class on <html> (v3 `darkMode: 'class'`). */
 @custom-variant dark (&:where(.dark, .dark *));
 
-@theme {
+@theme inline {
+  --color-page: var(--bg-page);
+  --color-surface: var(--bg-surface);
+  --color-subtle: var(--bg-subtle);
+  --color-light: var(--border-light);
+  --color-primary: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-brand: var(--brand-primary);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-active: var(--brand-active-text);
+  --color-brand-selected: var(--brand-selected-bg);
+  --color-code-bg: var(--bg-code);
+  --color-code-text: var(--text-code);
 }
 
 :root {
@@ -20,8 +32,12 @@
   --text-primary: #202124;
   --text-secondary: #656B75;
   --brand-primary: #355CFF;
+  --brand-hover: #2B4CE0;
   --brand-active-text: #355CFF;
   --brand-selected-bg: #EEF2FF;
+  --bg-code: #111214;
+  --text-code: #F1F2F4;
+  --scrollbar-hover: #C8CBD0;
 }
 
 .dark {
@@ -34,6 +50,8 @@
   --brand-primary: #355CFF;
   --brand-active-text: #91A7FF;
   --brand-selected-bg: #242D48;
+  --brand-hover: #4E70FF;
+  --scrollbar-hover: #3E434E;
 }
 
 @layer base {
@@ -68,113 +86,101 @@
 @layer components {
   /* ---- Form controls: unified radius / height / focus treatment ---- */
   .ui-field {
-    @apply w-full rounded-lg border border-[#E4E6E9] dark:border-[#2C3038] bg-white dark:bg-[#191B1F]
-           px-3 py-2 text-[13px] leading-5 text-[#202124] dark:text-[#F1F2F4]
-           placeholder-[#656B75]/60 dark:placeholder-[#A1A7B0]/60 shadow-2xs transition-colors duration-150;
+    @apply w-full rounded-lg border border-light bg-surface
+           px-3 py-2 text-[13px] leading-5 text-primary
+           placeholder-secondary/60 shadow-2xs transition-colors duration-150;
   }
   .ui-field:focus {
-    @apply outline-none border-[#355CFF] ring-2 ring-[#355CFF]/15;
+    @apply outline-none border-brand ring-2 ring-brand/15;
   }
   .ui-field:disabled {
-    @apply opacity-50 cursor-not-allowed bg-[#F0F1F2]/50 dark:bg-[#22252B]/50;
+    @apply opacity-50 cursor-not-allowed bg-subtle/50;
   }
   /* Compact variant for denser toolbars and inline grids */
   .ui-field-sm {
     @apply px-2.5 py-1.5 text-xs;
   }
   .ui-label {
-    @apply block mb-1.5 text-xs font-medium text-[#202124] dark:text-[#F1F2F4];
+    @apply block mb-1.5 text-xs font-medium text-primary;
   }
   .ui-label-sm {
-    @apply block mb-1 text-[11px] font-medium text-[#656B75] dark:text-[#A1A7B0];
+    @apply block mb-1 text-[11px] font-medium text-secondary;
   }
 
   /* ---- Text hierarchy ---- */
   .ui-page-title {
-    @apply text-2xl font-semibold tracking-tight text-[#202124] dark:text-[#F1F2F4];
+    @apply text-2xl font-semibold tracking-tight text-primary;
   }
   .ui-page-subtitle {
-    @apply text-sm text-[#656B75] dark:text-[#A1A7B0] mt-1;
+    @apply text-sm text-secondary mt-1;
   }
   .ui-meta {
-    @apply text-xs text-[#656B75] dark:text-[#A1A7B0];
+    @apply text-xs text-secondary;
   }
   .ui-meta-sm {
-    @apply text-[11px] text-[#656B75] dark:text-[#A1A7B0];
+    @apply text-[11px] text-secondary;
   }
   .ui-section-title {
-    @apply text-xs font-semibold uppercase tracking-wider text-[#656B75] dark:text-[#A1A7B0];
+    @apply text-xs font-semibold uppercase tracking-wider text-secondary;
   }
   .ui-metric-number {
-    @apply text-3xl font-semibold font-mono tabular-nums tracking-tight text-[#202124] dark:text-[#F1F2F4];
+    @apply text-3xl font-semibold font-mono tabular-nums tracking-tight text-primary;
   }
 
   /* ---- Buttons ---- */
-  .ui-btn {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium
+  .ui-btn, .ui-btn-primary, .ui-btn-secondary, .ui-btn-ghost, .ui-btn-danger {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg border border-transparent px-4 py-2 text-xs font-medium
            transition-colors duration-150 cursor-pointer select-none active:scale-[0.99]
            disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none;
   }
   .ui-btn-primary {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium
-           transition-colors duration-150 cursor-pointer select-none bg-[#355CFF] text-white
-           hover:bg-[#2B4CE0] dark:hover:bg-[#4E70FF] shadow-xs active:scale-[0.99]
-           disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none;
+    @apply bg-brand text-white hover:bg-brand-hover shadow-xs;
   }
   .ui-btn-secondary {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium
-           transition-colors duration-150 cursor-pointer select-none border border-[#E4E6E9] dark:border-[#2C3038]
-           bg-white dark:bg-[#191B1F] text-[#202124] dark:text-[#F1F2F4]
-           hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] shadow-2xs active:scale-[0.99]
-           disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none;
+    @apply border-light bg-surface text-primary hover:bg-subtle shadow-2xs;
   }
   .ui-btn-ghost {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium
-           transition-colors duration-150 cursor-pointer select-none text-[#656B75] dark:text-[#A1A7B0]
-           hover:text-[#202124] dark:hover:text-[#F1F2F4] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B]
-           disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none;
+    @apply px-3 text-secondary hover:text-primary hover:bg-subtle;
   }
   .ui-btn-danger {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium
-           transition-colors duration-150 cursor-pointer select-none bg-rose-600 text-white hover:bg-rose-500 shadow-xs
-           disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none;
+    @apply bg-rose-600 text-white hover:bg-rose-500 shadow-xs;
   }
   .ui-btn-sm {
     @apply px-2.5 py-1.5;
   }
   .ui-icon-btn {
-    @apply inline-flex items-center justify-center rounded-lg p-1.5 text-[#656B75] dark:text-[#A1A7B0]
-           hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] hover:text-[#202124] dark:hover:text-[#F1F2F4]
+    @apply inline-flex items-center justify-center rounded-lg p-1.5 text-secondary
+           hover:bg-subtle hover:text-primary
            transition-colors duration-150 cursor-pointer;
   }
 
   /* ---- Surfaces, Cards & Tables ---- */
   .ui-card {
-    @apply bg-white dark:bg-[#191B1F] border border-[#E4E6E9] dark:border-[#2C3038] rounded-xl shadow-2xs;
+    @apply bg-surface border border-light rounded-xl shadow-2xs;
   }
   .ui-th {
-    @apply px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-[#656B75] dark:text-[#A1A7B0] whitespace-nowrap border-b border-[#E4E6E9] dark:border-[#2C3038];
+    @apply px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-secondary whitespace-nowrap border-b border-light;
   }
   .ui-td {
-    @apply px-4 py-3.5 text-[13px] text-[#202124] dark:text-[#F1F2F4] border-b border-[#E4E6E9]/60 dark:border-[#2C3038]/60 align-middle;
+    @apply px-4 py-3.5 text-[13px] text-primary border-b border-light/60 align-middle;
   }
   .ui-tr-hover {
-    @apply hover:bg-[#F0F1F2]/70 dark:hover:bg-[#22252B]/60 transition-colors duration-150;
+    @apply hover:bg-subtle/70 transition-colors duration-150;
   }
   .ui-chip {
-    @apply inline-flex items-center gap-1 rounded-md border border-[#E4E6E9] dark:border-[#2C3038]
-           bg-[#F0F1F2]/80 dark:bg-[#22252B]/80 px-2 py-0.5 text-xs font-medium
-           text-[#202124] dark:text-[#F1F2F4];
+    @apply inline-flex items-center gap-1 rounded-md border border-light
+           bg-subtle/80 px-2 py-0.5 text-xs font-medium
+           text-primary;
   }
 
   /* ---- Dropdown menus & Overflows ---- */
   .ui-menu {
-    @apply absolute right-0 mt-2 z-30 min-w-[180px] rounded-xl border border-[#E4E6E9] dark:border-[#2C3038]
-           bg-white dark:bg-[#191B1F] p-1.5 shadow-xl;
+    @apply absolute right-0 mt-2 z-30 min-w-[180px] rounded-xl border border-light
+           bg-surface p-1.5 shadow-xl;
   }
   .ui-menu-item {
-    @apply flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-[#202124] dark:text-[#F1F2F4]
-           hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] transition-colors duration-150 cursor-pointer;
+    @apply flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-primary
+           hover:bg-subtle transition-colors duration-150 cursor-pointer;
   }
 }
 
@@ -187,16 +193,9 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #E4E6E9;
+  background: var(--border-light);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #C8CBD0;
-}
-
-.dark ::-webkit-scrollbar-thumb {
-  background: #2C3038;
-}
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: #3E434E;
+  background: var(--scrollbar-hover);
 }

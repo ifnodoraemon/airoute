@@ -61,6 +61,7 @@ func TestZeroTouchSessionAffinity(t *testing.T) {
 	dispatcher := router.NewDispatcher(channels)
 	handler := api.NewHandler(dispatcher)
 	r := gin.New()
+	r.Use(unrestrictedTestModels)
 	r.POST("/v1/chat/completions", handler.HandleChatCompletions)
 
 	// 1. Turn 1: Client sends initial user question (WITHOUT ANY X-Session-ID or Cookie)

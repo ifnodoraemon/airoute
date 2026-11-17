@@ -308,6 +308,7 @@ func TestFixGeminiEmbedContentUsesEmbeddingsPath(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
+	c.Set(middleware.ContextKeyAPIKeyConfig, &model.APIKeyConfig{})
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/text-embedding:embedContent",
 		strings.NewReader(`{"model":"models/text-embedding","content":{"parts":[{"text":"hello world"}]}}`))
 	c.Request.Header.Set("Content-Type", "application/json")
@@ -473,6 +474,7 @@ func TestFixTraceSessionIDPopulated(t *testing.T) {
 	h := NewHandler(router.NewDispatcher(nil))
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
+	c.Set(middleware.ContextKeyAPIKeyConfig, &model.APIKeyConfig{})
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions",
 		strings.NewReader(`{"model":"ghost-model","messages":[{"role":"user","content":"hi"}]}`))
 	c.Request.Header.Set("Content-Type", "application/json")
@@ -510,6 +512,7 @@ func TestFixCountTokensUnknownModelIs404(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
+	c.Set(middleware.ContextKeyAPIKeyConfig, &model.APIKeyConfig{})
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages/count_tokens", strings.NewReader(body("ghost-model")))
 	c.Request.Header.Set("Content-Type", "application/json")
 	h.HandleAnthropicCountTokens(c)
@@ -521,6 +524,7 @@ func TestFixCountTokensUnknownModelIs404(t *testing.T) {
 	// local-estimate fallback.
 	w2 := httptest.NewRecorder()
 	c2, _ := gin.CreateTestContext(w2)
+	c2.Set(middleware.ContextKeyAPIKeyConfig, &model.APIKeyConfig{})
 	c2.Request = httptest.NewRequest(http.MethodPost, "/v1/messages/count_tokens", strings.NewReader(body("known-model")))
 	c2.Request.Header.Set("Content-Type", "application/json")
 	h.HandleAnthropicCountTokens(c2)
@@ -543,6 +547,7 @@ func TestFixOversizedBodyIs413(t *testing.T) {
 	openaiCase := func(name string, handler func(*gin.Context)) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
+		c.Set(middleware.ContextKeyAPIKeyConfig, &model.APIKeyConfig{})
 		c.Request = httptest.NewRequest(http.MethodPost, "/x", strings.NewReader(bigJSON))
 		c.Request.Header.Set("Content-Type", "application/json")
 		c.Request.Body = limit(w, strings.NewReader(bigJSON))
@@ -565,6 +570,7 @@ func TestFixOversizedBodyIs413(t *testing.T) {
 	// Anthropic ingress uses the Anthropic error envelope.
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
+	c.Set(middleware.ContextKeyAPIKeyConfig, &model.APIKeyConfig{})
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(bigJSON))
 	c.Request.Header.Set("Content-Type", "application/json")
 	c.Request.Body = limit(w, strings.NewReader(bigJSON))
@@ -576,6 +582,7 @@ func TestFixOversizedBodyIs413(t *testing.T) {
 	// Gemini ingress.
 	w2 := httptest.NewRecorder()
 	c2, _ := gin.CreateTestContext(w2)
+	c2.Set(middleware.ContextKeyAPIKeyConfig, &model.APIKeyConfig{})
 	c2.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/m:generateContent", strings.NewReader(bigJSON))
 	c2.Request.Header.Set("Content-Type", "application/json")
 	c2.Request.Body = limit(w2, strings.NewReader(bigJSON))

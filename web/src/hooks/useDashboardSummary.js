@@ -1,17 +1,11 @@
 import { useMemo } from 'react';
+import dashboardAttentionSummary from '../lib/dashboardAttentionSummary';
 
 export default function useDashboardSummary({
   channelLatencies, channels, chartMetric, errorLogs, isZh, logs, maxMetricVal, slaAvailability, stats,
   timeBuckets, timeframe, timeseriesData, totalErrorRequests, totalRequests
 }) {
-  const attention = useMemo(() => {
-    const tripped = (channels || []).filter(ch =>
-      ['OPEN', 'HALF-OPEN'].includes(String(ch.breaker_status || '').toUpperCase())
-    ).length;
-    const disabled = (channels || []).filter(ch => ch.status !== 'active').length;
-    const failed = (stats.client_error_requests || 0) + (stats.server_error_requests || 0);
-    return { tripped, disabled, failed, recentTotal: stats.total_requests || 0 };
-  }, [channels, stats]);
+  const attention = useMemo(() => dashboardAttentionSummary({ channels, logs, stats, timeseriesData, timeframe }), [channels, logs, stats, timeseriesData, timeframe]);
 
   // 3. MULTIMODAL WORKLOAD BREAKDOWN
   const modalityStats = useMemo(() => {
@@ -129,17 +123,6 @@ export default function useDashboardSummary({
         percent: Math.min(100, Math.round((tokens / totalModelTokens) * 100))
       }));
   }, [logs]);
-
-  // 7. ERROR CODE CLUSTERING
-  const errorCountByCode = useMemo(() => {
-    const counts = {};
-    (errorLogs || []).forEach(l => {
-      if (l && l.status_code) {
-        counts[l.status_code] = (counts[l.status_code] || 0) + 1;
-      }
-    });
-    return counts;
-  }, [errorLogs]);
 
   // 8. CONTINUOUS SVG TREND SPLINE OVERLAY FOR COCKPIT HISTOGRAM
   const chartSvgData = useMemo(() => {
@@ -266,7 +249,7 @@ export default function useDashboardSummary({
     });
   }, [channels, logs, channelLatencies]);
   return {
-    attention, chartSvgData, errorBudget, errorCountByCode, fmtPct, modalityStats, percentiles,
+    attention, chartSvgData, errorBudget, fmtPct, modalityStats, percentiles,
     providerSlaStats, tokenMetrics, topModels
   };
 }

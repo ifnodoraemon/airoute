@@ -23,7 +23,7 @@ helm upgrade --install airoute ./helm/airoute -n gateway --create-namespace \
   --set database.existingSecret=airoute-database
 ```
 
-各副本每 10 秒从数据库同步配置。熔断状态仍由各进程独立维护，切换取决于具体请求的上游耗时；没有固定的故障转移毫秒数或可用率保证。流式请求在首个内容块或工具调用前可以尝试备用渠道；已发送内容后的错误会返回给客户端。
+各副本每 10 秒从数据库同步配置。熔断状态仍由各进程独立维护，切换取决于具体请求的上游耗时；没有固定的故障转移毫秒数或可用率保证。流式请求在首个内容块或工具调用前可以尝试备用渠道。首包阶段最多缓冲 64 个前导帧；缓冲已满后再收到合法事件即提交连接，并按顺序转发全部已缓冲帧与当前帧，后续不再回退。已提交连接后的错误会返回给客户端。父请求取消会立即退出首包等待、释放对应代际的 canary，并保留取消原因和渠道轨迹。
 
 ## MCP 会话与控制台日志的副本边界
 
@@ -43,3 +43,9 @@ HTTP Transport 按需建立连接，最多保留 2048 个空闲连接、每 Host
 收到 `SIGTERM`/`SIGINT` 后进程停止接收新连接，最多等待 `GATEWAY_SHUTDOWN_TIMEOUT_SEC`（默认由 `GATEWAY_DRAIN_TIMEOUT_SEC + 15s` 派生为 135s）让在途请求完成——其中包括客户端断连后继续排空上游的 `GATEWAY_DRAIN_TIMEOUT_SEC`（默认 120s）预算——随后停止审计队列（落盘/刷库）并关闭数据库。信号处理在初始化之前注册，因此迁移/启动阶段的信号也会走同一套清理流程，而不是直接杀死进程。
 
 编排层必须给出更大的宽限窗口：Compose/Swarm 服务使用 `stop_grace_period: 150s`（Docker/Swarm 默认 10s 会在排空完成前 SIGKILL），Helm 使用 `terminationGracePeriodSeconds: 180`（可配置）。若数据库持续不可用直到进程退出，内存中未写入的审计记录仍有丢失风险；对严格计费场景应配置 Redis Streams、监控持久化错误，并确保数据库在停机前恢复。
+
+审计停机后新到达的记录会在字段归一化后直接写入本地 spill 文件，不再进入 Redis。
+Redis Stream 使用已确认游标与消费组最早 Pending ID 中较早的水位线执行 MINID
+修剪；即使持续有在途消息，也可清理安全水位线之前的历史。孤儿消息回收失败会记录
+包含 consumer 与错误的结构化警告。终止分发错误保留 attempted / skipped 渠道，
+包括准入拒绝、确定性载荷错误和跨模型回退；审计失败说明同时记录跳过的渠道。

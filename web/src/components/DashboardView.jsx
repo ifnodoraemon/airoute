@@ -65,10 +65,9 @@ export default function DashboardView({
     statsKey, timeframe, timeseriesData
   });
 
-  // 2b. ACTIONABLE SIGNALS for the "needs attention" strip.
-  // Derived only from data already held in props — no extra requests.
+  // Prefer the authorized time-window summary; logs are a labelled fallback.
   const {
-    attention, chartSvgData, errorBudget, errorCountByCode, fmtPct, modalityStats, percentiles,
+    attention, chartSvgData, errorBudget, fmtPct, modalityStats, percentiles,
     providerSlaStats, tokenMetrics, topModels
   } = useDashboardSummary({
     channelLatencies, channels, chartMetric, errorLogs, isZh, logs, maxMetricVal, slaAvailability, stats,
@@ -82,12 +81,10 @@ export default function DashboardView({
     setLastRefreshed, setRefreshing, showToast, slaAvailability, stats, tokenMetrics, totalRequests
   });
 
-  // Only signals we can actually derive from the props; `logs` is one page, so
-  // the failure count is always phrased as "of the last N logged requests".
   const {
     attentionItems, attentionTones
   } = buildDashboardAttention({
-    adminUser, attention, channels, errorCountByCode, errorLogs, isZh, onNavigateToErrors, setCurrentTab,
+    adminUser, attention, channels, isZh, onNavigateToErrors, setCurrentTab,
     setShowChannelModal
   });
 

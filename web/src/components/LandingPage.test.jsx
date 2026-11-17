@@ -85,7 +85,7 @@ describe('LandingPage', () => {
     it('switches to the curl tab', () => {
       setup();
 
-      fireEvent.click(screen.getByRole('button', { name: /cURL|curl/i }));
+      fireEvent.click(screen.getByRole('tab', { name: /cURL|curl/i }));
 
       expect(screen.getByText(/curl -X POST|curl https/)).toBeInTheDocument();
     });

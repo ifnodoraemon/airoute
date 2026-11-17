@@ -20,22 +20,22 @@ import (
 // must stop instead of fanning out to the next channel: a client cancellation, or
 // a client payload error that would fail identically everywhere. A node-specific
 // 404 falls through to the next candidate channel, like any other channel failure.
-func (d *Dispatcher) failStreamAttempt(ctx context.Context, req *model.ChatCompletionRequest, ch *model.ChannelConfig, attempted []string, err error, logMsg string, breakerGen uint64) error {
-	if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
-		d.circuitBreaker.AbortCanary(ch.Name)
-		return newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
+func (d *Dispatcher) failStreamAttempt(ctx context.Context, req *model.ChatCompletionRequest, ch *model.ChannelConfig, attempted, skipped []string, err error, logMsg string, breakerGen uint64) error {
+	if ctx.Err() != nil || errors.Is(err, context.Canceled) {
+		d.circuitBreaker.AbortCanaryGen(ch.Name, breakerGen)
+		return stoppedDispatchError(ctx, req.Model, attempted, skipped, ch.Name, req.EstimatedPromptTokens(), err)
 	}
 	d.observeUpstreamError(ctx, ch, req.Model, err)
 	if provider.IsModelNotFound(err) {
 		// A node-specific 404 is not the caller's fault: keep fanning out.
-		d.circuitBreaker.AbortCanary(ch.Name)
+		d.circuitBreaker.AbortCanaryGen(ch.Name, breakerGen)
 	} else if provider.IsFatalPayloadError(err) {
-		d.circuitBreaker.AbortCanary(ch.Name)
-		return err
+		d.circuitBreaker.AbortCanaryGen(ch.Name, breakerGen)
+		return newDispatchError(ctx, req.Model, append(attempted, ch.Name), skipped, err)
 	} else if provider.IsChannelFailure(err) {
 		d.circuitBreaker.RecordFailureGen(ch.Name, breakerGen)
 	} else {
-		d.circuitBreaker.AbortCanary(ch.Name)
+		d.circuitBreaker.AbortCanaryGen(ch.Name, breakerGen)
 	}
 	telemetry.GlobalMetrics.RecordFallback()
 	routerLog(ctx).Warn(logMsg, "channel", ch.Name, "error", err.Error())
@@ -99,7 +99,7 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 
 		if !exists {
 			lastErr = fmt.Errorf("unsupported provider type '%s' on channel %s", ch.Type, ch.Name)
-			d.circuitBreaker.AbortCanary(ch.Name)
+			d.circuitBreaker.AbortCanaryGen(ch.Name, breakerGen)
 			continue
 		}
 
@@ -116,18 +116,19 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		// derived from the same number.
 		attemptCtx, attemptCancel, admissionErr := d.beginChannelCall(ctx, ch, req.Model)
 		if admissionErr != nil {
-			d.circuitBreaker.AbortCanary(ch.Name)
+			d.circuitBreaker.AbortCanaryGen(ch.Name, breakerGen)
+			skipped = append(skipped, ch.Name)
 			if ctx.Err() != nil {
-				return nil, admissionDispatchError(ctx, req.Model, attempted, admissionErr)
+				return nil, admissionDispatchError(ctx, req.Model, attempted, skipped, admissionErr)
 			}
 			lastErr = admissionErr
-			skipped = append(skipped, ch.Name)
+			logAdmissionFailure(ctx, ch.Name, attempted, skipped, admissionErr)
 			continue
 		}
 		streamChan, err := prov.ChatCompleteStream(attemptCtx, callReq, ch)
 		if err != nil {
 			attemptCancel()
-			if stopErr := d.failStreamAttempt(ctx, req, ch, attempted, err, "stream connection failed, trying next channel", breakerGen); stopErr != nil {
+			if stopErr := d.failStreamAttempt(ctx, req, ch, attempted, skipped, err, "stream connection failed, trying next channel", breakerGen); stopErr != nil {
 				return nil, stopErr
 			}
 			lastErr = err
@@ -135,58 +136,10 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 			continue
 		}
 
-		firstTokenTimeout := d.GetFirstTokenTimeout(ch, req.Model)
-		timer := time.NewTimer(firstTokenTimeout)
-		var preamble []*model.StreamEvent
-		var firstErr error
-		committed := false
-		for !committed && firstErr == nil {
-			select {
-			case event, ok := <-streamChan:
-				if !ok {
-					firstErr = fmt.Errorf("channel %s closed stream before a valid token", ch.Name)
-					break
-				}
-				if event == nil {
-					continue
-				}
-				if event.Err != nil {
-					firstErr = event.Err
-					break
-				}
-				// Role-only chunks and unparsed SSE frames are not evidence of a usable stream.
-				// Keep a bounded preamble so it can be sent if content follows.
-				// The newest event must always be kept: it may be the one that commits
-				// the stream, and dropping it silently swallowed the first content
-				// token once an upstream emitted more than maxPreambleEvents silent
-				// frames. Drop the oldest instead.
-				if len(preamble) >= maxPreambleEvents {
-					preamble = preamble[1:]
-				}
-				preamble = append(preamble, event)
-				if streamEventHasContent(event) || streamEventIsTerminal(event) {
-					committed = true
-				}
-			case <-timer.C:
-				firstErr = fmt.Errorf("channel %s timed out waiting for first token (%v)", ch.Name, firstTokenTimeout)
-			case <-ctx.Done():
-				timer.Stop()
-				attemptCancel()
-				d.circuitBreaker.AbortCanary(ch.Name)
-				return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
-			case <-attemptCtx.Done():
-				// The channel budget ran out before the first token. When the
-				// parent context is still alive this is a channel failure, not a
-				// client cancellation.
-				if ctx.Err() == nil {
-					firstErr = fmt.Errorf("channel %s exceeded its timeout before the first token", ch.Name)
-				}
-			}
-		}
-		timer.Stop()
+		preamble, firstErr := waitStreamPreamble(ctx, attemptCtx, streamChan, ch.Name, d.GetFirstTokenTimeout(ch, req.Model))
 		if firstErr != nil {
 			attemptCancel()
-			if stopErr := d.failStreamAttempt(ctx, req, ch, attempted, firstErr, "channel failed before first valid token, falling back", breakerGen); stopErr != nil {
+			if stopErr := d.failStreamAttempt(ctx, req, ch, attempted, skipped, firstErr, "channel failed before first valid token, falling back", breakerGen); stopErr != nil {
 				return nil, stopErr
 			}
 			lastErr = firstErr
@@ -223,25 +176,21 @@ func (d *Dispatcher) DispatchStream(ctx context.Context, req *model.ChatCompleti
 		nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
 		if fbErr != nil {
 			routerLog(ctx).Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
-			return nil, newExhaustedError(ctx, req.Model, exhaustedTrail(attempted, skipped), fmt.Errorf("all channels failed for stream request on model %s (last error: %v); cannot fallback to %s: %w", req.Model, lastErr, fb, fbErr))
+			return nil, newExhaustedError(ctx, req.Model, attempted, skipped, fmt.Errorf("all channels failed for stream request on model %s (last error: %v); cannot fallback to %s: %w", req.Model, lastErr, fb, fbErr))
 		}
 		routerLog(ctx).Warn("all stream channels failed, triggering cross-model fallback",
+			"attempted", attempted, "skipped", skipped,
 			"requested_model", req.Model,
 			"fallback_model", fb,
 			"last_error", lastErr,
 		)
 		reqCopy := *req
 		reqCopy.Model = fb
-		return d.DispatchStream(withChannelTrail(nextCtx, attempted), &reqCopy)
+		return d.DispatchStream(withChannelTrail(nextCtx, attempted, skipped), &reqCopy)
 	}
 
-	return nil, newExhaustedError(ctx, req.Model, exhaustedTrail(attempted, skipped), fmt.Errorf("all channels failed for stream request on model %s. Last error: %w", req.Model, lastErr))
+	return nil, newExhaustedError(ctx, req.Model, attempted, skipped, fmt.Errorf("all channels failed for stream request on model %s. Last error: %w", req.Model, lastErr))
 }
-
-// maxPreambleEvents bounds the silent prefix kept before the first content token.
-// It is a memory bound, not a promise to drop the committing event: when it is
-// reached the oldest event is discarded.
-const maxPreambleEvents = 64
 
 // GetFirstTokenTimeout is how long a single attempt may stay silent before the
 // gateway gives up on it. It is derived from the channel timeout, not configured

@@ -108,5 +108,5 @@ func dispatchUnaryModality[T any](d *Dispatcher, ctx context.Context, name strin
 		state.lastErr = skippedOnlyError(name, state.skipped)
 	}
 	err := fmt.Errorf("all %d providers failed for %s model '%s'. Last error: %w", len(channels), modality.label, name, state.lastErr)
-	return nil, "", newExhaustedError(ctx, name, exhaustedTrail(state.attempted, state.skipped), err)
+	return nil, "", newExhaustedError(ctx, name, state.attempted, state.skipped, err)
 }

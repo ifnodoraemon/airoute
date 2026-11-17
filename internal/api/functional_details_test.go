@@ -45,6 +45,7 @@ func TestAuditReviewMultimodalPreservesAPIBasePath(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
+	c.Set(middleware.ContextKeyAPIKeyConfig, &model.APIKeyConfig{})
 	c.Request = httptest.NewRequest("POST", "/v1/images/generations", strings.NewReader(`{"model":"image-model","prompt":"hello"}`))
 	h.HandleImageGenerations(c)
 	if calledPath != "/v1/images/generations" {

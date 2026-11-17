@@ -167,6 +167,7 @@ func TestMultimodalDispatchCancellationIsClientClosed(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
+	c.Set(middleware.ContextKeyAPIKeyConfig, &model.APIKeyConfig{})
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", strings.NewReader(`{"model":"image-model","prompt":"x"}`))
 	h.HandleImageGenerations(c)
 
@@ -196,6 +197,7 @@ func TestMultimodalDispatchSurvivesClientCancellation(t *testing.T) {
 	cancel() // the customer is already gone before the provider answers
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
+	c.Set(middleware.ContextKeyAPIKeyConfig, &model.APIKeyConfig{})
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", strings.NewReader(`{"model":"image-model","prompt":"x"}`)).WithContext(ctx)
 	h.HandleImageGenerations(c)
 

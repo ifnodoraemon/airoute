@@ -76,10 +76,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		// the loop may start already expired). Stop here instead of paying the
 		// next channel timeout as well.
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			if requestBudgetExceeded(ctx, ctxErr) {
-				return nil, newRequestBudgetError(req.Model, attempted, lastErr)
-			}
-			return nil, newCanceledError(ctx, attempted, "", 0)
+			return nil, stoppedDispatchError(ctx, req.Model, attempted, skipped, "", 0, lastErr)
 		}
 
 		callReq, thinkingErr := provider.PrepareThinkingRequest(req, ch)
@@ -119,11 +116,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		callCtx, cancelCall, admissionErr := d.beginChannelCall(ctx, ch, req.Model)
 		if admissionErr != nil {
 			d.circuitBreaker.AbortCanary(ch.Name)
+			skipped = append(skipped, ch.Name)
 			if ctx.Err() != nil {
-				return nil, admissionDispatchError(ctx, req.Model, attempted, admissionErr)
+				return nil, admissionDispatchError(ctx, req.Model, attempted, skipped, admissionErr)
 			}
 			lastErr = admissionErr
-			skipped = append(skipped, ch.Name)
+			logAdmissionFailure(ctx, ch.Name, attempted, skipped, admissionErr)
 			continue
 		}
 		resp, err := prov.ChatComplete(callCtx, callReq, ch)
@@ -159,14 +157,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		// classify it as ours rather than charging the channel and retrying.
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			d.circuitBreaker.AbortCanary(ch.Name)
-			if requestBudgetExceeded(ctx, ctxErr) {
-				return nil, newRequestBudgetError(req.Model, append(attempted, ch.Name), err)
-			}
-			return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
+			return nil, stoppedDispatchError(ctx, req.Model, attempted, skipped, ch.Name, req.EstimatedPromptTokens(), err)
 		}
 		if ctx.Err() == context.Canceled || errors.Is(err, context.Canceled) {
 			d.circuitBreaker.AbortCanary(ch.Name)
-			return nil, newCanceledError(ctx, attempted, ch.Name, req.EstimatedPromptTokens())
+			return nil, newCanceledError(withChannelTrail(ctx, nil, skipped), attempted, ch.Name, req.EstimatedPromptTokens())
 		}
 
 		lastErr = err
@@ -191,7 +186,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 				"error", err.Error(),
 			)
 			d.circuitBreaker.AbortCanary(ch.Name)
-			return nil, err
+			return nil, newDispatchError(ctx, req.Model, append(attempted, ch.Name), skipped, err)
 		}
 		if !provider.IsChannelFailure(err) {
 			// Unknown but non-fatal classification: try the next channel without
@@ -220,22 +215,23 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.ChatCompletionRequ
 		nextCtx, fbErr := nextFallbackContext(ctx, req.Model, fb)
 		if fbErr != nil {
 			routerLog(ctx).Warn("aborting fallback to prevent cycle or depth exhaustion", "error", fbErr.Error())
-			return nil, newExhaustedError(ctx, req.Model, exhaustedTrail(attempted, skipped), fmt.Errorf("all %d candidate channels failed for model %s (last error: %v); cannot fallback to %s: %w", len(channels), req.Model, lastErr, fb, fbErr))
+			return nil, newExhaustedError(ctx, req.Model, attempted, skipped, fmt.Errorf("all %d candidate channels failed for model %s (last error: %v); cannot fallback to %s: %w", len(channels), req.Model, lastErr, fb, fbErr))
 		}
 		routerLog(ctx).Warn("all candidate channels failed, triggering cross-model fallback",
+			"attempted", attempted, "skipped", skipped,
 			"requested_model", req.Model,
 			"fallback_model", fb,
 			"last_error", lastErr,
 		)
 		reqCopy := *req
 		reqCopy.Model = fb
-		return d.Dispatch(withChannelTrail(nextCtx, attempted), &reqCopy)
+		return d.Dispatch(withChannelTrail(nextCtx, attempted, skipped), &reqCopy)
 	}
 
 	// Request-level metrics are written once by the API layer (RecordUsage); the
 	// router used to record the same request here as well, so every unary request
 	// was counted twice in airoute_requests_total (B-04/C-08).
-	return nil, newExhaustedError(ctx, req.Model, exhaustedTrail(attempted, skipped), fmt.Errorf("all %d candidate channels failed for model %s. Last error: %w", len(channels), req.Model, lastErr))
+	return nil, newExhaustedError(ctx, req.Model, attempted, skipped, fmt.Errorf("all %d candidate channels failed for model %s. Last error: %w", len(channels), req.Model, lastErr))
 }
 
 func (d *Dispatcher) candidateChannelsForRequest(ctx context.Context, req *model.ChatCompletionRequest, proto string) ([]*model.ChannelConfig, error) {

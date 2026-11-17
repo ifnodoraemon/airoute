@@ -1,10 +1,13 @@
 import { Server, AlertTriangle, AlertCircle, Flame } from 'lucide-react';
+import { attentionScopeLabel } from './dashboardAttentionSummary';
 
 export default function buildDashboardAttention({
-  adminUser, attention, channels, errorCountByCode, errorLogs, isZh, onNavigateToErrors, setCurrentTab,
+  adminUser, attention, channels, isZh, onNavigateToErrors, setCurrentTab,
   setShowChannelModal
 }) {
   const attentionItems = [];
+  const scope = attentionScopeLabel(attention.scope, attention.timeframe, isZh);
+  const codeScope = attentionScopeLabel(attention.codeScope, attention.timeframe, isZh);
   if (channels.length === 0) {
     attentionItems.push({
       key: 'no-channels',
@@ -40,7 +43,7 @@ export default function buildDashboardAttention({
   }
   // Error codes, clustered. The histogram was computed and never rendered, so the
   // operator could see that requests failed but not with what status.
-  const errorCodeEntries = Object.entries(errorCountByCode)
+  const errorCodeEntries = Object.entries(attention.errorCountByCode)
     .map(([code, count]) => ({ code, count }))
     .sort((a, b) => b.count - a.count);
   if (errorCodeEntries.length > 0) {
@@ -53,8 +56,8 @@ export default function buildDashboardAttention({
         ? `失败状态码分布：${top.map(e => `${e.code}×${e.count}`).join('、')}`
         : `Failure status codes: ${top.map(e => `${e.code}×${e.count}`).join(', ')}`,
       detail: isZh
-        ? `基于当前页 ${errorLogs.length} 条失败样本聚类，共 ${errorCodeEntries.length} 种状态码。`
-        : `Clustered from ${errorLogs.length} failed rows on the current page across ${errorCodeEntries.length} status codes.`,
+        ? `覆盖${codeScope}，共 ${errorCodeEntries.length} 种失败状态码。`
+        : `Covers ${codeScope} across ${errorCodeEntries.length} failure status codes.`,
       actionLabel: isZh ? '查看日志' : 'View logs',
       onAction: () => onNavigateToErrors ? onNavigateToErrors() : setCurrentTab?.('logs')
     });
@@ -66,11 +69,22 @@ export default function buildDashboardAttention({
       tone: 'warn',
       icon: AlertCircle,
       title: isZh
-        ? `最近 ${attention.recentTotal} 条日志中有 ${attention.failed} 条失败`
-        : `${attention.failed} of the last ${attention.recentTotal} logged requests failed`,
-      detail: isZh ? '统计覆盖全部调用日志，点击查看全部异常记录。' : 'Counts cover all invocation logs. View all failed requests.',
+        ? `${attention.recentTotal} 条请求中有 ${attention.failed} 条失败`
+        : `${attention.failed} of ${attention.recentTotal} requests failed`,
+      detail: isZh ? `统计覆盖${scope}，点击查看异常记录。` : `Counts cover ${scope}. View failed requests.`,
       actionLabel: isZh ? '查看日志' : 'View logs',
       onAction: () => onNavigateToErrors ? onNavigateToErrors() : setCurrentTab?.('logs')
+    });
+  }
+
+  if (attention.rateLimited > 0) {
+    const rateScope = attentionScopeLabel(attention.rateLimitScope, attention.timeframe, isZh);
+    attentionItems.push({
+      key: 'rate-limits', tone: 'warn', icon: AlertTriangle,
+      title: isZh ? `${attention.rateLimited} 条请求触发限流` : `${attention.rateLimited} requests rate limited`,
+      detail: isZh ? `覆盖${rateScope}的 HTTP 429 响应。` : `HTTP 429 responses across ${rateScope}.`,
+      actionLabel: isZh ? '查看日志' : 'View logs',
+      onAction: () => onNavigateToErrors ? onNavigateToErrors() : setCurrentTab?.('logs'),
     });
   }
 

@@ -3,6 +3,8 @@ package api
 import (
 	"errors"
 	"fmt"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
+	"github.com/ifnodoraemon/airoute/internal/model"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -119,6 +121,7 @@ func TestUnroutableModelIsAuditedWithEmptyChannel(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
+	c.Set(middleware.ContextKeyAPIKeyConfig, &model.APIKeyConfig{})
 	body := `{"model":"llm-rerank-shim","messages":[{"role":"user","content":"hi"}]}`
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")

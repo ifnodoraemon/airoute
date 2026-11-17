@@ -89,6 +89,10 @@ func TestAuthMiddlewareOpenModeRequiresNoKeyEverRegistered(t *testing.T) {
 			engine := gin.New()
 			engine.Use(AuthMiddleware())
 			engine.GET("/v1/models", func(c *gin.Context) {
+				if !ValidateModelAllowed(c, "gpt-4.1") {
+					c.Status(http.StatusForbidden)
+					return
+				}
 				c.Status(http.StatusOK)
 			})
 

@@ -262,21 +262,6 @@ func (cb *CircuitBreaker) recordAdvisoryFailureLocked(status *BreakerStatus, now
 	}
 }
 
-// AbortCanary decrements the canary in-flight count if a canary probe was aborted
-// (e.g. client cancellation) during half-open recovery, preventing canary lockouts.
-func (cb *CircuitBreaker) AbortCanary(name string) {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
-
-	status, exists := cb.breakers[name]
-	if !exists {
-		return
-	}
-	if status.State == StateHalfOpen && status.CanaryInFlight > 0 {
-		status.CanaryInFlight--
-	}
-}
-
 // GetStatus returns the current state of a provider's circuit breaker.
 func (cb *CircuitBreaker) GetStatus(name string) CircuitState {
 	cb.mu.RLock()

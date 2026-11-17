@@ -119,19 +119,19 @@ export default function ChannelsView({
         <div className="flex items-center space-x-2.5">
           {onNavigateToProcurement && <button type="button" className="ui-btn-secondary ui-btn-sm" onClick={() => onNavigateToProcurement()}><Coins className="w-3.5 h-3.5" />{isZh ? '渠道采购报价' : 'Purchase quotes'}</button>}
           {onNavigateToReconciliation && (
-            <button
+            <button type="button"
               onClick={onNavigateToReconciliation}
-              className="ui-btn-secondary"
+              className="ui-btn-secondary ui-btn-sm"
             >
               <Coins className="w-3.5 h-3.5 text-[#355CFF] dark:text-[#91A7FF]" />
               <span>{isZh ? '供应商整体对账' : 'Supplier Reconciliation'}</span>
             </button>
           )}
-          <button onClick={handleBatchPing} disabled={batchTesting || channels.length === 0} className="ui-btn-secondary">
+          <button type="button" onClick={handleBatchPing} disabled={batchTesting || channels.length === 0} className="ui-btn-secondary ui-btn-sm">
             <Activity className={`w-3.5 h-3.5 text-[#656B75] dark:text-[#A1A7B0] ${batchTesting ? 'animate-spin text-[#355CFF]' : ''}`} />
             <span>{batchTesting ? (isZh ? '巡检中...' : 'Probing...') : (isZh ? '全量体检' : 'Probe All Health')}</span>
           </button>
-          <button onClick={openCreateChannel} className="ui-btn-primary">
+          <button type="button" onClick={openCreateChannel} className="ui-btn-primary ui-btn-sm">
             <Plus className="w-3.5 h-3.5" />
             <span>{isZh ? '接入服务商' : 'Add Channel'}</span>
           </button>
@@ -157,7 +157,7 @@ export default function ChannelsView({
               : 'Connect upstream providers to mount compute endpoints, supporting GPUStack, Volcengine, OpenAI, and compatible APIs.'}
           </p>
           {typeof openCreateChannel === 'function' && (
-            <button onClick={openCreateChannel} className="ui-btn-primary">
+            <button type="button" onClick={openCreateChannel} className="ui-btn-primary">
               <Plus className="w-4 h-4" />
               <span>{isZh ? '接入服务商' : 'Add Channel'}</span>
             </button>
@@ -171,17 +171,17 @@ export default function ChannelsView({
                 <span>{isZh ? `已选中 ${selectedChannelIds.length} 个服务商` : `Selected ${selectedChannelIds.length} channels`}</span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <button onClick={() => handleBatchStatusChannels('active')} className="ui-btn-primary ui-btn-sm">
+                <button type="button" onClick={() => handleBatchStatusChannels('active')} className="ui-btn-primary ui-btn-sm">
                   {isZh ? '批量启用' : 'Batch Enable'}
                 </button>
-                <button onClick={() => handleBatchStatusChannels('disabled')} className="ui-btn-secondary ui-btn-sm">
+                <button type="button" onClick={() => handleBatchStatusChannels('disabled')} className="ui-btn-secondary ui-btn-sm">
                   {isZh ? '批量停用' : 'Batch Disable'}
                 </button>
-                <button onClick={handleBatchDeleteChannels} className="ui-btn-danger ui-btn-sm">
+                <button type="button" onClick={handleBatchDeleteChannels} className="ui-btn-danger ui-btn-sm">
                   <Trash2 className="w-3.5 h-3.5" />
                   <span>{isZh ? '批量删除' : 'Batch Delete'}</span>
                 </button>
-                <button onClick={() => setSelectedChannelIds([])} className="ui-btn-secondary ui-btn-sm">
+                <button type="button" onClick={() => setSelectedChannelIds([])} className="ui-btn-secondary ui-btn-sm">
                   {isZh ? '取消' : 'Cancel'}
                 </button>
               </div>

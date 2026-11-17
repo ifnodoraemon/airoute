@@ -297,6 +297,7 @@ func TestAnthropicInbound_ToolCallingPipeline(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
+	engine.Use(unrestrictedTestModels)
 	engine.POST("/v1/messages", handler.HandleAnthropicMessages)
 
 	anthropicPayload := `{

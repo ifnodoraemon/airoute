@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/distributed"
@@ -75,6 +77,11 @@ func (c *logStreamConsumer) claimOrphans() {
 	// path was idle (no traffic, so no failing read to react to), recreate it
 	// here instead of waiting for the next request.
 	claimedMsgs, nextStart, err := c.client.AutoClaimLogs(c.ctx, RedisLogStreamKey, RedisLogGroup, c.consumerID, 30*time.Second, c.claimStart, int64(c.logger.batchSize))
+	if err != nil && !distributed.IsConsumerGroupMissing(err) {
+		telemetry.ScopedLogger("system").Warn("failed to reclaim orphaned audit log entries",
+			"consumer", c.consumerID, "error", err.Error())
+		return
+	}
 	if err != nil && distributed.IsConsumerGroupMissing(err) {
 		if ensureErr := c.logger.ensureLogConsumerGroup(c.ctx, c.client); ensureErr != nil {
 			telemetry.ScopedLogger("system").Error("failed to recreate the missing audit-log consumer group during the periodic check",
@@ -98,6 +105,9 @@ func (c *logStreamConsumer) claimOrphans() {
 }
 
 func (c *logStreamConsumer) trimAcknowledged() {
+	if c.ackedUpTo == "" {
+		return
+	}
 	c.trimCounter++
 	if c.trimCounter >= 100 {
 		c.trimCounter = 0
@@ -108,10 +118,27 @@ func (c *logStreamConsumer) trimAcknowledged() {
 		// consumer.
 		if pendingID, err := c.client.MinPendingID(c.ctx, RedisLogStreamKey, RedisLogGroup); err != nil {
 			telemetry.ScopedLogger("system").Warn("failed to inspect pending log stream entries; skipping trim", "error", err.Error())
-		} else if pendingID == "" {
-			if err := c.client.TrimStreamBefore(c.ctx, RedisLogStreamKey, c.ackedUpTo); err != nil {
+		} else {
+			watermark := c.ackedUpTo
+			if pendingID != "" && streamIDBefore(pendingID, watermark) {
+				watermark = pendingID
+			}
+			if err := c.client.TrimStreamBefore(c.ctx, RedisLogStreamKey, watermark); err != nil {
 				telemetry.ScopedLogger("system").Warn("failed to trim acknowledged log stream entries", "error", err.Error())
 			}
 		}
 	}
+}
+
+// Redis IDs are unsigned millisecond/sequence pairs, not lexicographic strings.
+func streamIDBefore(a, b string) bool {
+	parse := func(id string) (uint64, uint64) {
+		ms, seq, _ := strings.Cut(id, "-")
+		m, _ := strconv.ParseUint(ms, 10, 64)
+		s, _ := strconv.ParseUint(seq, 10, 64)
+		return m, s
+	}
+	am, as := parse(a)
+	bm, bs := parse(b)
+	return am < bm || (am == bm && as < bs)
 }

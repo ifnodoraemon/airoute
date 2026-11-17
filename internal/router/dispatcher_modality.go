@@ -110,11 +110,11 @@ func (d *Dispatcher) dispatchHTTPOnce(ctx context.Context, req *UpstreamRequest)
 		callCtx, cancelCall, admissionErr := d.beginChannelCall(ctx, ch, req.Model)
 		if admissionErr != nil {
 			d.circuitBreaker.AbortCanary(ch.Name)
+			skipped = append(skipped, ch.Name)
 			if ctx.Err() != nil {
-				return nil, admissionDispatchError(ctx, req.Model, attempted, admissionErr)
+				return nil, admissionDispatchError(ctx, req.Model, attempted, skipped, admissionErr)
 			}
 			lastErr = admissionErr
-			skipped = append(skipped, ch.Name)
 			continue
 		}
 		httpReq, err := http.NewRequestWithContext(callCtx, req.Method, targetURL, bytes.NewReader(targetBody))
@@ -259,5 +259,5 @@ func (d *Dispatcher) dispatchHTTPOnce(ctx context.Context, req *UpstreamRequest)
 	if lastErr == nil {
 		lastErr = skippedOnlyError(req.Model, skipped)
 	}
-	return nil, newExhaustedError(ctx, req.Model, exhaustedTrail(attempted, skipped), fmt.Errorf("all %d providers failed for model '%s'. Last error: %w", len(channels), req.Model, lastErr))
+	return nil, newExhaustedError(ctx, req.Model, attempted, skipped, fmt.Errorf("all %d providers failed for model '%s'. Last error: %w", len(channels), req.Model, lastErr))
 }

@@ -163,7 +163,7 @@ func (h *AdminHandler) GetStatsTimeSeries(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": data})
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": h.dashboardTimeSeries(c, data)})
 }
 
 // MiddlewareComponentStatus represents the live status of an internal middleware/infrastructure component.

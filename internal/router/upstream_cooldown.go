@@ -129,9 +129,11 @@ func (d *Dispatcher) beginChannelCall(ctx context.Context, ch *model.ChannelConf
 	return callCtx, sync.OnceFunc(func() { cancel(); release() }), nil
 }
 
-func admissionDispatchError(ctx context.Context, modelName string, attempted []string, err error) error {
-	if requestBudgetExceeded(ctx, ctx.Err()) {
-		return newRequestBudgetError(modelName, attempted, err)
-	}
-	return newCanceledError(ctx, attempted, "", 0)
+func admissionDispatchError(ctx context.Context, modelName string, attempted, skipped []string, err error) error {
+	return stoppedDispatchError(ctx, modelName, attempted, skipped, "", 0, err)
+}
+
+func logAdmissionFailure(ctx context.Context, channel string, attempted, skipped []string, err error) {
+	routerLog(ctx).Warn("upstream admission rejected", "channel", channel,
+		"attempted", attempted, "skipped", skipped, "error", err.Error())
 }

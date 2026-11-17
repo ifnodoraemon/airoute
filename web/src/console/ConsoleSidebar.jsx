@@ -18,27 +18,27 @@ export default function ConsoleSidebar() {
       : t.statusOperationalBadge;
   return (
     <aside
-      className={`bg-white dark:bg-[#191B1F] border-r border-[#E4E6E9] dark:border-[#2C3038] flex flex-col shrink-0 transition-all duration-200 z-30 ${
+      className={`bg-surface border-r border-light flex flex-col shrink-0 transition-all duration-200 z-30 ${
         sidebarCollapsed ? 'w-16' : 'w-56'
       } ${
         mobileMenuOpen ? 'fixed inset-y-0 left-0 w-56 shadow-2xl flex' : 'hidden md:flex'
       }`}
     >
-      <div className="h-16 px-4 border-b border-[#E4E6E9] dark:border-[#2C3038] flex items-center justify-between">
+      <div className="h-16 px-4 border-b border-light flex items-center justify-between">
         <div
           onClick={() => setViewMode('landing')}
           className={`flex items-center ${sidebarCollapsed ? 'justify-center w-full' : 'space-x-2.5'} cursor-pointer group transition hover:opacity-90`}
           title={lang === 'zh' ? '点击返回门户首页' : 'Return to product portal'}
         >
-          <div className="w-8 h-8 rounded-lg bg-[#355CFF] flex items-center justify-center text-white shrink-0 shadow-xs">
+          <div className="w-8 h-8 rounded-lg bg-brand flex items-center justify-center text-white shrink-0 shadow-xs">
             <Zap className="w-4 h-4 fill-white text-white" />
           </div>
           {!sidebarCollapsed && (
             <div className="min-w-0">
-              <h1 className="font-semibold text-sm text-[#202124] dark:text-[#F1F2F4] tracking-tight leading-none">
+              <h1 className="font-semibold text-sm text-primary tracking-tight leading-none">
                 Airoute
               </h1>
-              <span className="text-[10px] text-[#656B75] dark:text-[#A1A7B0] font-mono tracking-tight block mt-1">
+              <span className="text-[10px] text-secondary font-mono tracking-tight block mt-1">
                 AI Gateway
               </span>
             </div>
@@ -46,9 +46,9 @@ export default function ConsoleSidebar() {
         </div>
 
         {!sidebarCollapsed && (
-          <button
+          <button type="button"
             onClick={collapseSidebar}
-            className="p-1 rounded-md text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] transition-colors cursor-pointer"
+            className="p-1 rounded-md text-secondary hover:text-primary hover:bg-subtle transition-colors cursor-pointer"
             title={isZh ? '收起侧边栏' : 'Collapse sidebar'}
           >
             <PanelLeftClose className="w-4 h-4" />
@@ -57,10 +57,10 @@ export default function ConsoleSidebar() {
       </div>
 
       {sidebarCollapsed && (
-        <div className="p-2 border-b border-[#E4E6E9] dark:border-[#2C3038] flex justify-center">
-          <button
+        <div className="p-2 border-b border-light flex justify-center">
+          <button type="button"
             onClick={expandSidebar}
-            className="p-1.5 rounded-md text-[#656B75] dark:text-[#A1A7B0] hover:text-[#202124] dark:hover:text-[#F1F2F4] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] transition-colors cursor-pointer"
+            className="p-1.5 rounded-md text-secondary hover:text-primary hover:bg-subtle transition-colors cursor-pointer"
             title={isZh ? '展开侧边栏' : 'Expand sidebar'}
           >
             <PanelLeft className="w-4 h-4" />
@@ -72,10 +72,10 @@ export default function ConsoleSidebar() {
       {(() => {
         const navBtnClass = (tab) => `w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-2.5'} py-2 rounded-lg text-xs font-medium transition-colors duration-150 cursor-pointer ${
           currentTab === tab
-            ? 'bg-[#EEF2FF] dark:bg-[#242D48] text-[#355CFF] dark:text-[#91A7FF] font-semibold'
-            : 'text-[#656B75] dark:text-[#A1A7B0] hover:bg-[#F0F1F2] dark:hover:bg-[#22252B] hover:text-[#202124] dark:hover:text-[#F1F2F4]'
+            ? 'bg-brand-selected text-brand-active font-semibold'
+            : 'text-secondary hover:bg-subtle hover:text-primary'
         }`;
-        const navIconColor = (tab) => (currentTab === tab ? 'text-[#355CFF] dark:text-[#91A7FF]' : 'text-[#656B75] dark:text-[#A1A7B0]');
+        const navIconColor = (tab) => (currentTab === tab ? 'text-brand-active' : 'text-secondary');
 
         // One grouped navigation for both roles. Membership and order come from
         // lib/navGroups.js (the same config the breadcrumb reads); appearance
@@ -97,7 +97,7 @@ export default function ConsoleSidebar() {
               {groups.map((group) => (
                 <div key={group.id}>
                   {!sidebarCollapsed && (
-                    <span className="px-2.5 text-[10px] font-semibold tracking-wider text-[#656B75] dark:text-[#A1A7B0] uppercase block mb-1">
+                    <span className="px-2.5 text-[10px] font-semibold tracking-wider text-secondary uppercase block mb-1">
                       {navGroupLabel(group, isZh)}
                     </span>
                   )}
@@ -109,7 +109,7 @@ export default function ConsoleSidebar() {
                       const title = item.title ? item.title(t, isZh, isAdmin) : label;
                       const count = item.count ? item.count(counts, isAdmin) : 0;
                       return (
-                        <button
+                        <button type="button"
                           key={tab}
                           onClick={() => setCurrentTab(tab)}
                           title={title}
@@ -120,7 +120,7 @@ export default function ConsoleSidebar() {
                             {!sidebarCollapsed && <span>{label}</span>}
                           </div>
                           {!sidebarCollapsed && count > 0 && (
-                            <span className={`text-xs font-mono ${currentTab === tab ? 'text-[#355CFF] dark:text-[#91A7FF]' : 'text-[#656B75] dark:text-[#A1A7B0]'}`}>
+                            <span className={`text-xs font-mono ${currentTab === tab ? 'text-brand-active' : 'text-secondary'}`}>
                               {count}
                             </span>
                           )}
@@ -132,8 +132,8 @@ export default function ConsoleSidebar() {
               ))}
             </div>
 
-            <div className="pt-2 border-t border-[#E4E6E9] dark:border-[#2C3038]">
-              <button
+            <div className="pt-2 border-t border-light">
+              <button type="button"
                 onClick={() => setCurrentTab('docs')}
                 className={navBtnClass('docs')}
                 title={isZh ? '查阅开发文档' : 'Documentation'}
@@ -149,11 +149,11 @@ export default function ConsoleSidebar() {
       })()}
 
       {/* Sidebar bottom status */}
-      <div className="p-3 border-t border-[#E4E6E9] dark:border-[#2C3038] text-xs">
+      <div className="p-3 border-t border-light text-xs">
         <button
           type="button"
           onClick={() => setViewMode('status')}
-          className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-2'} text-[#656B75] hover:text-[#202124] dark:hover:text-[#F1F2F4] transition-colors cursor-pointer`}
+          className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-2'} text-secondary hover:text-primary transition-colors cursor-pointer`}
           title={isZh ? '查看公开服务状态' : 'Public Status'}
         >
           <span className={`w-2 h-2 rounded-full ${healthDot} shrink-0`}></span>

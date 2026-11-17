@@ -22,6 +22,8 @@ const (
 	ContextKeyTenant       = "tenant_id"
 	ContextKeyAPIKey       = "api_key"
 	ContextKeyAPIKeyConfig = "api_key_config"
+	// Set only after the control plane verifies an administrator session.
+	ContextKeyAdminSession = "authenticated_admin_session"
 	// ContextKeyAPIKeyID carries the key's public identifier (ak_…). Access logs
 	// and audit lines name a key with it; the digest is never displayed.
 	ContextKeyAPIKeyID = "api_key_id"
@@ -54,6 +56,8 @@ func authMiddleware(resolve func(*gin.Context) (*model.APIKeyConfig, *AccessDeni
 			return
 		}
 		if effectiveKey == nil {
+			// Open development mode is explicitly admitted by resolveAuthKey.
+			c.Set(ContextKeyAPIKeyConfig, &model.APIKeyConfig{})
 			c.Next()
 			return
 		}
@@ -88,14 +92,17 @@ func authMiddleware(resolve func(*gin.Context) (*model.APIKeyConfig, *AccessDeni
 
 // ValidateModelAllowed checks if the requested model is permitted for this API key.
 func ValidateModelAllowed(c *gin.Context, requestedModel string) bool {
+	if c == nil {
+		return false
+	}
 	keyAny, exists := c.Get(ContextKeyAPIKeyConfig)
 	if !exists {
-		return true // open mode
+		return c.GetBool(ContextKeyAdminSession)
 	}
 
 	keyCfg, ok := keyAny.(*model.APIKeyConfig)
-	if !ok {
-		return true // all models allowed
+	if !ok || keyCfg == nil {
+		return false
 	}
 	return ModelAllowed(keyCfg.AllowedModels, requestedModel)
 }

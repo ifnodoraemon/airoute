@@ -2,58 +2,38 @@ package router
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/ifnodoraemon/airoute/internal/model"
 )
 
-// R-07: the silent-preamble buffer is a memory bound. When it is full the oldest
-// silent frame must be dropped — never the newest one, because that event may be
-// the one that commits the stream and carries the first content token.
-func TestStreamPreambleCapKeepsCommittingEvent(t *testing.T) {
-	events := make([]*model.StreamEvent, 0, maxPreambleEvents+1)
-	for i := 0; i < maxPreambleEvents; i++ {
+// A bounded preamble commits without dropping any protocol frame.
+func TestStreamPreambleCapPreservesEveryEvent(t *testing.T) {
+	events := make([]*model.StreamEvent, 0, maxPreambleEvents+6)
+	for i := 0; i < maxPreambleEvents+3; i++ {
 		events = append(events, &model.StreamEvent{Chunk: &model.ChatCompletionChunk{
-			Choices: []model.ChunkChoice{{Index: 0, Delta: model.ChunkDelta{}}},
+			Choices: []model.ChunkChoice{{Index: 0, Delta: model.ChunkDelta{Role: "assistant"}}},
 		}})
 	}
 	events = append(events, &model.StreamEvent{Chunk: &model.ChatCompletionChunk{
-		Choices: []model.ChunkChoice{{Index: 0, Delta: model.ChunkDelta{Content: "FIRST-TOKEN"}}},
-	}})
-
-	fake := &scriptedStreamProvider{events: events}
-	d := NewDispatcher([]model.ChannelConfig{{
-		Name: "slow-preamble", Type: model.ProviderCustom, Models: []string{"m"},
-		Status: "active", Priority: 1, Weight: 1, TimeoutSeconds: 5,
-	}})
-	d.RegisterProvider(fake)
-
+		Choices: []model.ChunkChoice{{Delta: model.ChunkDelta{Content: "FIRST-TOKEN"}}},
+	}}, &model.StreamEvent{IsDone: true})
+	d := NewDispatcher([]model.ChannelConfig{{Name: "preamble", Type: model.ProviderCustom, Models: []string{"m"}, Status: "active"}})
+	d.RegisterProvider(&scriptedStreamProvider{events: events})
 	stream, err := d.DispatchStream(context.Background(), &model.ChatCompletionRequest{Model: "m", Stream: true})
 	if err != nil {
-		t.Fatalf("dispatch stream: %v", err)
+		t.Fatal(err)
 	}
-
-	var content strings.Builder
-	timeout := time.After(5 * time.Second)
-	for {
-		select {
-		case ev, ok := <-stream:
-			if !ok {
-				if got := content.String(); got != "FIRST-TOKEN" {
-					t.Fatalf("client received %q: the event that committed the stream was dropped by the preamble cap", got)
-				}
-				return
-			}
-			if ev != nil && ev.Chunk != nil {
-				for _, choice := range ev.Chunk.Choices {
-					content.WriteString(choice.Delta.Content)
-				}
-			}
-		case <-timeout:
-			t.Fatalf("stream did not finish")
+	count := 0
+	for event := range stream {
+		if count >= len(events) || event != events[count] {
+			t.Fatalf("event %d was lost or reordered", count)
 		}
+		count++
+	}
+	if count != len(events) {
+		t.Fatalf("received %d of %d events", count, len(events))
 	}
 }
 

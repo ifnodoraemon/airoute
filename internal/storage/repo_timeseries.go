@@ -39,6 +39,7 @@ type TimeSeriesData struct {
 	Buckets       []*TimeSeriesBucket `json:"buckets"`
 	Percentiles   LatencyPercentiles  `json:"percentiles"`
 	ModalityStats map[string]int64    `json:"modality_stats"`
+	Attention     *AttentionSummary   `json:"attention"`
 }
 
 // NewEmptyTimeSeriesData constructs an initialized empty TimeSeriesData structure for the given timeframe.
@@ -48,6 +49,7 @@ func NewEmptyTimeSeriesData(timeframe string) *TimeSeriesData {
 	return &TimeSeriesData{
 		Timeframe: timeframe, Buckets: buckets,
 		Percentiles: LatencyPercentiles{Sampled: 0, Total: 0},
+		Attention:   &AttentionSummary{ErrorCountByCode: make(map[int]int64)},
 		ModalityStats: map[string]int64{
 			"chat": 0, "images": 0, "audio": 0, "video": 0, "embeddings": 0, "rerank": 0,
 		},
@@ -83,6 +85,10 @@ func (r *Repository) GetStatsTimeSeries(timeframe string, keys []string) (*TimeS
 		return nil, err
 	}
 	res.ModalityStats, err = r.readTimeSeriesModalities(window)
+	if err != nil {
+		return nil, err
+	}
+	res.Attention, err = r.readTimeSeriesAttention(window)
 	if err != nil {
 		return nil, err
 	}

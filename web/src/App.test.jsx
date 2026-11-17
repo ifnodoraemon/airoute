@@ -158,7 +158,7 @@ describe('App integration', () => {
     window.history.replaceState(null, '', '/?logs.channel=old&logs.range=1h&logs.q=other#/dashboard');
     stubGateway({
       '/api/v1/auth/me': () => jsonResponse({ code: 0, data: { user: { username: 'root', role: 'admin' } } }),
-      '/api/v1/admin/stats/overview': () => jsonResponse({ code: 0, data: { total_requests: 100, server_error_requests: 2 } }),
+      '/api/v1/admin/stats/overview': () => jsonResponse({ code: 0, data: { total_requests: 100, client_error_requests: 0, server_error_requests: 2 } }),
     });
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: /查看日志/ }, { timeout: 8000 }));

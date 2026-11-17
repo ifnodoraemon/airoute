@@ -45,7 +45,7 @@ func TestDispatchNoRouteReportsRoutingFacts(t *testing.T) {
 }
 
 func TestDispatchErrorSurvivesWrapping(t *testing.T) {
-	base := newExhaustedError(context.Background(), "gpt-4o", []string{"ch-a", "ch-b"}, errors.New("boom"))
+	base := newExhaustedError(context.Background(), "gpt-4o", []string{"ch-a", "ch-b"}, nil, errors.New("boom"))
 	wrapped := fmt.Errorf("handler: %w", base)
 
 	de, ok := AsDispatchError(wrapped)
@@ -74,7 +74,7 @@ func TestFormatAttemptedTrail(t *testing.T) {
 	})
 
 	t.Run("joins prior fallback hops and current attempts", func(t *testing.T) {
-		ctx := withChannelTrail(context.Background(), []string{"ch-prior"})
+		ctx := withChannelTrail(context.Background(), []string{"ch-prior"}, nil)
 		if got := formatAttemptedTrail(ctx, []string{"ch-a", "ch-b"}); got != "ch-prior→ch-a→ch-b" {
 			t.Errorf("formatAttemptedTrail = %q, want %q", got, "ch-prior→ch-a→ch-b")
 		}

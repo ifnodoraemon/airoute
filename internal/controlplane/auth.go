@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
 )
 
 // GetClaimsFromContext safely extracts verified AdminClaims from the gin context.
@@ -129,10 +130,15 @@ func (h *AdminHandler) AdminAuthMiddleware() gin.HandlerFunc {
 			c.Set("session_user_id", user.ID)
 		}
 
-		c.Set("admin_claims", claims)
-		c.Set("admin_username", claims.Username)
+		setVerifiedSession(c, claims)
 		c.Next()
 	}
+}
+
+func setVerifiedSession(c *gin.Context, claims *AdminClaims) {
+	c.Set("admin_claims", claims)
+	c.Set(middleware.ContextKeyAdminSession, claims.Role == "admin")
+	c.Set("admin_username", claims.Username)
 }
 
 // RequireAdminRole verifies that the authenticated user possesses the admin role.

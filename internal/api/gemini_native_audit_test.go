@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/ifnodoraemon/airoute/internal/middleware"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -91,6 +92,7 @@ func TestGeminiNativeOnlyFeaturesRejectLossyFallback(t *testing.T) {
 	_ = edgeBillingRepo(t, &storage.ModelPriceRecord{Model: "m", GroupName: "default", PromptPrice: 1, CompletionPrice: 2, Currency: "CNY"})
 	h := NewHandler(router.NewDispatcher([]model.ChannelConfig{{Name: "chat-only", Type: model.ProviderOpenAI, BaseURL: upstream.URL, Models: []string{"m"}, Protocols: []string{"openai_chat"}}}))
 	c, w := newTestContext(http.MethodPost, "/v1beta/models/m:generateContent")
+	c.Set(middleware.ContextKeyAPIKeyConfig, &model.APIKeyConfig{})
 	c.Params = gin.Params{{Key: "modelAction", Value: "/m:generateContent"}}
 	c.Request.Body = io.NopCloser(strings.NewReader(`{"contents":[{"role":"user","parts":[{"text":"search"}]}],"tools":[{"googleSearch":{}}]}`))
 	h.HandleGeminiAction(c)

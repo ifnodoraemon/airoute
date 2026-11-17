@@ -7,17 +7,19 @@ import { LandingPage, LoginModal, ViewLoader } from './consoleComponents';
 export default function ConsoleLanding() {
   const {
   adminToken, adminUser, dismissToast, fetchData, fetchLogs, isZh, lang, resetWorkspaceState, setAuthTab,
-  setLang, setShowLoginModal, setViewMode, showLoginModal, showToast, signIn, t, toast, toggleLang
+  setLang, setShowLoginModal, setViewMode, showLoginModal, showToast, signIn, t, toast, toggleLang, theme, toggleTheme
 } = useConsoleContext();
   return (
     <I18nContext.Provider value={{ lang, setLang, toggleLang, t }}>
-      <div className="min-h-screen bg-[#F7F7F5] dark:bg-[#111214] text-[#202124] dark:text-[#F1F2F4] font-sans selection:bg-[#355CFF] selection:text-white">
+      <div className="min-h-screen bg-page text-primary font-sans selection:bg-brand selection:text-white">
         <Toast toast={toast} onClose={dismissToast} />
         <Suspense fallback={<ViewLoader lang={lang} />}>
           <LandingPage
             isLoggedIn={!!adminToken || !!adminUser}
             lang={lang}
             toggleLang={toggleLang}
+            theme={theme}
+            toggleTheme={toggleTheme}
             onOpenLogin={() => {
               setAuthTab('login');
               setViewMode('auth');

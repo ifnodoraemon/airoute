@@ -18,6 +18,7 @@ func TestGeminiCountTokensEndpoint(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
+	engine.Use(unrestrictedTestModels)
 	engine.POST("/v1beta/models/*modelAction", handler.HandleGeminiAction)
 
 	// Valid countTokens payload with system instruction and user contents

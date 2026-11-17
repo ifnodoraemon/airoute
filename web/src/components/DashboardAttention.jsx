@@ -1,4 +1,5 @@
 import { CheckCircle2, X } from 'lucide-react';
+import { attentionScopeLabel } from '../lib/dashboardAttentionSummary';
 
 export default function DashboardAttention({
   attention, attentionItems, attentionTones, channels, dismissedAttentions, handleDismissAttention, isZh
@@ -22,14 +23,14 @@ export default function DashboardAttention({
                 <p className="ui-meta mt-0.5">
                   {attention.recentTotal > 0
                     ? (isZh
-                      ? `${channels.length} 个渠道的断路器均未触发，最近 ${attention.recentTotal} 条日志中没有失败请求。`
-                      : `No breaker tripped across ${channels.length} channel(s), and no failed request among the last ${attention.recentTotal} logged calls.`)
+                      ? `${channels.length} 个渠道的断路器均未触发，${attentionScopeLabel(attention.scope, attention.timeframe, isZh)}中没有失败请求。`
+                      : `No breaker tripped across ${channels.length} channel(s), and no failed requests across ${attentionScopeLabel(attention.scope, attention.timeframe, isZh)}.`)
                     : (isZh
                       ? `已配置 ${channels.length} 个渠道且断路器均未触发；暂无请求日志可判断成功率。`
                       : `${channels.length} channel(s) configured with no tripped breaker; no request logs yet to judge success rate.`)}
                 </p>
                 <p className="ui-meta mt-1">
-                  {isZh ? '数据为最近一次探测结果。' : 'Based on the most recent probe.'}
+                  {isZh ? '基于最近一次汇总与渠道状态。' : 'Based on the latest summary and channel state.'}
                 </p>
               </div>
             </div>

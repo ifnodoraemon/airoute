@@ -149,6 +149,10 @@ func (al *AsyncLogger) Record(rec *UsageLogRecord) {
 	// they must not carry a cleartext credential either: normalize before either
 	// transport sees the record.
 	rec.APIKey = NormalizeStoredAPIKeyReference(rec.APIKey)
+	if al.stopped.Load() {
+		al.spillRecords([]*UsageLogRecord{rec}, "logger stopped")
+		return
+	}
 
 	// Try distributed message queue first if active
 	redisClient := distributed.GetClient()
@@ -167,10 +171,6 @@ func (al *AsyncLogger) Record(rec *UsageLogRecord) {
 
 	// Fallback to local memory buffered channel
 	if al.ch == nil {
-		return
-	}
-	if al.stopped.Load() {
-		al.spillRecords([]*UsageLogRecord{rec}, "logger stopped")
 		return
 	}
 	timer := time.NewTimer(500 * time.Millisecond)

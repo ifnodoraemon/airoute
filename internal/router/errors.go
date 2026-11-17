@@ -22,9 +22,11 @@ import (
 // at all, yet a text scan will happily report the English word "provider" as
 // one.
 type DispatchError struct {
-	Model   string
-	Trail   string // channels actually called, joined with "→"; "" when none
-	NoRoute bool   // true when routing produced no candidate channel
+	Model     string
+	Trail     string // attempted chain, or skipped channels when no upstream was called
+	Attempted []string
+	Skipped   []string
+	NoRoute   bool // true when routing produced no candidate channel
 	// PromptTokens is the estimated prompt size when the failure is a client
 	// cancellation: the request already reached an upstream, so the provider has
 	// consumed (and will bill us for) the prompt even though we got nothing back.
@@ -34,7 +36,8 @@ type DispatchError struct {
 	// expired) rather than a routing outcome. Cross-model fallback must not fire
 	// for it: replaying a canceled request on another model only adds upstream
 	// load for a client that already hung up.
-	Canceled bool
+	Canceled   bool
+	contextErr error
 
 	Err error
 }
@@ -55,6 +58,11 @@ func (e *DispatchError) Unwrap() error {
 	return e.Err
 }
 
+// Is preserves cancellation classification when a custom context cause is used.
+func (e *DispatchError) Is(target error) bool {
+	return e != nil && errors.Is(e.contextErr, target)
+}
+
 // AsDispatchError extracts a *DispatchError from an error chain.
 func AsDispatchError(err error) (*DispatchError, bool) {
 	var de *DispatchError
@@ -69,22 +77,25 @@ func AsDispatchError(err error) (*DispatchError, bool) {
 // by earlier hops of a cross-model fallback chain, and is empty when the request
 // never reached a channel.
 func newNoRouteError(ctx context.Context, modelName string, err error) error {
+	de := newDispatchError(ctx, modelName, nil, nil, err)
+	de.NoRoute = true
+	return de
+}
+
+// newDispatchError snapshots both routing trails across model fallback hops.
+func newDispatchError(ctx context.Context, modelName string, attempted, skipped []string, err error) *DispatchError {
+	trail := getRoutingTrail(withChannelTrail(ctx, attempted, skipped))
 	return &DispatchError{
-		Model:   modelName,
-		Trail:   formatAttemptedTrail(ctx, nil),
-		NoRoute: true,
-		Err:     err,
+		Model:     modelName,
+		Trail:     joinChannelTrail(exhaustedTrail(trail.attempted, trail.skipped)),
+		Attempted: trail.attempted,
+		Skipped:   trail.skipped,
+		Err:       err,
 	}
 }
 
-// newExhaustedError builds the terminal error for a request whose candidate
-// channels were all attempted and failed.
-func newExhaustedError(ctx context.Context, modelName string, attempted []string, err error) error {
-	return &DispatchError{
-		Model: modelName,
-		Trail: formatAttemptedTrail(ctx, attempted),
-		Err:   err,
-	}
+func newExhaustedError(ctx context.Context, modelName string, attempted, skipped []string, err error) error {
+	return newDispatchError(ctx, modelName, attempted, skipped, err)
 }
 
 // newCanceledError attaches routing context to a request cancellation.
@@ -97,14 +108,30 @@ func newExhaustedError(ctx context.Context, modelName string, attempted []string
 func newCanceledError(ctx context.Context, attempted []string, channel string, promptTokens int) error {
 	cause := context.Canceled
 	if ctx != nil && ctx.Err() != nil {
-		cause = ctx.Err()
+		cause = context.Cause(ctx)
 	}
-	return &DispatchError{
-		Trail:        formatChannelTrail(ctx, attempted, channel),
-		PromptTokens: promptTokens,
-		Canceled:     true,
-		Err:          cause,
+	if channel != "" {
+		attempted = append(append([]string(nil), attempted...), channel)
 	}
+	de := newDispatchError(ctx, "", attempted, nil, cause)
+	de.PromptTokens, de.Canceled = promptTokens, true
+	if ctx != nil {
+		de.contextErr = ctx.Err()
+	}
+	return de
+}
+
+func stoppedDispatchError(ctx context.Context, modelName string, attempted, skipped []string, channel string, promptTokens int, lastErr error) error {
+	ctx = withChannelTrail(ctx, nil, skipped)
+	if requestBudgetExceeded(ctx, ctx.Err()) {
+		if channel != "" {
+			attempted = append(append([]string(nil), attempted...), channel)
+		}
+		return newDispatchError(ctx, modelName, attempted, nil, newRequestBudgetError(modelName, attempted, lastErr))
+	}
+	de := newCanceledError(ctx, attempted, channel, promptTokens).(*DispatchError)
+	de.Model = modelName
+	return de
 }
 
 // exhaustedTrail names the channels involved when a dispatch runs out of

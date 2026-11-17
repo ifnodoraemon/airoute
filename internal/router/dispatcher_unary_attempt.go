@@ -42,11 +42,12 @@ func (s *unaryAttemptState) unsupported(ch *model.ChannelConfig, err error) {
 
 func (s *unaryAttemptState) admissionFailure(ch *model.ChannelConfig, err error) error {
 	s.dispatcher.circuitBreaker.AbortCanary(ch.Name)
+	s.skipped = append(s.skipped, ch.Name)
 	if s.ctx.Err() != nil {
-		return admissionDispatchError(s.ctx, s.model, s.attempted, err)
+		return admissionDispatchError(s.ctx, s.model, s.attempted, s.skipped, err)
 	}
 	s.lastErr = err
-	s.skipped = append(s.skipped, ch.Name)
+	logAdmissionFailure(s.ctx, ch.Name, s.attempted, s.skipped, err)
 	return nil
 }
 
@@ -70,7 +71,7 @@ func (s *unaryAttemptState) failure(ch *model.ChannelConfig, err error, attempt 
 		d.circuitBreaker.AbortCanary(ch.Name)
 	case provider.IsFatalPayloadError(err):
 		d.circuitBreaker.AbortCanary(ch.Name)
-		return err
+		return newDispatchError(s.ctx, s.model, append(s.attempted, ch.Name), s.skipped, err)
 	case !provider.IsChannelFailure(err):
 		d.circuitBreaker.AbortCanary(ch.Name)
 	default:

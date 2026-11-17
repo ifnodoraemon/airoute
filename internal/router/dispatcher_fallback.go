@@ -38,27 +38,31 @@ func nextFallbackContext(ctx context.Context, currentModel, nextModel string) (c
 	return context.WithValue(ctx, fallbackChainKey{}, newChain), nil
 }
 
-// channelTrailKey carries the sequence of channels that were actually called
-// (and failed) across cross-model fallback recursions, so the final audit log
-// can show the full routing chain such as "A→B→C".
+// channelTrailKey carries both called and bypassed channels across cross-model
+// fallback. The called chain is rendered separately from skipped attribution.
 type channelTrailKey struct{}
 
-func getChannelTrail(ctx context.Context) []string {
-	if val := ctx.Value(channelTrailKey{}); val != nil {
-		if trail, ok := val.([]string); ok {
-			return trail
-		}
-	}
-	return nil
+type channelTrail struct {
+	attempted []string
+	skipped   []string
 }
 
-// withChannelTrail returns a context carrying prior failures plus the given
-// attempted channels, for propagation into fallback recursion.
-func withChannelTrail(ctx context.Context, attempted []string) context.Context {
-	if len(attempted) == 0 {
-		return ctx
+func getRoutingTrail(ctx context.Context) channelTrail {
+	trail, _ := ctx.Value(channelTrailKey{}).(channelTrail)
+	return trail
+}
+
+func getChannelTrail(ctx context.Context) []string {
+	return getRoutingTrail(ctx).attempted
+}
+
+// withChannelTrail snapshots both current trails for propagation into fallback.
+func withChannelTrail(ctx context.Context, attempted, skipped []string) context.Context {
+	prior := getRoutingTrail(ctx)
+	merged := channelTrail{
+		attempted: append(append([]string(nil), prior.attempted...), attempted...),
+		skipped:   append(append([]string(nil), prior.skipped...), skipped...),
 	}
-	merged := append(append([]string(nil), getChannelTrail(ctx)...), attempted...)
 	return context.WithValue(ctx, channelTrailKey{}, merged)
 }
 

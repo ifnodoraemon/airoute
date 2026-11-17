@@ -27,6 +27,7 @@ func newChatEngine(t *testing.T, channels []model.ChannelConfig) (*gin.Engine, *
 	dispatcher := router.NewDispatcher(channels)
 	handler := api.NewHandler(dispatcher)
 	engine := gin.New()
+	engine.Use(unrestrictedTestModels)
 	engine.POST("/v1/chat/completions", handler.HandleChatCompletions)
 	return engine, dispatcher
 }
